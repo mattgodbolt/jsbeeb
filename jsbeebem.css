@@ -1,0 +1,14 @@
+body {
+    background-color: #000000;
+    color: #ffffff;
+    font-family: arial, tahoma;
+    font-size: 11px;
+}
+
+#screen {
+    width: 1280px;
+    height: 1024px;
+    margin-left: auto;
+    margin-right: auto;
+    display: block;
+}
