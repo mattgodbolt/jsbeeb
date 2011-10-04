@@ -10,4 +10,5 @@ $(function() {
     imageData = ctx.getImageData(0, 0, 1280, 768);
     imageDataData = imageData.data;
     processor = new cpu6502();
+    processor.execute();
 })
