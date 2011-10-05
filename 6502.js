@@ -23,8 +23,18 @@ function flags() {
 }
 
 function inst_LDA_imm(cpu) {
-    console.log("Yay");
-    cpu.halted = true;
+    cpu.a = cpu.getb();
+    cpu.setzn(cpu.a);
+    cpu.polltime(1);
+    cpu.checkInt();
+    cpu.polltime(1);
+}
+
+function inst_STA_abs(cpu) {
+    var addr = cpu.getw();
+    cpu.polltime(4);
+    cpu.checkInt();
+    cpu.writemem(addr, cpu.a);
 }
 
 function cpu6502() {
@@ -45,6 +55,39 @@ function cpu6502() {
             return this.ramRomOs[offset + addr];
         }
         return null;
+    }
+
+    this.writemem = function(addr, b) {
+        if (this.debugwrite) this.debugwrite(addr, b);
+        if (this.memstat[this.vis20k][addr >> 8] == 1) {
+            var offset = this.memlook[this.vis20k][addr >> 8];
+            this.ramRomOs[offset + addr] = b;
+            return;
+        }
+        if (addr < 0xfc00 || addr >= 0xff00) return;
+        // TODO: hardware!
+    }
+
+    this.incpc = function() {
+        this.pc = (this.pc + 1) & 0xffff;
+    }
+
+    this.getb = function() {
+        var result = this.readmem();
+        this.incpc();
+        return result;
+    }
+
+    this.getw = function() {
+        var result = this.readmem(this.pc);
+        this.incpc();
+        result |= this.readmem(this.pc) << 8;
+        this.incpc();
+        return result;
+    }
+
+    this.checkInt = function() {
+        this.takeInt = (this.interrupt && !this.p.i);
     }
 
     this.dumpregs = function() {
@@ -92,22 +135,11 @@ function cpu6502() {
         this.tubecycle = this.tubecycles = 0;
         this.halted = false;
         this.instructions = [];
+        this.instructions[0x8d] = inst_STA_abs;
         this.instructions[0xa9] = inst_LDA_imm;
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };
-
-    this.incpc = function() {
-        this.pc = (this.pc + 1) & 0xffff;
-    }
-
-    this.getsw = function() {
-        var result = readmem(this.pc);
-        this.incpc();
-        result |= readmem(this.pc) << 8;
-        this.incpc();
-        return result;
-    }
 
     this.setzn = function(v) {
         this.p.z = (v != 0);
