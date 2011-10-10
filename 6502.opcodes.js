@@ -95,7 +95,7 @@ function compileAsl(arg) {
 function compilePush(reg) {
     lines = [];
     if (reg == 'p') {
-        lines.concat([
+        lines = lines.concat([
                 "var temp = 0x30;",
                 "if (cpu.p.c) temp |= 0x01;",
                 "if (cpu.p.z) temp |= 0x02;",
@@ -162,6 +162,56 @@ function compileRts() {
         ];
 }
 
+function getGetPut(arg) {
+    switch (arg) {
+    case "zp":
+        return {
+            reg: "temp",
+            get: ["var addr = cpu.getb();", "var temp = cpu.readmem(addr);"],
+            put: ["cpu.writemem(addr, temp);"],
+            cycles: 1,
+        };
+    case "A":
+        return {
+            reg: "cpu.a",
+            get: [],
+            put: [],
+            cycles: 0,
+        };
+    }
+    // TODO: consider "abs" cases, e.g. ROL abs, which will need more smarts here.
+    // Possibly best to write them all out longhand.
+}
+
+function compileRotate(left, logical, arg) {
+    var getput = getGetPut(arg);
+    if (!getput) return null;
+    var lines = getput.get;
+    if (!left) {
+        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
+        lines.push("cpu.p.c = !!(" + getput.reg + " & 0x01);");
+        if (logical) {
+            lines.push(getput.reg + " >>= 1;");
+        } else {
+            lines.push(getput.reg + " = (" + getput.reg + " >> 1) | newTopBit;");
+        }
+    } else {
+        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x01 : 0x00;");
+        lines.push("cpu.p.c = !!(" + getput.reg + " & 0x80);");
+        if (logical) {
+            lines.push(getput.reg + " = (" + getput.reg + " << 1) & 0xff;");
+        } else {
+            lines.push(getput.reg + " = ((" + getput.reg + " << 1) & 0xff) | newTopBit;");
+        }
+    }
+    lines.push("cpu.setzn(" + getput.reg + ");");
+    lines = lines.concat(getput.put);
+    return lines.concat([
+            "cpu.polltime(" + (4 + getput.cycles) + ");",
+            "cpu.checkInt();"
+            ]);
+}
+
 function compileInstruction(opcodeString) {
     var split = opcodeString.split(' ');
     var opcode = split[0];
@@ -198,6 +248,14 @@ function compileInstruction(opcodeString) {
         lines = compileJsr();
     } else if (opcode == "RTS") {
         lines = compileRts();
+    } else if (opcode == "ROR") {
+        lines = compileRotate(false, false, arg);
+    } else if (opcode == "ROL") {
+        lines = compileRotate(true, false, arg);
+    } else if (opcode == "LSR") {
+        lines = compileRotate(false, true, arg);
+    } else if (opcode == "LSL") {
+        lines = compileRotate(true, true, arg);
     }
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
@@ -246,7 +304,7 @@ var opcodes6502 = {
     0x26: "ROL zp",
     0x27: "RLA zp",
     0x28: "PLP",
-    0x29: "AND",
+    0x29: "AND imm",
     0x2A: "ROL A",
     0x2B: "ANC imm",
     0x2C: "BIT abs",
