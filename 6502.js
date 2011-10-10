@@ -43,6 +43,7 @@ function cpu6502() {
         if (offset !== 0xffffffff) {
             return this.ramRomOs[offset + addr];
         }
+        console.log("Read of " + hexword(addr));
         return null;
     }
 
@@ -62,7 +63,7 @@ function cpu6502() {
     }
 
     this.getb = function() {
-        var result = this.readmem();
+        var result = this.readmem(this.pc);
         this.incpc();
         return result;
     }
