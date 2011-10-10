@@ -6,6 +6,10 @@ function hexword(value) {
     return hexbyte(value>>8) + hexbyte(value & 0xff);
 }
 
+function signExtend(val) {
+    return val >= 128 ? val - 256 : val;
+}
+
 function flags() {
     this.reset = function() {
         this.c = this.z = this.i = this.d = this.v = this.n = false;
@@ -20,21 +24,6 @@ function flags() {
     }
 
     this.reset();
-}
-
-function inst_LDA_imm(cpu) {
-    cpu.a = cpu.getb();
-    cpu.setzn(cpu.a);
-    cpu.polltime(1);
-    cpu.checkInt();
-    cpu.polltime(1);
-}
-
-function inst_STA_abs(cpu) {
-    var addr = cpu.getw();
-    cpu.polltime(4);
-    cpu.checkInt();
-    cpu.writemem(addr, cpu.a);
 }
 
 function cpu6502() {
@@ -134,9 +123,8 @@ function cpu6502() {
         this.output = 0;
         this.tubecycle = this.tubecycles = 0;
         this.halted = false;
-        this.instructions = [];
-        this.instructions[0x8d] = inst_STA_abs;
-        this.instructions[0xa9] = inst_LDA_imm;
+        this.instructions = generate6502();
+        this.disassemble = disassemble6502;
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };
@@ -159,6 +147,22 @@ function cpu6502() {
     this.polltime = function(cycles) {
         this.cycles -= cycles;
         // TODO: lots more...
+    }
+
+    this.branch = function(taken) {
+        var offset = signExtend(this.getb());
+        if (!taken) {
+            this.polltime(2);
+            this.checkInt();
+            return;
+        }
+        var cycles = 3;
+        var newPc = (this.pc + offset) & 0xffff;
+        if ((this.pc & 0xff00) ^ (newPc & 0xff00)) cycles++;
+        this.pc = newPc;
+        this.polltime(cycles - 1);
+        this.checkInt();
+        this.polltime(1);
     }
 
     this.adc = function(addend, isC) {
@@ -205,9 +209,11 @@ function cpu6502() {
             this.vis20k = this.ramBank[this.pc>>12];
             var opcode = this.readmem(this.pc);
             if (this.debugInstruction) this.debugInstruction();
+            console.log(hexword(this.pc), this.disassemble(this.pc)[0]);
             var instruction = this.instructions[opcode];
             if (!instruction) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
+                console.log(this.disassemble(this.pc)[0]);
                 this.dumpregs();
                 this.halted = true;
                 return;
