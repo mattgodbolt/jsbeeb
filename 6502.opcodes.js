@@ -1,5 +1,5 @@
 function replaceReg(lines, reg) {
-    return lines.map(function(line) { return line.replace('REG', reg); });
+    return lines.map(function(line) { return line.replace(/REG/g, reg); });
 }
 
 function compileLoad(reg, arg) {
@@ -31,12 +31,50 @@ function compileStore(reg, arg) {
                 "cpu.checkInt();",
                 "cpu.writemem(addr, cpu.REG);"
                 ], reg);
+    } else if (arg == 'zp') {
+        return replaceReg([
+                "var addr = cpu.getb();",
+                "cpu.writemem(addr, cpu.REG);",
+                "cpu.polltime(3);",
+                "cpu.checkInt()",
+                ], reg);
+    } else if (arg.substr(0, 2) == "()") {
+        var off = arg[3];
+        return replaceReg([
+                "var zp = cpu.getb();",
+                "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8) + cpu." + off,
+                "addr &= 0xffff;",
+                "cpu.writemem(addr, cpu.REG);",
+                "cpu.polltime(6);",
+                "cpu.checkInt();"
+                ], reg);
+    }
+}
+
+function compileCompare(arg, reg) {
+    if (arg == "zp") {
+        return replaceReg([
+            "var addr = cpu.getb();",
+            "var temp = cpu.readmem(addr);",
+            "cpu.setzn(cpu.REG - temp);",
+            "cpu.p.c = (cpu.REG >= temp);",
+            "cpu.polltime(3);",
+            "cpu.checkInt();",
+            ], reg);
+    } else if (arg == "imm") {
+        return replaceReg([
+            "var temp = cpu.getb();",
+            "cpu.setzn(cpu.REG - temp);",
+            "cpu.p.c = (cpu.REG >= temp);",
+            "cpu.polltime(2);",
+            "cpu.checkInt();",
+            ], reg);
     }
 }
 
 function compileTransfer(from, to) {
     lines = ["cpu." + from + " = cpu." + to + ";"];
-    if (to != "s") lines.push("cpu.setzn(" + to + ");");
+    if (to != "s") lines.push("cpu.setzn(cpu." + to + ");");
     lines.push("cpu.polltime(2);");
     lines.push("cpu.checkInt();");
     return lines;
@@ -82,7 +120,46 @@ function compileBranch(condition) {
         return ["cpu.branch(cpu.p.z);"];
     case "ne":
         return ["cpu.branch(!cpu.p.z);"];
+    case "cs":
+        return ["cpu.branch(cpu.p.c);"];
+    case "cc":
+        return ["cpu.branch(!cpu.p.c);"];
     }
+}
+
+function compileAddDec(reg, arg, addOrDec) {
+    if (arg == null) {
+        return replaceReg([
+            "cpu.REG = (cpu.REG " + addOrDec + ") & 0xff;",
+            "cpu.setzn(cpu.REG);",
+            "cpu.polltime(2);",
+            "cpu.checkInt();",
+            ], reg);
+    }
+}
+
+function compileJsr() {
+    return [
+        "var addr = cpu.getw();",
+        "var pushAddr = cpu.pc - 1;",
+        "cpu.push(pushAddr >> 8);",
+        "cpu.push(pushAddr & 0xff);",
+        "cpu.pc = addr;",
+        "cpu.polltime(5);",
+        "cpu.checkInt();",
+        "cpu.polltime(1);",
+        ];
+}
+
+function compileRts() {
+    return [
+        "var temp = cpu.pull();",
+        "temp |= cpu.pull() << 8;",
+        "cpu.pc = temp + 1;",
+        "cpu.polltime(5);",
+        "cpu.checkInt();",
+        "cpu.polltime(1);",
+        ];
 }
 
 function compileInstruction(opcodeString) {
@@ -109,12 +186,25 @@ function compileInstruction(opcodeString) {
         // todo
     } else if (opcode[0] == 'B') {
         lines = compileBranch(opcode.substr(1,2).toLowerCase());
+    } else if (opcode == "CMP") {
+        lines = compileCompare(arg, "a");
+    } else if (opcode.match(/^CP/)) {
+        lines = compileCompare(arg, opcode[2].toLowerCase());
+    } else if (opcode.match(/^DE/)) {
+        lines = compileAddDec(opcode[2].toLowerCase(), arg, "- 1");
+    } else if (opcode.match(/^IN/)) {
+        lines = compileAddDec(opcode[2].toLowerCase(), arg, "+ 1");
+    } else if (opcode == "JSR") {
+        lines = compileJsr();
+    } else if (opcode == "RTS") {
+        lines = compileRts();
     }
     if (!lines) return null;
-    text = "compiled = function(cpu) {\n    " + lines.join("\n    ") + "\n}\n";
+    var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
+    var text = fnName + " = function(cpu) {\n    " + lines.join("\n    ") + "\n}\n";
     console.log(text);
     eval(text);
-    return compiled;
+    return this[fnName];
 }
 
 var opcodes6502 = {
@@ -148,7 +238,7 @@ var opcodes6502 = {
     0x1D: "ORA abs,x",
     0x1E: "ASL abs,x",
     0x1F: "SLO abs,x",
-    0x20: "JSR",
+    0x20: "JSR abs",
     0x21: "AND (,x)",
     0x23: "RLA (,x)",
     0x24: "BIT zp",
@@ -189,7 +279,7 @@ var opcodes6502 = {
     0x49: "EOR imm",
     0x4A: "LSR A",
     0x4B: "ASR imm",
-    0x4C: "JMP",
+    0x4C: "JMP abs",
     0x4D: "EOR abs",
     0x4E: "LSR abs",
     0x4F: "SRE abs",
@@ -379,15 +469,26 @@ function disassemble6502(addr) {
     if (!split[1]) {
         return [opcode, addr + 1];
     }
-    switch (split[1]) {
+    var param = split[1] || "";
+    var suffix = "";
+    index = param.match(/(.*),([xy])/);
+    if (index) {
+        param = index[1];
+        suffix = "," + index[2].toUpperCase();
+    }
+    switch (param) {
     case "imm":
-        return [split[0] + " #$" + hexbyte(this.readmem(addr + 1)), addr + 2];
+        return [split[0] + " #$" + hexbyte(this.readmem(addr + 1)) + suffix, addr + 2];
     case "abs":
-        return [split[0] + " $" + hexword(this.readmem(addr + 1) | (this.readmem(addr+2)<<8)),
+        return [split[0] + " $" + hexword(this.readmem(addr + 1) | (this.readmem(addr+2)<<8)) + suffix,
                addr + 3];
     case "branch":
-        return [split[0] + " $" + hexword(addr + signExtend(this.readmem(addr + 1)) + 2),
+        return [split[0] + " $" + hexword(addr + signExtend(this.readmem(addr + 1)) + 2) + suffix,
                addr + 2];
+    case "zp":
+        return [split[0] + " $" + hexbyte(this.readmem(addr + 1)) + suffix, addr + 2];
+    case "()":
+        return [split[0] + " ($" + hexbyte(this.readmem(addr + 1)) + ")" + suffix, addr + 2];
     }
     return [opcode, addr + 1];
 }

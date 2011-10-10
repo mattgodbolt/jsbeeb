@@ -83,7 +83,7 @@ function cpu6502() {
     this.dumpregs = function() {
         console.log("6502 registers :");
         console.log("A=" + hexbyte(this.a) + " X=" + hexbyte(this.x) + " Y=" + hexbyte(this.y)
-                + "S=01" + hexbyte(this.s) + " PC=" + hexword(this.pc));
+                + " S=01" + hexbyte(this.s) + " PC=" + hexword(this.pc));
         console.log("ROMSEL " + hexbyte(this.romsel>>24));
     }
 
@@ -142,7 +142,7 @@ function cpu6502() {
 
     this.pull = function() {
         this.s = (this.s + 1) & 0xff;
-        return readmem(0x100 + this.s);
+        return this.readmem(0x100 + this.s);
     }
 
     this.polltime = function(cycles) {
