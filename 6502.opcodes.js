@@ -265,6 +265,19 @@ function getGetPut(arg) {
             opcodeCycles: 2,
             memoryCycles: 1,
         };
+    case "abs,x":
+    case "abs.y":
+        return {
+            reg: "addr",
+            get: [
+                "var temp = cpu.getw();",
+                "var addr = temp + cpu." + arg[4] +";",
+                "if ((addr & 0xff00) != (temp & 0xff00)) cpu.polltime(1);",
+                ],
+            put: ["throw \"bad fit\""],
+            opcodeCycles: 2,
+            memoryCycles: 1,
+        };
     }
     // TODO: consider "abs" cases, e.g. ROL abs, which will need more smarts here.
     // Possibly best to write them all out longhand.
@@ -331,7 +344,7 @@ function compileLogical(arg, op) {
     var getput = getGetPut(arg);
     if (!getput) return null;
     var lines = getput.get;
-    lines.push("cpu.a " + op + "= " + getput.reg);
+    lines.push("cpu.a " + op + "= " + getput.reg + ";");
     lines.push("cpu.setzn(cpu.a);");
     lines.push("cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");");
     lines.push("cpu.checkInt();");
@@ -365,6 +378,16 @@ function compileBit(arg) {
             "cpu.checkInt();"
                 ];
     }
+}
+
+function compileAdcSbc(inst, isC, arg) {
+    // TODO: get rid of the isC thing.
+    var getput = getGetPut(arg);
+    if (!getput) return null;
+    return getput.get.concat([
+            "cpu." + inst + "(" + getput.reg + ");",
+            "cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");",
+            "cpu.checkInt();"]);
 }
 
 function compileInstruction(opcodeString) {
@@ -431,6 +454,8 @@ function compileInstruction(opcodeString) {
         lines = compileLogical(arg, "^");
     } else if (opcode == "JMP") {
         lines = compileJump(arg);
+    } else if (opcode == "ADC" || opcode == "SBC") {
+        lines = compileAdcSbc(opcode.toLowerCase(), false, arg);
     }
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');

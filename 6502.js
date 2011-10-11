@@ -205,6 +205,20 @@ function cpu6502() {
         }
     }
 
+    this.sbc = function(subend, isC) {
+        if (!this.p.d) {
+            subend += this.p.c ? 0 : 1;
+            var tempv = this.a - subend;
+            var tempw = tempv & 0xffff;
+            this.p.v = !!((this.a ^ subend) & (this.a ^ tempv) & 0x80);
+            this.p.c = tempv >= 0;
+            this.a = tempw & 0xff;
+            this.setzn(this.a);
+        } else {
+            throw "Oh noes";
+        }
+    }
+
     this.execute = function() {
         if (this.halted) return;
         this.cycles += 40000;
