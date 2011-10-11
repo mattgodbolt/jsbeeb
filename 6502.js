@@ -15,12 +15,12 @@ function flags() {
         this.c = this.z = this.i = this.d = this.v = this.n = false;
     }
     this.debugString = function() {
-        return (this.c ? "C" : "_") +
-               (this.z ? "Z" : "_") +
-               (this.i ? "I" : "_") +
-               (this.d ? "D" : "_") +
-               (this.v ? "V" : "_") +
-               (this.n ? "N" : "_");
+        return (this.c ? "C" : "c") +
+               (this.z ? "Z" : "z") +
+               (this.i ? "I" : "i") +
+               (this.d ? "D" : "d") +
+               (this.v ? "V" : "v") +
+               (this.n ? "N" : "n");
     }
 
     this.reset();
@@ -80,11 +80,16 @@ function cpu6502() {
         this.takeInt = (this.interrupt && !this.p.i);
     }
 
+    this.checkInt2 = function() {
+        this.takeInt = ((this.interrupt & 0x80) && !this.p.i);
+    }
+
     this.dumpregs = function() {
         console.log("6502 registers :");
         console.log("A=" + hexbyte(this.a) + " X=" + hexbyte(this.x) + " Y=" + hexbyte(this.y)
                 + " S=01" + hexbyte(this.s) + " PC=" + hexword(this.pc));
-        console.log("ROMSEL " + hexbyte(this.romsel>>24));
+        console.log("FLAGS = " + this.p.debugString());
+        // console.log("ROMSEL " + hexbyte(this.romsel>>24));
     }
 
     this.loadOs = function(name) {

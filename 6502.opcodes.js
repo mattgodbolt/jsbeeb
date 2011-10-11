@@ -20,6 +20,26 @@ function compileLoad(reg, arg) {
             "cpu.REG = cpu.readmem(addr);",
             "cpu.setzn(cpu.REG);"
         ], reg);
+    } else if (arg.match(/^abs,[xy]/)) {
+        var off = arg[4];
+        return replaceReg([
+            "var addr = cpu.getw();",
+            "cpu.polltime(3);",
+            "var offsetAddr = (addr + cpu." + off + ") & 0xffff;",
+            "if ((addr & 0xff00) != (offsetAddr & 0xff00)) cpu.polltime(1);",
+            "cpu.REG = cpu.readmem(offsetAddr);",
+            "cpu.setzn(cpu.REG);",
+            "cpu.polltime(1);",
+            "cpu.checkInt();",
+        ], reg);
+    } else if (arg == "zp") {
+        return replaceReg([
+            "var addr = cpu.getb();",
+            "cpu.REG = cpu.readmem(addr);",
+            "cpu.setzn(cpu.REG);",
+            "cpu.polltime(3);",
+            "cpu.checkInt();",
+        ], reg);
     }
 }
 
@@ -31,6 +51,18 @@ function compileStore(reg, arg) {
                 "cpu.checkInt();",
                 "cpu.writemem(addr, cpu.REG);"
                 ], reg);
+    } else if (arg.match(/^abs,[xy]/)) {
+        var off = arg[4];
+        return replaceReg([
+                "var addr = cpu.getw();",
+                "cpu.polltime(4);",
+                "var offsetAddr = (addr + cpu." + off + ") & 0xffff;",
+                "var weirdReadAddr = (addr & 0xff00) | (offsetAddr & 0xff);",
+                "cpu.readmem(weirdReadAddr);",
+                "cpu.polltime(1);",
+                "cpu.checkInt();",
+                "cpu.writemem(offsetAddr, cpu.REG);"
+                ], reg);
     } else if (arg == 'zp') {
         return replaceReg([
                 "var addr = cpu.getb();",
@@ -38,11 +70,19 @@ function compileStore(reg, arg) {
                 "cpu.polltime(3);",
                 "cpu.checkInt()",
                 ], reg);
+    } else if (arg.match(/^zp,[xy]/)) {
+        var off = arg[3];
+        return replaceReg([
+                "var addr = cpu.getb();",
+                "cpu.writemem((addr + cpu." + off + ") & 0xff, cpu.REG);",
+                "cpu.polltime(4);",
+                "cpu.checkInt()",
+                ], reg);
     } else if (arg.substr(0, 2) == "()") {
         var off = arg[3];
         return replaceReg([
                 "var zp = cpu.getb();",
-                "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8) + cpu." + off,
+                "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8) + cpu." + off + ";",
                 "addr &= 0xffff;",
                 "cpu.writemem(addr, cpu.REG);",
                 "cpu.polltime(6);",
@@ -60,6 +100,15 @@ function compileCompare(arg, reg) {
             "cpu.p.c = (cpu.REG >= temp);",
             "cpu.polltime(3);",
             "cpu.checkInt();",
+            ], reg);
+    } else if (arg == "abs") {
+        return replaceReg([
+            "var addr = cpu.getw();",
+            "cpu.polltime(4);",
+            "cpu.checkInt();",
+            "var temp = cpu.readmem(addr);",
+            "cpu.setzn(cpu.REG - temp);",
+            "cpu.p.c = (cpu.REG >= temp);",
             ], reg);
     } else if (arg == "imm") {
         return replaceReg([
@@ -114,6 +163,29 @@ function compilePush(reg) {
         ], reg));
 }
 
+function compilePull(reg) {
+    if (reg == 'p') {
+        return [
+                "var temp = cpu.pull();",
+                "cpu.polltime(4);",
+                "cpu.checkInt();",
+                "cpu.p.c = !!(temp & 0x01);",
+                "cpu.p.z = !!(temp & 0x02);",
+                "cpu.p.i = !!(temp & 0x04);",
+                "cpu.p.d = !!(temp & 0x08);",
+                "cpu.p.v = !!(temp & 0x40);",
+                "cpu.p.d = !!(temp & 0x80);"
+                    ];
+        reg = 'temp';
+    }
+    return replaceReg([
+        "cpu.REG = cpu.pull();",
+        "cpu.setzn(cpu.REG);",
+        "cpu.polltime(4);",
+        "cpu.checkInt()",  // TODO - PLY PLX don't check ints in b-em. bug?
+        ], reg);
+}
+
 function compileBranch(condition) {
     switch (condition) {
     case "eq":
@@ -124,17 +196,14 @@ function compileBranch(condition) {
         return ["cpu.branch(cpu.p.c);"];
     case "cc":
         return ["cpu.branch(!cpu.p.c);"];
-    }
-}
-
-function compileAddDec(reg, arg, addOrDec) {
-    if (arg == null) {
-        return replaceReg([
-            "cpu.REG = (cpu.REG " + addOrDec + ") & 0xff;",
-            "cpu.setzn(cpu.REG);",
-            "cpu.polltime(2);",
-            "cpu.checkInt();",
-            ], reg);
+    case "mi":
+        return ["cpu.branch(cpu.p.n);"];
+    case "pl":
+        return ["cpu.branch(!cpu.p.n);"];
+    case "vs":
+        return ["cpu.branch(cpu.p.v);"];
+    case "vc":
+        return ["cpu.branch(!cpu.p.v);"];
     }
 }
 
@@ -169,19 +238,65 @@ function getGetPut(arg) {
             reg: "temp",
             get: ["var addr = cpu.getb();", "var temp = cpu.readmem(addr);"],
             put: ["cpu.writemem(addr, temp);"],
-            cycles: 1,
+            opcodeCycles: 1,
+            memoryCycles: 1,
         };
     case "A":
         return {
             reg: "cpu.a",
             get: [],
             put: [],
-            cycles: 0,
+            opcodeCycles: 0,
+            memoryCycles: 0,
+        };
+    case "imm":
+        return {
+            reg: "temp",
+            get: ["var temp = cpu.getb();"],
+            put: [],
+            opcodeCycles: 1,
+            memoryCycles: 0,
+        };
+    case "abs":
+        return {
+            reg: "temp",
+            get: ["var temp = cpu.getw();"],
+            put: ["cpu.writemem(addr, temp);"],
+            opcodeCycles: 2,
+            memoryCycles: 1,
         };
     }
     // TODO: consider "abs" cases, e.g. ROL abs, which will need more smarts here.
     // Possibly best to write them all out longhand.
 }
+
+function compileAddDec(reg, arg, addOrDec) {
+    if (arg == null) {
+        return replaceReg([
+            "cpu.REG = (cpu.REG " + addOrDec + ") & 0xff;",
+            "cpu.setzn(cpu.REG);",
+            "cpu.polltime(2);",
+            "cpu.checkInt();",
+            ], reg);
+    } else if (arg == "abs") {
+        // Hugely hand-crafted looking RMW instruction:
+        // TODO: 65c02 version
+        return [
+            "var addr = cpu.getw();",
+            "cpu.polltime(4);",
+            "var oldValue = cpu.readmem(addr);",
+            "var newValue = (oldValue " + addOrDec + ") & 0xff;",
+            "cpu.polltime(1);",
+            "cpu.writemem(addr, oldValue);",
+            "cpu.checkInt2();", // TODO: rename when I know what this is
+            "cpu.polltime(1);",
+            "cpu.checkInt();",
+            "cpu.writemem(addr, newValue);",
+            "cpu.setzn(newValue);"
+            ];
+    }
+}
+
 
 function compileRotate(left, logical, arg) {
     var getput = getGetPut(arg);
@@ -207,9 +322,49 @@ function compileRotate(left, logical, arg) {
     lines.push("cpu.setzn(" + getput.reg + ");");
     lines = lines.concat(getput.put);
     return lines.concat([
-            "cpu.polltime(" + (4 + getput.cycles) + ");",
+            "cpu.polltime(" + (1 + getput.opcodeCycles + 2 * getput.memoryCycles) + ");",
             "cpu.checkInt();"
             ]);
+}
+
+function compileLogical(arg, op) {
+    var getput = getGetPut(arg);
+    if (!getput) return null;
+    var lines = getput.get;
+    lines.push("cpu.a " + op + "= " + getput.reg);
+    lines.push("cpu.setzn(cpu.a);");
+    lines.push("cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");");
+    lines.push("cpu.checkInt();");
+    return lines;
+}
+
+function compileJump(arg) {
+    if (arg == "abs") {
+        return [
+            "cpu.pc = cpu.getw();",
+            "cpu.polltime(3);",
+            "cpu.checkInt();"
+                ];
+    }
+}
+
+function compileBit(arg) {
+    if (arg == "imm") {
+        return [
+            "cpu.p.z = !(cpu.a & cpu.getb());",
+            "cpu.polltime(2);"
+                ];  // TODO: No checkint?
+    } else if (arg == "zp") {
+        return [
+            "var addr = cpu.getb();",
+            "var temp = cpu.readmem(addr);",
+            "cpu.p.z = !(cpu.a & temp);",
+            "cpu.p.v = !!(temp & 0x40);",
+            "cpu.p.n = !!(temp & 0x80);",
+            "cpu.polltime(3);",
+            "cpu.checkInt();"
+                ];
+    }
 }
 
 function compileInstruction(opcodeString) {
@@ -224,6 +379,14 @@ function compileInstruction(opcodeString) {
         lines = compileStore(reg, arg);
     } else if (opcode == "SEI") {
         lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.i = true;"];
+    } else if (opcode == "CLI") {
+        lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.i = false;"];
+    } else if (opcode == "SEC") {
+        lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.c = true;"];
+    } else if (opcode == "CLC") {
+        lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.c = false;"];
+    } else if (opcode == "SED") {
+        lines = ["cpu.p.d = true;", "cpu.polltime(2);", "cpu.checkInt();"]
     } else if (opcode == "CLD") {
         lines = ["cpu.p.d = false;", "cpu.polltime(2);", "cpu.checkInt();"]
     } else if (opcode[0] == 'T') {
@@ -232,7 +395,11 @@ function compileInstruction(opcodeString) {
         lines = compileAsl(arg);
     } else if (opcode.match(/^PH/)) {
         lines = compilePush(reg);
-    } else if (opcode == "BRK" || opcode == "BIT") {
+    } else if (opcode.match(/^PL/)) {
+        lines = compilePull(reg);
+    } if (opcode == "BIT") {
+        lines = compileBit(arg);
+    } else if (opcode == "BRK") {
         // todo
     } else if (opcode[0] == 'B') {
         lines = compileBranch(opcode.substr(1,2).toLowerCase());
@@ -256,6 +423,14 @@ function compileInstruction(opcodeString) {
         lines = compileRotate(false, true, arg);
     } else if (opcode == "LSL") {
         lines = compileRotate(true, true, arg);
+    } else if (opcode == "AND") {
+        lines = compileLogical(arg, "&");
+    } else if (opcode == "ORA") {
+        lines = compileLogical(arg, "|");
+    } else if (opcode == "EOR") {
+        lines = compileLogical(arg, "^");
+    } else if (opcode == "JMP") {
+        lines = compileJump(arg);
     }
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
