@@ -1,0 +1,38 @@
+ASL:
+
+0  +0  opcode  finish prev
+1  +1  addrlo  interpret ASL
+2  +2  addrhi  hold addrlo
+3 lohi data    fetch data
+  [stretch here, ie poll(4); readmem]
+4 lohi data    writeback data (idiotically); do shift
+5 lohi rslt    store result
+6  +3  nxtop   read next op
+
+
+ROL abs,X abs+X crossing page
+0  +0  opcode  finish prev
+1  +1  addrlo  interpret ROL
+2  +2  addrhi  calc addrlo+X
+3 lhX  wrong?  inc addrhi  -- according to docs "provision made to prevent for mem-mod inst"
+4 LhX  data    
+5 ?    ?       execute
+6 LhX  reslt   store
+7  + 3 next .....
+
+vs b-em's read twice @0, write @0, polltime(6/7), checkInt.
+
+From 650X doc:
+0  +0  opcode  fetch          finish prev
+1  +1  adl     fetch          decode
+2  +2  adh     fetch          add ADL to x
+3 lhX  ???     fetch wrong    add carry
+4 LhX  data    fetch correct  -
+5 LhX  data    destroy mem    perform rotate, turn on write
+6 LhX  rslt    store results  set flags
+7  +3  next    opcode         fetch  next opcode
+
+
+ROL abs as per ASL
+
+pg151 106. RMW instr
