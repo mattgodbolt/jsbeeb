@@ -1,10 +1,63 @@
+var debugText = "";
+
 function replaceReg(lines, reg) {
     return lines.map(function(line) { return line.replace(/REG/g, reg); });
 }
 
+function getGetPut(arg) {
+    switch (arg) {
+    case "zp":
+        return {
+            reg: "temp",
+            get: ["var addr = cpu.getb();", "var temp = cpu.readmem(addr);"],
+            put: ["cpu.writemem(addr, temp);"],
+            opcodeCycles: 1,
+            memoryCycles: 1,
+        };
+    case "A":
+        return {
+            reg: "cpu.a",
+            get: [],
+            put: [],
+            opcodeCycles: 0,
+            memoryCycles: 0,
+        };
+    case "imm":
+        return {
+            reg: "temp",
+            get: ["var temp = cpu.getb();"],
+            put: [],
+            opcodeCycles: 1,
+            memoryCycles: 0,
+        };
+    case "abs":
+        return {
+            reg: "temp",
+            get: ["var temp = cpu.getw();"],
+            put: ["cpu.writemem(addr, temp);"],
+            opcodeCycles: 2,
+            memoryCycles: 1,
+        };
+    case "abs,x":
+    case "abs,y":
+        return {
+            reg: "temp",
+            get: [
+                "var temp = cpu.getw();",
+                "var addr = temp + cpu." + arg[4] +";",
+                "if ((addr & 0xff00) != (temp & 0xff00)) cpu.polltime(1);",
+                "temp = cpu.readmem(temp);",
+                ],
+            put: ["throw \"bad fit\""],
+            opcodeCycles: 2,
+            memoryCycles: 1,
+        };
+    }
+}
+
 function compileLoad(reg, arg) {
-    // TODO: work out if this is valid for LDX and LDY. checkint/polltime differs in b-em.
-    if (arg == 'imm') {
+    if (arg == 'imm' && reg == 'a') {
+        // Special cased as it is in b-em. TODO: is there really any diff?
         return replaceReg([
             "cpu.REG = cpu.getb();",
             "cpu.setzn(cpu.REG);",
@@ -12,35 +65,16 @@ function compileLoad(reg, arg) {
             "cpu.checkInt();",
             "cpu.polltime(1);",
         ], reg);
-    } else if (arg == 'abs') {
-        return replaceReg([
-            "var addr = cpu.getw();",
-            "cpu.polltime(4);",
-            "cpu.checkInt();",
-            "cpu.REG = cpu.readmem(addr);",
-            "cpu.setzn(cpu.REG);"
-        ], reg);
-    } else if (arg.match(/^abs,[xy]/)) {
-        var off = arg[4];
-        return replaceReg([
-            "var addr = cpu.getw();",
-            "cpu.polltime(3);",
-            "var offsetAddr = (addr + cpu." + off + ") & 0xffff;",
-            "if ((addr & 0xff00) != (offsetAddr & 0xff00)) cpu.polltime(1);",
-            "cpu.REG = cpu.readmem(offsetAddr);",
-            "cpu.setzn(cpu.REG);",
-            "cpu.polltime(1);",
-            "cpu.checkInt();",
-        ], reg);
-    } else if (arg == "zp") {
-        return replaceReg([
-            "var addr = cpu.getb();",
-            "cpu.REG = cpu.readmem(addr);",
-            "cpu.setzn(cpu.REG);",
-            "cpu.polltime(3);",
-            "cpu.checkInt();",
-        ], reg);
     }
+    var gp = getGetPut(arg);
+    if (!gp) return null;
+    var lines = gp.get;
+    if (gp.reg != reg) lines.push("cpu." + reg + " = " + gp.reg + ";");
+    return lines.concat([
+            "cpu.setzn(cpu." + reg + ");",
+            "cpu.polltime(" + (1 + gp.opcodeCycles + gp.memoryCycles) + ");",
+            "cpu.checkInt();"]        
+            );
 }
 
 function compileStore(reg, arg) {
@@ -92,33 +126,14 @@ function compileStore(reg, arg) {
 }
 
 function compileCompare(arg, reg) {
-    if (arg == "zp") {
-        return replaceReg([
-            "var addr = cpu.getb();",
-            "var temp = cpu.readmem(addr);",
-            "cpu.setzn(cpu.REG - temp);",
-            "cpu.p.c = (cpu.REG >= temp);",
-            "cpu.polltime(3);",
-            "cpu.checkInt();",
-            ], reg);
-    } else if (arg == "abs") {
-        return replaceReg([
-            "var addr = cpu.getw();",
-            "cpu.polltime(4);",
-            "cpu.checkInt();",
-            "var temp = cpu.readmem(addr);",
-            "cpu.setzn(cpu.REG - temp);",
-            "cpu.p.c = (cpu.REG >= temp);",
-            ], reg);
-    } else if (arg == "imm") {
-        return replaceReg([
-            "var temp = cpu.getb();",
-            "cpu.setzn(cpu.REG - temp);",
-            "cpu.p.c = (cpu.REG >= temp);",
-            "cpu.polltime(2);",
-            "cpu.checkInt();",
-            ], reg);
-    }
+    var gp = getGetPut(arg);
+    if (!gp) return null;
+    return gp.get.concat(replaceReg([
+            "cpu.setzn(cpu.REG - " + gp.reg + ");",
+            "cpu.p.c = (cpu.REG >= " + gp.reg + ");",
+            "cpu.polltime(" + (1 + gp.opcodeCycles + gp.memoryCycles) + ");",
+            "cpu.checkInt()"],
+            reg));
 }
 
 function compileTransfer(from, to) {
@@ -231,57 +246,6 @@ function compileRts() {
         ];
 }
 
-function getGetPut(arg) {
-    switch (arg) {
-    case "zp":
-        return {
-            reg: "temp",
-            get: ["var addr = cpu.getb();", "var temp = cpu.readmem(addr);"],
-            put: ["cpu.writemem(addr, temp);"],
-            opcodeCycles: 1,
-            memoryCycles: 1,
-        };
-    case "A":
-        return {
-            reg: "cpu.a",
-            get: [],
-            put: [],
-            opcodeCycles: 0,
-            memoryCycles: 0,
-        };
-    case "imm":
-        return {
-            reg: "temp",
-            get: ["var temp = cpu.getb();"],
-            put: [],
-            opcodeCycles: 1,
-            memoryCycles: 0,
-        };
-    case "abs":
-        return {
-            reg: "temp",
-            get: ["var temp = cpu.getw();"],
-            put: ["cpu.writemem(addr, temp);"],
-            opcodeCycles: 2,
-            memoryCycles: 1,
-        };
-    case "abs,x":
-    case "abs.y":
-        return {
-            reg: "addr",
-            get: [
-                "var temp = cpu.getw();",
-                "var addr = temp + cpu." + arg[4] +";",
-                "if ((addr & 0xff00) != (temp & 0xff00)) cpu.polltime(1);",
-                ],
-            put: ["throw \"bad fit\""],
-            opcodeCycles: 2,
-            memoryCycles: 1,
-        };
-    }
-    // TODO: consider "abs" cases, e.g. ROL abs, which will need more smarts here.
-    // Possibly best to write them all out longhand.
-}
 
 function compileAddDec(reg, arg, addOrDec) {
     if (arg == null) {
@@ -363,21 +327,24 @@ function compileJump(arg) {
 
 function compileBit(arg) {
     if (arg == "imm") {
+        // 65c02 instr.
         return [
             "cpu.p.z = !(cpu.a & cpu.getb());",
             "cpu.polltime(2);"
                 ];  // TODO: No checkint?
-    } else if (arg == "zp") {
-        return [
-            "var addr = cpu.getb();",
-            "var temp = cpu.readmem(addr);",
-            "cpu.p.z = !(cpu.a & temp);",
-            "cpu.p.v = !!(temp & 0x40);",
-            "cpu.p.n = !!(temp & 0x80);",
-            "cpu.polltime(3);",
-            "cpu.checkInt();"
-                ];
+    } else if (arg == "abs") {
+        // TODO: b-em special cases the timing here.
     }
+    
+    var getput = getGetPut(arg);
+    if (!getput) return null;
+    return getput.get.concat([
+            "cpu.p.z = !(cpu.a & " + getput.reg + ");",
+            "cpu.p.v = !!(" + getput.reg + " & 0x40);",
+            "cpu.p.n = !!(" + getput.reg + " & 0x80);",
+            "cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");",
+            "cpu.checkInt();"
+                ]);
 }
 
 function compileAdcSbc(inst, isC, arg) {
@@ -460,6 +427,7 @@ function compileInstruction(opcodeString) {
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
     var text = fnName + " = function(cpu) {\n    " + lines.join("\n    ") + "\n}\n";
+    debugText += text;
     console.log(text);
     eval(text);
     return this[fnName];
@@ -713,10 +681,12 @@ var opcodes6502 = {
 
 function generate6502() {
     functions = [];
+    debugText = "";
     for (var i = 0; i < 256; ++i) {
         var opcode = opcodes6502[i];
         if (opcode) functions[i] = compileInstruction(opcode);
     }
+    $('#debug').html('<pre>' + debugText + '</pre>');
     return functions;
 }
 

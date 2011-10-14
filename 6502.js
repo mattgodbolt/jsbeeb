@@ -177,12 +177,12 @@ function cpu6502() {
             this.p.v = !((this.a ^ addend) & 0x80) && !!((this.a ^ tempw) & 0x80);
             this.a = tempw & 0xff;
             this.p.c = !!(tempw & 0x100);
-            this.setzn(a);
+            this.setzn(this.a);
         } else {
             var ah = 0;
-            var tempb = (this.a + addend + (p.c ? 1 : 0)) & 0xff;
+            var tempb = (this.a + addend + (this.p.c ? 1 : 0)) & 0xff;
             if (!isC && !tempb) this.p.z = true;
-            var al = (this.a & 0xf) + (addend & 0xf) + (p.c ? 1 : 0);
+            var al = (this.a & 0xf) + (addend & 0xf) + (this.p.c ? 1 : 0);
             if (al > 9) {
                 al -= 10;
                 al &= 0xf;
