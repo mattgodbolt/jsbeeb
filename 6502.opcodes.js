@@ -265,7 +265,7 @@ function compileAddDec(reg, arg, addOrDec) {
             "var newValue = (oldValue " + addOrDec + ") & 0xff;",
             "cpu.polltime(1);",
             "cpu.writemem(addr, oldValue);",
-            "cpu.checkInt2();", // TODO: rename when I know what this is
+            "cpu.checkViaIntOnly();",
             "cpu.polltime(1);",
             "cpu.checkInt();",
             "cpu.writemem(addr, newValue);",
@@ -428,7 +428,6 @@ function compileInstruction(opcodeString) {
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
     var text = fnName + " = function(cpu) {\n    " + lines.join("\n    ") + "\n}\n";
     debugText += text;
-    console.log(text);
     eval(text);
     return this[fnName];
 }
@@ -686,7 +685,7 @@ function generate6502() {
         var opcode = opcodes6502[i];
         if (opcode) functions[i] = compileInstruction(opcode);
     }
-    $('#debug').html('<pre>' + debugText + '</pre>');
+    //$('#debug').html('<pre>' + debugText + '</pre>');
     return functions;
 }
 

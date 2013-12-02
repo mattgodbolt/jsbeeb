@@ -36,15 +36,56 @@ function cpu6502() {
     this.osOffset = this.romOffset + 16 * 1024;
     this.a = this.x = this.y = this.s = 0;
     this.romsel = 0;
+    this.FEslowdown = [true,false,true,true,false,false,true,false];
 
     this.readmem = function(addr) {
         if (this.debugRead) this.debugRead(addr);
-        var offset = this.memlook[this.vis20k][addr >> 8];
-        if (offset !== 0xffffffff) {
+        if (this.memstat[this.vis20k][addr >> 8]) {
+            var offset = this.memlook[this.vis20k][addr >> 8];
             return this.ramRomOs[offset + addr];
         }
-        console.log("Read of " + hexword(addr));
-        return null;
+        if (addr < 0xfe00 || this.FEslowdown[(addr>>5) & 7]) {
+            this.polltime(1 + this.cycles & 1);
+        }
+        console.log("Peripheral read " + hexword(addr));
+        switch (addr & ~0x0003) {
+        case 0xfc20: case 0xfc24: case 0xfc28: case 0xfc2c:
+        case 0xfc30: case 0xfc34: case 0xfc38: case 0xfc3c:
+            // TODO: sid chip (really?);
+            break;
+        case 0xfc40: case 0xfc44: case 0xfc48: case 0xfc4c:
+        case 0xfc50: case 0xfc54: case 0xfc58: case 0xfc5c:
+            // TODO: ide
+            break;
+        case 0xfe00: case 0xfe04: return this.crtc.read(addr);
+        case 0xfe08: case 0xfe0c: return this.acia.read(addr);
+        case 0xfe18: // TODO adc on master
+            break;
+        case 0xfe24: case 0xfe28: // TODO 1770 on master
+            break;
+        case 0xfe34: // TODO acccon on master;
+            break;
+        case 0xfe40: case 0xfe44: case 0xfe48: case 0xfe4c:
+        case 0xfe50: case 0xfe54: case 0xfe58: case 0xfe5c:
+            return this.sysvia.read(addr);
+        case 0xfe60: case 0xfe64: case 0xfe68: case 0xfe6c:
+        case 0xfe70: case 0xfe74: case 0xfe78: case 0xfe7c:
+            return this.uservia.read(addr);
+        case 0xfe80: case 0xfe84: case 0xfe88: case 0xfe8c:
+        case 0xfe90: case 0xfe94: case 0xfe98: case 0xfe9c:
+            // TODO if (!master)
+            // TODO wd1770 support
+            return this.fdc.read(addr);
+        case 0xfec0: case 0xfec4: case 0xfec8: case 0xfecc:
+        case 0xfed0: case 0xfed4: case 0xfed8: case 0xfedc:
+            // if (!master)
+            return this.adc.read(addr);
+        case 0xfee0: case 0xfee4: case 0xfee8: case 0xfeec:
+        case 0xfef0: case 0xfef4: case 0xfef8: case 0xfefc:
+            return this.tube.read(addr);
+        }
+        if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
+        return addr >> 8;
     }
 
     this.writemem = function(addr, b) {
@@ -55,6 +96,51 @@ function cpu6502() {
             return;
         }
         if (addr < 0xfc00 || addr >= 0xff00) return;
+        if (this.FEslowdown[(addr>>5) & 7]) {
+            this.polltime(1 + this.cycles & 1);
+        }
+        console.log("Peripheral write " + hexword(addr) + " " + hexbyte(b));
+        switch (addr & ~0x0003) {
+        case 0xfc20: case 0xfc24: case 0xfc28: case 0xfc2c:
+        case 0xfc30: case 0xfc34: case 0xfc38: case 0xfc3c:
+            // TODO: sid chip (really?);
+            break;
+        case 0xfc40: case 0xfc44: case 0xfc48: case 0xfc4c:
+        case 0xfc50: case 0xfc54: case 0xfc58: case 0xfc5c:
+            // TODO: ide
+            break;
+        case 0xfe00: case 0xfe04: return this.crtc.write(addr, b);
+        case 0xfe08: case 0xfe0c: return this.acia.write(addr, b);
+        case 0xfe10: case 0xfe14: // TODO serial
+            break;
+        case 0xfe18: // TODO adc on master
+            break;
+        case 0xfe24: case 0xfe28: // TODO ula & 1770 on master
+            break;
+        case 0xfe30:
+            this.romSelect(b);
+            break;
+        case 0xfe34: // TODO accon etc
+            break;
+        case 0xfe40: case 0xfe44: case 0xfe48: case 0xfe4c:
+        case 0xfe50: case 0xfe54: case 0xfe58: case 0xfe5c:
+            return this.sysvia.write(addr, b);
+        case 0xfe60: case 0xfe64: case 0xfe68: case 0xfe6c:
+        case 0xfe70: case 0xfe74: case 0xfe78: case 0xfe7c:
+            return this.uservia.write(addr, b);
+        case 0xfe80: case 0xfe84: case 0xfe88: case 0xfe8c:
+        case 0xfe90: case 0xfe94: case 0xfe98: case 0xfe9c:
+            // TODO if (!master)
+            // TODO wd1770 support
+            return this.fdc.write(addr, b);
+        case 0xfec0: case 0xfec4: case 0xfec8: case 0xfecc:
+        case 0xfed0: case 0xfed4: case 0xfed8: case 0xfedc:
+            // if (!master)
+            return this.adc.write(addr, b);
+        case 0xfee0: case 0xfee4: case 0xfee8: case 0xfeec:
+        case 0xfef0: case 0xfef4: case 0xfef8: case 0xfefc:
+            return this.tube.write(addr, b);
+        }
         // TODO: hardware!
     }
 
@@ -80,7 +166,7 @@ function cpu6502() {
         this.takeInt = (this.interrupt && !this.p.i);
     }
 
-    this.checkInt2 = function() {
+    this.checkViaIntOnly = function() {
         this.takeInt = ((this.interrupt & 0x80) && !this.p.i);
     }
 
@@ -131,6 +217,8 @@ function cpu6502() {
         this.halted = false;
         this.instructions = generate6502();
         this.disassemble = disassemble6502;
+        this.sysvia = new sysvia(this);
+        this.uservia = new uservia(this);
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };
@@ -152,7 +240,6 @@ function cpu6502() {
 
     this.polltime = function(cycles) {
         this.cycles -= cycles;
-        // TODO: lots more...
     }
 
     this.branch = function(taken) {
@@ -229,7 +316,7 @@ function cpu6502() {
             this.vis20k = this.ramBank[this.pc>>12];
             var opcode = this.readmem(this.pc);
             if (this.debugInstruction) this.debugInstruction();
-            console.log(hexword(this.pc), this.disassemble(this.pc)[0]);
+//            console.log(hexword(this.pc), this.disassemble(this.pc)[0]);
             var instruction = this.instructions[opcode];
             if (!instruction) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
