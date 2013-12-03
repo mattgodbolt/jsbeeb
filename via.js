@@ -11,7 +11,7 @@ const ORB   = 0x0,
       SR    = 0xa,
       ACR   = 0xb,
       PCR   = 0xc,
-      IRF   = 0xd,
+      IFR   = 0xd,
       IER   = 0xe,
       ORAnh = 0xf,
       TIMER1INT = 0x40,
@@ -29,7 +29,13 @@ function via() {
         acr: 0, pcr: 0, ifr: 0, ier: 0,
         t1hit: 0, t2hit: 0,
         porta: 0, portb: 0,
-        ca1: 0, ca2: 0
+        ca1: 0, ca2: 0,
+
+        update: function(cycles) {
+            this.t1c -= cycles;
+            if (!(this.acr & 0x20)) this.t2c -= cycles;
+            return (this.t1c < -3 || this.t2c < -3);
+        }
     };
 }
 
@@ -129,6 +135,52 @@ function sysvia(cpu) {
         case SR: this.via.sr = val; break;
         case ACR: this.via.acr = val; break;
         case PCR: /* TODO: latchpen? */ this.via.pcr = val; break;
+        case T1LL: case T1CL:
+            this.via.t1l &= 0x1fe00;
+            this.t1l |= (val << 1);
+            break;            
+        case T1LH:
+           this.via.t1l &= 0x1fe;
+           this.via.t1l |= (val << 9);
+           if (this.via.acr & 0x40) {
+               this.via.ifr &= ~TIMER1INT;
+               this.updateIFR();
+           }
+           break;
+        case T1CH:
+           this.via.t1l &= 0x1fe;
+           this.via.t1l |= (val << 9);
+           this.via.t1c = this.via.t1l + 1;
+           this.via.ifr &= ~TIMER1INT;
+           this.updateIFR();
+           this.via.t1hit = 0;
+           break;
+        case T2CL:
+           this.via.t2l &= 0x1fe00;
+           this.via.t2l |= (val << 1);
+           break;
+        case T2CH:
+           if (this.via.t2c == -3 && (this.via.ier & TIMER2INT) && !(this.via.ifr & TIMER2INT)) {
+               cpu.interrupt |= 128;
+           }
+           this.via.t2l &= 0x1fe;
+           this.via.t2l |= (val << 9);
+           this.t2c = this.via.t2l + 1;
+           this.via.ifr &= ~TIMER2INT;
+           this.updateIFR();
+           this.via.t2hit = 0;
+           break;
+        case IER:
+           if (val & 0x80)
+               this.ier |= (val & 0x7f);
+           else
+               this.ier &= ~(val & 0x7f);
+           this.updateIFR();
+           break;
+        case IFR:
+           this.via.ifr &= ~(val & 0x7f);
+           this.updateIFR();
+           break;
         default:
             throw "Sys VIA write " + hexbyte(addr) + " " + hexbyte(val);
             break;
@@ -136,6 +188,27 @@ function sysvia(cpu) {
         return 0xfe;
     };
 
+    this.polltime = function(cycles) {
+        if (this.via.update(cycles)) {
+            if (this.via.t1c < -3) {
+                while (this.via.t1c < -3) this.via.t1c += this.via.t1l + 4;
+                if (!this.via.t1hit) {
+                    this.ifr |= TIMER1INT;
+                    this.updateIFR();
+                }
+                if (!(this.via.acr & 0x40)) this.via.t1hit = 1;
+            }
+            if (!(this.via.acr & 0x20)) {
+                if (this.via.t2c < -3) {
+                    if (!this.via.t2hit) {
+                        this.via.ifr |= TIMER2INT;
+                        this.updateIFR();
+                    }
+                    this.via.t2hit = 1;
+                }
+            }
+        }
+    };
     this.reset = function() {
         this.via.ifr = this.via.ier = 0;
         this.via.t1c = this.via.t1l = 0x1fffe;
@@ -234,7 +307,7 @@ function uservia(cpu) {
     };
     this.read = function(addr) {
         var temp;
-        addr &= 0xfe;
+        addr &= 0xf;
         switch (addr) {
         case ORA:
             this.via.ifr &= ~PORTAINT;
@@ -283,6 +356,7 @@ function uservia(cpu) {
         }
         throw "User VIA read " + hexbyte(addr);
     };
+
     this.reset = function() {
         this.via.ora = 0x80;
         this.via.orb = 0xff;
@@ -293,5 +367,11 @@ function uservia(cpu) {
         this.timerout = 1;
         this.via.acr = 0;
     };
+
+    this.polltime = function(cycles) {
+        if (this.via.update(cycles)) {
+        }
+    };
+
     this.reset();
 }

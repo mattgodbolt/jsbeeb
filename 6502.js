@@ -36,7 +36,19 @@ function cpu6502() {
     this.osOffset = this.romOffset + 16 * 1024;
     this.a = this.x = this.y = this.s = 0;
     this.romsel = 0;
+    this.ram_fe30 = 0;
     this.FEslowdown = [true,false,true,true,false,false,true,false];
+
+    this.romSelect = function(rom) {
+        this.ram_fe30 = rom;
+        var c;
+        romsel = (rom & 15)<<14;
+        var offset = romsel - 0x8000;
+        for (c = 128; c < 192; ++c) this.memlook[0][c] = this.memlook[1][c] = offset;
+        var swram = 1; // TODO: swram[val & 15]?1:2
+        for (c = 128; c < 192; ++c) this.memstat[0][c] = this.memstat[1][c] = swram;
+        // TODO: ram4k, ram12k MASTER BPLUS
+    };
 
     this.readmem = function(addr) {
         if (this.debugRead) this.debugRead(addr);
@@ -79,7 +91,7 @@ function cpu6502() {
         case 0xfec0: case 0xfec4: case 0xfec8: case 0xfecc:
         case 0xfed0: case 0xfed4: case 0xfed8: case 0xfedc:
             // if (!master)
-            return this.adc.read(addr);
+            return this.adconverter.read(addr);
         case 0xfee0: case 0xfee4: case 0xfee8: case 0xfeec:
         case 0xfef0: case 0xfef4: case 0xfef8: case 0xfefc:
             return this.tube.read(addr);
@@ -136,7 +148,7 @@ function cpu6502() {
         case 0xfec0: case 0xfec4: case 0xfec8: case 0xfecc:
         case 0xfed0: case 0xfed4: case 0xfed8: case 0xfedc:
             // if (!master)
-            return this.adc.write(addr, b);
+            return this.adconverter.write(addr, b);
         case 0xfee0: case 0xfee4: case 0xfee8: case 0xfeec:
         case 0xfef0: case 0xfef4: case 0xfef8: case 0xfefc:
             return this.tube.write(addr, b);
@@ -175,7 +187,7 @@ function cpu6502() {
         console.log("A=" + hexbyte(this.a) + " X=" + hexbyte(this.x) + " Y=" + hexbyte(this.y)
                 + " S=01" + hexbyte(this.s) + " PC=" + hexword(this.pc));
         console.log("FLAGS = " + this.p.debugString());
-        // console.log("ROMSEL " + hexbyte(this.romsel>>24));
+        console.log("ROMSEL " + hexbyte(this.romsel>>24));
     }
 
     this.loadOs = function(name) {
@@ -219,6 +231,8 @@ function cpu6502() {
         this.disassemble = disassemble6502;
         this.sysvia = new sysvia(this);
         this.uservia = new uservia(this);
+        this.acia = new acia(this);
+        this.adconverter = { read: function() { return 0xff; }, write: function() {}};
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };
@@ -240,6 +254,8 @@ function cpu6502() {
 
     this.polltime = function(cycles) {
         this.cycles -= cycles;
+        this.sysvia.polltime(cycles);
+        this.uservia.polltime(cycles);
     }
 
     this.branch = function(taken) {
@@ -308,7 +324,7 @@ function cpu6502() {
 
     this.execute = function() {
         if (this.halted) return;
-        this.cycles += 40000;
+        this.cycles += 1000 * 1000;
         while (!this.halted && this.cycles > 0) {
             this.pc3 = this.oldoldpc;
             this.oldoldpc = this.oldpc;
