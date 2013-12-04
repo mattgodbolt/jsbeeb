@@ -26,7 +26,7 @@ function flags() {
     this.reset();
 }
 
-function cpu6502() {
+function cpu6502(dbgr) {
     this.ramBank = new Uint8Array(16);
     this.memstat = [new Uint8Array(256), new Uint8Array(256)];
     this.memlook = [new Uint32Array(256), new Uint32Array(256)];
@@ -322,9 +322,9 @@ function cpu6502() {
         }
     }
 
-    this.execute = function() {
-        if (this.halted) return;
-        this.cycles += 1000 * 1000;
+    this.execute = function(numCyclesToRun) {
+        this.halted = false;
+        this.cycles += numCyclesToRun;
         while (!this.halted && this.cycles > 0) {
             this.pc3 = this.oldoldpc;
             this.oldoldpc = this.oldpc;
@@ -350,8 +350,14 @@ function cpu6502() {
             // TODO: tube
             // TODO: nmis
         }
+    };
+
+    this.stop = function() {
+        this.halted = true;
+        dbgr.debug(this.pc);
     }
 
+    dbgr.setCpu(this);
     this.loadOs("roms/os");
     this.reset();
 }

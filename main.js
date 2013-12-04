@@ -1,14 +1,21 @@
+var processor;
+var dbgr;
+
 $(function() {
-    canvas = $('#screen')[0];
-    ctx = canvas.getContext('2d');
+    var canvas = $('#screen')[0];
+    var ctx = canvas.getContext('2d');
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, 1280, 768);
     if (!ctx.getImageData) {
         alert('Unsupported browser');
         return;
     }
-    imageData = ctx.getImageData(0, 0, 1280, 768);
-    imageDataData = imageData.data;
-    processor = new cpu6502();
-    processor.execute();
+    var imageData = ctx.getImageData(0, 0, 1280, 768);
+    var imageDataData = imageData.data;
+
+    dbgr = new Debugger();
+    processor = new cpu6502(dbgr);
+    processor.execute(1000 * 1000);
+
+    processor.stop();
 })
