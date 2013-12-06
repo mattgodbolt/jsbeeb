@@ -62,7 +62,7 @@ function sysvia(cpu) {
         case ORAnh: // keyboard
             // if master and cmos and not compact return cmosread
             var temp = this.via.ora & this.via.ddra;
-            temp |= (this.via.porta & ~this.vis.ddra);
+            temp |= (this.via.porta & ~this.via.ddra);
             temp &= 0x7f;
             // TODO: if key press temp |= 0x80
             return temp;

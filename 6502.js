@@ -51,6 +51,7 @@ function cpu6502(dbgr) {
     };
 
     this.readmem = function(addr) {
+        addr &= 0xffff;
         if (this.debugRead) this.debugRead(addr);
         if (this.memstat[this.vis20k][addr >> 8]) {
             var offset = this.memlook[this.vis20k][addr >> 8];
@@ -59,7 +60,7 @@ function cpu6502(dbgr) {
         if (addr < 0xfe00 || this.FEslowdown[(addr>>5) & 7]) {
             this.polltime(1 + this.cycles & 1);
         }
-        console.log("Peripheral read " + hexword(addr));
+        //console.log("Peripheral read " + hexword(addr));
         switch (addr & ~0x0003) {
         case 0xfc20: case 0xfc24: case 0xfc28: case 0xfc2c:
         case 0xfc30: case 0xfc34: case 0xfc38: case 0xfc3c:
@@ -101,6 +102,8 @@ function cpu6502(dbgr) {
     }
 
     this.writemem = function(addr, b) {
+        addr &= 0xffff;
+        b |= 0;
         if (this.debugwrite) this.debugwrite(addr, b);
         if (this.memstat[this.vis20k][addr >> 8] == 1) {
             var offset = this.memlook[this.vis20k][addr >> 8];
@@ -111,7 +114,7 @@ function cpu6502(dbgr) {
         if (this.FEslowdown[(addr>>5) & 7]) {
             this.polltime(1 + this.cycles & 1);
         }
-        console.log("Peripheral write " + hexword(addr) + " " + hexbyte(b));
+        //console.log("Peripheral write " + hexword(addr) + " " + hexbyte(b));
         switch (addr & ~0x0003) {
         case 0xfc20: case 0xfc24: case 0xfc28: case 0xfc2c:
         case 0xfc30: case 0xfc34: case 0xfc38: case 0xfc3c:
@@ -238,8 +241,9 @@ function cpu6502(dbgr) {
     };
 
     this.setzn = function(v) {
-        this.p.z = (v != 0);
-        this.p.n = (v & 0x80) == 0x80;
+        v = v|0;
+        this.p.z = !v;
+        this.p.n = (v & 0x80) === 0x80;
     }
 
     this.push = function(v) {

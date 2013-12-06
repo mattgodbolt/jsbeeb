@@ -33,7 +33,7 @@ function getGetPut(arg) {
     case "abs":
         return {
             reg: "temp",
-            get: ["var temp = cpu.getw();"],
+            get: ["var addr = cpu.getw();", "var temp = cpu.readmem(addr);"],
             put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 2,
             memoryCycles: 1,
@@ -51,6 +51,20 @@ function getGetPut(arg) {
             put: ["throw \"bad fit\""],
             opcodeCycles: 2,
             memoryCycles: 1,
+        };
+    case "(),y":
+        return {
+            reg: "temp",
+            get: [
+                "var temp = cpu.getb();",
+                "var baseAddr = cpu.readmem(temp) | (cpu.readmem(temp + 1) << 8);",
+                "var addr = baseAddr + cpu.y",
+                "if ((baseAddr & 0xff00) != (addr & 0xff00)) cpu.polltime(1);",
+                "temp = cpu.readmem(addr);",
+                ],
+            put: ["throw \"bad fit\""],
+            opcodeCycles: 1,
+            memoryCycles: 3,
         };
     }
 }
@@ -117,7 +131,6 @@ function compileStore(reg, arg) {
         return replaceReg([
                 "var zp = cpu.getb();",
                 "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8) + cpu." + off + ";",
-                "addr &= 0xffff;",
                 "cpu.writemem(addr, cpu.REG);",
                 "cpu.polltime(6);",
                 "cpu.checkInt();"
@@ -137,7 +150,7 @@ function compileCompare(arg, reg) {
 }
 
 function compileTransfer(from, to) {
-    lines = ["cpu." + from + " = cpu." + to + ";"];
+    lines = ["cpu." + to + " = cpu." + from + ";"];
     if (to != "s") lines.push("cpu.setzn(cpu." + to + ");");
     lines.push("cpu.polltime(2);");
     lines.push("cpu.checkInt();");
@@ -189,7 +202,7 @@ function compilePull(reg) {
                 "cpu.p.i = !!(temp & 0x04);",
                 "cpu.p.d = !!(temp & 0x08);",
                 "cpu.p.v = !!(temp & 0x40);",
-                "cpu.p.d = !!(temp & 0x80);"
+                "cpu.p.n = !!(temp & 0x80);"
                     ];
         reg = 'temp';
     }
@@ -271,6 +284,14 @@ function compileAddDec(reg, arg, addOrDec) {
             "cpu.writemem(addr, newValue);",
             "cpu.setzn(newValue);"
             ];
+    } else {
+        var getput = getGetPut(arg);
+        if (!getput) return null;
+        return getput.get.concat([
+            getput.reg + " = (" + getput.reg + " " + addOrDec + ") & 0xff;",
+            "cpu.setzn(" + getput.reg + ");",
+            "cpu.polltime(" + (1 + getput.opcodeCycles + 2*getput.memoryCycles) + ");" // todo why is the cycle count wrong?
+            ]).concat(getput.put);
     }
 }
 
@@ -310,6 +331,7 @@ function compileLogical(arg, op) {
     var lines = getput.get;
     lines.push("cpu.a " + op + "= " + getput.reg + ";");
     lines.push("cpu.setzn(cpu.a);");
+    // TODO should this be 2x memory?
     lines.push("cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");");
     lines.push("cpu.checkInt();");
     return lines;
@@ -347,8 +369,7 @@ function compileBit(arg) {
                 ]);
 }
 
-function compileAdcSbc(inst, isC, arg) {
-    // TODO: get rid of the isC thing.
+function compileAdcSbc(inst, arg) {
     var getput = getGetPut(arg);
     if (!getput) return null;
     return getput.get.concat([
@@ -422,7 +443,7 @@ function compileInstruction(opcodeString) {
     } else if (opcode == "JMP") {
         lines = compileJump(arg);
     } else if (opcode == "ADC" || opcode == "SBC") {
-        lines = compileAdcSbc(opcode.toLowerCase(), false, arg);
+        lines = compileAdcSbc(opcode.toLowerCase(), arg);
     }
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
