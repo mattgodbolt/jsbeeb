@@ -235,6 +235,7 @@ function cpu6502(dbgr) {
         this.sysvia = new sysvia(this);
         this.uservia = new uservia(this);
         this.acia = new acia(this);
+        this.crtc = new crtc(this);
         this.adconverter = { read: function() { return 0xff; }, write: function() {}};
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));

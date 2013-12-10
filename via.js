@@ -35,6 +35,35 @@ function via() {
             this.t1c -= cycles;
             if (!(this.acr & 0x20)) this.t2c -= cycles;
             return (this.t1c < -3 || this.t2c < -3);
+        },
+
+        read: function(addr) {
+            switch (addr|0) {
+            case DDRA: return this.ddra;
+            case DDRB: return this.ddrb;
+            case T1LL: return (this.t1l & 0x1fe) >> 1;
+            case T1LH: return this.t1l >> 9;
+            case T1CL:
+               this.ifr &= ~TIMER1INT;
+               this.updateIFR();
+               if (this.t1c < -1) return 0xff;
+               return ((this.t1c + 1) >> 1) & 0xff;
+            case T1CH:
+               if (this.t1c < -1) return 0xff;
+               return (this.t1c+1) >> 9;
+            case T2CL:
+               this.ifr &= ~TIMER2INT;
+               this.updateIFR();
+               return ((this.t2c + 1) >> 1) & 0xff;
+            case T2CH:
+               return (this.t2c + 1) >> 9;
+            case SR: return this.sr;
+            case ACR: return this.acr;
+            case PCR: return this.pcr;
+            case IER: return this.ier | 0x80;
+            case IFR: return this.ifr;
+            default: throw "Unknown VIA read";
+            }
         }
     };
 }
@@ -53,6 +82,7 @@ function sysvia(cpu) {
         }
     };
     this.read = function(addr) {
+        var temp;
         addr &= 0xf;
         switch (addr) {
         case ORA:
@@ -66,16 +96,18 @@ function sysvia(cpu) {
             temp &= 0x7f;
             // TODO: if key press temp |= 0x80
             return temp;
-        case SR: return this.via.sr;
-        case ACR: return this.via.acr;
-        case PCR: return this.via.pcr;
-        case IER: return this.via.ier|0x80;
-        case IFR: return this.via.ifr;
+        case ORB:
+            this.via.ifr &= 0xef;
+            this.updateIFR();
+            temp = this.via.orb & this.via.ddrb;
+            // todo: compact cmos?
+            this.via.irb |= 0xf0;
+            // todo: joystick buttons
+            temp |= (this.via.irb & ~this.via.ddrb);
+            return temp;
         default:
-            throw "Sys VIA read " + hexbyte(addr);
-            break;
+            return this.via.read(addr);
         }
-        return 0xfe;
     };
 
     this.sdbval = 0;
@@ -330,29 +362,8 @@ function uservia(cpu) {
             else
                 temp &= 0x7f;
             return temp;
-        case DDRA: return this.via.ddra;
-        case DDRB: return this.via.ddrb;
-        case T1LL: return (this.t1l & 0x1fe) >> 1;
-        case T1LH: return this.t1l >> 9;
-        case T1CL:
-            this.via.ifr &= ~TIMER1INT;
-            this.updateIFR();
-            if (this.via.t1c < -1) return 0xff;
-            return ((this.via.t1c + 1) >> 1) & 0xff;
-        case T1CH:
-            if (this.via.t1c < -1) return 0xff;
-            return (this.via.t1c+1) >> 9;
-        case T2CL:
-            this.ifr &= ~TIMER2INT;
-            this.updateIFR();
-            return ((this.via.t2c + 1) >> 1) & 0xff;
-        case T2CH:
-            return (this.via.t2c + 1) >> 9;
-        case SR: return this.via.sr;
-        case ACR: return this.via.acr;
-        case PCR: return this.via.pcr;
-        case IER: return this.via.ier | 0x80;
-        case IFR: return this.via.ifr;
+        default:
+            return this.via.read(addr);
         }
         throw "User VIA read " + hexbyte(addr);
     };

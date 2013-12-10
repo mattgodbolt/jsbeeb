@@ -86,13 +86,13 @@ function Debugger() {
             var addr = startingPoint & 0xffff;
             while (addr < address) {
                 var result = cpu.disassemble(addr);
-                if (result[1] == address) {
+                if (result[1] == address && result[0] != "???") {
                     return addr;
                 }
                 addr = result[1];
             }
         }
-        return 0;
+        return address - 1;
     }
 
     function nextInstruction(address) {
@@ -127,5 +127,26 @@ function Debugger() {
             .keypress(function(e) { if (e.which==13) $(this).blur(); });
             address = result[1];
         });
+    }
+
+    this.keyPress = function(key) {
+        switch (String.fromCharCode(key)) {
+        case 'k':
+            updateDisassembly(prevInstruction(disassPc));
+            break;
+        case 'j':
+            updateDisassembly(nextInstruction(disassPc));
+            break;
+        case 'n':
+            step();
+            break;
+        case 'm':
+            stepOver();
+            break;
+        case 'u':
+            stepOut();
+            break;
+        }
+        return true;
     }
 }

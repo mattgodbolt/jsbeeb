@@ -48,7 +48,7 @@ function getGetPut(arg) {
                 "if ((addr & 0xff00) != (temp & 0xff00)) cpu.polltime(1);",
                 "temp = cpu.readmem(temp);",
                 ],
-            put: ["throw \"bad fit\""],
+            put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 2,
             memoryCycles: 1,
         };
@@ -116,7 +116,7 @@ function compileStore(reg, arg) {
                 "var addr = cpu.getb();",
                 "cpu.writemem(addr, cpu.REG);",
                 "cpu.polltime(3);",
-                "cpu.checkInt()",
+                "cpu.checkInt();",
                 ], reg);
     } else if (arg.match(/^zp,[xy]/)) {
         var off = arg[3];
@@ -124,7 +124,7 @@ function compileStore(reg, arg) {
                 "var addr = cpu.getb();",
                 "cpu.writemem((addr + cpu." + off + ") & 0xff, cpu.REG);",
                 "cpu.polltime(4);",
-                "cpu.checkInt()",
+                "cpu.checkInt();",
                 ], reg);
     } else if (arg.substr(0, 2) == "()") {
         var off = arg[3];
@@ -167,6 +167,17 @@ function compileAsl(arg) {
             "cpu.checkInt();"
                 ];
     }
+    var gp = getGetPut(arg);
+    if (!gp) return null;
+    return gp.get.concat([
+            "cpu.p.c = !!(" + gp.reg + " & 0x80);",
+            gp.reg + " = (" + gp.reg + " << 1) & 0xff;",
+            "cpu.setzn(" + gp.reg + ");"
+            ])
+        .concat(gp.put).concat([
+            "cpu.polltime(" + (1 + gp.opcodeCycles + gp.memoryCycles) + ");",
+            "cpu.checkInt();"]);
+            
 }
 
 function compilePush(reg) {
@@ -284,6 +295,19 @@ function compileAddDec(reg, arg, addOrDec) {
             "cpu.writemem(addr, newValue);",
             "cpu.setzn(newValue);"
             ];
+    } else if (arg == "abs,x") {
+        return [
+            "var addr = cpu.getw();",
+            "cpu.readmem((addr & 0xff00) | ((addr + cpu.x) & 0xff));",
+            "addr += cpu.x;",
+            "var oldValue = cpu.readmem(addr);",
+            "var newValue = (oldValue " + addOrDec + ") & 0xff;",
+            "cpu.writemem(addr, oldValue);",
+            "cpu.writemem(addr, newValue);",
+            "cpu.setzn(newValue);",
+            "cpu.polltime(7);",
+            "cpu.checkInt();"
+            ];
     } else {
         var getput = getGetPut(arg);
         if (!getput) return null;
@@ -342,6 +366,14 @@ function compileJump(arg) {
         return [
             "cpu.pc = cpu.getw();",
             "cpu.polltime(3);",
+            "cpu.checkInt();"
+                ];
+    } else if (arg == "()") {
+        return [
+            "var addr = cpu.getw();",
+            "var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);",
+            "cpu.pc = cpu.readmem(addr) | (cpu.readmem(nextAddr) << 8);",
+            "cpu.polltime(5);",
             "cpu.checkInt();"
                 ];
     }
@@ -449,7 +481,11 @@ function compileInstruction(opcodeString) {
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
     var text = fnName + " = function(cpu) {\n    " + lines.join("\n    ") + "\n}\n";
     debugText += text;
-    eval(text);
+    try {
+        eval(text);
+    } catch (e) {
+        throw "Unable to compile: " + e + "\nText:\n" + text;
+    }
     return this[fnName];
 }
 
@@ -736,7 +772,11 @@ function disassemble6502(addr) {
     case "zp":
         return [split[0] + " $" + hexbyte(this.readmem(addr + 1)) + suffix, addr + 2];
     case "()":
-        return [split[0] + " ($" + hexbyte(this.readmem(addr + 1)) + ")" + suffix, addr + 2];
+        if (split[0] == "JMP")
+            return [split[0] + " ($" + hexword(this.readmem(addr + 1) | (this.readmem(addr+2)<<8)) + ")" + suffix,
+                addr + 3];
+        else
+            return [split[0] + " ($" + hexbyte(this.readmem(addr + 1)) + ")" + suffix, addr + 2];
     }
     return [opcode, addr + 1];
 }

@@ -14,6 +14,14 @@ $(function() {
     var imageDataData = imageData.data;
 
     dbgr = new Debugger();
+    function keyCode(evt) {
+        return evt.which || evt.charCode || evt.keyCode;
+    }
+    function keyPress(evt) {
+       return dbgr.keyPress(keyCode(evt)); 
+    }
+    document.onkeypress = keyPress;
+
     processor = new cpu6502(dbgr);
     processor.execute(1000 * 1000);
 
