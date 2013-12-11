@@ -23,6 +23,17 @@ function flags() {
                (this.n ? "N" : "n");
     }
 
+    this.asByte = function() {
+        var temp = 0x30;
+        if (this.c) temp |= 0x01;
+        if (this.z) temp |= 0x02;
+        if (this.i) temp |= 0x04;
+        if (this.d) temp |= 0x08;
+        if (this.v) temp |= 0x40;
+        if (this.n) temp |= 0x80;
+        return temp;
+    }
+
     this.reset();
 }
 
@@ -237,6 +248,7 @@ function cpu6502(dbgr) {
         this.acia = new acia(this);
         this.crtc = new crtc(this);
         this.adconverter = { read: function() { return 0xff; }, write: function() {}};
+        this.tube = { read: function() { return 0xff; }, write: function() {}};
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };
@@ -261,6 +273,17 @@ function cpu6502(dbgr) {
         this.cycles -= cycles;
         this.sysvia.polltime(cycles);
         this.uservia.polltime(cycles);
+    }
+
+    this.brk = function() {
+        this.push(this.pc >>> 8);
+        this.push(this.pc & 0xff);
+        var temp = this.p.asByte() & ~0x04; // clear I bit
+        this.push(temp);
+        this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
+        this.p.i = 1;
+        this.polltime(7);
+        this.takeInt = 0;
     }
 
     this.branch = function(taken) {

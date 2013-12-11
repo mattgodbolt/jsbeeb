@@ -23,6 +23,12 @@ $(function() {
     document.onkeypress = keyPress;
 
     processor = new cpu6502(dbgr);
+    //processor.debugwrite = function(mem, v) {
+    //    if (mem == 0x22a || mem == 0x22b) {
+    //        console.log("Write to", hexword(mem), hexbyte(v));
+    //        processor.stop();
+    //    }
+    //}
     processor.execute(1000 * 1000);
 
     processor.stop();

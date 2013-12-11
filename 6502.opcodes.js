@@ -46,7 +46,7 @@ function getGetPut(arg) {
                 "var temp = cpu.getw();",
                 "var addr = temp + cpu." + arg[4] +";",
                 "if ((addr & 0xff00) != (temp & 0xff00)) cpu.polltime(1);",
-                "temp = cpu.readmem(temp);",
+                "temp = cpu.readmem(addr);",
                 ],
             put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 2,
@@ -80,6 +80,7 @@ function compileLoad(reg, arg) {
             "cpu.polltime(1);",
         ], reg);
     }
+    // TODO: timings for LDA abs,[xy]
     var gp = getGetPut(arg);
     if (!gp) return null;
     var lines = gp.get;
@@ -135,6 +136,15 @@ function compileStore(reg, arg) {
                 "cpu.polltime(6);",
                 "cpu.checkInt();"
                 ], reg);
+    } else if (arg == "(,x)") {
+        var off = arg[3];
+        return replaceReg([
+                "var zp = cpu.getb() + cpu.x;",
+                "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8);",
+                "cpu.writemem(addr, cpu.REG);",
+                "cpu.polltime(6);",
+                "cpu.checkInt();"
+                ], reg);
     }
 }
 
@@ -183,14 +193,7 @@ function compileAsl(arg) {
 function compilePush(reg) {
     lines = [];
     if (reg == 'p') {
-        lines = lines.concat([
-                "var temp = 0x30;",
-                "if (cpu.p.c) temp |= 0x01;",
-                "if (cpu.p.z) temp |= 0x02;",
-                "if (cpu.p.i) temp |= 0x04;",
-                "if (cpu.p.d) temp |= 0x08;",
-                "if (cpu.p.v) temp |= 0x40;",
-                "if (cpu.p.n) temp |= 0x80;"]);
+        lines = lines.concat([ "var temp = cpu.p.asByte();"]);
         reg = 'temp';
     } else {
         reg = 'cpu.' + reg;
@@ -432,6 +435,8 @@ function compileInstruction(opcodeString) {
         lines = ["cpu.p.d = true;", "cpu.polltime(2);", "cpu.checkInt();"]
     } else if (opcode == "CLD") {
         lines = ["cpu.p.d = false;", "cpu.polltime(2);", "cpu.checkInt();"]
+    } else if (opcode == "CLV") {
+        lines = ["cpu.p.v = false;", "cpu.polltime(2);", "cpu.checkInt();"]
     } else if (opcode[0] == 'T') {
         lines = compileTransfer(opcode[1].toLowerCase(), opcode[2].toLowerCase());
     } else if (opcode == 'ASL') {
@@ -443,7 +448,7 @@ function compileInstruction(opcodeString) {
     } if (opcode == "BIT") {
         lines = compileBit(arg);
     } else if (opcode == "BRK") {
-        // todo
+        lines = ["cpu.brk();"]
     } else if (opcode[0] == 'B') {
         lines = compileBranch(opcode.substr(1,2).toLowerCase());
     } else if (opcode == "CMP") {
@@ -755,7 +760,7 @@ function disassemble6502(addr) {
     }
     var param = split[1] || "";
     var suffix = "";
-    index = param.match(/(.*),([xy])/);
+    index = param.match(/(.*),([xy])$/);
     if (index) {
         param = index[1];
         suffix = "," + index[2].toUpperCase();
@@ -771,6 +776,8 @@ function disassemble6502(addr) {
                addr + 2];
     case "zp":
         return [split[0] + " $" + hexbyte(this.readmem(addr + 1)) + suffix, addr + 2];
+    case "(,x)":
+        return [split[0] + " ($" + hexbyte(this.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
     case "()":
         if (split[0] == "JMP")
             return [split[0] + " ($" + hexword(this.readmem(addr + 1) | (this.readmem(addr+2)<<8)) + ")" + suffix,
