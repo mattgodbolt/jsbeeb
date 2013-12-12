@@ -41,10 +41,10 @@ function cpu6502(dbgr) {
     this.ramBank = new Uint8Array(16);
     this.memstat = [new Uint8Array(256), new Uint8Array(256)];
     this.memlook = [new Uint32Array(256), new Uint32Array(256)];
-    this.ramRomOs = new Uint8Array(128 * 1024 + 2 * 16 * 16384);
+    this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
     this.vis20k = 0;
     this.romOffset = 128 * 1024;
-    this.osOffset = this.romOffset + 16 * 1024;
+    this.osOffset = this.romOffset + 16 * 16 * 1024;
     this.a = this.x = this.y = this.s = 0;
     this.romsel = 0;
     this.ram_fe30 = 0;
@@ -53,8 +53,8 @@ function cpu6502(dbgr) {
     this.romSelect = function(rom) {
         this.ram_fe30 = rom;
         var c;
-        romsel = (rom & 15)<<14;
-        var offset = romsel - 0x8000;
+        this.romsel = ((rom & 15)<<14) + this.romOffset;
+        var offset = this.romsel - 0x8000;
         for (c = 128; c < 192; ++c) this.memlook[0][c] = this.memlook[1][c] = offset;
         var swram = 1; // TODO: swram[val & 15]?1:2
         for (c = 128; c < 192; ++c) this.memstat[0][c] = this.memstat[1][c] = swram;
@@ -204,18 +204,25 @@ function cpu6502(dbgr) {
         console.log("ROMSEL " + hexbyte(this.romsel>>24));
     }
 
-    this.loadOs = function(name) {
-        console.log("Loading OS from " + name);
+    this.loadRom = function(name, offset) {
+        console.log("Loading ROM from " + name);
         var request = new XMLHttpRequest();
         request.open("GET", name, false);
         request.overrideMimeType('text/plain; charset=x-user-defined');
         request.send(null);
-        if (request.response.length != 16384) {
+        var len = request.response.length;
+        if (len != 16384 && len != 8192) {
             throw "Broken rom file";
         }
-        for (var i = 0; i < 16384; ++i) {
-            this.ramRomOs[this.osOffset + i] = request.response.charCodeAt(i) & 0xff;
+        for (var i = 0; i < len; ++i) {
+            this.ramRomOs[offset + i] = request.response.charCodeAt(i) & 0xff;
         }
+    }
+
+    this.loadOs = function(os, basic, dfs) {
+        this.loadRom(os, this.osOffset);
+        this.loadRom(basic, this.romOffset + 15 * 16384);
+        //this.loadRom(dfs, this.romOffset + 14 * 16384);
     }
 
     this.reset = function() {
@@ -276,6 +283,7 @@ function cpu6502(dbgr) {
     }
 
     this.brk = function() {
+        this.stop();return;
         this.push(this.pc >>> 8);
         this.push(this.pc & 0xff);
         var temp = this.p.asByte() & ~0x04; // clear I bit
@@ -386,7 +394,7 @@ function cpu6502(dbgr) {
     }
 
     dbgr.setCpu(this);
-    this.loadOs("roms/os");
+    this.loadOs("roms/os", "roms/b/BASIC.ROM", "roms/b/DFS-0.9.rom");
     this.reset();
 }
 
