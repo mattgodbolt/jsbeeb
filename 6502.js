@@ -48,6 +48,7 @@ function cpu6502(dbgr) {
     this.a = this.x = this.y = this.s = 0;
     this.romsel = 0;
     this.ram_fe30 = 0;
+    this.interrupt = 0;
     this.FEslowdown = [true,false,true,true,false,false,true,false];
 
     this.romSelect = function(rom) {
@@ -283,7 +284,6 @@ function cpu6502(dbgr) {
     }
 
     this.brk = function() {
-        this.stop();return;
         this.push(this.pc >>> 8);
         this.push(this.pc & 0xff);
         var temp = this.p.asByte() & ~0x04; // clear I bit
@@ -368,7 +368,6 @@ function cpu6502(dbgr) {
             this.vis20k = this.ramBank[this.pc>>12];
             var opcode = this.readmem(this.pc);
             if (this.debugInstruction) this.debugInstruction();
-//            console.log(hexword(this.pc), this.disassemble(this.pc)[0]);
             var instruction = this.instructions[opcode];
             if (!instruction) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
@@ -380,7 +379,16 @@ function cpu6502(dbgr) {
             this.incpc();
             instruction(this);
             // TODO: timetolive
-            // TODO: interrupts
+            if (this.takeInt) {
+                this.interrupt &= 0x7f;
+                this.takeInt = 0;
+                this.push(this.pc >>> 8);
+                this.push(this.pc & 0xff);
+                this.push(this.p.asByte() & ~0x10);
+                this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
+                this.p.i = 1;
+                this.polltime(7);
+            }
             this.interrupt &= 0x7f;
             // TODO: otherstuff
             // TODO: tube

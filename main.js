@@ -23,13 +23,13 @@ $(function() {
     document.onkeypress = keyPress;
 
     processor = new cpu6502(dbgr);
-    processor.debugwrite = function(mem, v) {
-        if (mem == 0x267) {
-            console.log(hexword(processor.oldpc), "Write to", hexword(mem), hexbyte(v));
-            //processor.stop();
-        }
-    }
-    processor.execute(1000 * 1000);
+    //processor.debugwrite = function(mem, v) {
+    //    if (mem == 0x267) {
+    //        console.log(hexword(processor.oldpc), "Write to", hexword(mem), hexbyte(v));
+    //        //processor.stop();
+    //    }
+    //}
+    processor.execute(3 * 1000 * 1000);
 
     processor.stop();
 })

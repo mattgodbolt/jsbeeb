@@ -273,6 +273,22 @@ function compileRts() {
         ];
 }
 
+function compileRti() {
+    return [
+        "var temp = cpu.pull();",
+        "cpu.p.c = temp & 1;",
+        "cpu.p.z = temp & 2;",
+        "cpu.p.i = temp & 4;",
+        "cpu.p.d = temp & 8;",
+        "cpu.p.v = temp & 0x40;",
+        "cpu.p.n = temp & 0x80;",
+        "temp = cpu.pull();",
+        "cpu.pc = temp | cpu.pull() << 8;",
+        "cpu.polltime(6);",
+        "cpu.checkInt();",
+        ];
+}
+
 
 function compileAddDec(reg, arg, addOrDec) {
     if (arg == null) {
@@ -463,6 +479,8 @@ function compileInstruction(opcodeString) {
         lines = compileJsr();
     } else if (opcode == "RTS") {
         lines = compileRts();
+    } else if (opcode == "RTI") {
+        lines = compileRti();
     } else if (opcode == "ROR") {
         lines = compileRotate(false, false, arg);
     } else if (opcode == "ROL") {
