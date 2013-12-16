@@ -15,6 +15,7 @@ $(function() {
     var imageData = ctx.getImageData(0, 0, 1280, 768);
     var fb8 = imageData.data;
     function paint() {
+        frames++;
         imageData.data.set(fb8);
         ctx.putImageData(imageData, 0, 0);
     };
@@ -37,7 +38,9 @@ $(function() {
     //        //processor.stop();
     //    }
     //}
-    processor.execute(3 * 1000 * 1000);
+    // Run for three seconds.
+    //processor.execute(3 * 2 * 1000 * 1000);
+    processor.execute(1000 * 100);
 
     processor.stop();
 })

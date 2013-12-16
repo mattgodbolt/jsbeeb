@@ -260,7 +260,7 @@ function cpu6502(dbgr, video) {
         this.ula = video.ula;
         this.adconverter = { read: function() { return 0xff; }, write: function() {}};
         this.tube = { read: function() { return 0xff; }, write: function() {}};
-        video.reset(this.sysvia);
+        video.reset(this, this.sysvia);
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };

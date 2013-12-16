@@ -7,7 +7,8 @@ function video(fb32, paint) {
             0xff000000, 0xffff0000, 0xff00ff00, 0xffffff00,
             0xff0000ff, 0xffff00ff, 0xff00ffff, 0xffffffff]);
 
-    self.reset = function(via) { 
+    self.reset = function(cpu, via) { 
+        self.cpu = cpu;
         self.sysvia = via;
         self.regs = new Uint8Array(32);
         self.scrx = 0;
@@ -70,13 +71,13 @@ function video(fb32, paint) {
         //TODO: cursor stuff
         var dat = 0;
         if (self.ma & 0x2000) {
-            dat = cpu.readmem(0x7c00 | (ma & 0x3ff) | vidbank);
+            dat = self.cpu.readmem(0x7c00 | (self.ma & 0x3ff) | vidbank);
         } else {
             var ilSyncAndVideo = (self.regs[8] & 3) == 3;
             var addr = ilSyncAndVideo ? ((self.ma << 3) | ((self.sc & 3) << 1) | self.interlline)
                 : ((self.ma<<3) | (self.sc & 7));
             if (addr & 0x8000) addr -= self.screenlen[self.sysvia.getScrSize()];
-            dat = cpu.readmem((addr & 0x7fff) | vidbank) | 0;
+            dat = self.cpu.readmem((addr & 0x7fff) | vidbank) | 0;
         }
         if (self.scrx < 1280) {
             if (true) { // but really, if blanked in some way
@@ -233,7 +234,7 @@ function video(fb32, paint) {
 
     ////////////////////
     // CRTC interface
-    self.crtc = new function(regs) {
+    self.crtc = new (function(video) {
         var curReg = 0;
         var crtcmask = new Uint8Array([
                 0xff, 0xff, 0xff, 0xff, 0x7f, 0x1f, 0x7f, 0x7f,
@@ -241,16 +242,16 @@ function video(fb32, paint) {
                 0x3f, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
         this.read = function(addr) { 
-            if (addr & 1) return regs[curReg];
+            if (addr & 1) return video.regs[curReg];
             return curReg;
         };
         this.write = function(addr, val) {
             if (addr & 1) 
-                regs[curReg] = val & crtcmask[curReg];
+                video.regs[curReg] = val & crtcmask[curReg];
             else 
                 curReg = val & 31;
         };
-    }(self.regs);
+    })(self);
 
     
     ////////////////////
