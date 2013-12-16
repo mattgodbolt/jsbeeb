@@ -1,5 +1,7 @@
 var processor;
+var video;
 var dbgr;
+var frames = 0;
 
 $(function() {
     var canvas = $('#screen')[0];
@@ -11,7 +13,13 @@ $(function() {
         return;
     }
     var imageData = ctx.getImageData(0, 0, 1280, 768);
-    var imageDataData = imageData.data;
+    var fb8 = imageData.data;
+    function paint() {
+        imageData.data.set(fb8);
+        ctx.putImageData(imageData, 0, 0);
+    };
+    var fb32 = new Uint32Array(fb8.buffer);
+    video = new video(fb32, paint);
 
     dbgr = new Debugger();
     function keyCode(evt) {
@@ -22,7 +30,7 @@ $(function() {
     }
     document.onkeypress = keyPress;
 
-    processor = new cpu6502(dbgr);
+    processor = new cpu6502(dbgr, video);
     //processor.debugwrite = function(mem, v) {
     //    if (mem == 0x267) {
     //        console.log(hexword(processor.oldpc), "Write to", hexword(mem), hexbyte(v));

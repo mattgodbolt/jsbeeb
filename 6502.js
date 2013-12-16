@@ -37,7 +37,7 @@ function flags() {
     this.reset();
 }
 
-function cpu6502(dbgr) {
+function cpu6502(dbgr, video) {
     this.ramBank = new Uint8Array(16);
     this.memstat = [new Uint8Array(256), new Uint8Array(256)];
     this.memlook = [new Uint32Array(256), new Uint32Array(256)];
@@ -142,7 +142,9 @@ function cpu6502(dbgr) {
             break;
         case 0xfe18: // TODO adc on master
             break;
-        case 0xfe24: case 0xfe28: // TODO ula & 1770 on master
+        case 0xfe20: return this.ula.write(addr, b);
+        case 0xfe24: return  this.ula.write(addr, b); // todo if master, 1770
+        case 0xfe28: // TODO 1770 on master
             break;
         case 0xfe30:
             this.romSelect(b);
@@ -254,9 +256,11 @@ function cpu6502(dbgr) {
         this.sysvia = new sysvia(this);
         this.uservia = new uservia(this);
         this.acia = new acia(this);
-        this.crtc = new crtc(this);
+        this.crtc = video.crtc;
+        this.ula = video.ula;
         this.adconverter = { read: function() { return 0xff; }, write: function() {}};
         this.tube = { read: function() { return 0xff; }, write: function() {}};
+        video.reset(this.sysvia);
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };
@@ -281,6 +285,7 @@ function cpu6502(dbgr) {
         this.cycles -= cycles;
         this.sysvia.polltime(cycles);
         this.uservia.polltime(cycles);
+        video.polltime(cycles);
     }
 
     this.brk = function() {

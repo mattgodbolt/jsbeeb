@@ -111,6 +111,23 @@ function sysvia(cpu) {
     };
 
     this.sdbval = 0;
+    this.scrsize = 0;
+    this.getScrSize = function() { return this.scrsize; };
+
+    this.vblankint = function() {
+        if (!this.via.ca1 && (this.via.pcr & 1)) {
+            this.via.ifr |= 2;
+            this.updateIFR();
+        }
+        this.via.ca1 = 1;
+    };
+    this.vblankintlow = function() {
+        if (this.via.ca1 && !(this.via.pcr & 1)) {
+            this.via.ifr |= 2;
+            this.updateIFR();
+        }
+        this.via.ca1 = 0;
+    };
 
     this.writeIC32 = function(val) { // addressable latch
         var oldIC32 = this.IC32;
@@ -119,8 +136,7 @@ function sysvia(cpu) {
         else
            this.IC32 &= ~(1<<(val&7));
 
-        // TODO: screen size
-        //scrsize = ((this.IC32&16)?2:0) | ((this.IC32&32)?1:0);
+        this.scrsize = ((this.IC32&16)?2:0) | ((this.IC32&32)?1:0);
         if (!(this.IC32&8) && (oldIC32&8)) {
             // TODO: keyboard
                 //keyrow = (sdbval>>4)&7;
