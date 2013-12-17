@@ -16,7 +16,6 @@ $(function() {
     var fb8 = imageData.data;
     function paint() {
         frames++;
-        imageData.data.set(fb8);
         ctx.putImageData(imageData, 0, 0);
     };
     var fb32 = new Uint32Array(fb8.buffer);
@@ -40,7 +39,7 @@ $(function() {
     //}
     // Run for three seconds.
     //processor.execute(3 * 2 * 1000 * 1000);
-    processor.execute(1000 * 100);
+    processor.execute(1000 * 1200);
 
     processor.stop();
 })

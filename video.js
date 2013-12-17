@@ -52,13 +52,13 @@ function video(fb32, paint) {
             if (self.charsleft != 1) rendermode7(255);
             self.charsleft--;
         } else if (self.scrx < 1280) {
-            var bytesPerChar = (self.ulactrl & 0x10) ? 8 : 16;
-            for (var x = 0; x < bytesPerChar; x += 4) {
+            var pixels = (self.ulactrl & 0x10) ? 8 : 16;
+            for (var x = 0; x < pixels; x++) {
                 fb32[self.scry * 1280 + self.scrx + x] = self.collook[0];
             }
             if (self.crtcmode != 0) {
-                // Not sure about self...check! seems to be "not teletext"
-                for (var x = 0; x < 16; x += 4) {
+                // Not sure about this...check! seems to be "not teletext"
+                for (var x = 0; x < 16; x++) {
                     fb32[self.scry * 1280 + self.scrx + x + 16] = self.collook[0];
                 }
             }
@@ -120,7 +120,7 @@ function video(fb32, paint) {
                 self.scry++;
                 if (self.scry >= 384) {
                     // End of the screen!
-                    self.scry == 0;
+                    self.scry = 0;
                     paint();
                 }
             }
