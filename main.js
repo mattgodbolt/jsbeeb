@@ -39,7 +39,7 @@ $(function() {
     //}
     // Run for three seconds.
     //processor.execute(3 * 2 * 1000 * 1000);
-    processor.execute(1000 * 1200);
+    processor.execute(1000 * 1400);
 
     processor.stop();
 })

@@ -31,11 +31,11 @@ function video(fb32, paint) {
         self.charsleft = 0; // chars left hanging off end of mode 7 line
         self.ulapal = new Uint32Array(16);
         self.bakpal = new Uint8Array(16);
-        self.interlace = false;
-        self.interline = 0;
-        self.interlline = 0;
+        self.interline = 0;// maybe can delete? don't support interlace
+        self.interlline = 0; // maybe delete?
         self.oldr8 = 0;
         self.frameodd = false;
+        self.teletext = new teletext();
     };
 
     self.reset(null);
@@ -45,11 +45,11 @@ function video(fb32, paint) {
             fb32[y * 1280 + x] = 0xff00ff00;
     paint();
 
-    function rendermode7() {}
-
     function renderblank() {
         if (self.charsleft) {
-            if (self.charsleft != 1) rendermode7(255);
+            if (self.charsleft != 1) {
+                self.teletext.render(self.fb32, self.scry * 1280 + self.scrx, self.sc, 0xff);
+            }
             self.charsleft--;
         } else if (self.scrx < 1280) {
             var pixels = (self.ulactrl & 0x10) ? 8 : 16;
@@ -80,13 +80,19 @@ function video(fb32, paint) {
             dat = self.cpu.readmem((addr & 0x7fff) | vidbank) | 0;
         }
         if (self.scrx < 1280) {
-            if (true) { // but really, if blanked in some way
+            if ((self.regs[8] & 0x30) == 0x30 || ((self.sc&8) && ! (self.ulactrl&2))) {
                 var pixels = (self.ulactrl & 0x10) ? 8 : 16;
                 for (var i = 0; i < pixels; ++i) {
                     self.fb32[self.scry * 1280 + self.scrx + i] = self.collook[0];
                 }
             } else {
-                // actual drawing
+                switch (self.crtcmode) {
+                case 0:
+                    self.teletext.render(self.fb32, self.scry * 1280 + self.scrx, self.sc, dat & 0x7f);
+                    break;
+                default:
+                // todo actual drawing
+                }
             }
             // TODO: cursor
         }
@@ -103,7 +109,7 @@ function video(fb32, paint) {
             self.oddclock = !self.oddclock;
             if (!(self.ulactrl & 0x10) && !self.oddclock) continue;
 
-            // Have we reached the end of self line?
+            // Have we reached the end of this line?
             if (self.hc == self.regs[1]) {
                 if ((self.ulactrl & 2) && self.dispen) self.charsleft = 3; // Teletext mode?
                 else self.charsleft = 0;
@@ -125,8 +131,6 @@ function video(fb32, paint) {
                 }
             }
 
-            if (self.interlace) self.scry = (self.scry << 1) + self.interlline;
-
             // rendering here!
             if (self.dispen) {
                 renderline();
@@ -134,8 +138,6 @@ function video(fb32, paint) {
                 renderblank();
             }
             
-            if (self.interlace) self.scry >>= 1;
-
             if (self.hvblcount) {
                 self.hvblcount--;
                 if (!self.hvblcount) {
@@ -205,29 +207,30 @@ function video(fb32, paint) {
                         //todo m7 flashing here
                         self.vidclocks = self.vidbytes = 0;
                     }
-            } else {
-                self.sc = (self.sc + 1) & 31;
-                self.ma = self.maback;
-            }
-            // mode7 doubling, cursor
-            // line 978
-            if (self.vsynctime) {
-                self.vsynctime--;
-                if (!self.vsynctime) {
-                    self.hvblcount = 1;
-                    if (self.frameodd) self.interline = self.regs[8] & 1;
+                } else {
+                    self.sc = (self.sc + 1) & 31;
+                    self.ma = self.maback;
                 }
-            }
-            self.dispen = self.vdispen;
-            if (self.dispen || self.vadj) {
-                // update firsty, maybe not useful?
-            }
+                self.teletext.endline();
+                // mode7 doubling, cursor
+                // line 978
+                if (self.vsynctime) {
+                    self.vsynctime--;
+                    if (!self.vsynctime) {
+                        self.hvblcount = 1;
+                        if (self.frameodd) self.interline = self.regs[8] & 1;
+                    }
+                }
+                self.dispen = self.vdispen;
+                if (self.dispen || self.vadj) {
+                    // update firsty, maybe not useful?
+                }
 
-            // adc, mouse? seriously?
+                // adc, mouse? seriously?
 
-        } else { // matches if at end of line
-            self.hc = (self.hc + 1) & 0xff;
-        }
+            } else { // matches if at end of line
+                self.hc = (self.hc + 1) & 0xff;
+            }
         } // matches while
     };
     ////////////////////
