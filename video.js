@@ -66,7 +66,7 @@ function video(fb32, paint) {
         // TODO: cursor, if cdraw and scrx<1280..
     }
 
-    function renderline() {
+    function renderchar() {
         var vidbank = 0; // TODO: vid bank support
         //TODO: cursor stuff
         var dat = 0;
@@ -124,16 +124,18 @@ function video(fb32, paint) {
                     self.scrx = 128 - ((self.regs[3] & 0xf) * 8);
                 }
                 self.scry++;
+                /* This seems really broken in b-em. mode 7 has at least 18 * 25 lines.
                 if (self.scry >= 384) {
-                    // End of the screen!
+                    // End of the screen! (overscan?)
                     self.scry = 0;
-                    paint();
+                    //paint();
                 }
+                */
             }
 
             // rendering here!
             if (self.dispen) {
-                renderline();
+                renderchar();
             } else {
                 renderblank();
             }
@@ -212,8 +214,7 @@ function video(fb32, paint) {
                     self.ma = self.maback;
                 }
                 self.teletext.endline();
-                // mode7 doubling, cursor
-                // line 978
+                // todo cursor
                 if (self.vsynctime) {
                     self.vsynctime--;
                     if (!self.vsynctime) {

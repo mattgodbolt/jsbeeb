@@ -128,7 +128,7 @@ function teletext() {
         var i;
         if (data == 255) {
             for (i = 0; i < 16; ++i) {
-                buf[offset + i + 16] = 0xff0000ff; // todo color lookup 0
+                buf[offset + i + 16] = 0xff000000; // todo color lookup 0
             }
             return;
         }
