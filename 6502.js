@@ -372,7 +372,12 @@ function cpu6502(dbgr, video) {
             this.oldpc = this.pc;
             this.vis20k = this.ramBank[this.pc>>12];
             var opcode = this.readmem(this.pc);
-            if (this.debugInstruction) this.debugInstruction();
+            if (this.debugInstruction 
+                    && this.oldoldpc !== this.pc
+                    && this.debugInstruction(this.pc)) {
+                stop();
+                return;
+            }
             var instruction = this.instructions[opcode];
             if (!instruction) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));

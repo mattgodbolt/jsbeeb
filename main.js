@@ -26,9 +26,28 @@ $(function() {
         return evt.which || evt.charCode || evt.keyCode;
     }
     function keyPress(evt) {
-       return dbgr.keyPress(keyCode(evt)); 
+        if (!running) {
+            return dbgr.keyPress(keyCode(evt)); 
+        }
     }
+    function keyDown(evt) {
+        if (running) {
+            var code = keyCode(evt);
+            if (code === 36) { 
+                stop();  // home
+            } else {
+                processor.sysvia.keyDown(keyCode(evt));
+            }
+        }
+    }
+    function keyUp(evt) {
+        if (running) {
+            processor.sysvia.keyUp(keyCode(evt));
+        }
+    }
+    document.onkeydown = keyDown;
     document.onkeypress = keyPress;
+    document.onkeyup = keyUp;
 
     processor = new cpu6502(dbgr, video);
     //processor.debugwrite = function(mem, v) {
@@ -39,11 +58,29 @@ $(function() {
     //}
     // Run for three seconds.
     //processor.execute(3 * 2 * 1000 * 1000);
+    processor.debugInstruction = function(pc) {return (pc === 0x993f);};
     processor.execute(1000 * 1400);
-
-    processor.stop();
+    go();
 })
 
 function frame() {
     processor.execute(2 * 1000 * 1000 / 50);
+}
+
+var running = false;
+
+function run() {
+    if (!running) return;
+    frame();
+    setTimeout(run, 1000/50);
+}
+
+function go() {
+    running = true;
+    run();
+}
+
+function stop() {
+    running = false; 
+    processor.stop();
 }

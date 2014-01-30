@@ -17,7 +17,11 @@ const ORB   = 0x0,
       TIMER1INT = 0x40,
       TIMER2INT = 0x20,
       PORTBINT = 0x18,
-      PORTAINT = 0x03;
+      PORTAINT = 0x03,
+      INT_CA1 = 0x02,
+      INT_CA2 = 0x01,
+      INT_CB1 = 0x10,
+      INT_CB2 = 0x08;
 
 function via(ifr) {
     return {
@@ -35,6 +39,16 @@ function via(ifr) {
             this.t1c -= cycles;
             if (!(this.acr & 0x20)) this.t2c -= cycles;
             return (this.t1c < -3 || this.t2c < -3);
+        },
+
+        setca2: function(val) {
+            if (val == this.ca2 || (this.pcr & 8)) return;
+            var pcrSetting = !!(this.pcr & 0x4);
+            if (pcrSetting == !!val) {
+                this.ifr |= INT_CA2;
+                ifr.updateIFR();
+            }
+            this.ca2 = val;
         },
 
         read: function(addr) {
@@ -82,6 +96,7 @@ function sysvia(cpu) {
         }
     };
     this.read = function(addr) {
+        // TODO: some considerable updates here, cf b-em2.2
         var temp;
         addr &= 0xf;
         switch (addr) {
@@ -92,9 +107,12 @@ function sysvia(cpu) {
         case ORAnh: // keyboard
             // if master and cmos and not compact return cmosread
             var temp = this.via.ora & this.via.ddra;
-            temp |= (this.via.porta & ~this.via.ddra);
-            temp &= 0x7f;
-            // TODO: if key press temp |= 0x80
+            if (this.via.acr & 1) {
+                temp |= this.via.ira & ~this.via.ddra;
+            } else {
+                this.updateSdb();
+                temp |= this.sdbval &~this.via.ddra;
+            }
             return temp;
         case ORB:
             this.via.ifr &= 0xef;
@@ -110,9 +128,14 @@ function sysvia(cpu) {
         }
     };
 
+    this.keycol = 0;
+    this.keyrow = 0;
+    this.sdbout = 0;
     this.sdbval = 0;
     this.scrsize = 0;
     this.getScrSize = function() { return this.scrsize; };
+    this.keys = [];
+    for (var i = 0; i < 16; ++i) { this.keys[i] = new Uint8Array(16); }
 
     this.vblankint = function() {
         if (!this.via.ca1 && (this.via.pcr & 1)) {
@@ -129,6 +152,80 @@ function sysvia(cpu) {
         this.via.ca1 = 0;
     };
 
+    this.keycodeToRowCol = (function() {
+        var keys = {};
+        function C(s, c, r) { keys[s.charCodeAt(0)] = [c, r]; };
+        C('\r', 9, 4);
+        
+        //C('TODO', 9, 6); // copy key I think
+
+        C('/', 8, 6); // TODO find key code for this
+
+        C('\xbe', 7, 6);  // '.' (why is this 0xbe / 190) ? 
+
+        C('3', 1, 1);
+        C('4', 2, 1);
+        C('5', 3, 1);
+        C('8', 5, 1);
+        C('9', 6, 2);
+
+        C('Q', 0, 1);
+        C('A', 1, 4);
+
+        C('S', 1, 5);
+        C('D', 2, 3);
+        C('K', 6, 4);
+        C('L', 6, 5);
+
+        C('Z', 1, 6);
+        C('X', 2, 4);
+        C('C', 2, 5);
+        return keys;
+    })();
+    this.set = function(key, val) {
+        var colrow = this.keycodeToRowCol[key];
+        if (!colrow) return;
+        this.keys[colrow[0]][colrow[1]] = val;
+        this.updateKeys();
+    };
+    this.keyDown = function(key) { this.set(key, 1); };
+    this.keyUp = function(key) { this.set(key, 0); };
+
+    this.updateKeys = function() {
+        var numCols = 10; // 13 for MASTER
+        var i, j;
+        if (this.IC32 & 8) {
+            for (i = 0; i < numCols; ++i) {
+                for (j = 1; j < 8; ++j) {
+                    if (this.keys[i][j]) {
+                        this.via.setca2(true);
+                        return;
+                    }
+                }
+            }
+        } else {
+            if (this.keycol < numCols) {
+                for (j = 1; j < 8; ++j) {
+                    if (this.keys[this.keycol][j]) {
+                        this.via.setca2(true);
+                        return;
+                    }
+                }
+            }
+        }
+        this.via.setca2(false);
+    };
+
+    this.updateSdb = function() {
+        this.sdbval = this.sdbout;
+        // TODO cmos
+        var keyrow = (this.sdbval >> 4) & 7;
+        this.keycol = this.sdbval & 0xf;
+        this.updateKeys();
+        if (!(this.IC32 & 8) && !this.keys[this.keycol][keyrow]) {
+            this.sdbval &= 0x7f;
+        }
+    };
     this.writeIC32 = function(val) { // addressable latch
         var oldIC32 = this.IC32;
         if (val & 8)
@@ -136,23 +233,19 @@ function sysvia(cpu) {
         else
            this.IC32 &= ~(1<<(val&7));
 
-        this.scrsize = ((this.IC32&16)?2:0) | ((this.IC32&32)?1:0);
-        if (!(this.IC32&8) && (oldIC32&8)) {
-            // TODO: keyboard
-                //keyrow = (sdbval>>4)&7;
-                //keycol = sdbval&0xF;
-                //updatekeyboard();
-        }
+        this.updateSdb();
         // TODO: sound
         if (!(this.IC32&1) && (oldIC32&1))
            console.log("sound: " + this.sdbval);
+
+        this.scrsize = ((this.IC32&16)?2:0) | ((this.IC32&32)?1:0);
         //if (MASTER && !compactcmos) cmosupdate(IC32,sdbval);
     };
 
-    this.writeDataBus = function(val) {
-        this.sdbval = val;
-        // TODO: keyboard, cmos
-        // [NB commented-out code in b-em for sound]
+    this.updateDataBus = function() {
+        this.sdbout = ((this.via.ora & this.via.ddra) | ~this.via.ddra) & 0xff;
+        this.updateSdb();
+        // CMOS write?
     };
 
     this.write = function(addr, val) {
@@ -166,7 +259,7 @@ function sysvia(cpu) {
         case ORAnh:
             this.via.ora = val;
             this.via.porta = (this.via.porta & ~this.via.ddra) | (this.via.ora & this.via.ddra);
-            this.writeDataBus(val);
+            this.updateDataBus();
             break;
         case ORB:
             this.via.orb = val;
@@ -178,7 +271,10 @@ function sysvia(cpu) {
             this.updateIFR();
             // TODO: CMOS write
             break;
-        case DDRA: this.via.ddra = val; break;
+        case DDRA: 
+            this.via.ddra = val; 
+            this.updateDataBus();
+            break;
         case DDRB: this.via.ddrb = val; break;
         case SR: this.via.sr = val; break;
         case ACR: this.via.acr = val; break;
