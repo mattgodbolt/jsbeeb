@@ -14,6 +14,14 @@ function getGetPut(arg) {
             opcodeCycles: 1,
             memoryCycles: 1,
         };
+    case "zp,x":
+        return {
+            reg: "temp",
+            get: ["var addr = (cpu.getb() + cpu.x) & 0xff;", "var temp = cpu.readmem(addr);"],
+            put: ["cpu.writemem(addr, temp);"],
+            opcodeCycles: 1,
+            memoryCycles: 1,
+        };
     case "A":
         return {
             reg: "cpu.a",
@@ -429,6 +437,11 @@ function compileAdcSbc(inst, arg) {
             "cpu.checkInt();"]);
 }
 
+function compileNop(arg) {
+    if (arg) return null;
+    return ["cpu.polltime(2);", "cpu.checkInt();"];
+}
+
 function compileInstruction(opcodeString) {
     var split = opcodeString.split(' ');
     var opcode = split[0];
@@ -499,6 +512,8 @@ function compileInstruction(opcodeString) {
         lines = compileJump(arg);
     } else if (opcode == "ADC" || opcode == "SBC") {
         lines = compileAdcSbc(opcode.toLowerCase(), arg);
+    } else if (opcode == "NOP") {
+        lines = compileNop(arg);
     }
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');

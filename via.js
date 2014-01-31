@@ -156,33 +156,65 @@ function sysvia(cpu) {
         var keys = {};
         function C(s, c, r) { keys[s.charCodeAt(0)] = [c, r]; };
         C('\r', 9, 4);
+        C('\x08', 9, 5); // delete
+        C('\x10', 0, 7); // shift
+        C('\x1b', 0, 0); // escape
+        C('\x11', 1, 7); // control
+        C('\x00', 0, 4); // caps
         
-        //C('TODO', 9, 6); // copy key I think
+        //C('TODO', 9, 6); // copy key
 
         C('/', 8, 6); // TODO find key code for this
 
         C('\xbe', 7, 6);  // '.' (why is this 0xbe / 190) ? 
+        C("\xde", 8, 4);  // ' maps to :*
 
+        C('0', 2, 0);
+        C('1', 0, 3);
+        C('2', 1, 3);
         C('3', 1, 1);
         C('4', 2, 1);
         C('5', 3, 1);
+        C('6', 4, 3);
+        C('7', 4, 2);
         C('8', 5, 1);
         C('9', 6, 2);
+        C('0', 7, 2);
 
         C('Q', 0, 1);
-        C('A', 1, 4);
+        C('W', 1, 2);
+        C('E', 2, 2);
+        C('R', 3, 3);
+        C('T', 3, 2);
+        C('Y', 4, 4);
+        C('U', 5, 3);
+        C('I', 5, 2);
+        C('O', 6, 3);
+        C('P', 7, 3);
 
+        C('A', 1, 4);
         C('S', 1, 5);
         C('D', 2, 3);
+        C('F', 3, 4);
+        C('G', 3, 5);
+        C('H', 4, 5);
+        C('J', 5, 4);
         C('K', 6, 4);
         C('L', 6, 5);
 
         C('Z', 1, 6);
         C('X', 2, 4);
         C('C', 2, 5);
+        C('V', 3, 6);
+        C('B', 4, 6);
+        C('N', 5, 5);
+        C('M', 5, 6);
+
+        C(' ', 2, 6);
         return keys;
     })();
     this.set = function(key, val) {
+        console.log(key);
         var colrow = this.keycodeToRowCol[key];
         if (!colrow) return;
         this.keys[colrow[0]][colrow[1]] = val;

@@ -37,12 +37,14 @@ $(function() {
                 stop();  // home
             } else {
                 processor.sysvia.keyDown(keyCode(evt));
+                evt.preventDefault();
             }
         }
     }
     function keyUp(evt) {
         if (running) {
             processor.sysvia.keyUp(keyCode(evt));
+            evt.preventDefault();
         }
     }
     document.onkeydown = keyDown;
@@ -51,14 +53,13 @@ $(function() {
 
     processor = new cpu6502(dbgr, video);
     //processor.debugwrite = function(mem, v) {
-    //    if (mem == 0x267) {
+    //    if (mem == 0x37) {
     //        console.log(hexword(processor.oldpc), "Write to", hexword(mem), hexbyte(v));
     //        //processor.stop();
     //    }
     //}
-    // Run for three seconds.
-    //processor.execute(3 * 2 * 1000 * 1000);
-    processor.debugInstruction = function(pc) {return (pc === 0x993f);};
+    //processor.debugInstruction = function(pc) {return (pc === 0xbe9e);};
+    //processor.debugInstruction = function(pc) {return (pc === 0xbfcf);};
     processor.execute(1000 * 1400);
     go();
 })

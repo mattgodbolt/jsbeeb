@@ -115,13 +115,21 @@ function Debugger() {
         disass.children().each(function() {
             var result = cpu.disassemble(address);
             var hex = "";
+            var asc = "";
             for (var i = address; i < result[1]; ++i) {
                 if (hex !== "") hex += " ";
-                hex += hexbyte(cpu.readmem(i)); 
+                var b = cpu.readmem(i);
+                hex += hexbyte(b);
+                if (b >= 32 && b < 128) {
+                    asc += String.fromCharCode(b);
+                } else { 
+                    asc += "."; 
+                }
             }
             $(this).find('.dis_addr').html(labelHtml(address));
             $(this).toggleClass('current', address == cpu.pc);
             $(this).find('.instr_bytes').text(hex);
+            $(this).find('.instr_asc').text(asc);
             $(this).find('.disassembly').html(result[0]);
             $(this).find('.addr')
             //.editable({editBy: 'dblclick', editClass: 'editable', onSubmit:endLabelEdit })

@@ -383,7 +383,7 @@ function cpu6502(dbgr, video) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
                 console.log(this.disassemble(this.pc)[0]);
                 this.dumpregs();
-                this.halted = true;
+                stop();
                 return;
             }
             this.incpc();

@@ -52,6 +52,12 @@ body {
     color: #80d0d0;
 }
 
+.instr_asc {
+    display: inline-block;
+    width: 3em;
+    color: #60f060;
+}
+
 .addr:hover {
     background-color: #330000;
 }
