@@ -64,7 +64,7 @@ function cpu6502(dbgr, video) {
 
     this.readmem = function(addr) {
         addr &= 0xffff;
-        if (this.debugRead) this.debugRead(addr);
+        if (this.debugread) this.debugread(addr);
         if (this.memstat[this.vis20k][addr >> 8]) {
             var offset = this.memlook[this.vis20k][addr >> 8];
             return this.ramRomOs[offset + addr];
@@ -289,8 +289,9 @@ function cpu6502(dbgr, video) {
     }
 
     this.brk = function() {
-        this.push(this.pc >>> 8);
-        this.push(this.pc & 0xff);
+        var nextByte = this.pc + 1;
+        this.push(nextByte >>> 8);
+        this.push(nextByte & 0xff);
         var temp = this.p.asByte() & ~0x04; // clear I bit
         this.push(temp);
         this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);

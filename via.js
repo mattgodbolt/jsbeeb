@@ -157,16 +157,24 @@ function sysvia(cpu) {
         function C(s, c, r) { keys[s.charCodeAt(0)] = [c, r]; };
         C('\r', 9, 4);
         C('\x08', 9, 5); // delete
-        C('\x10', 0, 7); // shift
-        C('\x1b', 0, 0); // escape
-        C('\x11', 1, 7); // control
+        C('\x10', 0, 0); // shift
+        C('\x1b', 0, 7); // escape
+        C('\x11', 1, 0); // control
         C('\x00', 0, 4); // caps
+        C('\x25', 9, 1); // arrow left TBC
+        C('\x28', 9, 2); // arrow down TBC
+        C('\x27', 9, 3); // arrow up TBC
+        C('\x26', 9, 7); // arrow right TBC
         
-        //C('TODO', 9, 6); // copy key
+        //C('TODO', 9, 6); // copy key?
 
-        C('/', 8, 6); // TODO find key code for this
-
+        C('\xba', 7, 5);  // ';' / '+'
+        C('\xbc', 6, 6);  // ','
+        C('\xbd', 7, 1);  // '_' / '=' mapped to underscore
         C('\xbe', 7, 6);  // '.' (why is this 0xbe / 190) ? 
+        C('\xbf', 8, 6);  // '/' / '?'
+        C("\xdb", 8, 3);  // ' maps to [{
+        C("\xdd", 8, 5);  // ' maps to ]}
         C("\xde", 8, 4);  // ' maps to :*
 
         C('0', 2, 0);

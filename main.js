@@ -52,14 +52,17 @@ $(function() {
     document.onkeyup = keyUp;
 
     processor = new cpu6502(dbgr, video);
+    //processor.debugread = function(mem) {
+    //    if (mem === 0x983f) stop();
+    //        //console.log(hexword(processor.pc), "Read of", hexword(mem));
+    //};
     //processor.debugwrite = function(mem, v) {
-    //    if (mem == 0x37) {
+    //    if (mem == 0xfd) {
     //        console.log(hexword(processor.oldpc), "Write to", hexword(mem), hexbyte(v));
     //        //processor.stop();
     //    }
     //}
-    //processor.debugInstruction = function(pc) {return (pc === 0xbe9e);};
-    //processor.debugInstruction = function(pc) {return (pc === 0xbfcf);};
+    //processor.debugInstruction = function(pc) {return (pc === 0xbfea);};
     processor.execute(1000 * 1400);
     go();
 })
