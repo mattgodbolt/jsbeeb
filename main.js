@@ -33,8 +33,11 @@ $(function() {
     function keyDown(evt) {
         if (running) {
             var code = keyCode(evt);
-            if (code === 36) { 
-                stop();  // home
+            if (code === 36) {  // home
+                stop();
+            } else if (code == 123) { // F12
+                processor.reset();
+                evt.preventDefault();
             } else {
                 processor.sysvia.keyDown(keyCode(evt));
                 evt.preventDefault();
