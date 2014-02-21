@@ -225,7 +225,7 @@ function cpu6502(dbgr, video) {
     this.loadOs = function(os, basic, dfs) {
         this.loadRom(os, this.osOffset);
         this.loadRom(basic, this.romOffset + 15 * 16384);
-        //this.loadRom(dfs, this.romOffset + 14 * 16384);
+        this.loadRom(dfs, this.romOffset + 14 * 16384);
     }
 
     this.reset = function() {
@@ -247,7 +247,7 @@ function cpu6502(dbgr, video) {
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd)<<8);
         this.p = new flags();
         this.p.i = 1;
-        this.nmi = this.oldnmi = this.nmilock = 0;
+        this.nmi = 0;
         this.output = 0;
         this.tubecycle = this.tubecycles = 0;
         this.halted = false;
@@ -256,6 +256,7 @@ function cpu6502(dbgr, video) {
         this.sysvia = new sysvia(this);
         this.uservia = new uservia(this);
         this.acia = new acia(this);
+        this.fdc = new fdc(this);
         this.crtc = video.crtc;
         this.ula = video.ula;
         this.adconverter = { read: function() { return 0xff; }, write: function() {}};
@@ -285,7 +286,12 @@ function cpu6502(dbgr, video) {
         this.cycles -= cycles;
         this.sysvia.polltime(cycles);
         this.uservia.polltime(cycles);
+        this.fdc.polltime(cycles);
         video.polltime(cycles);
+    }
+
+    this.NMI = function() {
+        this.nmi = 1;
     }
 
     this.brk = function() {
@@ -403,7 +409,16 @@ function cpu6502(dbgr, video) {
             this.interrupt &= 0x7f;
             // TODO: otherstuff
             // TODO: tube
-            // TODO: nmis
+            if (this.nmi) {
+                this.push(this.pc >>> 8);
+                this.push(this.pc & 0xff);
+                this.push(this.p.asByte() & ~0x10);
+                this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
+                this.p.i = 1;
+                this.polltime(7);
+                this.nmi = 0;
+                this.p.d = 0;
+            }
         }
     };
 

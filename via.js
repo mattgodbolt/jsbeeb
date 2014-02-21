@@ -222,7 +222,7 @@ function sysvia(cpu) {
         return keys;
     })();
     this.set = function(key, val) {
-        console.log(key);
+        //console.log(key);
         var colrow = this.keycodeToRowCol[key];
         if (!colrow) return;
         this.keys[colrow[0]][colrow[1]] = val;
