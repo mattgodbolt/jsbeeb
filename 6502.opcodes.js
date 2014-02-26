@@ -74,6 +74,18 @@ function getGetPut(arg) {
             opcodeCycles: 1,
             memoryCycles: 3,
         };
+    case "(,x)":
+        return {
+            reg: "temp",
+            get: [
+                "var temp = cpu.getb() + cpu.x;",
+                "var addr = cpu.readmem(temp) | (cpu.readmem(temp + 1) << 8);",
+                "temp = cpu.readmem(addr);",
+                ],
+            put: ["throw \"bad fit\""],
+            opcodeCycles: 1,
+            memoryCycles: 4,  // Not sure this is correct
+        };
     }
 }
 
