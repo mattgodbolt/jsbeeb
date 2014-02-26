@@ -118,10 +118,67 @@ function teletext() {
         self.gfx = 0;
         self.flash = self.flashon = self.flashtime = 0;
         self.heldchar = self.holdchar = 0;
+        self.curChars = [self.chars, self.charsi];
     }
 
     function handleControlCode(data) {
-        // TODO: control codes
+        var holdclear = false;
+        var holdoff = false;
+        switch (data) {
+        case 1: case 2: case 3: case 4: case 5: case 6: case 7:
+            self.gfx = 0;
+            self.col = data;
+            self.curChars[0] = self.chars;
+            self.curChars[1] = self.charsi;
+            holdclear = true;
+            break;
+        case 8: self.flash = true; break;
+        case 9: self.flash = false; break;
+        case 12: case 13:
+            self.dbl = !!(data & 1);
+            if (self.dbl) self.wasdbl = true;
+            break;
+        case 17: case 18: case 19: case 20: case 21: case 22: case 23:
+            self.gfx = true;
+            self.col = data & 7;
+            if (self.sep) {
+                self.curChars[0] = self.sepgraph;
+                self.curChars[1] = self.sepgraphi;
+            } else {
+                self.curChars[0] = self.graph;
+                self.curChars[1] = self.graphi;
+            }
+            break;
+        case 24: 
+            // TODO mcolx?
+            self.col = self.bg;
+            break;
+        case 25:
+            if (self.gfx) {
+                self.curChars[0] = self.graph;
+                self.curChars[1] = self.graphi;
+            }
+            self.sep = false;
+            break;
+        case 26:
+            if (self.gfx) {
+                self.curChars[0] = self.sepgraph;
+                self.curChars[1] = self.sepgraphi;
+            }
+            self.sep = true;
+            break;
+        case 28: self.bg = 0; break;
+        case 29: self.bg = self.col; break;
+        case 30: self.holdchar = true; break;
+        case 31: holdoff = true; break;
+        }
+        if (self.holdchar) {
+            data = self.heldchar;
+            if (data >= 0x40 && data <= 0x60) data = 0x20;
+            // TODO held 'px'
+        } else data = 0x20;
+        // TODO:         if (self.dbl !== self.dblx) data = 0x20; 
+        return data;
     }
 
     function render(buf, offset, scanline, data) {
@@ -133,8 +190,7 @@ function teletext() {
             return;
         }
         if (data < 0x20) {
-            handleControlCode(data);
-            data = 0x20; // for now
+            data = handleControlCode(data);
         }
         scanline >>>=1; // why is this needed?
         var t = (data - 0x20) * 160 + scanline * 16;
@@ -144,7 +200,7 @@ function teletext() {
         } else {
             palette = self.palette[((self.bg & 7)<<3) | (self.col & 7)];
         }
-        var px = self.chars;
+        var px = self.curChars[0];
         // interlace?
         for (i = 0; i < 16; ++i) {
             buf[offset + i + 16] = palette[px[t]&15];
@@ -153,6 +209,17 @@ function teletext() {
     };
 
     this.endline = function() {
+        self.col = 7;
+        self.bg = 0;
+        self.holdchar = false;
+        self.heldchar = 0x20;
+        self.curChars[0] = self.chars;
+        self.curChars[1] = self.charsi;
+        self.flash = false;
+        self.sep = false;
+        self.gfx = false;
+        // TODO heldp
+
         self.dbl = self.wasdbl = false;
     };
 

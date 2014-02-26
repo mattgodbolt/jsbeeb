@@ -156,7 +156,6 @@ function video(fb32, paint) {
                 }
             } else if (self.hc == self.regs[0]) {
                 // We've hit the end of a line (reg 0 is horiz sync char count)
-                // bunch of mode 7 stuff todo
                 self.hc = 0;
                 // TODO: cursor stuff
                 if (self.vadj) {
