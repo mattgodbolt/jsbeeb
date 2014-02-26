@@ -27,12 +27,13 @@ function ssdLoad(name, fdc) {
         side: -1,
         notFound: 0,
         seek: function(track) {
+            console.log("Seeking to track", track);
             this.seekOffset = track * 10 * 256;
             if (this.dsd) this.seekOffset <<= 1;
             this.track = track;
         },
         check: function(track, side, density) {
-            if (!this.track !== track || density || (side && !this.dsd)) {
+            if (this.track !== track || density || (side && !this.dsd)) {
                 this.notFound = 500;
                 return false;
             }
@@ -67,14 +68,15 @@ function ssdLoad(name, fdc) {
         poll: function() {
             this.time++;
             if (this.time < 16) return;
+            this.time = 0;
             if (this.notFound && --this.notFound == 0) {
                 fdc.notFound();
             }
             if (this.inRead) {
-                fdc.data(data[this.seekOffset + this.sectorOffset + this.byteWithinSector]);
+                fdc.discData(data[this.seekOffset + this.sectorOffset + this.byteWithinSector]);
                 if (++this.byteWithinSector == 256) {
                     this.inRead = false;
-                    fdc.finishRead();
+                    fdc.discFinishRead();
                 }
             }
             if (this.inWrite) {
@@ -87,14 +89,14 @@ function ssdLoad(name, fdc) {
             }
             if (this.inReadAddr) {
                 switch (this.byteWithinSector) {
-                case 0: fdc.data(this.track); break;
-                case 1: fdc.data(this.side); break;
-                case 2: fdc.data(this.rsector); break;
-                case 3: fdc.data(1); break;
-                case 4: case 5: fdc.data(0); break;
+                case 0: fdc.discData(this.track); break;
+                case 1: fdc.discData(this.side); break;
+                case 2: fdc.discData(this.rsector); break;
+                case 3: fdc.discData(1); break;
+                case 4: case 5: fdc.discData(0); break;
                 case 6:
                     this.inRead = false;
-                    fdc.finishRead();
+                    fdc.discFinishRead();
                     this.rsector++;
                     if (this.rsector === 10) this.rsector = 0;
                     break;
@@ -113,18 +115,23 @@ function i8271(cpu) {
     self.data = 0;
     self.drivesel = 0;
     self.curdrive = 0;
+    self.drvout = 0;
     self.curtrack = [0,0];
     self.realtrack = [0,0];
+    self.sectorsleft = 0;
+    self.cursector = 0;
+    self.phase = 0;
     self.command = 0xff;
     self.time = 0;
     self.paramnum = 0;
     self.paramreq = 0;
     self.params = new Uint8Array(8);
     self.written = 0;
-    self.drives = [ssdLoad("discs/Welcome.ssd")];
+    self.verify = 0;
+    self.drives = [ssdLoad("discs/Welcome.ssd", this)];
 
     self.NMI = function() {
-        if (self.status & 8) cpu.NMI();
+        cpu.NMI(self.status & 8);
     };
 
     self.read = function(addr) {
@@ -143,7 +150,18 @@ function i8271(cpu) {
         return 0x00;
     };
 
-    var paramMap = {0x34: 4, 0x29: 1, 0x2c: 0, 0x3d: 1, 0x3a: 2, 0x13: 3, 0x0b: 3, 
+    self.discData = function(byte) {
+        self.data = byte;
+        self.status = 0x8c;
+        self.result = 0;
+        self.NMI();
+        debugByte++;
+    };
+    self.discFinishRead = function() {
+        this.time = 200;
+    };
+
+    var paramMap = {0x35: 4, 0x29: 1, 0x2c: 0, 0x3d: 1, 0x3a: 2, 0x13: 3, 0x0b: 3, 
         0x1b: 3, 0x1f: 3, 0x23: 5 };
     function numParams(command) {
         var found = paramMap[command];
@@ -158,8 +176,9 @@ function i8271(cpu) {
         self.drivesel = val >>> 6;
         self.curdrive = (val & 0x80) ? 1 : 0;
         self.paramnum = 0;
-        self.paramreq = numParams(command);
+        self.paramreq = numParams(self.command);
         self.status = 0x80;
+        console.log(hexbyte(self.command));
         if (!self.paramreq) {
             if (self.command == 0x2c) {
                 // read drive status
@@ -176,11 +195,69 @@ function i8271(cpu) {
         }
     }
 
+    function writeSpecial(reg, a, b) {
+        self.status = 0; 
+        console.log(hexbyte(reg), hexbyte(a), hexbyte(b));
+        switch (reg) {
+        case 0x17: break; // apparently "mode register"
+        case 0x12: self.curtrack[0] = b; break;
+        case 0x1a: self.curtrack[1] = b; break;
+        case 0x23: self.drvout = a; break;
+        default:
+            self.result = self.status = 0x18;
+            self.NMI();
+            self.time = 0;
+            break;
+        }
+    }
+
+    function spinup() {}
+    function spindown() {}
+    function setspindown() {}
+
+    function seek(track) {
+        spinup();
+        var diff = track - self.curtrack[self.curdrive];
+        self.realtrack[self.curdrive] += diff;
+        self.drives[self.curdrive].seek(self.realtrack[self.curdrive]);
+        // NB should be dependent on diff; but always non-zero
+        self.time = 200; // TODO: b-em uses a round-the-houses approach to this where ddnoise actually sets time
+    }
+    
+    var debugByte = 0;
+    function read(track, sector, numSectors) {
+        console.log("Read track", track, "sector", sector, "num", numSectors & 31);
+        self.sectorsleft = numSectors & 31;
+        self.cursector = sector;
+        spinup();
+        self.phase = false;
+        seek(track);
+        debugByte = 0;
+    }
+
     function parameter(val) {
         if (self.paramnum < 5) self.params[self.paramnum++] = val;
         if (self.paramnum != self.paramreq) return;
-        console.log(self);
-        // todo: here...
+        switch (self.command) {
+        case 0x35: // Specify.
+            self.status = 0; 
+            break;
+        case 0x29: // Seek
+            seek(self.params[0]);
+            break;
+        case 0x13: // Read
+            read(self.params[0], self.params[1], self.params[2]);
+            break;
+        case 0x3a: // Special
+            writeSpecial(self.params[0], self.params[1], self.params[2]);
+            break;
+        default:
+            self.result = 0x18;
+            self.status = 0x18;
+            self.NMI();
+            self.time = 0;
+            break;
+        }
     }
 
     function reset(val) {}
@@ -200,11 +277,55 @@ function i8271(cpu) {
         }
     }
 
+    function callback() {
+        self.time = 0;
+        switch (self.command) {
+        case 0x29: // Seek
+            self.curtrack[self.curdrive] = self.params[0];
+            self.status = 0x18;
+            self.result = 0;
+            self.NMI();
+            break; 
+        case 0x13: // Read
+        case 0x1f: // Verify
+            if (!self.phase) {
+                self.curtrack[self.curdrive] = self.params[0];
+                self.phase = true;
+                self.drives[self.curdrive].read(self.cursector, self.params[0], (self.drvout & 0x20) ? true : false, 0);
+                return;
+            }
+            if (--self.sectorsleft == 0) {
+                self.status = 0x18;
+                self.result = 0;
+                self.NMI();
+                setspindown();
+                self.verify = 0;
+                return;
+            }
+            self.cursector++;
+            self.drives[self.curdrive].read(self.cursector, self.params[0], (self.drvout & 0x20) ? true : false, 0);
+            break;
+        case 0xff: break;
+        default:
+            console.log("ERK bad command", hexbyte(self.command));
+            break;
+        }
+    }
+
+    var driveTime = 0;
     self.polltime = function(c) {
         if (!c) return;
-        self.time -= c;
-        if (self.time <= 0) {
-            // CALLBACK
+        if (self.time) {
+            self.time -= c;
+            if (self.time <= 0) {
+                callback();
+            }
+        }
+        driveTime -= c;
+        if (driveTime <= 0) {
+            driveTime += 16;
+            if (self.drives[self.curdrive])
+                self.drives[self.curdrive].poll();
         }
     }
 };

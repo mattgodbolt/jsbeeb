@@ -247,7 +247,7 @@ function cpu6502(dbgr, video) {
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd)<<8);
         this.p = new flags();
         this.p.i = 1;
-        this.nmi = 0;
+        this.nmi = false;
         this.output = 0;
         this.tubecycle = this.tubecycles = 0;
         this.halted = false;
@@ -290,8 +290,8 @@ function cpu6502(dbgr, video) {
         video.polltime(cycles);
     }
 
-    this.NMI = function() {
-        this.nmi = 1;
+    this.NMI = function(nmi) {
+        this.nmi = !!nmi;
     }
 
     this.brk = function() {
@@ -416,7 +416,7 @@ function cpu6502(dbgr, video) {
                 this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
                 this.p.i = 1;
                 this.polltime(7);
-                this.nmi = 0;
+                this.nmi = false;
                 this.p.d = 0;
             }
         }
