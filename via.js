@@ -161,10 +161,10 @@ function sysvia(cpu) {
         C('\x1b', 0, 7); // escape
         C('\x11', 1, 0); // control
         C('\x00', 0, 4); // caps
-        C('\x25', 9, 1); // arrow left TBC
-        C('\x28', 9, 2); // arrow down TBC
-        C('\x27', 9, 3); // arrow up TBC
-        C('\x26', 9, 7); // arrow right TBC
+        C('\x25', 9, 1); // arrow left
+        C('\x26', 9, 3); // arrow up
+        C('\x27', 9, 7); // arrow right
+        C('\x28', 9, 2); // arrow down
         
         //C('TODO', 9, 6); // copy key?
 
