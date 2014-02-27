@@ -299,16 +299,16 @@ function video(fb32, paint) {
                 video.bakpal[index] = val & 0xf;
                 var ulaCol = val & 7;
                 if ((val & 8) && (video.ulactrl & 1)) 
-                    video.ulapal[index] = video.collook[ulaCol ^ 7];
-                else
                     video.ulapal[index] = video.collook[ulaCol];
+                else
+                    video.ulapal[index] = video.collook[ulaCol ^ 7];
             } else {
                 if ((video.ulactrl^val) & 1) {
                     // Flash colour has changed
                     var flashEnabled = !!(val & 1);
                     for (var i = 0; i < 16; ++i) {
                         var index = video.bakpal[i] & 7;
-                        if (!flashEnabled || (video.bakpal[i] & 8)) index ^= 7;
+                        if (!(flashEnabled && (video.bakpal[i] & 8))) index ^= 7;
                         video.ulapal[i] = video.collook[index];
                     }
                 }
