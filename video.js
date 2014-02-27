@@ -172,7 +172,8 @@ function video(fb32, paint) {
                     // end of a vertical character
                     self.maback = self.ma;
                     self.sc = 0;
-                    // todo, cursor stuff, mode7 stuff
+                    // todo, cursor stuff
+                    self.teletext.verticalCharEnd();
                     var oldvc = self.vc;
                     self.vc = (self.vc + 1) & 127;
                     if (self.vc == self.regs[6]) {

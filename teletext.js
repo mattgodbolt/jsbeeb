@@ -114,7 +114,7 @@ function teletext() {
         self.col = 7;
         self.bg = 0;
         self.sep = 0;
-        self.dbl = self.nextdbl = self.wasdbl = false;
+        self.dbl = self.dblx = self.nextdbl = self.wasdbl = false;
         self.gfx = 0;
         self.flash = self.flashon = self.flashtime = 0;
         self.heldchar = self.holdchar = 0;
@@ -177,12 +177,13 @@ function teletext() {
             if (data >= 0x40 && data <= 0x60) data = 0x20;
             // TODO held 'px'
         } else data = 0x20;
-        // TODO:         if (self.dbl !== self.dblx) data = 0x20; 
+        if (self.dbl !== self.dblx) data = 0x20; 
         return data;
     }
 
     function render(buf, offset, scanline, data) {
         var i;
+        self.dblx = self.dbl;
         if (data == 255) {
             for (i = 0; i < 16; ++i) {
                 buf[offset + i + 16] = 0xff000000; // todo color lookup 0
@@ -193,7 +194,14 @@ function teletext() {
             data = handleControlCode(data);
         }
         scanline >>>=1; // why is this needed?
-        var t = (data - 0x20) * 160 + scanline * 16;
+        var t = (data - 0x20) * 160;
+        if (self.dblx) {
+            t += (scanline >>> 1) * 16;
+            if (self.nextdbl) t += 5*16;
+        } else {
+            t += scanline * 16;
+        }
+            
         var palette;
         if (!self.dbl && self.nextdbl) {
             palette = self.palette[((self.bg & 7)<<3) | (self.bg & 7)];
@@ -206,6 +214,13 @@ function teletext() {
             buf[offset + i + 16] = palette[px[t]&15];
             t++;
         }
+    };
+
+    this.verticalCharEnd = function() {
+        if (self.nextdbl) 
+            self.nextdbl = false;
+        else
+            self.nextdbl = self.wasdbl;
     };
 
     this.endline = function() {
@@ -226,13 +241,4 @@ function teletext() {
     this.render = render;
 
     init();
-    //for (var j = 0; j < 10; ++j) {
-    //    var t = (66 - 0x20) * 160 + j * 16;
-    //    var s = "";
-    //    for (var i = 0; i < 16; ++i) {
-    //        s += self.chars[t].toString(16);
-    //        ++t;
-    //    }
-    //    console.log(s);
-    //}
 }
