@@ -6,6 +6,7 @@ function video(fb32, paint) {
     self.collook = new Uint32Array([
             0xff000000, 0xffff0000, 0xff00ff00, 0xffffff00,
             0xff0000ff, 0xffff00ff, 0xff00ffff, 0xffffffff]);
+    var screenlen = new Uint16Array([0x4000, 0x5000, 0x2000, 0x2800]);
 
     self.reset = function(cpu, via) { 
         self.cpu = cpu;
@@ -37,6 +38,33 @@ function video(fb32, paint) {
         self.frameodd = false;
         self.teletext = new teletext();
     };
+
+    function table4bppOffset(ulamode, byte) {
+        return ulamode * 256 * 16 + byte * 16;
+    };
+
+    var table4bpp = function() {
+        var t = new Uint8Array(4 * 256 * 16);
+        for (var b = 0; b < 256; ++b) {
+            var temp = b;
+            for (var i = 0; i < 16; ++i) {
+                var left = 0;
+                if (temp & 2) left |= 1;
+                if (temp & 8) left |= 2;
+                if (temp & 32) left |= 4;
+                if (temp & 128) left |= 8;
+                t[table4bppOffset(3, b) + i] = left;
+                temp <<= 1;
+                temp |= 1;
+            }
+            for (var i = 0; i < 16; ++i) {
+                t[table4bppOffset(2, b) + i] = t[table4bppOffset(3, b) + (i>>1)]; 
+                t[table4bppOffset(1, b) + i] = t[table4bppOffset(3, b) + (i>>2)]; 
+                t[table4bppOffset(0, b) + i] = t[table4bppOffset(3, b) + (i>>3)]; 
+            }
+        }
+        return t;
+    }();
 
     self.reset(null);
 
@@ -76,7 +104,7 @@ function video(fb32, paint) {
             var ilSyncAndVideo = (self.regs[8] & 3) == 3;
             var addr = ilSyncAndVideo ? ((self.ma << 3) | ((self.sc & 3) << 1) | self.interlline)
                 : ((self.ma<<3) | (self.sc & 7));
-            if (addr & 0x8000) addr -= self.screenlen[self.sysvia.getScrSize()];
+            if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
             dat = self.cpu.readmem((addr & 0x7fff) | vidbank) | 0;
         }
         if (self.scrx < 1280) {
@@ -86,12 +114,15 @@ function video(fb32, paint) {
                     self.fb32[self.scry * 1280 + self.scrx + i] = self.collook[0];
                 }
             } else {
-                switch (self.crtcmode) {
-                case 0:
-                    self.teletext.render(self.fb32, self.scry * 1280 + self.scrx, self.sc, dat & 0x7f);
-                    break;
-                default:
-                // todo actual drawing
+                var offset = self.scry * 1280 + self.scrx;
+                if (self.crtcmode === 0) {
+                    self.teletext.render(self.fb32, offset, self.sc, dat & 0x7f);
+                } else {
+                    var tblOff = table4bppOffset(self.ulamode, dat);
+                    var pixels = self.crtcmode * 8;
+                    for (var i = 0; i < pixels; ++i) {
+                        self.fb32[offset + i] = self.ulapal[table4bpp[tblOff + i]];
+                    }
                 }
             }
             // TODO: cursor
