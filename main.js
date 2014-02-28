@@ -1,6 +1,8 @@
 var processor;
 var video;
+var soundChip;
 var dbgr;
+var jsAudioNode;  // has to remain to keep thing alive
 var frames = 0;
 
 $(function() {
@@ -28,12 +30,38 @@ $(function() {
     var fb32 = new Uint32Array(fb8.buffer);
     video = new video(fb32, paint);
 
+    soundChip = (function() {
+        var context = null;
+        if (typeof AudioContext !== 'undefined') {
+            context = new AudioContext();
+        } else if (typeof(webkitAudioContext) !== 'undefined') {
+            context = new webkitAudioContext();
+        } else {
+            return new SoundChip(10000);
+        }
+        soundChip = new SoundChip(context.sampleRate);
+        jsAudioNode = context.createScriptProcessor(1024, 0, 1);
+        function pumpAudio(event) {
+            var outBuffer = event.outputBuffer;
+            var chan = outBuffer.getChannelData(0);
+            soundChip.render(chan, 0, chan.length);
+        }
+        jsAudioNode.onaudioprocess = pumpAudio;
+        jsAudioNode.connect(context.destination);
+        return soundChip;
+    })();
+
     dbgr = new Debugger();
     function keyCode(evt) {
         return evt.which || evt.charCode || evt.keyCode;
     }
     function keyPress(evt) {
         if (!running) {
+            if (keyCode(evt) === 103) {
+                dbgr.hide();
+                go();
+                return;
+            }
             return dbgr.keyPress(keyCode(evt)); 
         }
     }
@@ -61,7 +89,7 @@ $(function() {
     document.onkeypress = keyPress;
     document.onkeyup = keyUp;
 
-    processor = new cpu6502(dbgr, video);
+    processor = new cpu6502(dbgr, video, soundChip);
     //processor.debugread = function(mem) {
     //    if (mem === 0x983f) stop();
     //        //console.log(hexword(processor.pc), "Read of", hexword(mem));
@@ -73,7 +101,6 @@ $(function() {
     //    }
     //}
     //processor.debugInstruction = function(pc) {return (pc === 0xbfea);};
-    processor.execute(1000 * 1400);
     go();
 })
 

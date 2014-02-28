@@ -37,7 +37,7 @@ function flags() {
     this.reset();
 }
 
-function cpu6502(dbgr, video) {
+function cpu6502(dbgr, video, soundChip) {
     this.ramBank = new Uint8Array(16);
     this.memstat = [new Uint8Array(256), new Uint8Array(256)];
     this.memlook = [new Uint32Array(256), new Uint32Array(256)];
@@ -253,7 +253,7 @@ function cpu6502(dbgr, video) {
         this.halted = false;
         this.instructions = generate6502();
         this.disassemble = disassemble6502;
-        this.sysvia = new sysvia(this);
+        this.sysvia = new sysvia(this, soundChip);
         this.uservia = new uservia(this);
         this.acia = new acia(this);
         this.fdc = new fdc(this);
@@ -262,6 +262,7 @@ function cpu6502(dbgr, video) {
         this.adconverter = { read: function() { return 0xff; }, write: function() {}};
         this.tube = { read: function() { return 0xff; }, write: function() {}};
         video.reset(this, this.sysvia);
+        soundChip.reset();
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };
@@ -288,6 +289,7 @@ function cpu6502(dbgr, video) {
         this.uservia.polltime(cycles);
         this.fdc.polltime(cycles);
         video.polltime(cycles);
+        soundChip.advance(cycles);
     }
 
     this.NMI = function(nmi) {

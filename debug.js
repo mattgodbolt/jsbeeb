@@ -1,8 +1,9 @@
 function Debugger() {
     var self = this;
     var disass = $('#disassembly');
+    var debugNode = $('#debug');
     var cpu = null;
-    disass.hide();
+    debugNode.hide();
 
     var numToShow = 32;
     for (var i = 0; i < numToShow; i++) {
@@ -13,11 +14,15 @@ function Debugger() {
 
     var disassPc = null;
     this.debug = function(where) {
-        $('#disassembly').show();
+        debugNode.show();
         for (var i = 0; i < numToShow / 2; ++i)
             where = prevInstruction(where);
         updateDisassembly(where);
         updateRegisters();
+    };
+
+    this.hide = function() {
+        debugNode.hide();
     };
 
     function updateRegisters() {

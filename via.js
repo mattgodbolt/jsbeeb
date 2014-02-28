@@ -82,7 +82,7 @@ function via(ifr) {
     };
 }
 
-function sysvia(cpu) {
+function sysvia(cpu, soundChip) {
     this.via = via(this);
     this.IC32 = 0;
 
@@ -274,9 +274,8 @@ function sysvia(cpu) {
            this.IC32 &= ~(1<<(val&7));
 
         this.updateSdb();
-        // TODO: sound
         if (!(this.IC32&1) && (oldIC32&1))
-           console.log("sound: " + this.sdbval);
+            soundChip.poke(this.sdbval);
 
         this.scrsize = ((this.IC32&16)?2:0) | ((this.IC32&32)?1:0);
         //if (MASTER && !compactcmos) cmosupdate(IC32,sdbval);
