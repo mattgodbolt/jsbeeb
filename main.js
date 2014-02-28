@@ -112,8 +112,10 @@ var running = false;
 
 function run() {
     if (!running) return;
+    var next = Date.now() + (1000 / 50);
     frame();
-    setTimeout(run, 1000/50);
+    var wait = next - Date.now();
+    setTimeout(run, wait);
 }
 
 function go() {
