@@ -218,6 +218,8 @@ function sysvia(cpu, soundChip) {
         C('N', 5, 5);
         C('M', 5, 6);
 
+        C('\x79', 0, 2); // F0 (mapped to F10)
+
         C(' ', 2, 6);
         return keys;
     })();
