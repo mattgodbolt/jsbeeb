@@ -27,7 +27,6 @@ function ssdLoad(name, fdc) {
         side: -1,
         notFound: 0,
         seek: function(track) {
-            console.log("Seeking to track", track);
             this.seekOffset = track * 10 * 256;
             if (this.dsd) this.seekOffset <<= 1;
             this.track = track;
@@ -128,7 +127,7 @@ function i8271(cpu) {
     self.params = new Uint8Array(8);
     self.written = 0;
     self.verify = 0;
-    self.drives = [ssdLoad("discs/Welcome.ssd", this)];
+    self.drives = [ssdLoad("discs/elite.ssd", this)];
 
     self.NMI = function() {
         cpu.NMI(self.status & 8);
@@ -178,7 +177,6 @@ function i8271(cpu) {
         self.paramnum = 0;
         self.paramreq = numParams(self.command);
         self.status = 0x80;
-        console.log(hexbyte(self.command));
         if (!self.paramreq) {
             if (self.command == 0x2c) {
                 // read drive status
@@ -197,7 +195,6 @@ function i8271(cpu) {
 
     function writeSpecial(reg, a, b) {
         self.status = 0; 
-        console.log(hexbyte(reg), hexbyte(a), hexbyte(b));
         switch (reg) {
         case 0x17: break; // apparently "mode register"
         case 0x12: self.curtrack[0] = b; break;
@@ -226,7 +223,6 @@ function i8271(cpu) {
     
     var debugByte = 0;
     function read(track, sector, numSectors) {
-        console.log("Read track", track, "sector", sector, "num", numSectors & 31);
         self.sectorsleft = numSectors & 31;
         self.cursector = sector;
         spinup();
