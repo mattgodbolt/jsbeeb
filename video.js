@@ -242,7 +242,7 @@ function video(fb32, paint_ext) {
                     }
                     if (self.vc == self.regs[7]) {
                         // vertical sync position
-                        if (!(self.regs[8] & 1) && self.oldr8) clearToColour();
+                        //if (!(self.regs[8] & 1) && self.oldr8) clearToColour(); TODO: this!
                         self.frameodd = !self.frameodd;
                         if (self.frameodd) self.interline = !!(self.regs[8] & 1);
                         self.interlline = self.frameodd && (self.regs[8] & 1);

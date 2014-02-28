@@ -100,7 +100,20 @@ $(function() {
     //        //processor.stop();
     //    }
     //}
-    //processor.debugInstruction = function(pc) {return (pc === 0xbfea);};
+    processor.debugInstruction = function(pc) {
+        if (pc == 0xfff7) {
+            var addr = processor.x + (processor.y<<8);
+            var oscli = "";
+            for (;;) {
+                var b = processor.readmem(addr);
+                addr++;
+                if (b == 13) break;
+                oscli += String.fromCharCode(b);
+            }
+            console.log("OSCLI:", oscli);
+        }
+        return false;
+    };
     go();
 })
 
