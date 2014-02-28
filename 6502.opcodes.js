@@ -22,6 +22,14 @@ function getGetPut(arg) {
             opcodeCycles: 1,
             memoryCycles: 1,
         };
+    case "zp,y":
+        return {
+            reg: "temp",
+            get: ["var addr = (cpu.getb() + cpu.y) & 0xff;", "var temp = cpu.readmem(addr);"],
+            put: ["cpu.writemem(addr, temp);"],
+            opcodeCycles: 1,
+            memoryCycles: 1,
+        };
     case "A":
         return {
             reg: "cpu.a",
