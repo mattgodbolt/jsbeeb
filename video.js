@@ -1,4 +1,4 @@
-function video(fb32, paint) {
+function video(fb32, paint_ext) {
     "use strict";
     var self = this;
     self.fb32 = fb32;
@@ -37,7 +37,19 @@ function video(fb32, paint) {
         self.oldr8 = 0;
         self.frameodd = false;
         self.teletext = new teletext();
+        self.minx = self.miny = 65535;
+        self.maxx = self.maxy = 0;
     };
+
+    function paint() {
+        if (self.minx >= self.maxx || self.minxy >= self.maxy) {
+            paint_ext(0, 0, 1280, 768);
+        } else {
+            paint_ext(self.minx, self.miny, self.maxx, self.maxy);
+        }
+        self.minx = self.miny = 65535;
+        self.maxx = self.maxy = 0;
+    }
 
     function table4bppOffset(ulamode, byte) {
         return ulamode * 256 * 16 + byte * 16;
@@ -70,8 +82,8 @@ function video(fb32, paint) {
 
     for (var y = 0; y < 768; ++y)
         for (var x = 0; x < 1280; ++x)
-            fb32[y * 1280 + x] = 0xff00ff00;
-    paint();
+            fb32[y * 1280 + x] = 0;
+    paint(0, 0, 1280, 768);
 
     function renderblank() {
         if (self.charsleft) {
@@ -117,12 +129,19 @@ function video(fb32, paint) {
                 var offset = self.scry * 1280 + self.scrx;
                 if (self.crtcmode === 0) {
                     self.teletext.render(self.fb32, offset, self.sc, dat & 0x7f);
+                    var firstx = self.scrx + 16;
+                    if (firstx < self.minx) self.minx = firstx;
+                    var lastx = self.scrx + 32;
+                    if (lastx > self.maxx) self.maxx = lastx;
                 } else {
                     var tblOff = table4bppOffset(self.ulamode, dat);
                     var pixels = self.crtcmode * 8;
                     for (var i = 0; i < pixels; ++i) {
                         self.fb32[offset + i] = self.ulapal[table4bpp[tblOff + i]];
                     }
+                    if (self.scrx < self.minx) self.minx = self.scrx;
+                    var lastx = self.scrx + pixels;
+                    if (lastx > self.maxx) self.maxx = lastx;
                 }
             }
             // TODO: cursor
@@ -255,7 +274,9 @@ function video(fb32, paint) {
                 }
                 self.dispen = self.vdispen;
                 if (self.dispen || self.vadj) {
-                    // update firsty, maybe not useful?
+                    if (self.scry < self.miny) self.miny = self.scry;
+                    var nextY = self.scry + 1;
+                    if (nextY > self.maxy) self.maxy = nextY;
                 }
 
                 // adc, mouse? seriously?

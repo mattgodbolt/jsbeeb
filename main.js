@@ -12,11 +12,18 @@ $(function() {
         alert('Unsupported browser');
         return;
     }
-    var imageData = ctx.getImageData(0, 0, 1280, 768);
+    var backBuffer = document.createElement("canvas");
+    backBuffer.width = 1280;
+    backBuffer.height = 768;
+    var backCtx = backBuffer.getContext("2d");
+    var imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
     var fb8 = imageData.data;
-    function paint() {
+    function paint(minx, miny, maxx, maxy) {
         frames++;
-        ctx.putImageData(imageData, 0, 0);
+        var width = maxx-minx;
+        var height = maxy-miny;
+        backCtx.putImageData(imageData, 0, 0);
+        ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvas.width, canvas.height);
     };
     var fb32 = new Uint32Array(fb8.buffer);
     video = new video(fb32, paint);

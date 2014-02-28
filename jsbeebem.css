@@ -6,8 +6,6 @@ body {
 }
 
 #screen {
-    width: 1280px;
-    height: 1024px;
     margin-left: auto;
     margin-right: auto;
     display: block;
