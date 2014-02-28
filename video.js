@@ -3,9 +3,12 @@ function video(fb32, paint_ext) {
     var self = this;
     self.fb32 = fb32;
     self.paint = paint;
+    //self.collook = new Uint32Array([
+    //        0xff000000, 0xffff0000, 0xff00ff00, 0xffffff00,
+    //        0xff0000ff, 0xffff00ff, 0xff00ffff, 0xffffffff]);
     self.collook = new Uint32Array([
-            0xff000000, 0xffff0000, 0xff00ff00, 0xffffff00,
-            0xff0000ff, 0xffff00ff, 0xff00ffff, 0xffffffff]);
+            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
+            0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]);
     var screenlen = new Uint16Array([0x4000, 0x5000, 0x2000, 0x2800]);
 
     self.reset = function(cpu, via) { 
