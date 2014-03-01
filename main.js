@@ -71,7 +71,7 @@ $(function() {
             if (code === 36) {  // home
                 stop();
             } else if (code == 123) { // F12
-                processor.reset();
+                processor.reset(false);
                 evt.preventDefault();
             } else {
                 processor.sysvia.keyDown(keyCode(evt));

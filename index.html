@@ -27,8 +27,16 @@
 </script>
     </head>
     <body>
-        <h1>JavaScript BBC Emulator</h1>
+        <h1>JavaScript BBC B Emulator</h1>
+        <div id="info">
+            By <a href="http://xania.org/">Matt Godbolt</a>.  Source on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome or Firefox.<br>
+            Handy key mappings: <span class="key">F0</span> is <span class="key">F10</span>, <span class="key">BREAK</span> is <span class="key">F12</span>.  Hit <span class="key">HOME</span> for a debugger.<br>
+            To load up Elite (currently the only disc available), hold <span class="key">SHIFT</span> and then tap <span class="key">F12</span>.
+        </div>
         <canvas id="screen" width="698" height="571"></canvas>
+        <div>
+            Based on Tom Walker's <a href="http://b-em.bbcmicro.com/">b-em</a> emulator.  Huge thanks to him for open sourcing his code.  Big thanks too to Richard Talbot-Watkins for his help and support.
+        </div>
         <div id="debug">
             <div id="disassembly">
                 <div class="template"><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span></div>

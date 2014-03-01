@@ -228,39 +228,41 @@ function cpu6502(dbgr, video, soundChip) {
         this.loadRom(dfs, this.romOffset + 14 * 16384);
     }
 
-    this.reset = function() {
+    this.reset = function(hard) {
         console.log("Resetting 6502");
         var i;
-        for (i = 0; i < 16; ++i) this.ramBank[i] = 0;
-        for (i = 0; i < 128; ++i) this.memstat[0][i] = this.memstat[1][i] = 1;
-        for (i = 128; i < 256; ++i) this.memstat[0][i] = this.memstat[1][i] = 2;
-        for (i = 0; i < 128; ++i) this.memlook[0][i] = this.memlook[1][i] = 0;
-        /* TODO: Model A support here */
-        for (i = 48; i < 128; ++i) this.memlook[1][i] = 16384;
-        for (i = 128; i < 192; ++i) this.memlook[0][i] = this.memlook[1][i] = this.romOffset - 0x8000;
-        for (i = 192; i < 256; ++i) this.memlook[0][i] = this.memlook[1][i] = this.osOffset - 0xc000;
+        if (hard) {
+            for (i = 0; i < 16; ++i) this.ramBank[i] = 0;
+            for (i = 0; i < 128; ++i) this.memstat[0][i] = this.memstat[1][i] = 1;
+            for (i = 128; i < 256; ++i) this.memstat[0][i] = this.memstat[1][i] = 2;
+            for (i = 0; i < 128; ++i) this.memlook[0][i] = this.memlook[1][i] = 0;
+            /* TODO: Model A support here */
+            for (i = 48; i < 128; ++i) this.memlook[1][i] = 16384;
+            for (i = 128; i < 192; ++i) this.memlook[0][i] = this.memlook[1][i] = this.romOffset - 0x8000;
+            for (i = 192; i < 256; ++i) this.memlook[0][i] = this.memlook[1][i] = this.osOffset - 0xc000;
 
-        for (i = 0xfc; i < 0xff; ++i) this.memstat[0][i] = this.memstat[1][i] = 0;
-
+            for (i = 0xfc; i < 0xff; ++i) this.memstat[0][i] = this.memstat[1][i] = 0;
+            this.ram4k = this.ram8k = this.ram12k = this.ram20k = 0;
+            this.instructions = generate6502();
+            this.disassemble = disassemble6502;
+            this.sysvia = new sysvia(this, soundChip);
+            this.uservia = new uservia(this);
+            this.acia = new acia(this);
+            this.fdc = new fdc(this);
+            this.crtc = video.crtc;
+            this.ula = video.ula;
+            this.adconverter = { read: function() { return 0xff; }, write: function() {}};
+            this.tube = { read: function() { return 0xff; }, write: function() {}};
+        } else {
+            console.log("Soft reset");
+        }
         this.cycles = 0;
-        this.ram4k = this.ram8k = this.ram12k = this.ram20k = 0;
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd)<<8);
         this.p = new flags();
         this.p.i = 1;
         this.nmi = false;
-        this.output = 0;
         this.tubecycle = this.tubecycles = 0;
         this.halted = false;
-        this.instructions = generate6502();
-        this.disassemble = disassemble6502;
-        this.sysvia = new sysvia(this, soundChip);
-        this.uservia = new uservia(this);
-        this.acia = new acia(this);
-        this.fdc = new fdc(this);
-        this.crtc = video.crtc;
-        this.ula = video.ula;
-        this.adconverter = { read: function() { return 0xff; }, write: function() {}};
-        this.tube = { read: function() { return 0xff; }, write: function() {}};
         video.reset(this, this.sysvia);
         soundChip.reset();
         // TODO: cpu type support.
@@ -431,6 +433,6 @@ function cpu6502(dbgr, video, soundChip) {
 
     dbgr.setCpu(this);
     this.loadOs("roms/os", "roms/b/BASIC.ROM", "roms/b/DFS-0.9.rom");
-    this.reset();
+    this.reset(true);
 }
 

@@ -38,6 +38,14 @@ body {
     margin-top: 10px;
 }
 
+#info {
+    margin-bottom: 20px;
+}
+
+.key {
+    border: 1px solid #666666;
+}
+
 .dis_addr {
     display: inline-block;
     width: 8em;
