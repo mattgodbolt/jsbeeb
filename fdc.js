@@ -7,10 +7,15 @@ function ssdLoad(name, fdc) {
     request.open("GET", name, false);
     request.overrideMimeType('text/plain; charset=x-user-defined');
     request.send(null);
-    var len = request.response.length;
+    return ssdFor(fdc, request.response);
+}
+
+function ssdFor(fdc, stringData) {
+    "use strict";
+    var len = stringData.length;
     var data = new Uint8Array(len);
     for (var i = 0; i < len; ++i) {
-        data[i] = request.response.charCodeAt(i) & 0xff;
+        data[i] = stringData.charCodeAt(i) & 0xff;
     }
     return {
         dsd: false,
@@ -131,6 +136,10 @@ function i8271(cpu) {
 
     self.NMI = function() {
         cpu.NMI(self.status & 8);
+    };
+
+    self.loadDiscData = function(drive, data) {
+        self.drives[drive] = ssdFor(this, data);
     };
 
     self.read = function(addr) {

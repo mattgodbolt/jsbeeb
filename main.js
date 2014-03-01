@@ -114,6 +114,16 @@ $(function() {
         }
         return false;
     };
+
+    $('#disc_load').change(function(evt) { 
+        var file = evt.target.files[0]; 
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            processor.fdc.loadDiscData(0, e.target.result);
+        };
+        reader.readAsBinaryString(file);
+    });
+
     go();
 })
 
