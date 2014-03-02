@@ -24,6 +24,7 @@ const ORB   = 0x0,
       INT_CB2 = 0x08;
 
 function via(ifr) {
+    "use strict";
     return {
         ora: 0, orb: 0, ira: 0, irb: 0,
         ddra: 0, ddrb: 0,
@@ -83,6 +84,7 @@ function via(ifr) {
 }
 
 function sysvia(cpu, soundChip) {
+    "use strict";
     this.via = via(this);
     this.IC32 = 0;
 
@@ -199,6 +201,7 @@ function sysvia(cpu, soundChip) {
         C('I', 5, 2);
         C('O', 6, 3);
         C('P', 7, 3);
+        //C('', 7, 4); todo: @ character
 
         C('A', 1, 4);
         C('S', 1, 5);
@@ -414,6 +417,7 @@ function sysvia(cpu, soundChip) {
 }
 
 function uservia(cpu) {
+    "use strict";
     this.via = via(this);
     this.timerout = 1;
     this.updateIFR = function() {
@@ -464,7 +468,7 @@ function uservia(cpu) {
             this.via.t1l &= 0x1fe;
             this.via.t1l |= (val << 9);
             this.via.t1c = this.via.t1l + 1;
-            this.via.ift &= ~TIMER1INT;
+            this.via.ifr &= ~TIMER1INT;
             this.updateIFR();
             this.t1hit = 0;
             break;
@@ -492,7 +496,7 @@ function uservia(cpu) {
             this.updateIFR();
             break;
         case IFR:
-            this.via.ift &= ~(val & 0x7f);
+            this.via.ifr &= ~(val & 0x7f);
             this.updateIFR();
             break;
         default:

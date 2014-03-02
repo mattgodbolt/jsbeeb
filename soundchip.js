@@ -18,10 +18,10 @@ function SoundChip(sampleRate) {
     volumeTable[15] = 0;
 
     function toneChannel(channel, out, offset, length) {
-        var reg = register[channel], vol = volume[channel];;
+        var reg = register[channel], vol = volume[channel];
         if (reg <= 1) {
             for (var i = 0; i < length; ++i) {
-                out[i + offset] += volume[channel];
+                out[i + offset] += vol;
             }
             return;
         }
