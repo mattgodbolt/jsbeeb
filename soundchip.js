@@ -1,6 +1,6 @@
 function SoundChip(sampleRate) {
     "use strict";
-    var soundchipFreq = 3546893.0 / 16.0; // PAL
+    var soundchipFreq = 4000000.0 / 16;
     var sampleDecrement = soundchipFreq / sampleRate;
 
     var register = [ 0, 0, 0, 0 ];
