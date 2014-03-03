@@ -452,7 +452,7 @@ function uservia(cpu) {
         case PCR: this.via.pcr = val; break;
         case SR: this.via.sr = val; break;
         case T1LL: case T1CL:
-            this.via.tl1 &= 0x1fe000;
+            this.via.t1l &= 0x1fe00;
             this.via.t1l |= (val << 1);
             break;
         case T1LH:
@@ -470,7 +470,7 @@ function uservia(cpu) {
             this.via.t1c = this.via.t1l + 1;
             this.via.ifr &= ~TIMER1INT;
             this.updateIFR();
-            this.t1hit = 0;
+            this.via.t1hit = 0;
             break;
         case T2CL:
             this.via.t2l &= 0x1fe00;
