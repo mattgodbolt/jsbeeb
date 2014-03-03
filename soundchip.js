@@ -4,9 +4,11 @@ function SoundChip(sampleRate) {
     var sampleDecrement = soundchipFreq / sampleRate;
 
     var register = [ 0, 0, 0, 0 ];
+    this.registers = register; // for debug
     var counter = [ 0, 0, 0, 0 ];
     var outputBit = [ 0, 0, 0, 0 ];
     var volume = [ 0, 0, 0, 0 ];
+    this.volume = volume;  // for debug
     var generators = [ null, null, null, null ];
 
     var volumeTable = [];
