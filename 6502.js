@@ -434,7 +434,7 @@ function cpu6502(dbgr, video, soundChip) {
     }
 
     dbgr.setCpu(this);
-    this.loadOs("roms/os", "roms/b/BASIC.ROM", "roms/b/DFS-0.9.rom");
+    this.loadOs("roms/os.rom", "roms/b/BASIC.ROM", "roms/b/DFS-0.9.rom");
     this.reset(true);
 }
 
