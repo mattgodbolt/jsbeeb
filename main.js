@@ -22,9 +22,10 @@ $(function() {
     var fb8 = imageData.data;
     function paint(minx, miny, maxx, maxy) {
         frames++;
+        //if ((frames & 0x1) != 0) return; TODO: frameskip
         var width = maxx-minx;
         var height = maxy-miny;
-        backCtx.putImageData(imageData, 0, 0);
+        backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
         ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvas.width, canvas.height);
     };
     var fb32 = new Uint32Array(fb8.buffer);
@@ -127,18 +128,43 @@ $(function() {
     go();
 })
 
-function frame() {
-    processor.execute(2 * 1000 * 1000 / 50);
-}
-
-var running = false;
+const framesPerSecond = 50;
+const targetTimeout = 1000 / framesPerSecond;
+var adjustedTimeout = targetTimeout;
+var lastFrame = null;
+const clocksPerSecond = 2 * 1000 * 1000;
+const cyclesPerFrame = clocksPerSecond / framesPerSecond;
+const yieldsPerFrame = 1;
+const cyclesPerYield = cyclesPerFrame / yieldsPerFrame;
 
 function run() {
     if (!running) return;
-    var next = Date.now() + (1000 / 50);
-    frame();
-    var wait = next - Date.now();
-    setTimeout(run, wait);
+    var now = Date.now();
+    if (lastFrame) {
+        // Try and tweak the timeout to achieve target frame rate.
+        var timeSinceLast = now - lastFrame;
+        if (timeSinceLast < 2 * targetTimeout) {
+            // Ignore huge delays (e.g. trips in and out of the debugger)
+            var diff = timeSinceLast - targetTimeout;
+            adjustedTimeout -= 0.01 * diff;
+        }
+    }
+    lastFrame = now;
+    setTimeout(run, adjustedTimeout);
+
+    var count = 0;
+    var runner = function() {
+        if (!running) return;
+        if (count++ == yieldsPerFrame) return;
+        try {
+            processor.execute(cyclesPerYield);
+        } catch (e) {
+            running = false;
+            throw e;
+        }
+        if (running) setTimeout(runner, 0);
+    };
+    runner();
 }
 
 function go() {
