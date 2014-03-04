@@ -133,7 +133,7 @@ function SoundChip(sampleRate) {
             volume[channel] = volumeTable[newVolume];
         } else if ((value & 0x90) == 0x80) {
             latchedChannel = (value >> 5) & 3;
-            register[latchedChannel] = (register[latchedChannel] & ~0x0f) | value & 0x0f;
+            register[latchedChannel] = (register[latchedChannel] & ~0x0f) | (value & 0x0f);
             if (latchedChannel == 3) {
                 noisePoked();
             }
