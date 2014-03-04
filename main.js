@@ -102,6 +102,8 @@ $(function() {
     //    }
     //}
     //processor.debugInstruction = function(pc) {
+        //return (pc == 0xec5);
+    //};
     //    if (pc == 0xfff7) {
     //        var addr = processor.x + (processor.y<<8);
     //        var oscli = "";

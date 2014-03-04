@@ -2,6 +2,7 @@ function SoundChip(sampleRate) {
     "use strict";
     var soundchipFreq = 4000000.0 / 16;
     var sampleDecrement = soundchipFreq / sampleRate;
+    var samplesPerCycle = sampleRate / (2 * 1000 * 1000); // TODO hacky here
 
     var register = [ 0, 0, 0, 0 ];
     this.registers = register; // for debug
@@ -113,7 +114,7 @@ function SoundChip(sampleRate) {
     }
 
     function advance(time) {
-        var num = time * sampleRate + residual;
+        var num = time * samplesPerCycle + residual;
         var rounded = num|0;
         residual = num - rounded;
         if (position + rounded >= maxBufferSize) {
