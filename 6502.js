@@ -245,8 +245,8 @@ function cpu6502(dbgr, video, soundChip) {
             this.ram4k = this.ram8k = this.ram12k = this.ram20k = 0;
             this.instructions = generate6502();
             this.disassemble = disassemble6502;
-            this.sysvia = new sysvia(this, soundChip);
-            this.uservia = new uservia(this);
+            this.sysvia = sysvia(this, soundChip);
+            this.uservia = uservia(this);
             this.acia = new acia(this);
             this.fdc = new fdc(this);
             this.crtc = video.crtc;
@@ -256,6 +256,8 @@ function cpu6502(dbgr, video, soundChip) {
         } else {
             console.log("Soft reset");
         }
+        this.sysvia.reset();
+        this.uservia.reset();
         this.cycles = 0;
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd)<<8);
         this.p = new flags();
