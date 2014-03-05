@@ -50,6 +50,12 @@ function cpu6502(dbgr, video, soundChip) {
     this.ram_fe30 = 0;
     this.interrupt = 0;
     this.FEslowdown = [true,false,true,true,false,false,true,false];
+    // TODO: semi-bplus-style to get swram for exile hardcoded here
+    this.swram = [
+        true,true,false,false,
+        false,false,false,false,
+        false,false,false,false,
+        true,true,false,false];
 
     this.romSelect = function(rom) {
         this.ram_fe30 = rom;
@@ -57,7 +63,7 @@ function cpu6502(dbgr, video, soundChip) {
         this.romsel = ((rom & 15)<<14) + this.romOffset;
         var offset = this.romsel - 0x8000;
         for (c = 128; c < 192; ++c) this.memlook[0][c] = this.memlook[1][c] = offset;
-        var swram = 1; // TODO: swram[val & 15]?1:2
+        var swram = this.swram[rom & 15] ? 1 : 2
         for (c = 128; c < 192; ++c) this.memstat[0][c] = this.memstat[1][c] = swram;
         // TODO: ram4k, ram12k MASTER BPLUS
     };
@@ -70,7 +76,8 @@ function cpu6502(dbgr, video, soundChip) {
             return this.ramRomOs[offset + addr];
         }
         if (addr < 0xfe00 || this.FEslowdown[(addr>>5) & 7]) {
-            this.polltime(1 + this.cycles & 1);
+            // TODO: is 'cycles' the right thing to poll here, doens't it count down?
+            this.polltime(1 + (this.cycles & 1));
         }
         //console.log("Peripheral read " + hexword(addr));
         switch (addr & ~0x0003) {
@@ -117,7 +124,7 @@ function cpu6502(dbgr, video, soundChip) {
         addr &= 0xffff;
         b |= 0;
         if (this.debugwrite) this.debugwrite(addr, b);
-        if (this.memstat[this.vis20k][addr >> 8] == 1) {
+        if (this.memstat[this.vis20k][addr >> 8] === 1) {
             var offset = this.memlook[this.vis20k][addr >> 8];
             this.ramRomOs[offset + addr] = b;
             return;
