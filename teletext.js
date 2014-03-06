@@ -193,7 +193,6 @@ function teletext() {
         if (data < 0x20) {
             data = handleControlCode(data);
         }
-        scanline >>>=1; // why is this needed?
         var t = (data - 0x20) * 160;
         if (self.dblx) {
             t += (scanline >>> 1) * 16;
