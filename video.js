@@ -99,14 +99,17 @@ function Video(fb32, paint_ext) {
             self.charsleft--;
         } else if (self.scrx < 1280) {
             var pixels = (self.ulactrl & 0x10) ? 8 : 16;
+            var blank = self.collook[0];
+            var offset = self.scry * 1280 + self.scrx;
             var x;
             for (x = 0; x < pixels; x++) {
-                fb32[self.scry * 1280 + self.scrx + x] = self.collook[0];
+                fb32[offset + x] = blank;
             }
+            // Not quite sure why this is apparently required. TODO work out why, this contributes to the video runtime
             if (self.crtcmode !== 0) {
-                // Not sure about this...check! seems to be "not teletext"
+                offset += 16;
                 for (x = 0; x < 16; x++) {
-                    fb32[self.scry * 1280 + self.scrx + x + 16] = self.collook[0];
+                    fb32[offset + x] = blank;
                 }
             }
         }
