@@ -1,4 +1,4 @@
-function video(fb32, paint_ext) {
+function Video(fb32, paint_ext) {
     "use strict";
     var self = this;
     self.fb32 = fb32;
@@ -39,7 +39,7 @@ function video(fb32, paint_ext) {
         self.interlline = 0; // maybe delete?
         self.oldr8 = 0;
         self.frameodd = false;
-        self.teletext = new teletext();
+        self.teletext = new Teletext();
         self.minx = self.miny = 65535;
         self.maxx = self.maxy = 0;
         self.con = self.coff = self.cursoron = false; // on this line, off, on due to flash
@@ -58,13 +58,14 @@ function video(fb32, paint_ext) {
 
     function table4bppOffset(ulamode, byte) {
         return ulamode * 256 * 16 + byte * 16;
-    };
+    }
 
     var table4bpp = function() {
         var t = new Uint8Array(4 * 256 * 16);
+        var i;
         for (var b = 0; b < 256; ++b) {
             var temp = b;
-            for (var i = 0; i < 16; ++i) {
+            for (i = 0; i < 16; ++i) {
                 var left = 0;
                 if (temp & 2) left |= 1;
                 if (temp & 8) left |= 2;
@@ -74,7 +75,7 @@ function video(fb32, paint_ext) {
                 temp <<= 1;
                 temp |= 1;
             }
-            for (var i = 0; i < 16; ++i) {
+            for (i = 0; i < 16; ++i) {
                 t[table4bppOffset(2, b) + i] = t[table4bppOffset(3, b) + (i>>1)]; 
                 t[table4bppOffset(1, b) + i] = t[table4bppOffset(3, b) + (i>>2)]; 
                 t[table4bppOffset(0, b) + i] = t[table4bppOffset(3, b) + (i>>3)]; 
@@ -98,12 +99,13 @@ function video(fb32, paint_ext) {
             self.charsleft--;
         } else if (self.scrx < 1280) {
             var pixels = (self.ulactrl & 0x10) ? 8 : 16;
-            for (var x = 0; x < pixels; x++) {
+            var x;
+            for (x = 0; x < pixels; x++) {
                 fb32[self.scry * 1280 + self.scrx + x] = self.collook[0];
             }
-            if (self.crtcmode != 0) {
+            if (self.crtcmode !== 0) {
                 // Not sure about this...check! seems to be "not teletext"
-                for (var x = 0; x < 16; x++) {
+                for (x = 0; x < 16; x++) {
                     fb32[self.scry * 1280 + self.scrx + x + 16] = self.collook[0];
                 }
             }
@@ -134,25 +136,26 @@ function video(fb32, paint_ext) {
         if (self.scrx < 1280) {
             var offset = self.scry * 1280 + self.scrx;
             var pixels = (self.ulactrl & 0x10) ? 8 : 16;
+            var i;
             if ((self.regs[8] & 0x30) == 0x30 || ((self.sc&8) && ! (self.ulactrl&2))) {
-                for (var i = 0; i < pixels; ++i) {
+                for (i = 0; i < pixels; ++i) {
                     self.fb32[offset + i] = self.collook[0];
                 }
             } else {
+                var lastx;
                 if (self.crtcmode === 0) {
                     self.teletext.render(self.fb32, offset, self.sc, dat & 0x7f);
                     var firstx = self.scrx + 16;
                     if (firstx < self.minx) self.minx = firstx;
-                    var lastx = self.scrx + 32;
+                    lastx = self.scrx + 32;
                     if (lastx > self.maxx) self.maxx = lastx;
                 } else {
                     var tblOff = table4bppOffset(self.ulamode, dat);
-                    var pixels = self.crtcmode * 8;
-                    for (var i = 0; i < pixels; ++i) {
+                    for (i = 0; i < pixels; ++i) {
                         self.fb32[offset + i] = self.ulapal[table4bpp[tblOff + i]];
                     }
                     if (self.scrx < self.minx) self.minx = self.scrx;
-                    var lastx = self.scrx + pixels;
+                    lastx = self.scrx + pixels;
                     if (lastx > self.maxx) self.maxx = lastx;
                 }
             }
@@ -160,7 +163,7 @@ function video(fb32, paint_ext) {
             // TODO: move to common rendering code so handles case of being blank
             if (self.cdraw) {
                 if (self.cursoron && (self.ulactrl & cursorTable[self.cdraw])) {
-                    for (var i = 0; i < pixels; ++i) {
+                    for (i = 0; i < pixels; ++i) {
                         self.fb32[offset + i] = self.fb32[offset + i] ^ 0x00ffffff;
                     }
                 }
@@ -213,7 +216,7 @@ function video(fb32, paint_ext) {
                 }
                 self.frameCount++;
                 var cursorFlash = (self.regs[10] & 0x60) >>> 5;
-                self.cursoron = (cursorFlash == 0) || !!(self.frameCount & cursorFlashMask[cursorFlash]);
+                self.cursoron = (cursorFlash === 0) || !!(self.frameCount & cursorFlashMask[cursorFlash]);
             }
             if (self.vc == self.regs[7]) {
                 // vertical sync position
@@ -328,6 +331,7 @@ function video(fb32, paint_ext) {
 
     ////////////////////
     // CRTC interface
+    // jshint ignore:line
     self.crtc = new (function(video) {
         var curReg = 0;
         var crtcmask = new Uint8Array([
@@ -351,10 +355,11 @@ function video(fb32, paint_ext) {
     ////////////////////
     // ULA interface
     self.ula = new (function(video) {
-        this.read = function(addr) { return 0xff; }
+        this.read = function(addr) { return 0xff; };
         this.write = function(addr, val) {
+            var index;
             if (addr & 1) {
-                var index = val >>> 4;
+                index = val >>> 4;
                 video.bakpal[index] = val & 0xf;
                 var ulaCol = val & 7;
                 if ((val & 8) && (video.ulactrl & 1)) 
@@ -366,7 +371,7 @@ function video(fb32, paint_ext) {
                     // Flash colour has changed
                     var flashEnabled = !!(val & 1);
                     for (var i = 0; i < 16; ++i) {
-                        var index = video.bakpal[i] & 7;
+                        index = video.bakpal[i] & 7;
                         if (!(flashEnabled && (video.bakpal[i] & 8))) index ^= 7;
                         video.ulapal[i] = video.collook[index];
                     }

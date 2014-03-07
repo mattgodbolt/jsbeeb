@@ -3,6 +3,7 @@ function Debugger() {
     var disass = $('#disassembly');
     var debugNode = $('#debug');
     var cpu = null;
+    var disassemble = null;
     debugNode.hide();
 
     var numToShow = 32;
@@ -10,7 +11,10 @@ function Debugger() {
         disass.find('.template').clone().removeClass('template').appendTo(disass);
     }
 
-    this.setCpu = function(c) { cpu = c; };
+    this.setCpu = function(c) { 
+        cpu = c; 
+        disassemble = c.disassembler.disassemble;
+    };
 
     var disassPc = null;
     this.debug = function(where) {
@@ -53,7 +57,7 @@ function Debugger() {
     this.step = step;
 
     function isUnconditionalJump(addr) {
-        var result = cpu.disassemble(addr);
+        var result = disassemble(addr);
         if (result[0].match(/^(JMP|RTS)/)) {
             return true;
         }
@@ -69,7 +73,7 @@ function Debugger() {
     }
 
     function isReturn(addr) {
-        var result = cpu.disassemble(addr);
+        var result = disassemble(addr);
         if (result[0] == "RTS")
             return true;
         return false;
@@ -91,7 +95,7 @@ function Debugger() {
         for (var startingPoint = address - 20; startingPoint != address; startingPoint++) {
             var addr = startingPoint & 0xffff;
             while (addr < address) {
-                var result = cpu.disassemble(addr);
+                var result = disassemble(addr);
                 if (result[1] == address && result[0] != "???") {
                     return addr;
                 }
@@ -102,7 +106,7 @@ function Debugger() {
     }
 
     function nextInstruction(address) {
-        return cpu.disassemble(address)[1] & 0xffff;
+        return disassemble(address)[1] & 0xffff;
     }
 
     function addressName() { return null; /* later, more clevers */ }
@@ -118,7 +122,7 @@ function Debugger() {
     function updateDisassembly(address) {
         disassPc = address;
         disass.children().each(function() {
-            var result = cpu.disassemble(address);
+            var result = disassemble(address);
             var hex = "";
             var asc = "";
             for (var i = address; i < result[1]; ++i) {
@@ -162,5 +166,5 @@ function Debugger() {
             break;
         }
         return true;
-    }
+    };
 }

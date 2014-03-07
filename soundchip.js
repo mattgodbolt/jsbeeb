@@ -14,21 +14,23 @@ function SoundChip(sampleRate) {
 
     var volumeTable = [];
     var f = 1.0;
-    for (var i = 0; i < 16; ++i) {
+    var i;
+    for (i = 0; i < 16; ++i) {
         volumeTable[i] = f;
         f *= Math.pow(10, -0.1);
     }
     volumeTable[15] = 0;
 
     function toneChannel(channel, out, offset, length) {
+        var i;
         var reg = register[channel], vol = volume[channel];
         if (reg <= 1) {
-            for (var i = 0; i < length; ++i) {
+            for (i = 0; i < length; ++i) {
                 out[i + offset] += vol;
             }
             return;
         }
-        for (var i = 0; i < length; ++i) {
+        for (i = 0; i < length; ++i) {
             counter[channel] -= sampleDecrement;
             if (counter[channel] < 0) {
                 counter[channel] += reg;
@@ -45,7 +47,7 @@ function SoundChip(sampleRate) {
     }
     function shiftLfsrPeriodicNoise() {
         lfsr >>= 1;
-        if (lfsr == 0) lfsr = 1<<15;
+        if (lfsr === 0) lfsr = 1<<15;
     }
     var shiftLfsr = shiftLfsrWhiteNoise;
     function noisePoked() {
@@ -64,7 +66,7 @@ function SoundChip(sampleRate) {
     }
 
     function noiseChannel(channel, out, offset, length) {
-        var add = addFor(channel), vol = volume[channel];;
+        var add = addFor(channel), vol = volume[channel];
         for (var i = 0; i < length; ++i) {
             counter[channel] -= sampleDecrement;
             if (counter[channel] < 0) {
@@ -143,7 +145,7 @@ function SoundChip(sampleRate) {
         }
     }
 
-    for (var i = 0; i < 3; ++i) {
+    for (i = 0; i < 3; ++i) {
         generators[i] = toneChannel;
     }
     generators[3] = noiseChannel;
@@ -151,11 +153,11 @@ function SoundChip(sampleRate) {
     this.advance = advance;
     this.render = render;
     this.poke = poke;
-    this.enable = function(e) { enabled = e; }
+    this.enable = function(e) { enabled = e; };
     this.reset = function() {
         for (var i = 0; i < 3; ++i) {
             volume[i] = register[i] = 0;
         }
         noisePoked();
-    }
+    };
 }

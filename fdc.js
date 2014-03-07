@@ -73,7 +73,7 @@ function ssdFor(fdc, stringData) {
             this.time++;
             if (this.time < 16) return;
             this.time = 0;
-            if (this.notFound && --this.notFound == 0) {
+            if (this.notFound && --this.notFound === 0) {
                 fdc.notFound();
             }
             if (this.inRead) {
@@ -111,7 +111,7 @@ function ssdFor(fdc, stringData) {
     };
 }
 
-function i8271(cpu) {
+function I8271(cpu) {
     "use strict";
     var self = this;
     self.status = 0;
@@ -280,7 +280,7 @@ function i8271(cpu) {
         case 2: reset(val); break;
         case 4: data(val); break;
         }
-    }
+    };
 
     function callback() {
         self.time = 0;
@@ -299,7 +299,7 @@ function i8271(cpu) {
                 self.drives[self.curdrive].read(self.cursector, self.params[0], (self.drvout & 0x20) ? true : false, 0);
                 return;
             }
-            if (--self.sectorsleft == 0) {
+            if (--self.sectorsleft === 0) {
                 self.status = 0x18;
                 self.result = 0;
                 self.NMI();
@@ -332,6 +332,7 @@ function i8271(cpu) {
             if (self.drives[self.curdrive])
                 self.drives[self.curdrive].poll();
         }
-    }
-};
-var fdc = i8271;
+    };
+}
+
+var Fdc = I8271;

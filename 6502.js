@@ -1,19 +1,23 @@
 function hexbyte(value) {
-      return ((value >> 4) & 0xf).toString(16) + (value & 0xf).toString(16); 
+    "use strict";
+    return ((value >> 4) & 0xf).toString(16) + (value & 0xf).toString(16); 
 }
 
 function hexword(value) {
+    "use strict";
     return hexbyte(value>>8) + hexbyte(value & 0xff);
 }
 
 function signExtend(val) {
+    "use strict";
     return val >= 128 ? val - 256 : val;
 }
 
-function flags() {
+function Flags() {
+    "use strict";
     this.reset = function() {
         this.c = this.z = this.i = this.d = this.v = this.n = false;
-    }
+    };
     this.debugString = function() {
         return (this.c ? "C" : "c") +
                (this.z ? "Z" : "z") +
@@ -21,7 +25,7 @@ function flags() {
                (this.d ? "D" : "d") +
                (this.v ? "V" : "v") +
                (this.n ? "N" : "n");
-    }
+    };
 
     this.asByte = function() {
         var temp = 0x30;
@@ -32,12 +36,13 @@ function flags() {
         if (this.v) temp |= 0x40;
         if (this.n) temp |= 0x80;
         return temp;
-    }
+    };
 
     this.reset();
 }
 
-function cpu6502(dbgr, video, soundChip) {
+function Cpu6502(dbgr, video, soundChip) {
+    "use strict";
     this.ramBank = new Uint8Array(16);
     this.memstat = [new Uint8Array(256), new Uint8Array(256)];
     this.memlook = [new Uint32Array(256), new Uint32Array(256)];
@@ -63,7 +68,7 @@ function cpu6502(dbgr, video, soundChip) {
         this.romsel = ((rom & 15)<<14) + this.romOffset;
         var offset = this.romsel - 0x8000;
         for (c = 128; c < 192; ++c) this.memlook[0][c] = this.memlook[1][c] = offset;
-        var swram = this.swram[rom & 15] ? 1 : 2
+        var swram = this.swram[rom & 15] ? 1 : 2;
         for (c = 128; c < 192; ++c) this.memstat[0][c] = this.memstat[1][c] = swram;
         // TODO: ram4k, ram12k MASTER BPLUS
     };
@@ -118,7 +123,7 @@ function cpu6502(dbgr, video, soundChip) {
         }
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
         return addr >> 8;
-    }
+    };
 
     this.writemem = function(addr, b) {
         addr &= 0xffff;
@@ -178,17 +183,17 @@ function cpu6502(dbgr, video, soundChip) {
             return this.tube.write(addr, b);
         }
         // TODO: hardware!
-    }
+    };
 
     this.incpc = function() {
         this.pc = (this.pc + 1) & 0xffff;
-    }
+    };
 
     this.getb = function() {
         var result = this.readmem(this.pc);
         this.incpc();
         return result;
-    }
+    };
 
     this.getw = function() {
         var result = this.readmem(this.pc);
@@ -196,23 +201,23 @@ function cpu6502(dbgr, video, soundChip) {
         result |= this.readmem(this.pc) << 8;
         this.incpc();
         return result;
-    }
+    };
 
     this.checkInt = function() {
         this.takeInt = (this.interrupt && !this.p.i);
-    }
+    };
 
     this.checkViaIntOnly = function() {
         this.takeInt = ((this.interrupt & 0x80) && !this.p.i);
-    }
+    };
 
     this.dumpregs = function() {
         console.log("6502 registers :");
-        console.log("A=" + hexbyte(this.a) + " X=" + hexbyte(this.x) + " Y=" + hexbyte(this.y)
-                + " S=01" + hexbyte(this.s) + " PC=" + hexword(this.pc));
+        console.log("A=" + hexbyte(this.a) + " X=" + hexbyte(this.x) + " Y=" + hexbyte(this.y) +
+                " S=01" + hexbyte(this.s) + " PC=" + hexword(this.pc));
         console.log("FLAGS = " + this.p.debugString());
         console.log("ROMSEL " + hexbyte(this.romsel>>24));
-    }
+    };
 
     this.loadRom = function(name, offset) {
         console.log("Loading ROM from " + name);
@@ -227,13 +232,13 @@ function cpu6502(dbgr, video, soundChip) {
         for (var i = 0; i < len; ++i) {
             this.ramRomOs[offset + i] = request.response.charCodeAt(i) & 0xff;
         }
-    }
+    };
 
     this.loadOs = function(os, basic, dfs) {
         this.loadRom(os, this.osOffset);
         this.loadRom(basic, this.romOffset + 15 * 16384);
         this.loadRom(dfs, this.romOffset + 14 * 16384);
-    }
+    };
 
     this.reset = function(hard) {
         console.log("Resetting 6502");
@@ -251,11 +256,11 @@ function cpu6502(dbgr, video, soundChip) {
             for (i = 0xfc; i < 0xff; ++i) this.memstat[0][i] = this.memstat[1][i] = 0;
             this.ram4k = this.ram8k = this.ram12k = this.ram20k = 0;
             this.instructions = generate6502();
-            this.disassemble = disassemble6502;
+            this.disassembler = new Disassemble6502(this);
             this.sysvia = sysvia(this, soundChip);
             this.uservia = uservia(this);
-            this.acia = new acia(this);
-            this.fdc = new fdc(this);
+            this.acia = new Acia(this);
+            this.fdc = new Fdc(this);
             this.crtc = video.crtc;
             this.ula = video.ula;
             this.adconverter = { read: function() { return 0xff; }, write: function() {}};
@@ -267,7 +272,7 @@ function cpu6502(dbgr, video, soundChip) {
         this.uservia.reset();
         this.cycles = 0;
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd)<<8);
-        this.p = new flags();
+        this.p = new Flags();
         this.p.i = 1;
         this.nmi = false;
         this.tubecycle = this.tubecycles = 0;
@@ -282,17 +287,17 @@ function cpu6502(dbgr, video, soundChip) {
         v = v|0;
         this.p.z = !v;
         this.p.n = (v & 0x80) === 0x80;
-    }
+    };
 
     this.push = function(v) {
         this.writemem(0x100 + this.s, v);
         this.s = (this.s - 1) & 0xff;
-    }
+    };
 
     this.pull = function() {
         this.s = (this.s + 1) & 0xff;
         return this.readmem(0x100 + this.s);
-    }
+    };
 
     this.polltime = function(cycles) {
         this.cycles -= cycles;
@@ -301,11 +306,11 @@ function cpu6502(dbgr, video, soundChip) {
         this.fdc.polltime(cycles);
         video.polltime(cycles);
         soundChip.advance(cycles);
-    }
+    };
 
     this.NMI = function(nmi) {
         this.nmi = !!nmi;
-    }
+    };
 
     this.brk = function() {
         var nextByte = this.pc + 1;
@@ -317,7 +322,7 @@ function cpu6502(dbgr, video, soundChip) {
         this.p.i = 1;
         this.polltime(7);
         this.takeInt = 0;
-    }
+    };
 
     this.branch = function(taken) {
         var offset = signExtend(this.getb());
@@ -333,7 +338,7 @@ function cpu6502(dbgr, video, soundChip) {
         this.polltime(cycles - 1);
         this.checkInt();
         this.polltime(1);
-    }
+    };
 
     this.adc = function(addend, isC) {
         if (!this.p.d) {
@@ -367,7 +372,7 @@ function cpu6502(dbgr, video, soundChip) {
                 this.polltime(1);
             }
         }
-    }
+    };
 
     this.sbc = function(subend, isC) {
         if (!this.p.d) {
@@ -381,7 +386,7 @@ function cpu6502(dbgr, video, soundChip) {
         } else {
             throw "Oh noes";
         }
-    }
+    };
 
     this.execute = function(numCyclesToRun) {
         this.halted = false;
@@ -392,16 +397,14 @@ function cpu6502(dbgr, video, soundChip) {
             this.oldpc = this.pc;
             this.vis20k = this.ramBank[this.pc>>12];
             var opcode = this.readmem(this.pc);
-            if (this.debugInstruction 
-                    && this.oldoldpc !== this.pc
-                    && this.debugInstruction(this.pc)) {
+            if (this.debugInstruction && this.oldoldpc !== this.pc && this.debugInstruction(this.pc)) {
                 stop();
                 return;
             }
             var instruction = this.instructions[opcode];
             if (!instruction) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
-                console.log(this.disassemble(this.pc)[0]);
+                console.log(this.disassembler.disassemble(this.pc)[0]);
                 this.dumpregs();
                 stop();
                 return;
@@ -438,10 +441,11 @@ function cpu6502(dbgr, video, soundChip) {
     this.stop = function() {
         this.halted = true;
         dbgr.debug(this.pc);
-    }
+    };
 
-    dbgr.setCpu(this);
     this.loadOs("roms/os.rom", "roms/b/BASIC.ROM", "roms/b/DFS-0.9.rom");
     this.reset(true);
+
+    dbgr.setCpu(this);
 }
 

@@ -1,4 +1,4 @@
-function teletext() {
+function Teletext() {
     "use strict";
     var self = this;
 
@@ -11,7 +11,7 @@ function teletext() {
 
     function init() {
         var Data = teletextCharacters();
-        var i, x, x2, stat, offs1, offs2, j, y;
+        var i, x, x2, stat, offs1, offs2, j, y, o, p;
         // turn the 1s into 15s (?)
         for (i = 0; i < 96*60; ++i) {
             Data.normal[i] *= 15;
@@ -32,7 +32,7 @@ function teletext() {
         for (i = 0; i < 960; ++i) {
             x = x2 = 0;
             for (j = 0; j < 16; ++j) {
-                var o = offs2 + j;
+                o = offs2 + j;
                 //var p = offs1 + x2;
                 //self.graph[o] = lerp(Data.graphics[p], Data.graphics[p + 1], x);
                 //self.sepgraph[o] = lerp(Data.separated[p], Data.separated[p + 1], x);
@@ -84,8 +84,8 @@ function teletext() {
         for (i = 0; i < 960; ++i) {
             x = x2 = 0;
             for (j = 0; j < 16; ++j) {
-                var o = offs2 + j;
-                var p = offs1 + x2;
+                o = offs2 + j;
+                p = offs1 + x2;
                 self.chars[o] = lerp(tempi2[p], tempi2[p + 1], x);
                 self.charsi[o] = lerp(tempi[p], tempi[p + 1], x);
                 x += 11/15;
@@ -213,7 +213,7 @@ function teletext() {
             buf[offset + i + 16] = palette[px[t]&15];
             t++;
         }
-    };
+    }
 
     this.verticalCharEnd = function() {
         if (self.nextdbl) 

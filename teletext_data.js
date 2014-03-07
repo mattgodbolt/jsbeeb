@@ -1,4 +1,5 @@
 // Extremely heavily based on b-em.
+/* jshint laxcomma:true */
 function teletextCharacters() {
     return {
         normal: new Uint8Array([
@@ -1721,7 +1722,7 @@ function teletextCharacters() {
                                 0,0,0,0,0,0,
                                 0,0,0,0,0,0,
                                 0,0,0,0,0,0
-                                    , // 0x5c '½'
+                                    , // 0x5c 1/2
                                 0,0,0,0,0,0,
                                 0,1,0,0,0,0,
                                 0,1,0,0,0,0,
@@ -3260,7 +3261,7 @@ function teletextCharacters() {
                                         1,1,0,1,1,0,
                                         0,0,0,0,0,0
                                             ,
-                                        // Character '' (127)
+                                        // Character  (127)
                                         1,1,0,1,1,0,
                                         1,1,0,1,1,0,
                                         0,0,0,0,0,0,

@@ -6,6 +6,7 @@ var jsAudioNode;  // has to remain to keep thing alive
 var frames = 0;
 
 $(function() {
+    "use strict";
     var canvas = $('#screen')[0];
     var ctx = canvas.getContext('2d');
     ctx.fillStyle = 'black';
@@ -27,16 +28,16 @@ $(function() {
         var height = maxy-miny;
         backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
         ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvas.width, canvas.height);
-    };
+    }
     var fb32 = new Uint32Array(fb8.buffer);
-    video = new video(fb32, paint);
+    video = new Video(fb32, paint);
 
     soundChip = (function() {
         var context = null;
         if (typeof AudioContext !== 'undefined') {
             context = new AudioContext();
         } else if (typeof(webkitAudioContext) !== 'undefined') {
-            context = new webkitAudioContext();
+            context = new webkitAudioContext(); // jshint ignore:line
         } else {
             return new SoundChip(10000);
         }
@@ -90,7 +91,7 @@ $(function() {
     document.onkeypress = keyPress;
     document.onkeyup = keyUp;
 
-    processor = new cpu6502(dbgr, video, soundChip);
+    processor = new Cpu6502(dbgr, video, soundChip);
     //processor.debugread = function(mem) {
     //    if (mem === 0x983f) stop();
     //        //console.log(hexword(processor.pc), "Read of", hexword(mem));
@@ -128,7 +129,7 @@ $(function() {
     });
 
     go();
-})
+});
 
 const framesPerSecond = 50;
 const targetTimeout = 1000 / framesPerSecond;

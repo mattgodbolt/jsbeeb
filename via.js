@@ -77,6 +77,7 @@ function via(cpu, irq) {
         },
 
         write: function(addr, val) {
+            var mode;
             val|= 0;
             switch (addr&0xf) {
             case ORA:
@@ -87,14 +88,14 @@ function via(cpu, irq) {
                 }
                 self.updateIFR();
 
-                var mode = (self.pcr & 0x0e);
+                mode = (self.pcr & 0x0e);
                 if (mode == 8) { // Handshake mode
                     self.setca2(0);
                 } else if (mode == 0x0a) { // Pulse mode
                     self.setca2(0);
                     self.setca2(1);
                 }
-                // Falls through to...
+                /* falls through */
             case ORAnh:
                 self.ora = val;
                 self.writePortA(((self.ora & self.ddra) | ~self.ddra) & 0xff);
@@ -111,7 +112,7 @@ function via(cpu, irq) {
                 self.orb = val;
                 self.writePortB(((self.orb & self.ddrb) | ~self.ddrb) & 0xff);
 
-                var mode = (self.pcr & 0xe0) >>> 4;
+                mode = (self.pcr & 0xe0) >>> 4;
                 if (mode == 8) { // Handshake mode
                     self.setcb2(0);
                 } else if (mode == 0x0a) { // Pulse mode
@@ -209,13 +210,14 @@ function via(cpu, irq) {
                 if ((self.pcr & 0xa) != 0x2)
                     self.ifr &= ~INT_CA2;
                 self.updateIFR();
-                // Falls to
+                /* falls through */
             case ORAnh:
                 temp = self.ora & self.ddra;
                 if (self.acr & 1)
                     return temp | (self.ira & ~self.ddra);
                 else 
                     return temp | (self.readPortA() & ~self.ddra);
+                break;
 
             case ORB:
                 self.ifr &= ~INT_CB1;
@@ -228,6 +230,7 @@ function via(cpu, irq) {
                     return temp | (self.irb & ~self.ddrb);
                 else
                     return temp | (self.readPortB() & ~self.ddrb);
+                break;
 
             case DDRA: return self.ddra;
             case DDRB: return self.ddrb;
@@ -264,7 +267,8 @@ function via(cpu, irq) {
         setca1: function(val) {
             var level = !!val;
             if (level === self.ca1) return;
-            if (!!(self.pcr & 1) === level) {
+            var pcrSet = !!(self.pcr & 1);
+            if (pcrSet === level) {
                 if (self.acr & 1) self.ira = self.readPortA();
                 self.ifr |= INT_CA1;
                 self.updateIFR();
@@ -279,7 +283,8 @@ function via(cpu, irq) {
             var level = !!val;
             if (level === self.ca2) return;
             if (self.pcr & 8) return; // output
-            if (!!(self.pcr & 4) == level) {
+            var pcrSet = !!(self.pcr & 4);
+            if (pcrSet === level) {
                 self.ifr |= INT_CA2;
                 self.updateIFR();
             }
@@ -289,7 +294,8 @@ function via(cpu, irq) {
         setcb1: function(val) {
             var level = !!val;
             if (level === self.cb1) return;
-            if (!!(self.pcr & 0x10) === level) {
+            var pcrSet = !!(self.pcr & 0x10);
+            if (pcrSet === level) {
                 if (self.acr & 2) self.irb = self.readPortB();
                 self.ifr |= INT_CB1;
                 self.updateIFR();
@@ -304,7 +310,8 @@ function via(cpu, irq) {
             var level = !!val;
             if (level === self.cb2) return;
             if (self.pcr & 0x80) return; // output
-            if (!!(self.pcr & 0x40) == level) {
+            var pcrSet = !!(self.pcr & 0x40);
+            if (pcrSet === level) {
                 self.ifr |= INT_CB2;
                 self.updateIFR();
             }
@@ -337,83 +344,83 @@ function sysvia(cpu, soundChip) {
 
     self.keycodeToRowCol = (function() {
         var keys = {};
-        function C(s, c, r) { keys[s.charCodeAt(0)] = [c, r]; };
-        C('\r', 9, 4);
-        C('\x08', 9, 5); // delete
-        C('\x10', 0, 0); // shift
-        C('\x1b', 0, 7); // escape
-        C('\x11', 1, 0); // control
-        C('\x00', 0, 4); // caps
-        C('\x25', 9, 1); // arrow left
-        C('\x26', 9, 3); // arrow up
-        C('\x27', 9, 7); // arrow right
-        C('\x28', 9, 2); // arrow down
+        function map(s, c, r) { keys[s.charCodeAt(0)] = [c, r]; }
+        map('\r', 9, 4);
+        map('\x08', 9, 5); // delete
+        map('\x10', 0, 0); // shift
+        map('\x1b', 0, 7); // escape
+        map('\x11', 1, 0); // control
+        map('\x00', 0, 4); // caps
+        map('\x25', 9, 1); // arrow left
+        map('\x26', 9, 3); // arrow up
+        map('\x27', 9, 7); // arrow right
+        map('\x28', 9, 2); // arrow down
         
-        //C('TODO', 9, 6); // copy key?
+        //map('TODO', 9, 6); // copy key?
 
-        C('\xba', 7, 5);  // ';' / '+'
-        C('\xbc', 6, 6);  // ','
-        C('\xbd', 7, 1);  // '_' / '=' mapped to underscore
-        C('\xbe', 7, 6);  // '.' (why is self 0xbe / 190) ? 
-        C('\xbf', 8, 6);  // '/' / '?'
-        C("\xdb", 8, 3);  // ' maps to [{
-        C("\xdd", 8, 5);  // ' maps to ]}
-        C("\xde", 8, 4);  // ' maps to :*
+        map('\xba', 7, 5);  // ';' / '+'
+        map('\xbc', 6, 6);  // ','
+        map('\xbd', 7, 1);  // '_' / '=' mapped to underscore
+        map('\xbe', 7, 6);  // '.' (why is self 0xbe / 190) ? 
+        map('\xbf', 8, 6);  // '/' / '?'
+        map("\xdb", 8, 3);  // ' maps to [{
+        map("\xdd", 8, 5);  // ' maps to ]}
+        map("\xde", 8, 4);  // ' maps to :*
 
-        C('0', 2, 0);
-        C('1', 0, 3);
-        C('2', 1, 3);
-        C('3', 1, 1);
-        C('4', 2, 1);
-        C('5', 3, 1);
-        C('6', 4, 3);
-        C('7', 4, 2);
-        C('8', 5, 1);
-        C('9', 6, 2);
-        C('0', 7, 2);
+        map('0', 2, 0);
+        map('1', 0, 3);
+        map('2', 1, 3);
+        map('3', 1, 1);
+        map('4', 2, 1);
+        map('5', 3, 1);
+        map('6', 4, 3);
+        map('7', 4, 2);
+        map('8', 5, 1);
+        map('9', 6, 2);
+        map('0', 7, 2);
 
-        C('Q', 0, 1);
-        C('W', 1, 2);
-        C('E', 2, 2);
-        C('R', 3, 3);
-        C('T', 3, 2);
-        C('Y', 4, 4);
-        C('U', 5, 3);
-        C('I', 5, 2);
-        C('O', 6, 3);
-        C('P', 7, 3);
-        //C('', 7, 4); todo: @ character
+        map('Q', 0, 1);
+        map('W', 1, 2);
+        map('E', 2, 2);
+        map('R', 3, 3);
+        map('T', 3, 2);
+        map('Y', 4, 4);
+        map('U', 5, 3);
+        map('I', 5, 2);
+        map('O', 6, 3);
+        map('P', 7, 3);
+        //map('', 7, 4); todo: @ character
 
-        C('A', 1, 4);
-        C('S', 1, 5);
-        C('D', 2, 3);
-        C('F', 3, 4);
-        C('G', 3, 5);
-        C('H', 4, 5);
-        C('J', 5, 4);
-        C('K', 6, 4);
-        C('L', 6, 5);
+        map('A', 1, 4);
+        map('S', 1, 5);
+        map('D', 2, 3);
+        map('F', 3, 4);
+        map('G', 3, 5);
+        map('H', 4, 5);
+        map('J', 5, 4);
+        map('K', 6, 4);
+        map('L', 6, 5);
 
-        C('Z', 1, 6);
-        C('X', 2, 4);
-        C('C', 2, 5);
-        C('V', 3, 6);
-        C('B', 4, 6);
-        C('N', 5, 5);
-        C('M', 5, 6);
+        map('Z', 1, 6);
+        map('X', 2, 4);
+        map('C', 2, 5);
+        map('V', 3, 6);
+        map('B', 4, 6);
+        map('N', 5, 5);
+        map('M', 5, 6);
 
-        C('\x79', 0, 2); // F0 (mapped to F10)
-        C('\x70', 1, 7); // F1
-        C('\x71', 2, 7); // F2
-        C('\x72', 3, 7); // F3
-        C('\x73', 4, 1); // F4
-        C('\x74', 4, 7); // F5
-        C('\x75', 5, 7); // F6
-        C('\x76', 6, 1); // F7
-        C('\x77', 6, 7); // F8
-        C('\x78', 7, 7); // F9
+        map('\x79', 0, 2); // F0 (mapped to F10)
+        map('\x70', 1, 7); // F1
+        map('\x71', 2, 7); // F2
+        map('\x72', 3, 7); // F3
+        map('\x73', 4, 1); // F4
+        map('\x74', 4, 7); // F5
+        map('\x75', 5, 7); // F6
+        map('\x76', 6, 1); // F7
+        map('\x77', 6, 7); // F8
+        map('\x78', 7, 7); // F9
 
-        C(' ', 2, 6);
+        map(' ', 2, 6);
         return keys;
     })();
     self.set = function(key, val) {

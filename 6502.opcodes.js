@@ -1,10 +1,12 @@
 var debugText = "";
 
 function replaceReg(lines, reg) {
+    "use strict";
     return lines.map(function(line) { return line.replace(/REG/g, reg); });
 }
 
 function getGetPut(arg) {
+    "use strict";
     switch (arg) {
     case "zp":
         return {
@@ -98,6 +100,7 @@ function getGetPut(arg) {
 }
 
 function compileLoad(reg, arg) {
+    "use strict";
     if (arg == 'imm' && reg == 'a') {
         // Special cased as it is in b-em. TODO: is there really any diff?
         return replaceReg([
@@ -121,6 +124,8 @@ function compileLoad(reg, arg) {
 }
 
 function compileStore(reg, arg) {
+    "use strict";
+    var off;
     if (arg == 'abs') {
         return replaceReg([
                 "var addr = cpu.getw();",
@@ -129,7 +134,7 @@ function compileStore(reg, arg) {
                 "cpu.writemem(addr, cpu.REG);"
                 ], reg);
     } else if (arg.match(/^abs,[xy]/)) {
-        var off = arg[4];
+        off = arg[4];
         return replaceReg([
                 "var addr = cpu.getw();",
                 "cpu.polltime(4);",
@@ -148,7 +153,7 @@ function compileStore(reg, arg) {
                 "cpu.checkInt();",
                 ], reg);
     } else if (arg.match(/^zp,[xy]/)) {
-        var off = arg[3];
+        off = arg[3];
         return replaceReg([
                 "var addr = cpu.getb();",
                 "cpu.writemem((addr + cpu." + off + ") & 0xff, cpu.REG);",
@@ -156,7 +161,7 @@ function compileStore(reg, arg) {
                 "cpu.checkInt();",
                 ], reg);
     } else if (arg.substr(0, 2) == "()") {
-        var off = arg[3];
+        off = arg[3];
         return replaceReg([
                 "var zp = cpu.getb();",
                 "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8) + cpu." + off + ";",
@@ -165,7 +170,7 @@ function compileStore(reg, arg) {
                 "cpu.checkInt();"
                 ], reg);
     } else if (arg == "(,x)") {
-        var off = arg[3];
+        off = arg[3];
         return replaceReg([
                 "var zp = cpu.getb() + cpu.x;",
                 "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8);",
@@ -177,6 +182,7 @@ function compileStore(reg, arg) {
 }
 
 function compileCompare(arg, reg) {
+    "use strict";
     var gp = getGetPut(arg);
     if (!gp) return null;
     return gp.get.concat(replaceReg([
@@ -188,7 +194,8 @@ function compileCompare(arg, reg) {
 }
 
 function compileTransfer(from, to) {
-    lines = ["cpu." + to + " = cpu." + from + ";"];
+    "use strict";
+    var lines = ["cpu." + to + " = cpu." + from + ";"];
     if (to != "s") lines.push("cpu.setzn(cpu." + to + ");");
     lines.push("cpu.polltime(2);");
     lines.push("cpu.checkInt();");
@@ -196,6 +203,7 @@ function compileTransfer(from, to) {
 }
 
 function compileAsl(arg) {
+    "use strict";
     if (arg == 'A') {
         return [
             "cpu.p.c = !!(cpu.a & 0x80);",
@@ -219,7 +227,8 @@ function compileAsl(arg) {
 }
 
 function compilePush(reg) {
-    lines = [];
+    "use strict";
+    var lines = [];
     if (reg == 'p') {
         lines = lines.concat([ "var temp = cpu.p.asByte();"]);
         reg = 'temp';
@@ -234,6 +243,7 @@ function compilePush(reg) {
 }
 
 function compilePull(reg) {
+    "use strict";
     if (reg == 'p') {
         return [
                 "var temp = cpu.pull();",
@@ -246,7 +256,6 @@ function compilePull(reg) {
                 "cpu.p.v = !!(temp & 0x40);",
                 "cpu.p.n = !!(temp & 0x80);"
                     ];
-        reg = 'temp';
     }
     return replaceReg([
         "cpu.REG = cpu.pull();",
@@ -257,6 +266,7 @@ function compilePull(reg) {
 }
 
 function compileBranch(condition) {
+    "use strict";
     switch (condition) {
     case "eq":
         return ["cpu.branch(cpu.p.z);"];
@@ -278,6 +288,7 @@ function compileBranch(condition) {
 }
 
 function compileJsr() {
+    "use strict";
     return [
         "var addr = cpu.getw();",
         "var pushAddr = cpu.pc - 1;",
@@ -291,6 +302,7 @@ function compileJsr() {
 }
 
 function compileRts() {
+    "use strict";
     return [
         "var temp = cpu.pull();",
         "temp |= cpu.pull() << 8;",
@@ -302,6 +314,7 @@ function compileRts() {
 }
 
 function compileRti() {
+    "use strict";
     return [
         "var temp = cpu.pull();",
         "cpu.p.c = temp & 1;",
@@ -319,7 +332,8 @@ function compileRti() {
 
 
 function compileAddDec(reg, arg, addOrDec) {
-    if (arg == null) {
+    "use strict";
+    if (arg === undefined) {
         return replaceReg([
             "cpu.REG = (cpu.REG " + addOrDec + ") & 0xff;",
             "cpu.setzn(cpu.REG);",
@@ -368,6 +382,7 @@ function compileAddDec(reg, arg, addOrDec) {
 
 
 function compileRotate(left, logical, arg) {
+    "use strict";
     var getput = getGetPut(arg);
     if (!getput) return null;
     var lines = getput.get;
@@ -397,6 +412,7 @@ function compileRotate(left, logical, arg) {
 }
 
 function compileLogical(arg, op) {
+    "use strict";
     var getput = getGetPut(arg);
     if (!getput) return null;
     var lines = getput.get;
@@ -409,6 +425,7 @@ function compileLogical(arg, op) {
 }
 
 function compileJump(arg) {
+    "use strict";
     if (arg == "abs") {
         return [
             "cpu.pc = cpu.getw();",
@@ -427,6 +444,7 @@ function compileJump(arg) {
 }
 
 function compileBit(arg) {
+    "use strict";
     if (arg == "imm") {
         // 65c02 instr.
         return [
@@ -449,6 +467,7 @@ function compileBit(arg) {
 }
 
 function compileAdcSbc(inst, arg) {
+    "use strict";
     var getput = getGetPut(arg);
     if (!getput) return null;
     return getput.get.concat([
@@ -458,6 +477,7 @@ function compileAdcSbc(inst, arg) {
 }
 
 function compileNop(arg) {
+    "use strict";
     if (arg) return null;
     return ["cpu.polltime(2);", "cpu.checkInt();"];
 }
@@ -481,11 +501,11 @@ function compileInstruction(opcodeString) {
     } else if (opcode == "CLC") {
         lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.c = false;"];
     } else if (opcode == "SED") {
-        lines = ["cpu.p.d = true;", "cpu.polltime(2);", "cpu.checkInt();"]
+        lines = ["cpu.p.d = true;", "cpu.polltime(2);", "cpu.checkInt();"];
     } else if (opcode == "CLD") {
-        lines = ["cpu.p.d = false;", "cpu.polltime(2);", "cpu.checkInt();"]
+        lines = ["cpu.p.d = false;", "cpu.polltime(2);", "cpu.checkInt();"];
     } else if (opcode == "CLV") {
-        lines = ["cpu.p.v = false;", "cpu.polltime(2);", "cpu.checkInt();"]
+        lines = ["cpu.p.v = false;", "cpu.polltime(2);", "cpu.checkInt();"];
     } else if (opcode[0] == 'T') {
         lines = compileTransfer(opcode[1].toLowerCase(), opcode[2].toLowerCase());
     } else if (opcode == 'ASL') {
@@ -497,7 +517,7 @@ function compileInstruction(opcodeString) {
     } if (opcode == "BIT") {
         lines = compileBit(arg);
     } else if (opcode == "BRK") {
-        lines = ["cpu.brk();"]
+        lines = ["cpu.brk();"];
     } else if (opcode[0] == 'B') {
         lines = compileBranch(opcode.substr(1,2).toLowerCase());
     } else if (opcode == "CMP") {
@@ -540,7 +560,7 @@ function compileInstruction(opcodeString) {
     var text = fnName + " = function(cpu) {\n    " + lines.join("\n    ") + "\n}\n";
     debugText += text;
     try {
-        eval(text);
+        eval(text); // jshint ignore:line
     } catch (e) {
         throw "Unable to compile: " + e + "\nText:\n" + text;
     }
@@ -794,49 +814,51 @@ var opcodes6502 = {
 };
 
 function generate6502() {
-    functions = [];
-    debugText = "";
+    "use strict";
+    var functions = [];
     for (var i = 0; i < 256; ++i) {
         var opcode = opcodes6502[i];
         if (opcode) functions[i] = compileInstruction(opcode);
     }
-    //$('#debug').html('<pre>' + debugText + '</pre>');
     return functions;
 }
 
-function disassemble6502(addr) {
-    var opcode = opcodes6502[this.readmem(addr)];
-    if (!opcode) { return ["???", addr + 1]; }
-    var split = opcode.split(" ");
-    if (!split[1]) {
+function Disassemble6502(cpu) {
+    "use strict";
+    this.disassemble = function(addr) {
+        var opcode = opcodes6502[cpu.readmem(addr)];
+        if (!opcode) { return ["???", addr + 1]; }
+        var split = opcode.split(" ");
+        if (!split[1]) {
+            return [opcode, addr + 1];
+        }
+        var param = split[1] || "";
+        var suffix = "";
+        var index = param.match(/(.*),([xy])$/);
+        if (index) {
+            param = index[1];
+            suffix = "," + index[2].toUpperCase();
+        }
+        switch (param) {
+        case "imm":
+            return [split[0] + " #$" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
+        case "abs":
+            return [split[0] + " $" + hexword(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + suffix,
+                   addr + 3];
+        case "branch":
+            return [split[0] + " $" + hexword(addr + signExtend(cpu.readmem(addr + 1)) + 2) + suffix,
+                   addr + 2];
+        case "zp":
+            return [split[0] + " $" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
+        case "(,x)":
+            return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
+        case "()":
+            if (split[0] == "JMP")
+                return [split[0] + " ($" + hexword(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + ")" + suffix,
+                    addr + 3];
+            else
+                return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
+        }
         return [opcode, addr + 1];
-    }
-    var param = split[1] || "";
-    var suffix = "";
-    index = param.match(/(.*),([xy])$/);
-    if (index) {
-        param = index[1];
-        suffix = "," + index[2].toUpperCase();
-    }
-    switch (param) {
-    case "imm":
-        return [split[0] + " #$" + hexbyte(this.readmem(addr + 1)) + suffix, addr + 2];
-    case "abs":
-        return [split[0] + " $" + hexword(this.readmem(addr + 1) | (this.readmem(addr+2)<<8)) + suffix,
-               addr + 3];
-    case "branch":
-        return [split[0] + " $" + hexword(addr + signExtend(this.readmem(addr + 1)) + 2) + suffix,
-               addr + 2];
-    case "zp":
-        return [split[0] + " $" + hexbyte(this.readmem(addr + 1)) + suffix, addr + 2];
-    case "(,x)":
-        return [split[0] + " ($" + hexbyte(this.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
-    case "()":
-        if (split[0] == "JMP")
-            return [split[0] + " ($" + hexword(this.readmem(addr + 1) | (this.readmem(addr+2)<<8)) + ")" + suffix,
-                addr + 3];
-        else
-            return [split[0] + " ($" + hexbyte(this.readmem(addr + 1)) + ")" + suffix, addr + 2];
-    }
-    return [opcode, addr + 1];
+    };
 }
