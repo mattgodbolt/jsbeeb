@@ -278,7 +278,7 @@ function Cpu6502(dbgr, video, soundChip) {
         this.tubecycle = this.tubecycles = 0;
         this.halted = false;
         video.reset(this, this.sysvia);
-        soundChip.reset();
+        if (hard) soundChip.reset();
         // TODO: cpu type support.
         console.log("Starting PC = " + hexword(this.pc));
     };

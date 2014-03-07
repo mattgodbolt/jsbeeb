@@ -16,7 +16,7 @@ function SoundChip(sampleRate) {
     var f = 1.0;
     var i;
     for (i = 0; i < 16; ++i) {
-        volumeTable[i] = f;
+        volumeTable[i] = f * 0.25;  // Bakes in the 1/4 volume per channel
         f *= Math.pow(10, -0.1);
     }
     volumeTable[15] = 0;
@@ -24,12 +24,13 @@ function SoundChip(sampleRate) {
     function toneChannel(channel, out, offset, length) {
         var i;
         var reg = register[channel], vol = volume[channel];
-        if (reg <= 1) {
+        if (reg === 1) {
             for (i = 0; i < length; ++i) {
                 out[i + offset] += vol;
             }
             return;
         }
+        if (reg === 0) reg = 1024;
         for (i = 0; i < length; ++i) {
             counter[channel] -= sampleDecrement;
             if (counter[channel] < 0) {
@@ -89,10 +90,6 @@ function SoundChip(sampleRate) {
         for (i = 0; i < 4; ++i) {
             generators[i](i, out, offset, length);
         }
-        var scale = 1.0 / 4.0;
-        for (i = 0; i < length; ++i) {
-            out[i + offset] *= scale;
-        }
     }
 
     var residual = 0;
@@ -121,8 +118,8 @@ function SoundChip(sampleRate) {
         residual = num - rounded;
         if (position + rounded >= maxBufferSize) {
             rounded = maxBufferSize - position;
-            if (rounded === 0) return;
         }
+        if (rounded === 0) return;
         generate(buffer, position, rounded);
         position += rounded;
     }
@@ -155,9 +152,12 @@ function SoundChip(sampleRate) {
     this.poke = poke;
     this.enable = function(e) { enabled = e; };
     this.reset = function() {
-        for (var i = 0; i < 3; ++i) {
-            volume[i] = register[i] = 0;
+        for (var i = 0; i < 4; ++i) {
+            counter[i] = 0;
+            register[i] = 0;
+            volume[i] = 0; // ideally this would be volumeTable[0] to get the "boo" of "boo...beep".  But startup issues make the "boo" all clicky.
         }
         noisePoked();
+        advance(100000);
     };
 }
