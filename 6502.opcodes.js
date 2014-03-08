@@ -12,6 +12,7 @@ function getGetPut(arg) {
         return {
             reg: "temp",
             get: ["var addr = cpu.getb();", "var temp = cpu.readmem(addr);"],
+            reget: [],
             put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 1,
             memoryCycles: 1,
@@ -20,6 +21,7 @@ function getGetPut(arg) {
         return {
             reg: "temp",
             get: ["var addr = (cpu.getb() + cpu.x) & 0xff;", "var temp = cpu.readmem(addr);"],
+            reget: [],
             put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 1,
             memoryCycles: 1,
@@ -28,6 +30,7 @@ function getGetPut(arg) {
         return {
             reg: "temp",
             get: ["var addr = (cpu.getb() + cpu.y) & 0xff;", "var temp = cpu.readmem(addr);"],
+            reget: [],
             put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 1,
             memoryCycles: 1,
@@ -36,6 +39,7 @@ function getGetPut(arg) {
         return {
             reg: "cpu.a",
             get: [],
+            reget: [],
             put: [],
             opcodeCycles: 0,
             memoryCycles: 0,
@@ -44,6 +48,7 @@ function getGetPut(arg) {
         return {
             reg: "temp",
             get: ["var temp = cpu.getb();"],
+            reget: [],
             put: [],
             opcodeCycles: 1,
             memoryCycles: 0,
@@ -52,6 +57,7 @@ function getGetPut(arg) {
         return {
             reg: "temp",
             get: ["var addr = cpu.getw();", "var temp = cpu.readmem(addr);"],
+            reget: ["cpu.readmem(addr);"],
             put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 2,
             memoryCycles: 1,
@@ -66,6 +72,7 @@ function getGetPut(arg) {
                 "if ((addr & 0xff00) != (temp & 0xff00)) cpu.polltime(1);",
                 "temp = cpu.readmem(addr);",
                 ],
+            reget: ["cpu.readmem(addr);"],
             put: ["cpu.writemem(addr, temp);"],
             opcodeCycles: 2,
             memoryCycles: 1,
@@ -80,6 +87,7 @@ function getGetPut(arg) {
                 "if ((baseAddr & 0xff00) != (addr & 0xff00)) cpu.polltime(1);",
                 "temp = cpu.readmem(addr);",
                 ],
+            reget: ["cpu.readmem(addr);"],
             put: ["throw \"bad fit\""],
             opcodeCycles: 1,
             memoryCycles: 3,
@@ -92,6 +100,7 @@ function getGetPut(arg) {
                 "var addr = cpu.readmem(temp) | (cpu.readmem(temp + 1) << 8);",
                 "temp = cpu.readmem(addr);",
                 ],
+            reget: [],
             put: ["throw \"bad fit\""],
             opcodeCycles: 1,
             memoryCycles: 4,  // Not sure this is correct
@@ -102,7 +111,7 @@ function getGetPut(arg) {
 function compileLoad(reg, arg) {
     "use strict";
     if (arg == 'imm' && reg == 'a') {
-        // Special cased as it is in b-em. TODO: is there really any diff?
+        // Special cased as it is in b-em. TODO: make all instructions checkInt on penult cyc
         return replaceReg([
             "cpu.REG = cpu.getb();",
             "cpu.setzn(cpu.REG);",
@@ -111,15 +120,14 @@ function compileLoad(reg, arg) {
             "cpu.polltime(1);",
         ], reg);
     }
-    // TODO: timings for LDA abs,[xy]
     var gp = getGetPut(arg);
     if (!gp) return null;
-    var lines = gp.get;
+    var lines = ["cpu.polltime(" + (gp.opcodeCycles + gp.memoryCycles) + ");"].concat(gp.get)
     if (gp.reg != reg) lines.push("cpu." + reg + " = " + gp.reg + ";");
     return lines.concat([
             "cpu.setzn(cpu." + reg + ");",
-            "cpu.polltime(" + (1 + gp.opcodeCycles + gp.memoryCycles) + ");",
-            "cpu.checkInt();"]        
+            "cpu.polltime(1);",
+            "cpu.checkInt();"]
             );
 }
 
@@ -385,7 +393,10 @@ function compileRotate(left, logical, arg) {
     "use strict";
     var getput = getGetPut(arg);
     if (!getput) return null;
-    var lines = getput.get;
+    var lines = ["cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");"];
+    lines = lines.concat(getput.get);
+    lines.push("cpu.polltime(" + getput.memoryCycles + ")");
+    lines = lines.concat(getput.put);
     if (!left) {
         if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
         lines.push("cpu.p.c = !!(" + getput.reg + " & 0x01);");
@@ -405,21 +416,18 @@ function compileRotate(left, logical, arg) {
     }
     lines.push("cpu.setzn(" + getput.reg + ");");
     lines = lines.concat(getput.put);
-    return lines.concat([
-            "cpu.polltime(" + (1 + getput.opcodeCycles + 2 * getput.memoryCycles) + ");",
-            "cpu.checkInt();"
-            ]);
+    return lines.concat([ "cpu.checkInt();", "cpu.polltime(" + (getput.memoryCycles) + ");" ]);
 }
 
 function compileLogical(arg, op) {
     "use strict";
     var getput = getGetPut(arg);
     if (!getput) return null;
-    var lines = getput.get;
+    // Is this right? needed?
+    var lines = ["cpu.polltime(" + (getput.opcodeCycles + getput.memoryCycles) + ");"].concat(getput.get);
     lines.push("cpu.a " + op + "= " + getput.reg + ";");
     lines.push("cpu.setzn(cpu.a);");
-    // TODO should this be 2x memory?
-    lines.push("cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");");
+    lines.push("cpu.polltime(1);");
     lines.push("cpu.checkInt();");
     return lines;
 }
@@ -557,7 +565,7 @@ function compileInstruction(opcodeString) {
     }
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
-    var text = fnName + " = function(cpu) {\n    " + lines.join("\n    ") + "\n}\n";
+    var text = fnName + " = function(cpu) {\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n";
     debugText += text;
     try {
         eval(text); // jshint ignore:line
