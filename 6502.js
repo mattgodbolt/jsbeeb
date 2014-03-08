@@ -136,7 +136,7 @@ function Cpu6502(dbgr, video, soundChip) {
         }
         if (addr < 0xfc00 || addr >= 0xff00) return;
         if (this.FEslowdown[(addr>>5) & 7]) {
-            this.polltime(1 + this.cycles & 1);
+            this.polltime(1 + (this.cycles & 1));
         }
         //console.log("Peripheral write " + hexword(addr) + " " + hexbyte(b));
         switch (addr & ~0x0003) {
