@@ -4,9 +4,11 @@
   - then store old value
   - then store new value
   e.g. INC abs,x: abs == $0080, X = $ff, data zero
-  [INC] [LO] [HI] [READ@007f] [READ@017f = 0] [WRITE@017f = 0] [WRITE@017f = 1]
+  [INC] [LO] [HI] [READ@007f] [READ@017f = 0] [WRITE@017f = 0] [WRITE@017f = 1] = 7
+  e.g. INC abs,x: abs == $0080, X = $00, data zero
+  [INC] [LO] [HI] [READ@007f] [READ@017f = 0] [WRITE@017f = 0] [WRITE@017f = 1] = 7
   e.g. INC abs abs = $80
-  [INC] [LO] [HI] [READ@0080 = 0] [WRITE@0080 = 0] [WRITE@0080 = 1]
+  [INC] [LO] [HI] [READ@0080 = 0] [WRITE@0080 = 0] [WRITE@0080 = 1] = 6
 
 * Read or write-only instructions
   - Still have spurious reads when crossing carry-bit
@@ -15,3 +17,8 @@
   - if not cross break, early out
     LDA abs,x: abs - $0080, X = $00
     [lda] [lo] [hi] [read@7f] = 4
+
+  STA abs, x: abs - $0080, X = $ff - spurios read. non-carry address
+  [sta] [lo] [hi] [read@7f] [write@17f] 
+  STA abs, x: abs - $0080, X = 0 - spurious read
+  [sta] [lo] [hi] [read@80] [store@80]

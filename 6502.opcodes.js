@@ -1,10 +1,237 @@
-var debugText = "";
-
 function replaceReg(lines, reg) {
     "use strict";
     return lines.map(function(line) { return line.replace(/REG/g, reg); });
 }
 
+function rotate(left, logical) {
+    "use strict";
+    var lines = [];
+    if (!left) {
+        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
+        lines.push("cpu.p.c = !!(REG & 0x01);");
+        if (logical) {
+            lines.push("REG >>= 1;");
+        } else {
+            lines.push("REG = (REG >> 1) | newTopBit;");
+        }
+    } else {
+        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x01 : 0x00;");
+        lines.push("cpu.p.c = !!(REG & 0x80);");
+        if (logical) {
+            lines.push("REG = (REG << 1) & 0xff;");
+        } else {
+            lines.push("REG = ((REG << 1) & 0xff) | newTopBit;");
+        }
+    }
+    lines.push("cpu.setzn(REG);");
+    return lines;
+}
+
+function InstructionGen() {
+    "use strict";
+    var self = this;
+    self.ops = {};
+    self.cycle = 0;
+
+    self.flush = function() {
+        if (!self.ops[self.cycle]) throw "erk";
+        self.ops[self.cycle].exact = true;
+    };
+
+    self.append = function(cycle, op, exact) {
+        if (op === undefined) {
+            op = cycle;
+            cycle = self.cycle;
+        }
+        exact = exact || false;
+        if (typeof(op) == "string") op = [op];
+        if (self.ops[cycle])  {
+            self.ops[cycle].op = self.ops[cycle].op.concat(op);
+            self.ops[cycle].exact |= exact;
+        } else
+            self.ops[cycle] = {op: op, exact: exact };
+    };
+
+    self.tick = function(cycles) { self.cycle += (cycles || 1); }
+    self.readOp = function(op) {
+        self.cycle++;
+        self.append(self.cycle, op, true);
+    };
+    self.writeOp = function(op) {
+        self.cycle++;
+        self.append(self.cycle, op, true);
+    };
+    self.zpReadOp = function(op) {
+        self.cycle++;
+        self.append(self.cycle, op, false);
+    };
+    self.zpWriteOp = function(op) {
+        self.cycle++;
+        self.append(self.cycle, op, false);
+    };
+    self.render = function(zpOnly) {
+        zpOnly = zpOnly || false;
+        if (zpOnly) {
+            // Check interrupts at the end to hopefully coalesce time.
+            self.append(self.cycle, "cpu.checkInt();", true);
+        } else {
+            // Check on penultimate cycle.
+            self.append(self.cycle - 1, "cpu.checkInt();", true);
+        }
+        var i;
+        var toSkip = 0;
+        var out = [];
+        for (i = 0; i < self.cycle; ++i) {
+            if (!self.ops[i]) {
+                toSkip++;
+                continue;
+            }
+            if (toSkip && self.ops[i].exact) {
+                out.push("cpu.polltime(" + toSkip + ");");
+                toSkip = 0;
+            }
+            out = out.concat(self.ops[i].op);
+            toSkip++;
+        }
+        if (toSkip) out.push("cpu.polltime(" + toSkip + ");");
+        if (self.ops[self.cycle]) out = out.concat(self.ops[self.cycle].op);
+        return out;
+    };
+}
+
+function getOp(op) {
+    "use strict";
+    switch (op) {
+    case "LDA": return { op: ["cpu.a = REG;", "cpu.setzn(cpu.a);"], read: true, write: false };
+    case "STA": return { op: ["REG = cpu.a;"], read: false, write: true };
+    case "INC": return { 
+        op: ["REG = (REG + 1) & 0xff;", "cpu.setzn(REG);"], 
+        read: true, write: true 
+    };
+    case "DEC": return { 
+        op: ["REG = (REG - 1) & 0xff;", "cpu.setzn(REG);"], 
+        read: true, write: true 
+    };
+    case "ROL": return { op: rotate(true, false), read: true, write: true };
+    case "ROR": return { op: rotate(false, false), read: true, write: true };
+    case "ASL": return { op: rotate(true, true), read: true, write: true };
+    case "ASR": return { op: rotate(false, true), read: true, write: true };
+    case "EOR": return { op: ["cpu.a ^= REG;", "cpu.setzn(cpu.a);"], read: true, write: false };
+    case "CMP": return { op: ["cpu.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"], 
+        read: true, write: false };
+    }
+    return null;
+}
+
+function getInstruction2(opcodeString) {
+    "use strict";
+    var split = opcodeString.split(' ');
+    var opcode = split[0];
+    var arg = split[1];
+    var reg = opcode[2].toLowerCase();
+    var op = getOp(opcode);
+    var indexReg;
+    if (!op) return null;
+
+    var ig = new InstructionGen();
+    ig.append("var REG = 0|0;");
+
+    var opCount = 1;
+    switch (arg) {
+    case undefined:
+        return null;
+
+    case "zp":
+        ig.tick(2);
+        ig.append("var addr = cpu.getb();");
+        if (op.read) {
+            ig.zpReadOp("REG = cpu.readmem(addr);");
+            if (op.write) ig.tick(1);  // Spurious write
+        }
+        ig.append(op.op);
+        if (op.write) {
+            ig.zpWriteOp("cpu.writemem(addr, REG);");
+        }
+        return ig.render(true);
+
+    case "abs":
+        ig.tick(3);
+        ig.append("var addr = cpu.getw();");
+        if (op.read) {
+            ig.readOp("REG = cpu.readmem(addr);");
+            if (op.write) 
+                ig.writeOp("cpu.writemem(addr, REG);");
+        }
+        ig.append(op.op);
+        if (op.write) {
+            ig.writeOp("cpu.writemem(addr, REG);");
+        }
+
+        return ig.render(false);
+
+    case "abs,x":
+    case "abs,y":
+        ig.tick(3);
+        indexReg = arg[4];
+        ig.append("var addr = cpu.getw();");
+        ig.append("var addrWithCarry = (addr + cpu." + indexReg + ") & 0xffff;");
+        ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+        if (op.read) {
+            ig.readOp("REG = cpu.readmem(addrNonCarry);");
+            if (!op.write) {
+                // For non-RMW, we only pay the cost of the spurious read if the address carried
+                ig.flush();
+                ig.append("if (addrWithCarry !== addrNonCarry) {");
+                ig.append("    cpu.polltime(1);");
+                ig.append("    REG = cpu.readmem(addrWithCarry);");
+                ig.append("}");
+            } else {
+                // For RMW we always have a spurious read and then a spurious write
+                ig.readOp("REG = cpu.readmem(addrWithCarry);");
+                ig.writeOp("cpu.writemem(addrWithCarry, REG); // Spurious write");
+            }
+        } else if (op.write) {
+            // Pure stores still exhibit a read at the non-carried address.
+            ig.readOp("cpu.readmem(addrNonCarry);");
+        }
+        ig.append(op.op);
+        if (op.write) {
+            ig.writeOp("cpu.writemem(addrWithCarry, REG);");
+        }
+        // TODO: LDA abs,x is broken as the interrupt check can occur one cycle too early if
+        // there's a carry.
+        return ig.render();
+
+    case "zp,x":
+    case "zp,y":
+    case "A":
+    case "imm":
+    case "(),y":
+    case "(,y)":
+    case "(,x)":
+    case "branch": case "()": case "zpx":
+        return null;
+
+    default:
+        throw "Unknown arg type " + arg;
+    }
+    return null;
+}
+
+function compileInstruction2(ins) {
+    "use strict";
+    var lines = getInstruction2(ins);;
+    if (!lines) return null;
+    var text = "var f = function(cpu) {\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;f\n";
+    try {
+        return eval(text); // jshint ignore:line
+    } catch (e) {
+        throw "Unable to compile: " + e + "\nText:\n" + text;
+    }
+}
+
+///////////////////////////////////////////////////////
+//
 function getGetPut(arg) {
     "use strict";
     switch (arg) {
@@ -566,7 +793,6 @@ function compileInstruction(opcodeString) {
     if (!lines) return null;
     var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
     var text = fnName + " = function(cpu) {\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n";
-    debugText += text;
     try {
         eval(text); // jshint ignore:line
     } catch (e) {
@@ -826,7 +1052,12 @@ function generate6502() {
     var functions = [];
     for (var i = 0; i < 256; ++i) {
         var opcode = opcodes6502[i];
-        if (opcode) functions[i] = compileInstruction(opcode);
+        if (opcode) {
+            functions[i] = compileInstruction2(opcode);
+            if (!functions[i]) {
+                functions[i] = compileInstruction(opcode);
+            }
+        }
     }
     return functions;
 }
