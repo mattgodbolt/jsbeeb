@@ -1,8 +1,3 @@
-function replaceReg(lines, reg) {
-    "use strict";
-    return lines.map(function(line) { return line.replace(/REG/g, reg); });
-}
-
 function rotate(left, logical) {
     "use strict";
     var lines = [];
@@ -15,16 +10,38 @@ function rotate(left, logical) {
             lines.push("REG = (REG >> 1) | newTopBit;");
         }
     } else {
-        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x01 : 0x00;");
+        if (!logical) lines.push("var newBotBit = cpu.p.c ? 0x01 : 0x00;");
         lines.push("cpu.p.c = !!(REG & 0x80);");
         if (logical) {
             lines.push("REG = (REG << 1) & 0xff;");
         } else {
-            lines.push("REG = ((REG << 1) & 0xff) | newTopBit;");
+            lines.push("REG = ((REG << 1) & 0xff) | newBotBit;");
         }
     }
     lines.push("cpu.setzn(REG);");
     return lines;
+}
+
+function pull(reg) {
+    "use strict";
+    if (reg == 'p') {
+        return [
+                "var tempFlags = cpu.pull();",
+                "cpu.p.c = !!(tempFlags & 0x01);",
+                "cpu.p.z = !!(tempFlags & 0x02);",
+                "cpu.p.i = !!(tempFlags & 0x04);",
+                "cpu.p.d = !!(tempFlags & 0x08);",
+                "cpu.p.v = !!(tempFlags & 0x40);",
+                "cpu.p.n = !!(tempFlags & 0x80);"
+                    ];
+    }
+    return ["cpu." + reg + " = cpu.pull();", "cpu.setzn(cpu." + reg + ")"];
+}
+
+function push(reg) {
+    "use strict";
+    if (reg == 'p') return "cpu.push(cpu.p.asByte());";
+    return "cpu.push(cpu." + reg + ");";
 }
 
 function InstructionGen() {
@@ -52,7 +69,7 @@ function InstructionGen() {
             self.ops[cycle] = {op: op, exact: exact };
     };
 
-    self.tick = function(cycles) { self.cycle += (cycles || 1); }
+    self.tick = function(cycles) { self.cycle += (cycles || 1); };
     self.readOp = function(op) {
         self.cycle++;
         self.append(self.cycle, op, true);
@@ -70,6 +87,7 @@ function InstructionGen() {
         self.append(self.cycle, op, false);
     };
     self.render = function(zpOnly) {
+        if (self.cycle < 2) self.cycle = 2;
         zpOnly = zpOnly || false;
         if (zpOnly) {
             // Check interrupts at the end to hopefully coalesce time.
@@ -102,8 +120,21 @@ function InstructionGen() {
 function getOp(op) {
     "use strict";
     switch (op) {
-    case "LDA": return { op: ["cpu.a = REG;", "cpu.setzn(cpu.a);"], read: true, write: false };
-    case "STA": return { op: ["REG = cpu.a;"], read: false, write: true };
+    case "NOP": return { op: "" };
+    case "BRK": return { op: "cpu.brk();" };
+    case "CLC": return { op: "cpu.p.c = false;" };
+    case "SEC": return { op: "cpu.p.c = true;" };
+    case "CLD": return { op: "cpu.p.d = false;" };
+    case "SED": return { op: "cpu.p.d = true;" };
+    case "CLI": return { op: "cpu.p.i = false;" };
+    case "SEI": return { op: "cpu.p.i = true;" };
+    case "CLV": return { op: "cpu.p.v = false;" };
+    case "LDA": return { op: ["cpu.a = REG;", "cpu.setzn(cpu.a);"], read: true };
+    case "LDX": return { op: ["cpu.x = REG;", "cpu.setzn(cpu.x);"], read: true };
+    case "LDY": return { op: ["cpu.y = REG;", "cpu.setzn(cpu.y);"], read: true };
+    case "STA": return { op: "REG = cpu.a;", write: true };
+    case "STX": return { op: "REG = cpu.x;", write: true };
+    case "STY": return { op: "REG = cpu.y;", write: true };
     case "INC": return { 
         op: ["REG = (REG + 1) & 0xff;", "cpu.setzn(REG);"], 
         read: true, write: true 
@@ -112,25 +143,92 @@ function getOp(op) {
         op: ["REG = (REG - 1) & 0xff;", "cpu.setzn(REG);"], 
         read: true, write: true 
     };
+    case "INX": return { op: ["cpu.x = (cpu.x + 1) & 0xff;", "cpu.setzn(cpu.x);"] };
+    case "INY": return { op: ["cpu.y = (cpu.y + 1) & 0xff;", "cpu.setzn(cpu.y);"] };
+    case "DEX": return { op: ["cpu.x = (cpu.x - 1) & 0xff;", "cpu.setzn(cpu.x);"] };
+    case "DEY": return { op: ["cpu.y = (cpu.y - 1) & 0xff;", "cpu.setzn(cpu.y);"] };
+    case "ADC": return { op: "cpu.adc(REG);", read: true };
+    case "SBC": return { op: "cpu.sbc(REG);", read: true };
+    case "BIT": return {
+        op: [
+            "cpu.p.z = !(cpu.a & REG);",
+            "cpu.p.v = !!(REG & 0x40);",
+            "cpu.p.n = !!(REG & 0x80);"],
+        read: true };
     case "ROL": return { op: rotate(true, false), read: true, write: true };
     case "ROR": return { op: rotate(false, false), read: true, write: true };
-    case "ASL": return { op: rotate(true, true), read: true, write: true };
-    case "ASR": return { op: rotate(false, true), read: true, write: true };
-    case "EOR": return { op: ["cpu.a ^= REG;", "cpu.setzn(cpu.a);"], read: true, write: false };
+    case "ASL": return { 
+        op: [ "cpu.p.c = !!(REG & 0x80);", "REG = (REG << 1) & 0xff;", "cpu.setzn(REG);" ], 
+        read: true, write: true };
+    case "LSL": return { op: rotate(true, true), read: true, write: true };
+    case "LSR": return { op: rotate(false, true), read: true, write: true };
+    case "EOR": return { op: ["cpu.a ^= REG;", "cpu.setzn(cpu.a);"], read: true };
+    case "AND": return { op: ["cpu.a &= REG;", "cpu.setzn(cpu.a);"], read: true };
+    case "ORA": return { op: ["cpu.a |= REG;", "cpu.setzn(cpu.a);"], read: true };
     case "CMP": return { op: ["cpu.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"], 
-        read: true, write: false };
+        read: true };
+    case "CPX": return { op: ["cpu.setzn(cpu.x - REG);", "cpu.p.c = cpu.x >= REG;"], 
+        read: true };
+    case "CPY": return { op: ["cpu.setzn(cpu.y - REG);", "cpu.p.c = cpu.y >= REG;"], 
+        read: true };
+    case "TXA": return { op: ["cpu.a = cpu.x;", "cpu.setzn(cpu.a);"] };
+    case "TAX": return { op: ["cpu.x = cpu.a;", "cpu.setzn(cpu.x);"] };
+    case "TXS": return { op: "cpu.s = cpu.x;" };
+    case "TSX": return { op: "cpu.x = cpu.s;" };
+    case "TYA": return { op: ["cpu.a = cpu.y;", "cpu.setzn(cpu.a);"] };
+    case "TAY": return { op: ["cpu.y = cpu.a;", "cpu.setzn(cpu.y);"] };
+    case "BEQ": return { op: "cpu.branch(cpu.p.z);" };
+    case "BNE": return { op: "cpu.branch(!cpu.p.z);" };
+    case "BCS": return { op: "cpu.branch(cpu.p.c);" };
+    case "BCC": return { op: "cpu.branch(!cpu.p.c);" };
+    case "BMI": return { op: "cpu.branch(cpu.p.n);" };
+    case "BPL": return { op: "cpu.branch(!cpu.p.n);" };
+    case "BVS": return { op: "cpu.branch(cpu.p.v);" };
+    case "BVC": return { op: "cpu.branch(!cpu.p.v);" };
+    case "PLA": return { op: pull('a') };
+    case "PLP": return { op: pull('p'), extra: 2 };
+    case "PLX": return { op: pull('x'), extra: 2 };
+    case "PLY": return { op: pull('y'), extra: 2 };
+    case "PHA": return { op: push('a'), extra: 2 };
+    case "PHP": return { op: push('p'), extra: 2 };
+    case "PHX": return { op: push('x'), extra: 2 };
+    case "PHY": return { op: push('y'), extra: 2 };
+    case "RTS": return { op: [  // TODO: check in v6502
+        "var temp = cpu.pull();",
+        "temp |= cpu.pull() << 8;",
+        "cpu.pc = (temp + 1) & 0xffff;" ], extra: 5, needsExact: true };
+    case "RTI": return { op: [  // TODO: check in v6502
+        "var temp = cpu.pull();",
+        "cpu.p.c = temp & 1;",
+        "cpu.p.z = temp & 2;",
+        "cpu.p.i = temp & 4;",
+        "cpu.p.d = temp & 8;",
+        "cpu.p.v = temp & 0x40;",
+        "cpu.p.n = temp & 0x80;",
+        "temp = cpu.pull();",
+        "cpu.pc = temp | (cpu.pull() << 8);" ], extra: 5, needsExact: true };
+    case "JSR": return { op: [
+        "var pushAddr = cpu.pc - 1;",
+        "cpu.push(pushAddr >> 8);",
+        "cpu.push(pushAddr & 0xff);",
+        "cpu.pc = addr;" ], extra: 3 };
+    case "JSR": return { op: [
+        "var pushAddr = cpu.pc - 1;",
+        "cpu.push(pushAddr >> 8);",
+        "cpu.push(pushAddr & 0xff);",
+        "cpu.pc = addr;" ], extra: 3 };
+    case "JMP": return { op: "cpu.pc = addr;" };
     }
     return null;
 }
 
-function getInstruction2(opcodeString) {
+function getInstruction(opcodeString) {
     "use strict";
     var split = opcodeString.split(' ');
     var opcode = split[0];
     var arg = split[1];
     var reg = opcode[2].toLowerCase();
     var op = getOp(opcode);
-    var indexReg;
     if (!op) return null;
 
     var ig = new InstructionGen();
@@ -139,11 +237,25 @@ function getInstruction2(opcodeString) {
     var opCount = 1;
     switch (arg) {
     case undefined:
-        return null;
+        // Many of these ops need a little special casing.
+        if (op.read || op.write) throw "Unsupported " + opcodeString;
+        ig.tick(1 + (op.extra || 0));
+        ig.append(op.op);
+        return ig.render(!op.needsExact);
+
+    case "branch":
+        return [op.op];  // TODO: special cased here, would be nice to pull out of cpu
 
     case "zp":
-        ig.tick(2);
-        ig.append("var addr = cpu.getb();");
+    case "zp,x":
+    case "zp,y":
+        if (arg == "zp") {
+            ig.tick(2);
+            ig.append("var addr = cpu.getb();");
+        } else {
+            ig.tick(2);
+            ig.append("var addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
+        }
         if (op.read) {
             ig.zpReadOp("REG = cpu.readmem(addr);");
             if (op.write) ig.tick(1);  // Spurious write
@@ -155,7 +267,7 @@ function getInstruction2(opcodeString) {
         return ig.render(true);
 
     case "abs":
-        ig.tick(3);
+        ig.tick(3 + (op.extra || 0));
         ig.append("var addr = cpu.getw();");
         if (op.read) {
             ig.readOp("REG = cpu.readmem(addr);");
@@ -172,9 +284,8 @@ function getInstruction2(opcodeString) {
     case "abs,x":
     case "abs,y":
         ig.tick(3);
-        indexReg = arg[4];
         ig.append("var addr = cpu.getw();");
-        ig.append("var addrWithCarry = (addr + cpu." + indexReg + ") & 0xffff;");
+        ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
         ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
         if (op.read) {
             ig.readOp("REG = cpu.readmem(addrNonCarry);");
@@ -202,14 +313,86 @@ function getInstruction2(opcodeString) {
         // there's a carry.
         return ig.render();
 
-    case "zp,x":
-    case "zp,y":
-    case "A":
     case "imm":
-    case "(),y":
-    case "(,y)":
+        if (op.write) {
+            console.log("Ignoring undocumentd opcode " + opcodeString);
+            return null; // TODO: there's an undocumented opcode ASR imm
+        }
+        if (op.read) {
+            // NOP imm
+        }
+        ig.tick(2);
+        ig.append("REG = cpu.getb();");
+        ig.append(op.op);
+        return ig.render(true);
+
+    case "A":
+        ig.tick(2);
+        ig.append("REG = cpu.a;");
+        ig.append(op.op);
+        ig.append("cpu.a = REG;");
+        return ig.render(true);
+
     case "(,x)":
-    case "branch": case "()": case "zpx":
+    case "(,y)":
+        ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
+        ig.append("var zpAddr = (cpu.getb() + cpu." + arg[2] + ") & 0xff;");
+        ig.zpReadOp("var lo = cpu.readmem(zpAddr);");
+        ig.zpReadOp("var hi = cpu.readmem((zpAddr + 1) & 0xff);");
+        ig.append("var addr = lo | (hi << 8);");
+        if (op.read) ig.readOp("REG = cpu.readmem(addr);");
+        ig.append(op.op);
+        if (op.write) ig.writeOp("cpu.writemem(addr, REG);");
+        return ig.render(false);
+
+    case "(),y":
+        ig.tick(2);
+        ig.append("var zpAddr = cpu.getb();");
+        ig.zpReadOp("var lo = cpu.readmem(zpAddr);");
+        ig.zpReadOp("var hi = cpu.readmem((zpAddr + 1) & 0xff);");
+        ig.append("var addr = lo | (hi << 8);");
+        ig.append("var addrWithCarry = (addr + cpu.y) & 0xffff;");
+        ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+        // Strictly speaking this code below is overkill; it handles RMW when no such documented
+        // instruction exists.
+        if (op.read) {
+            ig.readOp("REG = cpu.readmem(addrNonCarry);");
+            if (!op.write) {
+                // For non-RMW, we only pay the cost of the spurious read if the address carried
+                ig.flush();
+                ig.append("if (addrWithCarry !== addrNonCarry) {");
+                ig.append("    cpu.polltime(1);");
+                ig.append("    REG = cpu.readmem(addrWithCarry);");
+                ig.append("}");
+            } else {
+                // For RMW we always have a spurious read and then a spurious write
+                ig.readOp("REG = cpu.readmem(addrWithCarry);");
+                ig.writeOp("cpu.writemem(addrWithCarry, REG); // Spurious write");
+            }
+        } else if (op.write) {
+            // Pure stores still exhibit a read at the non-carried address.
+            ig.readOp("cpu.readmem(addrNonCarry);");
+        }
+        ig.append(op.op);
+        if (op.write) {
+            ig.writeOp("cpu.writemem(addrWithCarry, REG);");
+        }
+        // TODO: loads are broken as the interrupt check can occur one cycle too early if
+        // there's a carry.
+        return ig.render();
+
+    case "()": 
+        // Special case for indirect jumps only
+        ig.tick(4);  // For the jump part? TODO: check in v6502
+        ig.append("var addr = cpu.getw();");
+        ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
+        ig.readOp("var lo = cpu.readmem(addr);");
+        ig.readOp("var hi = cpu.readmem(nextAddr);");
+        ig.append("addr = lo | (hi << 8);");
+        ig.append(op.op);
+        return ig.render();
+
+    case "zpx":
         return null;
 
     default:
@@ -218,9 +401,9 @@ function getInstruction2(opcodeString) {
     return null;
 }
 
-function compileInstruction2(ins) {
+function compileInstruction(ins) {
     "use strict";
-    var lines = getInstruction2(ins);;
+    var lines = getInstruction(ins);
     if (!lines) return null;
     var text = "var f = function(cpu) {\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;f\n";
     try {
@@ -228,577 +411,6 @@ function compileInstruction2(ins) {
     } catch (e) {
         throw "Unable to compile: " + e + "\nText:\n" + text;
     }
-}
-
-///////////////////////////////////////////////////////
-//
-function getGetPut(arg) {
-    "use strict";
-    switch (arg) {
-    case "zp":
-        return {
-            reg: "temp",
-            get: ["var addr = cpu.getb();", "var temp = cpu.readmem(addr);"],
-            reget: [],
-            put: ["cpu.writemem(addr, temp);"],
-            opcodeCycles: 1,
-            memoryCycles: 1,
-        };
-    case "zp,x":
-        return {
-            reg: "temp",
-            get: ["var addr = (cpu.getb() + cpu.x) & 0xff;", "var temp = cpu.readmem(addr);"],
-            reget: [],
-            put: ["cpu.writemem(addr, temp);"],
-            opcodeCycles: 1,
-            memoryCycles: 1,
-        };
-    case "zp,y":
-        return {
-            reg: "temp",
-            get: ["var addr = (cpu.getb() + cpu.y) & 0xff;", "var temp = cpu.readmem(addr);"],
-            reget: [],
-            put: ["cpu.writemem(addr, temp);"],
-            opcodeCycles: 1,
-            memoryCycles: 1,
-        };
-    case "A":
-        return {
-            reg: "cpu.a",
-            get: [],
-            reget: [],
-            put: [],
-            opcodeCycles: 0,
-            memoryCycles: 0,
-        };
-    case "imm":
-        return {
-            reg: "temp",
-            get: ["var temp = cpu.getb();"],
-            reget: [],
-            put: [],
-            opcodeCycles: 1,
-            memoryCycles: 0,
-        };
-    case "abs":
-        return {
-            reg: "temp",
-            get: ["var addr = cpu.getw();", "var temp = cpu.readmem(addr);"],
-            reget: ["cpu.readmem(addr);"],
-            put: ["cpu.writemem(addr, temp);"],
-            opcodeCycles: 2,
-            memoryCycles: 1,
-        };
-    case "abs,x":
-    case "abs,y":
-        return {
-            reg: "temp",
-            get: [
-                "var temp = cpu.getw();",
-                "var addr = temp + cpu." + arg[4] +";",
-                "if ((addr & 0xff00) != (temp & 0xff00)) cpu.polltime(1);",
-                "temp = cpu.readmem(addr);",
-                ],
-            reget: ["cpu.readmem(addr);"],
-            put: ["cpu.writemem(addr, temp);"],
-            opcodeCycles: 2,
-            memoryCycles: 1,
-        };
-    case "(),y":
-        return {
-            reg: "temp",
-            get: [
-                "var temp = cpu.getb();",
-                "var baseAddr = cpu.readmem(temp) | (cpu.readmem(temp + 1) << 8);",
-                "var addr = baseAddr + cpu.y",
-                "if ((baseAddr & 0xff00) != (addr & 0xff00)) cpu.polltime(1);",
-                "temp = cpu.readmem(addr);",
-                ],
-            reget: ["cpu.readmem(addr);"],
-            put: ["throw \"bad fit\""],
-            opcodeCycles: 1,
-            memoryCycles: 3,
-        };
-    case "(,x)":
-        return {
-            reg: "temp",
-            get: [
-                "var temp = cpu.getb() + cpu.x;",
-                "var addr = cpu.readmem(temp) | (cpu.readmem(temp + 1) << 8);",
-                "temp = cpu.readmem(addr);",
-                ],
-            reget: [],
-            put: ["throw \"bad fit\""],
-            opcodeCycles: 1,
-            memoryCycles: 4,  // Not sure this is correct
-        };
-    }
-}
-
-function compileLoad(reg, arg) {
-    "use strict";
-    if (arg == 'imm' && reg == 'a') {
-        // Special cased as it is in b-em. TODO: make all instructions checkInt on penult cyc
-        return replaceReg([
-            "cpu.REG = cpu.getb();",
-            "cpu.setzn(cpu.REG);",
-            "cpu.polltime(1);",
-            "cpu.checkInt();",
-            "cpu.polltime(1);",
-        ], reg);
-    }
-    var gp = getGetPut(arg);
-    if (!gp) return null;
-    var lines = ["cpu.polltime(" + (gp.opcodeCycles + gp.memoryCycles) + ");"].concat(gp.get)
-    if (gp.reg != reg) lines.push("cpu." + reg + " = " + gp.reg + ";");
-    return lines.concat([
-            "cpu.setzn(cpu." + reg + ");",
-            "cpu.polltime(1);",
-            "cpu.checkInt();"]
-            );
-}
-
-function compileStore(reg, arg) {
-    "use strict";
-    var off;
-    if (arg == 'abs') {
-        return replaceReg([
-                "var addr = cpu.getw();",
-                "cpu.polltime(4);",
-                "cpu.checkInt();",
-                "cpu.writemem(addr, cpu.REG);"
-                ], reg);
-    } else if (arg.match(/^abs,[xy]/)) {
-        off = arg[4];
-        return replaceReg([
-                "var addr = cpu.getw();",
-                "cpu.polltime(4);",
-                "var offsetAddr = (addr + cpu." + off + ") & 0xffff;",
-                "var weirdReadAddr = (addr & 0xff00) | (offsetAddr & 0xff);",
-                "cpu.readmem(weirdReadAddr);",
-                "cpu.polltime(1);",
-                "cpu.checkInt();",
-                "cpu.writemem(offsetAddr, cpu.REG);"
-                ], reg);
-    } else if (arg == 'zp') {
-        return replaceReg([
-                "var addr = cpu.getb();",
-                "cpu.writemem(addr, cpu.REG);",
-                "cpu.polltime(3);",
-                "cpu.checkInt();",
-                ], reg);
-    } else if (arg.match(/^zp,[xy]/)) {
-        off = arg[3];
-        return replaceReg([
-                "var addr = cpu.getb();",
-                "cpu.writemem((addr + cpu." + off + ") & 0xff, cpu.REG);",
-                "cpu.polltime(4);",
-                "cpu.checkInt();",
-                ], reg);
-    } else if (arg.substr(0, 2) == "()") {
-        off = arg[3];
-        return replaceReg([
-                "var zp = cpu.getb();",
-                "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8) + cpu." + off + ";",
-                "cpu.writemem(addr, cpu.REG);",
-                "cpu.polltime(6);",
-                "cpu.checkInt();"
-                ], reg);
-    } else if (arg == "(,x)") {
-        off = arg[3];
-        return replaceReg([
-                "var zp = cpu.getb() + cpu.x;",
-                "var addr = cpu.readmem(zp) + (cpu.readmem((zp + 1) & 0xff) << 8);",
-                "cpu.writemem(addr, cpu.REG);",
-                "cpu.polltime(6);",
-                "cpu.checkInt();"
-                ], reg);
-    }
-}
-
-function compileCompare(arg, reg) {
-    "use strict";
-    var gp = getGetPut(arg);
-    if (!gp) return null;
-    return gp.get.concat(replaceReg([
-            "cpu.setzn(cpu.REG - " + gp.reg + ");",
-            "cpu.p.c = (cpu.REG >= " + gp.reg + ");",
-            "cpu.polltime(" + (1 + gp.opcodeCycles + gp.memoryCycles) + ");",
-            "cpu.checkInt()"],
-            reg));
-}
-
-function compileTransfer(from, to) {
-    "use strict";
-    var lines = ["cpu." + to + " = cpu." + from + ";"];
-    if (to != "s") lines.push("cpu.setzn(cpu." + to + ");");
-    lines.push("cpu.polltime(2);");
-    lines.push("cpu.checkInt();");
-    return lines;
-}
-
-function compileAsl(arg) {
-    "use strict";
-    if (arg == 'A') {
-        return [
-            "cpu.p.c = !!(cpu.a & 0x80);",
-            "cpu.a = (cpu.a << 1) & 0xff;",
-            "cpu.setzn(cpu.a);",
-            "cpu.polltime(2);",
-            "cpu.checkInt();"
-                ];
-    }
-    var gp = getGetPut(arg);
-    if (!gp) return null;
-    return gp.get.concat([
-            "cpu.p.c = !!(" + gp.reg + " & 0x80);",
-            gp.reg + " = (" + gp.reg + " << 1) & 0xff;",
-            "cpu.setzn(" + gp.reg + ");"
-            ])
-        .concat(gp.put).concat([
-            "cpu.polltime(" + (1 + gp.opcodeCycles + gp.memoryCycles) + ");",
-            "cpu.checkInt();"]);
-            
-}
-
-function compilePush(reg) {
-    "use strict";
-    var lines = [];
-    if (reg == 'p') {
-        lines = lines.concat([ "var temp = cpu.p.asByte();"]);
-        reg = 'temp';
-    } else {
-        reg = 'cpu.' + reg;
-    }
-    return lines.concat(replaceReg([
-        "cpu.push(REG);",
-        "cpu.polltime(3);",
-        "cpu.checkInt()",  // TODO - PHY PHX don't check ints in b-em. bug?
-        ], reg));
-}
-
-function compilePull(reg) {
-    "use strict";
-    if (reg == 'p') {
-        return [
-                "var temp = cpu.pull();",
-                "cpu.polltime(4);",
-                "cpu.checkInt();",
-                "cpu.p.c = !!(temp & 0x01);",
-                "cpu.p.z = !!(temp & 0x02);",
-                "cpu.p.i = !!(temp & 0x04);",
-                "cpu.p.d = !!(temp & 0x08);",
-                "cpu.p.v = !!(temp & 0x40);",
-                "cpu.p.n = !!(temp & 0x80);"
-                    ];
-    }
-    return replaceReg([
-        "cpu.REG = cpu.pull();",
-        "cpu.setzn(cpu.REG);",
-        "cpu.polltime(4);",
-        "cpu.checkInt()",  // TODO - PLY PLX don't check ints in b-em. bug?
-        ], reg);
-}
-
-function compileBranch(condition) {
-    "use strict";
-    switch (condition) {
-    case "eq":
-        return ["cpu.branch(cpu.p.z);"];
-    case "ne":
-        return ["cpu.branch(!cpu.p.z);"];
-    case "cs":
-        return ["cpu.branch(cpu.p.c);"];
-    case "cc":
-        return ["cpu.branch(!cpu.p.c);"];
-    case "mi":
-        return ["cpu.branch(cpu.p.n);"];
-    case "pl":
-        return ["cpu.branch(!cpu.p.n);"];
-    case "vs":
-        return ["cpu.branch(cpu.p.v);"];
-    case "vc":
-        return ["cpu.branch(!cpu.p.v);"];
-    }
-}
-
-function compileJsr() {
-    "use strict";
-    return [
-        "var addr = cpu.getw();",
-        "var pushAddr = cpu.pc - 1;",
-        "cpu.push(pushAddr >> 8);",
-        "cpu.push(pushAddr & 0xff);",
-        "cpu.pc = addr;",
-        "cpu.polltime(5);",
-        "cpu.checkInt();",
-        "cpu.polltime(1);",
-        ];
-}
-
-function compileRts() {
-    "use strict";
-    return [
-        "var temp = cpu.pull();",
-        "temp |= cpu.pull() << 8;",
-        "cpu.pc = temp + 1;",
-        "cpu.polltime(5);",
-        "cpu.checkInt();",
-        "cpu.polltime(1);",
-        ];
-}
-
-function compileRti() {
-    "use strict";
-    return [
-        "var temp = cpu.pull();",
-        "cpu.p.c = temp & 1;",
-        "cpu.p.z = temp & 2;",
-        "cpu.p.i = temp & 4;",
-        "cpu.p.d = temp & 8;",
-        "cpu.p.v = temp & 0x40;",
-        "cpu.p.n = temp & 0x80;",
-        "temp = cpu.pull();",
-        "cpu.pc = temp | cpu.pull() << 8;",
-        "cpu.polltime(6);",
-        "cpu.checkInt();",
-        ];
-}
-
-
-function compileAddDec(reg, arg, addOrDec) {
-    "use strict";
-    if (arg === undefined) {
-        return replaceReg([
-            "cpu.REG = (cpu.REG " + addOrDec + ") & 0xff;",
-            "cpu.setzn(cpu.REG);",
-            "cpu.polltime(2);",
-            "cpu.checkInt();",
-            ], reg);
-    } else if (arg == "abs") {
-        // Hugely hand-crafted looking RMW instruction:
-        // TODO: 65c02 version
-        return [
-            "var addr = cpu.getw();",
-            "cpu.polltime(4);",
-            "var oldValue = cpu.readmem(addr);",
-            "var newValue = (oldValue " + addOrDec + ") & 0xff;",
-            "cpu.polltime(1);",
-            "cpu.writemem(addr, oldValue);",
-            "cpu.checkViaIntOnly();",
-            "cpu.polltime(1);",
-            "cpu.checkInt();",
-            "cpu.writemem(addr, newValue);",
-            "cpu.setzn(newValue);"
-            ];
-    } else if (arg == "abs,x") {
-        return [
-            "var addr = cpu.getw();",
-            "cpu.readmem((addr & 0xff00) | ((addr + cpu.x) & 0xff));",
-            "addr += cpu.x;",
-            "var oldValue = cpu.readmem(addr);",
-            "var newValue = (oldValue " + addOrDec + ") & 0xff;",
-            "cpu.writemem(addr, oldValue);",
-            "cpu.writemem(addr, newValue);",
-            "cpu.setzn(newValue);",
-            "cpu.polltime(7);",
-            "cpu.checkInt();"
-            ];
-    } else {
-        var getput = getGetPut(arg);
-        if (!getput) return null;
-        return getput.get.concat([
-            getput.reg + " = (" + getput.reg + " " + addOrDec + ") & 0xff;",
-            "cpu.setzn(" + getput.reg + ");",
-            "cpu.polltime(" + (1 + getput.opcodeCycles + 2*getput.memoryCycles) + ");" // todo why is the cycle count wrong?
-            ]).concat(getput.put);
-    }
-}
-
-
-function compileRotate(left, logical, arg) {
-    "use strict";
-    var getput = getGetPut(arg);
-    if (!getput) return null;
-    var lines = ["cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");"];
-    lines = lines.concat(getput.get);
-    lines.push("cpu.polltime(" + getput.memoryCycles + ")");
-    lines = lines.concat(getput.put);
-    if (!left) {
-        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
-        lines.push("cpu.p.c = !!(" + getput.reg + " & 0x01);");
-        if (logical) {
-            lines.push(getput.reg + " >>= 1;");
-        } else {
-            lines.push(getput.reg + " = (" + getput.reg + " >> 1) | newTopBit;");
-        }
-    } else {
-        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x01 : 0x00;");
-        lines.push("cpu.p.c = !!(" + getput.reg + " & 0x80);");
-        if (logical) {
-            lines.push(getput.reg + " = (" + getput.reg + " << 1) & 0xff;");
-        } else {
-            lines.push(getput.reg + " = ((" + getput.reg + " << 1) & 0xff) | newTopBit;");
-        }
-    }
-    lines.push("cpu.setzn(" + getput.reg + ");");
-    lines = lines.concat(getput.put);
-    return lines.concat([ "cpu.checkInt();", "cpu.polltime(" + (getput.memoryCycles) + ");" ]);
-}
-
-function compileLogical(arg, op) {
-    "use strict";
-    var getput = getGetPut(arg);
-    if (!getput) return null;
-    // Is this right? needed?
-    var lines = ["cpu.polltime(" + (getput.opcodeCycles + getput.memoryCycles) + ");"].concat(getput.get);
-    lines.push("cpu.a " + op + "= " + getput.reg + ";");
-    lines.push("cpu.setzn(cpu.a);");
-    lines.push("cpu.polltime(1);");
-    lines.push("cpu.checkInt();");
-    return lines;
-}
-
-function compileJump(arg) {
-    "use strict";
-    if (arg == "abs") {
-        return [
-            "cpu.pc = cpu.getw();",
-            "cpu.polltime(3);",
-            "cpu.checkInt();"
-                ];
-    } else if (arg == "()") {
-        return [
-            "var addr = cpu.getw();",
-            "var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);",
-            "cpu.pc = cpu.readmem(addr) | (cpu.readmem(nextAddr) << 8);",
-            "cpu.polltime(5);",
-            "cpu.checkInt();"
-                ];
-    }
-}
-
-function compileBit(arg) {
-    "use strict";
-    if (arg == "imm") {
-        // 65c02 instr.
-        return [
-            "cpu.p.z = !(cpu.a & cpu.getb());",
-            "cpu.polltime(2);"
-                ];  // TODO: No checkint?
-    } else if (arg == "abs") {
-        // TODO: b-em special cases the timing here.
-    }
-    
-    var getput = getGetPut(arg);
-    if (!getput) return null;
-    return getput.get.concat([
-            "cpu.p.z = !(cpu.a & " + getput.reg + ");",
-            "cpu.p.v = !!(" + getput.reg + " & 0x40);",
-            "cpu.p.n = !!(" + getput.reg + " & 0x80);",
-            "cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");",
-            "cpu.checkInt();"
-                ]);
-}
-
-function compileAdcSbc(inst, arg) {
-    "use strict";
-    var getput = getGetPut(arg);
-    if (!getput) return null;
-    return getput.get.concat([
-            "cpu." + inst + "(" + getput.reg + ");",
-            "cpu.polltime(" + (1 + getput.opcodeCycles + getput.memoryCycles) + ");",
-            "cpu.checkInt();"]);
-}
-
-function compileNop(arg) {
-    "use strict";
-    if (arg) return null;
-    return ["cpu.polltime(2);", "cpu.checkInt();"];
-}
-
-function compileInstruction(opcodeString) {
-    var split = opcodeString.split(' ');
-    var opcode = split[0];
-    var arg = split[1];
-    var lines = null;
-    var reg = opcode[2].toLowerCase();
-    if (opcode.match(/^LD/)) {
-        lines = compileLoad(reg, arg);
-    } else if (opcode.match(/^ST/)) {
-        lines = compileStore(reg, arg);
-    } else if (opcode == "SEI") {
-        lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.i = true;"];
-    } else if (opcode == "CLI") {
-        lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.i = false;"];
-    } else if (opcode == "SEC") {
-        lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.c = true;"];
-    } else if (opcode == "CLC") {
-        lines = ["cpu.polltime(2);", "cpu.checkInt();", "cpu.p.c = false;"];
-    } else if (opcode == "SED") {
-        lines = ["cpu.p.d = true;", "cpu.polltime(2);", "cpu.checkInt();"];
-    } else if (opcode == "CLD") {
-        lines = ["cpu.p.d = false;", "cpu.polltime(2);", "cpu.checkInt();"];
-    } else if (opcode == "CLV") {
-        lines = ["cpu.p.v = false;", "cpu.polltime(2);", "cpu.checkInt();"];
-    } else if (opcode[0] == 'T') {
-        lines = compileTransfer(opcode[1].toLowerCase(), opcode[2].toLowerCase());
-    } else if (opcode == 'ASL') {
-        lines = compileAsl(arg);
-    } else if (opcode.match(/^PH/)) {
-        lines = compilePush(reg);
-    } else if (opcode.match(/^PL/)) {
-        lines = compilePull(reg);
-    } if (opcode == "BIT") {
-        lines = compileBit(arg);
-    } else if (opcode == "BRK") {
-        lines = ["cpu.brk();"];
-    } else if (opcode[0] == 'B') {
-        lines = compileBranch(opcode.substr(1,2).toLowerCase());
-    } else if (opcode == "CMP") {
-        lines = compileCompare(arg, "a");
-    } else if (opcode.match(/^CP/)) {
-        lines = compileCompare(arg, opcode[2].toLowerCase());
-    } else if (opcode.match(/^DE/)) {
-        lines = compileAddDec(opcode[2].toLowerCase(), arg, "- 1");
-    } else if (opcode.match(/^IN/)) {
-        lines = compileAddDec(opcode[2].toLowerCase(), arg, "+ 1");
-    } else if (opcode == "JSR") {
-        lines = compileJsr();
-    } else if (opcode == "RTS") {
-        lines = compileRts();
-    } else if (opcode == "RTI") {
-        lines = compileRti();
-    } else if (opcode == "ROR") {
-        lines = compileRotate(false, false, arg);
-    } else if (opcode == "ROL") {
-        lines = compileRotate(true, false, arg);
-    } else if (opcode == "LSR") {
-        lines = compileRotate(false, true, arg);
-    } else if (opcode == "LSL") {
-        lines = compileRotate(true, true, arg);
-    } else if (opcode == "AND") {
-        lines = compileLogical(arg, "&");
-    } else if (opcode == "ORA") {
-        lines = compileLogical(arg, "|");
-    } else if (opcode == "EOR") {
-        lines = compileLogical(arg, "^");
-    } else if (opcode == "JMP") {
-        lines = compileJump(arg);
-    } else if (opcode == "ADC" || opcode == "SBC") {
-        lines = compileAdcSbc(opcode.toLowerCase(), arg);
-    } else if (opcode == "NOP") {
-        lines = compileNop(arg);
-    }
-    if (!lines) return null;
-    var fnName = "compiled_" + opcodeString.replace(/[^a-zA-Z0-9]+/g, '_');
-    var text = fnName + " = function(cpu) {\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n";
-    try {
-        eval(text); // jshint ignore:line
-    } catch (e) {
-        throw "Unable to compile: " + e + "\nText:\n" + text;
-    }
-    return this[fnName];
 }
 
 var opcodes6502 = {
@@ -1052,12 +664,7 @@ function generate6502() {
     var functions = [];
     for (var i = 0; i < 256; ++i) {
         var opcode = opcodes6502[i];
-        if (opcode) {
-            functions[i] = compileInstruction2(opcode);
-            if (!functions[i]) {
-                functions[i] = compileInstruction(opcode);
-            }
-        }
+        if (opcode) functions[i] = compileInstruction(opcode);
     }
     return functions;
 }
