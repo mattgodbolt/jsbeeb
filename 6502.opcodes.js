@@ -86,16 +86,9 @@ function InstructionGen() {
         self.cycle++;
         self.append(self.cycle, op, false);
     };
-    self.render = function(zpOnly) {
+    self.render = function() {
         if (self.cycle < 2) self.cycle = 2;
-        zpOnly = zpOnly || false;
-        if (zpOnly) {
-            // Check interrupts at the end to hopefully coalesce time.
-            self.append(self.cycle, "cpu.checkInt();", true);
-        } else {
-            // Check on penultimate cycle.
-            self.append(self.cycle - 1, "cpu.checkInt();", true);
-        }
+        self.append(self.cycle - 1, "cpu.checkInt();", true);
         var i;
         var toSkip = 0;
         var out = [];
@@ -196,7 +189,7 @@ function getOp(op) {
     case "RTS": return { op: [  // TODO: check in v6502
         "var temp = cpu.pull();",
         "temp |= cpu.pull() << 8;",
-        "cpu.pc = (temp + 1) & 0xffff;" ], extra: 5, needsExact: true };
+        "cpu.pc = (temp + 1) & 0xffff;" ], extra: 5 };
     case "RTI": return { op: [  // TODO: check in v6502
         "var temp = cpu.pull();",
         "cpu.p.c = temp & 1;",
@@ -206,7 +199,7 @@ function getOp(op) {
         "cpu.p.v = temp & 0x40;",
         "cpu.p.n = temp & 0x80;",
         "temp = cpu.pull();",
-        "cpu.pc = temp | (cpu.pull() << 8);" ], extra: 5, needsExact: true };
+        "cpu.pc = temp | (cpu.pull() << 8);" ], extra: 5 };
     case "JSR": return { op: [
         "var pushAddr = cpu.pc - 1;",
         "cpu.push(pushAddr >> 8);",
@@ -241,7 +234,7 @@ function getInstruction(opcodeString) {
         if (op.read || op.write) throw "Unsupported " + opcodeString;
         ig.tick(1 + (op.extra || 0));
         ig.append(op.op);
-        return ig.render(!op.needsExact);
+        return ig.render();
 
     case "branch":
         return [op.op];  // TODO: special cased here, would be nice to pull out of cpu
@@ -253,7 +246,7 @@ function getInstruction(opcodeString) {
             ig.tick(2);
             ig.append("var addr = cpu.getb();");
         } else {
-            ig.tick(2);
+            ig.tick(3);
             ig.append("var addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
         }
         if (op.read) {
@@ -264,7 +257,7 @@ function getInstruction(opcodeString) {
         if (op.write) {
             ig.zpWriteOp("cpu.writemem(addr, REG);");
         }
-        return ig.render(true);
+        return ig.render();
 
     case "abs":
         ig.tick(3 + (op.extra || 0));
@@ -279,7 +272,7 @@ function getInstruction(opcodeString) {
             ig.writeOp("cpu.writemem(addr, REG);");
         }
 
-        return ig.render(false);
+        return ig.render();
 
     case "abs,x":
     case "abs,y":
@@ -324,14 +317,14 @@ function getInstruction(opcodeString) {
         ig.tick(2);
         ig.append("REG = cpu.getb();");
         ig.append(op.op);
-        return ig.render(true);
+        return ig.render();
 
     case "A":
         ig.tick(2);
         ig.append("REG = cpu.a;");
         ig.append(op.op);
         ig.append("cpu.a = REG;");
-        return ig.render(true);
+        return ig.render();
 
     case "(,x)":
     case "(,y)":
@@ -343,7 +336,7 @@ function getInstruction(opcodeString) {
         if (op.read) ig.readOp("REG = cpu.readmem(addr);");
         ig.append(op.op);
         if (op.write) ig.writeOp("cpu.writemem(addr, REG);");
-        return ig.render(false);
+        return ig.render();
 
     case "(),y":
         ig.tick(2);

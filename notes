@@ -22,3 +22,9 @@
   [sta] [lo] [hi] [read@7f] [write@17f] 
   STA abs, x: abs - $0080, X = 0 - spurious read
   [sta] [lo] [hi] [read@80] [store@80]
+
+
+- from Rich:
+  * adc/sbc can be improved
+    * sbc exactly same as adc val^ff
+    * ovf = !!(a ^ result) & (val ^ result) & 0x80)
