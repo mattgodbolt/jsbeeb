@@ -277,11 +277,11 @@ function Cpu6502(dbgr, video, soundChip) {
             this.ula = video.ula;
             this.adconverter = { read: function() { return 0xff; }, write: function() {}};
             this.tube = { read: function() { return 0xff; }, write: function() {}};
+            this.sysvia.reset();
+            this.uservia.reset();
         } else {
             console.log("Soft reset");
         }
-        this.sysvia.reset();
-        this.uservia.reset();
         this.cycles = 0;
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd)<<8);
         this.p = new Flags();
