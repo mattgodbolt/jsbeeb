@@ -51,8 +51,7 @@ function InstructionGen() {
     self.cycle = 0;
 
     self.flush = function() {
-        if (!self.ops[self.cycle]) throw "erk";
-        self.ops[self.cycle].exact = true;
+        self.append(self.cycle, "", true);
     };
 
     self.append = function(cycle, op, exact) {
@@ -106,7 +105,7 @@ function InstructionGen() {
         }
         if (toSkip) out.push("cpu.polltime(" + toSkip + ");");
         if (self.ops[self.cycle]) out = out.concat(self.ops[self.cycle].op);
-        return out;
+        return out.filter(function(l){return l;});
     };
 }
 
@@ -220,19 +219,18 @@ function getInstruction(opcodeString) {
     var split = opcodeString.split(' ');
     var opcode = split[0];
     var arg = split[1];
-    var reg = opcode[2].toLowerCase();
     var op = getOp(opcode);
     if (!op) return null;
 
     var ig = new InstructionGen();
     ig.append("var REG = 0|0;");
 
-    var opCount = 1;
     switch (arg) {
     case undefined:
         // Many of these ops need a little special casing.
         if (op.read || op.write) throw "Unsupported " + opcodeString;
-        ig.tick(1 + (op.extra || 0));
+        ig.tick(Math.max(2, 1 + (op.extra || 0)));
+        ig.flush();
         ig.append(op.op);
         return ig.render();
 
@@ -251,7 +249,10 @@ function getInstruction(opcodeString) {
         }
         if (op.read) {
             ig.zpReadOp("REG = cpu.readmem(addr);");
-            if (op.write) ig.tick(1);  // Spurious write
+            if (op.write) {
+                ig.flush();
+                ig.tick(1);  // Spurious write
+            }
         }
         ig.append(op.op);
         if (op.write) {
@@ -281,16 +282,17 @@ function getInstruction(opcodeString) {
         ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
         ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
         if (op.read) {
-            ig.readOp("REG = cpu.readmem(addrNonCarry);");
             if (!op.write) {
                 // For non-RMW, we only pay the cost of the spurious read if the address carried
                 ig.flush();
                 ig.append("if (addrWithCarry !== addrNonCarry) {");
                 ig.append("    cpu.polltime(1);");
-                ig.append("    REG = cpu.readmem(addrWithCarry);");
+                ig.append("    REG = cpu.readmem(addrNonCarry);");
                 ig.append("}");
+                ig.readOp("REG = cpu.readmem(addrWithCarry);");
             } else {
                 // For RMW we always have a spurious read and then a spurious write
+                ig.readOp("REG = cpu.readmem(addrNonCarry);");
                 ig.readOp("REG = cpu.readmem(addrWithCarry);");
                 ig.writeOp("cpu.writemem(addrWithCarry, REG); // Spurious write");
             }
@@ -302,9 +304,7 @@ function getInstruction(opcodeString) {
         if (op.write) {
             ig.writeOp("cpu.writemem(addrWithCarry, REG);");
         }
-        // TODO: LDA abs,x is broken as the interrupt check can occur one cycle too early if
-        // there's a carry.
-        return ig.render();
+        return ig.render()
 
     case "imm":
         if (op.write) {
@@ -349,16 +349,17 @@ function getInstruction(opcodeString) {
         // Strictly speaking this code below is overkill; it handles RMW when no such documented
         // instruction exists.
         if (op.read) {
-            ig.readOp("REG = cpu.readmem(addrNonCarry);");
             if (!op.write) {
                 // For non-RMW, we only pay the cost of the spurious read if the address carried
                 ig.flush();
                 ig.append("if (addrWithCarry !== addrNonCarry) {");
                 ig.append("    cpu.polltime(1);");
-                ig.append("    REG = cpu.readmem(addrWithCarry);");
+                ig.append("    REG = cpu.readmem(addrNonCarry);");
                 ig.append("}");
+                ig.readOp("REG = cpu.readmem(addrWithCarry);");
             } else {
                 // For RMW we always have a spurious read and then a spurious write
+                ig.readOp("REG = cpu.readmem(addrNonCarry);");
                 ig.readOp("REG = cpu.readmem(addrWithCarry);");
                 ig.writeOp("cpu.writemem(addrWithCarry, REG); // Spurious write");
             }
@@ -370,8 +371,6 @@ function getInstruction(opcodeString) {
         if (op.write) {
             ig.writeOp("cpu.writemem(addrWithCarry, REG);");
         }
-        // TODO: loads are broken as the interrupt check can occur one cycle too early if
-        // there's a carry.
         return ig.render();
 
     case "()": 
