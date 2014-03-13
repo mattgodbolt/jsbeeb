@@ -69,21 +69,26 @@ function InstructionGen() {
     };
 
     self.tick = function(cycles) { self.cycle += (cycles || 1); };
-    self.readOp = function(op) {
+    self.readOp = function(addr, reg) {
         self.cycle++;
+        var op;
+        if (reg)
+            op = reg + " = cpu.readmem(" + addr + ");";
+        else
+            op = "cpu.readmem(" + addr + ");";
         self.append(self.cycle, op, true);
     };
-    self.writeOp = function(op) {
+    self.writeOp = function(addr, reg) {
         self.cycle++;
-        self.append(self.cycle, op, true);
+        self.append(self.cycle, "cpu.writemem(" + addr + ", " + reg + ");", true);
     };
-    self.zpReadOp = function(op) {
+    self.zpReadOp = function(addr, reg) {
         self.cycle++;
-        self.append(self.cycle, op, false);
+        self.append(self.cycle, reg + " = cpu.readmemZpStack(" + addr + ");", false);
     };
-    self.zpWriteOp = function(op) {
+    self.zpWriteOp = function(addr, reg) {
         self.cycle++;
-        self.append(self.cycle, op, false);
+        self.append(self.cycle, "cpu.writememZpStack(" + addr + ", " + reg + ");", true);
     };
     self.render = function() {
         if (self.cycle < 2) self.cycle = 2;
@@ -248,30 +253,25 @@ function getInstruction(opcodeString) {
             ig.append("var addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
         }
         if (op.read) {
-            ig.zpReadOp("REG = cpu.readmem(addr);");
+            ig.zpReadOp("addr", "REG");
             if (op.write) {
                 ig.flush();
                 ig.tick(1);  // Spurious write
             }
         }
         ig.append(op.op);
-        if (op.write) {
-            ig.zpWriteOp("cpu.writemem(addr, REG);");
-        }
+        if (op.write) ig.zpWriteOp("addr", "REG");
         return ig.render();
 
     case "abs":
         ig.tick(3 + (op.extra || 0));
         ig.append("var addr = cpu.getw();");
         if (op.read) {
-            ig.readOp("REG = cpu.readmem(addr);");
-            if (op.write) 
-                ig.writeOp("cpu.writemem(addr, REG);");
+            ig.readOp("addr", "REG");
+            if (op.write) ig.writeOp("addr", "REG");
         }
         ig.append(op.op);
-        if (op.write) {
-            ig.writeOp("cpu.writemem(addr, REG);");
-        }
+        if (op.write) ig.writeOp("addr", "REG");
 
         return ig.render();
 
@@ -289,22 +289,22 @@ function getInstruction(opcodeString) {
                 ig.append("    cpu.polltime(1);");
                 ig.append("    REG = cpu.readmem(addrNonCarry);");
                 ig.append("}");
-                ig.readOp("REG = cpu.readmem(addrWithCarry);");
+                ig.readOp("addrWithCarry", "REG");
             } else {
                 // For RMW we always have a spurious read and then a spurious write
-                ig.readOp("REG = cpu.readmem(addrNonCarry);");
-                ig.readOp("REG = cpu.readmem(addrWithCarry);");
-                ig.writeOp("cpu.writemem(addrWithCarry, REG); // Spurious write");
+                ig.readOp("addrNonCarry");
+                ig.readOp("addrWithCarry", "REG");
+                ig.writeOp("addrWithCarry", "REG");
             }
         } else if (op.write) {
             // Pure stores still exhibit a read at the non-carried address.
-            ig.readOp("cpu.readmem(addrNonCarry);");
+            ig.readOp("addrNonCarry");
         }
         ig.append(op.op);
         if (op.write) {
-            ig.writeOp("cpu.writemem(addrWithCarry, REG);");
+            ig.writeOp("addrWithCarry", "REG");
         }
-        return ig.render()
+        return ig.render();
 
     case "imm":
         if (op.write) {
@@ -330,19 +330,21 @@ function getInstruction(opcodeString) {
     case "(,y)":
         ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
         ig.append("var zpAddr = (cpu.getb() + cpu." + arg[2] + ") & 0xff;");
-        ig.zpReadOp("var lo = cpu.readmem(zpAddr);");
-        ig.zpReadOp("var hi = cpu.readmem((zpAddr + 1) & 0xff);");
+        ig.append("var lo, hi;");
+        ig.zpReadOp("zpAddr", "lo");
+        ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
         ig.append("var addr = lo | (hi << 8);");
-        if (op.read) ig.readOp("REG = cpu.readmem(addr);");
+        if (op.read) ig.readOp("addr", "REG");
         ig.append(op.op);
-        if (op.write) ig.writeOp("cpu.writemem(addr, REG);");
+        if (op.write) ig.writeOp("addr", "REG");
         return ig.render();
 
     case "(),y":
         ig.tick(2);
         ig.append("var zpAddr = cpu.getb();");
-        ig.zpReadOp("var lo = cpu.readmem(zpAddr);");
-        ig.zpReadOp("var hi = cpu.readmem((zpAddr + 1) & 0xff);");
+        ig.append("var lo, hi;");
+        ig.zpReadOp("zpAddr", "lo");
+        ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
         ig.append("var addr = lo | (hi << 8);");
         ig.append("var addrWithCarry = (addr + cpu.y) & 0xffff;");
         ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
@@ -356,21 +358,19 @@ function getInstruction(opcodeString) {
                 ig.append("    cpu.polltime(1);");
                 ig.append("    REG = cpu.readmem(addrNonCarry);");
                 ig.append("}");
-                ig.readOp("REG = cpu.readmem(addrWithCarry);");
+                ig.readOp("addrWithCarry", "REG");
             } else {
                 // For RMW we always have a spurious read and then a spurious write
-                ig.readOp("REG = cpu.readmem(addrNonCarry);");
-                ig.readOp("REG = cpu.readmem(addrWithCarry);");
-                ig.writeOp("cpu.writemem(addrWithCarry, REG); // Spurious write");
+                ig.readOp("addrNonCarry");
+                ig.readOp("addrWithCarry", "REG");
+                ig.writeOp("addrWithCarry", "REG");
             }
         } else if (op.write) {
             // Pure stores still exhibit a read at the non-carried address.
-            ig.readOp("cpu.readmem(addrNonCarry);");
+            ig.readOp("addrNonCarry");
         }
         ig.append(op.op);
-        if (op.write) {
-            ig.writeOp("cpu.writemem(addrWithCarry, REG);");
-        }
+        if (op.write) ig.writeOp("addrWithCarry", "REG");
         return ig.render();
 
     case "()": 
@@ -378,8 +378,9 @@ function getInstruction(opcodeString) {
         ig.tick(4);  // For the jump part? TODO: check in v6502
         ig.append("var addr = cpu.getw();");
         ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
-        ig.readOp("var lo = cpu.readmem(addr);");
-        ig.readOp("var hi = cpu.readmem(nextAddr);");
+        ig.append("var lo, hi;");
+        ig.readOp("addr", "lo");
+        ig.readOp("nextAddr", "hi");
         ig.append("addr = lo | (hi << 8);");
         ig.append(op.op);
         return ig.render();

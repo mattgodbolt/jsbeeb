@@ -73,6 +73,19 @@ function Cpu6502(dbgr, video, soundChip) {
         // TODO: ram4k, ram12k MASTER BPLUS
     };
 
+    // Works for unpaged RAM only (ie stack and zp)
+    this.readmemZpStack = function(addr) {
+        addr &= 0xffff;
+        if (this.debugread) this.debugread(addr);
+        return this.ramRomOs[addr];
+    };
+    this.writememZpStack = function(addr, b) {
+        addr &= 0xffff;
+        b |= 0;
+        if (this.debugwrite) this.debugwrite(addr, b);
+        this.ramRomOs[addr] = b;
+    };
+
     this.readmem = function(addr) {
         addr &= 0xffff;
         if (this.debugread) this.debugread(addr);
@@ -289,13 +302,13 @@ function Cpu6502(dbgr, video, soundChip) {
     };
 
     this.push = function(v) {
-        this.writemem(0x100 + this.s, v);
+        this.writememZpStack(0x100 + this.s, v);
         this.s = (this.s - 1) & 0xff;
     };
 
     this.pull = function() {
         this.s = (this.s + 1) & 0xff;
-        return this.readmem(0x100 + this.s);
+        return this.readmemZpStack(0x100 + this.s);
     };
 
     this.polltime = function(cycles) {

@@ -103,7 +103,7 @@ $(function() {
     //    }
     //}
     //processor.debugInstruction = function(pc) {
-      //return (pc == 0x294b);
+      //return (pc == 0xdef);
     //};
     //    if (pc == 0xfff7) {
     //        var addr = processor.x + (processor.y<<8);
