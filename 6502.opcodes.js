@@ -114,7 +114,7 @@ function getOp(op) {
     "use strict";
     switch (op) {
     case "NOP": return { op: "" };
-    case "BRK": return { op: "cpu.brk();" };
+    case "BRK": return { op: "cpu.brk();", extra: 6 };
     case "CLC": return { op: "cpu.p.c = false;" };
     case "SEC": return { op: "cpu.p.c = true;" };
     case "CLD": return { op: "cpu.p.d = false;" };
@@ -178,10 +178,10 @@ function getOp(op) {
     case "BPL": return { op: "cpu.branch(!cpu.p.n);" };
     case "BVS": return { op: "cpu.branch(cpu.p.v);" };
     case "BVC": return { op: "cpu.branch(!cpu.p.v);" };
-    case "PLA": return { op: pull('a') };
-    case "PLP": return { op: pull('p'), extra: 2 };
-    case "PLX": return { op: pull('x'), extra: 2 };
-    case "PLY": return { op: pull('y'), extra: 2 };
+    case "PLA": return { op: pull('a'), extra: 3 };
+    case "PLP": return { op: pull('p'), extra: 3 };
+    case "PLX": return { op: pull('x'), extra: 3 };
+    case "PLY": return { op: pull('y'), extra: 3 };
     case "PHA": return { op: push('a'), extra: 2 };
     case "PHP": return { op: push('p'), extra: 2 };
     case "PHX": return { op: push('x'), extra: 2 };
