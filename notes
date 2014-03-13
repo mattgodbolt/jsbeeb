@@ -28,3 +28,5 @@
   * adc/sbc can be improved
     * sbc exactly same as adc val^ff
     * ovf = !!(a ^ result) & (val ^ result) & 0x80)
+  * RTI, which has to have updated its flags from the stack *before* the checkInts, as that stack load happens on cycle 4 out of 6.  It all makes sense though.  With this done correctly, some of the weirder things should "just work", e.g. when an interrupt occurs during the first cycle of an SEI, the interrupt is taken immediately following the SEI, but the I flag is set in the status register that's pushed to the stack (so that the RTI returns and IRQs are disabled, as expected).  I don't think you should be clearing the I flag in the status register that's pushed in BRK, by the way (I know B-Em does, but I think it's wrong)... also BRK is getting an extra cycle.
+  * Random optimisation thought - create readZP, readStack, writeZP and writeStack, which do a simpler version of the memory access (don't need to lookup through the paging table or check for hardware).  You could also do a readInterruptVector which reads directly from FFFA...FFFF, wherever they are, as this is also fixed.
