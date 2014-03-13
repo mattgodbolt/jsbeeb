@@ -1,5 +1,5 @@
-jsbeebem - Javascript BBC Micro emulator
-----------------------------------------
+jsbeeb - Javascript BBC Micro emulator
+--------------------------------------
 
 A 32K BBC Model B micro computer emulator in Javascript.  Runs on Firefox and Chrome.
 Key mappings you may find useful:
