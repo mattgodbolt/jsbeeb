@@ -30,7 +30,7 @@ function via(cpu, irq) {
         t1l: 0, t2l: 0,
         t1c: 0, t2c: 0,
         acr: 0, pcr: 0, ifr: 0, ier: 0,
-        t1hit: 0, t2hit: 0,
+        t1hit: false, t2hit: false,
         porta: 0, portb: 0,
         ca1: 0, ca2: 0,
 
@@ -39,7 +39,7 @@ function via(cpu, irq) {
             self.ddra = self.ddrb = 0xff;
             self.ifr = self.ier = 0x00;
             self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
-            self.t1hit = self.t2hit = 1;
+            self.t1hit = self.t2hit = true;
             self.acr = self.pcr = 0;
         },
 
@@ -56,13 +56,13 @@ function via(cpu, irq) {
                         self.orb ^= 0x80;
                     }
                 }
-                if (!(this.acr & 0x40)) self.t1hit = 1;
+                if (!(this.acr & 0x40)) self.t1hit = true;
             }
             if (self.acr & 0x20) return;
             if (self.t2c < -3 && !self.t2hit) {
                 self.ifr |= TIMER2INT;
                 self.updateIFR();
-                self.t2hit = 1;
+                self.t2hit = true;
             }
         },
 
@@ -167,7 +167,7 @@ function via(cpu, irq) {
                 self.t1l &= 0x1fe;
                 self.t1l |= (val << 9);
                 self.t1c = self.t1l + 1;
-                self.t1hit = 0;
+                self.t1hit = false;
                 self.ifr &= ~TIMER1INT;
                 self.updateIFR();
                 break;
@@ -184,7 +184,7 @@ function via(cpu, irq) {
                 self.t2c = self.t2l + 1;
                 self.ifr &= ~TIMER2INT;
                 self.updateIFR();
-                self.t2hit = 0;
+                self.t2hit = false;
                 break;
 
             case IER:
