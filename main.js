@@ -126,6 +126,7 @@ $(function() {
     }
 
     var queryString = document.location.search;
+    var discImage = starCat()[0].file;
     if (queryString) {
         queryString = queryString.substring(1);
         if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
@@ -137,9 +138,14 @@ $(function() {
             case "autoboot":
                 autoboot();
                 break;
+            case "disc":
+                discImage = val;
+                break;
             }
         });
     }
+
+    processor.fdc.loadDiscData(0, ssdLoad("discs/" + discImage));
 
     $('#disc_load').change(function(evt) { 
         var file = evt.target.files[0]; 

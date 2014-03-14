@@ -1,13 +1,13 @@
 // Floppy disc controller and assorted utils.
 
-function ssdLoad(name, fdc) {
+function ssdLoad(name) {
     "use strict";
     console.log("Loading disc from " + name);
     var request = new XMLHttpRequest();
     request.open("GET", name, false);
     request.overrideMimeType('text/plain; charset=x-user-defined');
     request.send(null);
-    return ssdFor(fdc, request.response);
+    return request.response;
 }
 
 function ssdFor(fdc, stringData) {
@@ -132,7 +132,7 @@ function I8271(cpu) {
     self.params = new Uint8Array(8);
     self.written = 0;
     self.verify = 0;
-    self.drives = [ssdLoad("discs/elite.ssd", this)];
+    self.drives = [];
 
     self.NMI = function() {
         cpu.NMI(self.status & 8);
