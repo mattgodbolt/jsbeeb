@@ -234,26 +234,26 @@ function via(cpu, irq) {
 
             case DDRA: return self.ddra;
             case DDRB: return self.ddrb;
-            case T1LL: return (self.t1l & 0x1fe) >> 1;
-            case T1LH: return self.t1l >> 9;
+            case T1LL: return ((self.t1l & 0x1fe) >>> 1) & 0xff;
+            case T1LH: return (self.t1l >>> 9) & 0xff;
 
             case T1CL:
                self.ifr &= ~TIMER1INT;
                self.updateIFR();
                if (self.t1c < -1) return 0xff;
-               return ((self.t1c + 1) >> 1) & 0xff;
+               return ((self.t1c + 1) >>> 1) & 0xff;
 
             case T1CH:
                if (self.t1c < -1) return 0xff;
-               return (self.t1c+1) >> 9;
+               return ((self.t1c+1) >>> 9) & 0xff;
 
             case T2CL:
                self.ifr &= ~TIMER2INT;
                self.updateIFR();
-               return ((self.t2c + 1) >> 1) & 0xff;
+               return ((self.t2c + 1) >>> 1) & 0xff;
 
             case T2CH:
-               return (self.t2c + 1) >> 9;
+               return ((self.t2c + 1) >>> 9) & 0xff;
 
             case SR: return self.sr;
             case ACR: return self.acr;
@@ -460,7 +460,7 @@ function sysvia(cpu, soundChip) {
     self.updateSdb = function() {
         self.sdbval = self.sdbout;
         // TODO cmos
-        var keyrow = (self.sdbval >> 4) & 7;
+        var keyrow = (self.sdbval >>> 4) & 7;
         self.keycol = self.sdbval & 0xf;
         self.updateKeys();
         if (!(self.IC32 & 8) && !self.keys[self.keycol][keyrow]) {
