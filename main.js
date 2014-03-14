@@ -122,7 +122,7 @@ $(function() {
     function autoboot() {
         console.log("Autobooting");
         processor.sysvia.keyDown(16);
-        setTimeout(function() { processor.sysvia.keyUp(16); }, 1000);
+        setTimeout(function() { processor.sysvia.keyUp(16); }, 5000);
     }
 
     var queryString = document.location.search;
