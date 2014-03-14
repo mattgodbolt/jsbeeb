@@ -119,6 +119,28 @@ $(function() {
     //    return false;
     //};
 
+    function autoboot() {
+        console.log("Autobooting");
+        processor.sysvia.keyDown(16);
+        setTimeout(function() { processor.sysvia.keyUp(16); }, 1000);
+    }
+
+    var queryString = document.location.search;
+    if (queryString) {
+        queryString = queryString.substring(1);
+        if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
+            queryString = queryString.substring(0, queryString.length - 1);
+        queryString.split("&").forEach(function(keyval) {
+            var keyAndVal = keyval.split("=");
+            var key = keyAndVal[0], val = keyAndVal[1];
+            switch (key) {
+            case "autoboot":
+                autoboot();
+                break;
+            }
+        });
+    }
+
     $('#disc_load').change(function(evt) { 
         var file = evt.target.files[0]; 
         var reader = new FileReader();
