@@ -328,28 +328,27 @@ function Cpu6502(dbgr, video, soundChip) {
         var nextByte = this.pc + 1;
         this.push(nextByte >>> 8);
         this.push(nextByte & 0xff);
-        var temp = this.p.asByte() & ~0x04; // clear I bit
+        var temp = this.p.asByte();
         this.push(temp);
         this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
         this.p.i = 1;
-        this.polltime(7);
         this.takeInt = 0;
     };
 
     this.branch = function(taken) {
         var offset = signExtend(this.getb());
         if (!taken) {
-            this.polltime(2);
+            this.polltime(1);
             this.checkInt();
+            this.polltime(1);
             return;
         }
-        var cycles = 3;
         var newPc = (this.pc + offset) & 0xffff;
-        if ((this.pc & 0xff00) ^ (newPc & 0xff00)) cycles++;
+        var pageCrossed = !!((this.pc & 0xff00) ^ (newPc & 0xff00));
         this.pc = newPc;
-        this.polltime(cycles - 1);
+        this.polltime(pageCrossed ? 3 : 1);
         this.checkInt();
-        this.polltime(1);
+        this.polltime(pageCrossed ? 1 : 2);
     };
 
     this.adc = function(addend, isC) {
@@ -425,7 +424,6 @@ function Cpu6502(dbgr, video, soundChip) {
             instruction(this);
             // TODO: timetolive
             if (this.takeInt) {
-                this.interrupt &= 0x7f;
                 this.takeInt = 0;
                 this.push(this.pc >>> 8);
                 this.push(this.pc & 0xff);
@@ -434,7 +432,6 @@ function Cpu6502(dbgr, video, soundChip) {
                 this.p.i = 1;
                 this.polltime(7);
             }
-            this.interrupt &= 0x7f;
             // TODO: otherstuff
             // TODO: tube
             if (this.nmi) {
