@@ -102,6 +102,29 @@ $(function() {
     //        //processor.stop();
     //    }
     //}
+    //processor.debugInstruction = function(pc, opcode) {
+    //    if (pc === 0xffdd) {
+    //        var paramBlock = processor.x + (processor.y<<8);
+    //        var fnAddr = processor.readmem(paramBlock) + (processor.readmem(paramBlock + 1) << 8);
+    //            
+    //        console.log("OSFILE", processor.a, fnAddr, processor.readstring(fnAddr));
+    //        if (fnAddr === 22137) return true;
+    //        //return true;
+    //    }
+    //    return false;
+    //};
+    //var count = 0;
+    //var debugging = false;
+    //processor.debugInstruction = function(pc) {
+    //    function s(via) { return "t1c: " + via.t1c + " t2l: " + via.t1l + " t2c:" + via.t2c + " t2l: " + via.t2l; };
+    //    if (pc === 0xceb) debugging = true;
+    //    if (debugging && count < 1000) {
+    //        count++;
+    //        console.log(hexword(pc) + " " 
+    //                + processor.disassembler.disassemble(pc)[0]
+    //                + " "+ processor.cycles + " u{" + s(processor.uservia) +"} s{" + s(processor.sysvia) + "}"); 
+    //    }
+    //};
     //processor.debugInstruction = function(pc) {
       //return (pc == 0xdef);
     //};

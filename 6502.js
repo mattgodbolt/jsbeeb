@@ -86,6 +86,18 @@ function Cpu6502(dbgr, video, soundChip) {
         this.ramRomOs[addr] = b;
     };
 
+    // Handy debug function to read a string zero or \n terminated.
+    this.readstring = function(addr) {
+        var s = "";
+        for (;;) {
+            var b = this.readmem(addr);
+            addr++;
+            if (b === 0 || b === 13) break;
+            s += String.fromCharCode(b);
+        }
+        return s;
+    };
+
     this.readmem = function(addr) {
         addr &= 0xffff;
         if (this.debugread) this.debugread(addr);
