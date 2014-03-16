@@ -5,9 +5,9 @@ function rotate(left, logical) {
         if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
         lines.push("cpu.p.c = !!(REG & 0x01);");
         if (logical) {
-            lines.push("REG >>>= 1;");
+            lines.push("REG >>= 1;");
         } else {
-            lines.push("REG = (REG >>> 1) | newTopBit;");
+            lines.push("REG = (REG >> 1) | newTopBit;");
         }
     } else {
         if (!logical) lines.push("var newBotBit = cpu.p.c ? 0x01 : 0x00;");
@@ -154,11 +154,14 @@ function getOp(op) {
         read: true };
     case "ROL": return { op: rotate(true, false), read: true, write: true };
     case "ROR": return { op: rotate(false, false), read: true, write: true };
-    case "ASL": return { op: rotate(true, true), read: true, write: true };
+    case "ASL": return { 
+        op: [ "cpu.p.c = !!(REG & 0x80);", "REG = (REG << 1) & 0xff;", "cpu.setzn(REG);" ], 
+        read: true, write: true };
+    case "LSL": return { op: rotate(true, true), read: true, write: true };
     case "LSR": return { op: rotate(false, true), read: true, write: true };
-    case "EOR": return { op: ["cpu.a = (cpu.a ^ REG) & 0xff;", "cpu.setzn(cpu.a);"], read: true };
-    case "AND": return { op: ["cpu.a = (cpu.a & REG) & 0xff;", "cpu.setzn(cpu.a);"], read: true };
-    case "ORA": return { op: ["cpu.a = (cpu.a | REG) & 0xff;", "cpu.setzn(cpu.a);"], read: true };
+    case "EOR": return { op: ["cpu.a ^= REG;", "cpu.setzn(cpu.a);"], read: true };
+    case "AND": return { op: ["cpu.a &= REG;", "cpu.setzn(cpu.a);"], read: true };
+    case "ORA": return { op: ["cpu.a |= REG;", "cpu.setzn(cpu.a);"], read: true };
     case "CMP": return { op: ["cpu.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"], 
         read: true };
     case "CPX": return { op: ["cpu.setzn(cpu.x - REG);", "cpu.p.c = cpu.x >= REG;"], 
@@ -168,7 +171,7 @@ function getOp(op) {
     case "TXA": return { op: ["cpu.a = cpu.x;", "cpu.setzn(cpu.a);"] };
     case "TAX": return { op: ["cpu.x = cpu.a;", "cpu.setzn(cpu.x);"] };
     case "TXS": return { op: "cpu.s = cpu.x;" };
-    case "TSX": return { op: "cpu.x = cpu.s; cpu.setzn(cpu.x);" };
+    case "TSX": return { op: "cpu.x = cpu.s;" };
     case "TYA": return { op: ["cpu.a = cpu.y;", "cpu.setzn(cpu.a);"] };
     case "TAY": return { op: ["cpu.y = cpu.a;", "cpu.setzn(cpu.y);"] };
     case "BEQ": return { op: "cpu.branch(cpu.p.z);" };
@@ -191,16 +194,21 @@ function getOp(op) {
         "var temp = cpu.pull();",
         "temp |= cpu.pull() << 8;",
         "cpu.pc = (temp + 1) & 0xffff;" ], extra: 5 };
-    case "RTI": return { preop: [  // TODO: check in v6502
+    case "RTI": return { op: [  // TODO: check in v6502
         "var temp = cpu.pull();",
-        "cpu.p.c = !!(temp & 0x01);",
-        "cpu.p.z = !!(temp & 0x02);",
-        "cpu.p.i = !!(temp & 0x04);",
-        "cpu.p.d = !!(temp & 0x08);",
-        "cpu.p.v = !!(temp & 0x40);",
-        "cpu.p.n = !!(temp & 0x80);",
+        "cpu.p.c = temp & 1;",
+        "cpu.p.z = temp & 2;",
+        "cpu.p.i = temp & 4;",
+        "cpu.p.d = temp & 8;",
+        "cpu.p.v = temp & 0x40;",
+        "cpu.p.n = temp & 0x80;",
         "temp = cpu.pull();",
         "cpu.pc = temp | (cpu.pull() << 8);" ], extra: 5 };
+    case "JSR": return { op: [
+        "var pushAddr = cpu.pc - 1;",
+        "cpu.push(pushAddr >> 8);",
+        "cpu.push(pushAddr & 0xff);",
+        "cpu.pc = addr;" ], extra: 3 };
     case "JSR": return { op: [
         "var pushAddr = cpu.pc - 1;",
         "cpu.push(pushAddr >> 8);",
@@ -226,7 +234,6 @@ function getInstruction(opcodeString) {
     case undefined:
         // Many of these ops need a little special casing.
         if (op.read || op.write) throw "Unsupported " + opcodeString;
-        ig.append(op.preop);
         ig.tick(Math.max(2, 1 + (op.extra || 0)));
         ig.flush();
         ig.append(op.op);
@@ -391,7 +398,7 @@ function compileInstruction(ins) {
     "use strict";
     var lines = getInstruction(ins);
     if (!lines) return null;
-    var text = "var f = function(cpu) {   // " + ins + "\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;f\n";
+    var text = "var f = function(cpu) {\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;f\n";
     try {
         return eval(text); // jshint ignore:line
     } catch (e) {
