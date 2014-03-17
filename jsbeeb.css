@@ -1,8 +1,5 @@
 body {
-    background-color: #000000;
-    color: #ffffff;
-    font-family: arial, tahoma;
-    font-size: 11px;
+    padding-top: 50px;
 }
 
 #screen {
@@ -36,10 +33,6 @@ body {
 
 #pages {
     margin-top: 10px;
-}
-
-#info {
-    margin-bottom: 20px;
 }
 
 .key {

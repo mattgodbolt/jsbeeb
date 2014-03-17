@@ -461,7 +461,6 @@ function Cpu6502(dbgr, video, soundChip) {
 
     this.stop = function() {
         this.halted = true;
-        dbgr.debug(this.pc);
     };
 
     this.loadOs("roms/os.rom", "roms/b/BASIC.ROM", "roms/b/DFS-0.9.rom");

@@ -1,9 +1,17 @@
 <!DOCTYPE HTML>
-<html>
+<html lang="en">
     <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="author" content="Matt Godbolt">
+        <meta name="description" content="A Javascript BBC Micro emulator">
         <title>JSBeeb - Javascript BBC Micro emulator</title>
+        <link rel="stylesheet" href="lib/bootstrap.min.css" type="text/css">
         <link rel="stylesheet" href="jsbeeb.css" type="text/css">
-        <script type="text/javascript" src="lib/jquery-1.5.1.min.js"></script>
+        <link rel="shortcut icon" href="/favicon.ico">
+        <script type="text/javascript" src="lib/jquery.min.js"></script>
+        <script type="text/javascript" src="lib/bootstrap.min.js"></script>
         <script type="text/javascript" src="acia.js"></script>
         <script type="text/javascript" src="fdc.js"></script>
         <script type="text/javascript" src="discs/cat.js"></script>
@@ -17,6 +25,7 @@
         <script type="text/javascript" src="debug.js"></script>
         <script type="text/javascript" src="main.js"></script>
         <script type="text/javascript" src="discs/cat.js"></script>
+
 <script>
   (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
   (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
@@ -27,39 +36,113 @@
   ga('send', 'pageview');
 
 </script>
+<script type="text/javascript">
+    (function() {
+     var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+     po.src = 'https://apis.google.com/js/plusone.js';
+     var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+     })();
+</script>
+
     </head>
+
     <body>
-        <h1>JavaScript BBC B Emulator</h1>
-        <div id="info">
-            By <a href="http://xania.org/">Matt Godbolt</a>.  Source on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome or Firefox. Still very much work in progress: keep coming back for bugfixes and more features!<br>
-            Handy key mappings: <span class="key">F0</span> is <span class="key">F10</span>, <span class="key">BREAK</span> is <span class="key">F12</span>.  Hit <span class="key">HOME</span> for a debugger.<br>
-            To boot the disc,
-            To load up Elite (currently the only disc available), hold <span class="key">SHIFT</span> and then tap <span class="key">F12</span>.
-            The disc loaded up by default is the amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it available).
-            To load a custom disc image, get an SSD file and load it below.  Search the web, or check somewhere like <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these.  Be aware the images are usually stored in a ZIP file, so you'll need to unzip first.
-            <div class="disc">
-                <label>Load SSD file: <input type="file" id="disc_load" accept=".ssd,image/*"></input></label>
-            </div>
-        </div>
-        <canvas id="screen" width="698" height="571"></canvas>
-        <div>
-            Based on Tom Walker's <a href="http://b-em.bbcmicro.com/">b-em</a> emulator.  Huge thanks to him for open sourcing his code.  Big thanks too to Richard Talbot-Watkins for his help and support.
-        </div>
-        <div id="debug">
-            <div id="disassembly">
-                <div class="template"><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span></div>
-            </div>
-            <div id="registers">
-                <div>
-                    <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span><span class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span><span class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
+
+        <div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+            <div class="container">
+                <div class="navbar-header">
+                    <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                        <span class="sr-only">Toggle navigation</span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                    </button>
+                    <a class="navbar-brand" href="#">jsbeeb - a Javascript BBC micro emulator</a>
                 </div>
-                <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
-                <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
-                <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
-                <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
-                <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
+                <div class="collapse navbar-collapse">
+                    <ul class="nav navbar-nav">
+                        <li class="active"><a href="#">Home</a></li>
+                        <li><a href="#about" data-toggle="modal" data-target="#discs">Load disc</a></li>
+                        <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
+                        <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                            <li class="social"><g:plusone annotation="inline" width="150"></g:plusone></li>
+                            <li class="social"><a href="https://twitter.com/share" class="twitter-share-button" data-via="mattgodbolt">Tweet</a>
+                            <script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src="//platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");</script></li>
+                        </ul>
+                        </li>
+                        <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Contact<b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="https://plus.google.com/105166465490735292917" rel="author">About Matt</a></li>
+                            <li><a href="mailto:matt@godbolt.org">Contact Matt</a></li>
+                        </ul>
+                        </li>
+                    </ul>
+                </div><!--/.nav-collapse -->
             </div>
         </div>
+
+        <div class="container">
+            <canvas id="screen" width="698" height="571"></canvas>
+            <div id="debug">
+                <div id="disassembly">
+                    <div class="template"><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span></div>
+                </div>
+                <div id="registers">
+                    <div>
+                        <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span><span class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span><span class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
+                    </div>
+                    <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
+                    <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
+                    <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
+                    <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
+                    <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="info">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                        <h4 class="modal-title">About jsbeeb</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div>By <a href="http://xania.org/">Matt Godbolt</a>.  Based on Tom Walker's <a href="http://b-em.bbcmicro.com/">b-em</a> emulator.  Huge thanks to him for open sourcing his code.  Big thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by default is the amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it available).</div>
+                        <div>Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome or Firefox. Still very much work in progress: keep coming back for bugfixes and more features!</div>
+                        <h5>Key mappings</h5>
+                        <div><span class="key">F0</span> is <span class="key">F10</span>, <span class="key">BREAK</span> is <span class="key">F12</span>.  Hit <span class="key">HOME</span> for a debugger.</div>
+                        <div>To boot the disc, hold <span class="key">SHIFT</span> and then tap <span class="key">F12</span>.</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div><!-- /.modal-content -->
+            </div><!-- /.modal-dialog -->
+        </div><!-- /.modal -->
+
+        <div class="modal fade" id="discs">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                        <h4 class="modal-title">Load disc image</h4>
+                    </div>
+                    <div class="modal-body">
+                        To load a custom disc image, get an SSD file and load it below.  Search the web, or check somewhere like <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these.  Be aware the images are usually stored in a ZIP file, and you'll need to unzip first.
+                        <div class="disc">
+                            <label>Load local SSD file: <input type="file" id="disc_load" accept=".ssd,image/*"></input></label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div><!-- /.modal-content -->
+            </div><!-- /.modal-dialog -->
+        </div><!-- /.modal -->
     </body>
 </html>
 

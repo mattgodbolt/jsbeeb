@@ -58,34 +58,31 @@ $(function() {
         return evt.which || evt.charCode || evt.keyCode;
     }
     function keyPress(evt) {
-        if (!running) {
-            if (keyCode(evt) === 103) {
-                dbgr.hide();
-                go();
-                return;
-            }
-            return dbgr.keyPress(keyCode(evt)); 
+        if (running) return;
+        if (keyCode(evt) === 103) {
+            dbgr.hide();
+            go();
+            return;
         }
+        return dbgr.keyPress(keyCode(evt)); 
     }
     function keyDown(evt) {
-        if (running) {
-            var code = keyCode(evt);
-            if (code === 36) {  // home
-                stop();
-            } else if (code == 123) { // F12
-                processor.reset(false);
-                evt.preventDefault();
-            } else {
-                processor.sysvia.keyDown(keyCode(evt));
-                evt.preventDefault();
-            }
+        if (!running) return;
+        var code = keyCode(evt);
+        if (code === 36) {  // home
+            stop(true);
+        } else if (code == 123) { // F12
+            processor.reset(false);
+            evt.preventDefault();
+        } else {
+            processor.sysvia.keyDown(keyCode(evt));
+            evt.preventDefault();
         }
     }
     function keyUp(evt) {
-        if (running) {
-            processor.sysvia.keyUp(keyCode(evt));
-            evt.preventDefault();
-        }
+        if (!running) return;
+        processor.sysvia.keyUp(keyCode(evt));
+        evt.preventDefault();
     }
     document.onkeydown = keyDown;
     document.onkeypress = keyPress;
@@ -179,6 +176,14 @@ $(function() {
         reader.readAsBinaryString(file);
     });
 
+    var modalSavedRunning = false;
+    $('.modal').on('show.bs.modal', function() { 
+        modalSavedRunning = running;
+        if (running) stop(false);
+    });
+    $('.modal').on('hidden.bs.modal', function() { 
+        if (modalSavedRunning) go();
+    });
     go();
 });
 
@@ -226,7 +231,8 @@ function go() {
     run();
 }
 
-function stop() {
+function stop(debug) {
     running = false; 
     processor.stop();
+    if (debug) dbgr.debug(processor.pc);
 }
