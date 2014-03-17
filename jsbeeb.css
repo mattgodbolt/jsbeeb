@@ -6,6 +6,11 @@ body {
     margin-left: auto;
     margin-right: auto;
     display: block;
+    padding: 20px;
+    border: 98px solid transparent;
+    -webkit-border-image:url(cub-monitor.jpeg) 98 98 stretch; /* Safari 5 */
+    -o-border-image:url(cub-monitor.jpeg) 98 98 stretch; /* Opera */
+    border-image:url(cub-monitor.jpeg) 98 98 stretch;
 }
 
 #debug {
