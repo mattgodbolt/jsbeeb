@@ -62,7 +62,7 @@
                 <div class="collapse navbar-collapse">
                     <ul class="nav navbar-nav">
                         <li class="active"><a href="#">Home</a></li>
-                        <li><a href="#about" data-toggle="modal" data-target="#discs">Load disc</a></li>
+                        <li><a href="#discs" data-toggle="modal" data-target="#discs">Load disc</a></li>
                         <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
                         <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
@@ -132,6 +132,9 @@
                         <h4 class="modal-title">Load disc image</h4>
                     </div>
                     <div class="modal-body">
+                        <ul id="disc-list">
+                            <li class="template"><a href="#"><span class="name"></span></a> - <span class="description"></span></li>
+                        </ul>
                         To load a custom disc image, get an SSD file and load it below.  Search the web, or check somewhere like <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these.  Be aware the images are usually stored in a ZIP file, and you'll need to unzip first.
                         <div class="disc">
                             <label>Load local SSD file: <input type="file" id="disc_load" accept=".ssd,image/*"></input></label>

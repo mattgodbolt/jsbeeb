@@ -145,8 +145,10 @@ $(function() {
         setTimeout(function() { processor.sysvia.keyUp(16); }, 5000);
     }
 
+    var availableImages = starCat();
     var queryString = document.location.search;
-    var discImage = starCat()[0].file;
+    var discImage = availableImages[0].file;
+    var parsedQuery = {};
     if (queryString) {
         queryString = queryString.substring(1);
         if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
@@ -154,6 +156,7 @@ $(function() {
         queryString.split("&").forEach(function(keyval) {
             var keyAndVal = keyval.split("=");
             var key = keyAndVal[0], val = keyAndVal[1];
+            parsedQuery[key] = val;
             switch (key) {
             case "autoboot":
                 autoboot();
@@ -165,6 +168,15 @@ $(function() {
         });
     }
 
+    function updateUrl() {
+        var url = window.location.origin + window.location.pathname;
+        var sep = '?';
+        $.each(parsedQuery, function(key, value) {
+            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+            sep = '&';
+        });
+        window.history.pushState(null, null, url);
+    }
     processor.fdc.loadDiscData(0, ssdLoad("discs/" + discImage));
 
     $('#disc_load').change(function(evt) { 
@@ -172,6 +184,8 @@ $(function() {
         var reader = new FileReader();
         reader.onload = function(e) {
             processor.fdc.loadDiscData(0, e.target.result);
+            delete parsedQuery.disc;
+            updateUrl();
         };
         reader.readAsBinaryString(file);
     });
@@ -184,6 +198,20 @@ $(function() {
     $('.modal').on('hidden.bs.modal', function() { 
         if (modalSavedRunning) go();
     });
+    var discList = $('#disc-list');
+    var template = discList.find(".template");
+    $.each(availableImages, function(i, image) {
+        var elem = template.clone().removeClass("template").appendTo(discList);
+        elem.find(".name").text(image.name);
+        elem.find(".description").text(image.desc);
+        $(elem).on("click", function(){
+            processor.fdc.loadDiscData(0, ssdLoad("discs/" + image.file));
+            parsedQuery.disc = image.file;
+            updateUrl();
+            $('#discs').modal("hide");
+        });
+    });
+    
     go();
 });
 
