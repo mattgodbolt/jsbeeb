@@ -10,6 +10,22 @@ function ssdLoad(name) {
     return request.response;
 }
 
+function emptySsd(fdc) {
+    "use strict";
+    var result = {
+        notFound: 0,
+        seek: function() {},
+        poll: function() {
+            if (this.notFound && --this.notFound === 0) fdc.notFound();
+        }
+    };
+
+    result.read = result.write = result.address = result.format = function() {
+        this.notFound = 500;
+    };
+    return result;
+}
+
 function ssdFor(fdc, stringData) {
     "use strict";
     var len = stringData.length;
@@ -132,7 +148,7 @@ function I8271(cpu) {
     self.params = new Uint8Array(8);
     self.written = 0;
     self.verify = 0;
-    self.drives = [];
+    self.drives = [emptySsd(this), emptySsd(this)];
 
     self.NMI = function() {
         cpu.NMI(self.status & 8);

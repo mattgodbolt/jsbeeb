@@ -235,14 +235,6 @@ function Cpu6502(dbgr, video, soundChip) {
         this.takeInt = ((this.interrupt & 0x80) && !this.p.i);
     };
 
-    this.dumpregs = function() {
-        console.log("6502 registers :");
-        console.log("A=" + hexbyte(this.a) + " X=" + hexbyte(this.x) + " Y=" + hexbyte(this.y) +
-                " S=01" + hexbyte(this.s) + " PC=" + hexword(this.pc));
-        console.log("FLAGS = " + this.p.debugString());
-        console.log("ROMSEL " + hexbyte(this.romsel>>24));
-    };
-
     this.loadRom = function(name, offset) {
         console.log("Loading ROM from " + name);
         var request = new XMLHttpRequest();
@@ -428,8 +420,7 @@ function Cpu6502(dbgr, video, soundChip) {
             if (!instruction) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
                 console.log(this.disassembler.disassemble(this.pc)[0]);
-                this.dumpregs();
-                stop();
+                stop(true);
                 return;
             }
             this.incpc();
