@@ -413,7 +413,7 @@ function Cpu6502(dbgr, video, soundChip) {
             this.vis20k = this.ramBank[this.pc>>12];
             var opcode = this.readmem(this.pc);
             if (this.debugInstruction && this.oldoldpc !== this.pc && this.debugInstruction(this.pc)) {
-                stop();
+                stop(true);
                 return;
             }
             var instruction = this.instructions[opcode];
@@ -445,8 +445,9 @@ function Cpu6502(dbgr, video, soundChip) {
                 this.p.i = 1;
                 this.polltime(7);
                 this.nmi = false;
-                this.p.d = 0;
+                this.p.d = 0; // TODO this is actually Master only
             }
+            // TODO: oldnmi stuff? master only it seems?
         }
     };
 

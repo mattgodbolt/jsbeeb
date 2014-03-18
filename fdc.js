@@ -21,7 +21,7 @@ function emptySsd(fdc) {
     };
 
     result.read = result.write = result.address = result.format = function() {
-        this.notFound = 500;
+        this.notFound = 500 * 16;
     };
     return result;
 }
@@ -239,6 +239,22 @@ function I8271(cpu) {
         }
     }
 
+    function readSpecial(reg) {
+        self.status = 0x10; 
+        self.result = 0;
+        switch (reg) {
+        case 0x06: break;
+        case 0x12: self.result = self.curtrack[0]; break;
+        case 0x1a: self.result = self.curtrack[1]; break;
+        case 0x23: self.result = self.drvout; break;
+        default:
+            self.result = self.status = 0x18;
+            self.NMI();
+            self.time = 0;
+            break;
+        }
+    }
+
     function spinup() {}
     function spindown() {}
     function setspindown() {}
@@ -275,8 +291,11 @@ function I8271(cpu) {
         case 0x13: // Read
             read(self.params[0], self.params[1], self.params[2]);
             break;
-        case 0x3a: // Special
+        case 0x3a: // Special register write
             writeSpecial(self.params[0], self.params[1], self.params[2]);
+            break;
+        case 0x3d: // Special register read
+            readSpecial(self.params[0]);
             break;
         default:
             self.result = 0x18;

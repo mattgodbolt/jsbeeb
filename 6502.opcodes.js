@@ -168,7 +168,7 @@ function getOp(op) {
     case "TXA": return { op: ["cpu.a = cpu.x;", "cpu.setzn(cpu.a);"] };
     case "TAX": return { op: ["cpu.x = cpu.a;", "cpu.setzn(cpu.x);"] };
     case "TXS": return { op: "cpu.s = cpu.x;" };
-    case "TSX": return { op: "cpu.x = cpu.s; cpu.setzn(cpu.x);" };
+    case "TSX": return { op: ["cpu.x = cpu.s;", "cpu.setzn(cpu.x);"] };
     case "TYA": return { op: ["cpu.a = cpu.y;", "cpu.setzn(cpu.a);"] };
     case "TAY": return { op: ["cpu.y = cpu.a;", "cpu.setzn(cpu.y);"] };
     case "BEQ": return { op: "cpu.branch(cpu.p.z);" };
