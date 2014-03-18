@@ -158,6 +158,12 @@ function I8271(cpu) {
         return 0x00;
     };
 
+    self.notFound = function() {
+        self.result = self.status = 0x18;
+        self.NMI();
+        self.time = 0;
+    };
+
     self.discData = function(byte) {
         self.data = byte;
         self.status = 0x8c;
