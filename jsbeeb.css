@@ -36,6 +36,25 @@ body {
 	float: left;
 }
 
+#keylights { 
+    border: 1px solid #555555;
+    margin: 2px;
+    padding: 2px;
+	font-size: 8pt;
+    bottom: 0px;
+    left: 0px;
+    position: fixed; 
+    text-align: center;
+}
+
+#keylights .on {
+    background-color: #ff0000;
+}
+
+#keylights td, th { 
+    padding: 2px 
+}
+
 #pages {
     margin-top: 10px;
 }

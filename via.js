@@ -346,6 +346,8 @@ function sysvia(cpu, soundChip) {
     self.sdbout = 0;
     self.sdbval = 0;
     self.scrsize = 0;
+    self.capsLockLight = false;
+    self.shiftLockLight = false;
     self.getScrSize = function() { return self.scrsize; };
     self.keys = [];
     for (var i = 0; i < 16; ++i) { self.keys[i] = new Uint8Array(16); }
@@ -359,9 +361,17 @@ function sysvia(cpu, soundChip) {
 
     self.keycodeToRowCol = (function() {
         var keys = {};
-        function map(s, c, r) { keys[s.charCodeAt(0)] = [c, r]; }
-        map('\r', 9, 4);
+        function map(s, c, r) { 
+            if (typeof(s) == "string") {
+                keys[s.charCodeAt(0)] = [c, r]; 
+            } else {
+                keys[s] = [c, r];
+            }
+        }
+        map(9, 0, 6); // tab
+        map(13, 9, 4); // return
         map('\x08', 9, 5); // delete
+        map(35, 9, 6); // copy key is end
         map('\x10', 0, 0); // shift
         map('\x1b', 0, 7); // escape
         map('\x11', 1, 0); // control
@@ -370,13 +380,13 @@ function sysvia(cpu, soundChip) {
         map('\x26', 9, 3); // arrow up
         map('\x27', 9, 7); // arrow right
         map('\x28', 9, 2); // arrow down
-        
-        //map('TODO', 9, 6); // copy key?
 
+        map(192, 0, 5); // shift lock mapped to backtic/slash
+        map(220, 7, 4); // @ mapped to backslash
         map('\xba', 7, 5);  // ';' / '+'
-        map('\xbc', 6, 6);  // ','
+        map('\xbc', 6, 6);  // ',' / '<'
         map('\xbd', 7, 1);  // '_' / '=' mapped to underscore
-        map('\xbe', 7, 6);  // '.' (why is self 0xbe / 190) ? 
+        map('\xbe', 7, 6);  // '.' / '>'
         map('\xbf', 8, 6);  // '/' / '?'
         map("\xdb", 8, 3);  // ' maps to [{
         map("\xdd", 8, 5);  // ' maps to ]}
@@ -493,6 +503,9 @@ function sysvia(cpu, soundChip) {
         self.updateSdb();
         if (!(self.IC32&1) && (oldIC32&1))
             soundChip.poke(self.sdbval);
+
+        self.capsLockLight = !(self.IC32 & 0x40);
+        self.shiftLockLight = !(self.IC32 & 0x80);
 
         self.scrsize = ((self.IC32&16)?2:0) | ((self.IC32&32)?1:0);
         //if (MASTER && !compactcmos) cmosupdate(IC32,sdbval);

@@ -4,6 +4,7 @@ var soundChip;
 var dbgr;
 var jsAudioNode;  // has to remain to keep thing alive
 var frames = 0;
+var syncLights;
 
 $(function() {
     "use strict";
@@ -223,9 +224,26 @@ $(function() {
             $('#discs').modal("hide");
         });
     });
+
     
+    var caps = $('#capslight');
+    var capsOn = false;
+    var shift = $('#shiftlight');
+    var shiftOn = false;
+    syncLights = function() {
+        if (capsOn != processor.sysvia.capsLockLight) {
+            capsOn = processor.sysvia.capsLockLight;
+            caps.toggleClass("on", capsOn);
+        }
+        if (shiftOn != processor.sysvia.shiftLockLight) {
+            shiftOn = processor.sysvia.shiftLockLight;
+            shift.toggleClass("on", shiftOn);
+        }
+    };
+
     go();
 });
+
 
 const framesPerSecond = 50;
 const targetTimeout = 1000 / framesPerSecond;
@@ -254,7 +272,10 @@ function run() {
     var count = 0;
     var runner = function() {
         if (!running) return;
-        if (count++ == yieldsPerFrame) return;
+        if (count++ == yieldsPerFrame) {
+            syncLights();
+            return;
+        }
         try {
             processor.execute(cyclesPerYield);
         } catch (e) {

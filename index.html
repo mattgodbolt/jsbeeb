@@ -86,6 +86,24 @@
 
         <div class="container">
             <canvas id="screen" width="698" height="571"></canvas>
+            <div id="keylights">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>casette<br>motor</th>
+                            <th>caps<br>lock</th>
+                            <th>shift<br>lock</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td id="motorlight">*</td>
+                            <td id="capslight">*</td>
+                            <td id="shiftlight">*</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
             <div id="debug">
                 <div id="disassembly">
                     <div class="template"><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span></div>
