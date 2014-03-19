@@ -148,6 +148,7 @@ $(function() {
     var availableImages = starCat();
     var queryString = document.location.search;
     var discImage = availableImages[0].file;
+    var secondDiscImage = null;
     var parsedQuery = {};
     if (queryString) {
         queryString = queryString.substring(1);
@@ -161,8 +162,11 @@ $(function() {
             case "autoboot":
                 autoboot();
                 break;
-            case "disc":
+            case "disc": case "disc1":
                 discImage = val;
+                break;
+            case "disc2":
+                secondDiscImage = val;
                 break;
             }
         });
@@ -177,7 +181,15 @@ $(function() {
         });
         window.history.pushState(null, null, url);
     }
-    processor.fdc.loadDiscData(0, ssdLoad("discs/" + discImage));
+    function loadDiscImage(drive, discImage) {
+        if (discImage && discImage[0] == "!") {
+            processor.fdc.loadDisc(drive, localDisc(processor.fdc, discImage.substr(1)));
+        } else {
+            processor.fdc.loadDiscData(drive, ssdLoad("discs/" + discImage));
+        }
+    }
+    if (discImage) loadDiscImage(0, discImage);
+    if (secondDiscImage) loadDiscImage(1, secondDiscImage);
 
     $('#disc_load').change(function(evt) { 
         var file = evt.target.files[0]; 
