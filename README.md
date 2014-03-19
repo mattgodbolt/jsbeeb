@@ -21,21 +21,32 @@ Fire up a local webserver and load it up.  I use `python` for this as it has a b
 
 Then visit http://localhost:8000/ and off you go.
 
+URL parameters
+--------------
+* autoboot - fakes a shift break
+
+* disc1=XXX - loads disc XXX (from the `discs/` directory) into drive 1
+* disc2=XXX - as above
+* disc1=!YYY - creates a local disk YYY which will be kept in browser local storage
+
+
 TODO
 ----
 
 If you're looking to help
 
 * HTML/web
-  * Make a much more pretty website, with help and stuff.
   * More discs and/or somehow XSS-request discs from other archives
 * Core
   * Save ability
-  * Support two discs and "not found"
-  * Get Frogman working (instruction and timer timings)
   * Get the "boo" of the boot "boo-beep" working
 * `git grep -i todo`
+* Timings (see below)
 
+Timings
+-------
+
+In the `tests` directory is a timing test program written by Rich.  It has been run on a real live BBC B and the results are in the directory.  An SSD of the same tests is in the `discs/` directory. We're working on making jsbeeb agree with the real Beeb.
 
 Thanks
 ------
