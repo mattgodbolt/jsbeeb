@@ -54,7 +54,7 @@ function InstructionGen() {
         self.append(self.cycle, "", true);
     };
 
-    self.append = function(cycle, op, exact) {
+    function appendOrPrepend(combiner, cycle, op, exact) {
         if (op === undefined) {
             op = cycle;
             cycle = self.cycle;
@@ -62,11 +62,18 @@ function InstructionGen() {
         exact = exact || false;
         if (typeof(op) == "string") op = [op];
         if (self.ops[cycle])  {
-            self.ops[cycle].op = self.ops[cycle].op.concat(op);
+            self.ops[cycle].op = combiner(self.ops[cycle].op, op);
             self.ops[cycle].exact |= exact;
         } else
             self.ops[cycle] = {op: op, exact: exact };
     };
+
+    self.append = function(cycle, op, exact) {
+        appendOrPrepend(function(lhs, rhs) { return lhs.concat(rhs); }, cycle, op, exact);
+    }
+    self.prepend = function(cycle, op, exact) {
+        appendOrPrepend(function(lhs, rhs) { return rhs.concat(lhs); }, cycle, op, exact);
+    }
 
     self.tick = function(cycles) { self.cycle += (cycles || 1); };
     self.readOp = function(addr, reg) {
@@ -92,7 +99,7 @@ function InstructionGen() {
     };
     self.render = function() {
         if (self.cycle < 2) self.cycle = 2;
-        self.append(self.cycle - 1, "cpu.checkInt();", true);
+        self.prepend(self.cycle - 1, "cpu.checkInt();", true);
         var i;
         var toSkip = 0;
         var out = [];
