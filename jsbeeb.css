@@ -8,9 +8,9 @@ body {
     display: block;
     padding: 20px;
     border: 98px solid transparent;
-    -webkit-border-image:url(cub-monitor.jpeg) 98 98 stretch; /* Safari 5 */
-    -o-border-image:url(cub-monitor.jpeg) 98 98 stretch; /* Opera */
-    border-image:url(cub-monitor.jpeg) 98 98 stretch;
+    -webkit-border-image:url(images/cub-monitor.jpeg) 98 98 stretch; /* Safari 5 */
+    -o-border-image:url(images/cub-monitor.jpeg) 98 98 stretch; /* Opera */
+    border-image:url(images/cub-monitor.jpeg) 98 98 stretch;
 }
 
 #debug {
@@ -36,7 +36,9 @@ body {
 	float: left;
 }
 
-#keylights { 
+#leds { 
+    box-shadow: 3px 3px 5px #000;
+    border-radius: 6px;
     border: 1px solid #555555;
     margin: 2px;
     padding: 2px;
@@ -44,15 +46,24 @@ body {
     bottom: 0px;
     left: 0px;
     position: fixed; 
-    text-align: center;
 }
 
-#keylights .on {
-    background-color: #ff0000;
+#leds td, th { 
+    padding: 2px;
+    text-align: center
 }
 
-#keylights td, th { 
-    padding: 2px 
+.red.led {
+    content: url(images/red-off-16.png);
+}
+.red.led.on {
+    content: url(images/red-on-16.png);
+}
+.yellow.led {
+    content: url(images/yellow-off-16.png);
+}
+.yellow.led.on {
+    content: url(images/yellow-on-16.png);
 }
 
 #pages {

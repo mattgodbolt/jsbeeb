@@ -86,20 +86,24 @@
 
         <div class="container">
             <canvas id="screen" width="698" height="571"></canvas>
-            <div id="keylights">
+            <div id="leds">
                 <table>
                     <thead>
                         <tr>
                             <th>casette<br>motor</th>
                             <th>caps<br>lock</th>
                             <th>shift<br>lock</th>
+                            <th>drive<br>0/2</th>
+                            <th>drive<br>1/3</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
-                            <td id="motorlight">*</td>
-                            <td id="capslight">*</td>
-                            <td id="shiftlight">*</td>
+                            <td><img class="red led" id="motorlight"></img></td>
+                            <td><img class="red led" id="capslight"></img></td>
+                            <td><img class="red led" id="shiftlight"></img></td>
+                            <td><img class="yellow led" id="drive0"></img></td>
+                            <td><img class="yellow led" id="drive1"></img></td>
                         </tr>
                     </tbody>
                 </table>

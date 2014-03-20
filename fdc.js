@@ -203,6 +203,8 @@ function I8271(cpu) {
     self.paramnum = 0;
     self.paramreq = 0;
     self.params = new Uint8Array(8);
+    self.motoron = [false, false];
+    self.motorspin = [0, 0];
     self.written = false;
     self.verify = false;
     self.drives = [emptySsd(this), emptySsd(this)];
@@ -239,6 +241,7 @@ function I8271(cpu) {
         self.status = 0x18;
         self.NMI();
         self.time = 0;
+        setspindown();
     }
 
     self.notFound = function() { error(0x18); };
@@ -333,9 +336,14 @@ function I8271(cpu) {
         }
     }
 
-    function spinup() {}
-    function spindown() {}
-    function setspindown() {}
+    function spinup() {
+        self.motoron[self.curdrive] = true;
+        self.motorspin[self.curdrive] = 0;
+    }
+    function setspindown() {
+        if (self.motoron[self.curdrive])
+            self.motorspin[self.curdrive] = 40000;
+    }
 
     function seek(track) {
         spinup();
@@ -493,6 +501,7 @@ function I8271(cpu) {
     }
 
     var driveTime = 0;
+    var motorTime = 0;
     self.polltime = function(c) {
         if (!c) return;
         if (self.time) {
@@ -506,6 +515,14 @@ function I8271(cpu) {
             driveTime += 16;
             if (self.drives[self.curdrive])
                 self.drives[self.curdrive].poll();
+        }
+        motorTime -= c;
+        if (motorTime <= 0) {
+            motorTime += 128;
+            for (var i = 0; i < 2; ++i) {
+                if (self.motorspin[i] && --self.motorspin[i] === 0)
+                    self.motoron[i] = false;
+            }
         }
     };
 }

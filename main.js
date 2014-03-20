@@ -225,20 +225,24 @@ $(function() {
         });
     });
 
-    
-    var caps = $('#capslight');
-    var capsOn = false;
-    var shift = $('#shiftlight');
-    var shiftOn = false;
+    function Light(name) {
+        var dom = $("#" + name);
+        var on = false;
+        this.update = function(val) {
+            if (val == on) return;
+            on = val;
+            dom.toggleClass("on", on);
+        }
+    };
+    var caps = new Light("capslight");
+    var shift = new Light("shiftlight");
+    var drive0 = new Light("drive0");
+    var drive1 = new Light("drive1");
     syncLights = function() {
-        if (capsOn != processor.sysvia.capsLockLight) {
-            capsOn = processor.sysvia.capsLockLight;
-            caps.toggleClass("on", capsOn);
-        }
-        if (shiftOn != processor.sysvia.shiftLockLight) {
-            shiftOn = processor.sysvia.shiftLockLight;
-            shift.toggleClass("on", shiftOn);
-        }
+        caps.update(processor.sysvia.capsLockLight);
+        shift.update(processor.sysvia.shiftLockLight);
+        drive0.update(processor.fdc.motoron[0]);
+        drive1.update(processor.fdc.motoron[1]);
     };
 
     go();
