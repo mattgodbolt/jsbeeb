@@ -398,7 +398,10 @@ function compileInstruction(ins) {
     "use strict";
     var lines = getInstruction(ins);
     if (!lines) return null;
-    var text = "var f = function(cpu) {   // " + ins + "\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;f\n";
+    var funcName = ins.replace(" ", "_").replace("()", "ind").replace(",", "_").replace("(", "").replace(")", "");
+    var text = "var " + funcName + " = function(cpu) {   // " + ins 
+        + "\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;" 
+        + funcName + "\n";
     try {
         return eval(text); // jshint ignore:line
     } catch (e) {
