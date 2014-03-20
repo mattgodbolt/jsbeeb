@@ -107,7 +107,7 @@ function Teletext() {
                 var r = ((i&1)>>0) * c + ((i&8)>>3) * (15-c);
                 var g = ((i&2)>>1) * c + ((i&16)>>4) * (15-c);
                 var b = ((i&4)>>2) * c + ((i&32)>>5) * (15-c);
-                self.palette[i][c] = 0xff000000 | (B(r)<<16) | (B(g)<<8) | (B(b)<<0);
+                self.palette[i][c] = 0xff000000 | (B(b)<<16) | (B(g)<<8) | (B(r)<<0);
             }
         }
 
