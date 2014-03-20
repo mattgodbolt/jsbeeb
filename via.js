@@ -362,11 +362,10 @@ function sysvia(cpu, soundChip) {
     self.keycodeToRowCol = (function() {
         var keys = {};
         function map(s, c, r) { 
-            if (typeof(s) == "string") {
-                keys[s.charCodeAt(0)] = [c, r]; 
-            } else {
-                keys[s] = [c, r];
-            }
+            if (typeof(s) == "string")
+                s = s.charCodeAt(0);
+            if (keys[s]) console.log("Duplicate binding for key", s, c, r, keys[s]);
+            keys[s] = [c, r];
         }
         map(9, 0, 6); // tab
         map(13, 9, 4); // return
@@ -375,7 +374,9 @@ function sysvia(cpu, soundChip) {
         map('\x10', 0, 0); // shift
         map('\x1b', 0, 7); // escape
         map('\x11', 1, 0); // control
-        map('\x00', 0, 4); // caps
+        map('\x00', 0, 4); // caps (on Matt's US laptop in Chrome)
+        map(225, 0, 4); // caps (on Matt's US laptop in Firefox)
+        map(20, 0, 4); // caps (on Rich's computer)
         map('\x25', 9, 1); // arrow left
         map('\x26', 9, 3); // arrow up
         map('\x27', 9, 7); // arrow right
@@ -392,7 +393,7 @@ function sysvia(cpu, soundChip) {
         map("\xdd", 8, 5);  // ' maps to ]}
         map("\xde", 8, 4);  // ' maps to :*
 
-        map('0', 2, 0);
+        map('0', 7, 2);
         map('1', 0, 3);
         map('2', 1, 3);
         map('3', 1, 1);
@@ -402,7 +403,6 @@ function sysvia(cpu, soundChip) {
         map('7', 4, 2);
         map('8', 5, 1);
         map('9', 6, 2);
-        map('0', 7, 2);
 
         map('Q', 0, 1);
         map('W', 1, 2);
@@ -414,7 +414,6 @@ function sysvia(cpu, soundChip) {
         map('I', 5, 2);
         map('O', 6, 3);
         map('P', 7, 3);
-        //map('', 7, 4); todo: @ character
 
         map('A', 1, 4);
         map('S', 1, 5);
