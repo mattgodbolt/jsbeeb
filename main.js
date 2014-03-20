@@ -232,8 +232,8 @@ $(function() {
             if (val == on) return;
             on = val;
             dom.toggleClass("on", on);
-        }
-    };
+        };
+    }
     var caps = new Light("capslight");
     var shift = new Light("shiftlight");
     var drive0 = new Light("drive0");
