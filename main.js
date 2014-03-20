@@ -22,13 +22,15 @@ $(function() {
     var backCtx = backBuffer.getContext("2d");
     var imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
     var fb8 = imageData.data;
+    var canvasWidth = canvas.width;
+    var canvasHeight = canvas.height;
     function paint(minx, miny, maxx, maxy) {
         frames++;
-        //if ((frames & 0x1) != 0) return; TODO: frameskip
-        var width = maxx-minx;
-        var height = maxy-miny;
+        //if ((frames & 0x7) != 0) return; //TODO: frameskip
+        var width = maxx - minx;
+        var height = maxy - miny;
         backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
-        ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvasWidth, canvasHeight);
     }
     var fb32 = new Uint32Array(fb8.buffer);
     video = new Video(fb32, paint);
