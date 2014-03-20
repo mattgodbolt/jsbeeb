@@ -69,17 +69,23 @@ body {
     text-align: center
 }
 
+div.led {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+}
+
 .red.led {
-    content: url(images/red-off-16.png);
+    background-image: url(images/red-off-16.png);
 }
 .red.led.on {
-    content: url(images/red-on-16.png);
+    background-image: url(images/red-on-16.png);
 }
 .yellow.led {
-    content: url(images/yellow-off-16.png);
+    background-image: url(images/yellow-off-16.png);
 }
 .yellow.led.on {
-    content: url(images/yellow-on-16.png);
+    background-image: url(images/yellow-on-16.png);
 }
 
 #pages {
