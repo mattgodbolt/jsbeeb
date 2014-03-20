@@ -368,7 +368,7 @@ function getInstruction(opcodeString) {
 
     case "()": 
         // Special case for indirect jumps only
-        ig.tick(4);  // For the jump part? TODO: check in v6502
+        ig.tick(3);  // Needs to be different for master
         ig.append("var addr = cpu.getw();");
         ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
         ig.append("var lo, hi;");
