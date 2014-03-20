@@ -25,10 +25,26 @@ body {
 	font-family: monospace;
 }
 
+#hardware_debug {
+    background-color: #333333;
+    border: 1px solid #555555;
+    margin: 2px;
+    padding: 2px;
+    position: fixed;
+    bottom: 80px;
+    left: 0px;
+	font-size: 8pt;
+	font-family: monospace;
+}
+
 #registers {
 	float: right;
     text-align: right;
     width: 90px;
+}
+
+.via_regs {
+    display: inline-block;
 }
 
 #disassembly {

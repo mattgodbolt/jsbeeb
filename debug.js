@@ -1,7 +1,7 @@
 function Debugger() {
     var self = this;
     var disass = $('#disassembly');
-    var debugNode = $('#debug');
+    var debugNode = $('#debug, #hardware_debug');
     var cpu = null;
     var disassemble = null;
     debugNode.hide();
@@ -11,9 +11,39 @@ function Debugger() {
         disass.find('.template').clone().removeClass('template').appendTo(disass);
     }
 
+    var uservia;
+    var sysvia;
+    function setupVia(node, via) {
+        var updates = [];
+        $.each(["ora", "orb", "ira", "irb", "ddra", "ddrb", 
+                "acr", "pcr", "ifr", "ier", "t1c", "t1l", "t2c", "t2l"], function(_, elem) {
+            var row = node.find(".template").clone().removeClass("template").appendTo(node);
+            row.find(".register").text(elem.toUpperCase());
+            var value = row.find(".value");
+            if (elem.match(/t[12][cl]/)) {
+                updates.push(function() {
+                    var reg = via[elem];
+                    value.text(hexbyte((reg>>16) & 0xff) + 
+                        hexbyte((reg>>8) & 0xff) + hexbyte(reg & 0xff));
+                });
+            } else {
+                updates.push(function() {
+                    value.text(hexbyte(via[elem]));
+                });
+            }
+        });
+        var update = function() {
+            $.each(updates, function(_, up) { up(); });
+        };
+        update();
+        return update;
+    }
+
     this.setCpu = function(c) { 
         cpu = c; 
         disassemble = c.disassembler.disassemble;
+        sysvia = setupVia($('#sysvia'), c.sysvia);
+        uservia = setupVia($('#uservia'), c.uservia);
     };
 
     var disassPc = null;
@@ -23,6 +53,8 @@ function Debugger() {
             where = prevInstruction(where);
         updateDisassembly(where);
         updateRegisters();
+        sysvia();
+        uservia();
     };
 
     this.hide = function() {
