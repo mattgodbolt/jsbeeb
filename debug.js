@@ -4,7 +4,15 @@ function Debugger() {
     var debugNode = $('#debug, #hardware_debug');
     var cpu = null;
     var disassemble = null;
-    debugNode.hide();
+    var enabled = false;
+
+    function enable(e) {
+        enabled = e;
+        debugNode.toggle(enabled);
+    }
+    this.enabled = function() { return enabled; };
+
+    enable(false);
 
     var numToShow = 32;
     for (var i = 0; i < numToShow; i++) {
@@ -48,7 +56,7 @@ function Debugger() {
 
     var disassPc = null;
     this.debug = function(where) {
-        debugNode.show();
+        enable(true);
         for (var i = 0; i < numToShow / 2; ++i)
             where = prevInstruction(where);
         updateDisassembly(where);
@@ -57,9 +65,7 @@ function Debugger() {
         uservia();
     };
 
-    this.hide = function() {
-        debugNode.hide();
-    };
+    this.hide = function() { enable(false); };
 
     function updateRegisters() {
         $("#cpu6502_a").text(hexbyte(cpu.a));

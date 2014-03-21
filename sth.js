@@ -1,5 +1,5 @@
 // Accesses STH archive via a proxy on the bbc.godbolt.org website
-function StairwayToHell(onCat) {
+function StairwayToHell(onCat, onError) {
     "use strict";
     var self = this;
     var baseUrl = "http://bbc.godbolt.org/sth/diskimages/";
@@ -9,6 +9,9 @@ function StairwayToHell(onCat) {
 
     var request = new XMLHttpRequest();
     request.open("GET", baseUrl + catalogUrl, true);
+    request.onerror = function() {
+        if (onError) onError();
+    };
     request.onload = function() {
         var doc = $($.parseHTML(this.responseText, null, false));
         var first = true;
@@ -64,4 +67,3 @@ function StairwayToHell(onCat) {
         return uncompressed.data;
     }
 }
-

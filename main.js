@@ -62,7 +62,7 @@ $(function() {
         return evt.which || evt.charCode || evt.keyCode;
     }
     function keyPress(evt) {
-        if (running) return;
+        if (running || !dbgr.enabled()) return;
         if (keyCode(evt) === 103) {
             dbgr.hide();
             go();
@@ -145,6 +145,7 @@ $(function() {
 
     sth = new StairwayToHell(function(cat) {
         var sthList = $("#sth-list");
+        $("#sth .loading").hide();
         var template = sthList.find(".template");
         $.each(cat, function(_, cat) {
            var row = template.clone().removeClass("template").appendTo(sthList); 
@@ -159,7 +160,19 @@ $(function() {
                $('#sth').modal("hide");
            });
         });
+    }, function() {
+        $('#sth .loading').text("There was an error accessing the STH archive");
     });
+
+    function setSthFilter(filter) {
+        filter = filter.toLowerCase();
+        $("#sth-list li").each(function() {
+            var el = $(this);
+            if (el.hasClass("template")) return;
+            el.toggle(el.text().toLowerCase().indexOf(filter) >= 0);
+        });
+    };
+    $('#sth-filter').on("change keyup", function() { setSthFilter($('#sth-filter').val()); });
 
     function autoboot() {
         console.log("Autobooting");
