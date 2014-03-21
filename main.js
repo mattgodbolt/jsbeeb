@@ -154,7 +154,7 @@ $(function() {
                var file = sth.fetch(cat);
                if (file) {
                    processor.fdc.loadDiscData(0, file);
-                   delete parsedQuery.disc;
+                   parsedQuery.disc = "|" + cat;
                    updateUrl();
                }
                $('#sth').modal("hide");
@@ -191,7 +191,7 @@ $(function() {
             queryString = queryString.substring(0, queryString.length - 1);
         queryString.split("&").forEach(function(keyval) {
             var keyAndVal = keyval.split("=");
-            var key = keyAndVal[0], val = keyAndVal[1];
+            var key = decodeURIComponent(keyAndVal[0]), val = decodeURIComponent(keyAndVal[1]);
             parsedQuery[key] = val;
             switch (key) {
             case "autoboot":
@@ -211,7 +211,8 @@ $(function() {
         var url = window.location.origin + window.location.pathname;
         var sep = '?';
         $.each(parsedQuery, function(key, value) {
-            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+            url += sep + encodeURIComponent(key);
+            if (value !== undefined) url + "=" + encodeURIComponent(value);
             sep = '&';
         });
         window.history.pushState(null, null, url);
@@ -219,6 +220,8 @@ $(function() {
     function loadDiscImage(drive, discImage) {
         if (discImage && discImage[0] == "!") {
             processor.fdc.loadDisc(drive, localDisc(processor.fdc, discImage.substr(1)));
+        } else if (discImage && discImage[0] == "|") {
+            processor.fdc.loadDiscData(drive, sth.fetch(discImage.substr(1)));
         } else {
             processor.fdc.loadDiscData(drive, ssdLoad("discs/" + discImage));
         }
