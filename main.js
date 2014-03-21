@@ -212,7 +212,7 @@ $(function() {
         var sep = '?';
         $.each(parsedQuery, function(key, value) {
             url += sep + encodeURIComponent(key);
-            if (value !== undefined) url + "=" + encodeURIComponent(value);
+            if (value !== undefined) url += "=" + encodeURIComponent(value);
             sep = '&';
         });
         window.history.pushState(null, null, url);
