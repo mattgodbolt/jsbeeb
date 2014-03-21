@@ -399,7 +399,25 @@ function Cpu6502(dbgr, video, soundChip) {
             this.a = tempw & 0xff;
             this.setzn(this.a);
         } else {
-            throw "Oh noes";
+            var hc6 = 0;
+            var carry = this.p.c ? 0 : 1;
+            this.p.z = this.p.n = false;
+            if (!((this.a - subend) - carry)) this.p.z = true;
+            var al = (this.a & 0xf) - (subend & 0xf) - carry;
+            if (al & 0x10) {
+                al = (al - 6) & 0xf;
+                hc6 = 1;
+            }
+            var ah = (this.a >>> 4) - (subend >>> 4);
+            if (hc6) ah--;
+            if ((this.a - (subend + carry)) & 0x80) this.p.n = true;
+            this.p.v = !!((((this.a - (subend + carry)) ^ subend) & 0x80) && ((this.a ^ subend) & 0x80));
+            this.p.c = true;
+            if (ah & 0x10) {
+                this.p.c = false;
+                ah = (ah - 6) & 0xf;
+            }
+            this.a = al | (ah<<4);
         }
     };
 
