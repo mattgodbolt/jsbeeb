@@ -237,7 +237,7 @@ function Video(fb32, paint_ext) {
                 self.sysvia.vblankint();
                 self.vsynctime = (self.regs[3]>>4) + 1;
                 if (!(self.regs[3]>>4)) self.vsynctime = 17;
-                //todo m7 flashing here
+                self.teletext.vsync();
                 self.vidclocks = self.vidbytes = 0;
             }
         } else {

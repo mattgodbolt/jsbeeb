@@ -114,14 +114,16 @@ function Teletext() {
         self.col = 7;
         self.bg = 0;
         self.sep = 0;
-        self.dbl = self.dblx = self.nextdbl = self.wasdbl = false;
+        self.dbl = self.oldDbl = self.nextDbl = self.wasDbl = false;
         self.gfx = 0;
-        self.flash = self.flashon = self.flashtime = 0;
-        self.heldchar = self.holdchar = 0;
+        self.flash = self.flashOn = false;
+        self.flashTime = 0;
+        self.heldChar = self.holdChar = 0;
         self.curChars = [self.chars, self.charsi];
     }
 
     function handleControlCode(data) {
+        // TODO: these need to be "exported" somehow to the caller
         var holdclear = false;
         var holdoff = false;
         switch (data) {
@@ -136,7 +138,7 @@ function Teletext() {
         case 9: self.flash = false; break;
         case 12: case 13:
             self.dbl = !!(data & 1);
-            if (self.dbl) self.wasdbl = true;
+            if (self.dbl) self.wasDbl = true;
             break;
         case 17: case 18: case 19: case 20: case 21: case 22: case 23:
             self.gfx = true;
@@ -169,46 +171,47 @@ function Teletext() {
             break;
         case 28: self.bg = 0; break;
         case 29: self.bg = self.col; break;
-        case 30: self.holdchar = true; break;
+        case 30: self.holdChar = true; break;
         case 31: holdoff = true; break;
         }
-        if (self.holdchar) {
-            data = self.heldchar;
+        if (self.holdChar) {
+            data = self.heldChar;
             if (data >= 0x40 && data <= 0x60) data = 0x20;
             // TODO held 'px'
         } else data = 0x20;
-        if (self.dbl !== self.dblx) data = 0x20; 
+        if (self.dbl !== self.oldDbl) data = 0x20; 
         return data;
     }
 
     function render(buf, offset, scanline, data) {
         var i;
-        self.dblx = self.dbl;
+        self.oldDbl = self.dbl;
         if (data == 255) {
             for (i = 0; i < 16; ++i) {
                 buf[offset + i + 16] = 0xff000000; // todo color lookup 0
             }
             return;
         }
-        if (data < 0x20) {
-            data = handleControlCode(data);
-        }
+        var prevFlash = self.flash;
+        if (data < 0x20) data = handleControlCode(data);
         var t = (data - 0x20) * 160;
-        if (self.dblx) {
+        if (self.oldDbl) {
             t += (scanline >>> 1) * 16;
-            if (self.nextdbl) t += 5*16;
+            if (self.nextDbl) t += 5*16;
         } else {
             t += scanline * 16;
         }
             
         var palette;
-        if (!self.dbl && self.nextdbl) {
+        if (prevFlash && self.flashOn) {
+            palette = self.palette[0];
+        } else if (!self.dbl && self.nextDbl) {
             palette = self.palette[((self.bg & 7)<<3) | (self.bg & 7)];
         } else {
             palette = self.palette[((self.bg & 7)<<3) | (self.col & 7)];
         }
         var px = self.curChars[0];
-        // interlace?
+        // TODO interlace
         for (i = 0; i < 16; ++i) {
             buf[offset + i + 16] = palette[px[t]&15];
             t++;
@@ -216,17 +219,22 @@ function Teletext() {
     }
 
     this.verticalCharEnd = function() {
-        if (self.nextdbl) 
-            self.nextdbl = false;
+        if (self.nextDbl) 
+            self.nextDbl = false;
         else
-            self.nextdbl = self.wasdbl;
+            self.nextDbl = self.wasDbl;
+    };
+
+    this.vsync = function() {
+        if (++self.flashTime == 48) self.flashTime = 0;
+        self.flashOn = self.flashTime < 16;
     };
 
     this.endline = function() {
         self.col = 7;
         self.bg = 0;
-        self.holdchar = false;
-        self.heldchar = 0x20;
+        self.holdChar = false;
+        self.heldChar = 0x20;
         self.curChars[0] = self.chars;
         self.curChars[1] = self.charsi;
         self.flash = false;
@@ -234,7 +242,7 @@ function Teletext() {
         self.gfx = false;
         // TODO heldp
 
-        self.dbl = self.wasdbl = false;
+        self.dbl = self.wasDbl = false;
     };
 
     this.render = render;
