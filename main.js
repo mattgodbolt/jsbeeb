@@ -177,7 +177,10 @@ $(function() {
     function autoboot() {
         console.log("Autobooting");
         processor.sysvia.keyDown(16);
-        setTimeout(function() { processor.sysvia.keyUp(16); }, 5000);
+        setTimeout(function() {
+            // defer...so we only start counting once we've run a bit...
+            setTimeout(function() { processor.sysvia.keyUp(16); }, 5000);
+        }, 0);
     }
 
     var availableImages = starCat();
