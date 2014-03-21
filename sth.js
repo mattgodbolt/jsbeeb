@@ -1,10 +1,10 @@
 // Accesses STH archive via a proxy on the bbc.godbolt.org website
-function StairwayToHell() {
+function StairwayToHell(onCat) {
     "use strict";
     var self = this;
-    var baseUrl = "http://bbc.godbolt.org/sth/";
+    var baseUrl = "http://bbc.godbolt.org/sth/diskimages/";
 
-    var catalogUrl = "diskimages/reclist.php?sort=name&filter=.zip";
+    var catalogUrl = "reclist.php?sort=name&filter=.zip";
     var catalog = [];
 
     var request = new XMLHttpRequest();
@@ -14,8 +14,9 @@ function StairwayToHell() {
         var first = true;
         doc.find("tr td:nth-child(3) a").each(function(_, link) {
             var href = $(link).attr("href");
-            if (href.indexOf(".zip") > 0) catalog.push("diskimages/" + href);
+            if (href.indexOf(".zip") > 0) catalog.push(href);
         });
+        if (onCat) onCat(catalog);
     };
     request.send();
 

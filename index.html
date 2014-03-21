@@ -65,6 +65,7 @@
                     <ul class="nav navbar-nav">
                         <li class="active"><a href="#">Home</a></li>
                         <li><a href="#discs" data-toggle="modal" data-target="#discs">Load disc</a></li>
+                        <li><a href="#sth" data-toggle="modal" data-target="#sth">Load from STH</a></li>
                         <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
                         <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
@@ -177,6 +178,25 @@
                         <div class="disc">
                             <label>Load local SSD file: <input type="file" id="disc_load" accept=".ssd,image/*"></input></label>
                         </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div><!-- /.modal-content -->
+            </div><!-- /.modal-dialog -->
+        </div><!-- /.modal -->
+
+        <div class="modal fade" id="sth">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                        <h4 class="modal-title">Load disc from <a href="http://www.stairwaytohell.com/">Stairway to Hell</a> archive</h4>
+                    </div>
+                    <div class="modal-body">
+                        <ul id="sth-list">
+                            <li class="template"><a href="#"><span class="name"></span></a></li>
+                        </ul>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>

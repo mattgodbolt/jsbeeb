@@ -29,9 +29,14 @@ function emptySsd(fdc) {
 
 function ssdFor(fdc, stringData) {
     "use strict";
-    var len = stringData.length;
-    var data = new Uint8Array(len);
-    for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
+    var data;
+    if (typeof(stringData) != "string") {
+        data = stringData;
+    } else {
+        var len = stringData.length;
+        data = new Uint8Array(len);
+        for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
+    }
     return baseSsd(fdc, data);
 }
 

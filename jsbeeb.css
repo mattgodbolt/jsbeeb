@@ -69,6 +69,11 @@ body {
     text-align: center
 }
 
+#sth-list {
+    height: 400px;
+    overflow: auto;
+}
+
 div.led {
     display: inline-block;
     width: 16px;

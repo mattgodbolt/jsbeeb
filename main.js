@@ -5,6 +5,7 @@ var dbgr;
 var jsAudioNode;  // has to remain to keep thing alive
 var frames = 0;
 var syncLights;
+var sth;
 
 $(function() {
     "use strict";
@@ -141,6 +142,24 @@ $(function() {
     //    }
     //    return false;
     //};
+
+    sth = new StairwayToHell(function(cat) {
+        var sthList = $("#sth-list");
+        var template = sthList.find(".template");
+        $.each(cat, function(_, cat) {
+           var row = template.clone().removeClass("template").appendTo(sthList); 
+           row.find(".name").text(cat);
+           $(row).on("click", function(){
+               var file = sth.fetch(cat);
+               if (file) {
+                   processor.fdc.loadDiscData(0, file);
+                   delete parsedQuery.disc;
+                   updateUrl();
+               }
+               $('#sth').modal("hide");
+           });
+        });
+    });
 
     function autoboot() {
         console.log("Autobooting");
