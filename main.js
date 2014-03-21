@@ -250,6 +250,21 @@ $(function() {
     go();
 });
 
+function hd(obj, start, end) {
+    var str = "";
+    var j = 0;
+    for (var i = start; i < end; ++i) {
+        if (str) str += " ";
+        str += hexbyte(obj[i]);
+        if (++j == 8) str += " ";
+        if (j == 16) {
+            console.log(str);
+            str = "";
+            j = 0;
+        }
+    }
+    if (str) console.log(str);
+}
 
 const framesPerSecond = 50;
 const targetTimeout = 1000 / framesPerSecond;
