@@ -65,5 +65,5 @@ function StairwayToHell(onCat, onError) {
             console.log("Failed to uncompress", uncompressed.error);
         }
         return uncompressed.data;
-    }
+    };
 }

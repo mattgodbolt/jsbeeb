@@ -66,14 +66,14 @@ function InstructionGen() {
             self.ops[cycle].exact |= exact;
         } else
             self.ops[cycle] = {op: op, exact: exact };
-    };
+    }
 
     self.append = function(cycle, op, exact) {
         appendOrPrepend(function(lhs, rhs) { return lhs.concat(rhs); }, cycle, op, exact);
-    }
+    };
     self.prepend = function(cycle, op, exact) {
         appendOrPrepend(function(lhs, rhs) { return rhs.concat(lhs); }, cycle, op, exact);
-    }
+    };
 
     self.tick = function(cycles) { self.cycle += (cycles || 1); };
     self.readOp = function(addr, reg) {
@@ -399,9 +399,9 @@ function compileInstruction(ins) {
     var lines = getInstruction(ins);
     if (!lines) return null;
     var funcName = ins.replace(" ", "_").replace("()", "ind").replace(",", "_").replace("(", "").replace(")", "");
-    var text = "var " + funcName + " = function(cpu) {   // " + ins 
-        + "\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;" 
-        + funcName + "\n";
+    var text = "var " + funcName + " = function(cpu) {   // " + ins +
+        "\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;" +
+        funcName + "\n";
     try {
         return eval(text); // jshint ignore:line
     } catch (e) {

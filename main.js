@@ -7,6 +7,14 @@ var frames = 0;
 var syncLights;
 var sth;
 
+function noteEvent(category, type, label) {
+    if (window.location.origin == "http://bbc.godbolt.org") {
+        // Only note events on the public site
+        ga('send', 'event', category, type, label);
+    }
+    console.log('event noted:', category, type, label);
+}
+
 $(function() {
     "use strict";
     var canvas = $('#screen')[0];
@@ -74,8 +82,10 @@ $(function() {
         if (!running) return;
         var code = keyCode(evt);
         if (code === 36) {  // home
+            noteEvent('keyboard', 'press', 'home');
             stop(true);
         } else if (code == 123) { // F12
+            noteEvent('keyboard', 'press', 'break');
             processor.reset(false);
             evt.preventDefault();
         } else {
@@ -152,6 +162,7 @@ $(function() {
            row.find(".name").text(cat);
            $(row).on("click", function(){
                var file = sth.fetch(cat);
+               noteEvent('sth', 'click', cat);
                if (file) {
                    processor.fdc.loadDiscData(0, file);
                    parsedQuery.disc = "|" + cat;
@@ -171,11 +182,12 @@ $(function() {
             if (el.hasClass("template")) return;
             el.toggle(el.text().toLowerCase().indexOf(filter) >= 0);
         });
-    };
+    }
     $('#sth-filter').on("change keyup", function() { setSthFilter($('#sth-filter').val()); });
 
     function autoboot() {
         console.log("Autobooting");
+        noteEvent('init', 'autoboot');
         processor.sysvia.keyDown(16);
         setTimeout(function() {
             // defer...so we only start counting once we've run a bit...
@@ -235,6 +247,7 @@ $(function() {
     $('#disc_load').change(function(evt) { 
         var file = evt.target.files[0]; 
         var reader = new FileReader();
+        noteEvent('local', 'click'); // NB no filename here
         reader.onload = function(e) {
             processor.fdc.loadDiscData(0, e.target.result);
             delete parsedQuery.disc;
@@ -258,6 +271,7 @@ $(function() {
         elem.find(".name").text(image.name);
         elem.find(".description").text(image.desc);
         $(elem).on("click", function(){
+            noteEvent('images', 'click', image.file);
             processor.fdc.loadDiscData(0, ssdLoad("discs/" + image.file));
             parsedQuery.disc = image.file;
             updateUrl();
@@ -339,6 +353,7 @@ function run() {
             processor.execute(cyclesPerYield);
         } catch (e) {
             running = false;
+            noteEvent('exception', 'thrown', e.stack);
             throw e;
         }
         if (running) setTimeout(runner, 0);

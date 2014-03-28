@@ -402,7 +402,7 @@ function Cpu6502(dbgr, video, soundChip) {
             var hc6 = 0;
             var carry = this.p.c ? 0 : 1;
             this.p.z = this.p.n = false;
-            if (!((this.a - subend) - carry)) this.p.z = true;
+            if (((this.a - subend) - carry) !== 0) this.p.z = true;
             var al = (this.a & 0xf) - (subend & 0xf) - carry;
             if (al & 0x10) {
                 al = (al - 6) & 0xf;
@@ -438,6 +438,7 @@ function Cpu6502(dbgr, video, soundChip) {
             if (!instruction) {
                 console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
                 console.log(this.disassembler.disassemble(this.pc)[0]);
+                noteEvent('exception', 'invalid opcode', hexbyte(opcode));
                 stop(true);
                 return;
             }
