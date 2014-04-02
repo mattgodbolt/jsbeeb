@@ -185,9 +185,9 @@ $(function() {
     }
     $('#sth-filter').on("change keyup", function() { setSthFilter($('#sth-filter').val()); });
 
-    function autoboot() {
+    function autoboot(image) {
         console.log("Autobooting");
-        noteEvent('init', 'autoboot');
+        noteEvent('init', 'autoboot', image);
         processor.sysvia.keyDown(16);
         setTimeout(function() {
             // defer...so we only start counting once we've run a bit...
@@ -200,6 +200,7 @@ $(function() {
     var discImage = availableImages[0].file;
     var secondDiscImage = null;
     var parsedQuery = {};
+    var needsAutoboot = false;
     if (queryString) {
         queryString = queryString.substring(1);
         if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
@@ -210,7 +211,7 @@ $(function() {
             parsedQuery[key] = val;
             switch (key) {
             case "autoboot":
-                autoboot();
+                needsAutoboot = true;
                 break;
             case "disc": case "disc1":
                 discImage = val;
@@ -222,6 +223,7 @@ $(function() {
         });
     }
 
+    if (needsAutoboot) autoboot(discImage);
     function updateUrl() {
         var url = window.location.origin + window.location.pathname;
         var sep = '?';
