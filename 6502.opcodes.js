@@ -214,6 +214,17 @@ function getOp(op) {
         "cpu.push(pushAddr & 0xff);",
         "cpu.pc = addr;" ], extra: 3 };
     case "JMP": return { op: "cpu.pc = addr;" };
+
+    // Undocumented opcodes
+    case "SAX": return { op: "REG = cpu.a & cpu.x;", write: true };
+    case "ASR": return { op: ["REG &= cpu.a;"].concat(
+                        rotate(false, false)).concat(["cpu.a = REG;"])};
+    case "SLO": return { op: rotate(true, false).concat([
+        // TODO timings are off here, and (ab)uses fact there's going to be an 'addr' variable
+        "cpu.writemem(addr, REG);", 
+        "cpu.a |= REG;",
+        "cpu.setzn(cpu.a);"
+        ]), read: true, write: true };
     }
     return null;
 }
@@ -308,8 +319,7 @@ function getInstruction(opcodeString) {
 
     case "imm":
         if (op.write) {
-            console.log("Ignoring undocumentd opcode " + opcodeString);
-            return null; // TODO: there's an undocumented opcode ASR imm
+            throw "This isn't possible";
         }
         if (op.read) {
             // NOP imm
