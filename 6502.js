@@ -97,6 +97,11 @@ function Cpu6502(dbgr, video, soundChip) {
         }
         return s;
     };
+    
+    this.is1MHzAccess = function(addr) {
+        addr &= 0xffff;
+        return (addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr>>5) & 7]));
+    };
 
     this.readmem = function(addr) {
         addr &= 0xffff;
@@ -104,9 +109,6 @@ function Cpu6502(dbgr, video, soundChip) {
         if (this.memstat[this.vis20k][addr >> 8]) {
             var offset = this.memlook[this.vis20k][addr >> 8];
             return this.ramRomOs[offset + addr];
-        }
-        if (addr < 0xfe00 || this.FEslowdown[(addr>>5) & 7]) {
-            this.polltime(1 + (this.cycles & 1));
         }
         //console.log("Peripheral read " + hexword(addr));
         switch (addr & ~0x0003) {
@@ -159,9 +161,6 @@ function Cpu6502(dbgr, video, soundChip) {
             return;
         }
         if (addr < 0xfc00 || addr >= 0xff00) return;
-        if (this.FEslowdown[(addr>>5) & 7]) {
-            this.polltime(1 + (this.cycles & 1));
-        }
         //console.log("Peripheral write " + hexword(addr) + " " + hexbyte(b));
         switch (addr & ~0x0003) {
         case 0xfc20: case 0xfc24: case 0xfc28: case 0xfc2c:

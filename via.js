@@ -33,7 +33,7 @@ function via(cpu, irq) {
         t1hit: false, t2hit: false,
         porta: 0, portb: 0,
         ca1: 0, ca2: 0,
-        irqcleartimer: 0,
+        t1justhit: false, t2justhit: false,
 
         reset: function() {
             self.ora = self.orb = 0xff;
@@ -42,16 +42,19 @@ function via(cpu, irq) {
             self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
             self.t1hit = self.t2hit = true;
             self.acr = self.pcr = 0;
-            self.clearcpuirq = 0;
         },
 
         polltime: function(cycles) {
             cycles |= 0;
+            self.t1justhit = false;
             self.t1c -= cycles;            
             if (self.t1c < -2 && self.t1c + cycles > -3) {
                 if (!self.t1hit) {
                     self.ifr |= TIMER1INT;
                     self.updateIFR();
+                    if (self.t1c === -3) {
+                       self.t1justhit = true;
+                    }
                     if ((self.acr & 0x80)) {
                         // b-em comment is "Output to PB7"
                         self.orb ^= 0x80;
@@ -61,23 +64,19 @@ function via(cpu, irq) {
             }
             while (self.t1c < -3) self.t1c += self.t1l + 4;
 
+            self.t2justhit = false;
             if (!(self.acr & 0x20)) {
                 self.t2c -= cycles;
                 if (self.t2c < -2) {
-                    self.t2c += 0x20000;
                     if (!self.t2hit) {
                         self.ifr |= TIMER2INT;
                         self.updateIFR();
+                        if (self.t2c === -3) {
+                           self.t2justhit = true;
+                        }
                         self.t2hit = true;
                     }
-                }
-            }
-
-            if (self.clearcpuirq > 0) {
-                self.clearcpuirq -= cycles;
-                if (self.clearcpuirq <= 0) {
-//                  cpu.interrupt &= ~irq;
-                    self.clearcpuirq = 0;
+                    self.t2c += 0x20000;
                 }
             }
         },
@@ -88,7 +87,6 @@ function via(cpu, irq) {
                 cpu.interrupt |= irq;
             } else {
                 self.ifr &= ~0x80;
-                self.clearcpuirq = 2;
                 cpu.interrupt &= ~irq;
             }
         },
@@ -255,16 +253,20 @@ function via(cpu, irq) {
             case T1LH: return (self.t1l >>> 9) & 0xff;
 
             case T1CL:
-               self.ifr &= ~TIMER1INT;
-               self.updateIFR();
+               if (!self.t1justhit) {
+                   self.ifr &= ~TIMER1INT;
+                   self.updateIFR();
+               }
                return ((self.t1c + 1) >>> 1) & 0xff;
 
             case T1CH:
                return ((self.t1c + 1) >>> 9) & 0xff;
 
             case T2CL:
-               self.ifr &= ~TIMER2INT;
-               self.updateIFR();
+               if (!self.t2justhit) {
+                  self.ifr &= ~TIMER2INT;
+                  self.updateIFR();
+               }
                return ((self.t2c + 1) >>> 1) & 0xff;
 
             case T2CH:

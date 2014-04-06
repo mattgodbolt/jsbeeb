@@ -54,7 +54,7 @@ function InstructionGen() {
         self.append(self.cycle, "", true);
     };
 
-    function appendOrPrepend(combiner, cycle, op, exact) {
+    function appendOrPrepend(combiner, cycle, op, exact, addr) {
         if (op === undefined) {
             op = cycle;
             cycle = self.cycle;
@@ -64,15 +64,16 @@ function InstructionGen() {
         if (self.ops[cycle])  {
             self.ops[cycle].op = combiner(self.ops[cycle].op, op);
             self.ops[cycle].exact |= exact;
+            if (!self.ops[cycle].addr) self.ops[cycle].addr = addr;
         } else
-            self.ops[cycle] = {op: op, exact: exact };
+            self.ops[cycle] = {op: op, exact: exact, addr: addr };
     }
 
-    self.append = function(cycle, op, exact) {
-        appendOrPrepend(function(lhs, rhs) { return lhs.concat(rhs); }, cycle, op, exact);
+    self.append = function(cycle, op, exact, addr) {
+        appendOrPrepend(function(lhs, rhs) { return lhs.concat(rhs); }, cycle, op, exact, addr);
     };
-    self.prepend = function(cycle, op, exact) {
-        appendOrPrepend(function(lhs, rhs) { return rhs.concat(lhs); }, cycle, op, exact);
+    self.prepend = function(cycle, op, exact, addr) {
+        appendOrPrepend(function(lhs, rhs) { return rhs.concat(lhs); }, cycle, op, exact, addr);
     };
 
     self.tick = function(cycles) { self.cycle += (cycles || 1); };
@@ -83,11 +84,11 @@ function InstructionGen() {
             op = reg + " = cpu.readmem(" + addr + ");";
         else
             op = "cpu.readmem(" + addr + ");";
-        self.append(self.cycle, op, true);
+        self.append(self.cycle, op, true, addr);
     };
     self.writeOp = function(addr, reg) {
         self.cycle++;
-        self.append(self.cycle, "cpu.writemem(" + addr + ", " + reg + ");", true);
+        self.append(self.cycle, "cpu.writemem(" + addr + ", " + reg + ");", true, addr);
     };
     self.zpReadOp = function(addr, reg) {
         self.cycle++;
@@ -109,13 +110,23 @@ function InstructionGen() {
                 continue;
             }
             if (toSkip && self.ops[i].exact) {
-                out.push("cpu.polltime(" + toSkip + ");");
+                if (self.ops[i].addr) {
+                    out.push("cpu.polltime(" + toSkip + "+ cpu.is1MHzAccess(" + self.ops[i].addr + ") * (" + ((toSkip & 1) ? "!" : "") + "(cpu.cycles & 1) + 1));");
+                } else {
+                    out.push("cpu.polltime(" + toSkip + ");");
+                }
                 toSkip = 0;
             }
             out = out.concat(self.ops[i].op);
             toSkip++;
         }
-        if (toSkip) out.push("cpu.polltime(" + toSkip + ");");
+        if (toSkip) {
+            if (self.ops[self.cycle].addr) {
+                out.push("cpu.polltime(" + toSkip + "+ cpu.is1MHzAccess(" + self.ops[self.cycle].addr + ") * (" + ((toSkip & 1) ? "!" : "") + "(cpu.cycles & 1) + 1));");            
+            } else {
+                out.push("cpu.polltime(" + toSkip + ");");
+            }
+        }
         if (self.ops[self.cycle]) out = out.concat(self.ops[self.cycle].op);
         return out.filter(function(l){return l;});
     };
@@ -295,11 +306,11 @@ function getInstruction(opcodeString) {
         if (op.read) {
             if (!op.write) {
                 // For non-RMW, we only pay the cost of the spurious read if the address carried
-                ig.flush();
                 ig.append("if (addrWithCarry !== addrNonCarry) {");
                 ig.append("    cpu.polltime(1);");
                 ig.append("    REG = cpu.readmem(addrNonCarry);");
                 ig.append("}");
+                ig.flush();
                 ig.readOp("addrWithCarry", "REG");
             } else {
                 // For RMW we always have a spurious read and then a spurious write
