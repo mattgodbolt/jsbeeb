@@ -17,15 +17,32 @@ function runUntilInput() {
     processor.execute(10 * 1000);
 }
 
+function runUntilAddress(targetAddr, maxInstr) {
+    var prev = processor.debugInstruction;
+    var hit = false;
+    processor.debugInstruction = function(addr) {
+        if (addr === targetAddr) {
+            hit = true;
+            return true;
+        }
+        return false;
+    };
+    processor.execute(maxInstr);
+    processor.debugInstruction = prev;
+    return hit;
+}
+
 function type(text) {
     var prev = processor.debugInstruction;
     var cycles = 40 * 1000;
     for (var i = 0; i < text.length; ++i) {
-        var ch = text[i];
+        var ch = text[i].toUpperCase();
         var shift = false;
         if (ch === '"') {
             ch = "2";
             shift = true;
+        } else if (ch == '.') {
+            ch = "\xbe";
         }
         ch = ch.charCodeAt(0);
         if (shift) {
@@ -108,8 +125,17 @@ function testTimings() {
     }
 }
 
+function alien8() {
+    processor.fdc.loadDiscData(0, ssdLoad("discs/Protection.ssd"));
+    runUntilInput();
+    type('CHAIN "B.ALIEN8"');
+    var hit = runUntilAddress(0xe00, 100 * 1000 * 1000);
+    expectEq(true, hit, "Decoded and hit end of protection");
+}
+
 function runTest(name, func) {
     log("Running", name);
+    processor = new Cpu6502(dbgr, video, soundChip);
     failures = 0;
     func();
     if (!failures) {
@@ -119,39 +145,43 @@ function runTest(name, func) {
 }
 
 $(function() {
-    "use strict";
+    var canvas = $('#screen')
+    if (canvas.length) {
+        canvas = $('#screen')[0];
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, 1280, 768);
+        if (!ctx.getImageData) {
+            alert('Unsupported browser');
+            return;
+        }
+        var backBuffer = document.createElement("canvas");
+        backBuffer.width = 1280;
+        backBuffer.height = 768;
+        var backCtx = backBuffer.getContext("2d");
+        var imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
+        var fb8 = imageData.data;
+        var canvasWidth = canvas.width;
+        var canvasHeight = canvas.height;
+        function paint(minx, miny, maxx, maxy) {
+            frames++;
+            var width = maxx - minx;
+            var height = maxy - miny;
+            backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
+            ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvasWidth, canvasHeight);
+        }
 
-    var canvas = $('#screen')[0];
-    var ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, 1280, 768);
-    if (!ctx.getImageData) {
-        alert('Unsupported browser');
-        return;
+        var fb32 = new Uint32Array(fb8.buffer);
+        video = new Video(fb32, paint);
+    } else {
+        var fb32 = new Uint32Array(1280 * 1024);
+        video = new Video(fb32, function() {});
     }
-    var backBuffer = document.createElement("canvas");
-    backBuffer.width = 1280;
-    backBuffer.height = 768;
-    var backCtx = backBuffer.getContext("2d");
-    var imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
-    var fb8 = imageData.data;
-    var canvasWidth = canvas.width;
-    var canvasHeight = canvas.height;
-    function paint(minx, miny, maxx, maxy) {
-        frames++;
-        var width = maxx - minx;
-        var height = maxy - miny;
-        //backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
-        //ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvasWidth, canvasHeight);
-    }
-
-    var fb32 = new Uint32Array(fb8.buffer);
-    video = new Video(fb32, paint);
     soundChip = new SoundChip(10000);
 
     dbgr = new Debugger();
-    processor = new Cpu6502(dbgr, video, soundChip);
 
-    runTest("TestTimings", testTimings);
+    runTest("Test timings", testTimings);
+    runTest("Alien8 protection", alien8); 
 });
 
