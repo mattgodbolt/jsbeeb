@@ -429,7 +429,7 @@ function Cpu6502(dbgr, video, soundChip) {
             this.oldpc = this.pc;
             this.vis20k = this.ramBank[this.pc>>12];
             var opcode = this.readmem(this.pc);
-            if (this.debugInstruction && this.oldoldpc !== this.pc && this.debugInstruction(this.pc)) {
+            if (this.debugInstruction && this.oldoldpc !== this.pc && this.debugInstruction(this.pc, opcode)) {
                 stop(true);
                 return;
             }
