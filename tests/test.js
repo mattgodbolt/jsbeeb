@@ -97,17 +97,17 @@ function type(text, whenDone) {
         }
     }
     var i = 0;
-    function type() {
+    function typeNext() {
         if (i === text.length) {
             atTheEnd();
         } else {
             typeChar(text[i], function() {
                 i = i + 1;
-                type();
+                typeNext();
             });
         }
     }
-    type();
+    typeNext();
 }
 
 var currentTest = null;
@@ -215,7 +215,8 @@ function runTest(name, func, whenDone) {
 }
 
 $(function() {
-    var canvas = $('#screen')
+    var canvas = $('#screen');
+    var fb32;
     if (canvas.length) {
         canvas = $('#screen')[0];
         var ctx = canvas.getContext('2d');
@@ -233,18 +234,18 @@ $(function() {
         var fb8 = imageData.data;
         var canvasWidth = canvas.width;
         var canvasHeight = canvas.height;
-        function paint(minx, miny, maxx, maxy) {
+        var paint = function (minx, miny, maxx, maxy) {
             frames++;
             var width = maxx - minx;
             var height = maxy - miny;
             backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
             ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvasWidth, canvasHeight);
-        }
+        };
 
-        var fb32 = new Uint32Array(fb8.buffer);
+        fb32 = new Uint32Array(fb8.buffer);
         video = new Video(fb32, paint);
     } else {
-        var fb32 = new Uint32Array(1280 * 1024);
+        fb32 = new Uint32Array(1280 * 1024);
         video = new Video(fb32, function() {});
     }
     soundChip = new SoundChip(10000);

@@ -19,7 +19,7 @@ function waitFor(testFx, onReady, timeOutMillis) {
                 }
             }
         }, 250); //< repeat check every 250ms
-};
+}
 
 var finished = false;
 var page = require('webpage').create();
