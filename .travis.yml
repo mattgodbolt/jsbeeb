@@ -1,4 +1,4 @@
 install: true
-before-script:
+before_script:
   - python -mSimpleHTTPServer &
 script: phantomjs tests/phantom-tests.js
