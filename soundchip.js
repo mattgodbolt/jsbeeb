@@ -95,7 +95,12 @@ function SoundChip(sampleRate) {
     var residual = 0;
     var position = 0;
     var maxBufferSize = 4096;
-    var buffer = new Float64Array(maxBufferSize);
+    var buffer;
+    if (window.Float64Array !== undefined) {
+        buffer = new Float64Array(maxBufferSize);
+    } else {
+        buffer = new Float32Array(maxBufferSize);
+    }
     function render(out, offset, length) {
         var fromBuffer = position > length ? length : position;
         for (var i = 0; i < fromBuffer; ++i) {

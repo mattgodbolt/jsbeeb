@@ -7,21 +7,22 @@
         <meta name="author" content="Matt Godbolt">
         <meta name="description" content="A Javascript BBC Micro emulator">
         <title>JSBeeb - Javascript BBC Micro emulator test</title>
-        <link rel="stylesheet" href="lib/bootstrap.min.css" type="text/css">
-        <link rel="stylesheet" href="jsbeeb.css" type="text/css">
-        <link rel="shortcut icon" href="/favicon.ico">
-        <script type="text/javascript" src="lib/jquery.min.js"></script>
-        <script type="text/javascript" src="lib/bootstrap.min.js"></script>
-        <script type="text/javascript" src="acia.js"></script>
-        <script type="text/javascript" src="fdc.js"></script>
-        <script type="text/javascript" src="via.js"></script>
-        <script type="text/javascript" src="soundchip.js"></script>
-        <script type="text/javascript" src="teletext_data.js"></script>
-        <script type="text/javascript" src="teletext.js"></script>
-        <script type="text/javascript" src="video.js"></script>
-        <script type="text/javascript" src="6502.js"></script>
-        <script type="text/javascript" src="6502.opcodes.js"></script>
-        <script type="text/javascript" src="debug.js"></script>
+        <link rel="stylesheet" href="../lib/bootstrap.min.css" type="text/css">
+        <link rel="stylesheet" href="../jsbeeb.css" type="text/css">
+        <link rel="stylesheet" href="test.css" type="text/css">
+        <link rel="shortcut icon" href="../favicon.ico">
+        <script type="text/javascript" src="../lib/jquery.min.js"></script>
+        <script type="text/javascript" src="../lib/bootstrap.min.js"></script>
+        <script type="text/javascript" src="../acia.js"></script>
+        <script type="text/javascript" src="../fdc.js"></script>
+        <script type="text/javascript" src="../via.js"></script>
+        <script type="text/javascript" src="../soundchip.js"></script>
+        <script type="text/javascript" src="../teletext_data.js"></script>
+        <script type="text/javascript" src="../teletext.js"></script>
+        <script type="text/javascript" src="../video.js"></script>
+        <script type="text/javascript" src="../6502.js"></script>
+        <script type="text/javascript" src="../6502.opcodes.js"></script>
+        <script type="text/javascript" src="../debug.js"></script>
         <script type="text/javascript" src="test.js"></script>
     </head>
 
@@ -36,7 +37,7 @@
                         <span class="icon-bar"></span>
                         <span class="icon-bar"></span>
                     </button>
-                    <a class="navbar-brand" href="#">jsbeeb - a Javascript BBC micro emulator</a>
+                    <a class="navbar-brand" href="#">jsbeeb - tests</a>
                 </div>
                 <div class="collapse navbar-collapse">
                     <ul class="nav navbar-nav">
@@ -56,7 +57,14 @@
 
         <div class="container">
             <div id="test-info">
+                <div class="template">
+                    <h2 class="test-name"></h2>
+                    <ul>
+                        <li class="template test-out"></li>
+                    </ul>
+                </div>
             </div>
+            <!-- comment the following back in to regain the screen during tests -->
             <!-- <canvas id="screen" width="698" height="571"></canvas> -->
             <div id="debug">
                 <div id="disassembly">

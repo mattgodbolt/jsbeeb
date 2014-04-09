@@ -274,7 +274,7 @@ $(function() {
         elem.find(".description").text(image.desc);
         $(elem).on("click", function(){
             noteEvent('images', 'click', image.file);
-            processor.fdc.loadDiscData(0, ssdLoad("discs/" + image.file));
+            processor.fdc.loadDiscData(0, ssdLoad("/discs/" + image.file));
             parsedQuery.disc = image.file;
             updateUrl();
             $('#discs').modal("hide");
