@@ -6,6 +6,7 @@ var jsAudioNode;  // has to remain to keep thing alive
 var frames = 0;
 var syncLights;
 var sth;
+var dropbox;
 
 function noteEvent(category, type, label) {
     if (window.location.origin == "http://bbc.godbolt.org") {
@@ -103,55 +104,6 @@ $(function() {
     document.onkeyup = keyUp;
 
     processor = new Cpu6502(dbgr, video, soundChip);
-    //processor.debugread = function(mem) {
-    //    if (mem === 0x983f) stop();
-    //        //console.log(hexword(processor.pc), "Read of", hexword(mem));
-    //};
-    //processor.debugwrite = function(mem, v) {
-    //    if (mem == 0xfd) {
-    //        console.log(hexword(processor.oldpc), "Write to", hexword(mem), hexbyte(v));
-    //        //processor.stop();
-    //    }
-    //}
-    //processor.debugInstruction = function(pc, opcode) {
-    //    if (pc === 0xffdd) {
-    //        var paramBlock = processor.x + (processor.y<<8);
-    //        var fnAddr = processor.readmem(paramBlock) + (processor.readmem(paramBlock + 1) << 8);
-    //            
-    //        console.log("OSFILE", processor.a, fnAddr, processor.readstring(fnAddr));
-    //        if (fnAddr === 22137) return true;
-    //        //return true;
-    //    }
-    //    return false;
-    //};
-    //var count = 0;
-    //var debugging = false;
-    //processor.debugInstruction = function(pc) {
-    //    function s(via) { return "t1c: " + via.t1c + " t2l: " + via.t1l + " t2c:" + via.t2c + " t2l: " + via.t2l; };
-    //    if (pc === 0xceb) debugging = true;
-    //    if (debugging && count < 1000) {
-    //        count++;
-    //        console.log(hexword(pc) + " " 
-    //                + processor.disassembler.disassemble(pc)[0]
-    //                + " "+ processor.cycles + " u{" + s(processor.uservia) +"} s{" + s(processor.sysvia) + "}"); 
-    //    }
-    //};
-    //processor.debugInstruction = function(pc) {
-      //return (pc == 0xdef);
-    //};
-    //    if (pc == 0xfff7) {
-    //        var addr = processor.x + (processor.y<<8);
-    //        var oscli = "";
-    //        for (;;) {
-    //            var b = processor.readmem(addr);
-    //            addr++;
-    //            if (b == 13) break;
-    //            oscli += String.fromCharCode(b);
-    //        }
-    //        console.log("OSCLI:", oscli);
-    //    }
-    //    return false;
-    //};
 
     sth = new StairwayToHell(function(cat) {
         var sthList = $("#sth-list");
@@ -239,6 +191,8 @@ $(function() {
             processor.fdc.loadDisc(drive, localDisc(processor.fdc, discImage.substr(1)));
         } else if (discImage && discImage[0] == "|") {
             processor.fdc.loadDiscData(drive, sth.fetch(discImage.substr(1)));
+        } else if (discImage && discImage[0] == "^") {
+            // TODO: fire up the disc here...think about the async though.
         } else {
             processor.fdc.loadDiscData(drive, ssdLoad("discs/" + discImage));
         }
@@ -265,6 +219,29 @@ $(function() {
     });
     $('.modal').on('hidden.bs.modal', function() { 
         if (modalSavedRunning) go();
+    });
+    var dropboxModal = $('#dropbox');
+    dropboxModal.on('show.bs.modal', function() {
+        dropboxModal.find(".loading").show();
+        dropboxModal.find("li:visible").remove();
+        dropbox = new DropboxLoader(function(cat) {
+            var dbList = $("#dropbox-list");
+            $("#dropbox .loading").hide();
+            var template = dbList.find(".template");
+            $.each(cat, function(_, cat) {
+                var row = template.clone().removeClass("template").appendTo(dbList); 
+                row.find(".name").text(cat);
+                $(row).on("click", function(){
+                    noteEvent('dropbox', 'click', cat);
+                    dropbox.load(processor.fdc, cat, 0);
+                    parsedQuery.disc = "^" + cat;
+                    updateUrl();
+                    dropboxModal.modal("hide");
+                });
+            });
+        }, function() {
+            $('#dropbox .loading').text("There was an error accessing the STH archive");
+        });
     });
     var discList = $('#disc-list');
     var template = discList.find(".template");

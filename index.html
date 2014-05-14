@@ -12,6 +12,7 @@
         <link rel="shortcut icon" href="/favicon.ico">
         <script type="text/javascript" src="lib/jquery.min.js"></script>
         <script type="text/javascript" src="lib/bootstrap.min.js"></script>
+        <script type="text/javascript" src="lib/underscore-min.js"></script>
         <script type="text/javascript" src="acia.js"></script>
         <script type="text/javascript" src="fdc.js"></script>
         <script type="text/javascript" src="discs/cat.js"></script>
@@ -24,6 +25,8 @@
         <script type="text/javascript" src="6502.opcodes.js"></script>
         <script type="text/javascript" src="debug.js"></script>
         <script type="text/javascript" src="main.js"></script>
+        <script type="text/javascript" src="lib/dropbox.min.js"></script>
+        <script type="text/javascript" src="dropbox.js"></script>
         <script type="text/javascript" src="discs/cat.js"></script>
         <script type="text/javascript" src="lib/jsunzip.js"></script>
         <script type="text/javascript" src="sth.js"></script>
@@ -66,6 +69,7 @@
                         <li class="active"><a href="#">Home</a></li>
                         <li><a href="#discs" data-toggle="modal" data-target="#discs">Load disc</a></li>
                         <li><a href="#sth" data-toggle="modal" data-target="#sth">Load from STH</a></li>
+                        <li><a href="#dropbox" data-toggle="modal" data-target="#dropbox">Dropbox</a></li>
                         <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
                         <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
@@ -178,6 +182,26 @@
                         <div class="disc">
                             <label>Load local SSD file: <input type="file" id="disc_load" accept=".ssd,image/*"></input></label>
                         </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div><!-- /.modal-content -->
+            </div><!-- /.modal-dialog -->
+        </div><!-- /.modal -->
+
+        <div class="modal fade" id="dropbox">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                        <h4 class="modal-title">Load or create disc from your <a href="https://www.dropbox.com/">Dropbox</a> account</h4>
+                        <div class="loading">Loading...</div>
+                    </div>
+                    <div class="modal-body">
+                        <ul id="dropbox-list">
+                            <li class="template"><a href="#"><span class="name"></span></a></li>
+                        </ul>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
