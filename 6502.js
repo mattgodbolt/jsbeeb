@@ -43,6 +43,7 @@ function Flags() {
 
 function Cpu6502(dbgr, video, soundChip) {
     "use strict";
+    var self = this;
     this.ramBank = new Uint8Array(16);
     this.memstat = [new Uint8Array(256), new Uint8Array(256)];
     this.memlook = [new Uint32Array(256), new Uint32Array(256)];
@@ -301,7 +302,7 @@ function Cpu6502(dbgr, video, soundChip) {
     this.setzn = function(v) {
         v = v|0;
         this.p.z = !v;
-        this.p.n = (v & 0x80) === 0x80;
+        this.p.n = !!(v & 0x80);
     };
 
     this.push = function(v) {
@@ -354,69 +355,75 @@ function Cpu6502(dbgr, video, soundChip) {
         this.polltime(pageCrossed ? 1 : 2);
     };
 
+    function adcNonBCD(addend, isC) {
+        var result = (self.a + addend + (self.p.c ? 1 : 0));
+        self.p.v = !!((self.a ^ result) & (addend ^ result) & 0x80);
+        self.p.c = !!(result & 0x100);
+        self.a = result & 0xff;
+        self.setzn(self.a);
+    }
+
+    function adcBCD(addend, isC) {
+        var ah = 0;
+        var tempb = (self.a + addend + (self.p.c ? 1 : 0)) & 0xff;
+        if (!isC && !tempb) self.p.z = true;
+        var al = (self.a & 0xf) + (addend & 0xf) + (self.p.c ? 1 : 0);
+        if (al > 9) {
+            al -= 10;
+            al &= 0xf;
+            ah = 1;
+        }
+        ah += (self.a >> 4) + (addend >> 4);
+        if (!isC && (ah & 8)) self.p.n = true;
+        self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
+        self.p.c = false;
+        if (ah > 9) {
+            self.p.c = true;
+            ah -= 10;
+            ah &= 0xf;
+        }
+        self.a = ((al & 0xf) | (ah << 4)) & 0xff;
+        if (isC) {
+            self.setzn(self.a);
+            self.polltime(1);
+        }
+    }
+
+    function sbcBCD(subend, isC) {
+        var hc6 = 0;
+        var carry = self.p.c ? 0 : 1;
+        self.p.z = self.p.n = false;
+        if (((self.a - subend) - carry) !== 0) self.p.z = true;
+        var al = (self.a & 0xf) - (subend & 0xf) - carry;
+        if (al & 0x10) {
+            al = (al - 6) & 0xf;
+            hc6 = 1;
+        }
+        var ah = (self.a >>> 4) - (subend >>> 4);
+        if (hc6) ah--;
+        if ((self.a - (subend + carry)) & 0x80) self.p.n = true;
+        self.p.v = !!((((self.a - (subend + carry)) ^ subend) & 0x80) && ((self.a ^ subend) & 0x80));
+        self.p.c = true;
+        if (ah & 0x10) {
+            self.p.c = false;
+            ah = (ah - 6) & 0xf;
+        }
+        self.a = al | (ah<<4);
+    }
+
     this.adc = function(addend, isC) {
         if (!this.p.d) {
-            var tempw = (this.a + addend + (this.p.c ? 1 : 0)) & 0xffff;
-            this.p.v = !((this.a ^ addend) & 0x80) && !!((this.a ^ tempw) & 0x80);
-            this.a = tempw & 0xff;
-            this.p.c = !!(tempw & 0x100);
-            this.setzn(this.a);
+            adcNonBCD(addend, isC);
         } else {
-            var ah = 0;
-            var tempb = (this.a + addend + (this.p.c ? 1 : 0)) & 0xff;
-            if (!isC && !tempb) this.p.z = true;
-            var al = (this.a & 0xf) + (addend & 0xf) + (this.p.c ? 1 : 0);
-            if (al > 9) {
-                al -= 10;
-                al &= 0xf;
-                ah = 1;
-            }
-            ah += (this.a >> 4) + (addend >> 4);
-            if (!isC && (ah & 8)) this.p.n = true;
-            this.p.v = !((this.a ^ addend) & 0x80) && !!((this.a ^ (ah << 4)) & 0x80);
-            this.p.c = false;
-            if (ah > 9) {
-                this.p.c = true;
-                ah -= 10;
-                ah &= 0xf;
-            }
-            this.a = ((al & 0xf) | (ah << 4)) & 0xff;
-            if (isC) {
-                this.setzn(this.a);
-                this.polltime(1);
-            }
+            adcBCD(addend, isC);
         }
     };
 
     this.sbc = function(subend, isC) {
         if (!this.p.d) {
-            subend += this.p.c ? 0 : 1;
-            var tempv = this.a - subend;
-            var tempw = tempv & 0xffff;
-            this.p.v = !!((this.a ^ subend) & (this.a ^ tempv) & 0x80);
-            this.p.c = tempv >= 0;
-            this.a = tempw & 0xff;
-            this.setzn(this.a);
+            adcNonBCD(subend ^ 0xff, isC);
         } else {
-            var hc6 = 0;
-            var carry = this.p.c ? 0 : 1;
-            this.p.z = this.p.n = false;
-            if (((this.a - subend) - carry) !== 0) this.p.z = true;
-            var al = (this.a & 0xf) - (subend & 0xf) - carry;
-            if (al & 0x10) {
-                al = (al - 6) & 0xf;
-                hc6 = 1;
-            }
-            var ah = (this.a >>> 4) - (subend >>> 4);
-            if (hc6) ah--;
-            if ((this.a - (subend + carry)) & 0x80) this.p.n = true;
-            this.p.v = !!((((this.a - (subend + carry)) ^ subend) & 0x80) && ((this.a ^ subend) & 0x80));
-            this.p.c = true;
-            if (ah & 0x10) {
-                this.p.c = false;
-                ah = (ah - 6) & 0xf;
-            }
-            this.a = al | (ah<<4);
+            sbcBCD(subend, isC);
         }
     };
 
