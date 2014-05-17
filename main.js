@@ -192,7 +192,9 @@ $(function() {
         } else if (discImage && discImage[0] == "|") {
             processor.fdc.loadDiscData(drive, sth.fetch(discImage.substr(1)));
         } else if (discImage && discImage[0] == "^") {
-            var db = new DropboxLoader();
+            var db = new DropboxLoader(function(){}, function(error){
+                loadingFinished(error);
+            });
             setTimeout(function() {
                 dropboxLoad(db, discImage.substr(1));
             }, 1); // defer so we start, then load disc, then continue

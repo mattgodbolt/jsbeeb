@@ -24,7 +24,7 @@ function DropboxLoader(onCat, onError) {
             }
             if (error) {
                 if (error.status != Dropbox.ApiError.NOT_FOUND) {
-                    onError(error);
+                    if (onError) onError(error);
                     whenDone(error);
                     return;
                 } else {
