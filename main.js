@@ -192,7 +192,10 @@ $(function() {
         } else if (discImage && discImage[0] == "|") {
             processor.fdc.loadDiscData(drive, sth.fetch(discImage.substr(1)));
         } else if (discImage && discImage[0] == "^") {
-            // TODO: fire up the disc here...think about the async though.
+            var db = new DropboxLoader();
+            setTimeout(function() {
+                dropboxLoad(db, discImage.substr(1));
+            }, 1); // defer so we start, then load disc, then continue
         } else {
             processor.fdc.loadDiscData(drive, ssdLoad("discs/" + discImage));
         }
@@ -220,10 +223,37 @@ $(function() {
     $('.modal').on('hidden.bs.modal', function() { 
         if (modalSavedRunning) go();
     });
+    function popupLoading(msg) {
+        var modal = $('#loading-dialog');
+        modal.find(".loading").text(msg);
+        modal.modal("show");
+    }
+    function loadingFinished(error) {
+        var modal = $('#loading-dialog');
+        if (error) {
+            modal.find(".loading").text("Error: " + error);
+            setTimeout(function() { 
+                modal.modal("hide");
+            }, 2000);
+        } else {
+            modal.modal("hide");
+        }
+    }
+
+    function dropboxLoad(dropbox, cat) {
+        noteEvent('dropbox', 'click', cat);
+        parsedQuery.disc = "^" + cat;
+        updateUrl();
+        popupLoading("Loading '" + cat + "' from Dropbox");
+        dropbox.load(processor.fdc, cat, 0, function(error) {
+            loadingFinished(error);
+        });
+    }
+
     var dropboxModal = $('#dropbox');
     dropboxModal.on('show.bs.modal', function() {
         dropboxModal.find(".loading").show();
-        dropboxModal.find("li:visible").remove();
+        dropboxModal.find("li").not(".template").remove();
         dropbox = new DropboxLoader(function(cat) {
             var dbList = $("#dropbox-list");
             $("#dropbox .loading").hide();
@@ -232,15 +262,12 @@ $(function() {
                 var row = template.clone().removeClass("template").appendTo(dbList); 
                 row.find(".name").text(cat);
                 $(row).on("click", function(){
-                    noteEvent('dropbox', 'click', cat);
-                    dropbox.load(processor.fdc, cat, 0);
-                    parsedQuery.disc = "^" + cat;
-                    updateUrl();
+                    dropboxLoad(dropbox, cat);
                     dropboxModal.modal("hide");
                 });
             });
-        }, function() {
-            $('#dropbox .loading').text("There was an error accessing the STH archive");
+        }, function(error) {
+            $('#dropbox .loading').text("There was an error accessing your Dropbox account: " + error);
         });
     });
     var discList = $('#disc-list');

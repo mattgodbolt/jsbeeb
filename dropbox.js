@@ -6,7 +6,7 @@ function DropboxLoader(onCat, onError) {
     self.client = client;
     client.authDriver(new Dropbox.AuthDriver.Popup({
         receiverUrl: document.location.origin + "/oauth_receiver.html"})); 
-    function dropboxDisc(client, fdc, drive, name) {
+    function dropboxDisc(client, fdc, drive, name, whenDone) {
         "use strict";
         client.readFile(name, function(error, dataString) {
             var i;
@@ -25,6 +25,7 @@ function DropboxLoader(onCat, onError) {
             if (error) {
                 if (error.status != Dropbox.ApiError.NOT_FOUND) {
                     onError(error);
+                    whenDone(error);
                     return;
                 } else {
                     console.log("Creating disc image");
@@ -42,10 +43,11 @@ function DropboxLoader(onCat, onError) {
 
             var ssd = baseSsd(fdc, data, _.debounce(save, 2000));
             fdc.loadDisc(drive, ssd);
+            whenDone(null);
         });
     } 
-    self.load = function(fdc, name, drive) {
-        dropboxDisc(client, fdc, drive, name);
+    self.load = function(fdc, name, drive, whenDone) {
+        dropboxDisc(client, fdc, drive, name, whenDone);
     };
 
     client.authenticate(function(error, client) {
