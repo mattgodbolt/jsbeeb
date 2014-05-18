@@ -369,6 +369,45 @@ function sysvia(cpu, soundChip) {
             if (keys[s]) console.log("Duplicate binding for key", s, c, r, keys[s]);
             keys[s] = [c, r];
         }
+        // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
+        // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
+        var isOpera = !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
+        var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
+        // At least Safari 3+: "[object HTMLElementConstructor]"
+        var isSafari = Object.prototype.toString.call(window.HTMLElement).indexOf('Constructor') > 0;
+        var isChrome = !!window.chrome && !isOpera;              // Chrome 1+
+
+        if (isFirefox) {
+            map(0xe1, 0, 4); // caps (on Matt's US laptop in Firefox)
+            map(0xad, 7, 1); // '-' / '=' mapped to underscore (Firefox)
+            map(0x3b, 7, 5); // ';' / '+'
+            map(0xad, 7, 1); // '-' / '=' mapped to underscore
+            map(0xbc, 6, 6); // ',' / '<'
+            map(0xbe, 7, 6); // '.' / '>'
+            map(0xbf, 8, 6); // '/' / '?'
+            map(0xdb, 8, 3); // maps to [{
+            map(0xdd, 8, 5); // maps to ]}
+            map(0xde, 8, 4); // maps to :*
+            map(0xc0, 7, 4); // @ mapped to backtic
+            map(0xdc, 8, 2); // pipe, backlash is underscore, pound
+            map(0x3d, 8, 1); // ^~ on +/=
+            map(0x5b, 0, 5); // shift lock mapped to "windows" key
+        } else { // Everything else assumed to be Chrome as I don't have a decent way of testing it
+            map(0x00, 0, 4); // caps (on Matt's US laptop in Chrome)
+            map(0xba, 7, 5); // ';' / '+'
+            map(0xbc, 6, 6); // ',' / '<'
+            map(0xbd, 7, 1); // '-' / '=' mapped to underscore
+            map(0xbe, 7, 6); // '.' / '>'
+            map(0xbf, 8, 6); // '/' / '?'
+            map(0xdb, 8, 3); // maps to [{
+            map(0xdd, 8, 5); // maps to ]}
+            map(0xde, 8, 4); // maps to :*
+            map(0xc0, 7, 4); // @ mapped to backtic
+            map(0xdc, 8, 2); // pipe, backlash is underscore, pound
+            map(0x3d, 8, 1); // ^~ on +/=
+            map(0xbb, 8, 1); // ^~ on +/=
+            map(0x5b, 0, 5); // shift lock mapped to "windows" key
+        }
         map(9, 0, 6); // tab
         map(13, 9, 4); // return
         map('\x08', 9, 5); // delete
@@ -376,24 +415,12 @@ function sysvia(cpu, soundChip) {
         map('\x10', 0, 0); // shift
         map('\x1b', 0, 7); // escape
         map('\x11', 1, 0); // control
-        map('\x00', 0, 4); // caps (on Matt's US laptop in Chrome)
-        map(225, 0, 4); // caps (on Matt's US laptop in Firefox)
         map(20, 0, 4); // caps (on Rich's computer)
         map('\x25', 9, 1); // arrow left
         map('\x26', 9, 3); // arrow up
         map('\x27', 9, 7); // arrow right
         map('\x28', 9, 2); // arrow down
 
-        map(192, 0, 5); // shift lock mapped to backtic/slash
-        map(220, 7, 4); // @ mapped to backslash
-        map('\xba', 7, 5);  // ';' / '+'
-        map('\xbc', 6, 6);  // ',' / '<'
-        map('\xbd', 7, 1);  // '-' / '=' mapped to underscore
-        map('\xbe', 7, 6);  // '.' / '>'
-        map('\xbf', 8, 6);  // '/' / '?'
-        map("\xdb", 8, 3);  // ' maps to [{
-        map("\xdd", 8, 5);  // ' maps to ]}
-        map("\xde", 8, 4);  // ' maps to :*
 
         map('0', 7, 2);
         map('1', 0, 3);
