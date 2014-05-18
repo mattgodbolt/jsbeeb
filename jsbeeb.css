@@ -8,6 +8,7 @@ body {
     display: block;
     padding: 20px;
     border: 98px solid transparent;
+    background-color: black;
     -webkit-border-image:url(images/cub-monitor.jpeg) 98 98 stretch; /* Safari 5 */
     -o-border-image:url(images/cub-monitor.jpeg) 98 98 stretch; /* Opera */
     border-image:url(images/cub-monitor.jpeg) 98 98 stretch;
