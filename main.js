@@ -159,7 +159,9 @@ $(function() {
             queryString = queryString.substring(0, queryString.length - 1);
         queryString.split("&").forEach(function(keyval) {
             var keyAndVal = keyval.split("=");
-            var key = decodeURIComponent(keyAndVal[0]), val = decodeURIComponent(keyAndVal[1]);
+            var key = decodeURIComponent(keyAndVal[0]);
+            var val = undefined;
+            if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
             parsedQuery[key] = val;
             switch (key) {
             case "autoboot":
@@ -175,13 +177,17 @@ $(function() {
         });
     }
 
+    if (parsedQuery.dbEnabled) {
+        $('.hidden-unless-db-enabled').show();
+    }
+
     if (needsAutoboot) autoboot(discImage);
     function updateUrl() {
         var url = window.location.origin + window.location.pathname;
         var sep = '?';
         $.each(parsedQuery, function(key, value) {
             url += sep + encodeURIComponent(key);
-            if (value !== undefined) url += "=" + encodeURIComponent(value);
+            if (value) url += "=" + encodeURIComponent(value);
             sep = '&';
         });
         window.history.pushState(null, null, url);

@@ -102,7 +102,39 @@ div.led {
 }
 
 .key {
+    color: #dddddd;
     border: 1px solid #666666;
+    border-radius: 2px;
+    padding: 2px;
+    background-color: #000;
+    box-shadow: 2px 2px 1px #888888;
+    display: inline-block;
+    min-width: 2em;
+}
+
+.hidden-unless-db-enabled {
+    display: none;
+}
+
+.key.dbl {
+    font-size: 10px;
+}
+
+.key.function {
+    background-color: #911;
+}
+
+table.keymap th {
+    width: 5em;
+}
+
+table.keymap td {
+    text-align: center;
+    padding: 2px;
+}
+
+div.modal-body > div:not(:first-child) {
+    padding-top: 1em;
 }
 
 .dis_addr {

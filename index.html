@@ -66,11 +66,14 @@
                 </div>
                 <div class="collapse navbar-collapse">
                     <ul class="nav navbar-nav">
-                        <li class="active"><a href="#">Home</a></li>
-                        <li><a href="#discs" data-toggle="modal" data-target="#discs">Load disc</a></li>
-                        <li><a href="#sth" data-toggle="modal" data-target="#sth">Load from STH</a></li>
-                        <li><a href="#dropbox" data-toggle="modal" data-target="#dropbox">Dropbox</a></li>
-                        <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
+                        <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Discs<b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="#sth" data-toggle="modal" data-target="#sth">From STH archive</a></li>
+                            <li class="hidden-unless-db-enabled"><a href="#dropbox" data-toggle="modal" data-target="#dropbox">From Dropbox</a></li>
+                            <li><a href="#discs" data-toggle="modal" data-target="#discs">From examples or local</a></li>
+                        </ul>
+                        </li>
                         <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
                         <ul class="dropdown-menu">
@@ -86,6 +89,8 @@
                             <li><a href="mailto:matt@godbolt.org">Contact Matt</a></li>
                         </ul>
                         </li>
+                        <li><a href="#help" data-toggle="modal" data-target="#help">Help</a></li>
+                        <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
                     </ul>
                 </div><!--/.nav-collapse -->
             </div>
@@ -156,9 +161,35 @@
                     <div class="modal-body">
                         <div>By <a href="http://xania.org/">Matt Godbolt</a>.  Based on Tom Walker's <a href="http://b-em.bbcmicro.com/">b-em</a> emulator.  Huge thanks to him for open sourcing his code.  Big thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by default is the amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it available).</div>
                         <div>Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome or Firefox. Still very much work in progress: keep coming back for bugfixes and more features!</div>
-                        <h5>Key mappings</h5>
-                        <div><span class="key">F0</span> is <span class="key">F10</span>, <span class="key">BREAK</span> is <span class="key">F12</span>.  Hit <span class="key">HOME</span> for a debugger.</div>
-                        <div>To boot the disc, hold <span class="key">SHIFT</span> and then tap <span class="key">F12</span>.</div>
+                        <div>Cycle-accurate emulation greatly helped by the fantastic <a href="http://www.visual6502.org/">Visual 6502</a> Project. Consider donating to them if you enjoy this stuff as much as I do!</div>
+                        <div>If you're looking for more information on the BBC or to find like-minded people to chat about the hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>.</div>
+                    </div><!-- model-body -->
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div><!-- /.modal-content -->
+            </div><!-- /.modal-dialog -->
+        </div><!-- /.modal -->
+
+        <div class="modal fade" id="help">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                        <h4 class="modal-title">Help</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div>This is an emulator for the <a href="http://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a> Model B, a popular home computer in the UK in the 1980s.</div>
+                        <div>The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC, one would press <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The keyboard of the BBC is slightly different from a modern PC, notably in the placement of the symbol characters. Also, the current keyboard layout is optimized for a US keyboard; I am working on improving this situation.</div>
+                        <h5>Handy key mappings</h5>
+                        <table class="keymap">
+                            <tr><th>BBC</th><th>PC</th></tr>
+                            <tr><td><span class="function key">F0</span></td><td><span class="key">F10</span></td></tr>
+                            <tr><td><span class="key">BREAK</span></td><td><span class="key">F12</span></td></tr>
+                            <tr><td><span class="key">COPY</span></td><td><span class="key">End</span></td></tr>
+                            <tr><td><div class="dbl key">*<br>:</span></td><td><span class="key">todo</span></td></tr>
+                            <tr><td>Debug</td><td><span class="key">Home</span></td></tr>
+                        </table>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
