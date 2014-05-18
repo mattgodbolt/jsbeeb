@@ -388,7 +388,7 @@ function sysvia(cpu, soundChip) {
         map(220, 7, 4); // @ mapped to backslash
         map('\xba', 7, 5);  // ';' / '+'
         map('\xbc', 6, 6);  // ',' / '<'
-        map('\xbd', 7, 1);  // '_' / '=' mapped to underscore
+        map('\xbd', 7, 1);  // '-' / '=' mapped to underscore
         map('\xbe', 7, 6);  // '.' / '>'
         map('\xbf', 8, 6);  // '/' / '?'
         map("\xdb", 8, 3);  // ' maps to [{
