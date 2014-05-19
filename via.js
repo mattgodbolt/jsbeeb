@@ -361,6 +361,14 @@ function sysvia(cpu, soundChip) {
         self.setca1(0);
     };
 
+    function detectKeyboardLayout() {
+        if (localStorage.keyboardLayout) return localStorage.keyboardLayout;
+        if (navigator.language) {
+            if (navigator.language == "EN-GB") return "UK";
+            if (navigator.language == "EN-US") return "US";
+        }
+        return "UK";  // Default guess of UK
+    }
     self.keycodeToRowCol = (function() {
         var keys = {};
         function map(s, c, r) { 
@@ -376,6 +384,14 @@ function sysvia(cpu, soundChip) {
         // At least Safari 3+: "[object HTMLElementConstructor]"
         var isSafari = Object.prototype.toString.call(window.HTMLElement).indexOf('Constructor') > 0;
         var isChrome = !!window.chrome && !isOpera;              // Chrome 1+
+        var isUKlayout = detectKeyboardLayout() == "UK";
+
+        if (isUKlayout) {
+            map(0xa3, 8, 2); // UK PC hash key maps to pound underscore
+            map(0xdc, 8, 7); // pipe, backlash is pipe, backslash
+        } else {
+            map(0xdc, 8, 2); // pipe, backlash is underscore, pound
+        }
 
         if (isFirefox) {
             map(0xe1, 0, 4); // caps (on Matt's US laptop in Firefox)
@@ -389,7 +405,6 @@ function sysvia(cpu, soundChip) {
             map(0xdd, 8, 5); // maps to ]}
             map(0xde, 8, 4); // maps to :*
             map(0xc0, 7, 4); // @ mapped to backtic
-            map(0xdc, 8, 2); // pipe, backlash is underscore, pound
             map(0x3d, 8, 1); // ^~ on +/=
             map(0x5b, 0, 5); // shift lock mapped to "windows" key
         } else { // Everything else assumed to be Chrome as I don't have a decent way of testing it
@@ -403,7 +418,6 @@ function sysvia(cpu, soundChip) {
             map(0xdd, 8, 5); // maps to ]}
             map(0xde, 8, 4); // maps to :*
             map(0xc0, 7, 4); // @ mapped to backtic
-            map(0xdc, 8, 2); // pipe, backlash is underscore, pound
             map(0x3d, 8, 1); // ^~ on +/=
             map(0xbb, 8, 1); // ^~ on +/=
             map(0x5b, 0, 5); // shift lock mapped to "windows" key
@@ -420,7 +434,6 @@ function sysvia(cpu, soundChip) {
         map('\x26', 9, 3); // arrow up
         map('\x27', 9, 7); // arrow right
         map('\x28', 9, 2); // arrow down
-
 
         map('0', 7, 2);
         map('1', 0, 3);
