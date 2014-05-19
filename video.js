@@ -105,13 +105,6 @@ function Video(fb32, paint_ext) {
             for (x = 0; x < pixels; x++) {
                 fb32[offset + x] = blank;
             }
-            // Not quite sure why this is apparently required. TODO work out why, this contributes to the video runtime
-            if (self.crtcmode !== 0) {
-                offset += 16;
-                for (x = 0; x < 16; x++) {
-                    fb32[offset + x] = blank;
-                }
-            }
         }
         // TODO: cursor, if cdraw and scrx<1280..
     }
