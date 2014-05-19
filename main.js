@@ -4,6 +4,7 @@ var soundChip;
 var dbgr;
 var jsAudioNode;  // has to remain to keep thing alive
 var frames = 0;
+var frameSkip = 0;
 var syncLights;
 var sth;
 var dropbox;
@@ -37,7 +38,8 @@ $(function() {
     var canvasHeight = canvas.height;
     function paint(minx, miny, maxx, maxy) {
         frames++;
-        //if ((frames & 0x7) != 0) return; //TODO: frameskip
+        if (frames < frameSkip) return;
+        frames = 0;
         var width = maxx - minx;
         var height = maxy - miny;
         backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
@@ -344,13 +346,22 @@ const cyclesPerYield = cyclesPerFrame / yieldsPerFrame;
 
 function benchmarkCpu(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;
+    var oldFS = frameSkip;
+    frameSkip = 10000;
     var startTime = Date.now();
     processor.execute(numCycles);
     var endTime = Date.now();
+    frameSkip = oldFS;
     var msTaken = endTime - startTime;
     var virtualMhz = (numCycles / msTaken) / 1000;
     console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
     console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
+}
+
+function profileCpu() {
+    console.profile("CPU");
+    benchmarkCpu(10 * 1000 * 1000);
+    console.profileEnd();
 }
 
 function run() {
