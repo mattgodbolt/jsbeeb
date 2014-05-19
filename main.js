@@ -7,6 +7,7 @@ var frames = 0;
 var syncLights;
 var sth;
 var dropbox;
+var running;
 
 function noteEvent(category, type, label) {
     if (window.location.origin == "http://bbc.godbolt.org") {
@@ -340,6 +341,17 @@ const clocksPerSecond = 2 * 1000 * 1000;
 const cyclesPerFrame = clocksPerSecond / framesPerSecond;
 const yieldsPerFrame = 1;
 const cyclesPerYield = cyclesPerFrame / yieldsPerFrame;
+
+function benchmarkCpu(numCycles) {
+    numCycles = numCycles || 10 * 1000 * 1000;
+    var startTime = Date.now();
+    processor.execute(numCycles);
+    var endTime = Date.now();
+    var msTaken = endTime - startTime;
+    var virtualMhz = (numCycles / msTaken) / 1000;
+    console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
+    console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
+}
 
 function run() {
     if (!running) return;

@@ -271,7 +271,6 @@ function Cpu6502(dbgr, video, soundChip) {
 
             for (i = 0xfc; i < 0xff; ++i) this.memstat[0][i] = this.memstat[1][i] = 0;
             this.ram4k = this.ram8k = this.ram12k = this.ram20k = 0;
-            this.instructions = generate6502();
             this.disassembler = new Disassemble6502(this);
             this.sysvia = sysvia(this, soundChip);
             this.uservia = uservia(this);
@@ -440,16 +439,8 @@ function Cpu6502(dbgr, video, soundChip) {
                 stop(true);
                 return;
             }
-            var instruction = this.instructions[opcode];
-            if (!instruction) {
-                console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(this.pc));
-                console.log(this.disassembler.disassemble(this.pc)[0]);
-                noteEvent('exception', 'invalid opcode', hexbyte(opcode));
-                stop(true);
-                return;
-            }
             this.incpc();
-            instruction(this);
+            runInstruction(this, opcode);
             // TODO: timetolive
             if (this.takeInt) {
                 this.takeInt = 0;

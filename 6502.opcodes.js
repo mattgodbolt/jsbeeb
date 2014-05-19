@@ -240,7 +240,7 @@ function getOp(op) {
     return null;
 }
 
-function getInstruction(opcodeString) {
+function getInstruction(opcodeString, needsReg) {
     "use strict";
     var split = opcodeString.split(' ');
     var opcode = split[0];
@@ -249,7 +249,7 @@ function getInstruction(opcodeString) {
     if (!op) return null;
 
     var ig = new InstructionGen();
-    ig.append("var REG = 0|0;");
+    if (needsReg) ig.append("var REG = 0|0;");
 
     switch (arg) {
     case undefined:
@@ -417,7 +417,7 @@ function getInstruction(opcodeString) {
 
 function compileInstruction(ins) {
     "use strict";
-    var lines = getInstruction(ins);
+    var lines = getInstruction(ins, true);
     if (!lines) return null;
     var funcName = ins.replace(" ", "_").replace("()", "ind").replace(",", "_").replace("(", "").replace(")", "");
     var text = "var " + funcName + " = function(cpu) {   // " + ins +
@@ -686,6 +686,27 @@ function generate6502() {
     return functions;
 }
 
+function generate6502Switch(min, max) {
+    "use strict";
+    var text = "var emulate = function(cpu, opcode) {\n" +
+        "    \"use strict\";\n    var REG = 0|0;\n    switch (opcode) {\n";
+    for (var i = min; i < max; ++i) {
+        var opcode = opcodes6502[i];
+        if (opcode) {
+            var lines = getInstruction(opcode, false);
+            text += "    case " + i + ":\n        ";
+            if (!lines) {
+                text += "invalidOpcode(cpu, opcode);";
+            } else {
+                text += lines.join("\n        ");
+            }
+            text += "\n    break;\n";
+        }
+    }
+    text += "    }\n\n}\n; emulate;";
+    return eval(text);
+}
+
 function Disassemble6502(cpu) {
     "use strict";
     this.disassemble = function(addr) {
@@ -724,4 +745,28 @@ function Disassemble6502(cpu) {
         }
         return [opcode, addr + 1];
     };
+}
+
+function invalidOpcode(cpu, opcode) {
+    console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(cpu.pc));
+    console.log(cpu.disassembler.disassemble(cpu.pc)[0]);
+    noteEvent('exception', 'invalid opcode', hexbyte(opcode));
+    stop(true);
+}
+
+var instructions6502 = generate6502();
+function runInstructionOldWay(cpu, opcode) {  // Unused as of now. This way seems a tiny bit slower for Firefox
+    var instruction = instructions6502[opcode];
+    if (!instruction) {
+        invalidOpcode(cpu, opcode);
+        return;
+    }
+    instruction(cpu);
+}
+
+var lower128 = generate6502Switch(0, 128);
+var upper128 = generate6502Switch(128, 256);
+
+function runInstruction(cpu, opcode) {
+    if (opcode < 128) lower128(cpu, opcode); else upper128(cpu, opcode);
 }
