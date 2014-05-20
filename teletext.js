@@ -212,10 +212,24 @@ function Teletext() {
         }
         var px = self.curChars[0];
         // TODO interlace
-        for (i = 0; i < 16; ++i) {
-            buf[offset + i + 16] = palette[px[t]&15];
-            t++;
-        }
+        offset += 16; // TODO: why is this needed?
+        // Unrolling seems a good thing here, at least on Chrome.
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
+        buf[offset++] = palette[px[t++]];
     }
 
     this.verticalCharEnd = function() {

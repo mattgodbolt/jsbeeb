@@ -94,7 +94,7 @@ function Video(fb32, paint_ext) {
     function renderblank() {
         if (self.charsleft) {
             if (self.charsleft != 1) {
-                self.teletext.render(self.fb32, self.scry * 1280 + self.scrx, self.sc, 0xff);
+                self.teletext.render(fb32, self.scry * 1280 + self.scrx, self.sc, 0xff);
             }
             self.charsleft--;
         } else if (self.scrx < 1280) {
@@ -102,8 +102,16 @@ function Video(fb32, paint_ext) {
             var blank = self.collook[0];
             var offset = self.scry * 1280 + self.scrx;
             var x;
-            for (x = 0; x < pixels; x++) {
-                fb32[offset + x] = blank;
+            for (x = 0; x < pixels; x += 8) {
+                // As per below, the days of unrolling have returned.
+                fb32[offset++] = blank;
+                fb32[offset++] = blank;
+                fb32[offset++] = blank;
+                fb32[offset++] = blank;
+                fb32[offset++] = blank;
+                fb32[offset++] = blank;
+                fb32[offset++] = blank;
+                fb32[offset++] = blank;
             }
         }
         // TODO: cursor, if cdraw and scrx<1280..
@@ -130,12 +138,23 @@ function Video(fb32, paint_ext) {
             dat = self.cpu.readmem((addr & 0x7fff) | vidbank) | 0;
         }
         if (self.scrx < 1280) {
-            var offset = self.scry * 1280 + self.scrx;
+            var offset = (self.scry * 1280 + self.scrx)|0;
             var pixels = (self.ulactrl & 0x10) ? 8 : 16;
+            var fb32 = self.fb32;
+            var fbOffset = offset;
             var i;
-            if ((self.regs[8] & 0x30) == 0x30 || ((self.sc&8) && ! (self.ulactrl&2))) {
-                for (i = 0; i < pixels; ++i) {
-                    self.fb32[offset + i] = self.collook[0];
+            if ((self.regs[8] & 0x30) === 0x30 || ((self.sc&8) && ! (self.ulactrl&2))) {
+                var black = self.collook[0];
+                for (i = 0; i < pixels; i += 8) {
+                    // As per below, this is faster.
+                    fb32[fbOffset++] = black;
+                    fb32[fbOffset++] = black;
+                    fb32[fbOffset++] = black;
+                    fb32[fbOffset++] = black;
+                    fb32[fbOffset++] = black;
+                    fb32[fbOffset++] = black;
+                    fb32[fbOffset++] = black;
+                    fb32[fbOffset++] = black;
                 }
             } else {
                 var lastx;
@@ -147,8 +166,20 @@ function Video(fb32, paint_ext) {
                     if (lastx > self.maxx) self.maxx = lastx;
                 } else {
                     var tblOff = table4bppOffset(self.ulamode, dat);
-                    for (i = 0; i < pixels; ++i) {
-                        self.fb32[offset + i] = self.ulapal[table4bpp[tblOff + i]];
+                    var ulapal = self.ulapal;
+                    for (i = 0; i < pixels; i += 8) {
+                        // This really does make a difference, at least in Chrome.
+                        // Unrolling is a big win, and don't be tempted to update the
+                        // two offsets in separate statements - that seems to slow things down
+                        // again.
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
+                        fb32[fbOffset++] = ulapal[table4bpp[tblOff++]];
                     }
                     if (self.scrx < self.minx) self.minx = self.scrx;
                     lastx = self.scrx + pixels;
@@ -165,7 +196,6 @@ function Video(fb32, paint_ext) {
                 }
                 if (++self.cdraw === 7) self.cdraw = 0;
             }
-
         }
         self.ma++;
         self.vidbytes++;
