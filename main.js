@@ -226,13 +226,18 @@ $(function() {
         reader.readAsBinaryString(file);
     });
 
+    var modalDepth = 0;
     var modalSavedRunning = false;
     $('.modal').on('show.bs.modal', function() { 
-        modalSavedRunning = running;
+        if (modalDepth++ === 0) modalSavedRunning = running;
+        console.log("modal show", modalSavedRunning);
         if (running) stop(false);
     });
     $('.modal').on('hidden.bs.modal', function() { 
-        if (modalSavedRunning) go();
+        if (--modalDepth === 0) {
+            console.log("modal hide", modalSavedRunning);
+            if (modalSavedRunning) go();
+        }
     });
     function popupLoading(msg) {
         var modal = $('#loading-dialog');
