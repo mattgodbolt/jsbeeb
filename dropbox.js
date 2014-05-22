@@ -12,14 +12,18 @@ function DropboxLoader(onCat, onError) {
             var i;
             var data;
             var lastString = dataString;
-            function save() {
+            function save(onDone) {
                 var str = "";
                 for (var i = 0; i < data.length; ++i) str += String.fromCharCode(data[i]);
                 if (lastString == str) { return; }
                 lastString = str;
                 client.writeFile(name, data, function(error, stat) {
-                    console.log("error", error);
-                    console.log("stat", stat);
+                    if (onDone) {
+                        onDone(error, stat);
+                    } else {
+                        // TODO - what to do on errors here?
+                        console.log(error, stat);
+                    }
                 });
             }
             if (error) {
@@ -32,18 +36,25 @@ function DropboxLoader(onCat, onError) {
                     data = new Uint8Array(100 * 1024);
                     for (i = 0; i < Math.max(12, name.length); ++i) 
                         data[i] = name.charCodeAt(i) & 0xff;
-                    save();
+                    save(function(error, stat) {
+                        console.log("error", error);
+                        console.log("stat", stat);
+                        if (!error) {
+                            var ssd = baseSsd(fdc, data, _.debounce(save, 2000));
+                            fdc.loadDisc(drive, ssd);
+                        }
+                        whenDone(error);
+                    });
                 }
             } else {
                 console.log("Loaded successfully");
                 var len = dataString.length;
                 data = new Uint8Array(len);
                 for (i = 0; i < len; ++i) data[i] = dataString.charCodeAt(i) & 0xff;
+                var ssd = baseSsd(fdc, data, _.debounce(save, 2000));
+                fdc.loadDisc(drive, ssd);
+                whenDone(null);
             }
-
-            var ssd = baseSsd(fdc, data, _.debounce(save, 2000));
-            fdc.loadDisc(drive, ssd);
-            whenDone(null);
         });
     } 
     self.load = function(fdc, name, drive, whenDone) {

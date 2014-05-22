@@ -201,12 +201,13 @@ $(function() {
         } else if (discImage && discImage[0] == "|") {
             processor.fdc.loadDiscData(drive, sth.fetch(discImage.substr(1)));
         } else if (discImage && discImage[0] == "^") {
-            var db = new DropboxLoader(function(){}, function(error){
+            var db = new DropboxLoader(function(){
+                setTimeout(function() {
+                    dropboxLoad(db, discImage.substr(1));
+                }, 1); // defer so we start, then load disc, then continue
+            }, function(error){
                 loadingFinished(error);
             });
-            setTimeout(function() {
-                dropboxLoad(db, discImage.substr(1));
-            }, 1); // defer so we start, then load disc, then continue
         } else {
             processor.fdc.loadDiscData(drive, ssdLoad("discs/" + discImage));
         }
@@ -226,17 +227,18 @@ $(function() {
         reader.readAsBinaryString(file);
     });
 
+    function anyModalsVisible() {
+        return $(".modal:visible").length !== 0;
+    }
     var modalDepth = 0;
     var modalSavedRunning = false;
     $('.modal').on('show.bs.modal', function() { 
-        if (modalDepth++ === 0) modalSavedRunning = running;
-        console.log("modal show", modalSavedRunning);
+        if (!anyModalsVisible()) modalSavedRunning = running;
         if (running) stop(false);
     });
     $('.modal').on('hidden.bs.modal', function() { 
-        if (--modalDepth === 0) {
-            console.log("modal hide", modalSavedRunning);
-            if (modalSavedRunning) go();
+        if (!anyModalsVisible() && modalSavedRunning) {
+            go();
         }
     });
     function popupLoading(msg) {
@@ -245,6 +247,8 @@ $(function() {
         modal.modal("show");
     }
     function loadingFinished(error) {
+        // TODO: either look for Dropbox errors here or wrap all the DB callers
+        // with wrappers to do the right thing on DB errors.
         var modal = $('#loading-dialog');
         if (error) {
             modal.find(".loading").text("Error: " + error);
@@ -256,11 +260,14 @@ $(function() {
         }
     }
 
-    function dropboxLoad(dropbox, cat) {
+    function dropboxLoad(dropbox, cat, create) {
         noteEvent('dropbox', 'click', cat);
         parsedQuery.disc = "^" + cat;
         updateUrl();
-        popupLoading("Loading '" + cat + "' from Dropbox");
+        if (create)
+            popupLoading("Creating '" + cat + "' on Dropbox");
+        else 
+            popupLoading("Loading '" + cat + "' from Dropbox");
         dropbox.load(processor.fdc, cat, 0, function(error) {
             loadingFinished(error);
         });
@@ -268,7 +275,7 @@ $(function() {
 
     var dropboxModal = $('#dropbox');
     dropboxModal.on('show.bs.modal', function() {
-        dropboxModal.find(".loading").show();
+        dropboxModal.find(".loading").text("Loading...").show();
         dropboxModal.find("li").not(".template").remove();
         dropbox = new DropboxLoader(function(cat) {
             var dbList = $("#dropbox-list");
@@ -300,6 +307,19 @@ $(function() {
             $('#discs').modal("hide");
         });
     });
+    function dbCreate() {
+        var text = $("#db-disc-name").val();
+        if (!text) return false;
+        popupLoading("Connecting to Dropbox");
+        $("#dropbox").modal("hide");
+        var db = new DropboxLoader(function(){
+            dropboxLoad(db, text, true);
+        }, function(error){
+            loadingFinished(error);
+        });
+        return false;
+    }
+    $("#dropbox form").on("submit", dbCreate);
 
     function Light(name) {
         var dom = $("#" + name);
