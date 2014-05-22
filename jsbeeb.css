@@ -155,6 +155,13 @@ div.modal-body > div:not(:first-child) {
     color: #60f060;
 }
 
+.instr_mem_ref {
+    color: #66f;
+}
+
+.instr_mem_ref:hover {
+    text-decoration: underline;
+}
 .addr:hover {
     background-color: #330000;
 }

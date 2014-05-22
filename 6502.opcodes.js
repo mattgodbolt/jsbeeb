@@ -709,6 +709,9 @@ function generate6502Switch(min, max) {
 
 function Disassemble6502(cpu) {
     "use strict";
+    function formatAddr(addr) {
+        return "<span class='instr_mem_ref'>" + hexword(addr) + "</span>";
+    }
     this.disassemble = function(addr) {
         var opcode = opcodes6502[cpu.readmem(addr)];
         if (!opcode) { return ["???", addr + 1]; }
@@ -727,10 +730,10 @@ function Disassemble6502(cpu) {
         case "imm":
             return [split[0] + " #$" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
         case "abs":
-            return [split[0] + " $" + hexword(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + suffix,
+            return [split[0] + " $" + formatAddr(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + suffix,
                    addr + 3];
         case "branch":
-            return [split[0] + " $" + hexword(addr + signExtend(cpu.readmem(addr + 1)) + 2) + suffix,
+            return [split[0] + " $" + formatAddr(addr + signExtend(cpu.readmem(addr + 1)) + 2) + suffix,
                    addr + 2];
         case "zp":
             return [split[0] + " $" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
@@ -738,7 +741,7 @@ function Disassemble6502(cpu) {
             return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
         case "()":
             if (split[0] == "JMP")
-                return [split[0] + " ($" + hexword(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + ")" + suffix,
+                return [split[0] + " ($" + formatAddr(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + ")" + suffix,
                     addr + 3];
             else
                 return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
