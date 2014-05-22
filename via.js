@@ -385,6 +385,7 @@ function sysvia(cpu, soundChip) {
         var isSafari = Object.prototype.toString.call(window.HTMLElement).indexOf('Constructor') > 0;
         var isChrome = !!window.chrome && !isOpera;              // Chrome 1+
         var isUKlayout = detectKeyboardLayout() == "UK";
+        var isApple = navigator.appVersion.indexOf('Macintosh') > 0;
 
         if (isUKlayout) {
             map(0xa3, 8, 2); // UK PC hash key maps to pound underscore
@@ -425,7 +426,8 @@ function sysvia(cpu, soundChip) {
         map(9, 0, 6); // tab
         map(13, 9, 4); // return
         map('\x08', 9, 5); // delete
-        map(35, 9, 6); // copy key is end
+        map(35, 9, 6); // copy key is end 
+        map(122, 9, 6); // copy key is end for Apple
         map('\x10', 0, 0); // shift
         map('\x1b', 0, 7); // escape
         map('\x11', 1, 0); // control

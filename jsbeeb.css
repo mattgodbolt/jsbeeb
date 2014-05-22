@@ -130,7 +130,8 @@ table.keymap th {
 
 table.keymap td {
     text-align: center;
-    padding: 2px;
+    padding: 8px;
+    border-spacing: 4px;
 }
 
 div.modal-body > div:not(:first-child) {
