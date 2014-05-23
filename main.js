@@ -201,12 +201,13 @@ $(function() {
         } else if (discImage && discImage[0] == "|") {
             processor.fdc.loadDiscData(drive, sth.fetch(discImage.substr(1)));
         } else if (discImage && discImage[0] == "^") {
-            var db = new DropboxLoader(function(){
-                setTimeout(function() {
+            _.defer(function() {
+                popupLoading("Connecting to Dropbox");
+                var db = new DropboxLoader(function(){
                     dropboxLoad(db, discImage.substr(1));
-                }, 1); // defer so we start, then load disc, then continue
-            }, function(error){
-                loadingFinished(error);
+                }, function(error){
+                    loadingFinished(error);
+                });
             });
         } else {
             processor.fdc.loadDiscData(drive, ssdLoad("discs/" + discImage));
