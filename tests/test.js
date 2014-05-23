@@ -255,8 +255,8 @@ $(function() {
     var tests = [
     { test: "Test timings", func: testTimings },
     { test: "Alien8 protection", func: function(whenDone) { testKevinEdwards("ALIEN8", whenDone); } },
-//    { test: "Nightshade protection", func: function(whenDone) { testKevinEdwards("NIGHTSH", whenDone); } },
-//    { test: "Lunar Jetman protection", func: function(whenDone) { testKevinEdwards("JETMAN", whenDone); } },
+    { test: "Nightshade protection", func: function(whenDone) { testKevinEdwards("NIGHTSH", whenDone); } },
+    { test: "Lunar Jetman protection", func: function(whenDone) { testKevinEdwards("JETMAN", whenDone); } },
         ];
     var testIdx = 0;
     function nextTest() {
