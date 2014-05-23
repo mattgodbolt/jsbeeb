@@ -299,25 +299,41 @@ function getInstruction(opcodeString, needsReg) {
 
     case "abs,x":
     case "abs,y":
+        var preamble = [];
+        preamble.push("var addr = cpu.getw();");
+        preamble.push("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
+        preamble.push("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+        if (op.read && !op.write) {
+            // For non-RMW, we only pay the cost of the spurious read if the address carried.
+            // We separate these cases and use two IGs so the automatic IRQ checker works correctly.
+            var carryIg = new InstructionGen();
+            if (needsReg) carryIg.append("var REG = 0|0;");
+            ig.tick(3); // The non-carry version
+            carryIg.tick(3);
+            carryIg.readOp("addrNonCarry");
+            //ig.flush();
+            //carryIg.flush();
+
+            ig.readOp("addrWithCarry", "REG");
+            ig.append(op.op);
+            carryIg.readOp("addrWithCarry", "REG");
+            carryIg.append(op.op);
+
+            return preamble.concat(["if (addrWithCarry !== addrNonCarry) {"])
+                .concat(carryIg.render())
+                .concat(["} else {"])
+                .concat(ig.render())
+                .concat("}");
+        }
+
+        for (var i = 0; i < preamble.length; ++i) ig.append(preamble[i]);
         ig.tick(3);
-        ig.append("var addr = cpu.getw();");
-        ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
-        ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
         if (op.read) {
-            if (!op.write) {
-                // For non-RMW, we only pay the cost of the spurious read if the address carried
-                ig.append("if (addrWithCarry !== addrNonCarry) {");
-                ig.append("    cpu.polltime(1);");
-                ig.append("    REG = cpu.readmem(addrNonCarry);");
-                ig.append("}");
-                ig.flush();
-                ig.readOp("addrWithCarry", "REG");
-            } else {
-                // For RMW we always have a spurious read and then a spurious write
-                ig.readOp("addrNonCarry");
-                ig.readOp("addrWithCarry", "REG");
-                ig.writeOp("addrWithCarry", "REG");
-            }
+            if (!op.write) throw "Erk";
+            // For RMW we always have a spurious read and then a spurious write
+            ig.readOp("addrNonCarry");
+            ig.readOp("addrWithCarry", "REG");
+            ig.writeOp("addrWithCarry", "REG");
         } else if (op.write) {
             // Pure stores still exhibit a read at the non-carried address.
             ig.readOp("addrNonCarry");
