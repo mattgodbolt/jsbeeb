@@ -274,6 +274,8 @@ function getOp(op) {
         "cpu.a |= REG;",
         "cpu.setzn(cpu.a);"
         ]), read: true, write: true };
+    case "SHX": return { op: "REG = cpu.x & ((addr>>8)+1);" };
+    case "SHY": return { op: "REG = cpu.y & ((addr>>8)+1);" };
     }
     return null;
 }
