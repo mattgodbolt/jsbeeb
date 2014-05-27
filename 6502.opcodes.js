@@ -98,13 +98,17 @@ function InstructionGen() {
         self.cycle++;
         self.append(self.cycle, "cpu.writememZpStack(" + addr + ", " + reg + ");", true);
     };
-    self.render = function() {
+    self.render = function(startCycle) {
         if (self.cycle < 2) self.cycle = 2;
         self.prepend(self.cycle - 1, "cpu.checkInt();", true);
+        return self.renderInternal(startCycle);
+    };
+    self.renderInternal = function(startCycle) {
+        startCycle = startCycle || 0;
         var i;
         var toSkip = 0;
         var out = [];
-        for (i = 0; i < self.cycle; ++i) {
+        for (i = startCycle; i < self.cycle; ++i) {
             if (!self.ops[i]) {
                 toSkip++;
                 continue;
@@ -121,7 +125,7 @@ function InstructionGen() {
             toSkip++;
         }
         if (toSkip) {
-            if (self.ops[self.cycle].addr) {
+            if (self.ops[self.cycle] && self.ops[self.cycle].addr) {
                 out.push("cpu.polltime(" + toSkip + "+ cpu.is1MHzAccess(" + self.ops[self.cycle].addr + ") * (" + ((toSkip & 1) ? "!" : "") + "(cpu.cycles & 1) + 1));");            
             } else {
                 out.push("cpu.polltime(" + toSkip + ");");
@@ -129,6 +133,40 @@ function InstructionGen() {
         }
         if (self.ops[self.cycle]) out = out.concat(self.ops[self.cycle].op);
         return out.filter(function(l){return l;});
+    };
+    self.split = function(condition) {
+        return new SplitInstruction(this, condition);
+    };
+}
+
+function SplitInstruction(preamble, condition) {
+    var self = this;
+    self.preamble = preamble;
+    self.ifTrue = new InstructionGen();
+    self.ifTrue.tick(preamble.cycle);
+    self.ifFalse = new InstructionGen();
+    self.ifFalse.tick(preamble.cycle);
+
+    ["append", "prepend", "readOp", "writeOp"].forEach(function(op) {
+        self[op] = function() {
+            self.ifTrue[op].apply(self.ifTrue, arguments); 
+            self.ifFalse[op].apply(self.ifFalse, arguments); 
+        };
+    });
+
+    function indent(a) {
+        var result = [];
+        a.forEach(function(x){ result.push("  " + x); });
+        return result;
+    }
+
+    self.render = function() {
+        return self.preamble.renderInternal()
+            .concat(["if (" + condition + ") {"])
+            .concat(indent(self.ifTrue.render(preamble.cycle)))
+            .concat(["} else {"])
+            .concat(indent(self.ifFalse.render(preamble.cycle)))
+            .concat("}");
     };
 }
 
@@ -299,37 +337,16 @@ function getInstruction(opcodeString, needsReg) {
 
     case "abs,x":
     case "abs,y":
-        var preamble = [];
-        preamble.push("var addr = cpu.getw();");
-        preamble.push("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
-        preamble.push("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+        ig.append("var addr = cpu.getw();");
+        ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
+        ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+        ig.tick(3);
         if (op.read && !op.write) {
             // For non-RMW, we only pay the cost of the spurious read if the address carried.
-            // We separate these cases and use two IGs so the automatic IRQ checker works correctly.
-            var carryIg = new InstructionGen();
-            if (needsReg) carryIg.append("var REG = 0|0;");
-            ig.tick(3); // The non-carry version
-            carryIg.tick(3);
-            carryIg.readOp("addrNonCarry");
-            //ig.flush();
-            //carryIg.flush();
-
+            ig = ig.split("addrWithCarry !== addrNonCarry");
+            ig.ifTrue.readOp("addrNonCarry");
             ig.readOp("addrWithCarry", "REG");
-            ig.append(op.op);
-            carryIg.readOp("addrWithCarry", "REG");
-            carryIg.append(op.op);
-
-            return preamble.concat(["if (addrWithCarry !== addrNonCarry) {"])
-                .concat(carryIg.render())
-                .concat(["} else {"])
-                .concat(ig.render())
-                .concat("}");
-        }
-
-        for (var i = 0; i < preamble.length; ++i) ig.append(preamble[i]);
-        ig.tick(3);
-        if (op.read) {
-            if (!op.write) throw "Erk";
+        } else if (op.read) {
             // For RMW we always have a spurious read and then a spurious write
             ig.readOp("addrNonCarry");
             ig.readOp("addrWithCarry", "REG");
@@ -339,9 +356,7 @@ function getInstruction(opcodeString, needsReg) {
             ig.readOp("addrNonCarry");
         }
         ig.append(op.op);
-        if (op.write) {
-            ig.writeOp("addrWithCarry", "REG");
-        }
+        if (op.write) ig.writeOp("addrWithCarry", "REG");
         return ig.render();
 
     case "imm":
@@ -387,21 +402,15 @@ function getInstruction(opcodeString, needsReg) {
         ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
         // Strictly speaking this code below is overkill; it handles RMW when no such documented
         // instruction exists.
-        if (op.read) {
-            if (!op.write) {
-                // For non-RMW, we only pay the cost of the spurious read if the address carried
-                ig.flush();
-                ig.append("if (addrWithCarry !== addrNonCarry) {");
-                ig.append("    cpu.polltime(1);");
-                ig.append("    REG = cpu.readmem(addrNonCarry);");
-                ig.append("}");
-                ig.readOp("addrWithCarry", "REG");
-            } else {
-                // For RMW we always have a spurious read and then a spurious write
-                ig.readOp("addrNonCarry");
-                ig.readOp("addrWithCarry", "REG");
-                ig.writeOp("addrWithCarry", "REG");
-            }
+        if (op.read && !op.write) {
+            ig = ig.split("addrWithCarry !== addrNonCarry");
+            ig.ifTrue.readOp("addrNonCarry");
+            ig.readOp("addrWithCarry", "REG");
+        } else if (op.read) {
+            // For RMW we always have a spurious read and then a spurious write
+            ig.readOp("addrNonCarry");
+            ig.readOp("addrWithCarry", "REG");
+            ig.writeOp("addrWithCarry", "REG");
         } else if (op.write) {
             // Pure stores still exhibit a read at the non-carried address.
             ig.readOp("addrNonCarry");
@@ -720,7 +729,7 @@ function generate6502Switch(min, max) {
         }
     }
     text += "    }\n\n}\n; emulate;";
-    return eval(text);
+    return eval(text); // jshint ignore:line
 }
 
 function Disassemble6502(cpu) {

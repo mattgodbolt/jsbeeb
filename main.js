@@ -163,7 +163,7 @@ $(function() {
         queryString.split("&").forEach(function(keyval) {
             var keyAndVal = keyval.split("=");
             var key = decodeURIComponent(keyAndVal[0]);
-            var val = undefined;
+            var val = null;
             if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
             parsedQuery[key] = val;
             switch (key) {

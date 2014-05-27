@@ -7,7 +7,6 @@ function DropboxLoader(onCat, onError) {
     client.authDriver(new Dropbox.AuthDriver.Popup({
         receiverUrl: document.location.origin + "/oauth_receiver.html"})); 
     function dropboxDisc(client, fdc, drive, name, whenDone) {
-        "use strict";
         client.readFile(name, function(error, dataString) {
             var i;
             var data;
