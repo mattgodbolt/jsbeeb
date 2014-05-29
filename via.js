@@ -193,7 +193,6 @@ function via(cpu, irq) {
                 break;
 
             case T2CH:
-                // TODO: b-em has a Kevin Edwards protection specific hack here. hopefully that's not necessary if we get instruction timings more correct.
                 self.t2l &= 0x1fe;
                 self.t2l |= (val << 9);
                 self.t2c = self.t2l + 1;
