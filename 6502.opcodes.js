@@ -115,7 +115,7 @@ function InstructionGen() {
             }
             if (toSkip && self.ops[i].exact) {
                 if (self.ops[i].addr) {
-                    out.push("cpu.polltime(" + toSkip + "+ cpu.is1MHzAccess(" + self.ops[i].addr + ") * (" + ((toSkip & 1) ? "!" : "") + "(cpu.cycles & 1) + 1));");
+                    out.push("cpu.polltimeAddr(" + toSkip + ", " + self.ops[i].addr + ");");
                 } else {
                     out.push("cpu.polltime(" + toSkip + ");");
                 }
@@ -126,7 +126,7 @@ function InstructionGen() {
         }
         if (toSkip) {
             if (self.ops[self.cycle] && self.ops[self.cycle].addr) {
-                out.push("cpu.polltime(" + toSkip + "+ cpu.is1MHzAccess(" + self.ops[self.cycle].addr + ") * (" + ((toSkip & 1) ? "!" : "") + "(cpu.cycles & 1) + 1));");            
+                out.push("cpu.polltimeAddr(" + toSkip + ", " + self.ops[self.cycle].addr + ");");
             } else {
                 out.push("cpu.polltime(" + toSkip + ");");
             }

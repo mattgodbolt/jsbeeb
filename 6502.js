@@ -314,6 +314,14 @@ function Cpu6502(dbgr, video, soundChip) {
         return this.readmemZpStack(0x100 + this.s);
     };
 
+    this.polltimeAddr = function(cycles, addr) {
+        cycles = cycles|0;
+        if (this.is1MHzAccess(addr)) {
+            cycles += 1 + ((cycles ^ this.cycles) & 1);
+        }
+        this.polltime(cycles);
+    };
+
     this.polltime = function(cycles) {
         this.cycles -= cycles;
         this.sysvia.polltime(cycles);
