@@ -99,6 +99,20 @@ function Cpu6502(dbgr, video, soundChip) {
         return s;
     };
     
+    this.findString = function(string, addr) {
+        addr = addr | 0;
+        for (; addr < 0xffff; ++addr) {
+            var i = addr;
+            for (var i = 0; i < string.length; ++i) {
+                if (this.readmem(addr + i) !== string.charCodeAt(i)) break;
+            }
+            if (i === string.length) {
+                return addr;
+            }
+        }
+        return null;
+    };
+
     this.is1MHzAccess = function(addr) {
         addr &= 0xffff;
         return (addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr>>5) & 7]));
