@@ -48,6 +48,11 @@ body {
     display: inline-block;
 }
 
+#memory {
+    float: left;
+    width: 400px;
+}
+
 #disassembly {
     width: 400px; 
 	float: left;
@@ -157,11 +162,24 @@ div.modal-body > div:not(:first-child) {
     color: #60f060;
 }
 
-.instr_mem_ref {
+.mem_bytes {
+    display: inline-block;
+    width: 18em;
+    color: #80d0d0;
+}
+
+.mem_asc {
+    display: inline-block;
+    width: 9em;
+    color: #60f060;
+}
+
+.instr_mem_ref, .instr_instr_ref {
+    cursor: pointer;
     color: #66f;
 }
 
-.instr_mem_ref:hover {
+.instr_mem_ref:hover, .instr_instr_ref:hover {
     text-decoration: underline;
 }
 .addr:hover {
@@ -194,6 +212,10 @@ div.modal-body > div:not(:first-child) {
 
 .current {
     background-color: #227777;
+}
+
+.highlight {
+    border: 1px solid #444;
 }
 
 .changed {

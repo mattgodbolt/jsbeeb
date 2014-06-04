@@ -1,6 +1,8 @@
 function Debugger() {
     var self = this;
     var disass = $('#disassembly');
+    var memview = $('#memory');
+    var memloc = 0;
     var debugNode = $('#debug, #hardware_debug');
     var cpu = null;
     var disassemble = null;
@@ -14,9 +16,13 @@ function Debugger() {
 
     enable(false);
 
-    var numToShow = 32;
-    for (var i = 0; i < numToShow; i++) {
+    var numToShow = 16;
+    var i;
+    for (i = 0; i < numToShow; i++) {
         disass.find('.template').clone().removeClass('template').appendTo(disass);
+    }
+    for (i = 0; i < numToShow; i++) {
+        memview.find('.template').clone().removeClass('template').appendTo(memview);
     }
 
     var uservia;
@@ -55,12 +61,12 @@ function Debugger() {
     };
 
     var disassPc = null;
+    var disassStack = [];
     this.debug = function(where) {
         enable(true);
-        for (var i = 0; i < numToShow / 2; ++i)
-            where = prevInstruction(where);
         updateDisassembly(where);
         updateRegisters();
+        updateMemory();
         sysvia();
         uservia();
     };
@@ -157,36 +163,86 @@ function Debugger() {
         }
     }
 
+    function memdump(from, to) {
+        var hex = "";
+        var asc = "";
+        for (var i = from; i < to; ++i) {
+            if (hex !== "") hex += " ";
+            var b = cpu.readmem(i);
+            hex += hexbyte(b);
+            if (b >= 32 && b < 128) {
+                asc += String.fromCharCode(b);
+            } else { 
+                asc += "."; 
+            }
+        }
+        return {hex: hex, asc: asc};
+    }
+    
+    function updateMemory(newAddr) {
+        if (newAddr !== undefined) memloc = newAddr;
+        var kids = memview.children().filter(":visible");
+        var addr = memloc - (8 * Math.floor(kids.length / 2));
+        if (addr < 0) addr = 0;
+        kids.each(function() {
+            $(this).find('.dis_addr').html(labelHtml(addr));
+            $(this).toggleClass('highlight', addr === memloc);
+            var dump = memdump(addr, addr + 8);
+            $(this).find('.mem_bytes').text(dump.hex);
+            $(this).find('.mem_asc').text(dump.asc);
+            addr += 8;
+        });
+    }
+
+    function instrClick(address) {
+        return function() {
+            disassStack.push(disassPc);
+            updateDisassembly(address);
+        };
+    }
+
+    function memClick(address) {
+        return function() {
+            updateMemory(address);
+        };
+    }
+
     function updateDisassembly(address) {
         disassPc = address;
-        disass.children().each(function() {
+        var elems = disass.children().filter(":visible");
+        function updateDisElem(elem, address) {
             var result = disassemble(address);
-            var hex = "";
-            var asc = "";
-            for (var i = address; i < result[1]; ++i) {
-                if (hex !== "") hex += " ";
-                var b = cpu.readmem(i);
-                hex += hexbyte(b);
-                if (b >= 32 && b < 128) {
-                    asc += String.fromCharCode(b);
-                } else { 
-                    asc += "."; 
-                }
-            }
-            $(this).find('.dis_addr').html(labelHtml(address));
-            $(this).toggleClass('current', address == cpu.pc);
-            $(this).find('.instr_bytes').text(hex);
-            $(this).find('.instr_asc').text(asc);
-            $(this).find('.disassembly').html(result[0]);
-            $(this).find('.addr')
-            //.editable({editBy: 'dblclick', editClass: 'editable', onSubmit:endLabelEdit })
-            .keypress(function(e) { if (e.which==13) $(this).blur(); });
-            address = result[1];
-        });
+            var dump = memdump(address, result[1]);
+            elem.find('.dis_addr').html(labelHtml(address));
+            elem.toggleClass('current', address === cpu.pc);
+            elem.toggleClass('highlight', address === disassPc);
+            elem.find('.instr_bytes').text(dump.hex);
+            elem.find('.instr_asc').text(dump.asc);
+            elem.find('.disassembly').html(result[0]);
+            elem.find('.instr_mem_ref').click(memClick(result[2]));
+            elem.find('.instr_instr_ref').click(instrClick(result[2]));
+            return result[1];
+        }
+        var i;
+        var elem;
+        for (i = 0; i < numToShow / 2; ++i) {
+            elem = $(elems[i + numToShow / 2]);
+            address = updateDisElem(elem, address);
+        }
+        address = disassPc;
+        for (i = numToShow / 2 - 1; i >= 0; --i) {
+            address = prevInstruction(address);
+            elem = $(elems[i]);
+            updateDisElem(elem, address);
+        }
     }
 
     this.keyPress = function(key) {
         switch (String.fromCharCode(key)) {
+        case 'b':
+            if (disassStack.length)
+                updateDisassembly(disassStack.pop());
+            break;
         case 'k':
             updateDisassembly(prevInstruction(disassPc));
             break;

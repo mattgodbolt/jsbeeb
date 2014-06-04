@@ -739,6 +739,9 @@ function Disassemble6502(cpu) {
     function formatAddr(addr) {
         return "<span class='instr_mem_ref'>" + hexword(addr) + "</span>";
     }
+    function formatJumpAddr(addr) {
+        return "<span class='instr_instr_ref'>" + hexword(addr) + "</span>";
+    }
     this.disassemble = function(addr) {
         var opcode = opcodes6502[cpu.readmem(addr)];
         if (!opcode) { return ["???", addr + 1]; }
@@ -749,6 +752,7 @@ function Disassemble6502(cpu) {
         var param = split[1] || "";
         var suffix = "";
         var index = param.match(/(.*),([xy])$/);
+        var destAddr;
         if (index) {
             param = index[1];
             suffix = "," + index[2].toUpperCase();
@@ -757,20 +761,22 @@ function Disassemble6502(cpu) {
         case "imm":
             return [split[0] + " #$" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
         case "abs":
-            return [split[0] + " $" + formatAddr(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + suffix,
-                   addr + 3];
+            var formatter = (split[0] == "JMP" || split[0] == "JSR") ? formatJumpAddr : formatAddr;
+            destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8);
+            return [split[0] + " $" + formatter(destAddr) + suffix, addr + 3, destAddr];
         case "branch":
-            return [split[0] + " $" + formatAddr(addr + signExtend(cpu.readmem(addr + 1)) + 2) + suffix,
-                   addr + 2];
+            destAddr = addr + signExtend(cpu.readmem(addr + 1)) + 2;
+            return [split[0] + " $" + formatJumpAddr(destAddr) + suffix, addr + 2, destAddr];
         case "zp":
             return [split[0] + " $" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
         case "(,x)":
             return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
         case "()":
-            if (split[0] == "JMP")
-                return [split[0] + " ($" + formatAddr(cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8)) + ")" + suffix,
-                    addr + 3];
-            else
+            if (split[0] == "JMP") {
+                destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr+2)<<8);
+                var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1)<<8);
+                return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
+            } else
                 return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
         }
         return [opcode, addr + 1];
