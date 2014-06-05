@@ -48,7 +48,11 @@ body {
     display: inline-block;
 }
 
-#memory {
+span.accesskey {
+    text-decoration: underline;
+}
+
+#memory-container {
     float: left;
     width: 400px;
 }

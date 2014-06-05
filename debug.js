@@ -4,6 +4,16 @@ function Debugger() {
     var memview = $('#memory');
     var memloc = 0;
     var debugNode = $('#debug, #hardware_debug');
+
+    function parseAddr(s) {
+        if (s[0] == '$') return parseInt(s.substr(1), 16);
+        if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
+        return parseInt(s, 16);
+    }
+    $('#goto-mem-addr-form').on('submit', function(){
+        updateMemory(parseAddr($('#goto-mem-addr').val()));
+        return false;
+    });
     var cpu = null;
     var disassemble = null;
     var enabled = false;
@@ -21,7 +31,7 @@ function Debugger() {
     for (i = 0; i < numToShow; i++) {
         disass.find('.template').clone().removeClass('template').appendTo(disass);
     }
-    for (i = 0; i < numToShow; i++) {
+    for (i = 0; i < numToShow - 2; i++) {
         memview.find('.template').clone().removeClass('template').appendTo(memview);
     }
 

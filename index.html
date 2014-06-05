@@ -121,8 +121,16 @@
                 </table>
             </div>
             <div id="debug">
-                <div id="memory">
-                    <div class="template"><span class="dis_addr">0000</span><span class="mem_bytes">11 22 33 44 55 66 77 88</span><span class="mem_asc">ABCDEFG</span></div>
+                <div id="memory-container">
+                    <form class="form-inline" role="form" id="goto-mem-addr-form">
+                        <div class="form-group">
+                            <label for="goto-mem-addr" accesskey="a" class="control-label"><span class="accesskey">A</span>ddr:</label>
+                            <input type="text" class="form-control input-sm" id="goto-mem-addr" placeholder="$0000">
+                        </div>
+                    </form>
+                    <div id="memory">
+                        <div class="template"><span class="dis_addr">0000</span><span class="mem_bytes">11 22 33 44 55 66 77 88</span><span class="mem_asc">ABCDEFG</span></div>
+                    </div>
                 </div>
                 <div id="disassembly">
                     <div class="template"><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span></div>
