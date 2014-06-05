@@ -243,11 +243,11 @@ function getOp(op) {
     case "PHP": return { op: push('p'), extra: 2 };
     case "PHX": return { op: push('x'), extra: 2 };
     case "PHY": return { op: push('y'), extra: 2 };
-    case "RTS": return { op: [  // TODO: check in v6502
+    case "RTS": return { op: [
         "var temp = cpu.pull();",
         "temp |= cpu.pull() << 8;",
         "cpu.pc = (temp + 1) & 0xffff;" ], extra: 5 };
-    case "RTI": return { preop: [  // TODO: check in v6502
+    case "RTI": return { preop: [
         "var temp = cpu.pull();",
         "cpu.p.c = !!(temp & 0x01);",
         "cpu.p.z = !!(temp & 0x02);",
@@ -269,7 +269,7 @@ function getOp(op) {
     case "ASR": return { op: ["REG &= cpu.a;"].concat(
                         rotate(false, false)).concat(["cpu.a = REG;"])};
     case "SLO": return { op: rotate(true, false).concat([
-        // TODO timings are off here, and (ab)uses fact there's going to be an 'addr' variable
+        // timings are off here, and (ab)uses fact there's going to be an 'addr' variable
         "cpu.writemem(addr, REG);", 
         "cpu.a |= REG;",
         "cpu.setzn(cpu.a);"

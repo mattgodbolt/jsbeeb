@@ -23,8 +23,8 @@ Then visit http://localhost:8000/ and off you go.
 
 URL parameters
 --------------
-* autoboot - fakes a shift break
 
+* autoboot - fakes a shift break
 * disc1=XXX - loads disc XXX (from the `discs/` directory) into drive 1
 * disc2=XXX - as above
 * disc1=!YYY - creates a local disk YYY which will be kept in browser local storage
@@ -33,22 +33,35 @@ URL parameters
 TODO
 ----
 
-If you're looking to help
+If you're looking to help:
 
-* HTML/web
-  * More discs and/or somehow XSS-request discs from other archives
 * Core
-  * Save ability
+  * Save state ability
   * Get the "boo" of the boot "boo-beep" working
+* Save disc support
+  * I've started dropbox support, but it's not quite there yet.
+  * Google Drive support would be nice
+  * Local discs need to be made more workable and need an "export" feature
 * `git grep -i todo`
-* Timings (see below)
 
 Timings
 -------
 
-In the `tests` directory is a timing test program written by Rich.  It has been run on a real live BBC B and the results are in the directory.  An SSD of the same tests is in the `discs/` directory. We're working on making jsbeeb agree with the real Beeb.
+In the `tests` directory is a timing test program written by Rich.  It has been run on a real live BBC B and the results are in the directory.  An SSD of the same tests is in the `discs/` directory. The emulation now agrees 100% with this and there are tests to keep it in line.
+
+Tests
+-----
+
+There are some simple tests of correctness against a few timing sources. Visit the `/tests` URL to run them.
+
+Tests can be run automatically if you have `node` installed - just run `make` and it'll ensure the relevant libraries are installed, then it'll run the tests.
 
 Thanks
 ------
 
-Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/). Huge thanks to him for his hard work and for open sourcing his code. Also huge thanks to Richard Talbot-Watkins for his advice and help along the way.
+Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. Also huge thanks to Richard Talbot-Watkins for his advice and help along the way.
+
+More information
+----------------
+
+I've written a lot of how the innards work on [my blog](http://xania.org) in the [emulation](http://xania.org/Emulation-archive) section.
