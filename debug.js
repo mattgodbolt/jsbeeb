@@ -134,9 +134,9 @@ function Debugger() {
     }
 
     function stepOut() {
-        var sp = cpu.sp;
+        var s = cpu.s;
         stepUntil(function () {
-            if (cpu.sp >= sp && isReturn(cpu.pc)) {
+            if (cpu.s >= s && isReturn(cpu.pc)) {
                 var nextInstr = nextInstruction(cpu.pc);
                 step();
                 return cpu.pc != nextInstr;
