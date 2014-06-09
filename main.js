@@ -80,7 +80,8 @@ $(function() {
             go();
             return;
         }
-        return dbgr.keyPress(keyCode(evt)); 
+        var handled = dbgr.keyPress(keyCode(evt));
+        if (handled) evt.preventDefault();
     }
     function keyDown(evt) {
         if (!running) return;

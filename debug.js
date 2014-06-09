@@ -6,14 +6,22 @@ function Debugger() {
     var debugNode = $('#debug, #hardware_debug');
 
     function parseAddr(s) {
-        if (s[0] == '$') return parseInt(s.substr(1), 16);
+        if (s[0] == '$' || s[0] == '&') return parseInt(s.substr(1), 16);
         if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
         return parseInt(s, 16);
     }
-    $('#goto-mem-addr-form').on('submit', function(){
-        updateMemory(parseAddr($('#goto-mem-addr').val()));
-        return false;
-    });
+    function setupGoto(form, func) {
+        var addr = form.find(".goto-addr");
+        form.on('submit', function() {
+            func(parseAddr(addr.val()));
+            addr.val("");
+            addr.blur();
+            return false;
+        });
+    }
+    setupGoto($("#goto-mem-addr-form"), updateMemory);
+    setupGoto($("#goto-dis-addr-form"), updateDisassembly);
+
     var cpu = null;
     var disassemble = null;
     var enabled = false;
@@ -30,8 +38,6 @@ function Debugger() {
     var i;
     for (i = 0; i < numToShow; i++) {
         disass.find('.template').clone().removeClass('template').appendTo(disass);
-    }
-    for (i = 0; i < numToShow - 2; i++) {
         memview.find('.template').clone().removeClass('template').appendTo(memview);
     }
 
@@ -146,6 +152,7 @@ function Debugger() {
     }
 
     function prevInstruction(address) {
+        address &= 0xffff;
         for (var startingPoint = address - 20; startingPoint != address; startingPoint++) {
             var addr = startingPoint & 0xffff;
             while (addr < address) {
@@ -248,6 +255,9 @@ function Debugger() {
     }
 
     this.keyPress = function(key) {
+        if ($(":focus").length > 0) {
+            return false;
+        }
         switch (String.fromCharCode(key)) {
         case 'b':
             if (disassStack.length)
@@ -258,6 +268,18 @@ function Debugger() {
             break;
         case 'j':
             updateDisassembly(nextInstruction(disassPc));
+            break;
+        case 'u':
+            updateMemory(memloc + 8);
+            break;
+        case 'i':
+            updateMemory(memloc - 8);
+            break;
+        case 'U':
+            updateMemory(memloc + 64);
+            break;
+        case 'I':
+            updateMemory(memloc - 64);
             break;
         case 'n':
             step();

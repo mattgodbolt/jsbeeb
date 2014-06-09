@@ -52,14 +52,13 @@ span.accesskey {
     text-decoration: underline;
 }
 
-#memory-container {
+.debug-container {
     float: left;
     width: 400px;
 }
 
-#disassembly {
-    width: 400px; 
-	float: left;
+.goto-addr {
+    max-width: 6em;
 }
 
 #leds { 
