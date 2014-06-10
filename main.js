@@ -69,7 +69,7 @@ $(function() {
         return soundChip;
     })();
 
-    dbgr = new Debugger();
+    dbgr = new Debugger(video);
     function keyCode(evt) {
         return evt.which || evt.charCode || evt.keyCode;
     }

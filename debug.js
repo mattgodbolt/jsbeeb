@@ -1,4 +1,4 @@
-function Debugger() {
+function Debugger(video) {
     var self = this;
     var disass = $('#disassembly');
     var memview = $('#memory');
@@ -85,6 +85,7 @@ function Debugger() {
         updateMemory();
         sysvia();
         uservia();
+        video.debugPaint();
     };
 
     this.hide = function() { enable(false); };
@@ -118,7 +119,7 @@ function Debugger() {
 
     function isUnconditionalJump(addr) {
         var result = disassemble(addr);
-        if (result[0].match(/^(JMP|RTS)/)) {
+        if (result[0].match(/^(JMP|RTS|BRA)/)) {
             return true;
         }
         return false;
@@ -287,7 +288,7 @@ function Debugger() {
         case 'm':
             stepOver();
             break;
-        case 'u':
+        case 'o':
             stepOut();
             break;
         }

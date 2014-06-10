@@ -44,6 +44,7 @@ function Video(fb32, paint_ext) {
         self.maxx = self.maxy = 0;
         self.con = self.coff = self.cursoron = false; // on this line, off, on due to flash
         self.cdraw = 0;
+        self.lastMinX = self.lastMaxX = self.lastMinY = self.lastMaxY = 0;
     };
 
     function paint() {
@@ -52,9 +53,17 @@ function Video(fb32, paint_ext) {
         } else {
             paint_ext(self.minx, self.miny, self.maxx, self.maxy);
         }
+        self.lastMinX = self.minx;
+        self.lastMaxX = self.maxx;
+        self.lastMinY = self.miny;
+        self.lastMaxY = self.maxy;
         self.minx = self.miny = 65535;
         self.maxx = self.maxy = 0;
     }
+
+    self.debugPaint = function() {
+        paint_ext(self.lastMinX, self.lastMinY, self.lastMaxX, self.lastMaxY);
+    };
 
     function table4bppOffset(ulamode, byte) {
         return ulamode * 256 * 16 + byte * 16;
