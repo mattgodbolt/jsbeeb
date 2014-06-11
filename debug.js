@@ -294,4 +294,49 @@ function Debugger(video) {
         }
         return true;
     };
+
+    var patchInstructions = {};
+    function execPatch(inst) {
+        var insts = inst.split(",");
+        if (insts.length != 1) {
+            _.each(insts, execPatch);
+            return;
+        }
+        if (!inst) return;
+        var ops = inst.split(":");
+        var addr = parseInt(ops[0], 16);
+        var setTo = ops[1];
+        for (var i = 0; i < setTo.length; i += 2) {
+            var b = parseInt(setTo.substr(i, 2), 16);
+            cpu.writemem(addr, b);
+            addr++;
+        }
+    }
+
+    this.setPatch = function(patch) {
+        _.each(patch.split(";"), function(inst) {
+            if (inst[0] == '@') {
+                var at = parseInt(inst.substr(1, 4), 16);
+                inst = inst.substr(5);
+                if (!patchInstructions[at])
+                    patchInstructions[at] = [];
+                patchInstructions[at].push(inst);
+            } else {
+                execPatch(inst);
+            }
+        });
+        if (Object.keys(patchInstructions).length !== 0) {
+            cpu.debugInstruction = function(pc) {
+                var insts = patchInstructions[pc];
+                if (!insts) return false;
+                _.each(insts, execPatch);
+                delete patchInstructions[pc];
+                if (Object.keys(patchInstructions).length === 0) {
+                    console.log("All patches done");
+                    cpu.debugInstruction = null;
+                }
+                return false;
+            };
+        }
+    };
 }

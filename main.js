@@ -185,6 +185,10 @@ $(function() {
         $('.hidden-unless-db-enabled').show();
     }
 
+    if (parsedQuery.patch) {
+        dbgr.setPatch(parsedQuery.patch);
+    }
+
     if (needsAutoboot) autoboot(discImage);
     function updateUrl() {
         var url = window.location.origin + window.location.pathname;
