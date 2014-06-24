@@ -105,10 +105,10 @@ function via(cpu, irq) {
 
                 mode = (self.pcr & 0x0e);
                 if (mode == 8) { // Handshake mode
-                    self.setca2(0);
+                    self.setca2(false);
                 } else if (mode == 0x0a) { // Pulse mode
-                    self.setca2(0);
-                    self.setca2(1);
+                    self.setca2(false);
+                    self.setca2(true);
                 }
                 /* falls through */
             case ORAnh:
@@ -152,8 +152,8 @@ function via(cpu, irq) {
 
             case PCR:
                 self.pcr = val;
-                if ((val & 0xe) == 0xc) self.setca2(0);
-                else if (val & 0x08) self.setca2(1);
+                if ((val & 0xe) == 0xc) self.setca2(false);
+                else if (val & 0x08) self.setca2(true);
                 if ((val & 0xe0) == 0xc0) self.setcb2(0);
                 else if (val & 0x80) self.setcb2(1);
                 break;
