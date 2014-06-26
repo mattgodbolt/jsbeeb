@@ -312,9 +312,10 @@ function Cpu6502(dbgr, video, soundChip) {
     };
 
     this.setzn = function(v) {
-        v = v|0;
+        v &= 0xff;
         this.p.z = !v;
         this.p.n = !!(v & 0x80);
+        return v;
     };
 
     this.push = function(v) {
