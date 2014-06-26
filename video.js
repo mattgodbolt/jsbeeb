@@ -20,6 +20,8 @@ function Video(fb32, paint_ext) {
         self.oddclock = false;
         self.frameCount = 0;
         self.ulactrl = 0;
+        self.pixelsPerChar = 8;
+        self.halfClock = false;
         self.ulamode = 0;
         self.crtcmode = 0;
         self.dispen = false;
@@ -107,7 +109,7 @@ function Video(fb32, paint_ext) {
             }
             self.charsleft--;
         } else if (self.scrx < 1280) {
-            var pixels = (self.ulactrl & 0x10) ? 8 : 16;
+            var pixels = self.pixelsPerChar;
             var blank = self.collook[0];
             var offset = self.scry * 1280 + self.scrx;
             var x;
@@ -140,7 +142,7 @@ function Video(fb32, paint_ext) {
         if (self.ma & 0x2000) {
             dat = self.cpu.readmem(0x7c00 | (self.ma & 0x3ff) | vidbank);
         } else {
-            var ilSyncAndVideo = (self.regs[8] & 3) == 3;
+            var ilSyncAndVideo = (self.regs[8] & 3) === 3;
             var addr = ilSyncAndVideo ? ((self.ma << 3) | ((self.sc & 3) << 1) | self.interlline)
                 : ((self.ma<<3) | (self.sc & 7));
             if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
@@ -148,11 +150,11 @@ function Video(fb32, paint_ext) {
         }
         if (self.scrx < 1280) {
             var offset = (self.scry * 1280 + self.scrx)|0;
-            var pixels = (self.ulactrl & 0x10) ? 8 : 16;
+            var pixels = self.pixelsPerChar;
             var fb32 = self.fb32;
             var fbOffset = offset;
             var i;
-            if ((self.regs[8] & 0x30) === 0x30 || ((self.sc&8) && ! (self.ulactrl&2))) {
+            if ((self.regs[8] & 0x30) === 0x30 || ((self.sc&8) && !(self.ulactrl&2))) {
                 var black = self.collook[0];
                 for (i = 0; i < pixels; i += 8) {
                     // As per below, this is faster.
@@ -211,7 +213,7 @@ function Video(fb32, paint_ext) {
     }
 
     self.endofline = function() {
-        var interlaced = (self.regs[8] & 3) == 3; // todo rename ilSyncAndVideo as above?
+        var interlaced = (self.regs[8] & 3) === 3; // todo rename ilSyncAndVideo as above?
         self.hc = 0;
 
         var cursorEnd = self.regs[11] & 31;
@@ -229,7 +231,7 @@ function Video(fb32, paint_ext) {
                 self.ma = self.maback = (self.regs[13] | (self.regs[12] << 8)) & 0x3fff;
                 self.sc = 0;
             }
-        } else if (self.sc == self.regs[9] || (interlaced && self.sc == (self.regs[9]>>>1))) {
+        } else if (self.sc === self.regs[9] || (interlaced && self.sc === (self.regs[9]>>>1))) {
             // end of a vertical character
             self.maback = self.ma;
             self.sc = 0;
@@ -237,11 +239,11 @@ function Video(fb32, paint_ext) {
             self.teletext.verticalCharEnd();
             var oldvc = self.vc;
             self.vc = (self.vc + 1) & 127;
-            if (self.vc == self.regs[6]) {
+            if (self.vc === self.regs[6]) {
                 // hit bottom of displayed screen
                 self.vdispen = false;
             }
-            if (oldvc == self.regs[4]) {
+            if (oldvc === self.regs[4]) {
                 // vertical total register count
                 self.vc = 0;
                 self.vadj = self.regs[5]; // load fractional adjustment
@@ -253,7 +255,7 @@ function Video(fb32, paint_ext) {
                 var cursorFlash = (self.regs[10] & 0x60) >>> 5;
                 self.cursoron = (cursorFlash === 0) || !!(self.frameCount & cursorFlashMask[cursorFlash]);
             }
-            if (self.vc == self.regs[7]) {
+            if (self.vc === self.regs[7]) {
                 // vertical sync position
                 //if (!(self.regs[8] & 1) && self.oldr8) clearToColour(); TODO: this!
                 self.frameodd = !self.frameodd;
@@ -301,6 +303,10 @@ function Video(fb32, paint_ext) {
         // adc, mouse? seriously?
     };
 
+    function startX() {
+        return (128 - ((self.regs[3] & 0xf) * self.pixelsPerChar / 2))|0;
+    }
+
     ////////////////////
     // Main drawing routine
     self.polltime = function(clocks) {
@@ -308,22 +314,18 @@ function Video(fb32, paint_ext) {
             self.scrx += 8;
             self.vidclocks++;
             self.oddclock = !self.oddclock;
-            if (!(self.ulactrl & 0x10) && !self.oddclock) continue;
+            if (self.halfClock && !self.oddclock) continue;
 
             // Have we reached the end of this displayed line? (i.e. entering hblank)
-            if (self.hc == self.regs[1]) {
+            if (self.hc === self.regs[1]) {
                 if ((self.ulactrl & 2) && self.dispen) self.charsleft = 3; // Teletext mode?
                 else self.charsleft = 0;
                 self.dispen = false;
             }
 
             // Have we reached the horizontal sync position? (i.e. beginning of next line)
-            if (self.hc == self.regs[2]) {
-                if (self.ulactrl & 0x10) {
-                    self.scrx = 128 - ((self.regs[3] & 0xf) * 4);
-                } else {
-                    self.scrx = 128 - ((self.regs[3] & 0xf) * 8);
-                }
+            if (self.hc === self.regs[2]) {
+                self.scrx = startX();
                 self.scry++;
                 // I'm really not sure when and if this can happen; b-em does this, anyway
                 if (self.scry >= 384) {
@@ -340,21 +342,16 @@ function Video(fb32, paint_ext) {
             }
             
             if (self.hvblcount) {
-                self.hvblcount--;
-                if (!self.hvblcount) {
+                if (--self.hvblcount === 0) {
                     self.sysvia.vblankintlow();
                 }
             }
 
-            if (self.interline && self.hc == (self.regs[0]>>>1)) {
+            if (self.interline && self.hc === (self.regs[0]>>>1)) {
                 // hit end of interlaced line
                 self.hc = self.interline = 0;
-                if (self.ulactrl&0x10) {
-                    self.scrx = 128 - ((self.regs[3] & 0xf) * 4);
-                } else {
-                    self.scrx = 128 - ((self.regs[3] & 0xf) * 8);
-                }
-            } else if (self.hc == self.regs[0]) {
+                self.scrx = startX();
+            } else if (self.hc === self.regs[0]) {
                 // We've hit the end of a line (reg 0 is horiz sync char count)
                 self.endofline();
             } else {
@@ -412,6 +409,8 @@ function Video(fb32, paint_ext) {
                     }
                 }
                 video.ulactrl = val;
+                video.pixelsPerChar = (val & 0x10) ? 8 : 16;
+                video.halfClock = !(val & 0x10);
                 video.ulamode = (val>>>2) & 3;
                 if (val & 2) video.crtcmode = 0;
                 else if (val & 0x10) video.crtcmode = 1;
