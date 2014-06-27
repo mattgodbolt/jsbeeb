@@ -192,7 +192,7 @@ function Cpu6502(dbgr, video, soundChip) {
         case 0xfe18: // TODO adc on master
             break;
         case 0xfe20: return this.ula.write(addr, b);
-        case 0xfe24: return  this.ula.write(addr, b); // todo if master, 1770
+        case 0xfe24: return this.ula.write(addr, b); // todo if master, 1770
         case 0xfe28: // TODO 1770 on master
             break;
         case 0xfe30:
