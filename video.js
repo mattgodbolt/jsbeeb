@@ -3,9 +3,10 @@ function Video(fb32, paint_ext) {
     var self = this;
     self.fb32 = fb32;
     self.paint = paint;
-    self.collook = new Uint32Array([
+    // TODO: on Chrome 35 making this a Uint32Array seems to push ula.write into a deopt party.
+    self.collook = /*new Uint32Array(*/[
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
-            0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]);
+            0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff];//);
     var screenlen = new Uint16Array([0x4000, 0x5000, 0x2000, 0x2800]);
     var cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
     var cursorFlashMask = new Uint8Array([0x00, 0x00, 0x10, 0x20]);
@@ -386,36 +387,37 @@ function Video(fb32, paint_ext) {
     
     ////////////////////
     // ULA interface
-    self.ula = new (function(video) {
-        this.read = function(addr) { return 0xff; };
-        this.write = function(addr, val) {
+    self.ula = {
+        read: function(addr) { return 0xff; },
+        write: function(addr, val) {
+            addr|=0; val|=0;
             var index;
             if (addr & 1) {
-                index = val >>> 4;
-                video.bakpal[index] = val & 0xf;
+                index = (val >>> 4) & 0xf;
+                self.bakpal[index] = val & 0xf;
                 var ulaCol = val & 7;
-                if ((val & 8) && (video.ulactrl & 1)) 
-                    video.ulapal[index] = video.collook[ulaCol];
+                if ((val & 8) && (self.ulactrl & 1))
+                    self.ulapal[index] = self.collook[ulaCol];
                 else
-                    video.ulapal[index] = video.collook[ulaCol ^ 7];
+                    self.ulapal[index] = self.collook[ulaCol ^ 7];
             } else {
-                if ((video.ulactrl^val) & 1) {
+                if ((self.ulactrl^val) & 1) {
                     // Flash colour has changed
                     var flashEnabled = !!(val & 1);
                     for (var i = 0; i < 16; ++i) {
-                        index = video.bakpal[i] & 7;
-                        if (!(flashEnabled && (video.bakpal[i] & 8))) index ^= 7;
-                        video.ulapal[i] = video.collook[index];
+                        index = self.bakpal[i] & 7;
+                        if (!(flashEnabled && (self.bakpal[i] & 8))) index ^= 7;
+                        self.ulapal[i] = self.collook[index];
                     }
                 }
-                video.ulactrl = val;
-                video.pixelsPerChar = (val & 0x10) ? 8 : 16;
-                video.halfClock = !(val & 0x10);
-                video.ulamode = (val>>>2) & 3;
-                if (val & 2) video.crtcmode = 0;
-                else if (val & 0x10) video.crtcmode = 1;
-                else video.crtcmode = 2;
+                self.ulactrl = val;
+                self.pixelsPerChar = (val & 0x10) ? 8 : 16;
+                self.halfClock = !(val & 0x10);
+                self.ulamode = (val>>>2) & 3;
+                if (val & 2) self.crtcmode = 0;
+                else if (val & 0x10) self.crtcmode = 1;
+                else self.crtcmode = 2;
             }
-        };
-    })(self);
+        }
+    };
 }
