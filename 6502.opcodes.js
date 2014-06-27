@@ -447,11 +447,11 @@ function compileInstruction(ins) {
     var lines = getInstruction(ins, true);
     if (!lines) return null;
     var funcName = ins.replace(" ", "_").replace("()", "ind").replace(",", "_").replace("(", "").replace(")", "");
-    var text = "var " + funcName + " = function(cpu) {   // " + ins +
-        "\n    \"use strict\";\n    " + lines.join("\n    ") + "\n}\n;" +
-        funcName + "\n";
+    var text = "// " + ins + "\n    \"use strict\";\n    " + lines.join("\n    ");
     try {
-        return eval(text); // jshint ignore:line
+        var func = new Function("cpu", text);
+        func.displayName = func;
+        return func;
     } catch (e) {
         throw "Unable to compile: " + e + "\nText:\n" + text;
     }
@@ -715,8 +715,7 @@ function generate6502() {
 
 function generate6502Switch(min, max) {
     "use strict";
-    var text = "var emulate = function(cpu, opcode) {\n" +
-        "    \"use strict\";\n    var REG = 0|0;\n    switch (opcode) {\n";
+    var text = "switch (opcode) {\n";
     for (var i = min; i < max; ++i) {
         var opcode = opcodes6502[i];
         if (opcode) {
@@ -730,8 +729,20 @@ function generate6502Switch(min, max) {
             text += "\n    break;\n";
         }
     }
-    text += "    }\n\n}\n; emulate;";
-    return eval(text); // jshint ignore:line
+    text += "}\n";
+    return text;
+}
+
+function generate6502() {
+    var text = "\"use strict\";\nvar REG = 0|0;\n";
+    text += "if (opcode < 128) {\n";
+    text += generate6502Switch(0, 128);
+    text += "} else {\n";
+    text += generate6502Switch(128, 256);
+    text += "}\n";
+    var func = new Function("cpu", "opcode", text);
+    func.displayName = "emulate";
+    return func;
 }
 
 function Disassemble6502(cpu) {
@@ -800,9 +811,4 @@ function runInstructionOldWay(cpu, opcode) {  // Unused as of now. This way seem
     instruction(cpu);
 }
 
-var lower128 = generate6502Switch(0, 128);
-var upper128 = generate6502Switch(128, 256);
-
-function runInstruction(cpu, opcode) {
-    if (opcode < 128) lower128(cpu, opcode); else upper128(cpu, opcode);
-}
+var runInstruction = generate6502();
