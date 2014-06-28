@@ -795,6 +795,7 @@ function Disassemble6502(cpu) {
 }
 
 function invalidOpcode(cpu, opcode) {
+    cpu.pc--;  // Account for the fact we've already incremented pc.
     console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(cpu.pc));
     console.log(cpu.disassembler.disassemble(cpu.pc)[0]);
     noteEvent('exception', 'invalid opcode', hexbyte(opcode));

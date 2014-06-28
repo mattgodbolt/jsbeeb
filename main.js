@@ -221,6 +221,12 @@ $(function() {
     if (discImage) loadDiscImage(0, discImage);
     if (secondDiscImage) loadDiscImage(1, secondDiscImage);
 
+    ////////////////
+    // tape test
+    processor.acia.setTape(new Tape(ssdLoad("tapes/Zalaga.tape")));
+    ////////////////
+
+
     $('#disc_load').change(function(evt) { 
         var file = evt.target.files[0]; 
         var reader = new FileReader();
@@ -336,6 +342,7 @@ $(function() {
             dom.toggleClass("on", on);
         };
     }
+    var cassette = new Light("motorlight");
     var caps = new Light("capslight");
     var shift = new Light("shiftlight");
     var drive0 = new Light("drive0");
@@ -345,8 +352,12 @@ $(function() {
         shift.update(processor.sysvia.shiftLockLight);
         drive0.update(processor.fdc.motoron[0]);
         drive1.update(processor.fdc.motoron[1]);
+        cassette.update(processor.acia.motorOn);
     };
 
+    // processor.debugInstruction = function(addr) {
+    //     return addr == 0xf5a9;
+    // };
     go();
 });
 

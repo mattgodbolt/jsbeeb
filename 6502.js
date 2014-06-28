@@ -136,6 +136,7 @@ function Cpu6502(dbgr, video, soundChip) {
             break;
         case 0xfe00: case 0xfe04: return this.crtc.read(addr);
         case 0xfe08: case 0xfe0c: return this.acia.read(addr);
+        case 0xfe10: case 0xfe14: return this.serial.read(addr);
         case 0xfe18: // TODO adc on master
             break;
         case 0xfe24: case 0xfe28: // TODO 1770 on master
@@ -187,8 +188,7 @@ function Cpu6502(dbgr, video, soundChip) {
             break;
         case 0xfe00: case 0xfe04: return this.crtc.write(addr, b);
         case 0xfe08: case 0xfe0c: return this.acia.write(addr, b);
-        case 0xfe10: case 0xfe14: // TODO serial
-            break;
+        case 0xfe10: case 0xfe14: return this.serial.write(addr, b);
         case 0xfe18: // TODO adc on master
             break;
         case 0xfe20: return this.ula.write(addr, b);
@@ -288,6 +288,7 @@ function Cpu6502(dbgr, video, soundChip) {
             this.sysvia = sysvia(this, soundChip);
             this.uservia = uservia(this);
             this.acia = new Acia(this);
+            this.serial = new Serial(this.acia);
             this.fdc = new Fdc(this);
             this.crtc = video.crtc;
             this.ula = video.ula;
@@ -337,10 +338,12 @@ function Cpu6502(dbgr, video, soundChip) {
     };
 
     this.polltime = function(cycles) {
+        cycles |= 0;
         this.cycles -= cycles;
         this.sysvia.polltime(cycles);
         this.uservia.polltime(cycles);
         this.fdc.polltime(cycles);
+        this.acia.polltime(cycles);
         video.polltime(cycles);
         soundChip.advance(cycles);
     };
