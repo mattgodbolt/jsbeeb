@@ -223,7 +223,7 @@ $(function() {
 
     ////////////////
     // tape test
-    processor.acia.setTape(new Tape(ssdLoad("tapes/Zalaga.tape")));
+    //processor.acia.setTape(new Tape(ssdLoad("tapes/Zalaga.tape")));
     ////////////////
 
 

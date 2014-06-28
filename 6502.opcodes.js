@@ -276,6 +276,9 @@ function getOp(op) {
         ]), read: true, write: true };
     case "SHX": return { op: "REG = cpu.x & ((addr>>8)+1);" };
     case "SHY": return { op: "REG = cpu.y & ((addr>>8)+1);" };
+    case "LAX": return { op: ["cpu.a = cpu.x = cpu.setzn(REG);"], read: true };
+    case "SRE": return { op: rotate(false, true).concat(["cpu.a = cpu.setzn(cpu.a ^ REG);"]), 
+                        read: true, write: true };
     }
     return null;
 }
@@ -619,7 +622,7 @@ var opcodes6502 = {
     0xA8: "TAY",
     0xA9: "LDA imm",
     0xAA: "TAX",
-    0xAB: "LAX",
+    0xAB: "LAX imm",
     0xAC: "LDY abs",
     0xAD: "LDA abs",
     0xAE: "LDX abs",
