@@ -24,7 +24,7 @@ function Acia(cpu) {
 
     self.setMotor = function(on) {
         self.motorOn = on;
-    }
+    };
 
     self.read = function(addr) {
         if (addr & 1) {
@@ -48,6 +48,7 @@ function Acia(cpu) {
             if ((self.cr & 0x03) == 0x03) {
                 self.reset();
             }
+            updateRate();
         }
     };
 
@@ -82,6 +83,31 @@ function Acia(cpu) {
 
     var runCounter = 0;
     var cyclesPerPoll = (2 * 1000 * 1000) / 30;
+    var serialReceiveRate = 19200;
+
+    self.setSerialReceive = function(rate) {
+        serialReceiveRate = rate;
+        updateRate();
+    };
+
+    var dividerTable = [1, 16, 64, 1];
+    function updateRate() {
+        var bitsPerByte = 8;
+        if (!(self.cr & 0x80)) {
+            bitsPerByte++; // Not totally correct if the AUG is to be believed.
+        }
+        var divider = dividerTable[self.cr & 0x03];
+        var newCyclesPerPoll = (64 * 2 * 1000 * 1000) / serialReceiveRate / divider;
+        newCyclesPerPoll = Math.floor(bitsPerByte * newCyclesPerPoll);
+        if (cyclesPerPoll != newCyclesPerPoll) {
+            cyclesPerPoll = newCyclesPerPoll;
+            console.log("Serial/ACIA - new cycles per poll = " + cyclesPerPoll);
+            console.log("Serial recv rate", serialReceiveRate);
+            console.log("Divider", divider);
+            console.log("Bits per byte", bitsPerByte);
+        }
+    }
+
     function run() {
         self.tape.poll(self);
     }
@@ -96,18 +122,9 @@ function Acia(cpu) {
     };
 }
 
-function Tape(stringData) {
+function TapefileTape(data) {
     var self = this;
     
-    //TODO: ugly and duplicated with disc code
-    var data;
-    if (typeof(data) == "string") {
-        data = stringData;
-    } else {
-        var len = stringData.length;
-        data = new Uint8Array(len);
-        for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
-    }
     self.count = 0;
     self.ptr = 0;
 
@@ -128,5 +145,22 @@ function Tape(stringData) {
             }
         }
         acia.receive(byte);
+    };
+}
+
+function loadTape(name) {
+    console.log("Loading tape from " + name);
+    var data = loadData(name);
+    if (!data) return null;
+    if (data[0] === 0x1f && data[1] === 0x8b && data[2] === 0x08) {
+        // It's gzipped, un-gzip before we detect further.
+        console.log("Tape is gzipped");
+        data = ungzip(data);
     }
+    if (data[0] === 0xff && data[1] === 0x04) {
+        console.log("Detected a 'tapefile' tape");
+        return new TapefileTape(data);
+    }
+    console.log("Unknown tape format");
+    return null;
 }

@@ -3,12 +3,7 @@
 function ssdLoad(name) {
     "use strict";
     console.log("Loading disc from " + name);
-    var request = new XMLHttpRequest();
-    request.open("GET", name, false);
-    request.overrideMimeType('text/plain; charset=x-user-defined');
-    request.send(null);
-    if (request.status != 200) return [];
-    return request.response;
+    return loadData(name);
 }
 
 function emptySsd(fdc) {

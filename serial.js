@@ -8,9 +8,12 @@ function Serial(acia) {
         self.receiveRate = 0;
     }
 
+    var table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
+
     function write(addr, val) {
         val &= 0xff;
         self.reg = val;
+        acia.setSerialReceive(table[val & 0x07]);
         self.transmitRate = val & 0x07;
         self.receiveRate = (val >>> 3) & 0x07;
         acia.setMotor(!!(val & 0x80));
