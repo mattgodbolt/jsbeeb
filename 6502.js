@@ -287,7 +287,7 @@ function Cpu6502(dbgr, video, soundChip) {
             this.disassembler = new Disassemble6502(this);
             this.sysvia = sysvia(this, soundChip);
             this.uservia = uservia(this);
-            this.acia = new Acia(this);
+            this.acia = new Acia(this, soundChip.toneGenerator);
             this.serial = new Serial(this.acia);
             this.fdc = new Fdc(this);
             this.crtc = video.crtc;
