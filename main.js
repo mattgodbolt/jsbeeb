@@ -223,9 +223,9 @@ $(function() {
 
     ////////////////
     // tape test
-    processor.acia.setTape(loadTape("tapes/Zalaga.tape"));
+    //processor.acia.setTape(loadTape("tapes/Zalaga.tape"));
+    processor.acia.setTape(loadTape("tapes/Welcome.uef"));
     ////////////////
-
 
     $('#disc_load').change(function(evt) { 
         var file = evt.target.files[0]; 
