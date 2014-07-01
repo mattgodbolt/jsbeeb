@@ -249,6 +249,7 @@ $(function() {
         video = new Video(fb32, function() {});
     }
     soundChip = new SoundChip(10000);
+    soundChip.toneGenerator = { mute: function() {}, tone: function() {} };
 
     dbgr = new Debugger();
 
