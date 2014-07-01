@@ -2,7 +2,7 @@
 function Acia(cpu) {
     "use strict";
     var self = this;
-    self.sr = 0x00;
+    self.sr = 0x02;
     self.cr = 0x00;
     self.dr = 0x00;
     self.motorOn = false;
@@ -44,20 +44,28 @@ function Acia(cpu) {
             self.sr &= ~0x02;
             updateIrq();
         } else {
-            self.cr = val;
-            if ((self.cr & 0x03) == 0x03) {
+            if ((val & 0x03) === 0x03) {
+                // According to the 6850 docs writing 3 here doesn't affect any CR bits, but
+                // just resets the device.
                 self.reset();
+                return;
+            } else {
+                self.cr = val;
             }
             updateRate();
         }
     };
 
+    var cassetteMode = false;
     self.selectRs423 = function(selected) {
         if (selected) {
             self.sr &= ~0x04; // Clear DCD
+            cassetteMode = false;
         } else {
             self.sr &= ~0x08; // Clear CTS
+            cassetteMode = true;
         }
+        updateRate();
     };
 
     self.setDCD = function(level) {
@@ -90,19 +98,23 @@ function Acia(cpu) {
         updateRate();
     };
 
-    var dividerTable = [1, 16, 64, 1];
+    var dividerTable = [1, 16, 64, -1];
     function updateRate() {
-        var bitsPerByte = 8;
+        var bitsPerByte = 9;
         if (!(self.cr & 0x80)) {
             bitsPerByte++; // Not totally correct if the AUG is to be believed.
         }
         var divider = dividerTable[self.cr & 0x03];
-        var newCyclesPerPoll = (64 * 2 * 1000 * 1000) / serialReceiveRate / divider;
+        // http://beebwiki.mdfs.net/index.php/Serial_ULA says the serial rate is ignored
+        // for cassette mode.
+        var effectiveReceive = cassetteMode ? 19200 : serialReceiveRate;
+        var newCyclesPerPoll = (2 * 1000 * 1000) / (effectiveReceive / divider);
         newCyclesPerPoll = Math.floor(bitsPerByte * newCyclesPerPoll);
         if (cyclesPerPoll != newCyclesPerPoll) {
             cyclesPerPoll = newCyclesPerPoll;
+            console.log("-----");
+            console.log("Processor is at: " + hexword(processor.pc));
             console.log("Serial/ACIA - new cycles per poll = " + cyclesPerPoll);
-            console.log("Serial recv rate", serialReceiveRate);
             console.log("Divider", divider);
             console.log("Bits per byte", bitsPerByte);
         }
@@ -119,6 +131,10 @@ function Acia(cpu) {
             runCounter += cyclesPerPoll;
             run();
         }
+    };
+
+    self.secondsToPolls = function(sec) {
+        return Math.floor(2 * 1000 * 1000 * sec / cyclesPerPoll);
     };
 }
 
@@ -139,6 +155,8 @@ function TapefileTape(data) {
             if (byte === 0) {
                 return acia.setDCD(false);
             } else if (byte === 0x04) {
+                // Simulate 5 seconds of carrier.
+                self.count = acia.secondsToPolls(5);
                 return acia.setDCD(true);
             }else if (byte !== 0xff) {
                 throw "Got a weird byte in the tape";

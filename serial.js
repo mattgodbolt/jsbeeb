@@ -13,9 +13,9 @@ function Serial(acia) {
     function write(addr, val) {
         val &= 0xff;
         self.reg = val;
-        acia.setSerialReceive(table[val & 0x07]);
         self.transmitRate = val & 0x07;
         self.receiveRate = (val >>> 3) & 0x07;
+        acia.setSerialReceive(table[self.receiveRate]);
         acia.setMotor(!!(val & 0x80));
         acia.selectRs423(!!(val & 0x40));
     }
