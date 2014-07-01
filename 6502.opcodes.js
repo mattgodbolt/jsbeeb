@@ -452,7 +452,7 @@ function compileInstruction(ins) {
     var funcName = ins.replace(" ", "_").replace("()", "ind").replace(",", "_").replace("(", "").replace(")", "");
     var text = "// " + ins + "\n    \"use strict\";\n    " + lines.join("\n    ");
     try {
-        var func = new Function("cpu", text);
+        var func = new Function("cpu", text); // jshint ignore:line
         func.displayName = func;
         return func;
     } catch (e) {
@@ -743,7 +743,7 @@ function generate6502() {
     text += "} else {\n";
     text += generate6502Switch(128, 256);
     text += "}\n";
-    var func = new Function("cpu", "opcode", text);
+    var func = new Function("cpu", "opcode", text); // jshint ignore:line
     func.displayName = "emulate";
     return func;
 }
