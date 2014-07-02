@@ -2,12 +2,12 @@ function waitFor(testFx, onReady, timeOutMillis) {
     var maxtimeOutMillis = timeOutMillis ? timeOutMillis : 3000, //< Default Max Timout is 3s
         start = new Date().getTime(),
         condition = false,
-        interval = setInterval(function() {
-            if ( (new Date().getTime() - start < maxtimeOutMillis) && !condition ) {
+        interval = setInterval(function () {
+            if ((new Date().getTime() - start < maxtimeOutMillis) && !condition) {
                 // If not time-out yet and condition not yet fulfilled
                 condition = (typeof(testFx) === "string" ? eval(testFx) : testFx()); //< defensive code
             } else {
-                if(!condition) {
+                if (!condition) {
                     // If condition still not fulfilled (timeout but condition is 'false')
                     console.log("'waitFor()' timeout");
                     phantom.exit(1);
@@ -23,20 +23,24 @@ function waitFor(testFx, onReady, timeOutMillis) {
 
 var finished = false;
 var page = require('webpage').create();
-page.onConsoleMessage = function(msg) {
+page.onConsoleMessage = function (msg) {
     console.log(">> " + msg);
     if (msg === "All tests complete") finished = true;
 };
 
 function firstTest() {
-    return page.evaluate(function() {
+    return page.evaluate(function () {
         return $('#test-info:visible').length !== 0;
     });
 }
 
 function whenAllFinished() {
-    var numFailed = page.evaluate(function() { return $('#test-info > .fail').length; });
-    var numSucceeded = page.evaluate(function() { return $('#test-info > .success').length; });
+    var numFailed = page.evaluate(function () {
+        return $('#test-info > .fail').length;
+    });
+    var numSucceeded = page.evaluate(function () {
+        return $('#test-info > .success').length;
+    });
     console.log("NumSucceeded = " + numSucceeded + ", NumFailed = " + numFailed);
     if (numSucceeded === 0 || numFailed !== 0) {
         console.log("Exiting with failure");
@@ -48,11 +52,11 @@ function whenAllFinished() {
 
 function waitForAllToFinish() {
     console.log("Waiting for all tests complete");
-    waitFor("finished", whenAllFinished, 600000);
+    waitFor("finished", whenAllFinished, 900000);
 }
 
 console.log("Loading test page");
-page.open("http://localhost:8000/tests/index.html", function(status) {
+page.open("http://localhost:8000/tests/index.html", function (status) {
     console.log("Page loaded");
     if (status != 'success') {
         console.log("Failed to load test page");
