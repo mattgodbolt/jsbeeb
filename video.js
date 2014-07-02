@@ -1,4 +1,5 @@
-function Video(fb32, paint_ext) {
+define(['teletext'], function(Teletext) { 
+    return function Video(fb32, paint_ext) {
     "use strict";
     var self = this;
     self.fb32 = fb32;
@@ -420,4 +421,4 @@ function Video(fb32, paint_ext) {
             }
         }
     };
-}
+};});

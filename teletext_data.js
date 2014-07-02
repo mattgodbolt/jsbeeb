@@ -1,6 +1,7 @@
+define({
 // Extremely heavily based on b-em.
 /* jshint laxcomma:true */
-function teletextCharacters() {
+    makeChars: function() {
     return {
         normal: new Uint8Array([
                         // 0x20 ' '
@@ -3273,4 +3274,4 @@ function teletextCharacters() {
                                         1,1,0,1,1,0,
                                         0,0,0,0,0,0
                                             ])};
-}
+    }});

@@ -1,4 +1,5 @@
-function SoundChip(sampleRate) {
+define([], function() {
+    return function SoundChip(sampleRate) {
     "use strict";
     var soundchipFreq = 4000000.0 / 16;
     var sampleDecrement = soundchipFreq / sampleRate;
@@ -165,4 +166,5 @@ function SoundChip(sampleRate) {
         noisePoked();
         advance(100000);
     };
-}
+};
+});

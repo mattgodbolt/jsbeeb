@@ -1,4 +1,4 @@
-function Teletext() {
+define(['teletext_data'], function (ttData) { return function Teletext() {
     "use strict";
     var self = this;
 
@@ -10,7 +10,7 @@ function Teletext() {
     self.sepgraphi = new Uint8Array(96 * 160);
 
     function init() {
-        var Data = teletextCharacters();
+        var Data = ttData.makeChars();
         var i, x, x2, stat, offs1, offs2, j, y, o, p;
         // turn the 1s into 15s (?)
         for (i = 0; i < 96*60; ++i) {
@@ -262,4 +262,4 @@ function Teletext() {
     this.render = render;
 
     init();
-}
+}; });
