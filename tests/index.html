@@ -7,25 +7,16 @@
         <meta name="author" content="Matt Godbolt">
         <meta name="description" content="A Javascript BBC Micro emulator">
         <title>JSBeeb - Javascript BBC Micro emulator test</title>
-        <link rel="stylesheet" href="../lib/bootstrap.min.css" type="text/css">
-        <link rel="stylesheet" href="../jsbeeb.css" type="text/css">
+        <link rel="stylesheet" href="/lib/bootstrap.min.css" type="text/css">
+        <link rel="stylesheet" href="/jsbeeb.css" type="text/css">
         <link rel="stylesheet" href="test.css" type="text/css">
         <link rel="shortcut icon" href="../favicon.ico">
-        <script type="text/javascript" src="../lib/jquery.min.js"></script>
-        <script type="text/javascript" src="../lib/bootstrap.min.js"></script>
-        <script type="text/javascript" src="../utils.js"></script>
-        <script type="text/javascript" src="../acia.js"></script>
-        <script type="text/javascript" src="../serial.js"></script>
-        <script type="text/javascript" src="../fdc.js"></script>
-        <script type="text/javascript" src="../via.js"></script>
-        <script type="text/javascript" src="../soundchip.js"></script>
-        <script type="text/javascript" src="../teletext_data.js"></script>
-        <script type="text/javascript" src="../teletext.js"></script>
-        <script type="text/javascript" src="../video.js"></script>
-        <script type="text/javascript" src="../6502.js"></script>
-        <script type="text/javascript" src="../6502.opcodes.js"></script>
-        <script type="text/javascript" src="../debug.js"></script>
-        <script type="text/javascript" src="test.js"></script>
+        <script type="text/javascript" src="/lib/require.js"></script>
+        <script type="text/javascript">
+            require(['../requirejs-common'], function() {
+                require(['./test.js']);
+            });
+        </script>
     </head>
 
     <body>
