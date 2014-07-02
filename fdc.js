@@ -1,13 +1,12 @@
 // Floppy disc controller and assorted utils.
 define(['utils'], function (utils) {
+    "use strict";
     function ssdLoad(name) {
-        "use strict";
         console.log("Loading disc from " + name);
         return utils.loadData(name);
     }
 
     function emptySsd(fdc) {
-        "use strict";
         var result = {
             notFound: 0,
             seek: function () {
@@ -24,7 +23,6 @@ define(['utils'], function (utils) {
     }
 
     function ssdFor(fdc, stringData) {
-        "use strict";
         var data;
         if (typeof(stringData) != "string") {
             data = stringData;
@@ -37,7 +35,6 @@ define(['utils'], function (utils) {
     }
 
     function localDisc(fdc, name) {
-        "use strict";
         var discName = "disc_" + name;
         var data;
         var i;
@@ -61,7 +58,6 @@ define(['utils'], function (utils) {
     }
 
     function baseSsd(fdc, data, flusher) {
-        "use strict";
         return {
             dsd: false,
             inRead: false,
@@ -198,26 +194,26 @@ define(['utils'], function (utils) {
     }
 
     function I8271(cpu) {
-        "use strict";
         var self = this;
         self.status = 0;
         self.result = 0;
         self.data = 0;
-        self.drivesel = 0;
-        self.curdrive = 0;
+        self.driveSel = 0;
+        self.curDrive = 0;
         self.drvout = 0;
-        self.curtrack = [0, 0];
-        self.realtrack = [0, 0];
-        self.sectorsleft = 0;
-        self.cursector = 0;
+        self.curTrack = [0, 0];
+        self.realTrack = [0, 0];
+        self.sectorsLeft = 0;
+        self.curSector = 0;
         self.phase = 0;
         self.command = 0xff;
         self.time = 0;
-        self.paramnum = 0;
-        self.paramreq = 0;
+        self.paramNum = 0;
+        self.paramReq = 0;
         self.params = new Uint8Array(8);
-        self.motoron = [false, false];
-        self.motorspin = [0, 0];
+        self.isActive = false;
+        self.motorOn = [false, false];
+        self.motorSpin = [0, 0];
         self.written = false;
         self.verify = false;
         self.drives = [emptySsd(this), emptySsd(this)];
@@ -306,18 +302,18 @@ define(['utils'], function (utils) {
             if (self.status & 0x80) return;
             self.command = val & 0x3f;
             if (self.command == 0x17) self.command = 0x13;
-            self.drivesel = val >>> 6;
-            self.curdrive = (val & 0x80) ? 1 : 0;
-            self.paramnum = 0;
-            self.paramreq = numParams(self.command);
+            self.driveSel = val >>> 6;
+            self.curDrive = (val & 0x80) ? 1 : 0;
+            self.paramNum = 0;
+            self.paramReq = numParams(self.command);
             self.status = 0x80;
-            if (!self.paramreq) {
+            if (!self.paramReq) {
                 if (self.command == 0x2c) {
                     // read drive status
                     self.status = 0x10;
-                    self.result = 0x88 | (self.curtrack[self.curdrive] ? 0 : 2);
-                    if (self.drivesel & 1) self.result |= 0x04;
-                    if (self.drivesel & 2) self.result |= 0x40;
+                    self.result = 0x88 | (self.curTrack[self.curDrive] ? 0 : 2);
+                    if (self.driveSel & 1) self.result |= 0x04;
+                    if (self.driveSel & 2) self.result |= 0x40;
                 } else {
                     self.result = 0x18;
                     self.status = 0x18;
@@ -333,10 +329,10 @@ define(['utils'], function (utils) {
                 case 0x17:
                     break; // apparently "mode register"
                 case 0x12:
-                    self.curtrack[0] = b;
+                    self.curTrack[0] = b;
                     break;
                 case 0x1a:
-                    self.curtrack[1] = b;
+                    self.curTrack[1] = b;
                     break;
                 case 0x23:
                     self.drvout = a;
@@ -356,10 +352,10 @@ define(['utils'], function (utils) {
                 case 0x06:
                     break;
                 case 0x12:
-                    self.result = self.curtrack[0];
+                    self.result = self.curTrack[0];
                     break;
                 case 0x1a:
-                    self.result = self.curtrack[1];
+                    self.result = self.curTrack[1];
                     break;
                 case 0x23:
                     self.result = self.drvout;
@@ -373,20 +369,21 @@ define(['utils'], function (utils) {
         }
 
         function spinup() {
-            self.motoron[self.curdrive] = true;
-            self.motorspin[self.curdrive] = 0;
+            self.isActive = true;
+            self.motorOn[self.curDrive] = true;
+            self.motorSpin[self.curDrive] = 0;
         }
 
         function setspindown() {
-            if (self.motoron[self.curdrive])
-                self.motorspin[self.curdrive] = 40000;
+            if (self.motorOn[self.curDrive])
+                self.motorSpin[self.curDrive] = 40000;
         }
 
         function seek(track) {
             spinup();
-            var diff = track - self.curtrack[self.curdrive];
-            self.realtrack[self.curdrive] += diff;
-            self.drives[self.curdrive].seek(self.realtrack[self.curdrive]);
+            var diff = track - self.curTrack[self.curDrive];
+            self.realTrack[self.curDrive] += diff;
+            self.drives[self.curDrive].seek(self.realTrack[self.curDrive]);
             // NB should be dependent on diff; but always non-zero
             self.time = 200; // TODO: b-em uses a round-the-houses approach to this where ddnoise actually sets time
         }
@@ -394,8 +391,8 @@ define(['utils'], function (utils) {
         var debugByte = 0;
 
         function prepareSectorIO(track, sector, numSectors) {
-            if (numSectors !== undefined) self.sectorsleft = numSectors & 31;
-            if (sector !== undefined) self.cursector = sector;
+            if (numSectors !== undefined) self.sectorsLeft = numSectors & 31;
+            if (sector !== undefined) self.curSector = sector;
             spinup();
             self.phase = 0;
             seek(track);
@@ -403,8 +400,8 @@ define(['utils'], function (utils) {
         }
 
         function parameter(val) {
-            if (self.paramnum < 5) self.params[self.paramnum++] = val;
-            if (self.paramnum != self.paramreq) return;
+            if (self.paramNum < 5) self.params[self.paramNum++] = val;
+            if (self.paramNum != self.paramReq) return;
             switch (self.command) {
                 case 0x35: // Specify.
                     self.status = 0;
@@ -485,24 +482,24 @@ define(['utils'], function (utils) {
             self.time = 0;
             switch (self.command) {
                 case 0x29: // Seek
-                    self.curtrack[self.curdrive] = self.params[0];
+                    self.curTrack[self.curDrive] = self.params[0];
                     update(0x18);
                     break;
 
                 case 0x0b: // Write
                     if (!self.phase) {
-                        self.curtrack[self.curdrive] = self.params[0];
+                        self.curTrack[self.curDrive] = self.params[0];
                         self.phase = 1;
-                        self.drives[self.curdrive].write(self.cursector, self.params[0], density(), 0);
+                        self.drives[self.curDrive].write(self.curSector, self.params[0], density(), 0);
                         update(0x8c);
                         return;
                     }
-                    if (--self.sectorsleft === 0) {
+                    if (--self.sectorsLeft === 0) {
                         done();
                         return;
                     }
-                    self.cursector++;
-                    self.drives[self.curdrive].write(self.cursector, self.params[0], density(), 0);
+                    self.curSector++;
+                    self.drives[self.curDrive].write(self.curSector, self.params[0], density(), 0);
                     update(0x8c);
                     self.debugByte = 0;
                     break;
@@ -510,29 +507,29 @@ define(['utils'], function (utils) {
                 case 0x13: // Read
                 case 0x1f: // Verify
                     if (!self.phase) {
-                        self.curtrack[self.curdrive] = self.params[0];
+                        self.curTrack[self.curDrive] = self.params[0];
                         self.phase = 1;
-                        self.drives[self.curdrive].read(self.cursector, self.params[0], density(), 0);
+                        self.drives[self.curDrive].read(self.curSector, self.params[0], density(), 0);
                         return;
                     }
-                    if (--self.sectorsleft === 0) {
+                    if (--self.sectorsLeft === 0) {
                         done();
                         return;
                     }
-                    self.cursector++;
-                    self.drives[self.curdrive].read(self.cursector, self.params[0], density(), 0);
+                    self.curSector++;
+                    self.drives[self.curDrive].read(self.curSector, self.params[0], density(), 0);
                     break;
 
                 case 0x23: // Format
                     switch (self.phase) {
                         case 0:
-                            self.curtrack[self.curdrive] = self.params[0];
-                            self.drives[self.curdrive].write(self.cursector, self.params[0], density(), 0);
+                            self.curTrack[self.curDrive] = self.params[0];
+                            self.drives[self.curDrive].write(self.curSector, self.params[0], density(), 0);
                             update(0x8c);
                             self.phase = 1;
                             break;
                         case 1:
-                            self.drives[self.curdrive].format(self.params[0], density(), 0);
+                            self.drives[self.curDrive].format(self.params[0], density(), 0);
                             self.phase = 2;
                             break;
                         case 2:
@@ -551,27 +548,28 @@ define(['utils'], function (utils) {
 
         var driveTime = 0;
         var motorTime = 0;
-        self.polltime = function (c) {
-            if (!c) return;
+        self.polltime = function (cycles) {
+            cycles = cycles|0;
             if (self.time) {
-                self.time -= c;
+                self.time -= cycles;
                 if (self.time <= 0) {
                     callback();
                 }
             }
-            driveTime -= c;
+            driveTime -= cycles;
             if (driveTime <= 0) {
                 driveTime += 16;
-                if (self.drives[self.curdrive])
-                    self.drives[self.curdrive].poll();
+                if (self.drives[self.curDrive])
+                    self.drives[self.curDrive].poll();
             }
-            motorTime -= c;
+            motorTime -= cycles;
             if (motorTime <= 0) {
                 motorTime += 128;
                 for (var i = 0; i < 2; ++i) {
-                    if (self.motorspin[i] && --self.motorspin[i] === 0)
-                        self.motoron[i] = false;
+                    if (self.motorSpin[i] && --self.motorSpin[i] === 0)
+                        self.motorOn[i] = false;
                 }
+                self.isActive = self.motorOn[0] || self.motorOn[1];
             }
         };
     }

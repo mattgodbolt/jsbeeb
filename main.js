@@ -392,8 +392,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
         syncLights = function () {
             caps.update(processor.sysvia.capsLockLight);
             shift.update(processor.sysvia.shiftLockLight);
-            drive0.update(processor.fdc.motoron[0]);
-            drive1.update(processor.fdc.motoron[1]);
+            drive0.update(processor.fdc.motorOn[0]);
+            drive1.update(processor.fdc.motorOn[1]);
             cassette.update(processor.acia.motorOn);
         };
 
