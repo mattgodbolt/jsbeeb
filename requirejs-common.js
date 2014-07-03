@@ -8,6 +8,7 @@ requirejs.config({
         'underscore': 'lib/underscore-min'
     },
     shim: {
-        'underscore': { exports: '_' }
+        'underscore': { exports: '_' },
+        'bootstrap': [ 'jquery' ]
     }
 });
