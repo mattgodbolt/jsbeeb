@@ -1,4 +1,4 @@
-require(['jquery', 'tests/test', 'utils'], function ($, test, utils) {
+require(['jquery', 'tests/test'], function ($, test) {
     "use strict"
     var currentTest = null;
 
