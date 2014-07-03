@@ -435,7 +435,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.fdc.polltime(cycles);
                 this.acia.polltime(cycles);
                 video.polltime(cycles);
-                soundChip.advance(cycles);
+                soundChip.polltime(cycles);
             };
 
             this.NMI = function (nmi) {
