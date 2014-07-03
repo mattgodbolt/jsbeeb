@@ -52,7 +52,7 @@ function whenAllFinished() {
 
 function waitForAllToFinish() {
     console.log("Waiting for all tests complete");
-    waitFor("finished", whenAllFinished, 900000);
+    waitFor("finished", whenAllFinished, 600000);
 }
 
 console.log("Loading test page");
