@@ -2,7 +2,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
     function (utils, opcodes, via, Acia, Serial, disc) {
         "use strict";
         var hexword = utils.hexword;
-        var hexbyte = utils.hexbyte;
         var signExtend = utils.signExtend;
 
         function Flags() {
@@ -333,10 +332,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.takeInt = (this.interrupt && !this.p.i);
             };
 
-            this.checkViaIntOnly = function () {
-                this.takeInt = ((this.interrupt & 0x80) && !this.p.i);
-            };
-
             this.loadRom = function (name, offset) {
                 console.log("Loading ROM from " + name);
                 var request = new XMLHttpRequest();
@@ -474,7 +469,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.polltime(pageCrossed ? 1 : 2);
             };
 
-            function adcNonBCD(addend, isC) { // TODO: don't use isC here - is that right?
+            function adcNonBCD(addend) {
                 var result = (self.a + addend + (self.p.c ? 1 : 0));
                 self.p.v = !!((self.a ^ result) & (addend ^ result) & 0x80);
                 self.p.c = !!(result & 0x100);
@@ -482,10 +477,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 self.setzn(self.a);
             }
 
-            function adcBCD(addend, isC) {
+            function adcBCD(addend) { // non 65c12 version. master version will need work here
                 var ah = 0;
                 var tempb = (self.a + addend + (self.p.c ? 1 : 0)) & 0xff;
-                if (!isC && !tempb) self.p.z = true;
+                if (!tempb) self.p.z = true;
                 var al = (self.a & 0xf) + (addend & 0xf) + (self.p.c ? 1 : 0);
                 if (al > 9) {
                     al -= 10;
@@ -493,7 +488,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     ah = 1;
                 }
                 ah += (self.a >> 4) + (addend >> 4);
-                if (!isC && (ah & 8)) self.p.n = true;
+                if (ah & 8) self.p.n = true;
                 self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
                 self.p.c = false;
                 if (ah > 9) {
@@ -502,13 +497,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     ah &= 0xf;
                 }
                 self.a = ((al & 0xf) | (ah << 4)) & 0xff;
-                if (isC) {
-                    self.setzn(self.a);
-                    self.polltime(1);
-                }
             }
 
-            function sbcBCD(subend, isC) {
+            function sbcBCD(subend) { // non 65c12 version. master version will need work here
                 var hc6 = 0;
                 var carry = self.p.c ? 0 : 1;
                 self.p.z = self.p.n = false;
@@ -530,19 +521,19 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 self.a = al | (ah << 4);
             }
 
-            this.adc = function (addend, isC) {
+            this.adc = function (addend) {
                 if (!this.p.d) {
-                    adcNonBCD(addend, isC);
+                    adcNonBCD(addend);
                 } else {
-                    adcBCD(addend, isC);
+                    adcBCD(addend);
                 }
             };
 
-            this.sbc = function (subend, isC) {
+            this.sbc = function (subend) {
                 if (!this.p.d) {
-                    adcNonBCD(subend ^ 0xff, isC);
+                    adcNonBCD(subend ^ 0xff);
                 } else {
-                    sbcBCD(subend, isC);
+                    sbcBCD(subend);
                 }
             };
 
@@ -550,7 +541,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.halted = false;
                 this.cycles += numCyclesToRun;
                 while (!this.halted && this.cycles > 0) {
-                    this.pc3 = this.oldoldpc;
                     this.oldoldpc = this.oldpc;
                     this.oldpc = this.pc;
                     this.vis20k = this.ramBank[this.pc >> 12];

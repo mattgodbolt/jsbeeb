@@ -524,7 +524,6 @@ define(['utils'], function (utils) {
             default:
                 throw "Unknown arg type " + arg;
         }
-        return null;
     }
 
     function compileInstruction(ins) {
@@ -535,7 +534,7 @@ define(['utils'], function (utils) {
         var text = "// " + ins + "\n    \"use strict\";\n    " + lines.join("\n    ");
         try {
             var func = new Function("cpu", text); // jshint ignore:line
-            func.displayName = func;
+            func.displayName = funcName;
             return func;
         } catch (e) {
             throw "Unable to compile: " + e + "\nText:\n" + text;
@@ -785,7 +784,7 @@ define(['utils'], function (utils) {
         0xFC: "NOP abs,x",
         0xFD: "SBC abs,x",
         0xFE: "INC abs,x",
-        0xFF: "ISB abs,x",
+        0xFF: "ISB abs,x"
     };
 
     function generate6502Old() {
