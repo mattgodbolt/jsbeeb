@@ -4,8 +4,6 @@ define(['video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
         var video;
         var soundChip;
         var dbgr;
-        var frames = 0;
-        var stopped = false;
         var MaxCyclesPerIter = 100 * 1000;
         var hexword = utils.hexword;
         var failures = 0;
@@ -54,17 +52,13 @@ define(['video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
             nextTest();
         }
 
-        function stop() {
-            stopped = true;
-        }
-
         function runFor(cycles, whenDone) {
             var left = cycles;
-            stopped = false;
+            var stopped = false;
             var now = function () {
                 var todo = Math.max(0, Math.min(left, MaxCyclesPerIter));
                 if (todo) {
-                    processor.execute(todo);
+                    stopped = !processor.execute(todo);
                     left -= todo;
                 }
                 if (left && !stopped) {
