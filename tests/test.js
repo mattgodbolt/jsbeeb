@@ -1,5 +1,5 @@
-require(['jquery', 'video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
-    function ($, Video, SoundChip, Debugger, Cpu6502, fdc, utils) {
+define(['video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
+    function (Video, SoundChip, Debugger, Cpu6502, fdc, utils) {
         var processor;
         var video;
         var soundChip;
@@ -8,6 +8,51 @@ require(['jquery', 'video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
         var stopped = false;
         var MaxCyclesPerIter = 100 * 1000;
         var hexword = utils.hexword;
+        var failures = 0;
+        var log, beginTest, endTest;
+
+        var tests = [
+            { test: "Test timings", func: testTimings },
+            { test: "Alien8 protection", func: function (whenDone) {
+                testKevinEdwards("ALIEN8", whenDone);
+            } },
+            { test: "Nightshade protection", func: function (whenDone) {
+                testKevinEdwards("NIGHTSH", whenDone);
+            } },
+            { test: "Lunar Jetman protection", func: function (whenDone) {
+                testKevinEdwards("JETMAN", whenDone);
+            } }
+        ];
+        var testIdx = 0;
+
+        function nextTest() {
+            if (testIdx === tests.length) {
+                log("All tests complete");
+            } else {
+                runTest(tests[testIdx].test, tests[testIdx].func, function () {
+                    testIdx++;
+                    nextTest();
+                });
+            }
+        }
+
+        function run(log_, beginTest_, endTest_, frameBuffer, paint) {
+            log = log_;
+            beginTest = beginTest_;
+            endTest = endTest_;
+            video = new Video(frameBuffer, paint);
+            soundChip = new SoundChip(10000);
+            soundChip.toneGenerator = {
+                mute: function () {
+                },
+                tone: function () {
+                }
+            };
+
+            dbgr = new Debugger();
+
+            nextTest();
+        }
 
         function stop() {
             stopped = true;
@@ -129,7 +174,6 @@ require(['jquery', 'video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
             }
         }
 
-        var failures = 0;
 
         function expectEq(expected, actual, msg) {
             if (actual !== expected) {
@@ -207,93 +251,16 @@ require(['jquery', 'video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
         }
 
         function runTest(name, func, whenDone) {
-            currentTest = $('#test-info > .template').clone().removeClass("template").appendTo($('#test-info'));
-            currentTest.find(".test-name").text(name);
             log("Running", name);
+            beginTest(name);
             processor = new Cpu6502(dbgr, video, soundChip);
             failures = 0;
             func(function () {
-                if (!failures) {
-                    currentTest.addClass("success");
-                    log("Passed ok!");
-                } else {
-                    currentTest.addClass("fail");
-                }
                 log("Finished", name);
+                endTest(name, failures);
                 whenDone();
             });
         }
-
-        $(function () {
-            var canvas = $('#screen');
-            var fb32;
-            if (canvas.length) {
-                canvas = $('#screen')[0];
-                var ctx = canvas.getContext('2d');
-                ctx.fillStyle = 'black';
-                ctx.fillRect(0, 0, 1280, 768);
-                if (!ctx.getImageData) {
-                    alert('Unsupported browser');
-                    return;
-                }
-                var backBuffer = document.createElement("canvas");
-                backBuffer.width = 1280;
-                backBuffer.height = 768;
-                var backCtx = backBuffer.getContext("2d");
-                var imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
-                var fb8 = imageData.data;
-                var canvasWidth = canvas.width;
-                var canvasHeight = canvas.height;
-                var paint = function (minx, miny, maxx, maxy) {
-                    frames++;
-                    var width = maxx - minx;
-                    var height = maxy - miny;
-                    backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
-                    ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvasWidth, canvasHeight);
-                };
-
-                fb32 = new Uint32Array(fb8.buffer);
-                video = new Video(fb32, paint);
-            } else {
-                fb32 = new Uint32Array(1280 * 1024);
-                video = new Video(fb32, function () {
-                });
-            }
-            soundChip = new SoundChip(10000);
-            soundChip.toneGenerator = {
-                mute: function () {
-                },
-                tone: function () {
-                }
-            };
-
-            dbgr = new Debugger();
-
-            var tests = [
-                { test: "Test timings", func: testTimings },
-                { test: "Alien8 protection", func: function (whenDone) {
-                    testKevinEdwards("ALIEN8", whenDone);
-                } },
-                { test: "Nightshade protection", func: function (whenDone) {
-                    testKevinEdwards("NIGHTSH", whenDone);
-                } },
-                { test: "Lunar Jetman protection", func: function (whenDone) {
-                    testKevinEdwards("JETMAN", whenDone);
-                } }
-            ];
-            var testIdx = 0;
-
-            function nextTest() {
-                if (testIdx === tests.length) {
-                    log("All tests complete");
-                } else {
-                    runTest(tests[testIdx].test, tests[testIdx].func, function () {
-                        testIdx++;
-                        nextTest();
-                    });
-                }
-            }
-
-            nextTest();
-        });
-    });
+        return { run: run };
+    }
+);
