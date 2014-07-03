@@ -540,7 +540,7 @@ define(['utils'], function (utils) {
                 case 0xff:
                     break;
                 default:
-                    console.log("ERK bad command", hexbyte(self.command));
+                    console.log("ERK bad command", utils.hexbyte(self.command));
                     break;
             }
         }
