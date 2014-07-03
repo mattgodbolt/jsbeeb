@@ -137,7 +137,7 @@ define(['utils'], function (utils) {
                         this.inWrite = false;
                         return;
                     }
-                    var c = fdc.readDiscData(this.byteWithinSector == 255);
+                    fdc.readDiscData(this.byteWithinSector == 255);
                     data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = c;
                     if (++this.byteWithinSector == 256) {
                         this.inWrite = false;
@@ -381,8 +381,7 @@ define(['utils'], function (utils) {
 
         function seek(track) {
             spinup();
-            var diff = track - self.curTrack[self.curDrive];
-            self.realTrack[self.curDrive] += diff;
+            self.realTrack[self.curDrive] += track - self.curTrack[self.curDrive];
             self.drives[self.curDrive].seek(self.realTrack[self.curDrive]);
             // NB should be dependent on diff; but always non-zero
             self.time = 200; // TODO: b-em uses a round-the-houses approach to this where ddnoise actually sets time
