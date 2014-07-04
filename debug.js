@@ -42,6 +42,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         };
 
         enable(false);
+        $('.initially-hidden').removeClass('initially-hidden');
 
         var numToShow = 16;
         var i;

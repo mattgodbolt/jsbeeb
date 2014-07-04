@@ -228,3 +228,7 @@ div.modal-body > div:not(:first-child) {
 .template {
 	display: none;
 }
+
+.initially-hidden {
+    display: none;
+}
