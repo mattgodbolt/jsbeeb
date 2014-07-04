@@ -190,9 +190,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
                     if (all.length) _.delay(doSome, Delay, remaining);
                 }
 
-                console.log("Found", cat.length, "STH entries")
+                console.log("Found", cat.length, "STH entries");
                 doSome(cat);
-            }
+            };
         }
 
         function sthOnError() {
@@ -471,7 +471,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
             var dom = $("#" + name);
             var on = false;
             this.update = function (val) {
-                if (val == on) return;
+                if (val === on) return;
                 on = val;
                 dom.toggleClass("on", on);
             };
