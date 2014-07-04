@@ -83,10 +83,7 @@ define(['utils'], function (utils) {
         };
     }
 
-    function loadTape(name) {
-        console.log("Loading tape from " + name);
-        var data = utils.loadData(name);
-        if (!data) return null;
+    function loadTapeFromData(data) {
         var stream = new utils.DataStream(name, data);
         if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
             console.log("Detected a 'tapefile' tape");
@@ -100,7 +97,15 @@ define(['utils'], function (utils) {
         return null;
     }
 
+    function loadTape(name) {
+        console.log("Loading tape from " + name);
+        var data = utils.loadData(name);
+        if (!data) return null;
+        return loadTapeFromData(data);
+    }
+
     return {
-        loadTape: loadTape
+        loadTape: loadTape,
+        loadTapeFromData: loadTapeFromData
     };
 });

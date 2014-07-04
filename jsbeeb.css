@@ -232,3 +232,8 @@ div.modal-body > div:not(:first-child) {
 .initially-hidden {
     display: none;
 }
+
+#error-dialog div.error {
+    background-color: #440000;
+    margin-top: 5px;
+}

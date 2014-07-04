@@ -54,10 +54,18 @@
                     <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Discs<b class="caret"></b></a>
                         <ul class="dropdown-menu">
-                            <li><a href="#sth" data-toggle="modal" data-target="#sth">From STH archive</a></li>
+                            <li><a href="#sth" class="sth" data-id="discs" data-toggle="modal" data-target="#sth">From STH archive</a></li>
                             <li class="hidden-unless-db-enabled"><a href="#dropbox" data-toggle="modal"
                                                                     data-target="#dropbox">From Dropbox</a></li>
                             <li><a href="#discs" data-toggle="modal" data-target="#discs">From examples or local</a>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Tapes<b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                            <li><a href="#sth" class="sth" data-toggle="modal" data-id="tapes" data-target="#sth">From STH archive</a></li>
+                            <li><a href="#discs" data-toggle="modal" data-target="#tapes">From local file</a>
                             </li>
                         </ul>
                     </li>
@@ -134,7 +142,7 @@
             <div class="debug-container">
                 <form class="form-inline" role="form" id="goto-mem-addr-form">
                     <div class="form-group">
-                        <label for="goto-mem-addr" accesskey="m" class="control-label"><span class="accesskey">M</span>em
+                        <label accesskey="m" class="control-label"><span class="accesskey">M</span>em
                             addr:</label>
                         <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
                     </div>
@@ -147,7 +155,7 @@
             <div class="debug-container">
                 <form class="form-inline" role="form" id="goto-dis-addr-form">
                     <div class="form-group">
-                        <label for="goto-dis-addr" accesskey="a" class="control-label"><span class="accesskey">A</span>ddr:</label>
+                        <label accesskey="a" class="control-label"><span class="accesskey">A</span>ddr:</label>
                         <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
                     </div>
                 </form>
@@ -325,6 +333,30 @@
     </div>
     <!-- /.modal -->
 
+    <div class="modal fade" id="tapes">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title">Load tape image</h4>
+                </div>
+                <div class="modal-body">
+                    To load a custom tape image, get a UEF file and load it below.
+                    <div class="tape">
+                        <label>Load local UEF file: <input type="file" id="tape_load"
+                                                           accept=".uef,image/*"></input></label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+            <!-- /.modal-content -->
+        </div>
+        <!-- /.modal-dialog -->
+    </div>
+    <!-- /.modal -->
+
     <div class="modal fade" id="dropbox">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -374,7 +406,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">Load disc from <a href="http://www.stairwaytohell.com/">Stairway to Hell</a>
+                    <h4 class="modal-title">Load from <a href="http://www.stairwaytohell.com/">Stairway to Hell</a>
                         archive</h4>
 
                     <div class="loading">Loading catalog from STH archive...</div>
@@ -386,6 +418,25 @@
                     <ul id="sth-list">
                         <li class="template"><a href="#"><span class="name"></span></a></li>
                     </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+            <!-- /.modal-content -->
+        </div>
+        <!-- /.modal-dialog -->
+    </div>
+    <!-- /.modal -->
+
+    <div class="modal fade" id="error-dialog">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                    <h4 class="modal-title">An error occurred - sorry!</h4>
+                    <div>While <span class="context"></span>:</div>
+                    <div class="error"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>

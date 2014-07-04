@@ -9,7 +9,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
         var frames = 0;
         var frameSkip = 0;
         var syncLights;
-        var sth;
+        var discSth;
+        var tapeSth;
         var dropbox;
         var running;
 
@@ -89,7 +90,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
                 },
                 tone: function (freq) {
                     toneGenerator.frequency.setValueAtTime(freq, context.currentTime);
-                    gainNode.gain.value = 1;
+                    gainNode.gain.value = 0.5;
                 }
             };
 
@@ -140,33 +141,81 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
 
         processor = new Cpu6502(dbgr, video, soundChip);
 
-        sth = new StairwayToHell(function (cat) {
-            var sthList = $("#sth-list");
-            $("#sth .loading").hide();
-            var template = sthList.find(".template");
-            $.each(cat, function (_, cat) {
-                var row = template.clone().removeClass("template").appendTo(sthList);
-                row.find(".name").text(cat);
-                $(row).on("click", function () {
-                    var file = sth.fetch(cat);
-                    utils.noteEvent('sth', 'click', cat);
-                    if (file) {
-                        processor.fdc.loadDiscData(0, file);
-                        parsedQuery.disc = "|" + cat;
-                        updateUrl();
-                    }
-                    $('#sth').modal("hide");
-                });
-            });
-        }, function () {
+        function sthClearList() {
+            $("#sth-list li:not('.template')").remove();
+        }
+
+        function sthStartLoad() {
+            $("#sth .loading").text("Loading catalog from STH archive");
+            $("#sth .loading").show();
+            sthClearList();
+        }
+
+        function discSthClick(item) {
+            utils.noteEvent('sth', 'click', item);
+            parsedQuery.disc = "|" + item;
+            updateUrl();
+            loadDiscImage(0, parsedQuery.disc);
+        }
+
+        function tapeSthClick(item) {
+            utils.noteEvent('sth', 'clickTape', item);
+            parsedQuery.tape = "|" + item;
+            updateUrl();
+            loadTapeImage(parsedQuery.tape);
+        }
+
+        function makeOnCat(onClick) {
+            return function (cat) {
+                sthClearList();
+                var sthList = $("#sth-list");
+                $("#sth .loading").hide();
+                var template = sthList.find(".template");
+
+                function doSome(all) {
+                    var MaxAtATime = 100;
+                    var Delay = 30;
+                    var cat = all.slice(0, MaxAtATime);
+                    var remaining = all.slice(MaxAtATime);
+                    var filter = $('#sth-filter').val();
+                    $.each(cat, function (_, cat) {
+                        var row = template.clone().removeClass("template").appendTo(sthList);
+                        row.find(".name").text(cat);
+                        $(row).on("click", function () {
+                            onClick(cat);
+                            $('#sth').modal("hide");
+                        });
+                        row.toggle(cat.toLowerCase().indexOf(filter) >= 0);
+                    });
+                    if (all.length) _.delay(doSome, Delay, remaining);
+                }
+
+                console.log("Found", cat.length, "STH entries")
+                doSome(cat);
+            }
+        }
+
+        function sthOnError() {
             $('#sth .loading').text("There was an error accessing the STH archive");
+            $("#sth .loading").show();
+            sthClearList();
+        }
+
+        discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
+        tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
+
+        $(document).on("click", "a.sth", function () {
+            var type = $(this).data('id');
+            if (type == 'discs')
+                discSth.populate();
+            else
+                tapeSth.populate();
         });
 
         function setSthFilter(filter) {
             filter = filter.toLowerCase();
-            $("#sth-list li").each(function () {
+            $("#sth-list li:not('.template')").each(function () {
                 var el = $(this);
-                if (el.hasClass("template")) return;
                 el.toggle(el.text().toLowerCase().indexOf(filter) >= 0);
             });
         }
@@ -238,33 +287,63 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
             window.history.pushState(null, null, url);
         }
 
+        function showError(context, error) {
+            var dialog = $('#error-dialog');
+            dialog.find(".context").text(context);
+            dialog.find(".error").text(error);
+            dialog.modal();
+        }
+
         function loadDiscImage(drive, discImage) {
-            if (discImage && discImage[0] == "!") {
-                processor.fdc.loadDisc(drive, localDisc(processor.fdc, discImage.substr(1)));
-            } else if (discImage && discImage[0] == "|") {
-                processor.fdc.loadDiscData(drive, sth.fetch(discImage.substr(1)));
-            } else if (discImage && discImage[0] == "^") {
-                _.defer(function () {
-                    popupLoading("Connecting to Dropbox");
-                    var db = new DropboxLoader(function () {
-                        dropboxLoad(db, discImage.substr(1));
-                    }, function (error) {
-                        loadingFinished(error);
+            if (!discImage) return;
+            var context = "built-in image";
+            try {
+                if (discImage[0] == "!") {
+                    discImage = discImage.substr(1);
+                    context = "Local disc";
+                    processor.fdc.loadDisc(drive, localDisc(processor.fdc, discImage));
+                } else if (discImage[0] == "|") {
+                    discImage = discImage.substr(1);
+                    context = "Stairway to Hell";
+                    processor.fdc.loadDiscData(drive, discSth.fetch(discImage));
+                } else if (discImage[0] == "^") {
+                    discImage = discImage.substr(1);
+                    context = "Dropbox";
+                    _.defer(function () {
+                        popupLoading("Connecting to Dropbox");
+                        var db = new DropboxLoader(function () {
+                            dropboxLoad(db, discImage);
+                        }, function (error) {
+                            loadingFinished(error);
+                        });
                     });
-                });
-            } else {
-                processor.fdc.loadDiscData(drive, disc.ssdLoad("discs/" + discImage));
+                } else {
+                    processor.fdc.loadDiscData(drive, disc.ssdLoad("discs/" + discImage));
+                }
+            } catch (e) {
+                showError("while loading disc '" + discImage + "' from " + context + " into drive " + drive, e);
             }
         }
 
         if (discImage) loadDiscImage(0, discImage);
         if (secondDiscImage) loadDiscImage(1, secondDiscImage);
 
-        ////////////////
-        // tape test
-        //processor.acia.setTape(tapes.loadTape("tapes/Zalaga.tape"));
-        processor.acia.setTape(tapes.loadTape("tapes/Welcome.uef"));
-        ////////////////
+        function loadTapeImage(tapeImage) {
+            var context = "built-in";
+            try {
+                if (tapeImage[0] == '|') {
+                    tapeImage = tapeImage.substr(1);
+                    context = "Stairway To Hell";
+                    processor.acia.setTape(tapes.loadTapeFromData(tapeSth.fetch(tapeImage)));
+                } else {
+                    processor.acia.setTape(tapes.loadTape(tapeImage));
+                }
+            } catch (e) {
+                showError("while loading tape '" + tapeImage + " from " + context, e);
+            }
+        }
+
+        if (parsedQuery.tape) loadTapeImage(parsedQuery.tape);
 
         $('#disc_load').change(function (evt) {
             var file = evt.target.files[0];
@@ -274,6 +353,20 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
                 processor.fdc.loadDiscData(0, e.target.result);
                 delete parsedQuery.disc;
                 updateUrl();
+                $('#discs').modal("hide");
+            };
+            reader.readAsBinaryString(file);
+        });
+
+        $('#tape_load').change(function (evt) {
+            var file = evt.target.files[0];
+            var reader = new FileReader();
+            utils.noteEvent('local', 'clickTape'); // NB no filename here
+            reader.onload = function (e) {
+                processor.acia.setTape(tapes.loadTapeFromData(e.target.result));
+                delete parsedQuery.tape;
+                updateUrl();
+                $('#tapes').modal("hide");
             };
             reader.readAsBinaryString(file);
         });

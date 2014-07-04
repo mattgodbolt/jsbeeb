@@ -1,27 +1,37 @@
 // Accesses STH archive via a proxy on the bbc.godbolt.org website
 define(['jquery', 'jsunzip'], function ($, jsunzip) {
     "use strict";
-    return function StairwayToHell(onCat, onError) {
+    return function StairwayToHell(onStart, onCat, onError, tape) {
         var self = this;
         var baseUrl = "http://bbc.godbolt.org/sth/diskimages/";
+        if (tape) {
+            baseUrl = "http://bbc.godbolt.org/sth/tapeimages/";
+        }
 
         var catalogUrl = "reclist.php?sort=name&filter=.zip";
         var catalog = [];
 
-        var request = new XMLHttpRequest();
-        request.open("GET", baseUrl + catalogUrl, true);
-        request.onerror = function () {
-            if (onError) onError();
+        self.populate = function () {
+            onStart();
+            if (catalog.length === 0) {
+                var request = new XMLHttpRequest();
+                request.open("GET", baseUrl + catalogUrl, true);
+                request.onerror = function () {
+                    if (onError) onError();
+                };
+                request.onload = function () {
+                    var doc = $($.parseHTML(this.responseText, null, false));
+                    doc.find("tr td:nth-child(3) a").each(function (_, link) {
+                        var href = $(link).attr("href");
+                        if (href.indexOf(".zip") > 0) catalog.push(href);
+                    });
+                    if (onCat) onCat(catalog);
+                };
+                request.send();
+            } else {
+                if (onCat) onCat(catalog);
+            }
         };
-        request.onload = function () {
-            var doc = $($.parseHTML(this.responseText, null, false));
-            doc.find("tr td:nth-child(3) a").each(function (_, link) {
-                var href = $(link).attr("href");
-                if (href.indexOf(".zip") > 0) catalog.push(href);
-            });
-            if (onCat) onCat(catalog);
-        };
-        request.send();
 
         self.catalog = function () {
             return catalog;
@@ -49,20 +59,30 @@ define(['jquery', 'jsunzip'], function ($, jsunzip) {
                 return null;
             }
             var uncompressed = null;
+            var knownExtensions = {
+                'uef': true,
+                'ssd': true,
+                'dsd': true
+            };
+            var loadedFile;
             for (var f in unzip.files) {
+                var match = f.match(/.*\.([a-z]+)/i);
+                if (!match || !knownExtensions[match[1].toLowerCase()]) {
+                    console.log("Skipping file", f);
+                    continue;
+                }
                 if (uncompressed) {
                     console.log("Ignoring", f, "as already found a file");
                     continue;
                 }
-                console.log(f);
+                loadedFile = f;
                 uncompressed = unzip.read(f);
             }
             if (!uncompressed) {
-                console.log("Didn't find any files :(");
-                return null;
+                throw new Error("Couldn't find any compatible files in the archive");
             }
             if (!uncompressed.status) {
-                console.log("Failed to uncompress", uncompressed.error);
+                throw new Error("Failed to uncompress file '" + loadedFile + "' - " + uncompressed.error);
             }
             return uncompressed.data;
         };

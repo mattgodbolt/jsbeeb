@@ -28,6 +28,14 @@ define(['jsunzip'], function (jsunzip) {
         console.log('event noted:', category, type, label);
     };
 
+    function makeBinaryData(dataIn) {
+        if (dataIn instanceof Uint8Array) return dataIn;
+        var len = dataIn.length;
+        var result = new Uint8Array(len);
+        for (var i = 0; i < len; ++i) result[i] = dataIn.charCodeAt(i) & 0xff;
+        return result;
+    }
+
     function loadData(url) {
         var request = new XMLHttpRequest();
         request.open("GET", url, false);
@@ -37,11 +45,7 @@ define(['jsunzip'], function (jsunzip) {
         if (typeof(request.response) != "string") {
             return request.response;
         }
-        var stringData = request.response;
-        var len = stringData.length;
-        var data = new Uint8Array(len);
-        for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
-        return data;
+        return makeBinaryData(request.response);
     }
 
     exports.loadData = loadData;
@@ -89,11 +93,10 @@ define(['jsunzip'], function (jsunzip) {
     exports.ungzip = ungzip;
 
     function DataStream(name_, data_, dontUnzip_) {
-        var request = new XMLHttpRequest();
         var self = this;
         self.name = name_;
         self.pos = 0;
-        self.data = data_;
+        self.data = makeBinaryData(data_);
         if (!dontUnzip_ && self.data && self.data.length > 4 && self.data[0] === 0x1f && self.data[1] === 0x8b && self.data[2] === 0x08) {
             self.data = ungzip(self.data);
         }
@@ -132,13 +135,15 @@ define(['jsunzip'], function (jsunzip) {
             return self.data[pos];
         };
 
-        self.readNulString = function (pos) {
+        self.readNulString = function (pos, maxLength) {
+            if (!maxLength) maxLength = 1024;
             var posToUse = pos === undefined ? self.pos : pos;
             var result = "";
             var c;
-            while ((c = self.readByte(posToUse++)) !== 0) {
+            while ((c = self.readByte(posToUse++)) !== 0 && --maxLength) {
                 result += String.fromCharCode(c);
             }
+            if (maxLength === 0) return "";
             if (pos === undefined) self.pos = posToUse;
             return result;
         };
