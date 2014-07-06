@@ -14,8 +14,15 @@ define(['jsunzip'], function (jsunzip) {
 
     exports.hexword = hexword;
 
+    var signExtendTable = (function () {
+        var table = [];
+        for (var i = 0; i < 256; ++i) table[i] = i >= 128 ? i - 256 : i;
+        return table;
+    })();
+
     function signExtend(val) {
-        return val >= 128 ? val - 256 : val;
+        val |= 0;
+        return signExtendTable[val] | 0;
     }
 
     exports.signExtend = signExtend;

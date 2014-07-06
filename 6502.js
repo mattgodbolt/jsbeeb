@@ -406,7 +406,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 v &= 0xff;
                 this.p.z = !v;
                 this.p.n = !!(v & 0x80);
-                return v;
+                return v|0;
             };
 
             this.push = function (v) {
