@@ -549,6 +549,7 @@ define(['utils'], function (utils) {
         var motorTime = 0;
         self.polltime = function (cycles) {
             cycles = cycles|0;
+            if (!self.isActive) return;
             if (self.time) {
                 self.time -= cycles;
                 if (self.time <= 0) {
