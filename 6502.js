@@ -34,15 +34,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
         return function Cpu6502(dbgr, video, soundChip) {
             var self = this;
             this.ramBank = new Uint8Array(16);
-            this.memstat = [new Uint8Array(256), new Uint8Array(256)];
-            this.memlook = [new Uint32Array(256), new Uint32Array(256)];
+            this.memStat = new Uint8Array(512);
+            this.memLook = new Uint32Array(512);
             this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
-            this.vis20k = 0;
+            this.vis20k = 0;  // Needs to be 0 or 256 to offset into memStat/memLook
             this.romOffset = 128 * 1024;
             this.osOffset = this.romOffset + 16 * 16 * 1024;
             this.a = this.x = this.y = this.s = 0;
             this.romsel = 0;
-            this.ram_fe30 = 0;
             this.interrupt = 0;
             this.FEslowdown = [true, false, true, true, false, false, true, false];
             // TODO: semi-bplus-style to get swram for exile hardcoded here
@@ -53,13 +52,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 true, true, false, false];
 
             this.romSelect = function (rom) {
-                this.ram_fe30 = rom;
                 var c;
                 this.romsel = ((rom & 15) << 14) + this.romOffset;
                 var offset = this.romsel - 0x8000;
-                for (c = 128; c < 192; ++c) this.memlook[0][c] = this.memlook[1][c] = offset;
+                for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
                 var swram = this.swram[rom & 15] ? 1 : 2;
-                for (c = 128; c < 192; ++c) this.memstat[0][c] = this.memstat[1][c] = swram;
+                for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
                 // TODO: ram4k, ram12k MASTER BPLUS
             };
 
@@ -106,14 +104,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 return (addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >> 5) & 7]));
             };
 
-            this.readmem = function (addr) {
+            this.readDevice = function (addr) {
                 addr &= 0xffff;
-                if (this.debugread) this.debugread(addr);
-                if (this.memstat[this.vis20k][addr >> 8]) {
-                    var offset = this.memlook[this.vis20k][addr >> 8];
-                    return this.ramRomOs[offset + addr];
-                }
-                //console.log("Peripheral read " + hexword(addr));
                 switch (addr & ~0x0003) {
                     case 0xfc20:
                     case 0xfc24:
@@ -204,17 +196,31 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 return addr >> 8;
             };
 
+            this.readmem = function (addr) {
+                addr &= 0xffff;
+                if (this.debugread) this.debugread(addr);
+                if (this.memStat[this.vis20k + (addr >>> 8)]) {
+                    var offset = this.memLook[this.vis20k + (addr >>> 8)];
+                    return this.ramRomOs[offset + addr] | 0;
+                } else {
+                    return this.readDevice(addr) | 0;
+                }
+            };
+
             this.writemem = function (addr, b) {
                 addr &= 0xffff;
                 b |= 0;
                 if (this.debugwrite) this.debugwrite(addr, b);
-                if (this.memstat[this.vis20k][addr >> 8] === 1) {
-                    var offset = this.memlook[this.vis20k][addr >> 8];
+                if (this.memStat[this.vis20k + (addr >>> 8)] === 1) {
+                    var offset = this.memLook[this.vis20k + (addr >>> 8)];
                     this.ramRomOs[offset + addr] = b;
                     return;
                 }
                 if (addr < 0xfc00 || addr >= 0xff00) return;
-                //console.log("Peripheral write " + hexword(addr) + " " + hexbyte(b));
+                this.writeDevice(addr, b);
+            };
+            this.writeDevice = function (addr, b) {
+                b |= 0;
                 switch (addr & ~0x0003) {
                     case 0xfc20:
                     case 0xfc24:
@@ -307,7 +313,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfefc:
                         return this.tube.write(addr, b);
                 }
-                // TODO: hardware!
             };
 
             this.incpc = function () {
@@ -317,15 +322,15 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             this.getb = function () {
                 var result = this.readmem(this.pc);
                 this.incpc();
-                return result;
+                return result | 0;
             };
 
             this.getw = function () {
-                var result = this.readmem(this.pc);
+                var result = this.readmem(this.pc) | 0;
                 this.incpc();
-                result |= this.readmem(this.pc) << 8;
+                result |= (this.readmem(this.pc) | 0) << 8;
                 this.incpc();
-                return result;
+                return result | 0;
             };
 
             this.checkInt = function () {
@@ -358,15 +363,15 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 var i;
                 if (hard) {
                     for (i = 0; i < 16; ++i) this.ramBank[i] = 0;
-                    for (i = 0; i < 128; ++i) this.memstat[0][i] = this.memstat[1][i] = 1;
-                    for (i = 128; i < 256; ++i) this.memstat[0][i] = this.memstat[1][i] = 2;
-                    for (i = 0; i < 128; ++i) this.memlook[0][i] = this.memlook[1][i] = 0;
+                    for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
+                    for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
+                    for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
                     /* TODO: Model A support here */
-                    for (i = 48; i < 128; ++i) this.memlook[1][i] = 16384;
-                    for (i = 128; i < 192; ++i) this.memlook[0][i] = this.memlook[1][i] = this.romOffset - 0x8000;
-                    for (i = 192; i < 256; ++i) this.memlook[0][i] = this.memlook[1][i] = this.osOffset - 0xc000;
+                    for (i = 48; i < 128; ++i) this.memLook[256 + i] = 16384;
+                    for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
+                    for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
-                    for (i = 0xfc; i < 0xff; ++i) this.memstat[0][i] = this.memstat[1][i] = 0;
+                    for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
                     this.ram4k = this.ram8k = this.ram12k = this.ram20k = 0;
                     this.disassembler = new opcodes.Disassemble6502(this);
                     this.sysvia = via.SysVia(this, soundChip);
@@ -406,7 +411,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 v &= 0xff;
                 this.p.z = !v;
                 this.p.n = !!(v & 0x80);
-                return v|0;
+                return v | 0;
             };
 
             this.push = function (v) {
@@ -450,7 +455,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.push(temp);
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = 1;
-                this.takeInt = 0;
+                this.takeInt = false;
             };
 
             this.branch = function (taken) {
@@ -487,7 +492,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     al &= 0xf;
                     ah = 1;
                 }
-                ah += (self.a >> 4) + (addend >> 4);
+                ah += (self.a >>> 4) + (addend >>> 4);
                 if (ah & 8) self.p.n = true;
                 self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
                 self.p.c = false;
@@ -543,7 +548,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 while (!this.halted && this.cycles > 0) {
                     this.oldoldpc = this.oldpc;
                     this.oldpc = this.pc;
-                    this.vis20k = this.ramBank[this.pc >> 12];
+                    this.vis20k = this.ramBank[this.pc >>> 12] ? 256 : 0;
                     var opcode = this.readmem(this.pc);
                     if (this.debugInstruction && this.oldoldpc !== this.pc && this.debugInstruction(this.pc, opcode)) {
                         return false;
@@ -552,7 +557,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     opcodes.runInstruction(this, opcode);
                     // TODO: timetolive
                     if (this.takeInt) {
-                        this.takeInt = 0;
+                        this.takeInt = false;
                         this.push(this.pc >>> 8);
                         this.push(this.pc & 0xff);
                         this.push(this.p.asByte() & ~0x10);
