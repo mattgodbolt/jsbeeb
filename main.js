@@ -514,7 +514,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
         function benchmarkCpu(numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
             var oldFS = frameSkip;
-            frameSkip = 10000;
+            frameSkip = 1000000;
             var startTime = Date.now();
             processor.execute(numCycles);
             var endTime = Date.now();
@@ -525,9 +525,29 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
             console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
         }
 
-        function profileCpu() {
+        function benchmarkVideo(numCycles) {
+            numCycles = numCycles || 10 * 1000 * 1000;
+            var oldFS = frameSkip;
+            frameSkip = 1000000;
+            var startTime = Date.now();
+            video.polltime(numCycles);
+            var endTime = Date.now();
+            frameSkip = oldFS;
+            var msTaken = endTime - startTime;
+            var virtualMhz = (numCycles / msTaken) / 1000;
+            console.log("Took " + msTaken + "ms to execute " + numCycles + " video cycles");
+            console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
+        }
+
+        function profileCpu(arg) {
             console.profile("CPU");
-            benchmarkCpu(10 * 1000 * 1000);
+            benchmarkCpu(arg);
+            console.profileEnd();
+        }
+
+        function profileVideo(arg) {
+            console.profile("Video");
+            benchmarkVideo(arg);
             console.profileEnd();
         }
 
@@ -579,9 +599,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
             if (debug) dbgr.debug(processor.pc);
         }
 
-        // Handy shortcuts
-        window.benchmarkCpu = benchmarkCpu;
-        window.profileCpu = profileCpu;
+        // Handy shortcuts. bench/profile stuff is delayed so that they can be
+        // safely run from the JS console in firefox.
+        window.benchmarkCpu = _.debounce(benchmarkCpu, 1);
+        window.profileCpu = _.debounce(profileCpu, 1);
+        window.benchmarkVideo = _.debounce(benchmarkVideo, 1);
+        window.profileVideo = _.debounce(profileVideo, 1);
         window.go = go;
         window.stop = stop;
         window.processor = processor;
