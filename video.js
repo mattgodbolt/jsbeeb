@@ -303,7 +303,7 @@ define(['teletext'], function (Teletext) {
         ////////////////////
         // Main drawing routine
         self.polltime = function (clocks) {
-//            if (fbTableDirty) updateFbTable();
+            if (fbTableDirty) updateFbTable();
             while (clocks--) {
                 self.scrx += 8;
                 self.vidclocks++;
