@@ -397,7 +397,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.cycles = 0;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p = new Flags();
-                this.p.i = 1;
+                this.p.i = true;
                 this.nmi = false;
                 this.tubecycle = this.tubecycles = 0;
                 this.halted = false;
@@ -454,7 +454,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 var temp = this.p.asByte();
                 this.push(temp);
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
-                this.p.i = 1;
+                this.p.i = true;
                 this.takeInt = false;
             };
 
@@ -562,7 +562,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         this.push(this.pc & 0xff);
                         this.push(this.p.asByte() & ~0x10);
                         this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
-                        this.p.i = 1;
+                        this.p.i = true;
                         this.polltime(7);
                     }
                     // TODO: otherstuff
@@ -572,10 +572,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         this.push(this.pc & 0xff);
                         this.push(this.p.asByte() & ~0x10);
                         this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
-                        this.p.i = 1;
+                        this.p.i = true;
                         this.polltime(7);
                         this.nmi = false;
-                        this.p.d = 0; // TODO this is actually Master only
+                        this.p.d = false; // TODO this is actually Master only
                     }
                     // TODO: oldnmi stuff? master only it seems?
                 }
