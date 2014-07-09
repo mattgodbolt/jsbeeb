@@ -394,7 +394,7 @@ define(['utils'], function (utils) {
             case "zp,y":
                 if (arg == "zp") {
                     ig.tick(2);
-                    ig.append("var addr = cpu.getb();");
+                    ig.append("var addr = cpu.getb() | 0;");
                 } else {
                     ig.tick(3);
                     ig.append("var addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
@@ -412,7 +412,7 @@ define(['utils'], function (utils) {
 
             case "abs":
                 ig.tick(3 + (op.extra || 0));
-                ig.append("var addr = cpu.getw();");
+                ig.append("var addr = cpu.getw() | 0;");
                 if (op.read) {
                     ig.readOp("addr", "REG");
                     if (op.write) ig.writeOp("addr", "REG");
@@ -424,7 +424,7 @@ define(['utils'], function (utils) {
 
             case "abs,x":
             case "abs,y":
-                ig.append("var addr = cpu.getw();");
+                ig.append("var addr = cpu.getw() | 0;");
                 ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
                 ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                 ig.tick(3);
@@ -454,7 +454,7 @@ define(['utils'], function (utils) {
                     // NOP imm
                 }
                 ig.tick(2);
-                ig.append("REG = cpu.getb();");
+                ig.append("REG = cpu.getb() | 0;");
                 ig.append(op.op);
                 return ig.render();
 
@@ -480,7 +480,7 @@ define(['utils'], function (utils) {
 
             case "(),y":
                 ig.tick(2);
-                ig.append("var zpAddr = cpu.getb();");
+                ig.append("var zpAddr = cpu.getb() | 0;");
                 ig.append("var lo, hi;");
                 ig.zpReadOp("zpAddr", "lo");
                 ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
@@ -509,7 +509,7 @@ define(['utils'], function (utils) {
             case "()":
                 // Special case for indirect jumps only
                 ig.tick(3);  // Needs to be different for master
-                ig.append("var addr = cpu.getw();");
+                ig.append("var addr = cpu.getw() | 0;");
                 ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
                 ig.append("var lo, hi;");
                 ig.readOp("addr", "lo");
@@ -818,7 +818,7 @@ define(['utils'], function (utils) {
     }
 
     function generate6502() {
-        var text = "\"use strict\";\nvar REG = 0|0;\n";
+        var text = "\"use strict\";\nopcode=opcode|0;\nvar REG = 0|0;\n";
         text += "if (opcode < 128) {\n";
         text += generate6502Switch(0, 128);
         text += "} else {\n";
