@@ -49,6 +49,8 @@ define(['teletext'], function (Teletext) {
             self.con = self.coff = self.cursoron = false; // on this line, off, on due to flash
             self.cdraw = 0;
             self.lastMinX = self.lastMaxX = self.lastMinY = self.lastMaxY = 0;
+            self.cursorPos = 0;
+            self.ilSyncAndVideo = false;
             updateFbTable();
         };
 
@@ -134,16 +136,17 @@ define(['teletext'], function (Teletext) {
         }
 
         function blitFb8(tblOff, destOffset) {
-            tblOff |= 0; destOffset |= 0;
+            tblOff |= 0;
+            destOffset |= 0;
             var fb32 = self.fb32;
-            fb32[destOffset]   = fbTable[tblOff];
-            fb32[destOffset+1] = fbTable[tblOff+1];
-            fb32[destOffset+2] = fbTable[tblOff+2];
-            fb32[destOffset+3] = fbTable[tblOff+3];
-            fb32[destOffset+4] = fbTable[tblOff+4];
-            fb32[destOffset+5] = fbTable[tblOff+5];
-            fb32[destOffset+6] = fbTable[tblOff+6];
-            fb32[destOffset+7] = fbTable[tblOff+7];
+            fb32[destOffset] = fbTable[tblOff];
+            fb32[destOffset + 1] = fbTable[tblOff + 1];
+            fb32[destOffset + 2] = fbTable[tblOff + 2];
+            fb32[destOffset + 3] = fbTable[tblOff + 3];
+            fb32[destOffset + 4] = fbTable[tblOff + 4];
+            fb32[destOffset + 5] = fbTable[tblOff + 5];
+            fb32[destOffset + 6] = fbTable[tblOff + 6];
+            fb32[destOffset + 7] = fbTable[tblOff + 7];
         }
 
         function blitFb(dat, destOffset, numPixels) {
@@ -165,8 +168,7 @@ define(['teletext'], function (Teletext) {
         function renderchar() {
             var vidbank = 0; // TODO: vid bank support
 
-            var cursorPos = self.regs[15] | (self.regs[14] << 8);
-            if (!((self.ma ^ cursorPos) & 0x3fff) && self.con) {
+            if (!((self.ma ^ self.cursorPos) & 0x3fff) && self.con) {
                 self.cdraw = 3 - ((self.regs[8] >>> 6) & 3);
                 // TODO - hack to get mode7 cursor lined up - fix
                 if (self.crtcmode === 0) self.cdraw = 3;
@@ -176,8 +178,7 @@ define(['teletext'], function (Teletext) {
             if (self.ma & 0x2000) {
                 dat = self.cpu.readmem(0x7c00 | (self.ma & 0x3ff) | vidbank);
             } else {
-                var ilSyncAndVideo = (self.regs[8] & 3) === 3;
-                var addr = ilSyncAndVideo ? ((self.ma << 3) | ((self.sc & 3) << 1) | self.interlline)
+                var addr = self.ilSyncAndVideo ? ((self.ma << 3) | ((self.sc & 3) << 1) | self.interlline)
                     : ((self.ma << 3) | (self.sc & 7));
                 if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
                 dat = self.cpu.readmem((addr & 0x7fff) | vidbank) | 0;
@@ -187,29 +188,24 @@ define(['teletext'], function (Teletext) {
                 var pixels = self.pixelsPerChar;
                 var fb32 = self.fb32;
                 var fbOffset = offset;
-                var i;
                 if ((self.regs[8] & 0x30) === 0x30 || ((self.sc & 8) && !(self.ulactrl & 2))) {
                     clearFb(fbOffset, pixels);
                 } else {
-                    var lastx;
                     if (self.crtcmode === 0) {
                         self.teletext.render(fb32, offset, self.sc, dat & 0x7f);
-                        var firstx = self.scrx + 16;
-                        if (firstx < self.minx) self.minx = firstx;
-                        lastx = self.scrx + 32;
-                        if (lastx > self.maxx) self.maxx = lastx;
+                        self.minx = Math.min(self.minx, self.scrx + 16) | 0;
+                        self.maxx = Math.max(self.maxx, self.scrx + 32) | 0;
                     } else {
                         blitFb(dat, fbOffset, pixels);
-                        if (self.scrx < self.minx) self.minx = self.scrx;
-                        lastx = self.scrx + pixels;
-                        if (lastx > self.maxx) self.maxx = lastx;
+                        self.minx = Math.min(self.minx, self.scrx) | 0;
+                        self.maxx = Math.max(self.maxx, self.scrx + pixels) | 0;
                     }
                 }
 
                 // TODO: move to common rendering code so handles case of being blank
                 if (self.cdraw) {
                     if (self.cursoron && (self.ulactrl & cursorTable[self.cdraw])) {
-                        for (i = 0; i < pixels; ++i) {
+                        for (var i = 0; i < pixels; ++i) {
                             fb32[offset + i] = self.fb32[offset + i] ^ 0x00ffffff;
                         }
                     }
@@ -221,11 +217,10 @@ define(['teletext'], function (Teletext) {
         }
 
         self.endofline = function () {
-            var interlaced = (self.regs[8] & 3) === 3; // todo rename ilSyncAndVideo as above?
             self.hc = 0;
 
             var cursorEnd = self.regs[11] & 31;
-            if (self.sc === cursorEnd || (interlaced && self.sc === (cursorEnd >>> 1))) {
+            if (self.sc === cursorEnd || (self.ilSyncAndVideo && self.sc === (cursorEnd >>> 1))) {
                 self.con = false;
                 self.coff = true;
             }
@@ -239,7 +234,7 @@ define(['teletext'], function (Teletext) {
                     self.ma = self.maback = (self.regs[13] | (self.regs[12] << 8)) & 0x3fff;
                     self.sc = 0;
                 }
-            } else if (self.sc === self.regs[9] || (interlaced && self.sc === (self.regs[9] >>> 1))) {
+            } else if (self.sc === self.regs[9] || (self.ilSyncAndVideo && self.sc === (self.regs[9] >>> 1))) {
                 // end of a vertical character
                 self.maback = self.ma;
                 self.sc = 0;
@@ -288,7 +283,7 @@ define(['teletext'], function (Teletext) {
             self.teletext.endline();
 
             var cursorStartLine = self.regs[10] & 31;
-            if (!self.coff && (self.sc === cursorStartLine || (interlaced && self.sc === (cursorStartLine >>> 1)))) {
+            if (!self.coff && (self.sc === cursorStartLine || (self.ilSyncAndVideo && self.sc === (cursorStartLine >>> 1)))) {
                 self.con = true;
             }
 
@@ -383,9 +378,18 @@ define(['teletext'], function (Teletext) {
                 return curReg;
             };
             this.write = function (addr, val) {
-                if (addr & 1)
+                if (addr & 1) {
                     video.regs[curReg] = val & crtcmask[curReg];
-                else
+                    switch (curReg) {
+                        case 8:
+                            self.ilSyncAndVideo = (self.regs[8] & 3) === 3;
+                            break;
+                        case 14:
+                        case 15:
+                            self.cursorPos = self.regs[15] | (self.regs[14] << 8);
+                            break;
+                    }
+                } else
                     curReg = val & 31;
             };
         })(self);
