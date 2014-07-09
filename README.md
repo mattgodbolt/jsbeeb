@@ -10,8 +10,8 @@ Key mappings you may find useful:
 
 To play right now, visit [http://bbc.godbolt.org/](http://bbc.godbolt.org/)
 
-Getting set up
---------------
+Getting set up to run locally
+-----------------------------
 
 Fire up a local webserver and load it up.  I use `python` for this as it has a built-in webserver. So:
 
@@ -28,16 +28,26 @@ URL parameters
 * disc1=XXX - loads disc XXX (from the `discs/` directory) into drive 1
 * disc2=XXX - as above
 * disc1=!YYY - creates a local disk YYY which will be kept in browser local storage
+* disc1=|ZZZ - loads disc ZZZ from the Stairway to Hell archive
+* tape=XXX - loads tape XXX (from the `tapes/` directory)
+* tape=|ZZZ - loads tape ZZZ from the Stairway to Hell archive
+* patch=P - applies a memory patch `P`. See below.
 
+Patches
+-------
+Patches can be applied by making a `patch=P` URL parameter.  `P` is a sequence of semicolon separated patches of the form `@XXXX,YYYY:ZZZZZ,...` where the `@XXXX` specifies a PC address to breakpoint, the `YYYY` is the address to patch and the `ZZZZ` is the data to write at address `YYYY`. The `@` part is optional, but is handy to ensure the code you want to patch has actually loaded. For example: `patch=@31a6,0769:6e4c4d48465a` which is a patch for the default Elite image. Once the PC has reached `$31a6`, the bytes at `0769` are replaced with `6e4c4d48465a`.
 
 TODO
 ----
 
 If you're looking to help:
 
+* Testing
+  * Play lots of games and report issues either on [github](https://github.com/mattgodbolt/jsbeeb/issues) or by email (matt@godbolt.org).
 * Core
   * Save state ability
   * Get the "boo" of the boot "boo-beep" working
+  * Optimization
 * Save disc support
   * I've started dropbox support, but it's not quite there yet.
   * Google Drive support would be nice
