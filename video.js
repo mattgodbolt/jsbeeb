@@ -133,11 +133,24 @@ define(['teletext'], function (Teletext) {
             // TODO: cursor, if cdraw and scrx<1280..
         }
 
+        function blitFb8(tblOff, destOffset) {
+            tblOff |= 0; destOffset |= 0;
+            var fb32 = self.fb32;
+            fb32[destOffset]   = fbTable[tblOff];
+            fb32[destOffset+1] = fbTable[tblOff+1];
+            fb32[destOffset+2] = fbTable[tblOff+2];
+            fb32[destOffset+3] = fbTable[tblOff+3];
+            fb32[destOffset+4] = fbTable[tblOff+4];
+            fb32[destOffset+5] = fbTable[tblOff+5];
+            fb32[destOffset+6] = fbTable[tblOff+6];
+            fb32[destOffset+7] = fbTable[tblOff+7];
+        }
+
         function blitFb(dat, destOffset, numPixels) {
             var tblOff = fbTableOffset(dat);
-            var fb32 = self.fb32;
-            while (numPixels--) {
-                fb32[destOffset++] = fbTable[tblOff++];
+            blitFb8(tblOff, destOffset);
+            if (numPixels === 16) {
+                blitFb8(tblOff + 8, destOffset + 8);
             }
         }
 
