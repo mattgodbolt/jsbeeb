@@ -120,7 +120,7 @@ define([], function () {
         var position = 0;
         var maxBufferSize = 4096;
         var buffer;
-        if (Float64Array !== undefined) {
+        if (typeof Float64Array !== "undefined") {
             buffer = new Float64Array(maxBufferSize);
         } else {
             buffer = new Float32Array(maxBufferSize);
