@@ -339,16 +339,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
 
             this.loadRom = function (name, offset) {
                 console.log("Loading ROM from " + name);
-                var request = new XMLHttpRequest();
-                request.open("GET", name, false);
-                request.overrideMimeType('text/plain; charset=x-user-defined');
-                request.send(null);
-                var len = request.response.length;
+                var data = utils.loadData(name);
+                var len = data.length;
                 if (len != 16384 && len != 8192) {
                     throw "Broken rom file";
                 }
                 for (var i = 0; i < len; ++i) {
-                    this.ramRomOs[offset + i] = request.response.charCodeAt(i) & 0xff;
+                    this.ramRomOs[offset + i] = data[i];
                 }
             };
 

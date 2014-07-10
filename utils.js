@@ -2,6 +2,8 @@ define(['jsunzip'], function (jsunzip) {
     "use strict";
     var exports = {};
 
+    exports.runningInNode = typeof window === 'undefined';
+
     function hexbyte(value) {
         return ((value >> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
     }
@@ -43,7 +45,7 @@ define(['jsunzip'], function (jsunzip) {
         return result;
     }
 
-    function loadData(url) {
+    function loadDataHttp(url) {
         var request = new XMLHttpRequest();
         request.open("GET", url, false);
         request.overrideMimeType('text/plain; charset=x-user-defined');
@@ -55,7 +57,16 @@ define(['jsunzip'], function (jsunzip) {
         return makeBinaryData(request.response);
     }
 
-    exports.loadData = loadData;
+    function loadDataNode(url) {
+        var fs = require('fs');
+        return fs.readFileSync("." + url);
+    }
+
+    if (exports.runningInNode) {
+        exports.loadData = loadDataNode;
+    } else {
+        exports.loadData = loadDataHttp;
+    }
 
     function readInt32(data, offset) {
         return (data[offset + 3] << 24)

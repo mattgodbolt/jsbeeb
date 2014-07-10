@@ -1,4 +1,4 @@
-define([], function () {
+define(['utils'], function (utils) {
     const ORB = 0x0,
         ORA = 0x1,
         DDRB = 0x2,
@@ -376,7 +376,12 @@ define([], function () {
         };
 
         function detectKeyboardLayout() {
-            if (localStorage.keyboardLayout) return localStorage.keyboardLayout;
+            if (utils.runningInNode) {
+                return "UK";
+            }
+            if (localStorage.keyboardLayout) {
+                return localStorage.keyboardLayout;
+            }
             if (navigator.language) {
                 if (navigator.language == "EN-GB") return "UK";
                 if (navigator.language == "EN-US") return "US";
@@ -396,13 +401,8 @@ define([], function () {
 
             // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
             // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-            var isOpera = !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
             var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
-            // At least Safari 3+: "[object HTMLElementConstructor]"
-            var isSafari = Object.prototype.toString.call(window.HTMLElement).indexOf('Constructor') > 0;
-            var isChrome = !!window.chrome && !isOpera;              // Chrome 1+
             var isUKlayout = detectKeyboardLayout() == "UK";
-            var isApple = navigator.appVersion.indexOf('Macintosh') > 0;
 
             if (isUKlayout) {
                 map(0xa3, 8, 2); // UK PC hash key maps to pound underscore
