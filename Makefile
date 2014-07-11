@@ -1,8 +1,15 @@
+.PHONY: npm all test
+
+NPM_UP_TO_DATE:=.npm-up-to-date
+NODE=node
+
 all: test
 
-PHANTOMJS:=node_modules/phantomjs/bin/phantomjs
-$(PHANTOMJS):
-	npm install phantomjs
+npm: $(NPM_UP_TO_DATE)
 
-test: $(PHANTOMJS)
-	$(PHANTOMJS) tests/phantom-tests.js
+$(NPM_UP_TO_DATE):
+	npm install
+	touch $(NPM_UP_TO_DATE)
+
+test: npm
+	$(NODE) tests/test-node.js

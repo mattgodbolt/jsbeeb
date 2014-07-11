@@ -1,5 +1,5 @@
-define(['video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
-    function (Video, SoundChip, Debugger, Cpu6502, fdc, utils) {
+define(['video', 'soundchip', '6502', 'fdc', 'utils'],
+    function (Video, SoundChip, Cpu6502, fdc, utils) {
         var processor;
         var video;
         var soundChip;
@@ -47,7 +47,7 @@ define(['video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
                 }
             };
 
-            dbgr = new Debugger();
+            dbgr = { setCpu: function () {} };
 
             nextTest();
         }
@@ -255,6 +255,7 @@ define(['video', 'soundchip', 'debug', '6502', 'fdc', 'utils'],
                 whenDone();
             });
         }
+
         return { run: run };
     }
 );
