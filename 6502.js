@@ -61,6 +61,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 // TODO: ram4k, ram12k MASTER BPLUS
             };
 
+            this.debugread = this.debugwrite = this.debugInstruction = null;
+
             // Works for unpaged RAM only (ie stack and zp)
             this.readmemZpStack = function (addr) {
                 addr &= 0xffff;
