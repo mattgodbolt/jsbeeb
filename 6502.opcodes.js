@@ -837,13 +837,13 @@ define(['utils'], function (utils) {
             var opcode = opcodes6502[min];
             var lines = null;
             if (opcode) {
-                lines = ["// " + utils.hexbyte(min) + " - " + opcode + "\n"].concat(getInstruction(opcode, false));
+                lines = getInstruction(opcode, false);
             }
-            if (lines) {
-                return tab + lines.join("\n" + tab);
-            } else {
-                return tab + "invalidOpcode(cpu, opcode);";
+            if (!lines) {
+                lines = ["invalidOpcode(cpu, opcode);"];
             }
+            lines = ["// " + utils.hexbyte(min) + " - " + opcode + "\n"].concat(lines);
+            return tab + lines.join("\n" + tab);
         }
         var mid = (min + max) >>> 1;
         return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ")
