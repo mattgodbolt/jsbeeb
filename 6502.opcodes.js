@@ -1,4 +1,5 @@
 define(['utils'], function (utils) {
+    "use strict";
     var hexword = utils.hexword;
     var hexbyte = utils.hexbyte;
     var signExtend = utils.signExtend;
@@ -817,13 +818,41 @@ define(['utils'], function (utils) {
         return text;
     }
 
-    function generate6502() {
+    function generate6502Switch() {
         var text = "\"use strict\";\nopcode=opcode|0;\nvar REG = 0|0;\n";
         text += "if (opcode < 128) {\n";
         text += generate6502Switch(0, 128);
         text += "} else {\n";
         text += generate6502Switch(128, 256);
         text += "}\n";
+        var func = new Function("cpu", "opcode", "invalidOpcode", text); // jshint ignore:line
+        func.displayName = "emulate";
+        return func;
+    }
+
+    function generate6502B(min, max, tab) {
+        "use strict";
+        tab = tab || "";
+        if (min === max || min === max - 1) {
+            var opcode = opcodes6502[min];
+            var lines = null;
+            if (opcode) {
+                lines = ["// " + utils.hexbyte(min) + " - " + opcode + "\n"].concat(getInstruction(opcode, false));
+            }
+            if (lines) {
+                return tab + lines.join("\n" + tab);
+            } else {
+                return tab + "invalidOpcode(cpu, opcode);";
+            }
+        }
+        var mid = (min + max) >>> 1;
+        return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ")
+            + "\n" + tab + "}\n";
+    }
+
+    function generate6502Binary() {
+        var text = "\"use strict\";\nopcode=opcode|0;\nvar REG = 0|0;\n";
+        text += generate6502B(0, 256);
         var func = new Function("cpu", "opcode", "invalidOpcode", text); // jshint ignore:line
         func.displayName = "emulate";
         return func;
@@ -901,7 +930,8 @@ define(['utils'], function (utils) {
         instruction(cpu);
     }
 
-    var generated = generate6502();
+    var generated = generate6502Binary();
+
     function runInstruction(cpu, opcode) {
         generated(cpu, opcode, invalidOpcode);
     }
@@ -910,4 +940,5 @@ define(['utils'], function (utils) {
         Disassemble6502: Disassemble6502,
         runInstruction: runInstruction
     };
-});
+})
+;
