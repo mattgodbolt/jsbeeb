@@ -48,12 +48,12 @@ define(['utils'], function (utils) {
             polltime: function (cycles) {
                 cycles |= 0;
                 self.t1justhit = false;
-                self.t1c -= cycles;
-                if (self.t1c < -2 && self.t1c + cycles > -3) {
+                var newT1c = self.t1c - cycles;
+                if (newT1c < -2 && self.t1c > -3) {
                     if (!self.t1hit) {
                         self.ifr |= TIMER1INT;
                         self.updateIFR();
-                        if (self.t1c === -3) {
+                        if (newT1c === -3) {
                             self.t1justhit = true;
                         }
                         if ((self.acr & 0x80)) {
@@ -63,22 +63,24 @@ define(['utils'], function (utils) {
                     }
                     if (!(this.acr & 0x40)) self.t1hit = true;
                 }
-                while (self.t1c < -3) self.t1c += self.t1l + 4;
+                while (newT1c < -3) newT1c += self.t1l + 4;
+                self.t1c = newT1c;
 
                 self.t2justhit = false;
                 if (!(self.acr & 0x20)) {
-                    self.t2c -= cycles;
-                    if (self.t2c < -2) {
+                    var newT2c = self.t2c - cycles;
+                    if (newT2c < -2) {
                         if (!self.t2hit) {
                             self.ifr |= TIMER2INT;
                             self.updateIFR();
-                            if (self.t2c === -3) {
+                            if (newT2c === -3) {
                                 self.t2justhit = true;
                             }
                             self.t2hit = true;
                         }
-                        self.t2c += 0x20000;
+                        newT2c += 0x20000;
                     }
+                    self.t2c = newT2c;
                 }
             },
 
