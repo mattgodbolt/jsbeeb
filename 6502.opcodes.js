@@ -938,7 +938,8 @@ define(['utils'], function (utils) {
 
     return {
         Disassemble6502: Disassemble6502,
-        runInstruction: runInstruction
+        runInstruction: runInstruction,
+        opcodes6502: opcodes6502
     };
 })
 ;
