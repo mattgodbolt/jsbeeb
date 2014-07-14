@@ -269,7 +269,7 @@ define(['teletext'], function (Teletext) {
                         paint();
                     }
                     self.scry = 0;
-                    self.sysvia.vblankint();
+                    self.sysvia.setVBlankInt(true);
                     self.vsynctime = (self.regs[3] >> 4) + 1;
                     if (!(self.regs[3] >> 4)) self.vsynctime = 17;
                     self.teletext.vsync();
@@ -345,7 +345,7 @@ define(['teletext'], function (Teletext) {
 
                 if (self.hvblcount) {
                     if (--self.hvblcount === 0) {
-                        self.sysvia.vblankintlow();
+                        self.sysvia.setVBlankInt(false);
                     }
                 }
 

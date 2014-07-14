@@ -368,12 +368,7 @@ define(['utils'], function (utils) {
             self.keys[i] = new Uint8Array(16);
         }
 
-        self.vblankint = function () {
-            self.setca1(1);
-        };
-        self.vblankintlow = function () {
-            self.setca1(0);
-        };
+        self.setVBlankInt = self.setca1;
 
         function detectKeyboardLayout() {
             if (utils.runningInNode) {
