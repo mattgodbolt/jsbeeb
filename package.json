@@ -9,7 +9,8 @@
   },
   "main": "./app.js",
   "dependencies": {
-      "requirejs": "2.1.x"
+      "requirejs": "2.1.x",
+      "png": "3.0.x"
   },
   "license": "GPLv3"
 }

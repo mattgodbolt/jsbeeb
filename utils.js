@@ -59,7 +59,8 @@ define(['jsunzip'], function (jsunzip) {
 
     function loadDataNode(url) {
         var fs = require('fs');
-        return fs.readFileSync("." + url);
+        if (url[0] == '/') url = "." + url;
+        return fs.readFileSync(url);
     }
 
     if (exports.runningInNode) {
