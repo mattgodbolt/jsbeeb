@@ -34,7 +34,7 @@ define(['utils'], function (utils) {
             t1hit: false, t2hit: false,
             porta: 0, portb: 0,
             ca1: 0, ca2: 0,
-            t1justhit: false, t2justhit: false,
+            justhit: 0,
 
             reset: function () {
                 self.ora = self.orb = 0xff;
@@ -47,26 +47,23 @@ define(['utils'], function (utils) {
 
             polltime: function (cycles) {
                 cycles |= 0;
-                self.t1justhit = false;
+                self.justhit = 0;
                 var newT1c = self.t1c - cycles;
                 if (newT1c < -2 && self.t1c > -3) {
                     if (!self.t1hit) {
                         self.ifr |= TIMER1INT;
                         self.updateIFR();
                         if (newT1c === -3) {
-                            self.t1justhit = true;
+                            self.justhit |= 1;
                         }
-                        if ((self.acr & 0x80)) {
-                            // b-em comment is "Output to PB7"
-                            self.orb ^= 0x80;
-                        }
+                        // b-em comment is "Output to PB7"
+                        self.orb ^= (self.acr & 0x80);
                     }
                     if (!(this.acr & 0x40)) self.t1hit = true;
                 }
                 while (newT1c < -3) newT1c += self.t1l + 4;
                 self.t1c = newT1c;
 
-                self.t2justhit = false;
                 if (!(self.acr & 0x20)) {
                     var newT2c = self.t2c - cycles;
                     if (newT2c < -2) {
@@ -74,7 +71,7 @@ define(['utils'], function (utils) {
                             self.ifr |= TIMER2INT;
                             self.updateIFR();
                             if (newT2c === -3) {
-                                self.t2justhit = true;
+                                self.justhit |= 2;
                             }
                             self.t2hit = true;
                         }
@@ -259,7 +256,7 @@ define(['utils'], function (utils) {
                         return (self.t1l >>> 9) & 0xff;
 
                     case T1CL:
-                        if (!self.t1justhit) {
+                        if (!(self.justhit & 1)) {
                             self.ifr &= ~TIMER1INT;
                             self.updateIFR();
                         }
@@ -269,7 +266,7 @@ define(['utils'], function (utils) {
                         return ((self.t1c + 1) >>> 9) & 0xff;
 
                     case T2CL:
-                        if (!self.t2justhit) {
+                        if (!(self.justhit & 2)) {
                             self.ifr &= ~TIMER2INT;
                             self.updateIFR();
                         }
