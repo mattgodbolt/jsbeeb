@@ -23,8 +23,7 @@ define(['jsunzip'], function (jsunzip) {
     })();
 
     function signExtend(val) {
-        val |= 0;
-        return signExtendTable[val] | 0;
+        return signExtendTable[val|0]|0;
     }
 
     exports.signExtend = signExtend;
