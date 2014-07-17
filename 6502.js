@@ -117,7 +117,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfc34:
                     case 0xfc38:
                     case 0xfc3c:
-                        // TODO: sid chip (really?);
+                        // SID Chip.
                         break;
                     case 0xfc40:
                     case 0xfc44:
@@ -127,7 +127,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfc54:
                     case 0xfc58:
                     case 0xfc5c:
-                        // TODO: ide
+                        // IDE
                         break;
                     case 0xfe00:
                     case 0xfe04:
@@ -232,7 +232,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfc34:
                     case 0xfc38:
                     case 0xfc3c:
-                        // TODO: sid chip (really?);
+                        // SID chip
                         break;
                     case 0xfc40:
                     case 0xfc44:
@@ -242,7 +242,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfc54:
                     case 0xfc58:
                     case 0xfc5c:
-                        // TODO: ide
+                        // IDE
                         break;
                     case 0xfe00:
                     case 0xfe04:
@@ -365,7 +365,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
                     for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
                     for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-                    /* TODO: Model A support here */
                     for (i = 48; i < 128; ++i) this.memLook[256 + i] = 16384;
                     for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
                     for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
@@ -554,7 +553,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     }
                     this.incpc();
                     opcodes.runInstruction(this, opcode);
-                    // TODO: timetolive
                     if (this.takeInt) {
                         this.takeInt = false;
                         this.push(this.pc >>> 8);
@@ -564,8 +562,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         this.p.i = true;
                         this.polltime(7);
                     }
-                    // TODO: otherstuff
-                    // TODO: tube
                     if (this.nmi) {
                         this.push(this.pc >>> 8);
                         this.push(this.pc & 0xff);
