@@ -100,10 +100,6 @@ define(['teletext'], function (Teletext) {
             return t;
         }();
 
-        function fbTableOffset(byte) {
-            return ((byte | 0) * 16) | 0;
-        }
-
         var fbTable = new Uint32Array(256 * 16);
         var fbTableDirty = true;
 
@@ -150,7 +146,7 @@ define(['teletext'], function (Teletext) {
         }
 
         function blitFb(dat, destOffset, numPixels) {
-            var tblOff = fbTableOffset(dat);
+            var tblOff = dat << 4;
             blitFb8(tblOff, destOffset);
             if (numPixels === 16) {
                 blitFb8(tblOff + 8, destOffset + 8);
