@@ -38,8 +38,8 @@ define(['teletext'], function (Teletext) {
             self.charsleft = 0; // chars left hanging off end of mode 7 line
             self.ulapal = new Uint32Array(16);
             self.bakpal = new Uint8Array(16);
-            self.interline = 0;// maybe can delete? don't support interlace
-            self.interlline = 0; // maybe delete?
+            self.inInterlacedLine = 0;
+            self.interline = 0;
             self.oldr8 = 0;
             self.frameodd = false;
             self.teletext = new Teletext();
@@ -51,7 +51,7 @@ define(['teletext'], function (Teletext) {
         };
 
         function paint() {
-            paint_ext(320, 24, 992, 296);
+            paint_ext(320, 24 << 1, 992, (296 << 1) + 1);
         }
 
         self.debugPaint = paint;
@@ -103,14 +103,14 @@ define(['teletext'], function (Teletext) {
                 fb32[y * 1280 + x] = 0;
         paint(0, 0, 1280, 768);
 
-        function renderblank() {
+        function renderblank(x, y) {
             if (self.charsleft) {
                 if (self.charsleft != 1) {
-                    self.teletext.render(fb32, self.scry * 1280 + self.scrx, self.sc, 0xff);
+                    self.teletext.render(fb32, y * 1280 + x, self.sc, false, 0xff);
                 }
                 self.charsleft--;
-            } else if (self.scrx < 1280) {
-                clearFb(self.scry * 1280 + self.scrx, self.pixelsPerChar);
+            } else if (x < 1280) {
+                clearFb(y * 1280 + x, self.pixelsPerChar);
             }
             // TODO: cursor, if cdraw and scrx<1280..
         }
@@ -145,7 +145,7 @@ define(['teletext'], function (Teletext) {
             }
         }
 
-        function renderchar() {
+        function renderchar(x, y) {
             var vidbank = 0; // TODO: vid bank support
 
             if (!((self.ma ^ self.cursorPos) & 0x3fff) && self.con) {
@@ -158,13 +158,13 @@ define(['teletext'], function (Teletext) {
             if (self.ma & 0x2000) {
                 dat = self.cpu.readmem(0x7c00 | (self.ma & 0x3ff) | vidbank);
             } else {
-                var addr = self.ilSyncAndVideo ? ((self.ma << 3) | ((self.sc & 3) << 1) | self.interlline)
+                var addr = self.ilSyncAndVideo ? ((self.ma << 3) | ((self.sc & 3) << 1) | self.interline)
                     : ((self.ma << 3) | (self.sc & 7));
                 if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
                 dat = self.cpu.readmem((addr & 0x7fff) | vidbank) | 0;
             }
-            if (self.scrx < 1280) {
-                var offset = (self.scry * 1280 + self.scrx) | 0;
+            if (x < 1280) {
+                var offset = (y * 1280 + x) | 0;
                 var pixels = self.pixelsPerChar;
                 var fb32 = self.fb32;
                 var fbOffset = offset;
@@ -172,7 +172,7 @@ define(['teletext'], function (Teletext) {
                     clearFb(fbOffset, pixels);
                 } else {
                     if (self.teletextMode) {
-                        self.teletext.render(fb32, offset, self.sc, dat & 0x7f);
+                        self.teletext.render(fb32, offset, self.sc, self.frameodd, dat & 0x7f);
                     } else {
                         blitFb(dat, fbOffset, pixels);
                     }
@@ -236,10 +236,10 @@ define(['teletext'], function (Teletext) {
                 }
                 if (self.vc === self.regs[7]) {
                     // vertical sync position
-                    //if (!(self.regs[8] & 1) && self.oldr8) clearToColour(); TODO: this!
+                    //if (!(self.regs[8] & 1) && self.oldr8) clearToColour(); TODO: this - clear display entirely when disabling interlace
                     self.frameodd = !self.frameodd;
-                    if (self.frameodd) self.interline = !!(self.regs[8] & 1);
-                    self.interlline = self.frameodd && (self.regs[8] & 1);
+                    self.interline = self.frameodd && (self.regs[8] & 1);
+                    if (self.frameodd) self.inInterlacedLine = !!(self.regs[8] & 1);
                     self.oldr8 = self.regs[8] & 1;
                     if (self.vidclocks > 2) {
                         paint();
@@ -267,7 +267,7 @@ define(['teletext'], function (Teletext) {
                 self.vsynctime--;
                 if (!self.vsynctime) {
                     self.hvblcount = 1;
-                    if (self.frameodd) self.interline = self.regs[8] & 1;
+                    if (self.frameodd) self.inInterlacedLine = self.regs[8] & 1;
                 }
             }
             self.dispen = self.vdispen;
@@ -308,10 +308,11 @@ define(['teletext'], function (Teletext) {
                     }
                 }
 
+                var renderY = (self.scry << 1) | (self.frameodd ? 1 : 0);
                 if (self.dispen) {
-                    renderchar();
+                    renderchar(self.scrx, renderY);
                 } else {
-                    renderblank();
+                    renderblank(self.scrx, renderY);
                 }
 
                 if (self.hvblcount) {
@@ -320,9 +321,9 @@ define(['teletext'], function (Teletext) {
                     }
                 }
 
-                if (self.interline && self.hc === (self.regs[0] >>> 1)) {
+                if (self.inInterlacedLine && self.hc === (self.regs[0] >>> 1)) {
                     // hit end of interlaced line
-                    self.hc = self.interline = 0;
+                    self.hc = self.inInterlacedLine = 0;
                     self.scrx = startX();
                 } else if (self.hc === self.regs[0]) {
                     // We've hit the end of a line (reg 0 is horiz sync char count)

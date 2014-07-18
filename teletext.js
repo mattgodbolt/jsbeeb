@@ -1,5 +1,6 @@
 define(['teletext_data'], function (ttData) { return function Teletext() {
     "use strict";
+    // TODO: fix the blurry double-height graphics (see Elite, Kindgdom etc)
     var self = this;
 
     self.chars = new Uint8Array(96 * 160);
@@ -183,7 +184,7 @@ define(['teletext_data'], function (ttData) { return function Teletext() {
         return data;
     }
 
-    function render(buf, offset, scanline, data) {
+    function render(buf, offset, scanline, interline, data) {
         var i;
         self.oldDbl = self.dbl;
         if (data == 255) {
@@ -210,8 +211,7 @@ define(['teletext_data'], function (ttData) { return function Teletext() {
         } else {
             palette = self.palette[((self.bg & 7)<<3) | (self.col & 7)];
         }
-        var px = self.curChars[0];
-        // TODO interlace
+        var px = self.curChars[interline ? 1 : 0];
         offset += 16; // TODO: why is this needed?
         // Unrolling seems a good thing here, at least on Chrome.
         buf[offset++] = palette[px[t++]];
