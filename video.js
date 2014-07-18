@@ -4,10 +4,9 @@ define(['teletext'], function (Teletext) {
         var self = this;
         self.fb32 = fb32;
         self.paint = paint;
-        // TODO: on Chrome 35 making this a Uint32Array seems to push ula.write into a deopt party.
-        self.collook = /*new Uint32Array(*/[
+        self.collook = new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
-            0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff];//);
+            0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]);
         var screenlen = new Uint16Array([0x4000, 0x5000, 0x2000, 0x2800]);
         var cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
         var cursorFlashMask = new Uint8Array([0x00, 0x00, 0x10, 0x20]);
@@ -25,7 +24,7 @@ define(['teletext'], function (Teletext) {
             self.pixelsPerChar = 8;
             self.halfClock = false;
             self.ulamode = 0;
-            self.crtcmode = 0;
+            self.teletextMode = false;
             self.dispen = false;
             self.vdispen = false;
             self.hc = 0; // horiz chars
@@ -44,33 +43,18 @@ define(['teletext'], function (Teletext) {
             self.oldr8 = 0;
             self.frameodd = false;
             self.teletext = new Teletext();
-            self.minx = self.miny = 65535;
-            self.maxx = self.maxy = 0;
             self.con = self.coff = self.cursoron = false; // on this line, off, on due to flash
             self.cdraw = 0;
-            self.lastMinX = self.lastMaxX = self.lastMinY = self.lastMaxY = 0;
             self.cursorPos = 0;
             self.ilSyncAndVideo = false;
             updateFbTable();
         };
 
         function paint() {
-            if (self.minx >= self.maxx || self.miny >= self.maxy) {
-                paint_ext(0, 0, 1280, 768);
-            } else {
-                paint_ext(self.minx, self.miny, self.maxx, self.maxy);
-            }
-            self.lastMinX = self.minx;
-            self.lastMaxX = self.maxx;
-            self.lastMinY = self.miny;
-            self.lastMaxY = self.maxy;
-            self.minx = self.miny = 65535;
-            self.maxx = self.maxy = 0;
+            paint_ext(320, 24, 992, 296);
         }
 
-        self.debugPaint = function () {
-            paint_ext(self.lastMinX, self.lastMinY, self.lastMaxX, self.lastMaxY);
-        };
+        self.debugPaint = paint;
 
         function table4bppOffset(ulamode, byte) {
             return ulamode * 256 * 16 + byte * 16;
@@ -167,7 +151,7 @@ define(['teletext'], function (Teletext) {
             if (!((self.ma ^ self.cursorPos) & 0x3fff) && self.con) {
                 self.cdraw = 3 - ((self.regs[8] >>> 6) & 3);
                 // TODO - hack to get mode7 cursor lined up - fix
-                if (self.crtcmode === 0) self.cdraw = 3;
+                if (self.teletextMode) self.cdraw = 3;
             }
 
             var dat = 0;
@@ -187,14 +171,10 @@ define(['teletext'], function (Teletext) {
                 if ((self.regs[8] & 0x30) === 0x30 || ((self.sc & 8) && !(self.ulactrl & 2))) {
                     clearFb(fbOffset, pixels);
                 } else {
-                    if (self.crtcmode === 0) {
+                    if (self.teletextMode) {
                         self.teletext.render(fb32, offset, self.sc, dat & 0x7f);
-                        self.minx = Math.min(self.minx, self.scrx + 16) | 0;
-                        self.maxx = Math.max(self.maxx, self.scrx + 32) | 0;
                     } else {
                         blitFb(dat, fbOffset, pixels);
-                        self.minx = Math.min(self.minx, self.scrx) | 0;
-                        self.maxx = Math.max(self.maxx, self.scrx + pixels) | 0;
                     }
                 }
 
@@ -291,11 +271,6 @@ define(['teletext'], function (Teletext) {
                 }
             }
             self.dispen = self.vdispen;
-            if (self.dispen || self.vadj) {
-                if (self.scry < self.miny) self.miny = self.scry;
-                var nextY = self.scry + 1;
-                if (nextY > self.maxy) self.maxy = nextY;
-            }
 
             // adc, mouse? seriously?
         };
@@ -432,9 +407,7 @@ define(['teletext'], function (Teletext) {
                         self.ulamode = newMode;
                         fbTableDirty = true;
                     }
-                    if (val & 2) self.crtcmode = 0;
-                    else if (val & 0x10) self.crtcmode = 1;
-                    else self.crtcmode = 2;
+                    self.teletextMode = !!(val & 2);
                 }
             }
         };
