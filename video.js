@@ -33,7 +33,6 @@ define(['teletext'], function (Teletext) {
             self.maback = 0; // copy of mem address; used to re-read same memory within a vert char
             self.sc = 0; // scanline within frame
             self.vadj = 0; // Vertical adjust remaining
-            self.vidbytes = 0;
             self.hvblcount = 0;
             self.charsleft = 0; // chars left hanging off end of mode 7 line
             self.ulapal = new Uint32Array(16);
@@ -189,7 +188,6 @@ define(['teletext'], function (Teletext) {
                 }
             }
             self.ma++;
-            self.vidbytes++;
         }
 
         self.endofline = function () {
@@ -249,7 +247,7 @@ define(['teletext'], function (Teletext) {
                     self.vsynctime = (self.regs[3] >> 4) + 1;
                     if (!(self.regs[3] >> 4)) self.vsynctime = 17;
                     self.teletext.vsync();
-                    self.vidclocks = self.vidbytes = 0;
+                    self.vidclocks = 0;
                 }
             } else {
                 self.sc = (self.sc + 1) & 31;
