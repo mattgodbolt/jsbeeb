@@ -181,7 +181,7 @@ define(['teletext'], function (Teletext) {
                 if (self.cdraw) {
                     if (self.cursoron && (self.ulactrl & cursorTable[self.cdraw])) {
                         for (var i = 0; i < pixels; ++i) {
-                            fb32[offset + i] = self.fb32[offset + i] ^ 0x00ffffff;
+                            fb32[offset + i] ^= 0x00ffffff;
                         }
                     }
                     if (++self.cdraw === 7) self.cdraw = 0;
