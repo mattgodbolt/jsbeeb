@@ -608,5 +608,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
         window.go = go;
         window.stop = stop;
         window.processor = processor;
+        window.video = video;
     }
 );
