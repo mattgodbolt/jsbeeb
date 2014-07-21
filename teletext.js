@@ -264,7 +264,9 @@ define(['teletext_data'], function (ttData) {
                 palette = self.palette[((self.bg & 7) << 3) | (self.col & 7)];
             }
             var px = self.curChars[rounding];
-            offset += 16; // TODO: why is this needed?
+            // There's a 2.6us delay in the output of the RGB of the SAA5050, which is
+            // about two characters' worth.
+            offset += 16;
             // Unrolling seems a good thing here, at least on Chrome.
             buf[offset] = palette[px[t]];
             buf[offset + 1] = palette[px[t + 1]];
