@@ -37,15 +37,16 @@ define(['teletext'], function (Teletext) {
             self.charsLeft = 0; // chars left hanging off end of mode 7 line (due to delays, TODOs here)
             self.ulaPal = new Uint32Array(16);
             self.actualPal = new Uint8Array(16);
+            self.atStartOfInterlaceLine = 0;
             self.inInterlacedLine = 0;
-            self.interline = 0;
             self.oddFrame = false;
             self.teletext = new Teletext();
-            self.con = self.coff = self.cursoron = false; // on this line, off, on due to flash
+            self.cursorOn = self.cursorOff = self.cursorOnThisFrame = false;
             self.cursorDrawIndex = 0;
             self.cursorPos = 0;
             self.ilSyncAndVideo = false;
             self.blanked = false;
+            self.vsyncIrqHighLines = 0;
             updateFbTable();
         };
 
@@ -103,15 +104,18 @@ define(['teletext'], function (Teletext) {
         paint(0, 0, 1280, 768);
 
         function renderBlank(x, y) {
+            var offset = y * 1280 + x;
             if (self.charsLeft) {
                 if (self.charsLeft != 1) {
-                    self.teletext.render(fb32, y * 1280 + x, self.charScanLine, false, 0xff);
+                    self.teletext.render(fb32, offset, self.charScanLine, false, 0xff);
                 }
                 self.charsLeft--;
             } else if (x < 1280) {
-                clearFb(y * 1280 + x, self.pixelsPerChar);
+                clearFb(offset, self.pixelsPerChar);
+                if (self.cursorDrawIndex) {
+                    handleCursor(offset);
+                }
             }
-            // TODO: cursor, if cursorDrawIndex and scrX<1280..
         }
 
         function blitFb8(tblOff, destOffset) {
@@ -144,10 +148,19 @@ define(['teletext'], function (Teletext) {
             }
         }
 
+        function handleCursor(offset) {
+            if (self.cursorOnThisFrame && (self.ulactrl & cursorTable[self.cursorDrawIndex])) {
+                for (var i = 0; i < self.pixelsPerChar; ++i) {
+                    fb32[offset + i] ^= 0x00ffffff;
+                }
+            }
+            if (++self.cursorDrawIndex === 7) self.cursorDrawIndex = 0;
+        }
+
         function renderChar(x, y) {
             var vidBank = 0; // TODO: vid bank support
 
-            if (!((self.memAddress ^ self.cursorPos) & 0x3fff) && self.con) {
+            if (!((self.memAddress ^ self.cursorPos) & 0x3fff) && self.cursorOn) {
                 self.cursorDrawIndex = 3 - ((self.regs[8] >>> 6) & 3);
                 // TODO - hack to get mode7 cursor lined up - fix
                 if (self.teletextMode) self.cursorDrawIndex = 3;
@@ -157,33 +170,25 @@ define(['teletext'], function (Teletext) {
             if (self.memAddress & 0x2000) {
                 dat = self.cpu.readmem(0x7c00 | (self.memAddress & 0x3ff) | vidBank);
             } else {
-                var addr = self.ilSyncAndVideo ? ((self.memAddress << 3) | ((self.charScanLine & 3) << 1) | self.interline)
+                var addr = self.ilSyncAndVideo ? ((self.memAddress << 3) | ((self.charScanLine & 3) << 1) | self.inInterlacedLine)
                     : ((self.memAddress << 3) | (self.charScanLine & 7));
                 if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
                 dat = self.cpu.readmem((addr & 0x7fff) | vidBank) | 0;
             }
             if (x < 1280) {
                 var offset = (y * 1280 + x) | 0;
-                var pixels = self.pixelsPerChar;
                 var fb32 = self.fb32;
                 var fbOffset = offset;
                 if (self.blanked || ((self.charScanLine & 8) && !self.teletextMode)) {
-                    clearFb(fbOffset, pixels);
+                    clearFb(fbOffset, self.pixelsPerChar);
                 } else if (self.teletextMode) {
                     self.teletext.render(fb32, offset, self.charScanLine, self.oddFrame, dat & 0x7f);
                 } else {
-                    blitFb(dat, fbOffset, pixels);
+                    blitFb(dat, fbOffset, self.pixelsPerChar);
                 }
 
-
-                // TODO: move to common rendering code so handles case of being blank
                 if (self.cursorDrawIndex) {
-                    if (self.cursoron && (self.ulactrl & cursorTable[self.cursorDrawIndex])) {
-                        for (var i = 0; i < pixels; ++i) {
-                            fb32[offset + i] ^= 0x00ffffff;
-                        }
-                    }
-                    if (++self.cursorDrawIndex === 7) self.cursorDrawIndex = 0;
+                    handleCursor(offset);
                 }
             }
             self.memAddress++;
@@ -194,8 +199,8 @@ define(['teletext'], function (Teletext) {
 
             var cursorEnd = self.regs[11] & 31;
             if (self.charScanLine === cursorEnd || (self.ilSyncAndVideo && self.charScanLine === (cursorEnd >>> 1))) {
-                self.con = false;
-                self.coff = true;
+                self.cursorOn = false;
+                self.cursorOff = true;
             }
 
             if (self.verticalAdjust) {
@@ -211,15 +216,15 @@ define(['teletext'], function (Teletext) {
                 // end of a vertical character
                 self.startOfLineMemAddr = self.memAddress;
                 self.charScanLine = 0;
-                self.con = self.coff = false;
+                self.cursorOn = self.cursorOff = false;
                 self.teletext.verticalCharEnd();
-                var oldvc = self.vertChars;
+                var oldVertChars = self.vertChars;
                 self.vertChars = (self.vertChars + 1) & 127;
                 if (self.vertChars === self.regs[6]) {
                     // hit bottom of displayed screen
                     self.vDisplayEnabled = false;
                 }
-                if (oldvc === self.regs[4]) {
+                if (oldVertChars === self.regs[4]) {
                     // vertical total register count
                     self.vertChars = 0;
                     self.verticalAdjust = self.regs[5]; // load fractional adjustment
@@ -229,20 +234,20 @@ define(['teletext'], function (Teletext) {
                     }
                     self.frameCount++;
                     var cursorFlash = (self.regs[10] & 0x60) >>> 5;
-                    self.cursoron = (cursorFlash === 0) || !!(self.frameCount & cursorFlashMask[cursorFlash]);
+                    self.cursorOnThisFrame = (cursorFlash === 0) || !!(self.frameCount & cursorFlashMask[cursorFlash]);
                 }
                 if (self.vertChars === self.regs[7]) {
                     // vertical sync position
                     self.oddFrame = !self.oddFrame;
-                    self.interline = self.oddFrame && (self.regs[8] & 1);
-                    if (self.oddFrame) self.inInterlacedLine = !!(self.regs[8] & 1);
+                    self.inInterlacedLine = !!(self.oddFrame && (self.regs[8] & 1));
+                    if (self.oddFrame) self.atStartOfInterlaceLine = !!(self.regs[8] & 1);
                     if (self.clocks > 2) {
                         paint();
                     }
                     self.scrY = 0;
                     self.sysvia.setVBlankInt(true);
-                    self.vsynctime = (self.regs[3] >> 4) + 1;
-                    if (!(self.regs[3] >> 4)) self.vsynctime = 17;
+                    self.vsyncIrqHighLines = (self.regs[3] >> 4) + 1;
+                    if (!(self.regs[3] >> 4)) self.vsyncIrqHighLines = 17;
                     self.teletext.vsync();
                     self.clocks = 0;
                 }
@@ -254,15 +259,17 @@ define(['teletext'], function (Teletext) {
             self.teletext.endline();
 
             var cursorStartLine = self.regs[10] & 31;
-            if (!self.coff && (self.charScanLine === cursorStartLine || (self.ilSyncAndVideo && self.charScanLine === (cursorStartLine >>> 1)))) {
-                self.con = true;
+            if (!self.cursorOff && (self.charScanLine === cursorStartLine || (self.ilSyncAndVideo && self.charScanLine === (cursorStartLine >>> 1)))) {
+                self.cursorOn = true;
             }
 
-            if (self.vsynctime) {
-                self.vsynctime--;
-                if (!self.vsynctime) {
+            if (self.vsyncIrqHighLines) {
+                if (--self.vsyncIrqHighLines === 0) {
+                    // TODO: is this really necessary? b-em gives a one-cycle delay for the
+                    // vsync line going low. Presumably this is for more accurate timing but
+                    // I'd love to know why this is needed as it complicates things.
                     self.vblankLowLineCount = 1;
-                    if (self.oddFrame) self.inInterlacedLine = self.regs[8] & 1;
+                    if (self.oddFrame) self.atStartOfInterlaceLine = !!(self.regs[8] & 1);
                 }
             }
             self.displayEnabled = self.vDisplayEnabled;
@@ -316,9 +323,13 @@ define(['teletext'], function (Teletext) {
                     }
                 }
 
-                if (self.inInterlacedLine && self.horizChars === (self.regs[0] >>> 1)) {
-                    // hit end of interlaced line
-                    self.horizChars = self.inInterlacedLine = 0;
+                if (self.atStartOfInterlaceLine && self.horizChars === (self.regs[0] >>> 1)) {
+                    // TODO: understand this mechanism:
+                    // There seems to be a half-line at the top of the screen on alternating
+                    // interlace lines. b-em doesn this, but I've yet to understand why it is
+                    // necessary.
+                    self.horizChars = 0;
+                    self.atStartOfInterlaceLine = false;
                     self.scrX = startX();
                 } else if (self.horizChars === self.regs[0]) {
                     // We've hit the end of a line (reg 0 is horiz sync char count)
