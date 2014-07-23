@@ -34,9 +34,6 @@ define(['teletext_data'], function (ttData) {
                 x = x2 = 0;
                 for (j = 0; j < 16; ++j) {
                     o = offs2 + j;
-                    //var p = offs1 + x2;
-                    //self.graph[o] = lerp(Data.graphics[p], Data.graphics[p + 1], x);
-                    //self.sepgraph[o] = lerp(Data.separated[p], Data.separated[p + 1], x);
                     if (!j) {
                         self.graph[o] = self.graphi[o] = Data.graphics[offs1];
                         self.sepgraph[o] = self.sepgraphi[o] = Data.separated[offs1];
@@ -64,12 +61,13 @@ define(['teletext_data'], function (ttData) {
                     for (x = 0; x < 6; ++x) {
                         stat = 0;
                         if (y != 9) {
-                            var above = Data.normal[offs1 + y * 6 + x];
-                            var below = Data.normal[offs1 + y * 6 + x + 6];
-                            var left = Data.normal[offs1 + y * 6 + x - 1];
-                            var right = Data.normal[offs1 + y * 6 + x + 1];
-                            var belowLeft = Data.normal[offs1 + y * 6 + x + 5];
-                            var belowRight = Data.normal[offs1 + y * 6 + x + 7];
+                            var basePos = offs1 + y * 6 + x;
+                            var above = Data.normal[basePos];
+                            var below = Data.normal[basePos + 6];
+                            var left = Data.normal[basePos - 1];
+                            var right = Data.normal[basePos + 1];
+                            var belowLeft = Data.normal[basePos + 5];
+                            var belowRight = Data.normal[basePos + 7];
                             if (above && below) stat = 3;
                             if (x > 0 && above && belowLeft && !left) stat |= 1;
                             if (x > 0 && below && left && !belowLeft) stat |= 1;
@@ -131,8 +129,10 @@ define(['teletext_data'], function (ttData) {
             self.gfx = 0;
             self.flash = self.flashOn = false;
             self.flashTime = 0;
-            self.heldChar = self.holdChar = 0;
+            self.heldChar = false;
+            self.holdChar = 0;
             self.curChars = [self.chars, self.charsi];
+            self.heldChars = [self.chars, self.charsi];
 
             function printerize(c, offset) {
                 for (var i = 0; i < 10; ++i) {
@@ -147,10 +147,13 @@ define(['teletext_data'], function (ttData) {
             }
         }
 
+        var mcolx = 0;
+        var holdClear = false;
+        var holdOff = false;
+
         function handleControlCode(data) {
-            // TODO: these need to be "exported" somehow to the caller
-            var holdclear = false;
-            var holdoff = false;
+            holdClear = false;
+            holdOff = false;
             switch (data) {
                 case 1:
                 case 2:
@@ -163,7 +166,7 @@ define(['teletext_data'], function (ttData) {
                     self.col = data;
                     self.curChars[0] = self.chars;
                     self.curChars[1] = self.charsi;
-                    holdclear = true;
+                    holdClear = true;
                     break;
                 case 8:
                     self.flash = true;
@@ -194,8 +197,7 @@ define(['teletext_data'], function (ttData) {
                     }
                     break;
                 case 24:
-                    // TODO mcolx?
-                    self.col = self.bg;
+                    self.col = mcolx = self.bg;
                     break;
                 case 25:
                     if (self.gfx) {
@@ -221,29 +223,38 @@ define(['teletext_data'], function (ttData) {
                     self.holdChar = true;
                     break;
                 case 31:
-                    holdoff = true;
+                    holdOff = true;
                     break;
             }
-            if (self.holdChar) {
+            if (self.holdChar && self.dbl === self.oldDbl) {
                 data = self.heldChar;
-                if (data >= 0x40 && data <= 0x60) data = 0x20;
-                // TODO held 'px'
-            } else data = 0x20;
-            if (self.dbl !== self.oldDbl) data = 0x20;
+                if (data >= 0x40 && data < 0x60) data = 0x20;
+                self.curChars[0] = self.heldChars[0];
+                self.curChars[1] = self.heldChars[1];
+            } else {
+                data = 0x20;
+            }
             return data;
         }
 
         function render(buf, offset, scanline, interline, data) {
             var i;
             self.oldDbl = self.dbl;
-            if (data == 255) {
+            mcolx = self.bg;
+            if (data === 255) {
                 for (i = 0; i < 16; ++i) {
-                    buf[offset + i + 16] = 0xff000000; // todo color lookup 0
+                    buf[offset + i + 16] = 0xff000000;
                 }
                 return;
             }
             var prevFlash = self.flash;
-            if (data < 0x20) data = handleControlCode(data);
+            if (data < 0x20) {
+                data = handleControlCode(data);
+            } else if (self.curChars[0] !== self.charsi) {
+                self.heldChar = data;
+                self.heldChars[0] = self.curChars[0];
+                self.heldChars[1] = self.curChars[1];
+            }
             var t = (data - 0x20) * 160;
             var rounding;
             if (self.oldDbl) {
@@ -261,11 +272,11 @@ define(['teletext_data'], function (ttData) {
             } else if (!self.dbl && self.nextDbl) {
                 palette = self.palette[((self.bg & 7) << 3) | (self.bg & 7)];
             } else {
-                palette = self.palette[((self.bg & 7) << 3) | (self.col & 7)];
+                palette = self.palette[((mcolx & 7) << 3) | (self.col & 7)];
             }
             var px = self.curChars[rounding];
             // There's a 2.6us delay in the output of the RGB of the SAA5050, which is
-            // about two characters' worth.
+            // about one Teletext character's worth.
             offset += 16;
             // Unrolling seems a good thing here, at least on Chrome.
             buf[offset] = palette[px[t]];
@@ -284,6 +295,14 @@ define(['teletext_data'], function (ttData) {
             buf[offset + 13] = palette[px[t + 13]];
             buf[offset + 14] = palette[px[t + 14]];
             buf[offset + 15] = palette[px[t + 15]];
+
+            if (holdOff) {
+                self.holdChar = false;
+                self.heldChar = 32;
+            }
+            if (holdClear) {
+                self.heldChar = 32;
+            }
         }
 
         this.verticalCharEnd = function () {
@@ -303,12 +322,11 @@ define(['teletext_data'], function (ttData) {
             self.bg = 0;
             self.holdChar = false;
             self.heldChar = 0x20;
-            self.curChars[0] = self.chars;
-            self.curChars[1] = self.charsi;
+            self.curChars[0] = self.heldChars[0] = self.chars;
+            self.curChars[1] = self.heldChars[1] = self.charsi;
             self.flash = false;
             self.sep = false;
             self.gfx = false;
-            // TODO heldp
 
             self.dbl = self.wasDbl = false;
         };
