@@ -14,6 +14,38 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
         var dropbox;
         var running;
 
+        var availableImages = starCat();
+        var queryString = document.location.search;
+        var discImage = availableImages[0].file;
+        var secondDiscImage = null;
+        var parsedQuery = {};
+        var needsAutoboot = false;
+        if (queryString) {
+            queryString = queryString.substring(1);
+            if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
+                queryString = queryString.substring(0, queryString.length - 1);
+            queryString.split("&").forEach(function (keyval) {
+                var keyAndVal = keyval.split("=");
+                var key = decodeURIComponent(keyAndVal[0]);
+                var val = null;
+                if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
+                parsedQuery[key] = val;
+                switch (key) {
+                    case "autoboot":
+                        needsAutoboot = true;
+                        break;
+                    case "disc":
+                    case "disc1":
+                        discImage = val;
+                        break;
+                    case "disc2":
+                        secondDiscImage = val;
+                        break;
+                }
+            });
+        }
+        var model = parsedQuery.model || 'B';
+
         var framesPerSecond = 50;
         var targetTimeout = 1000 / framesPerSecond;
         var adjustedTimeout = targetTimeout;
@@ -139,7 +171,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
 
-        processor = new Cpu6502(dbgr, video, soundChip);
+        processor = new Cpu6502(model, dbgr, video, soundChip);
 
         function sthClearList() {
             $("#sth-list li:not('.template')").remove();
@@ -234,37 +266,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
                     processor.sysvia.keyUp(16);
                 }, 5000);
             }, 0);
-        }
-
-        var availableImages = starCat();
-        var queryString = document.location.search;
-        var discImage = availableImages[0].file;
-        var secondDiscImage = null;
-        var parsedQuery = {};
-        var needsAutoboot = false;
-        if (queryString) {
-            queryString = queryString.substring(1);
-            if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
-                queryString = queryString.substring(0, queryString.length - 1);
-            queryString.split("&").forEach(function (keyval) {
-                var keyAndVal = keyval.split("=");
-                var key = decodeURIComponent(keyAndVal[0]);
-                var val = null;
-                if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
-                parsedQuery[key] = val;
-                switch (key) {
-                    case "autoboot":
-                        needsAutoboot = true;
-                        break;
-                    case "disc":
-                    case "disc1":
-                        discImage = val;
-                        break;
-                    case "disc2":
-                        secondDiscImage = val;
-                        break;
-                }
-            });
         }
 
         if (parsedQuery.dbEnabled) {

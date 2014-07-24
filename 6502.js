@@ -31,7 +31,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             this.reset();
         }
 
-        return function Cpu6502(dbgr, video, soundChip) {
+        return function Cpu6502(model, dbgr, video, soundChip) {
             var self = this;
             this.ramBank = new Uint8Array(16);
             this.memStat = new Uint8Array(512);
@@ -340,6 +340,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             };
 
             this.loadRom = function (name, offset) {
+                name = "/roms/" + name;
                 console.log("Loading ROM from " + name);
                 var data = utils.loadData(name);
                 var len = data.length;
@@ -351,11 +352,37 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 }
             };
 
-            this.loadOs = function (os, basic, dfs) {
-                this.loadRom(os, this.osOffset);
-                this.loadRom(basic, this.romOffset + 15 * 16384);
-                this.loadRom(dfs, this.romOffset + 14 * 16384);
+            this.loadOs = function (os) {
+                var i;
+                os = "/roms/" + os;
+                console.log("Loading OS from " + os);
+                var data = utils.loadData(os);
+                var len = data.length;
+                if (len < 0x4000 || (len & 0x3fff)) throw "Broken ROM file (length=" + len + ")";
+                for (i = 0; i < 0x4000; ++i) {
+                    this.ramRomOs[this.osOffset + i] = data[i];
+                }
+                var numExtraBanks = (len - 0x4000) / 0x4000;
+                var romIndex = 15 - numExtraBanks;
+                for (i = 0; i < numExtraBanks; ++i) {
+                    var srcBase = 0x4000 + 0x4000 * i;
+                    var destBase = this.romOffset + (romIndex + i) * 0x4000;
+                    for (var j = 0; j < 0x4000; ++j) {
+                        this.ramRomOs[destBase + j] = data[srcBase + j];
+                    }
+                }
+
+                for (i = 1; i < arguments.length; ++i) {
+                    this.loadRom(arguments[i], this.romOffset + romIndex * 0x4000);
+                    romIndex--;
+                }
             };
+
+            function resetB() {
+            }
+            function resetMaster() {}
+
+            this.resetModel = resetB;
 
             this.reset = function (hard) {
                 console.log("Resetting 6502");
@@ -370,7 +397,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
                     for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
-                    this.ram4k = this.ram8k = this.ram12k = this.ram20k = 0;
                     this.disassembler = new opcodes.Disassemble6502(this);
                     this.sysvia = via.SysVia(this, soundChip);
                     this.uservia = via.UserVia(this);
@@ -389,6 +415,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     }};
                     this.sysvia.reset();
                     this.uservia.reset();
+                    this.resetModel();
                 } else {
                     console.log("Soft reset");
                 }
@@ -397,7 +424,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.p = new Flags();
                 this.p.i = true;
                 this.nmi = false;
-                this.tubecycle = this.tubecycles = 0;
                 this.halted = false;
                 video.reset(this, this.sysvia);
                 if (hard) soundChip.reset();
@@ -581,7 +607,18 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.halted = true;
             };
 
-            this.loadOs("/roms/os.rom", "/roms/b/BASIC.ROM", "/roms/b/DFS-0.9.rom");
+            switch (model) {
+                case 'B':
+                    this.loadOs("os.rom", "b/BASIC.ROM", "b/DFS-0.9.rom");
+                    this.resetModel = resetB;
+                    break;
+                case 'Master':
+                    this.loadOs("master/mos3.20");
+                    this.resetModel = resetMaster;
+                    break;
+                default:
+                    throw "Bad model " + model;
+            }
             this.reset(true);
 
             dbgr.setCpu(this);

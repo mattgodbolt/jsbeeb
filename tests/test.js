@@ -247,7 +247,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils'],
         function runTest(name, func, whenDone) {
             log("Running", name);
             beginTest(name);
-            processor = new Cpu6502(dbgr, video, soundChip);
+            processor = new Cpu6502('B', dbgr, video, soundChip);
             failures = 0;
             func(function () {
                 log("Finished", name);

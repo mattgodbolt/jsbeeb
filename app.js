@@ -60,7 +60,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc'],
         }
 
         var discName = "elite";
-        var cpu = new Cpu6502(dbgr, video, soundChip);
+        var cpu = new Cpu6502('B', dbgr, video, soundChip);
         cpu.fdc.loadDiscData(0, disc.ssdLoad("discs/" + discName + ".ssd"));
         cpu.sysvia.keyDown(16);
         cpu.execute(10 * 1000 * 1000);
