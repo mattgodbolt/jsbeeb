@@ -582,6 +582,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
                 } catch (e) {
                     running = false;
                     utils.noteEvent('exception', 'thrown', e.stack);
+                    dbgr.debug(processor.pc);
                     throw e;
                 }
                 if (running) setTimeout(runner, 0);

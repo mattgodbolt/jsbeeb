@@ -47,6 +47,7 @@ define(['teletext'], function (Teletext) {
             self.ilSyncAndVideo = false;
             self.blanked = false;
             self.vsyncIrqHighLines = 0;
+            self.vidBank = 0;
             updateFbTable();
         };
 
@@ -158,8 +159,6 @@ define(['teletext'], function (Teletext) {
         }
 
         function renderChar(x, y) {
-            var vidBank = 0; // TODO: vid bank support
-
             if (!((self.memAddress ^ self.cursorPos) & 0x3fff) && self.cursorOn) {
                 self.cursorDrawIndex = 3 - ((self.regs[8] >>> 6) & 3);
                 // TODO - hack to get mode7 cursor lined up - fix
@@ -168,12 +167,12 @@ define(['teletext'], function (Teletext) {
 
             var dat = 0;
             if (self.memAddress & 0x2000) {
-                dat = self.cpu.readmem(0x7c00 | (self.memAddress & 0x3ff) | vidBank);
+                dat = self.cpu.readmem(0x7c00 | (self.memAddress & 0x3ff) | self.vidBank);
             } else {
                 var addr = self.ilSyncAndVideo ? ((self.memAddress << 3) | ((self.charScanLine & 3) << 1) | self.inInterlacedLine)
                     : ((self.memAddress << 3) | (self.charScanLine & 7));
                 if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
-                dat = self.cpu.readmem((addr & 0x7fff) | vidBank) | 0;
+                dat = self.cpu.readmem((addr & 0x7fff) | self.vidBank) | 0;
             }
             if (x < 1280) {
                 var offset = (y * 1280 + x) | 0;
@@ -280,6 +279,10 @@ define(['teletext'], function (Teletext) {
         function startX() {
             return (128 - ((self.regs[3] & 0xf) * self.pixelsPerChar / 2)) | 0;
         }
+
+        self.setOffset = function(offset) {
+            this.vidBank = offset;
+        };
 
         ////////////////////
         // Main drawing routine

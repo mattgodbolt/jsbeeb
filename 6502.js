@@ -1,5 +1,5 @@
 define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
-    function (utils, opcodes, via, Acia, Serial, disc) {
+    function (utils, opcodesAll, via, Acia, Serial, disc) {
         "use strict";
         var hexword = utils.hexword;
         var signExtend = utils.signExtend;
@@ -33,7 +33,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
 
         return function Cpu6502(model, dbgr, video, soundChip) {
             var self = this;
-            this.ramBank = new Uint8Array(16);
+
+            var isMaster = model == 'Master';
+            var opcodes = isMaster ? opcodesAll.cpu65c02 : opcodesAll.cpu6502;
+
+            this.ramBank = new Uint8Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStat = new Uint8Array(512);
             this.memLook = new Uint32Array(512);
             this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
@@ -42,6 +46,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             this.osOffset = this.romOffset + 16 * 16 * 1024;
             this.a = this.x = this.y = this.s = 0;
             this.romsel = 0;
+            this.acccon = 0;
             this.interrupt = 0;
             this.FEslowdown = [true, false, true, true, false, false, true, false];
             // TODO: semi-bplus-style to get swram for exile hardcoded here
@@ -51,14 +56,46 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 false, false, false, false,
                 true, true, false, false];
 
-            this.romSelect = function (rom) {
+            this.romSelect = function (b) {
                 var c;
-                this.romsel = ((rom & 15) << 14) + this.romOffset;
+                this.romsel = ((b & 15) << 14) + this.romOffset;
                 var offset = this.romsel - 0x8000;
                 for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
-                var swram = this.swram[rom & 15] ? 1 : 2;
+                var swram = this.swram[b & 15] ? 1 : 2;
                 for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
-                // TODO: ram4k, ram12k MASTER BPLUS
+                if (isMaster && (b & 0x80)) {
+                    // 4Kb RAM (private RAM? can't remember its name now)
+                    for (c = 128; c < 144; ++c) {
+                        this.memLook[c] = this.memLook[256 + c] = 0;
+                        this.memStat[c] = this.memStat[256 + c] = 1;
+                    }
+                }
+            };
+
+            this.writeFe34 = function (b) {
+                this.acccon = b;
+                // ACCCON is
+                // IRR TST IJF ITU  Y  X  E  D
+                //  7   6   5   4   3  2  1  0
+
+                // Video offset (to LYNNE) is controlled by the "D" bit of ACCCON.
+                // LYNNE/HAZEL live at 0x8000 in our map.
+                video.setOffset((b & 1) ? 0x8000 : 0x0000);
+                // The RAM the processor sees for writes when executing OS instructions
+                // is controlled by the "E" bit.
+                this.ramBank[0xc] = this.ramBank[0xd] = (b & 2) ? 256 : 0;
+                var i;
+                // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE.
+                var lowRamOffset = (b & 4) ? 0x8000 : 0;
+                for (i = 48; i < 128; ++i) this.memLook[i] = lowRamOffset;
+                // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
+                // at 0x8000, so (0xc000 - 0x3000) is needed as an offset.
+                var hazelRAM = (b & 8) ? 1 : 2;
+                var hazelOff = (b & 8) ? -0x3000 : this.osOffset - 0xc000;
+                for (i = 192; i < 224; ++i) {
+                    this.memLook[i] = this.memLook[i + 256] = hazelOff;
+                    this.memStat[i] = this.memStat[i + 256] = hazelRAM;
+                }
             };
 
             this.debugread = this.debugwrite = this.debugInstruction = null;
@@ -143,7 +180,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe24:
                     case 0xfe28: // TODO 1770 on master
                         break;
-                    case 0xfe34: // TODO acccon on master;
+                    case 0xfe34:
+                        if (isMaster) return this.acccon;
                         break;
                     case 0xfe40:
                     case 0xfe44:
@@ -264,7 +302,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe30:
                         this.romSelect(b);
                         break;
-                    case 0xfe34: // TODO accon etc
+                    case 0xfe34:
+                        if (isMaster) {
+                            this.writeFe34(b);
+                        }
                         break;
                     case 0xfe40:
                     case 0xfe44:
@@ -392,12 +433,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
                     for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
                     for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-                    for (i = 48; i < 128; ++i) this.memLook[256 + i] = 16384;
+                    for (i = 48; i < 128; ++i) this.memLook[256 + i] = 32768;
                     for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
                     for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
                     for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
-                    this.disassembler = new opcodes.Disassemble6502(this);
+                    this.disassembler = new opcodes.Disassemble(this);
                     this.sysvia = via.SysVia(this, soundChip);
                     this.uservia = via.UserVia(this);
                     this.acia = new Acia(this, soundChip.toneGenerator);
@@ -572,7 +613,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 while (!this.halted && this.cycles > 0) {
                     this.oldoldpc = this.oldpc;
                     this.oldpc = this.pc;
-                    this.vis20k = this.ramBank[this.pc >>> 12] ? 256 : 0;
+                    this.vis20k = this.ramBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
                     if (this.debugInstruction && this.oldoldpc !== this.pc && this.debugInstruction(this.pc, opcode)) {
                         return false;

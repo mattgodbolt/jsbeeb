@@ -5,7 +5,6 @@ define(['utils'], function (utils) {
     var signExtend = utils.signExtend;
 
     function rotate(left, logical) {
-        "use strict";
         var lines = [];
         if (!left) {
             if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
@@ -29,7 +28,6 @@ define(['utils'], function (utils) {
     }
 
     function pull(reg) {
-        "use strict";
         if (reg == 'p') {
             return [
                 "var tempFlags = cpu.pull();",
@@ -45,13 +43,11 @@ define(['utils'], function (utils) {
     }
 
     function push(reg) {
-        "use strict";
         if (reg == 'p') return "cpu.push(cpu.p.asByte());";
         return "cpu.push(cpu." + reg + ");";
     }
 
     function InstructionGen() {
-        "use strict";
         var self = this;
         self.ops = {};
         self.cycle = 0;
@@ -187,7 +183,6 @@ define(['utils'], function (utils) {
     }
 
     function getOp(op) {
-        "use strict";
         switch (op) {
             case "NOP":
                 return { op: "" };
@@ -340,6 +335,15 @@ define(['utils'], function (utils) {
             case "JMP":
                 return { op: "cpu.pc = addr;" };
 
+            // 65c02 opcodes
+            case "TSB":
+                return { op: [
+                    "cpu.p.x = !(REG & cpu.a);",
+                    "REG |= cpu.a;"
+                ], read: true, write: true };
+            case "BRA":
+                return { op: "cpu.branch(true);" };
+
             // Undocumented opcodes
             case "SAX":
                 return { op: "REG = cpu.a & cpu.x;", write: true };
@@ -367,7 +371,6 @@ define(['utils'], function (utils) {
     }
 
     function getInstruction(opcodeString, needsReg) {
-        "use strict";
         var split = opcodeString.split(' ');
         var opcode = split[0];
         var arg = split[1];
@@ -524,21 +527,6 @@ define(['utils'], function (utils) {
 
             default:
                 throw "Unknown arg type " + arg;
-        }
-    }
-
-    function compileInstruction(ins) {
-        "use strict";
-        var lines = getInstruction(ins, true);
-        if (!lines) return null;
-        var funcName = ins.replace(" ", "_").replace("()", "ind").replace(",", "_").replace("(", "").replace(")", "");
-        var text = "// " + ins + "\n    \"use strict\";\n    " + lines.join("\n    ");
-        try {
-            var func = new Function("cpu", text); // jshint ignore:line
-            func.displayName = funcName;
-            return func;
-        } catch (e) {
-            throw "Unable to compile: " + e + "\nText:\n" + text;
         }
     }
 
@@ -788,158 +776,291 @@ define(['utils'], function (utils) {
         0xFF: "ISB abs,x"
     };
 
-    function generate6502Old() {
-        "use strict";
-        var functions = [];
-        for (var i = 0; i < 256; ++i) {
-            var opcode = opcodes6502[i];
-            if (opcode) functions[i] = compileInstruction(opcode);
-        }
-        return functions;
-    }
+    var opcodes65c02 = {
+        0x00: "BRK",
+        0x01: "ORA (,x)",
+        0x04: "TSB zp",
+        0x05: "ORA zp",
+        0x06: "ASL zp",
+        0x08: "PHP",
+        0x09: "ORA imm",
+        0x0A: "ASL A",
+        0x0B: "ANC imm",
+        0x0C: "TSB abs",
+        0x0D: "ORA abs",
+        0x0E: "ASL abs",
+        0x10: "BPL branch",
+        0x11: "ORA (),y",
+        0x12: "ORA ()",
+        0x14: "TRB zp",
+        0x15: "ORA zp,x",
+        0x16: "ASL zp,x",
+        0x18: "CLC",
+        0x19: "ORA abs,y",
+        0x1A: "INC A",
+        0x1C: "TRB abs",
+        0x1D: "ORA abs,x",
+        0x1E: "ASL abs,x",
+        0x20: "JSR abs",
+        0x21: "AND (,x)",
+        0x24: "BIT zp",
+        0x25: "AND zp",
+        0x26: "ROL zp",
+        0x28: "PLP",
+        0x29: "AND imm",
+        0x2A: "ROL A",
+        0x2C: "BIT abs",
+        0x2D: "AND abs",
+        0x2E: "ROL abs",
+        0x30: "BMI branch",
+        0x31: "AND (),y",
+        0x32: "AND ()",
+        0x35: "AND zp,x",
+        0x36: "ROL zp,x",
+        0x38: "SEC",
+        0x39: "AND abs,y",
+        0x3A: "DEC A",
+        0x3C: "BIT abs,x",
+        0x3D: "AND abs,x",
+        0x3E: "ROL abs,x",
+        0x40: "RTI",
+        0x41: "EOR (,x)",
+        0x45: "EOR zp",
+        0x46: "LSR zp",
+        0x48: "PHA",
+        0x49: "EOR imm",
+        0x4A: "LSR A",
+        0x4C: "JMP abs",
+        0x4D: "EOR abs",
+        0x4E: "LSR abs",
+        0x50: "BVC branch",
+        0x51: "EOR (),y",
+        0x52: "EOR ()",
+        0x55: "EOR zp,x",
+        0x56: "LSR zp,x",
+        0x58: "CLI",
+        0x59: "EOR abs,y",
+        0x5A: "PHY",
+        0x5D: "EOR abs,x",
+        0x5E: "LSR abs,x",
+        0x60: "RTS",
+        0x61: "ADC (,x)",
+        0x64: "STZ zp",
+        0x65: "ADC zp",
+        0x66: "ROR zp",
+        0x68: "PLA",
+        0x69: "ADC imm",
+        0x6A: "ROR A",
+        0x6C: "JMP ()",
+        0x6D: "ADC abs",
+        0x6E: "ROR abs",
+        0x70: "BVS branch",
+        0x71: "ADC (),y",
+        0x72: "ADC ()",
+        0x74: "STZ zp,x",
+        0x75: "ADC zp,x",
+        0x76: "ROR zp,x",
+        0x78: "SEI",
+        0x79: "ADC abs,y",
+        0x7A: "PLY",
+        0x7C: "JMP (,x)",
+        0x7D: "ADC abs,x",
+        0x7E: "ROR abs,x",
+        0x80: "BRA branch",
+        0x81: "STA (,x)",
+        0x84: "STY zp",
+        0x85: "STA zp",
+        0x86: "STX zp",
+        0x88: "DEY",
+        0x89: "BIT imm",
+        0x8A: "TXA",
+        0x8C: "STY abs",
+        0x8D: "STA abs",
+        0x8E: "STX abs",
+        0x90: "BCC branch",
+        0x91: "STA (),y",
+        0x92: "STA ()",
+        0x94: "STY zp,x",
+        0x95: "STA zp,x",
+        0x96: "STX zp,y",
+        0x98: "TYA",
+        0x99: "STA abs,y",
+        0x9A: "TXS",
+        0x9C: "STZ abs",
+        0x9D: "STA abs,x",
+        0x9E: "STZ abs,x",
+        0xA0: "LDY imm",
+        0xA1: "LDA (,x)",
+        0xA2: "LDX imm",
+        0xA4: "LDY zp",
+        0xA5: "LDA zp",
+        0xA6: "LDX zp",
+        0xA8: "TAY",
+        0xA9: "LDA imm",
+        0xAA: "TAX",
+        0xAC: "LDY abs",
+        0xAD: "LDA abs",
+        0xAE: "LDX abs",
+        0xB0: "BCS branch",
+        0xB1: "LDA (),y",
+        0xB2: "LDA ()",
+        0xB4: "LDY zp,x",
+        0xB5: "LDA zp,x",
+        0xB6: "LDX zp,y",
+        0xB8: "CLV",
+        0xB9: "LDA abs,y",
+        0xBA: "TSX",
+        0xBC: "LDY abs,x",
+        0xBD: "LDA abs,x",
+        0xBE: "LDX abs,y",
+        0xC0: "CPY imm",
+        0xC1: "CMP (,x)",
+        0xC4: "CPY zp",
+        0xC5: "CMP zp",
+        0xC6: "DEC zp",
+        0xC8: "INY",
+        0xC9: "CMP imm",
+        0xCA: "DEX",
+        0xCB: "WAI",
+        0xCC: "CPY abs",
+        0xCD: "CMP abs",
+        0xCE: "DEC abs",
+        0xD0: "BNE branch",
+        0xD1: "CMP (),y",
+        0xD2: "CMP ()",
+        0xD5: "CMP zp,x",
+        0xD6: "DEC zp,x",
+        0xD8: "CLD",
+        0xD9: "CMP abs,y",
+        0xDA: "PHX",
+        0xDD: "CMP abs,x",
+        0xDE: "DEC abs,x",
+        0xE0: "CPX imm",
+        0xE1: "SBC (,x)",
+        0xE4: "CPX zp",
+        0xE5: "SBC zp",
+        0xE6: "INC zp",
+        0xE8: "INX",
+        0xE9: "SBC imm",
+        0xEA: "NOP",
+        0xEC: "CPX abs",
+        0xED: "SBC abs",
+        0xEE: "INC abs",
+        0xF0: "BEQ branch",
+        0xF1: "SBC (),y",
+        0xF2: "SBC ()",
+        0xF5: "SBC zp,x",
+        0xF6: "INC zp,x",
+        0xF8: "SED",
+        0xF9: "SBC abs,y",
+        0xFA: "PLX",
+        0xFD: "SBC abs,x",
+        0xFE: "INC abs,x"
+    };
 
-    function generate6502Switch(min, max) {
-        "use strict";
-        var text = "switch (opcode) {\n";
-        for (var i = min; i < max; ++i) {
-            var opcode = opcodes6502[i];
-            if (opcode) {
-                var lines = getInstruction(opcode, false);
-                text += "    case " + i + ":\n        ";
-                if (!lines) {
-                    text += "invalidOpcode(cpu, opcode);";
-                } else {
-                    text += lines.join("\n        ");
+    function makeCpuFunctions(opcodes) {
+        function generate6502B(min, max, tab) {
+            tab = tab || "";
+            if (min === max || min === max - 1) {
+                var opcode = opcodes[min];
+                var lines = null;
+                if (opcode) {
+                    lines = getInstruction(opcode, false);
                 }
-                text += "\n    break;\n";
+                if (!lines) {
+                    lines = ["invalidOpcode(cpu, opcode);"];
+                }
+                lines = ["// " + utils.hexbyte(min) + " - " + opcode + "\n"].concat(lines);
+                return tab + lines.join("\n" + tab);
             }
-        }
-        text += "}\n";
-        return text;
-    }
-
-    function generate6502Switch() {
-        var text = "\"use strict\";\nopcode=opcode|0;\nvar REG = 0|0;\n";
-        text += "if (opcode < 128) {\n";
-        text += generate6502Switch(0, 128);
-        text += "} else {\n";
-        text += generate6502Switch(128, 256);
-        text += "}\n";
-        var func = new Function("cpu", "opcode", "invalidOpcode", text); // jshint ignore:line
-        func.displayName = "emulate";
-        return func;
-    }
-
-    function generate6502B(min, max, tab) {
-        "use strict";
-        tab = tab || "";
-        if (min === max || min === max - 1) {
-            var opcode = opcodes6502[min];
-            var lines = null;
-            if (opcode) {
-                lines = getInstruction(opcode, false);
-            }
-            if (!lines) {
-                lines = ["invalidOpcode(cpu, opcode);"];
-            }
-            lines = ["// " + utils.hexbyte(min) + " - " + opcode + "\n"].concat(lines);
-            return tab + lines.join("\n" + tab);
-        }
-        var mid = (min + max) >>> 1;
-        return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ")
-            + "\n" + tab + "}\n";
-    }
-
-    function generate6502Binary() {
-        var text = "\"use strict\";\nopcode=opcode|0;\nvar REG = 0|0;\n";
-        text += generate6502B(0, 256);
-        var func = new Function("cpu", "opcode", "invalidOpcode", text); // jshint ignore:line
-        func.displayName = "emulate";
-        return func;
-    }
-
-    function Disassemble6502(cpu) {
-        "use strict";
-        function formatAddr(addr) {
-            return "<span class='instr_mem_ref'>" + hexword(addr) + "</span>";
+            var mid = (min + max) >>> 1;
+            return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ")
+                + "\n" + tab + "}\n";
         }
 
-        function formatJumpAddr(addr) {
-            return "<span class='instr_instr_ref'>" + hexword(addr) + "</span>";
+        function generate6502Binary() {
+            var text = "\"use strict\";\nopcode=opcode|0;\nvar REG = 0|0;\n";
+            text += generate6502B(0, 256);
+            var func = new Function("cpu", "opcode", "invalidOpcode", text); // jshint ignore:line
+            func.displayName = "emulate";
+            return func;
         }
 
-        this.disassemble = function (addr) {
-            var opcode = opcodes6502[cpu.readmem(addr)];
-            if (!opcode) {
-                return ["???", addr + 1];
+        function Disassemble6502(cpu) {
+            function formatAddr(addr) {
+                return "<span class='instr_mem_ref'>" + hexword(addr) + "</span>";
             }
-            var split = opcode.split(" ");
-            if (!split[1]) {
-                return [opcode, addr + 1];
+
+            function formatJumpAddr(addr) {
+                return "<span class='instr_instr_ref'>" + hexword(addr) + "</span>";
             }
-            var param = split[1] || "";
-            var suffix = "";
-            var index = param.match(/(.*),([xy])$/);
-            var destAddr;
-            if (index) {
-                param = index[1];
-                suffix = "," + index[2].toUpperCase();
-            }
-            switch (param) {
-                case "imm":
-                    return [split[0] + " #$" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
-                case "abs":
-                    var formatter = (split[0] == "JMP" || split[0] == "JSR") ? formatJumpAddr : formatAddr;
-                    destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
-                    return [split[0] + " $" + formatter(destAddr) + suffix, addr + 3, destAddr];
-                case "branch":
-                    destAddr = addr + signExtend(cpu.readmem(addr + 1)) + 2;
-                    return [split[0] + " $" + formatJumpAddr(destAddr) + suffix, addr + 2, destAddr];
-                case "zp":
-                    return [split[0] + " $" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
-                case "(,x)":
-                    return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
-                case "()":
-                    if (split[0] == "JMP") {
+
+            this.disassemble = function (addr) {
+                var opcode = opcodes[cpu.readmem(addr)];
+                if (!opcode) {
+                    return ["???", addr + 1];
+                }
+                var split = opcode.split(" ");
+                if (!split[1]) {
+                    return [opcode, addr + 1];
+                }
+                var param = split[1] || "";
+                var suffix = "";
+                var index = param.match(/(.*),([xy])$/);
+                var destAddr;
+                if (index) {
+                    param = index[1];
+                    suffix = "," + index[2].toUpperCase();
+                }
+                switch (param) {
+                    case "imm":
+                        return [split[0] + " #$" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
+                    case "abs":
+                        var formatter = (split[0] == "JMP" || split[0] == "JSR") ? formatJumpAddr : formatAddr;
                         destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
-                        var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
-                        return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
-                    } else
-                        return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
-            }
-            return [opcode, addr + 1];
+                        return [split[0] + " $" + formatter(destAddr) + suffix, addr + 3, destAddr];
+                    case "branch":
+                        destAddr = addr + signExtend(cpu.readmem(addr + 1)) + 2;
+                        return [split[0] + " $" + formatJumpAddr(destAddr) + suffix, addr + 2, destAddr];
+                    case "zp":
+                        return [split[0] + " $" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
+                    case "(,x)":
+                        return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
+                    case "()":
+                        if (split[0] == "JMP") {
+                            destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
+                            var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
+                            return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
+                        } else
+                            return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
+                }
+                return [opcode, addr + 1];
+            };
+        }
+
+        function invalidOpcode(cpu, opcode) {
+            cpu.pc--;  // Account for the fact we've already incremented pc.
+            console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(cpu.pc));
+            console.log(cpu.disassembler.disassemble(cpu.pc)[0]);
+            utils.noteEvent('exception', 'invalid opcode', hexbyte(opcode));
+            throw new Error('Invalid opcode');
+        }
+
+        var generated6502 = generate6502Binary();
+
+        function runInstruction6502(cpu, opcode) {
+            generated6502(cpu, opcode, invalidOpcode);
+        }
+
+        return {
+            Disassemble: Disassemble6502,
+            runInstruction: runInstruction6502,
+            opcodes: opcodes6502
         };
     }
 
-    function invalidOpcode(cpu, opcode) {
-        cpu.pc--;  // Account for the fact we've already incremented pc.
-        console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(cpu.pc));
-        console.log(cpu.disassembler.disassemble(cpu.pc)[0]);
-        utils.noteEvent('exception', 'invalid opcode', hexbyte(opcode));
-        throw new Error('Invalid opcode');
-    }
-
-    var instructions6502 = generate6502Old();
-
-    function runInstructionOldWay(cpu, opcode) {  // Unused as of now. This way seems a tiny bit slower for Firefox
-        var instruction = instructions6502[opcode];
-        if (!instruction) {
-            invalidOpcode(cpu, opcode);
-            return;
-        }
-        instruction(cpu);
-    }
-
-    var generated = generate6502Binary();
-
-    function runInstruction(cpu, opcode) {
-        generated(cpu, opcode, invalidOpcode);
-    }
-
     return {
-        Disassemble6502: Disassemble6502,
-        runInstruction: runInstruction,
-        opcodes6502: opcodes6502
+        'cpu6502': makeCpuFunctions(opcodes6502),
+        'cpu65c02': makeCpuFunctions(opcodes65c02)
     };
-})
-;
+});
