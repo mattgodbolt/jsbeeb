@@ -491,9 +491,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
             cassette.update(processor.acia.motorOn);
         };
 
-// processor.debugInstruction = function(addr) {
-//     return addr == 0xf5a9;
-// };
+//        processor.debugInstruction = function (addr) {
+//            return addr == 0x8003;
+//        };
         go();
 
         function hd(obj, start, end) {
@@ -576,7 +576,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
                 }
                 try {
                     if (!processor.execute(cyclesPerYield)) {
-                        stop();
+                        stop(true);
                         return;
                     }
                 } catch (e) {

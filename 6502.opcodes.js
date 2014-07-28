@@ -335,14 +335,21 @@ define(['utils'], function (utils) {
             case "JMP":
                 return { op: "cpu.pc = addr;" };
 
-            // 65c02 opcodes
+            // 65c12 opcodes
             case "TSB":
                 return { op: [
-                    "cpu.p.x = !(REG & cpu.a);",
+                    "cpu.p.z = !(REG & cpu.a);",
                     "REG |= cpu.a;"
+                ], read: true, write: true };
+            case "TRB":
+                return { op: [
+                    "cpu.p.z = !(REG & cpu.a);",
+                    "REG &= ~cpu.a;"
                 ], read: true, write: true };
             case "BRA":
                 return { op: "cpu.branch(true);" };
+            case "STZ":
+                return { op: "REG = 0;", write: true };
 
             // Undocumented opcodes
             case "SAX":
@@ -776,7 +783,7 @@ define(['utils'], function (utils) {
         0xFF: "ISB abs,x"
     };
 
-    var opcodes65c02 = {
+    var opcodes65c12 = {
         0x00: "BRK",
         0x01: "ORA (,x)",
         0x04: "TSB zp",
@@ -1061,6 +1068,6 @@ define(['utils'], function (utils) {
 
     return {
         'cpu6502': makeCpuFunctions(opcodes6502),
-        'cpu65c02': makeCpuFunctions(opcodes65c02)
+        'cpu65c12': makeCpuFunctions(opcodes65c12)
     };
 });

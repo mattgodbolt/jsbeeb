@@ -35,7 +35,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             var self = this;
 
             var isMaster = model == 'Master';
-            var opcodes = isMaster ? opcodesAll.cpu65c02 : opcodesAll.cpu6502;
+            var opcodes = isMaster ? opcodesAll.cpu65c12 : opcodesAll.cpu6502;
 
             this.ramBank = new Uint8Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStat = new Uint8Array(512);
@@ -46,6 +46,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             this.osOffset = this.romOffset + 16 * 16 * 1024;
             this.a = this.x = this.y = this.s = 0;
             this.romsel = 0;
+            this.lastFe30 = 0;
             this.acccon = 0;
             this.interrupt = 0;
             this.FEslowdown = [true, false, true, true, false, false, true, false];
@@ -58,6 +59,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
 
             this.romSelect = function (b) {
                 var c;
+                this.lastFe30 = b;
                 this.romsel = ((b & 15) << 14) + this.romOffset;
                 var offset = this.romsel - 0x8000;
                 for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
@@ -114,7 +116,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             };
 
             // Handy debug function to read a string zero or \n terminated.
-            this.readstring = function (addr) {
+            this.readString = function (addr) {
                 var s = "";
                 for (; ;) {
                     var b = this.readmem(addr);
@@ -404,7 +406,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     this.ramRomOs[this.osOffset + i] = data[i];
                 }
                 var numExtraBanks = (len - 0x4000) / 0x4000;
-                var romIndex = 15 - numExtraBanks;
+                var romIndex = 16 - numExtraBanks;
                 for (i = 0; i < numExtraBanks; ++i) {
                     var srcBase = 0x4000 + 0x4000 * i;
                     var destBase = this.romOffset + (romIndex + i) * 0x4000;
@@ -414,8 +416,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 }
 
                 for (i = 1; i < arguments.length; ++i) {
-                    this.loadRom(arguments[i], this.romOffset + romIndex * 0x4000);
                     romIndex--;
+                    this.loadRom(arguments[i], this.romOffset + romIndex * 0x4000);
                 }
             };
 
@@ -468,7 +470,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.halted = false;
                 video.reset(this, this.sysvia);
                 if (hard) soundChip.reset();
-                // TODO: cpu type support.
                 console.log("Starting PC = " + hexword(this.pc));
             };
 
@@ -637,9 +638,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         this.p.i = true;
                         this.polltime(7);
                         this.nmi = false;
-                        this.p.d = false; // TODO this is actually Master only
+                        if (isMaster)
+                            this.p.d = false;
                     }
-                    // TODO: oldnmi stuff? master only it seems?
                 }
                 return true;
             };
