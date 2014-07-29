@@ -377,166 +377,6 @@ define(['utils'], function (utils) {
         return null;
     }
 
-    function getInstruction(opcodeString, needsReg) {
-        var split = opcodeString.split(' ');
-        var opcode = split[0];
-        var arg = split[1];
-        var op = getOp(opcode);
-        if (!op) return null;
-
-        var ig = new InstructionGen();
-        if (needsReg) ig.append("var REG = 0|0;");
-
-        switch (arg) {
-            case undefined:
-                // Many of these ops need a little special casing.
-                if (op.read || op.write) throw "Unsupported " + opcodeString;
-                ig.append(op.preop);
-                ig.tick(Math.max(2, 1 + (op.extra || 0)));
-                ig.flush();
-                ig.append(op.op);
-                return ig.render();
-
-            case "branch":
-                return [op.op];  // TODO: special cased here, would be nice to pull out of cpu
-
-            case "zp":
-            case "zp,x":
-            case "zp,y":
-                if (arg == "zp") {
-                    ig.tick(2);
-                    ig.append("var addr = cpu.getb() | 0;");
-                } else {
-                    ig.tick(3);
-                    ig.append("var addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
-                }
-                if (op.read) {
-                    ig.zpReadOp("addr", "REG");
-                    if (op.write) {
-                        ig.flush();
-                        ig.tick(1);  // Spurious write
-                    }
-                }
-                ig.append(op.op);
-                if (op.write) ig.zpWriteOp("addr", "REG");
-                return ig.render();
-
-            case "abs":
-                ig.tick(3 + (op.extra || 0));
-                ig.append("var addr = cpu.getw() | 0;");
-                if (op.read) {
-                    ig.readOp("addr", "REG");
-                    if (op.write) ig.writeOp("addr", "REG");
-                }
-                ig.append(op.op);
-                if (op.write) ig.writeOp("addr", "REG");
-
-                return ig.render();
-
-            case "abs,x":
-            case "abs,y":
-                ig.append("var addr = cpu.getw() | 0;");
-                ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
-                ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
-                ig.tick(3);
-                if (op.read && !op.write) {
-                    // For non-RMW, we only pay the cost of the spurious read if the address carried.
-                    ig = ig.split("addrWithCarry !== addrNonCarry");
-                    ig.ifTrue.readOp("addrNonCarry");
-                    ig.readOp("addrWithCarry", "REG");
-                } else if (op.read) {
-                    // For RMW we always have a spurious read and then a spurious write
-                    ig.readOp("addrNonCarry");
-                    ig.readOp("addrWithCarry", "REG");
-                    ig.writeOp("addrWithCarry", "REG");
-                } else if (op.write) {
-                    // Pure stores still exhibit a read at the non-carried address.
-                    ig.readOp("addrNonCarry");
-                }
-                ig.append(op.op);
-                if (op.write) ig.writeOp("addrWithCarry", "REG");
-                return ig.render();
-
-            case "imm":
-                if (op.write) {
-                    throw "This isn't possible";
-                }
-                if (op.read) {
-                    // NOP imm
-                }
-                ig.tick(2);
-                ig.append("REG = cpu.getb() | 0;");
-                ig.append(op.op);
-                return ig.render();
-
-            case "A":
-                ig.tick(2);
-                ig.append("REG = cpu.a;");
-                ig.append(op.op);
-                ig.append("cpu.a = REG;");
-                return ig.render();
-
-            case "(,x)":
-            case "(,y)":
-                ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
-                ig.append("var zpAddr = (cpu.getb() + cpu." + arg[2] + ") & 0xff;");
-                ig.append("var lo, hi;");
-                ig.zpReadOp("zpAddr", "lo");
-                ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("var addr = lo | (hi << 8);");
-                if (op.read) ig.readOp("addr", "REG");
-                ig.append(op.op);
-                if (op.write) ig.writeOp("addr", "REG");
-                return ig.render();
-
-            case "(),y":
-                ig.tick(2);
-                ig.append("var zpAddr = cpu.getb() | 0;");
-                ig.append("var lo, hi;");
-                ig.zpReadOp("zpAddr", "lo");
-                ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("var addr = lo | (hi << 8);");
-                ig.append("var addrWithCarry = (addr + cpu.y) & 0xffff;");
-                ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
-                // Strictly speaking this code below is overkill; it handles RMW when no such documented
-                // instruction exists.
-                if (op.read && !op.write) {
-                    ig = ig.split("addrWithCarry !== addrNonCarry");
-                    ig.ifTrue.readOp("addrNonCarry");
-                    ig.readOp("addrWithCarry", "REG");
-                } else if (op.read) {
-                    // For RMW we always have a spurious read and then a spurious write
-                    ig.readOp("addrNonCarry");
-                    ig.readOp("addrWithCarry", "REG");
-                    ig.writeOp("addrWithCarry", "REG");
-                } else if (op.write) {
-                    // Pure stores still exhibit a read at the non-carried address.
-                    ig.readOp("addrNonCarry");
-                }
-                ig.append(op.op);
-                if (op.write) ig.writeOp("addrWithCarry", "REG");
-                return ig.render();
-
-            case "()":
-                // Special case for indirect jumps only
-                ig.tick(3);  // Needs to be different for master
-                ig.append("var addr = cpu.getw() | 0;");
-                ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
-                ig.append("var lo, hi;");
-                ig.readOp("addr", "lo");
-                ig.readOp("nextAddr", "hi");
-                ig.append("addr = lo | (hi << 8);");
-                ig.append(op.op);
-                return ig.render();
-
-            case "zpx":
-                return null;
-
-            default:
-                throw "Unknown arg type " + arg;
-        }
-    }
-
     var opcodes6502 = {
         0x00: "BRK",
         0x01: "ORA (,x)",
@@ -639,7 +479,7 @@ define(['utils'], function (utils) {
         0x69: "ADC imm",
         0x6A: "ROR A",
         0x6B: "ARR",
-        0x6C: "JMP ()",
+        0x6C: "JMP (abs)",
         0x6D: "ADC abs",
         0x6E: "ROR abs",
         0x6F: "RRA abs",
@@ -858,7 +698,7 @@ define(['utils'], function (utils) {
         0x68: "PLA",
         0x69: "ADC imm",
         0x6A: "ROR A",
-        0x6C: "JMP ()",
+        0x6C: "JMP (abs)",
         0x6D: "ADC abs",
         0x6E: "ROR abs",
         0x70: "BVS branch",
@@ -870,7 +710,7 @@ define(['utils'], function (utils) {
         0x78: "SEI",
         0x79: "ADC abs,y",
         0x7A: "PLY",
-        0x7C: "JMP (,x)",
+        0x7C: "JMP (abs,x)",
         0x7D: "ADC abs,x",
         0x7E: "ROR abs,x",
         0x80: "BRA branch",
@@ -965,7 +805,196 @@ define(['utils'], function (utils) {
         0xFE: "INC abs,x"
     };
 
-    function makeCpuFunctions(opcodes) {
+    function makeCpuFunctions(opcodes, is65C12) {
+
+        function getInstruction(opcodeString, needsReg) {
+            var split = opcodeString.split(' ');
+            var opcode = split[0];
+            var arg = split[1];
+            var op = getOp(opcode);
+            if (!op) return null;
+
+            var ig = new InstructionGen();
+            if (needsReg) ig.append("var REG = 0|0;");
+
+            // TODO: spurious writes don't happen on is65C12 (cf p48 of Atherton book)
+            switch (arg) {
+                case undefined:
+                    // Many of these ops need a little special casing.
+                    if (op.read || op.write) throw "Unsupported " + opcodeString;
+                    ig.append(op.preop);
+                    ig.tick(Math.max(2, 1 + (op.extra || 0)));
+                    ig.flush();
+                    ig.append(op.op);
+                    return ig.render();
+
+                case "branch":
+                    return [op.op];  // TODO: special cased here, would be nice to pull out of cpu
+
+                case "zp":
+                case "zp,x":
+                case "zp,y":
+                    if (arg == "zp") {
+                        ig.tick(2);
+                        ig.append("var addr = cpu.getb() | 0;");
+                    } else {
+                        ig.tick(3);
+                        ig.append("var addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
+                    }
+                    if (op.read) {
+                        ig.zpReadOp("addr", "REG");
+                        if (op.write) {
+                            ig.flush();
+                            ig.tick(1);  // Spurious write
+                        }
+                    }
+                    ig.append(op.op);
+                    if (op.write) ig.zpWriteOp("addr", "REG");
+                    return ig.render();
+
+                case "abs":
+                    ig.tick(3 + (op.extra || 0));
+                    ig.append("var addr = cpu.getw() | 0;");
+                    if (op.read) {
+                        ig.readOp("addr", "REG");
+                        if (op.write) ig.writeOp("addr", "REG");
+                    }
+                    ig.append(op.op);
+                    if (op.write) ig.writeOp("addr", "REG");
+
+                    return ig.render();
+
+                case "abs,x":
+                case "abs,y":
+                    ig.append("var addr = cpu.getw() | 0;");
+                    ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
+                    ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+                    ig.tick(3);
+                    if (op.read && !op.write) {
+                        // For non-RMW, we only pay the cost of the spurious read if the address carried.
+                        ig = ig.split("addrWithCarry !== addrNonCarry");
+                        ig.ifTrue.readOp("addrNonCarry");
+                        ig.readOp("addrWithCarry", "REG");
+                    } else if (op.read) {
+                        // For RMW we always have a spurious read and then a spurious write
+                        ig.readOp("addrNonCarry");
+                        ig.readOp("addrWithCarry", "REG");
+                        ig.writeOp("addrWithCarry", "REG");
+                    } else if (op.write) {
+                        // Pure stores still exhibit a read at the non-carried address.
+                        ig.readOp("addrNonCarry");
+                    }
+                    ig.append(op.op);
+                    if (op.write) ig.writeOp("addrWithCarry", "REG");
+                    return ig.render();
+
+                case "imm":
+                    if (op.write) {
+                        throw "This isn't possible";
+                    }
+                    if (op.read) {
+                        // NOP imm
+                    }
+                    ig.tick(2);
+                    ig.append("REG = cpu.getb() | 0;");
+                    ig.append(op.op);
+                    return ig.render();
+
+                case "A":
+                    ig.tick(2);
+                    ig.append("REG = cpu.a;");
+                    ig.append(op.op);
+                    ig.append("cpu.a = REG;");
+                    return ig.render();
+
+                case "(,x)":
+                case "(,y)":
+                    ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
+                    ig.append("var zpAddr = (cpu.getb() + cpu." + arg[2] + ") & 0xff;");
+                    ig.append("var lo, hi;");
+                    ig.zpReadOp("zpAddr", "lo");
+                    ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
+                    ig.append("var addr = lo | (hi << 8);");
+                    if (op.read) ig.readOp("addr", "REG");
+                    ig.append(op.op);
+                    if (op.write) ig.writeOp("addr", "REG");
+                    return ig.render();
+
+                case "(),y":
+                    ig.tick(2);
+                    ig.append("var zpAddr = cpu.getb() | 0;");
+                    ig.append("var lo, hi;");
+                    ig.zpReadOp("zpAddr", "lo");
+                    ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
+                    ig.append("var addr = lo | (hi << 8);");
+                    ig.append("var addrWithCarry = (addr + cpu.y) & 0xffff;");
+                    ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+                    // Strictly speaking this code below is overkill; it handles RMW when no such documented
+                    // instruction exists.
+                    if (op.read && !op.write) {
+                        ig = ig.split("addrWithCarry !== addrNonCarry");
+                        ig.ifTrue.readOp("addrNonCarry");
+                        ig.readOp("addrWithCarry", "REG");
+                    } else if (op.read) {
+                        // For RMW we always have a spurious read and then a spurious write
+                        ig.readOp("addrNonCarry");
+                        ig.readOp("addrWithCarry", "REG");
+                        ig.writeOp("addrWithCarry", "REG");
+                    } else if (op.write) {
+                        // Pure stores still exhibit a read at the non-carried address.
+                        ig.readOp("addrNonCarry");
+                    }
+                    ig.append(op.op);
+                    if (op.write) ig.writeOp("addrWithCarry", "REG");
+                    return ig.render();
+
+                case "(abs)":
+                    ig.tick(3);
+                    ig.append("var addr = cpu.getw() | 0;");
+                    if (is65C12) {
+                        // Timing probably wrong here TODO
+                        ig.append("var nextAddr = (addr + 1) & 0xffff;");
+                    } else {
+                        ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
+                    }
+                    ig.append("var lo, hi;");
+                    ig.readOp("addr", "lo");
+                    ig.readOp("nextAddr", "hi");
+                    ig.append("addr = lo | (hi << 8);");
+                    ig.append(op.op);
+                    return ig.render();
+
+                case "(abs,x)":
+                    ig.tick(4);
+                    ig.append("var addr = cpu.getw() | 0;");
+                    ig.append("var lo, hi;");
+                    ig.readOp("addr", "lo");
+                    ig.readOp("(addr + 1) & 0xffff", "hi");
+                    ig.append("addr = lo | (hi << 8);");
+                    ig.append(op.op);
+                    return ig.render();
+
+                case "()":
+                    // This is somewhat guessed-at, from timings. TODO
+                    ig.tick(2);
+                    ig.append("var zpAddr = cpu.getb();");
+                    ig.append("var lo, hi;");
+                    ig.zpReadOp("zpAddr", "lo");
+                    ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
+                    ig.append("var addr = lo | (hi << 8);");
+                    if (op.read) ig.readOp("addr", "REG");
+                    ig.append(op.op);
+                    if (op.write) ig.writeOp("addr", "REG");
+                    return ig.render();
+
+                case "zpx":
+                    return null;
+
+                default:
+                    throw "Unknown arg type " + arg;
+            }
+        }
+
         function generate6502B(min, max, tab) {
             tab = tab || "";
             if (min === max || min === max - 1) {
@@ -1034,12 +1063,11 @@ define(['utils'], function (utils) {
                     case "(,x)":
                         return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
                     case "()":
-                        if (split[0] == "JMP") {
-                            destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
-                            var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
-                            return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
-                        } else
-                            return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
+                        return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
+                    case "(abs)":
+                        destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
+                        var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
+                        return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
                 }
                 return [opcode, addr + 1];
             };
@@ -1062,12 +1090,13 @@ define(['utils'], function (utils) {
         return {
             Disassemble: Disassemble6502,
             runInstruction: runInstruction6502,
-            opcodes: opcodes6502
+            opcodes: opcodes6502,
+            getInstruction: getInstruction
         };
     }
 
     return {
-        'cpu6502': makeCpuFunctions(opcodes6502),
-        'cpu65c12': makeCpuFunctions(opcodes65c12)
+        'cpu6502': makeCpuFunctions(opcodes6502, false),
+        'cpu65c12': makeCpuFunctions(opcodes65c12, true)
     };
 });

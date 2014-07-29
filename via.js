@@ -347,7 +347,7 @@ define(['utils'], function (utils) {
         return self;
     }
 
-    function sysvia(cpu, soundChip) {
+    function sysvia(cpu, soundChip, cmos, isMaster) {
         "use strict";
         var self = via(cpu, 0x01);
 
@@ -542,7 +542,7 @@ define(['utils'], function (utils) {
 
         self.updateSdb = function () {
             self.sdbval = self.sdbout;
-            // TODO cmos
+            if (isMaster) self.sdbval &= cmos.read(self.IC32);
             var keyrow = (self.sdbval >>> 4) & 7;
             self.keycol = self.sdbval & 0xf;
             self.updateKeys();
@@ -566,18 +566,18 @@ define(['utils'], function (utils) {
             self.shiftLockLight = !(self.IC32 & 0x80);
 
             self.scrsize = ((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0);
-            //if (MASTER && !compactcmos) cmosupdate(IC32,sdbval);
+            if (isMaster) cmos.write(self.IC32, self.sdbval);
         };
 
         self.writePortA = function (val) {
             self.sdbout = val;
             self.updateSdb();
-            // TODO: CMOS write
+            if (isMaster) cmos.write(self.IC32, self.sdbval);
         };
 
         self.writePortB = function (val) {
             self.writeIC32(val);
-            // TODO: master/compact CMOS
+            if (isMaster) cmos.writeAddr(val, self.sdbval);
         };
 
         self.readPortA = function () {
@@ -586,7 +586,6 @@ define(['utils'], function (utils) {
         };
 
         self.readPortB = function () {
-            // TODO: compact CMOS, joystick
             return 0xff;
         };
 
@@ -594,7 +593,7 @@ define(['utils'], function (utils) {
         return self;
     }
 
-    function uservia(cpu) {
+    function uservia(cpu, isMaster) {
         "use strict";
         var self = via(cpu, 0x02);
 

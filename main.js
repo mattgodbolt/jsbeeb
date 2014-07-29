@@ -1,5 +1,5 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'bootstrap'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, StairwayToHell, disc, starCat, tapes, DropboxLoader) {
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'bootstrap'],
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader) {
         "use strict";
         var processor;
         var video;
@@ -171,7 +171,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'sth', 'fdc',
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
 
-        processor = new Cpu6502(model, dbgr, video, soundChip);
+        var cmos = new Cmos(); // TODO persistence model
+        processor = new Cpu6502(model, dbgr, video, soundChip, cmos);
 
         function sthClearList() {
             $("#sth-list li:not('.template')").remove();

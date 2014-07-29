@@ -31,7 +31,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             this.reset();
         }
 
-        return function Cpu6502(model, dbgr, video, soundChip) {
+        return function Cpu6502(model, dbgr, video, soundChip, cmos) {
             var self = this;
 
             var isMaster = model == 'Master';
@@ -50,6 +50,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             this.acccon = 0;
             this.interrupt = 0;
             this.FEslowdown = [true, false, true, true, false, false, true, false];
+            this.oldPcArray = new Uint16Array(256);
+            this.oldPcIndex = 0;
+            this.getPrevPc = function(index) {
+                return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
+            }
             // TODO: semi-bplus-style to get swram for exile hardcoded here
             this.swram = [
                 true, true, false, false,
@@ -66,7 +71,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 var swram = this.swram[b & 15] ? 1 : 2;
                 for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
                 if (isMaster && (b & 0x80)) {
-                    // 4Kb RAM (private RAM? can't remember its name now)
+                    // 4Kb RAM (private RAM - ANDY)
                     for (c = 128; c < 144; ++c) {
                         this.memLook[c] = this.memLook[256 + c] = 0;
                         this.memStat[c] = this.memStat[256 + c] = 1;
@@ -74,7 +79,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 }
             };
 
-            this.writeFe34 = function (b) {
+            this.writeAcccon = function (b) {
                 this.acccon = b;
                 // ACCCON is
                 // IRR TST IJF ITU  Y  X  E  D
@@ -98,6 +103,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     this.memLook[i] = this.memLook[i + 256] = hazelOff;
                     this.memStat[i] = this.memStat[i + 256] = hazelRAM;
                 }
+                // TODO: TST bit for MOS3.5 etc. b-em uses an explicit check in readMem
+                // but I think it can be done with lookups in memLook/memStat alone, though
+                // it's read-only so may require an extra memStat.
             };
 
             this.debugread = this.debugwrite = this.debugInstruction = null;
@@ -306,7 +314,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         break;
                     case 0xfe34:
                         if (isMaster) {
-                            this.writeFe34(b);
+                            this.writeAcccon(b);
                         }
                         break;
                     case 0xfe40:
@@ -441,8 +449,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
 
                     for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
                     this.disassembler = new opcodes.Disassemble(this);
-                    this.sysvia = via.SysVia(this, soundChip);
-                    this.uservia = via.UserVia(this);
+                    this.sysvia = via.SysVia(this, soundChip, cmos, isMaster);
+                    this.uservia = via.UserVia(this, isMaster);
                     this.acia = new Acia(this, soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
                     this.fdc = new disc.Fdc(this);
@@ -571,6 +579,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             }
 
             function sbcBCD(subend) { // non 65c12 version. master version will need work here
+                // TODO: master version. Only master does the flag nonsense, and takes another cycle
                 var hc6 = 0;
                 var carry = self.p.c ? 0 : 1;
                 self.p.z = self.p.n = false;
@@ -612,11 +621,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.halted = false;
                 this.cycles += numCyclesToRun;
                 while (!this.halted && this.cycles > 0) {
-                    this.oldoldpc = this.oldpc;
-                    this.oldpc = this.pc;
+                    this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
+                    this.oldPcArray[this.oldPcIndex] = this.pc;
                     this.vis20k = this.ramBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
-                    if (this.debugInstruction && this.oldoldpc !== this.pc && this.debugInstruction(this.pc, opcode)) {
+                    if (this.debugInstruction && this.getPrevPc(2) !== this.pc && this.debugInstruction(this.pc, opcode)) {
                         return false;
                     }
                     this.incpc();
