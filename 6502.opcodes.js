@@ -966,7 +966,7 @@ define(['utils'], function (utils) {
 
                 case "(abs,x)":
                     ig.tick(4);
-                    ig.append("var addr = cpu.getw() | 0;");
+                    ig.append("var addr = (cpu.getw() + cpu.x) | 0;");
                     ig.append("var lo, hi;");
                     ig.readOp("addr", "lo");
                     ig.readOp("(addr + 1) & 0xffff", "hi");
@@ -1068,6 +1068,10 @@ define(['utils'], function (utils) {
                         destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
                         var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
                         return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
+                    case "(abs,x)":
+                        destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
+                        var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
+                        return [split[0] + " ($" + formatJumpAddr(destAddr) + ",x)" + suffix, addr + 3, indDest];
                 }
                 return [opcode, addr + 1];
             };
