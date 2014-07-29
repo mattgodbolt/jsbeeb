@@ -39,14 +39,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
 
             this.ramBank = new Uint8Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStat = new Uint8Array(512);
-            this.memLook = new Uint32Array(512);
+            this.memLook = new Int32Array(512);  // Cannot be unsigned as we use negative offsets
             this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
             this.vis20k = 0;  // Needs to be 0 or 256 to offset into memStat/memLook
             this.romOffset = 128 * 1024;
             this.osOffset = this.romOffset + 16 * 16 * 1024;
             this.a = this.x = this.y = this.s = 0;
             this.romsel = 0;
-            this.lastFe30 = 0;
             this.acccon = 0;
             this.interrupt = 0;
             this.FEslowdown = [true, false, true, true, false, false, true, false];
@@ -54,7 +53,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             this.oldPcIndex = 0;
             this.getPrevPc = function(index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
-            }
+            };
             // TODO: semi-bplus-style to get swram for exile hardcoded here
             this.swram = [
                 true, true, false, false,
@@ -62,16 +61,23 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 false, false, false, false,
                 true, true, false, false];
 
+            // BBC Master memory map (within ramRomOs array):
+            // 00000 - 08000 -> base 32KB RAM
+            // 08000 - 09000 -> ANDY - 4KB
+            // 09000 - 0b000 -> HAZEL - 8KB
+            // 0b000 - 10000 -> LYNNE - 20KB
+
             this.romSelect = function (b) {
                 var c;
-                this.lastFe30 = b;
-                this.romsel = ((b & 15) << 14) + this.romOffset;
-                var offset = this.romsel - 0x8000;
+                this.romsel = b;
+                var bankOffset = ((b & 15) << 14) + this.romOffset;
+                var offset = bankOffset - 0x8000;
                 for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
                 var swram = this.swram[b & 15] ? 1 : 2;
                 for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
                 if (isMaster && (b & 0x80)) {
                     // 4Kb RAM (private RAM - ANDY)
+                    // Zero offset as 0x8000 mapped to 0x8000
                     for (c = 128; c < 144; ++c) {
                         this.memLook[c] = this.memLook[256 + c] = 0;
                         this.memStat[c] = this.memStat[256 + c] = 1;
@@ -86,7 +92,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 //  7   6   5   4   3  2  1  0
 
                 // Video offset (to LYNNE) is controlled by the "D" bit of ACCCON.
-                // LYNNE/HAZEL live at 0x8000 in our map.
+                // LYNNE lives at 0xb000 in our map, but the offset we use here is 0x8000
+                // as the video circuitry will already be looking at 0x3000 or so above
+                // the offset.
                 video.setOffset((b & 1) ? 0x8000 : 0x0000);
                 // The RAM the processor sees for writes when executing OS instructions
                 // is controlled by the "E" bit.
@@ -96,7 +104,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 var lowRamOffset = (b & 4) ? 0x8000 : 0;
                 for (i = 48; i < 128; ++i) this.memLook[i] = lowRamOffset;
                 // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
-                // at 0x8000, so (0xc000 - 0x3000) is needed as an offset.
+                // at 0x9000, so (0x9000 - 0xc000) = -0x3000 is needed as an offset.
                 var hazelRAM = (b & 8) ? 1 : 2;
                 var hazelOff = (b & 8) ? -0x3000 : this.osOffset - 0xc000;
                 for (i = 192; i < 224; ++i) {
@@ -185,7 +193,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe10:
                     case 0xfe14:
                         return this.serial.read(addr);
-                    case 0xfe18: // TODO adc on master
+                    case 0xfe18:
+                        if (isMaster) return this.adconverter.read(addr);
                         break;
                     case 0xfe24:
                     case 0xfe28: // TODO 1770 on master
@@ -230,8 +239,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfed4:
                     case 0xfed8:
                     case 0xfedc:
-                        // if (!master)
-                        return this.adconverter.read(addr);
+                        if (!isMaster) return this.adconverter.read(addr);
+                        break;
                     case 0xfee0:
                     case 0xfee4:
                     case 0xfee8:
@@ -242,6 +251,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfefc:
                         return this.tube.read(addr);
                 }
+//                console.log("Unhandled peripheral read of", addr);
+//                stop(true);
                 if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
                 return addr >> 8;
             };
@@ -302,6 +313,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe14:
                         return this.serial.write(addr, b);
                     case 0xfe18: // TODO adc on master
+                        if (isMaster)
+                        return this.adconverter.write(addr, b);
                         break;
                     case 0xfe20:
                         return this.ula.write(addr, b);
@@ -310,11 +323,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe28: // TODO 1770 on master
                         break;
                     case 0xfe30:
-                        this.romSelect(b);
+                        return this.romSelect(b);
                         break;
                     case 0xfe34:
                         if (isMaster) {
-                            this.writeAcccon(b);
+                            return this.writeAcccon(b);
                         }
                         break;
                     case 0xfe40:
@@ -366,6 +379,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfefc:
                         return this.tube.write(addr, b);
                 }
+//                console.log("Unhandled peripheral write to", addr);
+//                stop(true);
             };
 
             this.incpc = function () {
@@ -525,11 +540,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 var nextByte = this.pc + 1;
                 this.push(nextByte >>> 8);
                 this.push(nextByte & 0xff);
-                var temp = this.p.asByte();
-                this.push(temp);
+                this.push(this.p.asByte());
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = true;
-                this.takeInt = false;
+                if (isMaster) {
+                    this.p.d = false;
+                    this.takeInt = false;
+                }
             };
 
             this.branch = function (taken) {
