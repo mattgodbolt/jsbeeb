@@ -47,7 +47,6 @@ define(['teletext'], function (Teletext) {
             self.ilSyncAndVideo = false;
             self.blanked = false;
             self.vsyncIrqHighLines = 0;
-            self.vidBank = 0;
             updateFbTable();
         };
 
@@ -167,12 +166,12 @@ define(['teletext'], function (Teletext) {
 
             var dat = 0;
             if (self.memAddress & 0x2000) {
-                dat = self.cpu.readmem(0x7c00 | (self.memAddress & 0x3ff) | self.vidBank);
+                dat = self.cpu.videoRead(0x7c00 | (self.memAddress & 0x3ff));
             } else {
                 var addr = self.ilSyncAndVideo ? ((self.memAddress << 3) | ((self.charScanLine & 3) << 1) | self.inInterlacedLine)
                     : ((self.memAddress << 3) | (self.charScanLine & 7));
                 if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
-                dat = self.cpu.readmem((addr & 0x7fff) | self.vidBank) | 0;
+                dat = self.cpu.videoRead(addr & 0x7fff) | 0;
             }
             if (x < 1280) {
                 var offset = (y * 1280 + x) | 0;
@@ -279,10 +278,6 @@ define(['teletext'], function (Teletext) {
         function startX() {
             return (128 - ((self.regs[3] & 0xf) * self.pixelsPerChar / 2)) | 0;
         }
-
-        self.setOffset = function(offset) {
-            this.vidBank = offset;
-        };
 
         ////////////////////
         // Main drawing routine

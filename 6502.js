@@ -37,11 +37,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             var isMaster = model == 'Master';
             var opcodes = isMaster ? opcodesAll.cpu65c12 : opcodesAll.cpu6502;
 
-            this.ramBank = new Uint8Array(16);  // helps in master map of LYNNE for non-opcode read/writes
+            this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
+            this.memStatOffset = 0;
             this.memStat = new Uint8Array(512);
             this.memLook = new Int32Array(512);  // Cannot be unsigned as we use negative offsets
             this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
-            this.vis20k = 0;  // Needs to be 0 or 256 to offset into memStat/memLook
             this.romOffset = 128 * 1024;
             this.osOffset = this.romOffset + 16 * 16 * 1024;
             this.a = this.x = this.y = this.s = 0;
@@ -95,10 +95,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 // LYNNE lives at 0xb000 in our map, but the offset we use here is 0x8000
                 // as the video circuitry will already be looking at 0x3000 or so above
                 // the offset.
-                video.setOffset((b & 1) ? 0x8000 : 0x0000);
+                self.videoDisplayPage = (b & 1) ? 0x8000 : 0x0000;
                 // The RAM the processor sees for writes when executing OS instructions
                 // is controlled by the "E" bit.
-                this.ramBank[0xc] = this.ramBank[0xd] = (b & 2) ? 256 : 0;
+                this.memStatOffsetByIFetchBank[0xc] = this.memStatOffsetByIFetchBank[0xd] = (b & 2) ? 256 : 0;
                 var i;
                 // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE.
                 var lowRamOffset = (b & 4) ? 0x8000 : 0;
@@ -257,11 +257,15 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 return addr >> 8;
             };
 
+            this.videoRead = function(addr) {
+                return this.ramRomOs[addr | self.videoDisplayPage] | 0;
+            };
+
             this.readmem = function (addr) {
                 addr &= 0xffff;
                 if (this.debugread) this.debugread(addr);
-                if (this.memStat[this.vis20k + (addr >>> 8)]) {
-                    var offset = this.memLook[this.vis20k + (addr >>> 8)];
+                if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
+                    var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
                     return this.ramRomOs[offset + addr] | 0;
                 } else {
                     return this.readDevice(addr) | 0;
@@ -272,8 +276,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 addr &= 0xffff;
                 b |= 0;
                 if (this.debugwrite) this.debugwrite(addr, b);
-                if (this.memStat[this.vis20k + (addr >>> 8)] === 1) {
-                    var offset = this.memLook[this.vis20k + (addr >>> 8)];
+                if (this.memStat[this.memStatOffset + (addr >>> 8)] === 1) {
+                    var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
                     this.ramRomOs[offset + addr] = b;
                     return;
                 }
@@ -454,7 +458,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 console.log("Resetting 6502");
                 var i;
                 if (hard) {
-                    for (i = 0; i < 16; ++i) this.ramBank[i] = 0;
+                    for (i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
                     for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
                     for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
                     for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
@@ -463,6 +467,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
                     for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                    this.videoDisplayPage = 0;
                     this.disassembler = new opcodes.Disassemble(this);
                     this.sysvia = via.SysVia(this, soundChip, cmos, isMaster);
                     this.uservia = via.UserVia(this, isMaster);
@@ -640,7 +645,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 while (!this.halted && this.cycles > 0) {
                     this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
                     this.oldPcArray[this.oldPcIndex] = this.pc;
-                    this.vis20k = this.ramBank[this.pc >>> 12];
+                    this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
                     if (this.debugInstruction && this.getPrevPc(2) !== this.pc && this.debugInstruction(this.pc, opcode)) {
                         return false;
