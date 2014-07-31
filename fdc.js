@@ -210,6 +210,8 @@ define(['utils'], function (utils) {
         self.time = 0;
         self.paramNum = 0;
         self.paramReq = 0;
+        self.driveTime = 0;
+        self.motorTime = 0;
         self.params = new Uint8Array(8);
         self.isActive = false;
         self.motorOn = [false, false];
@@ -545,8 +547,6 @@ define(['utils'], function (utils) {
             }
         }
 
-        var driveTime = 0;
-        var motorTime = 0;
         self.polltime = function (cycles) {
             cycles = cycles|0;
             if (!self.isActive) return;
@@ -556,15 +556,15 @@ define(['utils'], function (utils) {
                     callback();
                 }
             }
-            driveTime -= cycles;
-            if (driveTime <= 0) {
-                driveTime += 16;
+            self.driveTime -= cycles;
+            if (self.driveTime <= 0) {
+                self.driveTime += 16;
                 if (self.drives[self.curDrive])
                     self.drives[self.curDrive].poll();
             }
-            motorTime -= cycles;
-            if (motorTime <= 0) {
-                motorTime += 128;
+            self.motorTime -= cycles;
+            if (self.motorTime <= 0) {
+                self.motorTime += 128;
                 for (var i = 0; i < 2; ++i) {
                     if (self.motorSpin[i] && --self.motorSpin[i] === 0)
                         self.motorOn[i] = false;
