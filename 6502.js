@@ -35,7 +35,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
             var self = this;
 
             var isMaster = model == 'Master';
-            var opcodes = isMaster ? opcodesAll.cpu65c12 : opcodesAll.cpu6502;
+            var opcodes = isMaster ? opcodesAll.cpu65c12(this) : opcodesAll.cpu6502(this);
 
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
@@ -639,6 +639,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 }
             };
 
+            this.runner = opcodes.runInstruction;
+
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
                 this.cycles += numCyclesToRun;
@@ -651,7 +653,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         return false;
                     }
                     this.incpc();
-                    opcodes.runInstruction(this, opcode);
+                    this.runner.run(opcode);
                     if (this.takeInt) {
                         this.takeInt = false;
                         this.push(this.pc >>> 8);

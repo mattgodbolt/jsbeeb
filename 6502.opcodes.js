@@ -805,7 +805,7 @@ define(['utils'], function (utils) {
         0xFE: "INC abs,x"
     };
 
-    function makeCpuFunctions(opcodes, is65C12) {
+    function makeCpuFunctions(cpu, opcodes, is65C12) {
 
         function getInstruction(opcodeString, needsReg) {
             var split = opcodeString.split(' ');
@@ -977,7 +977,7 @@ define(['utils'], function (utils) {
                 case "()":
                     // This is somewhat guessed-at, from timings. TODO
                     ig.tick(2);
-                    ig.append("var zpAddr = cpu.getb();");
+                    ig.append("var zpAddr = cpu.getb() | 0;");
                     ig.append("var lo, hi;");
                     ig.zpReadOp("zpAddr", "lo");
                     ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
@@ -1004,7 +1004,7 @@ define(['utils'], function (utils) {
                     lines = getInstruction(opcode, false);
                 }
                 if (!lines) {
-                    lines = ["invalidOpcode(cpu, opcode);"];
+                    lines = ["this.invalidOpcode(cpu, opcode);"];
                 }
                 lines = ["// " + utils.hexbyte(min) + " - " + opcode + "\n"].concat(lines);
                 return tab + lines.join("\n" + tab);
@@ -1014,12 +1014,14 @@ define(['utils'], function (utils) {
                 + "\n" + tab + "}\n";
         }
 
+        // Empty to hold prototypical stuff.
+        function Runner() {
+        }
+
         function generate6502Binary() {
-            var text = "\"use strict\";\nopcode=opcode|0;\nvar REG = 0|0;\n";
+            var text = "\"use strict\";\nopcode|=0;\nvar REG, cpu = this.cpu;\n";
             text += generate6502B(0, 256);
-            var func = new Function("cpu", "opcode", "invalidOpcode", text); // jshint ignore:line
-            func.displayName = "emulate";
-            return func;
+            return new Function("opcode", text); // jshint ignore:line
         }
 
         function Disassemble6502(cpu) {
@@ -1085,22 +1087,20 @@ define(['utils'], function (utils) {
             throw new Error('Invalid opcode');
         }
 
-        var generated6502 = generate6502Binary();
-
-        function runInstruction6502(cpu, opcode) {
-            generated6502(cpu, opcode, invalidOpcode);
-        }
+        Runner.prototype.invalidOpcode = invalidOpcode;
+        Runner.prototype.cpu = cpu;
+        Runner.prototype.run = generate6502Binary();
 
         return {
             Disassemble: Disassemble6502,
-            runInstruction: runInstruction6502,
+            runInstruction: new Runner(),
             opcodes: opcodes6502,
             getInstruction: getInstruction
         };
     }
 
     return {
-        'cpu6502': makeCpuFunctions(opcodes6502, false),
-        'cpu65c12': makeCpuFunctions(opcodes65c12, true)
+        'cpu6502': function(cpu) { return makeCpuFunctions(cpu, opcodes6502, false); },
+        'cpu65c12': function(cpu) { return makeCpuFunctions(cpu, opcodes6502, true); },
     };
 });
