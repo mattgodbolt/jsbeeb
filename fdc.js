@@ -67,6 +67,7 @@ define(['utils'], function (utils) {
             writeProt: !flusher,
             seekOffset: 0,
             sectorOffset: 0,
+            formatSector: 0,
             time: 0,
             rsector: 0,
             track: -1,
@@ -113,7 +114,7 @@ define(['utils'], function (utils) {
                 if (!this.check(track, side, density)) return;
                 this.side = side;
                 this.inFormat = true;
-                this.sector = 0;
+                this.formatSector = 0;
                 this.sectorOffset = side ? 10 * 256 : 0;
                 this.byteWithinSector = 0;
             },
@@ -182,7 +183,7 @@ define(['utils'], function (utils) {
                     if (++this.byteWithinSector == 256) {
                         this.byteWithinSector = 0;
                         this.sectorOffset += 256;
-                        if (++this.sector === 10) {
+                        if (++this.formatSector === 10) {
                             this.inFormat = false;
                             fdc.discFinishRead();
                             this.flush();
@@ -548,7 +549,7 @@ define(['utils'], function (utils) {
         }
 
         self.polltime = function (cycles) {
-            cycles = cycles|0;
+            cycles = cycles | 0;
             if (!self.isActive) return;
             if (self.time) {
                 self.time -= cycles;
@@ -574,8 +575,305 @@ define(['utils'], function (utils) {
         };
     }
 
+    function WD1770(cpu) {
+        this.cpu = cpu;
+        this.isActive = false;
+        this.command = 0;
+        this.sector = 0;
+        this.track = 0;
+        this.status = 0;
+        this.data = 0;
+        this.side = 0;
+        this.curDrive = 0;
+        this.curTrack = 0;
+        this.written = false;
+        this.density = false;
+        this.stepIn = false;
+        this.motorOn = [false, false];
+        this.motorSpin = [0, 0];
+        this.motorTime = 0;
+        this.driveTime = 0;
+        this.time = 0;
+        this.drives = [emptySsd(this), emptySsd(this)];
+    }
+
+    WD1770.prototype.spinUp = function () {
+        this.isActive = true;
+        this.status |= 0x80;
+        this.motorOn[this.curDrive] = true;
+        this.motorSpin[this.curDrive] = 0;
+    };
+
+    WD1770.prototype.spinDown = function () {
+        this.isActive = 0;
+        this.status &= ~0x80;
+        this.motorOn[this.curDrive] = false;
+    };
+
+    WD1770.prototype.setSpinDown = function () {
+        this.motorSpin[this.curDrive] = 45000;
+    };
+
+    WD1770.prototype.track0 = function () {
+        return this.curTrack === 0 ? 0x04 : 0x00;
+    };
+
+    WD1770.prototype.callback = function () {
+        switch (this.command >>> 4) {
+            case 0: // Restore
+                this.track = this.curTrack = 0;
+                this.status = 0x80;
+                this.setSpinDown();
+                this.cpu.NMI(true);
+                break;
+            case 1: // Seek
+                this.curTrack = this.track = this.data;
+                this.status = 0x80 | this.track0();
+                this.cpu.NMI(true);
+                break;
+            case 3: // Step (with update)
+            case 5: // Step in (with update)
+            case 7: // Step out (with update)
+                this.track = this.curTrack;
+            // falls through to
+            case 2: // Step
+            case 4: // Step in
+            case 6: // Step out
+                this.status = 0x80 | this.track0();
+                this.cpu.NMI(true);
+                break;
+            case 8: // Read sector
+            case 10: // Write sector
+            case 15: // Write track
+                this.status = 0x80;
+                this.setSpinDown();
+                this.cpu.NMI(true);
+                break;
+            case 12: // Read address
+                this.status = 0x80;
+                this.setSpinDown();
+                this.cpu.NMI(true);
+                this.sector = this.track;
+                break;
+        }
+    };
+
+    WD1770.prototype.polltime = function (cycles) {
+        cycles = cycles | 0;
+        if (!this.isActive) return;
+        if (this.time) {
+            this.time -= cycles;
+            if (this.time <= 0) {
+                this.time = 0;
+                this.callback();
+            }
+        }
+        this.driveTime -= cycles;
+        if (this.driveTime <= 0) {
+            this.driveTime += 16;
+            if (this.drives[this.curDrive])
+                this.drives[this.curDrive].poll();
+        }
+        this.motorTime -= cycles;
+        if (this.motorTime <= 0) {
+            this.motorTime += 128;
+            for (var i = 0; i < 2; ++i) {
+                if (this.motorSpin[i] && --this.motorSpin[i] === 0)
+                    this.motorOn[i] = false;
+            }
+            this.isActive = this.motorOn[0] || this.motorOn[1];
+        }
+    };
+
+    WD1770.prototype.read = function (addr) {
+//        console.log(utils.hexword(addr));
+        // b-em clears NMIs, but that happens after each instruction anyway, so
+        // I'm not quite sure what that's all about.
+        switch (addr) {
+            case 0xfe84:
+            case 0xfe28:
+                return this.status;
+            case 0xfe85:
+            case 0xfe29:
+                return this.track;
+            case 0xfe86:
+            case 0xfe2a:
+                return this.sector;
+            case 0xfe87:
+            case 0xfe2b:
+                this.status &= ~0x02;
+                return this.data;
+        }
+        return 0xfe;
+    };
+
+    WD1770.prototype.write = function (addr, byte) {
+//        console.log(utils.hexword(addr), utils.hexbyte(byte));
+        switch (addr) {
+            case 0xfe80:
+                this.curDrive = (byte & 2) ? 1 : 0;
+                this.side = (byte & 4) ? 1 : 0;
+                this.density = !(byte & 8);
+                break;
+            case 0xfe24:
+                this.curDrive = (byte & 2) ? 1 : 0;
+                this.side = (byte & 16) ? 1 : 0;
+                this.density = !(byte & 32);
+                break;
+            case 0xfe84:
+            case 0xfe28:
+                var command = (byte >>> 4) & 0xf;
+                var isInterrupt = command === 0x0d;
+                if ((this.status & 1) && !isInterrupt) {
+                    // Attempt to write while controller is busy.
+                    return;
+                }
+                this.command = byte;
+                if (!isInterrupt) this.spinUp();
+                this.handleCommand(command);
+                break;
+            case 0xfe85:
+            case 0xfe29:
+                this.track = byte;
+                break;
+            case 0xfe86:
+            case 0xfe2a:
+                this.sector = byte;
+                break;
+            case 0xfe87:
+            case 0xfe2b:
+                this.status &= ~0x02;
+                this.data = byte;
+                this.written = true;
+                break;
+        }
+    };
+
+    WD1770.prototype.curDisc = function () {
+        return this.drives[this.curDrive];
+    };
+
+    WD1770.prototype.handleCommand = function (command) {
+//        console.log("command ", command);
+        switch (command) {
+            case 0x0: // Restore
+                this.status = 0x80 | 0x21 | this.track0();
+                this.curDisc().seek(0);
+                this.time = 200; // TODO: unify with 1770 and
+                break;
+            case 0x01: // Seek
+                this.status = 0x80 | 0x21 | this.track0();
+                this.curDisc().seek(this.data);
+                this.time = 200; // TODO: unify with 1770 and
+                break;
+            case 0x02: // Step (no update)
+            case 0x03: // Step (update track register)
+                this.status = 0x80 | 0x21 | this.track0();
+                this.curTrack += this.stepIn ? 1 : -1;
+                if (this.curTrack < 0) this.curTrack = 0;
+                this.curDisc().seek(this.curTrack);
+                this.time = 200; // TODO: unify with 1770 and
+                break;
+            case 0x04: // Step in (no update)
+            case 0x05: // Step in (update track register)
+                this.status = 0x80 | 0x21 | this.track0();
+                this.curTrack++;
+                this.curDisc().seek(this.curTrack);
+                this.stepIn = true;
+                this.time = 200; // TODO: unify with 1770 and
+                break;
+            case 0x06: // Step out (no update)
+            case 0x07: // Step out (update track register)
+                this.status = 0x80 | 0x21 | this.track0();
+                this.curTrack--;
+                if (this.curTrack < 0) this.curTrack = 0;
+                this.curDisc().seek(this.curTrack);
+                this.stepIn = false;
+                this.time = 200; // TODO: unify with 1770 and
+                break;
+            case 0x08: // Read single sector
+                this.status = 0x81;
+                this.curDisc().read(this.sector, this.track, this.side, this.density);
+                break;
+            case 0x0a: // Write single sector
+                this.status = 0x83;
+                this.curDisc().write(this.sector, this.track, this.side, this.density);
+                this.written = false;
+                this.cpu.NMI(true);
+                break;
+            case 0x0c: // Read address
+                this.status = 0x81;
+                this.curDisc().address(this.track, this.side, this.density);
+                break;
+            case 0x0d: // Force IRQ
+                this.status = 0x80 | this.track0();
+                this.cpu.NMI(this.command & 0x08);
+                this.spinDown();
+                break;
+            case 0x0f: // Write track
+                this.status = 0x81;
+                this.curDisc().format(this.track, this.side, this.density);
+                break;
+            default: // Unsupported
+                this.time = 0;
+                this.status = 0x90;
+                this.cpu.NMI(true);
+                this.spinDown();
+                break;
+        }
+    };
+
+    WD1770.prototype.discData = function (byte) {
+        this.status |= 0x02;
+        this.data = byte;
+        this.cpu.NMI(true);
+    };
+
+    WD1770.prototype.readDiscData = function (last) {
+        if (!this.written) return 0xff;
+        this.written = false;
+        if (!last) {
+            this.cpu.NMI(true);
+            this.status |= 0x02;
+        }
+        return this.data;
+    };
+
+    WD1770.prototype.error = function (code) {
+        this.time = 0;
+        this.cpu.NMI(true);
+        this.status = code;
+        this.spinDown();
+    };
+
+    WD1770.prototype.discFinishRead = function () {
+//        console.log("finish read");
+        this.time = 200;
+    };
+
+    WD1770.prototype.notFound = function () {
+        this.error(0x90);
+    };
+    WD1770.prototype.writeProtect = function () {
+        this.error(0xc0);
+    };
+    WD1770.prototype.headerCrcError = function () {
+        this.error(0x98);
+    };
+    WD1770.prototype.dataCrcError = function () {
+        this.error(0x88);
+    };
+
+    WD1770.prototype.loadDiscData = function (drive, data) {
+        this.drives[drive] = ssdFor(this, data);
+    };
+    WD1770.prototype.loadDisc = function (drive, disc) {
+        this.drives[drive] = disc;
+    };
+
     return {
-        Fdc: I8271,
+        I8271: I8271,
+        WD1770: WD1770,
         ssdLoad: ssdLoad,
         localDisc: localDisc,
         emptySsd: emptySsd,

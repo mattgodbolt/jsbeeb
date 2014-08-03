@@ -197,7 +197,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         if (isMaster) return this.adconverter.read(addr);
                         break;
                     case 0xfe24:
-                    case 0xfe28: // TODO 1770 on master
+                    case 0xfe28:
+                        if (isMaster) return this.fdc.read(addr);
                         break;
                     case 0xfe34:
                         if (isMaster) return this.acccon;
@@ -323,8 +324,15 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe20:
                         return this.ula.write(addr, b);
                     case 0xfe24:
-                        return this.ula.write(addr, b); // todo if master, 1770
-                    case 0xfe28: // TODO 1770 on master
+                        if (isMaster) {
+                            return this.fdc.write(addr, b);
+                        } else {
+                            return this.ula.write(addr, b);
+                        }
+                    case 0xfe28:
+                        if (isMaster) {
+                            return this.fdc.write(addr, b);
+                        }
                         break;
                     case 0xfe30:
                         return this.romSelect(b);
@@ -473,7 +481,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     this.uservia = via.UserVia(this, isMaster);
                     this.acia = new Acia(this, soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
-                    this.fdc = new disc.Fdc(this);
+                    this.fdc = isMaster ? new disc.WD1770(this) : new disc.I8271(this);
                     this.crtc = video.crtc;
                     this.ula = video.ula;
                     this.adconverter = { read: function () {
