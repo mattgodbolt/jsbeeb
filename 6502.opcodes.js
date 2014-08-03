@@ -1101,6 +1101,6 @@ define(['utils'], function (utils) {
 
     return {
         'cpu6502': function(cpu) { return makeCpuFunctions(cpu, opcodes6502, false); },
-        'cpu65c12': function(cpu) { return makeCpuFunctions(cpu, opcodes6502, true); },
+        'cpu65c12': function(cpu) { return makeCpuFunctions(cpu, opcodes65c12, true); },
     };
 });
