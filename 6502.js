@@ -326,9 +326,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe24:
                         if (isMaster) {
                             return this.fdc.write(addr, b);
-                        } else {
-                            return this.ula.write(addr, b);
                         }
+                        return this.ula.write(addr, b);
                     case 0xfe28:
                         if (isMaster) {
                             return this.fdc.write(addr, b);
@@ -336,7 +335,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         break;
                     case 0xfe30:
                         return this.romSelect(b);
-                        break;
                     case 0xfe34:
                         if (isMaster) {
                             return this.writeAcccon(b);

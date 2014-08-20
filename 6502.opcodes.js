@@ -1010,8 +1010,7 @@ define(['utils'], function (utils) {
                 return tab + lines.join("\n" + tab);
             }
             var mid = (min + max) >>> 1;
-            return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ")
-                + "\n" + tab + "}\n";
+            return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ") + "\n" + tab + "}\n";
         }
 
         // Empty to hold prototypical stuff.
@@ -1045,7 +1044,7 @@ define(['utils'], function (utils) {
                 var param = split[1] || "";
                 var suffix = "";
                 var index = param.match(/(.*),([xy])$/);
-                var destAddr;
+                var destAddr, indDest;
                 if (index) {
                     param = index[1];
                     suffix = "," + index[2].toUpperCase();
@@ -1068,11 +1067,11 @@ define(['utils'], function (utils) {
                         return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
                     case "(abs)":
                         destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
-                        var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
+                        indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
                         return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
                     case "(abs,x)":
                         destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
-                        var indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
+                        indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
                         return [split[0] + " ($" + formatJumpAddr(destAddr) + ",x)" + suffix, addr + 3, indDest];
                 }
                 return [opcode, addr + 1];
@@ -1100,7 +1099,11 @@ define(['utils'], function (utils) {
     }
 
     return {
-        'cpu6502': function(cpu) { return makeCpuFunctions(cpu, opcodes6502, false); },
-        'cpu65c12': function(cpu) { return makeCpuFunctions(cpu, opcodes65c12, true); },
+        'cpu6502': function (cpu) {
+            return makeCpuFunctions(cpu, opcodes6502, false);
+        },
+        'cpu65c12': function (cpu) {
+            return makeCpuFunctions(cpu, opcodes65c12, true);
+        },
     };
 });

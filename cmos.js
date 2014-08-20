@@ -56,5 +56,5 @@ define([], function () {
         this.read = cmosRead;
         this.write = cmosWrite;
         this.writeAddr = cmosWriteAddr;
-    }
+    };
 });

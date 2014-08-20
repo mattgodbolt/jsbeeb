@@ -263,7 +263,7 @@ define(['teletext_data'], function (ttData) {
                 rounding = (interline && (scanline & 1)) ? 1 : 0;
             } else {
                 t += scanline * 16;
-                rounding = interline ? 1 : 0
+                rounding = interline ? 1 : 0;
             }
 
             var palette;
