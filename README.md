@@ -48,6 +48,10 @@ If you're looking to help:
   * Save state ability
   * Get the "boo" of the boot "boo-beep" working
   * Optimization
+* Master support
+  * Mostly done, but still TODOs in the code
+  * Needs a UI to select it.
+  * Exile doesn't run, for some reason.
 * Save disc support
   * I've started dropbox support, but it's not quite there yet.
   * Google Drive support would be nice

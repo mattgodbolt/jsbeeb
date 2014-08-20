@@ -59,10 +59,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var ctx = canvas.getContext('2d');
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, 1280, 768);
-        if (!ctx.getImageData) {
-            alert('Unsupported browser');
-            return;
-        }
         var backBuffer = document.createElement("canvas");
         backBuffer.width = 1280;
         backBuffer.height = 768;
