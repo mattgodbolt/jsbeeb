@@ -1,18 +1,29 @@
 define([], function () {
-    return function (store) {
+    return function (persistence) {
         "use strict";
-        if (store === undefined) {
+        var store = null;
+        if (persistence) {
+            store = persistence.load();
+        }
+        if (!store) {
             store = [
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0xc9, 0xff, 0xff, 0x12, 0x00, 0x17, 0xca, 0x1e, 0x05, 0x00, 0x35, 0xa6, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
             ];
+            save();
         }
         var readWrite = false;
         var oldStrobe = false;
         var data = 0;
         var enabled = false;
         var cmosAddr = 0;
+
+        function save() {
+            if (persistence) {
+                persistence.save(store);
+            }
+        }
 
         function cmosRead(IC32) {
             // b-em comment is: To drive bus, CMOS must be enabled, D must be high, RW must be high.
@@ -28,6 +39,7 @@ define([], function () {
                 if (!readWrite && cmosAddr > 0xb && !(IC32 & 4)) {
                     // Write triggered on low to high D
                     store[cmosAddr] = sdbval;
+                    save();
                 }
                 if (readWrite && (IC32 & 4)) {
                     // Read data output while D is high

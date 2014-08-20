@@ -150,7 +150,17 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
 
-        var cmos = new Cmos(); // TODO persistence model
+        var cmos = new Cmos({
+            load: function () {
+                if (window.localStorage.cmosRam) {
+                    return JSON.parse(window.localStorage.cmosRam);
+                }
+                return null;
+            },
+            save: function (data) {
+                window.localStorage.cmosRam = JSON.stringify(data);
+            }
+        });
         processor = new Cpu6502(model, dbgr, video, soundChip, cmos);
 
         function sthClearList() {
