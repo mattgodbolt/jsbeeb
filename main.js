@@ -95,7 +95,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 return new SoundChip(10000);
             }
             soundChip = new SoundChip(context.sampleRate);
-            jsAudioNode = context.createScriptProcessor(1024, 0, 1);
+            jsAudioNode = context.createScriptProcessor(2048, 0, 1);
             function pumpAudio(event) {
                 var outBuffer = event.outputBuffer;
                 var chan = outBuffer.getChannelData(0);
@@ -104,27 +104,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
             jsAudioNode.onaudioprocess = pumpAudio;
             jsAudioNode.connect(context.destination);
-
-            var toneGenerator = context.createOscillator();
-            toneGenerator.type = "sine";
-            var gainNode = context.createGain();
-            toneGenerator.connect(gainNode);
-            toneGenerator.frequency.value = 2400;
-            gainNode.connect(context.destination);
-            gainNode.gain.value = 0;
-            toneGenerator.start(0);
-            // TODO - this is not a good way to get proper sound. I'll need to bite the
-            // bullet and actually generate the wave myself; else it's really trick to get all
-            // the transitions in. Should probably trick out the soundChip to do this.
-            soundChip.toneGenerator = {
-                mute: function () {
-                    gainNode.gain.value = 0;
-                },
-                tone: function (freq) {
-                    toneGenerator.frequency.setValueAtTime(freq, context.currentTime);
-                    gainNode.gain.value = 0.5;
-                }
-            };
 
             return soundChip;
         })();
@@ -610,6 +589,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         window.profileVideo = _.debounce(profileVideo, 1);
         window.go = go;
         window.stop = stop;
+        window.soundChip = soundChip;
         window.processor = processor;
         window.video = video;
     }

@@ -41,12 +41,6 @@ requirejs(['video', '6502', 'soundchip', 'fdc'],
             }
         };
         var soundChip = new SoundChip(10000);
-        soundChip.toneGenerator = {
-            mute: function () {
-            },
-            tone: function () {
-            }
-        };
 
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;

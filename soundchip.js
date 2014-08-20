@@ -11,16 +11,48 @@ define([], function () {
         var outputBit = [ false, false, false, false ];
         var volume = [ 0, 0, 0, 0 ];
         this.volume = volume;  // for debug
-        var generators = [ null, null, null, null ];
+        var generators = [ null, null, null, null, null ];
 
         var volumeTable = [];
         var f = 1.0;
         var i;
         for (i = 0; i < 16; ++i) {
-            volumeTable[i] = f * 0.25;  // Bakes in the 1/4 volume per channel
+            volumeTable[i] = f / generators.length;  // Bakes in the per channel volume
             f *= Math.pow(10, -0.1);
         }
         volumeTable[15] = 0;
+
+        var sineTableSize = 8192;
+        var sineTable = [];
+        for (i = 0; i < sineTableSize; ++i) {
+            sineTable[i] = Math.sin(2 * Math.PI * i / sineTableSize) / generators.length;
+        }
+        var sineStep = 0;
+        var sineOn = false;
+        var sineTime = 0;
+
+        function sineChannel(channel, out, offset, length) {
+            if (!sineOn) {
+                return;
+            }
+            for (var i = 0; i < length; ++i) {
+                out[i + offset] += sineTable[sineTime & (sineTableSize - 1)];
+                sineTime += sineStep;
+            }
+            while (sineTime > sineTableSize) sineTime -= sineTableSize;
+        }
+
+        this.toneGenerator = {
+            mute: function() {
+                catchUp();
+                sineOn = false;
+            },
+            tone: function(freq) {
+                catchUp();
+                sineOn = true;
+                sineStep = (freq / sampleRate) * sineTableSize;
+            }
+        };
 
         function toneChannel(channel, out, offset, length) {
             var i;
@@ -98,7 +130,7 @@ define([], function () {
                 out[i + offset] = 0.0;
             }
             if (!enabled) return;
-            for (i = 0; i < 4; ++i) {
+            for (i = 0; i < generators.length; ++i) {
                 generators[i](i, out, offset, length);
             }
         }
@@ -179,6 +211,7 @@ define([], function () {
             generators[i] = toneChannel;
         }
         generators[3] = noiseChannel;
+        generators[4] = sineChannel;
 
         this.render = render;
         this.poke = poke;

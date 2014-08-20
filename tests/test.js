@@ -40,13 +40,6 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils'],
             endTest = endTest_;
             video = new Video(frameBuffer, paint);
             soundChip = new SoundChip(10000);
-            soundChip.toneGenerator = {
-                mute: function () {
-                },
-                tone: function () {
-                }
-            };
-
             dbgr = { setCpu: function () {} };
 
             nextTest();
