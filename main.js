@@ -44,7 +44,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 }
             });
         }
-        var model = parsedQuery.model || 'B';
+        function guessModelFromUrl() {
+            if (window.location.hostname == "bbc") return "B";
+            if (window.location.hostname == "master") return "Master";
+            return "B";
+        }
+
+        var model = parsedQuery.model || guessModelFromUrl();
 
         var framesPerSecond = 50;
         var targetTimeout = 1000 / framesPerSecond;
@@ -454,6 +460,22 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         $("#dropbox form").on("submit", dbCreate);
 
+        $('#model-menu a').on("click", function(e) {
+            parsedQuery.model = $(e.target).attr("data-target");
+            updateUrl();
+            if (parsedQuery.model != model) {
+                areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function(){
+                    window.location.reload();
+                });
+            }
+        });
+        // TODO: objects describing different models
+        if (model == 'B') {
+            $("#bbc-model").text("BBC B");
+        } else {
+            $("#bbc-model").text("BBC Master 128");
+        }
+
         function Light(name) {
             var dom = $("#" + name);
             var on = false;
@@ -481,6 +503,18 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 //            return addr == 0x8003;
 //        };
         go();
+
+        function areYouSure(message, yesText, noText, yesFunc) {
+            var ays = $('#are-you-sure');
+            ays.find(".context").text(message);
+            ays.find(".ays-yes").text(yesText);
+            ays.find(".ays-no").text(noText);
+            ays.find(".ays-yes").one("click", function() {
+                ays.modal("hide");
+                yesFunc();
+            });
+            ays.modal("show");
+        }
 
         function hd(obj, start, end) {
             var str = "";
