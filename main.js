@@ -45,8 +45,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             });
         }
         function guessModelFromUrl() {
-            if (window.location.hostname == "bbc") return "B";
-            if (window.location.hostname == "master") return "Master";
+            if (window.location.hostname.indexOf("bbc") === 0) return "B";
+            if (window.location.hostname.indexOf("master") === 0) return "Master";
             return "B";
         }
 
