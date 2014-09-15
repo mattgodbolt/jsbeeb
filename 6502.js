@@ -1,5 +1,5 @@
-define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
-    function (utils, opcodesAll, via, Acia, Serial, disc) {
+define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
+    function (utils, opcodesAll, via, Acia, Serial) {
         "use strict";
         var hexword = utils.hexword;
         var signExtend = utils.signExtend;
@@ -34,8 +34,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
         return function Cpu6502(model, dbgr, video, soundChip, cmos) {
             var self = this;
 
-            var isMaster = model == 'Master';
-            var opcodes = isMaster ? opcodesAll.cpu65c12(this) : opcodesAll.cpu6502(this);
+            var opcodes = model.nmos ? opcodesAll.cpu65c12(this) : opcodesAll.cpu6502(this);
 
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
@@ -75,7 +74,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
                 var swram = this.swram[b & 15] ? 1 : 2;
                 for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
-                if (isMaster && (b & 0x80)) {
+                if (model.isMaster && (b & 0x80)) {
                     // 4Kb RAM (private RAM - ANDY)
                     // Zero offset as 0x8000 mapped to 0x8000
                     for (c = 128; c < 144; ++c) {
@@ -194,14 +193,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe14:
                         return this.serial.read(addr);
                     case 0xfe18:
-                        if (isMaster) return this.adconverter.read(addr);
+                        if (model.isMaster) return this.adconverter.read(addr);
                         break;
                     case 0xfe24:
                     case 0xfe28:
-                        if (isMaster) return this.fdc.read(addr);
+                        if (model.isMaster) return this.fdc.read(addr);
                         break;
                     case 0xfe34:
-                        if (isMaster) return this.acccon;
+                        if (model.isMaster) return this.acccon;
                         break;
                     case 0xfe40:
                     case 0xfe44:
@@ -229,9 +228,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe94:
                     case 0xfe98:
                     case 0xfe9c:
-                        // TODO if (!master)
                         // TODO wd1770 support
-                        return this.fdc.read(addr);
+                        if (!model.isMaster)
+                            return this.fdc.read(addr);
+                        break;
                     case 0xfec0:
                     case 0xfec4:
                     case 0xfec8:
@@ -240,7 +240,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfed4:
                     case 0xfed8:
                     case 0xfedc:
-                        if (!isMaster) return this.adconverter.read(addr);
+                        if (!model.isMaster) return this.adconverter.read(addr);
                         break;
                     case 0xfee0:
                     case 0xfee4:
@@ -317,26 +317,26 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe10:
                     case 0xfe14:
                         return this.serial.write(addr, b);
-                    case 0xfe18: // TODO adc on master
-                        if (isMaster)
-                        return this.adconverter.write(addr, b);
+                    case 0xfe18:
+                        if (this.isMaster)
+                            return this.adconverter.write(addr, b);
                         break;
                     case 0xfe20:
                         return this.ula.write(addr, b);
                     case 0xfe24:
-                        if (isMaster) {
+                        if (model.isMaster) {
                             return this.fdc.write(addr, b);
                         }
                         return this.ula.write(addr, b);
                     case 0xfe28:
-                        if (isMaster) {
+                        if (model.isMaster) {
                             return this.fdc.write(addr, b);
                         }
                         break;
                     case 0xfe30:
                         return this.romSelect(b);
                     case 0xfe34:
-                        if (isMaster) {
+                        if (model.isMaster) {
                             return this.writeAcccon(b);
                         }
                         break;
@@ -366,9 +366,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfe94:
                     case 0xfe98:
                     case 0xfe9c:
-                        // TODO if (!master)
                         // TODO wd1770 support
-                        return this.fdc.write(addr, b);
+                        if (!model.isMaster)
+                            return this.fdc.write(addr, b);
+                        break;
                     case 0xfec0:
                     case 0xfec4:
                     case 0xfec8:
@@ -377,8 +378,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     case 0xfed4:
                     case 0xfed8:
                     case 0xfedc:
-                        // if (!master)
-                        return this.adconverter.write(addr, b);
+                        if (!model.isMaster)
+                            return this.adconverter.write(addr, b);
+                        break;
                     case 0xfee0:
                     case 0xfee4:
                     case 0xfee8:
@@ -454,12 +456,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 }
             };
 
-            function resetB() {
-            }
-            function resetMaster() {}
-
-            this.resetModel = resetB;
-
             this.reset = function (hard) {
                 console.log("Resetting 6502");
                 var i;
@@ -475,11 +471,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
                     this.videoDisplayPage = 0;
                     this.disassembler = new opcodes.Disassemble(this);
-                    this.sysvia = via.SysVia(this, soundChip, cmos, isMaster);
-                    this.uservia = via.UserVia(this, isMaster);
+                    this.sysvia = via.SysVia(this, soundChip, cmos, model.isMaster);
+                    this.uservia = via.UserVia(this, model.isMaster);
                     this.acia = new Acia(this, soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
-                    this.fdc = isMaster ? new disc.WD1770(this) : new disc.I8271(this);
+                    this.fdc = new model.Fdc(this);
                     this.crtc = video.crtc;
                     this.ula = video.ula;
                     this.adconverter = { read: function () {
@@ -492,7 +488,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                     }};
                     this.sysvia.reset();
                     this.uservia.reset();
-                    this.resetModel();
                 } else {
                     console.log("Soft reset");
                 }
@@ -554,7 +549,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.push(this.p.asByte());
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = true;
-                if (isMaster) {
+                if (model.isNmos) {
                     this.p.d = false;
                     this.takeInt = false;
                 }
@@ -584,7 +579,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 self.setzn(self.a);
             }
 
-            function adcBCD(addend) { // non 65c12 version. master version will need work here
+            function adcBCD(addend) { // non 65c12 version. NMOS version will need work here
                 var ah = 0;
                 var tempb = (self.a + addend + (self.p.c ? 1 : 0)) & 0xff;
                 if (!tempb) self.p.z = true;
@@ -606,8 +601,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 self.a = ((al & 0xf) | (ah << 4)) & 0xff;
             }
 
-            function sbcBCD(subend) { // non 65c12 version. master version will need work here
-                // TODO: master version. Only master does the flag nonsense, and takes another cycle
+            function sbcBCD(subend) { // non 65c12 version. NMOS version will need work here
+                // TODO: NMOS version. Only NMOS does the flag nonsense, and takes another cycle
                 var hc6 = 0;
                 var carry = self.p.c ? 0 : 1;
                 self.p.z = self.p.n = false;
@@ -677,7 +672,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                         this.p.i = true;
                         this.polltime(7);
                         this.nmi = false;
-                        if (isMaster)
+                        if (model.isNmos)
                             this.p.d = false;
                     }
                 }
@@ -688,18 +683,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'fdc'],
                 this.halted = true;
             };
 
-            switch (model) {
-                case 'B':
-                    this.loadOs("os.rom", "b/BASIC.ROM", "b/DFS-0.9.rom");
-                    this.resetModel = resetB;
-                    break;
-                case 'Master':
-                    this.loadOs("master/mos3.20");
-                    this.resetModel = resetMaster;
-                    break;
-                default:
-                    throw "Bad model " + model;
-            }
+            this.loadOs.apply(this, model.os);
             this.reset(true);
 
             dbgr.setCpu(this);

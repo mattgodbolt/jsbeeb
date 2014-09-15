@@ -1,5 +1,5 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'bootstrap'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader) {
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap'],
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models) {
         "use strict";
         var processor;
         var video;
@@ -50,7 +50,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             return "B";
         }
 
-        var model = parsedQuery.model || guessModelFromUrl();
+        var model = models.findModel(parsedQuery.model || guessModelFromUrl());
 
         var framesPerSecond = 50;
         var targetTimeout = 1000 / framesPerSecond;
@@ -469,12 +469,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 });
             }
         });
-        // TODO: objects describing different models
-        if (model == 'B') {
-            $("#bbc-model").text("BBC B");
-        } else {
-            $("#bbc-model").text("BBC Master 128");
-        }
+        $("#bbc-model").text(model.name);
 
         function Light(name) {
             var dom = $("#" + name);

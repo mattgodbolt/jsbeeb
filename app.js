@@ -9,8 +9,8 @@ requirejs.config({
     }
 });
 
-requirejs(['video', '6502', 'soundchip', 'fdc'],
-    function (Video, Cpu6502, SoundChip, disc) {
+requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
+    function (Video, Cpu6502, SoundChip, disc, models) {
         var fb32 = new Uint32Array(1280 * 768);
         var frame = 0;
         var screenshotRequest = null;
@@ -54,7 +54,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc'],
         }
 
         var discName = "elite";
-        var cpu = new Cpu6502('B', dbgr, video, soundChip);
+        var cpu = new Cpu6502(models.findModel('B'), dbgr, video, soundChip);
         cpu.fdc.loadDiscData(0, disc.ssdLoad("discs/" + discName + ".ssd"));
         cpu.sysvia.keyDown(16);
         cpu.execute(10 * 1000 * 1000);

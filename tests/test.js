@@ -1,5 +1,5 @@
-define(['video', 'soundchip', '6502', 'fdc', 'utils'],
-    function (Video, SoundChip, Cpu6502, fdc, utils) {
+define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
+    function (Video, SoundChip, Cpu6502, fdc, utils, models) {
         var processor;
         var video;
         var soundChip;
@@ -240,7 +240,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils'],
         function runTest(name, func, whenDone) {
             log("Running", name);
             beginTest(name);
-            processor = new Cpu6502('B', dbgr, video, soundChip);
+            processor = new Cpu6502(models.findModel('B'), dbgr, video, soundChip);
             failures = 0;
             func(function () {
                 log("Finished", name);
