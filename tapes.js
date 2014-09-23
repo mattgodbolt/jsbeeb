@@ -8,10 +8,6 @@ define(['utils'], function (utils) {
         var major = stream.readByte();
         if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
 
-        function cyclesPerPoll(suggested) {
-            return 16 / 13 * 1000 * 1000;
-        }
-
         function readChunk() {
             var chunkId = stream.readInt16();
             var length = stream.readInt32();
@@ -24,8 +20,12 @@ define(['utils'], function (utils) {
         var curChunk = readChunk();
         var baseFrequency = 1200;
 
+        function secsToClocks(secs) {
+            return (2 * 1000 * 1000 * secs) | 0;
+        }
+
         function cycles(count) {
-            return 2 * 1000 * 1000 * count / baseFrequency;
+            return secsToClocks(count / baseFrequency);
         }
 
         var state = -1;
@@ -65,17 +65,30 @@ define(['utils'], function (utils) {
                         }
                     }
                     return cycles(1);
+                case 0x0114:
+                    console.log("Ignoring security cycles");
+                    break;
                 case 0x0110:
                     var count = curChunk.stream.readInt16();
                     acia.setDCD(true);
                     acia.tone(2 * baseFrequency);
                     return cycles(count);
-                case 0x0112:
-                    console.log("Ignoring gap");
-                    acia.tone(0);
+                case 0x0113:
+                    baseFrequency = curChunk.stream.readFloat32();
+                    console.log("Frequency change ", baseFrequency);
                     break;
+                case 0x0112:
+                    var gap = 1 / (2 * curChunk.stream.readInt16() * baseFrequency);
+                    console.log("Tape gap of " + gap + "s");
+                    acia.tone(0);
+                    return secsToClocks(gap);
+                case 0x0116:
+                    var gap = curChunk.stream.readFloat32();
+                    console.log("Tape gap of " + gap + "s");
+                    acia.tone(0);
+                    return secsToClocks(gap);
                 default:
-                    console.log("Skipping unknown chunk " + hexword(curChunk.id));
+                    console.log("Skipping unknown chunk " + utils.hexword(curChunk.id));
                     curChunk = readChunk();
                     break;
             }

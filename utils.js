@@ -23,7 +23,7 @@ define(['jsunzip'], function (jsunzip) {
     })();
 
     function signExtend(val) {
-        return signExtendTable[val|0]|0;
+        return signExtendTable[val | 0] | 0;
     }
 
     exports.signExtend = signExtend;
@@ -78,12 +78,24 @@ define(['jsunzip'], function (jsunzip) {
     exports.readInt32 = readInt32;
 
     function readInt16(data, offset) {
-        var request = new XMLHttpRequest();
         return (data[offset + 1] << 8)
             | (data[offset + 0]);
     }
 
     exports.readInt16 = readInt16;
+    var tempBuf = new ArrayBuffer(4);
+    var tempBuf8 = new Uint8Array(tempBuf);
+    var tempBufF32 = new Float32Array(tempBuf);
+
+    function readFloat32(data, offset) {
+        tempBuf8[0] = data[offset];
+        tempBuf8[1] = data[offset + 1];
+        tempBuf8[2] = data[offset + 2];
+        tempBuf8[3] = data[offset + 3];
+        return tempBufF32[0];
+    }
+
+    exports.readFloat32 = readFloat32;
 
     function ungzip(data) {
         var request = new XMLHttpRequest();
@@ -137,6 +149,11 @@ define(['jsunzip'], function (jsunzip) {
             self.pos += distance;
             return self.pos - distance;
         };
+
+        self.readFloat32 = function (pos) {
+            if (pos === undefined) pos = self.advance(4);
+            return readFloat32(self.data, pos);
+        }
 
         self.readInt32 = function (pos) {
             if (pos === undefined) pos = self.advance(4);
