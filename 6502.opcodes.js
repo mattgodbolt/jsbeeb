@@ -373,6 +373,9 @@ define(['utils'], function (utils) {
             case "SRE":
                 return { op: rotate(false, true).concat(["cpu.a = cpu.setzn(cpu.a ^ REG);"]),
                     read: true, write: true };
+            case "RLA":
+                return { op: rotate(true, false).concat(["cpu.a = cpu.setzn(cpu.a & REG);"]),
+                    read: true, write: true };
         }
         return null;
     }
