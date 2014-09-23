@@ -17,7 +17,6 @@ define([], function () {
 
         self.reset = function () {
             self.sr = (self.sr & 0x08) | 0x04;
-            self.motorOn = false;
             updateIrq();
         };
         self.reset();
