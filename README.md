@@ -24,14 +24,14 @@ Then visit http://localhost:8000/ and off you go.
 URL parameters
 --------------
 
-* autoboot - fakes a shift break
-* disc1=XXX - loads disc XXX (from the `discs/` directory) into drive 1
-* disc2=XXX - as above
-* disc1=!YYY - creates a local disk YYY which will be kept in browser local storage
-* disc1=|ZZZ - loads disc ZZZ from the Stairway to Hell archive
-* tape=XXX - loads tape XXX (from the `tapes/` directory)
-* tape=|ZZZ - loads tape ZZZ from the Stairway to Hell archive
-* patch=P - applies a memory patch `P`. See below.
+* `autoboot` - fakes a shift break
+* `disc1=XXX` - loads disc XXX (from the `discs/` directory) into drive 1
+* `disc2=XXX` - as above
+* `disc1=!YYY` - creates a local disk YYY which will be kept in browser local storage
+* `disc1=|ZZZ` - loads disc ZZZ from the Stairway to Hell archive
+* `tape=XXX` - loads tape XXX (from the `tapes/` directory)
+* `tape=|ZZZ` - loads tape ZZZ from the Stairway to Hell archive
+* `patch=P` - applies a memory patch `P`. See below.
 
 Patches
 -------
@@ -73,7 +73,7 @@ Tests can be run automatically if you have `node` installed - just run `make` an
 Thanks
 ------
 
-Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. Also huge thanks to Richard Talbot-Watkins for his advice and help along the way.
+Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. Also huge thanks to Richard Talbot-Watkins for his advice and help along the way. Thanks to Michael Borcherds for his help in improving the keyboard layouts and handling in Javascript.
 
 More information
 ----------------
