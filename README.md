@@ -6,7 +6,7 @@ Key mappings you may find useful:
 
 * BBC F0 is F10
 * BBC Break key is F12
-* On a US keyboard, BBC star is on ".  For UK keyboards this is on 2 (sorry!)
+* BBC star is on " (if it doesn't work for you try shift-2)
 
 To play right now, visit [http://bbc.godbolt.org/](http://bbc.godbolt.org/)
 
