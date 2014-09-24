@@ -28,12 +28,15 @@ define(['utils'], function (utils) {
             return secsToClocks(count / baseFrequency);
         }
 
+        var dummyData = [false, false, true, false, true, false, true, false, true, true];
         var state = -1;
         var curByte = 0;
         var numDataBits = 8;
         var parity = 'N';
         var numParityBits = 0;
         var numStopBits = 1;
+        var carrierBefore = 0;
+        var carrierAfter = 0;
 
         function parityOf(curByte) {
             var parity = false;
@@ -116,6 +119,27 @@ define(['utils'], function (utils) {
                         acia.receive(curByte);
                         state = 0;
                         return 0;
+                    }
+                    return cycles(1);
+                case 0x0111: // Carrier tone with dummy data
+                    acia.setDCD(true);
+                    if (state === -1) {
+                        carrierBefore = curChunk.stream.readInt16();
+                        carrierAfter = curChunk.stream.readInt16();
+                        console.log("Carrier with", carrierBefore, carrierAfter);
+                        state = 0;
+                        acia.tone(2 * baseFrequency);
+                        return cycles(carrierBefore);
+                    } else if (state < 10) {
+                        acia.tone(dummyData[state] ? baseFrequency : (2 * baseFrequency));
+                        state++;
+                    } else if (state === 10) {
+                        acia.receive(0xaa);
+                        acia.tone(2 * baseFrequency);
+                        state++;
+                        return cycles(carrierAfter);
+                    } else {
+                        state = -1;
                     }
                     return cycles(1);
                 case 0x0114:
