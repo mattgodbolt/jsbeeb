@@ -16,13 +16,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         var availableImages;
         var discImage;
-		if (typeof starCat === 'function') {
-			availableImages = starCat();
-			
-			if (availableImages && availableImages[0]) {
-				discImage = availableImages[0].file;
-			}
-		}
+        if (typeof starCat === 'function') {
+            availableImages = starCat();
+
+            if (availableImages && availableImages[0]) {
+                discImage = availableImages[0].file;
+            }
+        }
         var queryString = document.location.search;
         var secondDiscImage = null;
         var parsedQuery = {};
@@ -467,24 +467,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         $("#dropbox form").on("submit", dbCreate);
 
-        $('#model-menu a').on("click", function(e) {
+        $('#model-menu a').on("click", function (e) {
             parsedQuery.model = $(e.target).attr("data-target");
-			
-			console.log(parsedQuery.model);
-			
-			if (parsedQuery.model === "soft-reset") {
-				console.log("soft reset");
-				processor.reset(false);
-				return;
-			}
-			
-            if (parsedQuery.model != model || parsedQuery.model === "hard-reset") {
-			
-			if (parsedQuery.model !== "hard-reset") {
-				updateUrl();
-			}
-			
-			areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function(){
+
+            if (parsedQuery.model === "soft-reset") {
+                processor.reset(false);
+            } else if (parsedQuery.model === "hard-reset") {
+                window.location.reload();
+            } else if (parsedQuery.model != model) {
+                areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function () {
                     window.location.reload();
                 });
             }
@@ -524,7 +515,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             ays.find(".context").text(message);
             ays.find(".ays-yes").text(yesText);
             ays.find(".ays-no").text(noText);
-            ays.find(".ays-yes").one("click", function() {
+            ays.find(".ays-yes").one("click", function () {
                 ays.modal("hide");
                 yesFunc();
             });
