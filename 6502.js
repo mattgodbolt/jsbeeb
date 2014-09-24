@@ -418,7 +418,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             };
 
             this.loadRom = function (name, offset) {
-                name = "/roms/" + name;
+                name = "roms/" + name;
                 console.log("Loading ROM from " + name);
                 var data = utils.loadData(name);
                 var len = data.length;
@@ -432,7 +432,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 
             this.loadOs = function (os) {
                 var i;
-                os = "/roms/" + os;
+                os = "roms/" + os;
                 console.log("Loading OS from " + os);
                 var data = utils.loadData(os);
                 var len = data.length;

@@ -14,9 +14,16 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var dropbox;
         var running;
 
-        var availableImages = starCat();
+        var availableImages;
+        var discImage;
+		if (typeof starCat === 'function') {
+			availableImages = starCat();
+			
+			if (availableImages && availableImages[0]) {
+				discImage = availableImages[0].file;
+			}
+		}
         var queryString = document.location.search;
-        var discImage = availableImages[0].file;
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
@@ -439,7 +446,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             elem.find(".description").text(image.desc);
             $(elem).on("click", function () {
                 utils.noteEvent('images', 'click', image.file);
-                processor.fdc.loadDiscData(0, disc.ssdLoad("/discs/" + image.file));
+                processor.fdc.loadDiscData(0, disc.ssdLoad("discs/" + image.file));
                 parsedQuery.disc = image.file;
                 updateUrl();
                 $('#discs').modal("hide");
@@ -462,9 +469,22 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         $('#model-menu a').on("click", function(e) {
             parsedQuery.model = $(e.target).attr("data-target");
-            updateUrl();
-            if (parsedQuery.model != model) {
-                areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function(){
+			
+			console.log(parsedQuery.model);
+			
+			if (parsedQuery.model === "soft-reset") {
+				console.log("soft reset");
+				processor.reset(false);
+				return;
+			}
+			
+            if (parsedQuery.model != model || parsedQuery.model === "hard-reset") {
+			
+			if (parsedQuery.model !== "hard-reset") {
+				updateUrl();
+			}
+			
+			areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function(){
                     window.location.reload();
                 });
             }
