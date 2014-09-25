@@ -68,7 +68,7 @@ In the `tests` directory is a timing test program written by Rich.  It has been 
 Tests
 -----
 
-There are some simple tests of correctness against a few timing sources. Visit the `/tests` URL to run them.
+There are some simple tests of correctness against a few timing sources. Visit the top-level `tests.html` URL to run them.
 
 Tests can be run automatically if you have `node` installed - just run `make` and it'll ensure the relevant libraries are installed, then it'll run the tests.
 
