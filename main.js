@@ -1,4 +1,4 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap'],
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap', 'jquery-visibility'],
     function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models) {
         "use strict";
         var processor;
@@ -615,6 +615,25 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             };
             runner();
         }
+
+        var wasPreviouslyRunning = false;
+        $(document).on(
+            {
+                "hide.visibility": function() {
+                    wasPreviouslyRunning = running;
+                    if (running) {
+                        console.log("Stopping due to window hidden event")
+                        stop(false);
+                    }
+                },
+                "show.visibility": function() {
+                    if (wasPreviouslyRunning) {
+                        console.log("Resuming")
+                        go();
+                    }
+                }
+            }
+        );
 
         function go() {
             running = true;
