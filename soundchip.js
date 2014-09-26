@@ -215,9 +215,6 @@ define([], function () {
 
         this.render = render;
         this.poke = poke;
-        this.enable = function (e) {
-            enabled = e;
-        };
         this.reset = function () {
             for (var i = 0; i < 4; ++i) {
                 counter[i] = 0;
@@ -227,6 +224,15 @@ define([], function () {
             noisePoked();
             advance(100000);
             cyclesPending = 0;
+        };
+        this.enable = function (e) {
+            enabled = e;
+        };
+        this.mute = function() {
+            enabled = false;
+        };
+        this.unmute = function() {
+            enabled = true;
         };
     };
 });
