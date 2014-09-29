@@ -1,100 +1,100 @@
 define(['utils'], function (utils) {
     const ORB = 0x0,
-        ORA = 0x1,
-        DDRB = 0x2,
-        DDRA = 0x3,
-        T1CL = 0x4,
-        T1CH = 0x5,
-        T1LL = 0x6,
-        T1LH = 0x7,
-        T2CL = 0x8,
-        T2CH = 0x9,
-        SR = 0xa,
-        ACR = 0xb,
-        PCR = 0xc,
-        IFR = 0xd,
-        IER = 0xe,
-        ORAnh = 0xf,
-        TIMER1INT = 0x40,
-        TIMER2INT = 0x20,
-        INT_CA1 = 0x02,
-        INT_CA2 = 0x01,
-        INT_CB1 = 0x10,
-        INT_CB2 = 0x08;
+    ORA = 0x1,
+    DDRB = 0x2,
+    DDRA = 0x3,
+    T1CL = 0x4,
+    T1CH = 0x5,
+    T1LL = 0x6,
+    T1LH = 0x7,
+    T2CL = 0x8,
+    T2CH = 0x9,
+    SR = 0xa,
+    ACR = 0xb,
+    PCR = 0xc,
+    IFR = 0xd,
+    IER = 0xe,
+    ORAnh = 0xf,
+    TIMER1INT = 0x40,
+    TIMER2INT = 0x20,
+    INT_CA1 = 0x02,
+    INT_CA2 = 0x01,
+    INT_CB1 = 0x10,
+    INT_CB2 = 0x08;
 
     function via(cpu, irq) {
         "use strict";
         var self = {
-            ora: 0, orb: 0, ira: 0, irb: 0,
-            ddra: 0, ddrb: 0,
-            sr: 0,
-            t1l: 0, t2l: 0,
-            t1c: 0, t2c: 0,
-            acr: 0, pcr: 0, ifr: 0, ier: 0,
-            t1hit: false, t2hit: false,
-            porta: 0, portb: 0,
-            ca1: 0, ca2: 0,
-            justhit: 0,
+                ora: 0, orb: 0, ira: 0, irb: 0,
+                ddra: 0, ddrb: 0,
+                sr: 0,
+                t1l: 0, t2l: 0,
+                t1c: 0, t2c: 0,
+                acr: 0, pcr: 0, ifr: 0, ier: 0,
+                t1hit: false, t2hit: false,
+                porta: 0, portb: 0,
+                ca1: 0, ca2: 0,
+                justhit: 0,
 
-            reset: function () {
-                self.ora = self.orb = 0xff;
-                self.ddra = self.ddrb = 0xff;
-                self.ifr = self.ier = 0x00;
-                self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
-                self.t1hit = self.t2hit = true;
-                self.acr = self.pcr = 0;
-            },
+                reset: function () {
+                    self.ora = self.orb = 0xff;
+                    self.ddra = self.ddrb = 0xff;
+                    self.ifr = self.ier = 0x00;
+                    self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
+                    self.t1hit = self.t2hit = true;
+                    self.acr = self.pcr = 0;
+                },
 
-            polltime: function (cycles) {
-                cycles |= 0;
-                self.justhit = 0;
-                var newT1c = self.t1c - cycles;
-                if (newT1c < -2 && self.t1c > -3) {
-                    if (!self.t1hit) {
-                        self.ifr |= TIMER1INT;
-                        self.updateIFR();
-                        if (newT1c === -3) {
-                            self.justhit |= 1;
-                        }
-                        // b-em comment is "Output to PB7"
-                        self.orb ^= (self.acr & 0x80);
-                    }
-                    if (!(this.acr & 0x40)) self.t1hit = true;
-                }
-                while (newT1c < -3) newT1c += self.t1l + 4;
-                self.t1c = newT1c;
-
-                if (!(self.acr & 0x20)) {
-                    var newT2c = self.t2c - cycles;
-                    if (newT2c < -2) {
-                        if (!self.t2hit) {
-                            self.ifr |= TIMER2INT;
+                polltime: function (cycles) {
+                    cycles |= 0;
+                    self.justhit = 0;
+                    var newT1c = self.t1c - cycles;
+                    if (newT1c < -2 && self.t1c > -3) {
+                        if (!self.t1hit) {
+                            self.ifr |= TIMER1INT;
                             self.updateIFR();
-                            if (newT2c === -3) {
-                                self.justhit |= 2;
+                            if (newT1c === -3) {
+                                self.justhit |= 1;
                             }
-                            self.t2hit = true;
+                            // b-em comment is "Output to PB7"
+                            self.orb ^= (self.acr & 0x80);
                         }
-                        newT2c += 0x20000;
+                        if (!(this.acr & 0x40)) self.t1hit = true;
                     }
-                    self.t2c = newT2c;
-                }
-            },
+                    while (newT1c < -3) newT1c += self.t1l + 4;
+                    self.t1c = newT1c;
 
-            updateIFR: function () {
-                if (self.ifr & self.ier & 0x7f) {
-                    self.ifr |= 0x80;
-                    cpu.interrupt |= irq;
-                } else {
-                    self.ifr &= ~0x80;
-                    cpu.interrupt &= ~irq;
-                }
-            },
+                    if (!(self.acr & 0x20)) {
+                        var newT2c = self.t2c - cycles;
+                        if (newT2c < -2) {
+                            if (!self.t2hit) {
+                                self.ifr |= TIMER2INT;
+                                self.updateIFR();
+                                if (newT2c === -3) {
+                                    self.justhit |= 2;
+                                }
+                                self.t2hit = true;
+                            }
+                            newT2c += 0x20000;
+                        }
+                        self.t2c = newT2c;
+                    }
+                },
 
-            write: function (addr, val) {
-                var mode;
-                val |= 0;
-                switch (addr & 0xf) {
+                updateIFR: function () {
+                    if (self.ifr & self.ier & 0x7f) {
+                        self.ifr |= 0x80;
+                        cpu.interrupt |= irq;
+                    } else {
+                        self.ifr &= ~0x80;
+                        cpu.interrupt &= ~irq;
+                    }
+                },
+
+                write: function (addr, val) {
+                    var mode;
+                    val |= 0;
+                    switch (addr & 0xf) {
                     case ORA:
                         self.ifr &= ~INT_CA1;
                         if ((self.pcr & 0x0a) != 0x02) {
@@ -110,7 +110,7 @@ define(['utils'], function (utils) {
                             self.setca2(false);
                             self.setca2(true);
                         }
-                    /* falls through */
+                        /* falls through */
                     case ORAnh:
                         self.ora = val;
                         self.writePortA(((self.ora & self.ddra) | ~self.ddra) & 0xff);
@@ -213,18 +213,18 @@ define(['utils'], function (utils) {
                         self.ifr &= ~(val & 0x7f);
                         self.updateIFR();
                         break;
-                }
-            },
+                    }
+                },
 
-            read: function (addr) {
-                var temp;
-                switch (addr & 0xf) {
+                read: function (addr) {
+                    var temp;
+                    switch (addr & 0xf) {
                     case ORA:
                         self.ifr &= ~INT_CA1;
                         if ((self.pcr & 0xa) != 0x2)
                             self.ifr &= ~INT_CA2;
                         self.updateIFR();
-                    /* falls through */
+                        /* falls through */
                     case ORAnh:
                         temp = self.ora & self.ddra;
                         if (self.acr & 1)
@@ -287,62 +287,62 @@ define(['utils'], function (utils) {
                         return self.ifr;
                     default:
                         throw "Unknown VIA read";
-                }
-            },
-
-            setca1: function (val) {
-                var level = !!val;
-                if (level === self.ca1) return;
-                var pcrSet = !!(self.pcr & 1);
-                if (pcrSet === level) {
-                    if (self.acr & 1) self.ira = self.readPortA();
-                    self.ifr |= INT_CA1;
-                    self.updateIFR();
-                    if ((self.pcr & 0xc) == 0x8) { // handshaking
-                        self.setca2(1);
                     }
-                }
-                self.ca1 = level;
-            },
+                },
 
-            setca2: function (val) {
-                var level = !!val;
-                if (level === self.ca2) return;
-                if (self.pcr & 8) return; // output
-                var pcrSet = !!(self.pcr & 4);
-                if (pcrSet === level) {
-                    self.ifr |= INT_CA2;
-                    self.updateIFR();
-                }
-                self.ca2 = level;
-            },
-
-            setcb1: function (val) {
-                var level = !!val;
-                if (level === self.cb1) return;
-                var pcrSet = !!(self.pcr & 0x10);
-                if (pcrSet === level) {
-                    if (self.acr & 2) self.irb = self.readPortB();
-                    self.ifr |= INT_CB1;
-                    self.updateIFR();
-                    if ((self.pcr & 0xc0) == 0x80) { // handshaking
-                        self.setcb2(1);
+                setca1: function (val) {
+                    var level = !!val;
+                    if (level === self.ca1) return;
+                    var pcrSet = !!(self.pcr & 1);
+                    if (pcrSet === level) {
+                        if (self.acr & 1) self.ira = self.readPortA();
+                        self.ifr |= INT_CA1;
+                        self.updateIFR();
+                        if ((self.pcr & 0xc) == 0x8) { // handshaking
+                            self.setca2(1);
+                        }
                     }
-                }
-                self.cb1 = level;
-            },
+                    self.ca1 = level;
+                },
 
-            setcb2: function (val) {
-                var level = !!val;
-                if (level === self.cb2) return;
-                if (self.pcr & 0x80) return; // output
-                var pcrSet = !!(self.pcr & 0x40);
-                if (pcrSet === level) {
-                    self.ifr |= INT_CB2;
-                    self.updateIFR();
+                setca2: function (val) {
+                    var level = !!val;
+                    if (level === self.ca2) return;
+                    if (self.pcr & 8) return; // output
+                    var pcrSet = !!(self.pcr & 4);
+                    if (pcrSet === level) {
+                        self.ifr |= INT_CA2;
+                        self.updateIFR();
+                    }
+                    self.ca2 = level;
+                },
+
+                setcb1: function (val) {
+                    var level = !!val;
+                    if (level === self.cb1) return;
+                    var pcrSet = !!(self.pcr & 0x10);
+                    if (pcrSet === level) {
+                        if (self.acr & 2) self.irb = self.readPortB();
+                        self.ifr |= INT_CB1;
+                        self.updateIFR();
+                        if ((self.pcr & 0xc0) == 0x80) { // handshaking
+                            self.setcb2(1);
+                        }
+                    }
+                    self.cb1 = level;
+                },
+
+                setcb2: function (val) {
+                    var level = !!val;
+                    if (level === self.cb2) return;
+                    if (self.pcr & 0x80) return; // output
+                    var pcrSet = !!(self.pcr & 0x40);
+                    if (pcrSet === level) {
+                        self.ifr |= INT_CB2;
+                        self.updateIFR();
+                    }
+                    self.cb2 = level;
                 }
-                self.cb2 = level;
-            }
         };
         return self;
     }
@@ -383,234 +383,12 @@ define(['utils'], function (utils) {
             return "UK";  // Default guess of UK
         }
 
-        /**
-         * Useful references:
-         * http://www.cambiaresearch.com/articles/15/javascript-char-codes-key-codes
-         * https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
-         */
-        self.keyCodes = {
-            UNDEFINED: 0,
-            BACKSPACE: 8,
-            TAB: 9,
-            CLEAR: 12,
-            ENTER: 13,
-            SHIFT: 16,
-            CTRL: 17,
-            ALT: 18,
-            CAPSLOCK: 20,
-            ESCAPE: 27,
-            SPACE: 32,
-            PAGEUP: 33,
-            PAGEDOWN: 34,
-            END: 35,
-            HOME: 36,
-            LEFT: 37,
-            UP: 38,
-            RIGHT: 39,
-            DOWN: 40,
-            PRINTSCREEN: 44,
-            INSERT: 45,
-            DELETE: 46,
-            K0: 48,
-            K1: 49,
-            K2: 50,
-            K3: 51,
-            K4: 52,
-            K5: 53,
-            K6: 54,
-            K7: 55,
-            K8: 56,
-            K9: 57,
-            A: 65,
-            B: 66,
-            C: 67,
-            D: 68,
-            E: 69,
-            F: 70,
-            G: 71,
-            H: 72,
-            I: 73,
-            J: 74,
-            K: 75,
-            L: 76,
-            M: 77,
-            N: 78,
-            O: 79,
-            P: 80,
-            Q: 81,
-            R: 82,
-            S: 83,
-            T: 84,
-            U: 85,
-            V: 86,
-            W: 87,
-            X: 88,
-            Y: 89,
-            Z: 90,
-            /* also META on Mac */
-            WINDOWS: 91,
-            NUMPAD0: 96,
-            NUMPAD1: 97,
-            NUMPAD2: 98,
-            NUMPAD3: 99,
-            NUMPAD4: 100,
-            NUMPAD5: 101,
-            NUMPAD6: 102,
-            NUMPAD7: 103,
-            NUMPAD8: 104,
-            NUMPAD9: 105,
-            NUMPADASTERISK: 106,
-            NUMPADPLUS: 107,
-            /* on numeric keypad in eg Germany*/
-            NUMPAD_DECIMAL_COMMA: 108,
-            NUMPADMINUS: 109,
-            /* on numeric keypad */
-            NUMPAD_DECIMAL_POINT: 110,
-            NUMPADSLASH: 111,
-            F1: 112,
-            F2: 113,
-            F3: 114,
-            F4: 115,
-            F5: 116,
-            F6: 117,
-            F7: 118,
-            F8: 119,
-            F9: 120,
-            F10: 121,
-            F11: 122,
-            F12: 123,
-            NUMLOCK: 144,
-            VOLUMEUP: 174,
-            VOLUMEDOWN: 175,
-            FASTFORWARD: 176,
-            FASTREWIND: 177,
-            PLAYPAUSE: 179,
-            COMMA: 188,
-            PERIOD: 190,
-            SLASH: 191,
-            LEFT_SQUARE_BRACKET: 219,
-            BACKSLASH: 220,
-            RIGHT_SQUARE_BRACKET: 221
-        };
-
-        // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-        // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-        var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
-        var keyCodes = self.keyCodes;
-
-        if (isFirefox) {
-            keyCodes.SEMICOLON = 59;
-//          # key
-            keyCodes.HASH = 163;
-            self.keyCodes.APOSTROPHE = 222;
-//          Firefox doesn't return a keycode for this
-            keyCodes.MUTE = -1;
-            keyCodes.MINUS = 173;
-            keyCodes.EQUALS = 61;
-            keyCodes.BACK_QUOTE = 192;
-
-
-        } else {
-//          Chrome
-//          TODO: check other browsers
-//          https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
-            keyCodes.SEMICOLON = 186;
-//          # key
-            keyCodes.HASH = 222;
-            keyCodes.APOSTROPHE = 192;
-            keyCodes.MUTE = 173;
-            keyCodes.MINUS = 189;
-            keyCodes.EQUALS = 187;
-            keyCodes.BACK_QUOTE = 223;
-        }
-
-        self.BBC = {
-            SEMICOLON_PLUS: [7, 5],
-            MINUS: [7, 1],
-            LEFT_SQUARE_BRACKET: [8, 3],
-            RIGHT_SQUARE_BRACKET: [8, 5],
-            COMMA: [6, 6],
-            PERIOD: [7, 6],
-            SLASH: [8, 6],
-            SHIFTLOCK: [0, 5],
-            TAB: [0, 6],
-            RETURN: [9, 4],
-            DELETE: [9, 5],
-            COPY: [9, 6],
-            SHIFT: [0, 0],
-            ESCAPE: [0, 7],
-            CTRL: [1, 0],
-            CAPSLOCK: [0, 4],
-            LEFT: [9, 1],
-            UP: [9, 3],
-            RIGHT: [9, 7],
-            DOWN: [9, 2],
-            K0: [7, 2],
-            K1: [0, 3],
-            K2: [1, 3],
-            K3: [1, 1],
-            K4: [2, 1],
-            K5: [3, 1],
-            K6: [4, 3],
-            K7: [4, 2],
-            K8: [5, 1],
-            K9: [6, 2],
-
-            Q: [0, 1],
-            W: [1, 2],
-            E: [2, 2],
-            R: [3, 3],
-            T: [3, 2],
-            Y: [4, 4],
-            U: [5, 3],
-            I: [5, 2],
-            O: [6, 3],
-            P: [7, 3],
-
-            A: [1, 4],
-            S: [1, 5],
-            D: [2, 3],
-            F: [3, 4],
-            G: [3, 5],
-            H: [4, 5],
-            J: [5, 4],
-            K: [6, 4],
-            L: [6, 5],
-
-            Z: [1, 6],
-            X: [2, 4],
-            C: [2, 5],
-            V: [3, 6],
-            B: [4, 6],
-            N: [5, 5],
-            M: [5, 6],
-
-            F0: [0, 2],
-            F1: [1, 7],
-            F2: [2, 7],
-            F3: [3, 7],
-            F4: [4, 1],
-            F5: [4, 7],
-            F6: [5, 7],
-            F7: [6, 1],
-            F8: [6, 7],
-            F9: [7, 7],
-
-            SPACE: [2, 6],
-
-            HASH: [8, 2],
-            AT: [7, 4],
-            COLON_STAR: [8, 4],
-            PIPE_BACKSLASH: [8, 7],
-            HAT_TILDE: [8, 1]
-        };
-
 
         self.keycodeToRowCol = (function () {
             var keys = {};
 
             function map(s, colRow) {
-                if ((!s && s !== 0) || !colRow) {
+                if ((!s  && s !== 0) || !colRow) {
                     console.log("error binding key", s, colRow);
                 }
                 if (typeof(s) == "string")
@@ -624,8 +402,10 @@ define(['utils'], function (utils) {
             var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
             var isUKlayout = detectKeyboardLayout() == "UK";
 
-            var keyCodes = self.keyCodes;
-            var BBC = self.BBC;
+            var keyCodes = utils.keyCodes;
+            var BBC = utils.BBC;
+
+            console.log("isUKlayout", isUKlayout);
 
             if (isUKlayout) {
 
@@ -643,8 +423,11 @@ define(['utils'], function (utils) {
             if (isFirefox) {
                 // Mike's UK Windows laptop returns 20 in Chrome and Firefox for Caps Lock
                 // TODO: 225 is definitely strange
-                map(225, BBC.CAPSLOCK);
-            }
+                map(225, BBC.CAPSLOCK); 
+            } 
+
+
+            var BBC = utils.BBC;
 
             map(keyCodes.EQUALS, BBC.HAT_TILDE); // ^~ on +/=
             map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
@@ -692,6 +475,7 @@ define(['utils'], function (utils) {
             map(keyCodes.O, BBC.O);
             map(keyCodes.P, BBC.P);
 
+
             map(keyCodes.A, BBC.A);
             map(keyCodes.S, BBC.S);
             map(keyCodes.D, BBC.D);
@@ -711,29 +495,38 @@ define(['utils'], function (utils) {
             map(keyCodes.M, BBC.M);
 
             map(keyCodes.F10, BBC.F0); // F0 (mapped to F10)
-            map(keyCodes.F1, BBC.F1);
-            map(keyCodes.F2, BBC.F2);
-            map(keyCodes.F3, BBC.F3);
-            map(keyCodes.F4, BBC.F4);
-            map(keyCodes.F5, BBC.F5);
-            map(keyCodes.F6, BBC.F6);
-            map(keyCodes.F7, BBC.F7);
-            map(keyCodes.F8, BBC.F8);
-            map(keyCodes.F9, BBC.F9);
+            map(keyCodes.F1, BBC.F1); 
+            map(keyCodes.F2, BBC.F2); 
+            map(keyCodes.F3, BBC.F3); 
+            map(keyCodes.F4, BBC.F4); 
+            map(keyCodes.F5, BBC.F5); 
+            map(keyCodes.F6, BBC.F6); 
+            map(keyCodes.F7, BBC.F7); 
+            map(keyCodes.F8, BBC.F8); 
+            map(keyCodes.F9, BBC.F9); 
 
             map(keyCodes.BACK_QUOTE, BBC.ESCAPE); // top left UK keyboard -> Escape
 
             map(keyCodes.SPACE, BBC.SPACE);
             return keys;
         })();
+        
+        self.keyboardEnabled = true;
+        
         self.set = function (key, val) {
-            //console.log("key code: " + key);
+
+            if (!self.keyboardEnabled) {
+                return;
+            }
+
+            console.log("key code: " + key);
             var colrow = self.keycodeToRowCol[key];
             if (!colrow) {
                 console.log("Unknown keycode: " + key);
                 console.log("Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode");
                 return;
             }
+
             self.keys[colrow[0]][colrow[1]] = val;
             self.updateKeys();
         };
@@ -742,6 +535,19 @@ define(['utils'], function (utils) {
         };
         self.keyUp = function (key) {
             self.set(key, 0);
+        };
+
+        self.keyDownRaw = function (colrow) {
+            self.keys[colrow[0]][colrow[1]] = 1;
+            self.updateKeys();
+        };
+        self.keyUpRaw = function (colrow) {
+            self.keys[colrow[0]][colrow[1]] = 0;
+            self.updateKeys();
+        };
+        self.keyToggleRaw = function (colrow) {
+            self.keys[colrow[0]][colrow[1]] = 1 - self.keys[colrow[0]][colrow[1]];
+            self.updateKeys();
         };
 
         self.updateKeys = function () {
