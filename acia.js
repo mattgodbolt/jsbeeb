@@ -88,6 +88,13 @@ define([], function () {
         self.setTape = function (tape) {
             self.tape = tape;
         };
+        
+        self.rewindTape = function() {
+            if (self.tape) {
+                console.log("rewinding tape");
+                self.tape.rewind();
+            }
+        }
 
         var runCounter = 0;
         var cyclesPerPoll = (2 * 1000 * 1000) / 30;
@@ -136,6 +143,12 @@ function TapefileTape(stream) {
         var cpp = (2 * 1000 * 1000) / (19200 / divider);
         return Math.floor(bitsPerByte * cpp);
     }
+
+    self.rewind = function() {
+        stream.seek(10);
+        console.log("poi");
+    }
+
 
     self.poll = function (acia) {
         if (stream.eof()) return 100000;
