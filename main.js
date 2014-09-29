@@ -306,6 +306,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 // clean up, just in case
                 console.log("KEYUP", "SHIFT");
                 processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
+
+                processor.sysvia.keyboardEnabled = true;
+
             }
 
         }
@@ -331,6 +334,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             //        processor.sysvia.keyUp(16);
             //    }, 5000);
             //}, 0);
+            
+            console.log("KEYUP", "SHIFT");
+            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
+            
+            processor.sysvia.keyboardEnabled = false;
+
+            
             setTimeout(function () {
                 sendRawKeyboardToBBC(
                         [
@@ -347,6 +357,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             
             console.log("Auto Chaining Tape");
             utils.noteEvent('init', 'autochain');
+
+            console.log("KEYUP", "SHIFT");
+            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
+
+            processor.sysvia.keyboardEnabled = false;
 
             setTimeout(function () {
                 sendRawKeyboardToBBC(
@@ -380,6 +395,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             
             console.log("Auto Running Tape");
             utils.noteEvent('init', 'autorun');
+
+            console.log("KEYUP", "SHIFT");
+            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
+
+            processor.sysvia.keyboardEnabled = false;
 
             setTimeout(function () {
                 sendRawKeyboardToBBC(

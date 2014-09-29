@@ -511,14 +511,22 @@ define(['utils'], function (utils) {
             return keys;
         })();
         
+        self.keyboardEnabled = true;
+        
         self.set = function (key, val) {
-            //console.log("key code: " + key);
+
+            if (!self.keyboardEnabled) {
+                return;
+            }
+
+            console.log("key code: " + key);
             var colrow = self.keycodeToRowCol[key];
             if (!colrow) {
                 console.log("Unknown keycode: " + key);
                 console.log("Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode");
                 return;
             }
+
             self.keys[colrow[0]][colrow[1]] = val;
             self.updateKeys();
         };
