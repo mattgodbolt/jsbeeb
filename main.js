@@ -126,12 +126,31 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         dbgr = new Debugger(video);
         function keyCode(evt) {
-            return evt.which || evt.charCode || evt.keyCode;
+            var ret = evt.which || evt.charCode || evt.keyCode;
+
+            // Firefox doesn't seem to provide a way to distinguish
+            // Enter from Keypad Enter
+            // Chrome has evt.keyLocation
+            if (evt.keyLocation == 3) {
+
+                switch (ret) {
+                
+                case utils.keyCodes.ENTER:
+                    console.log("numpad enter");
+                    return utils.keyCodes.NUMPADENTER;  
+                    
+                case utils.keyCodes.DELETE:
+                    console.log("numpad dot");
+                    return utils.keyCodes.NUMPAD_DECIMAL_POINT;                    
+                }
+            }
+
+            return ret;
         }
 
         function keyPress(evt) {
             if (running || !dbgr.enabled()) return;
-            if (keyCode(evt) === 103) {
+            if (keyCode(evt) === utils.keyCodes.NUMPAD7) {
                 dbgr.hide();
                 go();
                 return;
@@ -143,10 +162,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         function keyDown(evt) {
             if (!running) return;
             var code = keyCode(evt);
-            if (code === 36) {  // home
+            if (code === utils.keyCodes.INSERT) {  
                 utils.noteEvent('keyboard', 'press', 'home');
                 stop(true);
-            } else if (code == 123) { // F12
+            } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
                 utils.noteEvent('keyboard', 'press', 'break');
                 processor.reset(false);
                 evt.preventDefault();

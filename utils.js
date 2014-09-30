@@ -82,7 +82,36 @@ define(['jsunzip'], function (jsunzip) {
                 AT: [7, 4],
                 COLON_STAR: [8, 4],
                 PIPE_BACKSLASH: [8, 7],
-                HAT_TILDE: [8, 1]
+                HAT_TILDE: [8, 1],
+
+                // row 1
+                NUMPADPLUS: [10,3],
+                NUMPADMINUS: [11,3],
+                NUMPADSLASH: [10,4],
+                NUMPADASTERISK: [11,5],
+
+                // row 2
+                NUMPAD7: [11,1],
+                NUMPAD8: [10,2],
+                NUMPAD9: [11,2],
+                NUMPADHASH: [10,5],
+                // row 3
+                NUMPAD4: [10,7],
+                NUMPAD5: [11,7],
+                NUMPAD6: [10,1],
+                NUMPAD_DELETE: [11,4],
+                //row4
+                NUMPAD1: [11,6],
+                NUMPAD2: [12,7],
+                NUMPAD3: [12,6],
+                NUMPADCOMMA: [12,5],
+                
+                //row 5
+                NUMPAD0: [10,6],
+                NUMPAD_DECIMAL_POINT: [12,4],
+                NUMPADENTER: [12,3],
+                 
+                
         };
     
             /**
@@ -99,6 +128,7 @@ define(['jsunzip'], function (jsunzip) {
                 SHIFT: 16,
                 CTRL: 17,
                 ALT: 18,
+                BREAK: 19,
                 CAPSLOCK: 20,
                 ESCAPE: 27,
                 SPACE: 32,
@@ -182,6 +212,7 @@ define(['jsunzip'], function (jsunzip) {
                 F11: 122,
                 F12: 123,
                 NUMLOCK: 144,
+                SCROLL_LOCK: 145,
                 VOLUMEUP: 174,
                 VOLUMEDOWN: 175,
                 FASTFORWARD: 176,
@@ -192,7 +223,8 @@ define(['jsunzip'], function (jsunzip) {
                 SLASH: 191,
                 LEFT_SQUARE_BRACKET: 219,
                 BACKSLASH: 220,
-                RIGHT_SQUARE_BRACKET: 221
+                RIGHT_SQUARE_BRACKET: 221,
+                NUMPADENTER: 255 // hack, jsbeeb only
         };
 
 
@@ -211,7 +243,7 @@ define(['jsunzip'], function (jsunzip) {
             keyCodes.SEMICOLON = 59;
 //          # key
             keyCodes.HASH = 163;
-            self.keyCodes.APOSTROPHE = 222;
+            keyCodes.APOSTROPHE = 222;
 //          Firefox doesn't return a keycode for this
             keyCodes.MUTE = -1;
             keyCodes.MINUS = 173;

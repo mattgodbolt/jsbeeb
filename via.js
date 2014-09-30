@@ -393,7 +393,7 @@ define(['utils'], function (utils) {
                 }
                 if (typeof(s) == "string")
                     s = s.charCodeAt(0);
-                if (keys[s]) console.log("Duplicate binding for key", s, c, r, keys[s]);
+                if (keys[s]) console.log("Duplicate binding for key", s, colRow, keys[s]);
                 keys[s] = colRow;
             }
 
@@ -508,6 +508,35 @@ define(['utils'], function (utils) {
             map(keyCodes.BACK_QUOTE, BBC.ESCAPE); // top left UK keyboard -> Escape
 
             map(keyCodes.SPACE, BBC.SPACE);
+            
+            // Master
+            map(keyCodes.NUMPAD0, BBC.NUMPAD0);
+            map(keyCodes.NUMPAD1, BBC.NUMPAD1);
+            map(keyCodes.NUMPAD2, BBC.NUMPAD2);
+            map(keyCodes.NUMPAD3, BBC.NUMPAD3);
+            map(keyCodes.NUMPAD4, BBC.NUMPAD4);
+            map(keyCodes.NUMPAD5, BBC.NUMPAD5);
+            map(keyCodes.NUMPAD6, BBC.NUMPAD6);
+            map(keyCodes.NUMPAD7, BBC.NUMPAD7);
+            map(keyCodes.NUMPAD8, BBC.NUMPAD8);
+            map(keyCodes.NUMPAD9, BBC.NUMPAD9);
+            // small hack in main.js/keyCode() to make this work (Chrome only)
+            map(keyCodes.NUMPAD_DECIMAL_POINT, BBC.NUMPAD_DECIMAL_POINT);
+           
+            // "natural" mapping
+            map(keyCodes.NUMPADPLUS, BBC.NUMPADPLUS);
+            map(keyCodes.NUMPADMINUS, BBC.NUMPADMINUS);
+            map(keyCodes.NUMPADSLASH, BBC.NUMPADSLASH);
+            map(keyCodes.NUMPADASTERISK, BBC.NUMPADASTERISK);
+            //map(???, BBC.NUMPADCOMMA);
+            //map(???, BBC.NUMPADHASH);
+            // no keycode for NUMPADENTER, small hack in main.js/keyCode() (Chrome only)
+            map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
+            
+            // TODO: "game" mapping
+            // eg Master Dunjunz needs # Del 3 , * Enter
+            // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
+            
             return keys;
         })();
         
@@ -551,7 +580,8 @@ define(['utils'], function (utils) {
         };
 
         self.updateKeys = function () {
-            var numCols = 10; // 13 for MASTER
+            // 10 for BBC, 13 for Master 128
+            var numCols = 13;
             var i, j;
             if (self.IC32 & 8) {
                 for (i = 0; i < numCols; ++i) {
