@@ -369,7 +369,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     BBC.PERIOD,
                     BBC.SHIFT,
                     BBC.K2,
-                    200, // pause in ms between same keys
                     BBC.K2,
                     BBC.SHIFT,
                     BBC.RETURN
