@@ -1,4 +1,4 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap'],
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap', 'jquery-visibility'],
     function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models) {
         "use strict";
 
@@ -636,7 +636,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         });
         $("#bbc-model").text(model.name);
 
-
         $('#tape-menu a').on("click", function (e) {
             var type = $(e.target).attr("data-id");
 
@@ -648,7 +647,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             } else {
                 console.log("unknown type", type);
             }
-
         });
 
         function Light(name) {
@@ -784,6 +782,23 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             };
             runner();
         }
+
+        var wasPreviouslyRunning = false;
+        $(document).on(
+            {
+                "hide.visibility": function() {
+                    wasPreviouslyRunning = running;
+                    if (running && !processor.acia.motorOn) {
+                        stop(false);
+                    }
+                },
+                "show.visibility": function() {
+                    if (wasPreviouslyRunning) {
+                        go();
+                    }
+                }
+            }
+        );
 
         function go() {
             running = true;
