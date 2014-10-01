@@ -801,6 +801,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         );
 
         function go() {
+            soundChip.unmute();
             running = true;
             run();
         }
@@ -809,6 +810,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             running = false;
             processor.stop();
             if (debug) dbgr.debug(processor.pc);
+            soundChip.mute();
         }
 
         // Handy shortcuts. bench/profile stuff is delayed so that they can be
