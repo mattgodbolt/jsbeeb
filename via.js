@@ -535,6 +535,25 @@ define(['utils'], function (utils) {
 
         self.keyboardEnabled = true;
 
+        function clearKeys() {
+            for (var i = 0; i < self.keys.length; ++i) {
+                for (var j = 0; j < self.keys[i].length; ++j) {
+                    self.keys[i][j] = false;
+                }
+            }
+            self.updateKeys();
+        }
+
+        self.disableKeyboard = function() {
+            self.keyboardEnabled = false;
+            clearKeys();
+        };
+
+        self.enableKeyboard = function() {
+            self.keyboardEnabled = true;
+            clearKeys();
+        };
+
         self.set = function (key, val) {
             if (!self.keyboardEnabled) {
                 return;

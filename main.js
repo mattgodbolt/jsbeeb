@@ -290,6 +290,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 processor.sysvia.keyToggleRaw(lastChar);
             }
 
+            if (keysToSend.length === 0) {
+                // Finished
+                processor.sysvia.enableKeyboard();
+                return;
+            }
+
             var ch = keysToSend[0];
             var debounce = lastChar === ch;
             lastChar = ch;
@@ -299,30 +305,24 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 return;
             }
 
-            if (lastChar) {
-                var time = 70;
-                if (typeof lastChar === "number") {
-                    time = lastChar;
-                    lastChar = undefined;
-                } else {
-                    processor.sysvia.keyToggleRaw(lastChar);
-                }
-
-                // remove first character
-                keysToSend.shift();
-
-                setTimeout(sendNextChar, time);
-
+            var time = 70;
+            if (typeof lastChar === "number") {
+                time = lastChar;
+                lastChar = undefined;
             } else {
-                // clean up, just in case
-                processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-                processor.sysvia.keyboardEnabled = true;
+                processor.sysvia.keyToggleRaw(lastChar);
             }
+
+            // remove first character
+            keysToSend.shift();
+
+            setTimeout(sendNextChar, time);
         }
 
         function sendRawKeyboardToBBC() {
             keysToSend = Array.prototype.slice.call(arguments, 0);
-
+            lastChar = undefined;
+            processor.sysvia.disableKeyboard();
             sendNextChar();
         }
 
@@ -332,15 +332,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             console.log("Autobooting disc");
             utils.noteEvent('init', 'autoboot', image);
 
-            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-            processor.sysvia.keyboardEnabled = false;
-            setTimeout(function () {
-                sendRawKeyboardToBBC(
-                    // Shift on power-on -> run !Boot from the disc
-                    BBC.SHIFT,
-                    1000 // pause in ms
-                );
-            }, 0);
+            sendRawKeyboardToBBC(0,
+                // Shift on power-on -> run !Boot from the disc
+                BBC.SHIFT,
+                1000 // pause in ms
+            );
         }
 
         function autoChainTape() {
@@ -349,31 +345,26 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             console.log("Auto Chaining Tape");
             utils.noteEvent('init', 'autochain');
 
-            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-            processor.sysvia.keyboardEnabled = false;
-
-            setTimeout(function () {
-                sendRawKeyboardToBBC(
-                    // *TAPE
-                    // CH.""
-                    BBC.SHIFT,
-                    BBC.COLON_STAR,
-                    BBC.SHIFT,
-                    BBC.T,
-                    BBC.A,
-                    BBC.P,
-                    BBC.E,
-                    BBC.RETURN,
-                    BBC.C,
-                    BBC.H,
-                    BBC.PERIOD,
-                    BBC.SHIFT,
-                    BBC.K2,
-                    BBC.K2,
-                    BBC.SHIFT,
-                    BBC.RETURN
-                );
-            }, 1000);
+            sendRawKeyboardToBBC(1000,
+                // *TAPE
+                // CH.""
+                BBC.SHIFT,
+                BBC.COLON_STAR,
+                BBC.SHIFT,
+                BBC.T,
+                BBC.A,
+                BBC.P,
+                BBC.E,
+                BBC.RETURN,
+                BBC.C,
+                BBC.H,
+                BBC.PERIOD,
+                BBC.SHIFT,
+                BBC.K2,
+                BBC.K2,
+                BBC.SHIFT,
+                BBC.RETURN
+            );
         }
 
         function autoRunTape() {
@@ -383,28 +374,23 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             console.log("Auto Running Tape");
             utils.noteEvent('init', 'autorun');
 
-            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-            processor.sysvia.keyboardEnabled = false;
-
-            setTimeout(function () {
-                sendRawKeyboardToBBC(
-                    // *TAPE
-                    // */
-                    BBC.SHIFT,
-                    BBC.COLON_STAR,
-                    BBC.SHIFT,
-                    BBC.T,
-                    BBC.A,
-                    BBC.P,
-                    BBC.E,
-                    BBC.RETURN,
-                    BBC.SHIFT,
-                    BBC.COLON_STAR,
-                    BBC.SHIFT,
-                    BBC.SLASH,
-                    BBC.RETURN
-                );
-            }, 1000);
+            sendRawKeyboardToBBC(1000,
+                // *TAPE
+                // */
+                BBC.SHIFT,
+                BBC.COLON_STAR,
+                BBC.SHIFT,
+                BBC.T,
+                BBC.A,
+                BBC.P,
+                BBC.E,
+                BBC.RETURN,
+                BBC.SHIFT,
+                BBC.COLON_STAR,
+                BBC.SHIFT,
+                BBC.SLASH,
+                BBC.RETURN
+            );
         }
 
         if (parsedQuery.dbEnabled) {
@@ -786,13 +772,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var wasPreviouslyRunning = false;
         $(document).on(
             {
-                "hide.visibility": function() {
+                "hide.visibility": function () {
                     wasPreviouslyRunning = running;
                     if (running && !processor.acia.motorOn) {
                         stop(false);
                     }
                 },
-                "show.visibility": function() {
+                "show.visibility": function () {
                     if (wasPreviouslyRunning) {
                         go();
                     }
