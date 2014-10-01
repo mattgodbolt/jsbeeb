@@ -497,6 +497,7 @@ define(['utils'], function (utils) {
         0x79: "ADC abs,y",
         0x7A: "NOP",
         0x7B: "RRA abs,y",
+        0x7C: "NOP abs,x",
         0x7D: "ADC abs,x",
         0x7E: "ROR abs,x",
         0x7F: "RRA abs,x",
