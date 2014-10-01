@@ -1,7 +1,7 @@
 require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap'],
     function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models) {
         "use strict";
-        
+
         var processor;
         var video;
         var soundChip;
@@ -14,16 +14,16 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var tapeSth;
         var dropbox;
         var running;
-       
+
         var availableImages;
         var discImage;
-		if (typeof starCat === 'function') {
-			availableImages = starCat();
-			
-			if (availableImages && availableImages[0]) {
-				discImage = availableImages[0].file;
-			}
-		}
+        if (typeof starCat === 'function') {
+            availableImages = starCat();
+
+            if (availableImages && availableImages[0]) {
+                discImage = availableImages[0].file;
+            }
+        }
         var queryString = document.location.search;
         var secondDiscImage = null;
         var parsedQuery = {};
@@ -132,16 +132,14 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             // Enter from Keypad Enter
             // Chrome has evt.keyLocation
             if (evt.keyLocation == 3) {
-
                 switch (ret) {
-                
-                case utils.keyCodes.ENTER:
-                    console.log("numpad enter");
-                    return utils.keyCodes.NUMPADENTER;  
-                    
-                case utils.keyCodes.DELETE:
-                    console.log("numpad dot");
-                    return utils.keyCodes.NUMPAD_DECIMAL_POINT;                    
+                    case utils.keyCodes.ENTER:
+                        console.log("numpad enter");
+                        return utils.keyCodes.NUMPADENTER;
+
+                    case utils.keyCodes.DELETE:
+                        console.log("numpad dot");
+                        return utils.keyCodes.NUMPAD_DECIMAL_POINT;
                 }
             }
 
@@ -150,7 +148,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         function keyPress(evt) {
             if (running || !dbgr.enabled()) return;
-            if (keyCode(evt) === utils.keyCodes.NUMPAD7) {
+            if (keyCode(evt) === 103 /* lower case g */) {
                 dbgr.hide();
                 go();
                 return;
@@ -162,7 +160,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         function keyDown(evt) {
             if (!running) return;
             var code = keyCode(evt);
-            if (code === utils.keyCodes.INSERT) {  
+            if (code === utils.keyCodes.HOME) {
                 utils.noteEvent('keyboard', 'press', 'home');
                 stop(true);
             } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
@@ -283,162 +281,130 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         $('#sth-filter').on("change keyup", function () {
             setSthFilter($('#sth-filter').val());
         });
-        
+
         var keysToSend;
         var lastChar;
 
         function sendNextChar() {
-
             if (lastChar && lastChar != utils.BBC.SHIFT) {
-                console.log("KEYUP", lastChar);
                 processor.sysvia.keyToggleRaw(lastChar);
             }
-            
+
             var ch = keysToSend[0];
-            
-            var time = 100;
-            if (lastChar == ch) {
-                //
-                time = 1000;
-            }
-            
+            var debounce = lastChar === ch;
             lastChar = ch;
+            if (debounce) {
+                lastChar = undefined;
+                setTimeout(sendNextChar, 20);
+                return;
+            }
+
             if (lastChar) {
-                
+                var time = 70;
                 if (typeof lastChar === "number") {
                     time = lastChar;
                     lastChar = undefined;
                 } else {
-                    console.log("KEYDOWN", lastChar);
                     processor.sysvia.keyToggleRaw(lastChar);
                 }
 
                 // remove first character
                 keysToSend.shift();
-                
-                console.log("setting timeout");
-                setTimeout(function () {
-                    sendNextChar();
-                }, 150);
+
+                setTimeout(sendNextChar, time);
 
             } else {
                 // clean up, just in case
-                console.log("KEYUP", "SHIFT");
                 processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-
                 processor.sysvia.keyboardEnabled = true;
-
             }
-
         }
 
-        function sendRawKeyboardToBBC(array) {
-
-            keysToSend = array;
+        function sendRawKeyboardToBBC() {
+            keysToSend = Array.prototype.slice.call(arguments, 0);
 
             sendNextChar();
         }
 
-
         function autoboot(image) {
-            
             var BBC = utils.BBC;
-            
+
             console.log("Autobooting disc");
             utils.noteEvent('init', 'autoboot', image);
-            //processor.sysvia.keyDown(16);
-            //setTimeout(function () {
-            //    // defer...so we only start counting once we've run a bit...
-            //    setTimeout(function () {
-            //        processor.sysvia.keyUp(16);
-            //    }, 5000);
-            //}, 0);
-            
-            console.log("KEYUP", "SHIFT");
-            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-            
-            processor.sysvia.keyboardEnabled = false;
 
-            
+            processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
+            processor.sysvia.keyboardEnabled = false;
             setTimeout(function () {
                 sendRawKeyboardToBBC(
-                        [
-                         // Shift on power-on -> run !Boot from the disc
-                         BBC.SHIFT,
-                         1000, // pause in ms
-                         ]);
+                    // Shift on power-on -> run !Boot from the disc
+                    BBC.SHIFT,
+                    1000 // pause in ms
+                );
             }, 0);
         }
 
         function autoChainTape() {
-            
             var BBC = utils.BBC;
-            
+
             console.log("Auto Chaining Tape");
             utils.noteEvent('init', 'autochain');
 
-            console.log("KEYUP", "SHIFT");
             processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-
             processor.sysvia.keyboardEnabled = false;
 
             setTimeout(function () {
                 sendRawKeyboardToBBC(
-                        [
-                         // *TAPE
-                         // CH.""
-                         BBC.SHIFT,
-                         BBC.COLON_STAR,
-                         BBC.SHIFT,
-                         BBC.T,
-                         BBC.A,
-                         BBC.P,
-                         BBC.E,
-                         BBC.RETURN,
-                         BBC.C,
-                         BBC.H,
-                         BBC.PERIOD,
-                         BBC.SHIFT,
-                         BBC.K2,
-                         200, // pause in ms between same keys
-                         BBC.K2,
-                         BBC.SHIFT,
-                         BBC.RETURN
-                         ]);
+                    // *TAPE
+                    // CH.""
+                    BBC.SHIFT,
+                    BBC.COLON_STAR,
+                    BBC.SHIFT,
+                    BBC.T,
+                    BBC.A,
+                    BBC.P,
+                    BBC.E,
+                    BBC.RETURN,
+                    BBC.C,
+                    BBC.H,
+                    BBC.PERIOD,
+                    BBC.SHIFT,
+                    BBC.K2,
+                    200, // pause in ms between same keys
+                    BBC.K2,
+                    BBC.SHIFT,
+                    BBC.RETURN
+                );
             }, 1000);
         }
 
         function autoRunTape() {
-            
+
             var BBC = utils.BBC;
-            
+
             console.log("Auto Running Tape");
             utils.noteEvent('init', 'autorun');
 
-            console.log("KEYUP", "SHIFT");
             processor.sysvia.keyUpRaw(utils.BBC.SHIFT);
-
             processor.sysvia.keyboardEnabled = false;
 
             setTimeout(function () {
                 sendRawKeyboardToBBC(
-                        [
-                         // *TAPE
-                         // */
-                         BBC.SHIFT,
-                         BBC.COLON_STAR,
-                         BBC.SHIFT,
-                         BBC.T,
-                         BBC.A,
-                         BBC.P,
-                         BBC.E,
-                         BBC.RETURN,
-                         BBC.SHIFT,
-                         BBC.COLON_STAR,
-                         BBC.SHIFT,
-                         BBC.SLASH,
-                         BBC.RETURN
-                         ]);
+                    // *TAPE
+                    // */
+                    BBC.SHIFT,
+                    BBC.COLON_STAR,
+                    BBC.SHIFT,
+                    BBC.T,
+                    BBC.A,
+                    BBC.P,
+                    BBC.E,
+                    BBC.RETURN,
+                    BBC.SHIFT,
+                    BBC.COLON_STAR,
+                    BBC.SHIFT,
+                    BBC.SLASH,
+                    BBC.RETURN
+                );
             }, 1000);
         }
 
@@ -451,15 +417,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         }
 
         switch (needsAutoboot) {
-        case "boot":
-            autoboot(discImage);
-            break;
-        case "chain":
-            autoChainTape();
-            break;
-        case "run":
-            autoRunTape();
-            break;
+            case "boot":
+                autoboot(discImage);
+                break;
+            case "chain":
+                autoChainTape();
+                break;
+            case "run":
+                autoRunTape();
+                break;
         }
 
         function updateUrl() {
@@ -653,24 +619,18 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         $("#dropbox form").on("submit", dbCreate);
 
-        $('#model-menu a').on("click", function(e) {
+        $('#model-menu a').on("click", function (e) {
             parsedQuery.model = $(e.target).attr("data-target");
-			
-			console.log(parsedQuery.model);
-			
-			if (parsedQuery.model === "soft-reset") {
-				console.log("soft reset");
-				processor.reset(false);
-				return;
-			}
-			
-            if (parsedQuery.model != model || parsedQuery.model === "hard-reset") {
-			
-			if (parsedQuery.model !== "hard-reset") {
-				updateUrl();
-			}
-			
-			areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function(){
+
+            console.log(parsedQuery.model);
+
+            if (parsedQuery.model === "soft-reset") {
+                processor.reset(false);
+            } else if (parsedQuery.model === "hard-reset") {
+                processor.reset(true);
+            } else {
+                updateUrl();
+                areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function () {
                     window.location.reload();
                 });
             }
@@ -678,21 +638,19 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         $("#bbc-model").text(model.name);
 
 
-
-        $('#tape-menu a').on("click", function(e) {
+        $('#tape-menu a').on("click", function (e) {
             var type = $(e.target).attr("data-id");
-        
+
             if (type == "rewind") {
                 console.log("Rewinding tape to the start");
-                
+
                 processor.acia.rewindTape();
-                
+
             } else {
                 console.log("unknown type", type);
             }
-        
-        });
 
+        });
 
         function Light(name) {
             var dom = $("#" + name);
@@ -727,7 +685,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             ays.find(".context").text(message);
             ays.find(".ays-yes").text(yesText);
             ays.find(".ays-no").text(noText);
-            ays.find(".ays-yes").one("click", function() {
+            ays.find(".ays-yes").one("click", function () {
                 ays.modal("hide");
                 yesFunc();
             });

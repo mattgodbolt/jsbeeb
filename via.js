@@ -1,100 +1,100 @@
 define(['utils'], function (utils) {
     const ORB = 0x0,
-    ORA = 0x1,
-    DDRB = 0x2,
-    DDRA = 0x3,
-    T1CL = 0x4,
-    T1CH = 0x5,
-    T1LL = 0x6,
-    T1LH = 0x7,
-    T2CL = 0x8,
-    T2CH = 0x9,
-    SR = 0xa,
-    ACR = 0xb,
-    PCR = 0xc,
-    IFR = 0xd,
-    IER = 0xe,
-    ORAnh = 0xf,
-    TIMER1INT = 0x40,
-    TIMER2INT = 0x20,
-    INT_CA1 = 0x02,
-    INT_CA2 = 0x01,
-    INT_CB1 = 0x10,
-    INT_CB2 = 0x08;
+        ORA = 0x1,
+        DDRB = 0x2,
+        DDRA = 0x3,
+        T1CL = 0x4,
+        T1CH = 0x5,
+        T1LL = 0x6,
+        T1LH = 0x7,
+        T2CL = 0x8,
+        T2CH = 0x9,
+        SR = 0xa,
+        ACR = 0xb,
+        PCR = 0xc,
+        IFR = 0xd,
+        IER = 0xe,
+        ORAnh = 0xf,
+        TIMER1INT = 0x40,
+        TIMER2INT = 0x20,
+        INT_CA1 = 0x02,
+        INT_CA2 = 0x01,
+        INT_CB1 = 0x10,
+        INT_CB2 = 0x08;
 
     function via(cpu, irq) {
         "use strict";
         var self = {
-                ora: 0, orb: 0, ira: 0, irb: 0,
-                ddra: 0, ddrb: 0,
-                sr: 0,
-                t1l: 0, t2l: 0,
-                t1c: 0, t2c: 0,
-                acr: 0, pcr: 0, ifr: 0, ier: 0,
-                t1hit: false, t2hit: false,
-                porta: 0, portb: 0,
-                ca1: 0, ca2: 0,
-                justhit: 0,
+            ora: 0, orb: 0, ira: 0, irb: 0,
+            ddra: 0, ddrb: 0,
+            sr: 0,
+            t1l: 0, t2l: 0,
+            t1c: 0, t2c: 0,
+            acr: 0, pcr: 0, ifr: 0, ier: 0,
+            t1hit: false, t2hit: false,
+            porta: 0, portb: 0,
+            ca1: 0, ca2: 0,
+            justhit: 0,
 
-                reset: function () {
-                    self.ora = self.orb = 0xff;
-                    self.ddra = self.ddrb = 0xff;
-                    self.ifr = self.ier = 0x00;
-                    self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
-                    self.t1hit = self.t2hit = true;
-                    self.acr = self.pcr = 0;
-                },
+            reset: function () {
+                self.ora = self.orb = 0xff;
+                self.ddra = self.ddrb = 0xff;
+                self.ifr = self.ier = 0x00;
+                self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
+                self.t1hit = self.t2hit = true;
+                self.acr = self.pcr = 0;
+            },
 
-                polltime: function (cycles) {
-                    cycles |= 0;
-                    self.justhit = 0;
-                    var newT1c = self.t1c - cycles;
-                    if (newT1c < -2 && self.t1c > -3) {
-                        if (!self.t1hit) {
-                            self.ifr |= TIMER1INT;
+            polltime: function (cycles) {
+                cycles |= 0;
+                self.justhit = 0;
+                var newT1c = self.t1c - cycles;
+                if (newT1c < -2 && self.t1c > -3) {
+                    if (!self.t1hit) {
+                        self.ifr |= TIMER1INT;
+                        self.updateIFR();
+                        if (newT1c === -3) {
+                            self.justhit |= 1;
+                        }
+                        // b-em comment is "Output to PB7"
+                        self.orb ^= (self.acr & 0x80);
+                    }
+                    if (!(this.acr & 0x40)) self.t1hit = true;
+                }
+                while (newT1c < -3) newT1c += self.t1l + 4;
+                self.t1c = newT1c;
+
+                if (!(self.acr & 0x20)) {
+                    var newT2c = self.t2c - cycles;
+                    if (newT2c < -2) {
+                        if (!self.t2hit) {
+                            self.ifr |= TIMER2INT;
                             self.updateIFR();
-                            if (newT1c === -3) {
-                                self.justhit |= 1;
+                            if (newT2c === -3) {
+                                self.justhit |= 2;
                             }
-                            // b-em comment is "Output to PB7"
-                            self.orb ^= (self.acr & 0x80);
+                            self.t2hit = true;
                         }
-                        if (!(this.acr & 0x40)) self.t1hit = true;
+                        newT2c += 0x20000;
                     }
-                    while (newT1c < -3) newT1c += self.t1l + 4;
-                    self.t1c = newT1c;
+                    self.t2c = newT2c;
+                }
+            },
 
-                    if (!(self.acr & 0x20)) {
-                        var newT2c = self.t2c - cycles;
-                        if (newT2c < -2) {
-                            if (!self.t2hit) {
-                                self.ifr |= TIMER2INT;
-                                self.updateIFR();
-                                if (newT2c === -3) {
-                                    self.justhit |= 2;
-                                }
-                                self.t2hit = true;
-                            }
-                            newT2c += 0x20000;
-                        }
-                        self.t2c = newT2c;
-                    }
-                },
+            updateIFR: function () {
+                if (self.ifr & self.ier & 0x7f) {
+                    self.ifr |= 0x80;
+                    cpu.interrupt |= irq;
+                } else {
+                    self.ifr &= ~0x80;
+                    cpu.interrupt &= ~irq;
+                }
+            },
 
-                updateIFR: function () {
-                    if (self.ifr & self.ier & 0x7f) {
-                        self.ifr |= 0x80;
-                        cpu.interrupt |= irq;
-                    } else {
-                        self.ifr &= ~0x80;
-                        cpu.interrupt &= ~irq;
-                    }
-                },
-
-                write: function (addr, val) {
-                    var mode;
-                    val |= 0;
-                    switch (addr & 0xf) {
+            write: function (addr, val) {
+                var mode;
+                val |= 0;
+                switch (addr & 0xf) {
                     case ORA:
                         self.ifr &= ~INT_CA1;
                         if ((self.pcr & 0x0a) != 0x02) {
@@ -110,7 +110,7 @@ define(['utils'], function (utils) {
                             self.setca2(false);
                             self.setca2(true);
                         }
-                        /* falls through */
+                    /* falls through */
                     case ORAnh:
                         self.ora = val;
                         self.writePortA(((self.ora & self.ddra) | ~self.ddra) & 0xff);
@@ -213,18 +213,18 @@ define(['utils'], function (utils) {
                         self.ifr &= ~(val & 0x7f);
                         self.updateIFR();
                         break;
-                    }
-                },
+                }
+            },
 
-                read: function (addr) {
-                    var temp;
-                    switch (addr & 0xf) {
+            read: function (addr) {
+                var temp;
+                switch (addr & 0xf) {
                     case ORA:
                         self.ifr &= ~INT_CA1;
                         if ((self.pcr & 0xa) != 0x2)
                             self.ifr &= ~INT_CA2;
                         self.updateIFR();
-                        /* falls through */
+                    /* falls through */
                     case ORAnh:
                         temp = self.ora & self.ddra;
                         if (self.acr & 1)
@@ -287,62 +287,62 @@ define(['utils'], function (utils) {
                         return self.ifr;
                     default:
                         throw "Unknown VIA read";
-                    }
-                },
-
-                setca1: function (val) {
-                    var level = !!val;
-                    if (level === self.ca1) return;
-                    var pcrSet = !!(self.pcr & 1);
-                    if (pcrSet === level) {
-                        if (self.acr & 1) self.ira = self.readPortA();
-                        self.ifr |= INT_CA1;
-                        self.updateIFR();
-                        if ((self.pcr & 0xc) == 0x8) { // handshaking
-                            self.setca2(1);
-                        }
-                    }
-                    self.ca1 = level;
-                },
-
-                setca2: function (val) {
-                    var level = !!val;
-                    if (level === self.ca2) return;
-                    if (self.pcr & 8) return; // output
-                    var pcrSet = !!(self.pcr & 4);
-                    if (pcrSet === level) {
-                        self.ifr |= INT_CA2;
-                        self.updateIFR();
-                    }
-                    self.ca2 = level;
-                },
-
-                setcb1: function (val) {
-                    var level = !!val;
-                    if (level === self.cb1) return;
-                    var pcrSet = !!(self.pcr & 0x10);
-                    if (pcrSet === level) {
-                        if (self.acr & 2) self.irb = self.readPortB();
-                        self.ifr |= INT_CB1;
-                        self.updateIFR();
-                        if ((self.pcr & 0xc0) == 0x80) { // handshaking
-                            self.setcb2(1);
-                        }
-                    }
-                    self.cb1 = level;
-                },
-
-                setcb2: function (val) {
-                    var level = !!val;
-                    if (level === self.cb2) return;
-                    if (self.pcr & 0x80) return; // output
-                    var pcrSet = !!(self.pcr & 0x40);
-                    if (pcrSet === level) {
-                        self.ifr |= INT_CB2;
-                        self.updateIFR();
-                    }
-                    self.cb2 = level;
                 }
+            },
+
+            setca1: function (val) {
+                var level = !!val;
+                if (level === self.ca1) return;
+                var pcrSet = !!(self.pcr & 1);
+                if (pcrSet === level) {
+                    if (self.acr & 1) self.ira = self.readPortA();
+                    self.ifr |= INT_CA1;
+                    self.updateIFR();
+                    if ((self.pcr & 0xc) == 0x8) { // handshaking
+                        self.setca2(1);
+                    }
+                }
+                self.ca1 = level;
+            },
+
+            setca2: function (val) {
+                var level = !!val;
+                if (level === self.ca2) return;
+                if (self.pcr & 8) return; // output
+                var pcrSet = !!(self.pcr & 4);
+                if (pcrSet === level) {
+                    self.ifr |= INT_CA2;
+                    self.updateIFR();
+                }
+                self.ca2 = level;
+            },
+
+            setcb1: function (val) {
+                var level = !!val;
+                if (level === self.cb1) return;
+                var pcrSet = !!(self.pcr & 0x10);
+                if (pcrSet === level) {
+                    if (self.acr & 2) self.irb = self.readPortB();
+                    self.ifr |= INT_CB1;
+                    self.updateIFR();
+                    if ((self.pcr & 0xc0) == 0x80) { // handshaking
+                        self.setcb2(1);
+                    }
+                }
+                self.cb1 = level;
+            },
+
+            setcb2: function (val) {
+                var level = !!val;
+                if (level === self.cb2) return;
+                if (self.pcr & 0x80) return; // output
+                var pcrSet = !!(self.pcr & 0x40);
+                if (pcrSet === level) {
+                    self.ifr |= INT_CB2;
+                    self.updateIFR();
+                }
+                self.cb2 = level;
+            }
         };
         return self;
     }
@@ -383,12 +383,11 @@ define(['utils'], function (utils) {
             return "UK";  // Default guess of UK
         }
 
-
         self.keycodeToRowCol = (function () {
             var keys = {};
 
             function map(s, colRow) {
-                if ((!s  && s !== 0) || !colRow) {
+                if ((!s && s !== 0) || !colRow) {
                     console.log("error binding key", s, colRow);
                 }
                 if (typeof(s) == "string")
@@ -405,14 +404,10 @@ define(['utils'], function (utils) {
             var keyCodes = utils.keyCodes;
             var BBC = utils.BBC;
 
-            console.log("isUKlayout", isUKlayout);
-
             if (isUKlayout) {
-
                 map(keyCodes.HASH, BBC.HASH); // UK PC hash key maps to pound underscore
                 map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH); // pipe, backslash is pipe, backslash
                 map(keyCodes.APOSTROPHE, BBC.COLON_STAR); // maps to :*
-
             } else {
                 map(keyCodes.HASH, BBC.COLON_STAR); // maps to :*
                 map(keyCodes.BACKSLASH, BBC.HASH); // pipe, backlash is underscore, pound
@@ -423,9 +418,8 @@ define(['utils'], function (utils) {
             if (isFirefox) {
                 // Mike's UK Windows laptop returns 20 in Chrome and Firefox for Caps Lock
                 // TODO: 225 is definitely strange
-                map(225, BBC.CAPSLOCK); 
-            } 
-
+                map(225, BBC.CAPSLOCK);
+            }
 
             var BBC = utils.BBC;
 
@@ -475,7 +469,6 @@ define(['utils'], function (utils) {
             map(keyCodes.O, BBC.O);
             map(keyCodes.P, BBC.P);
 
-
             map(keyCodes.A, BBC.A);
             map(keyCodes.S, BBC.S);
             map(keyCodes.D, BBC.D);
@@ -495,20 +488,20 @@ define(['utils'], function (utils) {
             map(keyCodes.M, BBC.M);
 
             map(keyCodes.F10, BBC.F0); // F0 (mapped to F10)
-            map(keyCodes.F1, BBC.F1); 
-            map(keyCodes.F2, BBC.F2); 
-            map(keyCodes.F3, BBC.F3); 
-            map(keyCodes.F4, BBC.F4); 
-            map(keyCodes.F5, BBC.F5); 
-            map(keyCodes.F6, BBC.F6); 
-            map(keyCodes.F7, BBC.F7); 
-            map(keyCodes.F8, BBC.F8); 
-            map(keyCodes.F9, BBC.F9); 
+            map(keyCodes.F1, BBC.F1);
+            map(keyCodes.F2, BBC.F2);
+            map(keyCodes.F3, BBC.F3);
+            map(keyCodes.F4, BBC.F4);
+            map(keyCodes.F5, BBC.F5);
+            map(keyCodes.F6, BBC.F6);
+            map(keyCodes.F7, BBC.F7);
+            map(keyCodes.F8, BBC.F8);
+            map(keyCodes.F9, BBC.F9);
 
             map(keyCodes.BACK_QUOTE, BBC.ESCAPE); // top left UK keyboard -> Escape
 
             map(keyCodes.SPACE, BBC.SPACE);
-            
+
             // Master
             map(keyCodes.NUMPAD0, BBC.NUMPAD0);
             map(keyCodes.NUMPAD1, BBC.NUMPAD1);
@@ -522,7 +515,7 @@ define(['utils'], function (utils) {
             map(keyCodes.NUMPAD9, BBC.NUMPAD9);
             // small hack in main.js/keyCode() to make this work (Chrome only)
             map(keyCodes.NUMPAD_DECIMAL_POINT, BBC.NUMPAD_DECIMAL_POINT);
-           
+
             // "natural" mapping
             map(keyCodes.NUMPADPLUS, BBC.NUMPADPLUS);
             map(keyCodes.NUMPADMINUS, BBC.NUMPADMINUS);
@@ -532,23 +525,21 @@ define(['utils'], function (utils) {
             //map(???, BBC.NUMPADHASH);
             // no keycode for NUMPADENTER, small hack in main.js/keyCode() (Chrome only)
             map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
-            
+
             // TODO: "game" mapping
             // eg Master Dunjunz needs # Del 3 , * Enter
             // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
-            
+
             return keys;
         })();
-        
-        self.keyboardEnabled = true;
-        
-        self.set = function (key, val) {
 
+        self.keyboardEnabled = true;
+
+        self.set = function (key, val) {
             if (!self.keyboardEnabled) {
                 return;
             }
 
-            console.log("key code: " + key);
             var colrow = self.keycodeToRowCol[key];
             if (!colrow) {
                 console.log("Unknown keycode: " + key);
