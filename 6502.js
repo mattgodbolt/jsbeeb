@@ -549,7 +549,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.push(this.p.asByte());
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = true;
-                if (model.isNmos) {
+                if (model.nmos) {
                     this.p.d = false;
                     this.takeInt = false;
                 }
@@ -672,7 +672,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                         this.p.i = true;
                         this.polltime(7);
                         this.nmi = false;
-                        if (model.isNmos)
+                        if (model.nmos)
                             this.p.d = false;
                     }
                 }
