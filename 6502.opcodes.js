@@ -351,7 +351,8 @@ define(['utils'], function (utils) {
             case "STZ":
                 return { op: "REG = 0;", write: true };
 
-            // Undocumented opcodes
+            // Undocumented opcodes.
+            // Many of the timings here are plain wrong.
             case "SAX":
                 return { op: "REG = cpu.a & cpu.x;", write: true };
             case "ASR":
@@ -359,8 +360,6 @@ define(['utils'], function (utils) {
                     rotate(false, false)).concat(["cpu.a = REG;"])};
             case "SLO":
                 return { op: rotate(true, false).concat([
-                    // timings are off here, and (ab)uses fact there's going to be an 'addr' variable
-                    "cpu.writemem(addr, REG);",
                     "cpu.a |= REG;",
                     "cpu.setzn(cpu.a);"
                 ]), read: true, write: true };
@@ -377,7 +376,49 @@ define(['utils'], function (utils) {
                 return { op: rotate(true, false).concat(["cpu.a = cpu.setzn(cpu.a & REG);"]),
                     read: true, write: true };
             case "ANC":
-                return { op: ["cpu.a = cpu.setzn(cpu.a & REG); cpu.p.c = cpu.p.n"], read: true };
+                return { op: ["cpu.a = cpu.setzn(cpu.a & REG); cpu.p.c = cpu.p.n;"], read: true };
+            case "ANE":
+                return { op: ["cpu.a = cpu.setzn((cpu.a | 0xee) & REG & cpu.x);"], read: true };
+            case "ARR":
+                return { op: "cpu.arr(REG);", read: true };
+            case "DCP":
+                return {
+                    op: [
+                        "REG = cpu.setzn(REG - 1);",
+                        "cpu.setzn(cpu.a - REG);",
+                        "cpu.p.c = cpu.a >= REG;"
+                    ],
+                    read: true, write: true
+                };
+            case "LAS":
+                return { op: ["cpu.a = cpu.x = cpu.s = cpu.setzn(cpu.s & REG);"], read: true };
+            case "RRA":
+                return { op: rotate(false, false).concat(["cpu.adc(REG);"]), read: true, write: true };
+            case "SBX":
+                return {
+                    op: [
+                        "var temp = cpu.a & cpu.x;",
+                        "cpu.p.c = temp >= REG;",
+                        "cpu.x = cpu.setzn(temp - REG);"
+                    ],
+                    read: true
+                };
+            case "SHA":
+                return {
+                    op: [
+                        "REG = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"
+                    ],
+                    read: true, write: true
+                };
+            case "SHS":
+                return {
+                    op: [
+                        "cpu.s = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"
+                    ],
+                    read: true, write: true
+                };
+            case "WAI":
+                return { op: "cpu.brk();", extra: 1 };
         }
         return null;
     }
@@ -483,7 +524,7 @@ define(['utils'], function (utils) {
         0x68: "PLA",
         0x69: "ADC imm",
         0x6A: "ROR A",
-        0x6B: "ARR",
+        0x6B: "ARR imm",
         0x6C: "JMP (abs)",
         0x6D: "ADC abs",
         0x6E: "ROR abs",
@@ -514,7 +555,7 @@ define(['utils'], function (utils) {
         0x88: "DEY",
         0x89: "NOP imm",
         0x8A: "TXA",
-        0x8B: "ANE",
+        0x8B: "ANE imm",
         0x8C: "STY abs",
         0x8D: "STA abs",
         0x8E: "STX abs",
@@ -1110,6 +1151,6 @@ define(['utils'], function (utils) {
         },
         'cpu65c12': function (cpu) {
             return makeCpuFunctions(cpu, opcodes65c12, true);
-        },
+        }
     };
 });

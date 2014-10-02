@@ -50,7 +50,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.FEslowdown = [true, false, true, true, false, false, true, false];
             this.oldPcArray = new Uint16Array(256);
             this.oldPcIndex = 0;
-            this.getPrevPc = function(index) {
+            this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
             // TODO: semi-bplus-style to get swram for exile hardcoded here
@@ -258,7 +258,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 return addr >> 8;
             };
 
-            this.videoRead = function(addr) {
+            this.videoRead = function (addr) {
                 return this.ramRomOs[addr | self.videoDisplayPage] | 0;
             };
 
@@ -637,6 +637,31 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     adcNonBCD(subend ^ 0xff);
                 } else {
                     sbcBCD(subend);
+                }
+            };
+
+            this.arr = function (arg) {
+                // With thanks to both the b-em source and http://www.ffd2.com/fridge/docs/6502-NMOS.extra.opcodes
+                // for this insane "instruction". I don't have much confidence that I have this
+                // right, as I've not found a game that uses it.
+                this.a &= arg;
+                this.p.v = !!(((this.a >> 7) ^ (this.a >>> 6)) & 0x01);
+                this.a >>>= 1;
+                if (this.p.c) this.a |= 0x80;
+                if (!this.p.d) {
+                    this.setzn(this.a);
+                    this.p.c = !!(this.a & 0x40);
+                } else {
+                    // b-em checks the z and n flags based on the old carry here. I'm not
+                    // sure that's right, so I'm going with "a" instead here.
+                    this.setzn(this.a);
+                    this.p.c = false;
+                    if ((this.a & 0x0f) + (this.a & 0x01) > 5)
+                        this.a = (this.a & 0xf0) + ((this.a & 0x0f) + 6); // Do broken fixup
+                    if ((this.a & 0xf0) + (this.a & 0x10) > 0x50) {
+                        this.a += 0x60;
+                        this.p.c = true;
+                    }
                 }
             };
 
