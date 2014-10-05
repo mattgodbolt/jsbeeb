@@ -3,6 +3,14 @@ define(['jsunzip'], function (jsunzip) {
     var exports = {};
 
     exports.runningInNode = typeof window === 'undefined';
+    
+    exports.isFirefox = function() {
+
+        // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
+        // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
+        return typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
+    };
+
 
     exports.BBC = {
         SEMICOLON_PLUS: [7, 5],
@@ -227,12 +235,9 @@ define(['jsunzip'], function (jsunzip) {
         NUMPADENTER: 255 // hack, jsbeeb only
     };
 
-    // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-    // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-    var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
     var keyCodes = exports.keyCodes;
 
-    if (isFirefox) {
+    if (exports.isFirefox()) {
         keyCodes.SEMICOLON = 59;
         // # key
         keyCodes.HASH = 163;

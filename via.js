@@ -396,9 +396,6 @@ define(['utils'], function (utils) {
                 keys[s] = colRow;
             }
 
-            // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-            // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-            var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
             var isUKlayout = detectKeyboardLayout() == "UK";
 
             var keyCodes = utils.keyCodes;
@@ -415,7 +412,7 @@ define(['utils'], function (utils) {
             }
 
             // hack for Matt's laptop (Firefox bug?)
-            if (isFirefox) {
+            if (utils.isFirefox()) {
                 // Mike's UK Windows laptop returns 20 in Chrome and Firefox for Caps Lock
                 // TODO: 225 is definitely strange
                 map(225, BBC.CAPSLOCK);

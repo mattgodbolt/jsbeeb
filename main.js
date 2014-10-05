@@ -764,7 +764,130 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     dbgr.debug(processor.pc);
                     throw e;
                 }
-                if (running) setTimeout(runner, 0);
+                if (running) {
+                    setTimeout(runner, 0);
+
+                    // init gamepad
+                    // gamepad not necessarily available until a button press
+                    // so need to check gamepads[0] continuously
+                    if (navigator.getGamepads && !self.gamepad0) {
+                        var gamepads = navigator.getGamepads();
+                        self.gamepad0 = gamepads[0];
+
+                        if (self.gamepad0) {
+
+                            console.log("initing gamepad");
+
+                            var BBC = utils.BBC;
+
+                            // 16 buttons
+                            self.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+                            self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
+                                                   BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE, 
+                                                   BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE, 
+                                                   BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
+
+                            // two joysticks (so 4 axes)
+                            self.gamepadAxes = [0, 0, 0, 0];
+
+                            // "snapper" keys
+                            self.gamepadAxisMapping = [[],[],[],[]];
+                            self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
+                            self.gamepadAxisMapping[0][1]  = BBC.X;          // right
+                            self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
+                            self.gamepadAxisMapping[1][1]  = BBC.SLASH;      // down
+                            self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
+                            self.gamepadAxisMapping[2][1]  = BBC.X;          // right
+                            self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
+                            self.gamepadAxisMapping[3][1]  = BBC.SLASH;      // down
+
+                        }
+
+
+                    }
+
+                    // process gamepad buttons
+                    if (self.gamepad0) {
+
+                        // these two lines needed in Chrome to update state, not Firefox
+                        // TODO: what about IE? (can't get Gamepads to work in IE11/IE12. Mike)
+                        if (!utils.isFirefox()) {
+                            var gamepads = navigator.getGamepads();
+                            self.gamepad0 = gamepads[0];
+                        }
+
+                        //console.log(self.gamepad0.axes);
+
+                        for (var i = 0 ; i < 4 ; i++) {
+
+                            var axisRaw = self.gamepad0.axes[i];
+                            var axis;
+
+                            // normalize to -1, 0, 1
+                            if (axisRaw < -0.01) {
+                                axis = -1;
+                            } else if (axisRaw > 0.01) {
+                                axis = 1;
+                            } else {
+                                axis = 0;
+                            }
+
+                            //console.log(i, axisRaw, axis);
+
+                            if (axis !== self.gamepadAxes[i]) {
+
+                                // tricky because transition can be
+                                // -1 to 0
+                                // -1 to 1
+                                // 0 to 1
+                                // 0 to -1
+                                // 1 to 0
+                                // 1 to -1
+                                var oldKey = self.gamepadAxisMapping[i][self.gamepadAxes[i]];
+                                if (oldKey) {
+                                    processor.sysvia.keyUpRaw(oldKey);
+                                }
+
+                                var newKey = self.gamepadAxisMapping[i][axis];
+                                if (newKey) {
+                                    processor.sysvia.keyDownRaw(newKey);
+                                }
+
+                            }
+
+                            // store new state
+                            self.gamepadAxes[i] = axis;
+
+                        }
+
+                        for (var i = 0 ; i < 16 ; i++ ) {
+
+                            if (self.gamepad0.buttons[i]) {
+                                var button = self.gamepad0.buttons[i];
+
+                                if (button.pressed) {
+                                    console.log("gamepad button pressed ", i, self.gamepad0.id);
+                                }
+
+                                if (button.pressed !== self.gamepadButtons[i]) {
+                                    // different to last time
+
+                                    if (button.pressed) {
+                                        processor.sysvia.keyDownRaw(self.gamepadMapping[i]);
+                                    } else {
+                                        processor.sysvia.keyUpRaw(self.gamepadMapping[i]);
+                                    }
+                                }
+
+                                // store new state
+                                self.gamepadButtons[i] = button.pressed;
+
+                            }
+
+                        }
+
+                    }
+                }
             };
             runner();
         }
