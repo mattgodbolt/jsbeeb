@@ -10,6 +10,7 @@
   "main": "./app.js",
   "dependencies": {
       "requirejs": "2.1.x",
+      "nodeunit": "0.9.x",
       "png": "3.0.x"
   },
   "license": "GPLv3"
