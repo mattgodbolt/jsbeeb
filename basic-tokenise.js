@@ -3,10 +3,9 @@ define([], function () {
 
     var BASIC_TOKENS = [
         'AND', 'DIV', 'EOR', 'MOD', 'OR', 'ERROR', 'LINE', 'OFF',
-        'STEP', 'SPC', 'TAB(', 'ELSE', 'THEN', '<line>' // TODO
-        , 'OPENIN', 'PTR',
+        'STEP', 'SPC', 'TAB(', 'ELSE', 'THEN', '<line>', 'OPENIN', 'PTR',
 
-        'PAGE', 'TIME', 'LOMEM', 'HIMEM', 'ABS', 'ACS', 'ADVAL', 'ASC',
+        '=PAGE', '=TIME', '=LOMEM', '=HIMEM', 'ABS', 'ACS', 'ADVAL', 'ASC',
         'ASN', 'ATN', 'BGET', 'COS', 'COUNT', 'DEG', 'ERL', 'ERR',
 
         'EVAL', 'EXP', 'EXT', 'FALSE', 'FN', 'GET', 'INKEY', 'INSTR(',
@@ -19,7 +18,7 @@ define([], function () {
         '<ESCFN>', '<ESCCOM>', '<ESCSTMT>',
         'WHEN', 'OF', 'ENDCASE', 'ELSE', 'ENDIF', 'ENDWHILE', 'PTR',
 
-        'PAGE', 'TIME', 'LOMEM', 'HIMEM', 'SOUND', 'BPUT', 'CALL', 'CHAIN',
+        'PAGE=', 'TIME=', 'LOMEM=', 'HIMEM=', 'SOUND', 'BPUT', 'CALL', 'CHAIN',
         'CLEAR', 'CLOSE', 'CLG', 'CLS', 'DATA', 'DEF', 'DIM', 'DRAW',
 
         'END', 'ENDPROC', 'ENVELOPE', 'FOR', 'GOSUB', 'GOTO', 'GCOL', 'IF',
@@ -44,11 +43,19 @@ define([], function () {
 
     function tokeniseLine(line) {
         var result = "";
+        var atStart = true;
         while (line) {
             var found = null;
             for (var i = 0; i < BASIC_TOKENS.length; ++i) {
                 var candidateToken = BASIC_TOKENS[i];
-                if (candidateToken[0] == '<') continue;
+                if (candidateToken[0] === '<') continue;
+                if (candidateToken[0] === '=') {
+                    if (atStart) continue;
+                    candidateToken = candidateToken.substr(1);
+                } else if (candidateToken[candidateToken.length - 1] === '=') {
+                    if (!atStart) continue;
+                    candidateToken = candidateToken.substr(0, candidateToken.length - 1);
+                }
                 if (line.length >= candidateToken.length &&
                     line.substr(0, candidateToken.length) == candidateToken) {
                     result += String.fromCharCode(i + 0x80);
@@ -57,21 +64,26 @@ define([], function () {
                     break;
                 }
             }
-            if (!found) {
+            if (!found) { // Normal text
                 result += line[0];
+                if (line[0] !== ' ')
+                    atStart = line[0] == ':';
                 line = line.substr(1);
-            } else if (found == "GOTO") {
-                // Skip whitespace
-                while (line && line[0] == ' ') {
-                    result += line[0];
-                    line = line.substr(1);
-                }
-                // Parse out a number if it's there
-                var match = line.match(/^([0-9]+)(.*)$/);
-                if (match) {
-                    var num = parseInt(match[1]);
-                    line = match[2];
-                    result += encodeGoto(num);
+            } else {
+                atStart = false;
+                if (found == "GOTO") {
+                    // Skip whitespace
+                    while (line && line[0] == ' ') {
+                        result += line[0];
+                        line = line.substr(1);
+                    }
+                    // Parse out a number if it's there
+                    var match = line.match(/^([0-9]+)(.*)$/);
+                    if (match) {
+                        var num = parseInt(match[1]);
+                        line = match[2];
+                        result += encodeGoto(num);
+                    }
                 }
             }
         }

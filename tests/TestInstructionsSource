@@ -1,0 +1,27 @@
+REM TestInstructions
+HIMEM = &4000
+FOR N%=0 TO 2 STEP 2:P%=&4400:[OPT N%
+SEI
+LDA #0
+STA testInstr + 1
+.loop
+LDA #0
+TAX
+TAY
+CLC
+.testInstr ADC #0
+.storeAddr STA &4000
+INC testInstr + 1
+INC storeAddr + 1
+BNE loop
+CLI
+RTS
+]NEXT
+CALL &4400
+FOR N%=0 TO 255 STEP 16
+FOR M%=&4000 + N% TO &4000 + N% + 15
+IF ?M%<16:PRINT ;0;
+PRINT ;~?M%;
+NEXT
+PRINT
+NEXT

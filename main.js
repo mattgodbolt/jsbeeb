@@ -1,5 +1,5 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models) {
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'basic-tokenise', 'bootstrap', 'jquery-visibility'],
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models, tokeniser) {
         "use strict";
 
         var processor;
@@ -401,6 +401,26 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             dbgr.setPatch(parsedQuery.patch);
         }
 
+        if (parsedQuery.loadBasic) {
+            var prog = String.fromCharCode.apply(null, utils.loadData(parsedQuery.loadBasic));
+            var tokenised = tokeniser.tokenise(prog);
+            var page = parsedQuery.page ? utils.parseAddr(parsedQuery.page) : 0x1900;
+            // Load the program immediately after the \xff of the "no program" has been
+            // written to PAGE+1
+            processor.debugwrite = function (addr, b) {
+                if (addr === (page + 1) && b == 0xff) {
+                    // Needed as the debug happens before the write takes place.
+                    processor.debugInstruction = function () {
+                        for (var i = 0; i < tokenised.length; ++i) {
+                            processor.writemem(page + i, tokenised.charCodeAt(i));
+                        }
+                        processor.debugInstruction = null;
+                    }
+                    processor.debugwrite = null;
+                }
+            };
+        }
+
         switch (needsAutoboot) {
             case "boot":
                 autoboot(discImage);
@@ -783,23 +803,28 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             // 16 buttons
                             self.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
                             self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
-                                                   BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE, 
-                                                   BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE, 
-                                                   BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
+                                BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+                                BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+                                BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
 
                             // two joysticks (so 4 axes)
                             self.gamepadAxes = [0, 0, 0, 0];
 
                             // "snapper" keys
-                            self.gamepadAxisMapping = [[],[],[],[]];
+                            self.gamepadAxisMapping = [
+                                [],
+                                [],
+                                [],
+                                []
+                            ];
                             self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
-                            self.gamepadAxisMapping[0][1]  = BBC.X;          // right
+                            self.gamepadAxisMapping[0][1] = BBC.X;          // right
                             self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
-                            self.gamepadAxisMapping[1][1]  = BBC.SLASH;      // down
+                            self.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
                             self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
-                            self.gamepadAxisMapping[2][1]  = BBC.X;          // right
+                            self.gamepadAxisMapping[2][1] = BBC.X;          // right
                             self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
-                            self.gamepadAxisMapping[3][1]  = BBC.SLASH;      // down
+                            self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
 
                         }
 
@@ -818,7 +843,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                         //console.log(self.gamepad0.axes);
 
-                        for (var i = 0 ; i < 4 ; i++) {
+                        for (var i = 0; i < 4; i++) {
 
                             var axisRaw = self.gamepad0.axes[i];
                             var axis;
@@ -860,7 +885,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                         }
 
-                        for (var i = 0 ; i < 16 ; i++ ) {
+                        for (var i = 0; i < 16; i++) {
 
                             if (self.gamepad0.buttons[i]) {
                                 var button = self.gamepad0.buttons[i];
