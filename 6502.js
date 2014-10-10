@@ -587,10 +587,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.setzn(self.a);
             }
 
+            // For flags and stuff see URLs like:
+            // http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f86911eaeaea&steps=16
             function adcBCD(addend) { // non 65c12 version. NMOS version will need work here
                 var ah = 0;
                 var tempb = (self.a + addend + (self.p.c ? 1 : 0)) & 0xff;
-                if (!tempb) self.p.z = true;
+                self.p.z = !tempb;
                 var al = (self.a & 0xf) + (addend & 0xf) + (self.p.c ? 1 : 0);
                 if (al > 9) {
                     al -= 10;
@@ -598,7 +600,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     ah = 1;
                 }
                 ah += (self.a >>> 4) + (addend >>> 4);
-                if (ah & 8) self.p.n = true;
+                self.p.n = !!(ah & 8);
                 self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
                 self.p.c = false;
                 if (ah > 9) {
@@ -609,26 +611,26 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.a = ((al & 0xf) | (ah << 4)) & 0xff;
             }
 
+            // With reference to c64doc: http://vice-emu.sourceforge.net/plain/64doc.txt
+            // and http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f8e988eaeaea&steps=18
             function sbcBCD(subend) { // non 65c12 version. NMOS version will need work here
                 // TODO: NMOS version. Only NMOS does the flag nonsense, and takes another cycle
-                var hc6 = 0;
                 var carry = self.p.c ? 0 : 1;
-                self.p.z = self.p.n = false;
-                if (((self.a - subend) - carry) !== 0) self.p.z = true;
                 var al = (self.a & 0xf) - (subend & 0xf) - carry;
+                var ah = (self.a >>> 4) - (subend >>> 4);
                 if (al & 0x10) {
                     al = (al - 6) & 0xf;
-                    hc6 = 1;
+                    ah--;
                 }
-                var ah = (self.a >>> 4) - (subend >>> 4);
-                if (hc6) ah--;
-                if ((self.a - (subend + carry)) & 0x80) self.p.n = true;
-                self.p.v = !!((((self.a - (subend + carry)) ^ subend) & 0x80) && ((self.a ^ subend) & 0x80));
-                self.p.c = true;
                 if (ah & 0x10) {
-                    self.p.c = false;
                     ah = (ah - 6) & 0xf;
                 }
+
+                var result = self.a - subend - carry;
+                self.p.n = !!(result & 0x80);
+                self.p.z = !(result & 0xff);
+                self.p.v = !!((self.a ^ result) & (subend ^ self.a) & 0x80);
+                self.p.c = !(result & 0x100);
                 self.a = al | (ah << 4);
             }
 

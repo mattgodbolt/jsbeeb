@@ -49,7 +49,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
             }
             processor.writemem(0x0002, 0x00);
             processor.writemem(0xa002, 0x00);
-            processor.writemem(0xa003, 0x00);
+            processor.writemem(0xa003, 0x80); // Docs say put zero here, but this works better.
             processor.writemem(0x01fe, 0xff);
             processor.writemem(0x01ff, 0x7f);
             processor.s = 0xfd;
@@ -102,12 +102,17 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
                     var filename = "";
                     for (var i = 0; i < filenameLen; ++i)
                         filename += petToAscii(processor.readmem(filenameAddr + i));
+                    if (filename == "trap17") {
+                        console.log("All tests complete");
+                        process.exit(0);
+                    }
+
                     setup(filename);
                     processor.pc--; // Account for the instruction fetch
                     break;
                 case 0x8000:
                 case 0xa474: // Fail
-                    console.log(utils.hexword(processor.getPrevPc(1)));
+                    if (curLine.length) console.log(curLine);
                     throw "Test failed";
 
                 default:
@@ -116,7 +121,11 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
             return false;
         };
 
-        setup(" start");
+        if (process.argv.length === 3) {
+            setup(process.argv[2]);
+        } else {
+            setup(" start");
+        }
 
         for (;;)
             processor.execute(100000);
