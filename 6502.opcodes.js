@@ -417,6 +417,14 @@ define(['utils'], function (utils) {
                     ],
                     read: true, write: true
                 };
+            case "ISB":
+                return {
+                    op: [
+                        "REG = (REG + 1) & 0xff;",
+                        "cpu.sbc(REG);"
+                    ],
+                    read: true, write: true
+                };
             case "WAI":
                 return { op: "cpu.brk();", extra: 1 };
         }
