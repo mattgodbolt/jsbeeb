@@ -359,7 +359,7 @@ define(['utils'], function (utils) {
                 return { op: ["REG &= cpu.a;"].concat(
                     rotate(false, false)).concat(["cpu.a = REG;"])};
             case "SLO":
-                return { op: rotate(true, false).concat([
+                return { op: rotate(true, true).concat([
                     "cpu.a |= REG;",
                     "cpu.setzn(cpu.a);"
                 ]), read: true, write: true };
@@ -531,7 +531,7 @@ define(['utils'], function (utils) {
         0x6F: "RRA abs",
         0x70: "BVS branch",
         0x71: "ADC (),y",
-        0x73: "RRA (,y)",
+        0x73: "RRA (),y",
         0x74: "NOP zp,x",
         0x75: "ADC zp,x",
         0x76: "ROR zp,x",
@@ -578,7 +578,7 @@ define(['utils'], function (utils) {
         0xA0: "LDY imm",
         0xA1: "LDA (,x)",
         0xA2: "LDX imm",
-        0xA3: "LAX (,y)",
+        0xA3: "LAX (,x)",
         0xA4: "LDY zp",
         0xA5: "LDA zp",
         0xA6: "LDX zp",
@@ -956,9 +956,8 @@ define(['utils'], function (utils) {
                     return ig.render();
 
                 case "(,x)":
-                case "(,y)":
                     ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
-                    ig.append("var zpAddr = (cpu.getb() + cpu." + arg[2] + ") & 0xff;");
+                    ig.append("var zpAddr = (cpu.getb() + cpu.x) & 0xff;");
                     ig.append("var lo, hi;");
                     ig.zpReadOp("zpAddr", "lo");
                     ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
