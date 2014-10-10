@@ -290,7 +290,7 @@ define(['jsunzip'], function (jsunzip) {
     exports.signExtend = signExtend;
 
     exports.noteEvent = function noteEvent(category, type, label) {
-        if (window.location.origin == "http://bbc.godbolt.org") {
+        if (!exports.runningInNode && window.location.origin == "http://bbc.godbolt.org") {
             // Only note events on the public site
             ga('send', 'event', category, type, label);
         }
