@@ -6,6 +6,7 @@ define(['fdc'], function (fdc) {
         this.nmos = nmos;
         this.isMaster = isMaster;
         this.Fdc = fdc;
+        this.isTest = false;
     }
 
     var allModels = [
@@ -27,8 +28,12 @@ define(['fdc'], function (fdc) {
         return null;
     }
 
+    var cpuTestModel = new Model("TEST", ["TEST"], [], false, false, fdc.I8271);
+    cpuTestModel.isTest = true;
+
     return {
         allModels: allModels,
-        findModel: findModel
+        findModel: findModel,
+        CPU_TEST: cpuTestModel
     };
 });

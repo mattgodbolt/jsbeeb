@@ -461,14 +461,22 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 var i;
                 if (hard) {
                     for (i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
-                    for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
-                    for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
-                    for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-                    for (i = 48; i < 128; ++i) this.memLook[256 + i] = 32768;
-                    for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
-                    for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
+                    if (!model.isTest) {
+                        for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
+                        for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
+                        for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
+                        for (i = 48; i < 128; ++i) this.memLook[256 + i] = 32768;
+                        for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
+                        for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
-                    for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                        for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                    } else {
+                        // Test sets everything as RAM.
+                        for (i = 0; i < 256; ++i) {
+                            this.memStat[i] = this.memStat[256 + i] = 1;
+                            this.memLook[i] = this.memLook[256 + i] = 0;
+                        }
+                    }
                     this.videoDisplayPage = 0;
                     this.disassembler = new opcodes.Disassemble(this);
                     this.sysvia = via.SysVia(this, soundChip, cmos, model.isMaster);
@@ -708,7 +716,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.halted = true;
             };
 
-            this.loadOs.apply(this, model.os);
+            if (model.os.length)
+                this.loadOs.apply(this, model.os);
             this.reset(true);
 
             dbgr.setCpu(this);
