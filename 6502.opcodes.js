@@ -879,6 +879,7 @@ define(['utils'], function (utils) {
                     return [op.op];  // TODO: special cased here, would be nice to pull out of cpu
 
                 case "zp":
+                case "zpx":  // Seems to be enough to keep tests happy, but needs investigation.
                 case "zp,x":
                 case "zp,y":
                     if (arg == "zp") {
@@ -1033,9 +1034,6 @@ define(['utils'], function (utils) {
                     ig.append(op.op);
                     if (op.write) ig.writeOp("addr", "REG");
                     return ig.render();
-
-                case "zpx":
-                    return null;
 
                 default:
                     throw "Unknown arg type " + arg;
