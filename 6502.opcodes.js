@@ -353,16 +353,20 @@ define(['utils'], function (utils) {
 
             // Undocumented opcodes.
             // Many of the timings here are plain wrong.
-            case "SAX":
+            // first 3 used by Zalaga, http://stardot.org.uk/forums/viewtopic.php?f=2&t=3584&p=30514
+
+            case "SAX": // stores (A AND X)
                 return { op: "REG = cpu.a & cpu.x;", write: true };
-            case "ASR":
+            case "ASR": // aka ALR equivalent to AND #&AA:LSR A
                 return { op: ["REG &= cpu.a;"].concat(
-                    rotate(false, false)).concat(["cpu.a = REG;"])};
-            case "SLO":
-                return { op: rotate(true, true).concat([
+                    rotate(false, true)).concat(["cpu.a = REG;"])};
+            case "SLO": // equivalent to ASL zp:ORA zp
+                return { op: rotate(true, false).concat([
                     "cpu.a |= REG;",
                     "cpu.setzn(cpu.a);"
                 ]), read: true, write: true };
+
+            
             case "SHX":
                 return { op: "REG = cpu.x & ((addr>>8)+1);" };
             case "SHY":
