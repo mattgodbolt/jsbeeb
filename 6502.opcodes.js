@@ -361,12 +361,10 @@ define(['utils'], function (utils) {
                 return { op: ["REG &= cpu.a;"].concat(
                     rotate(false, true)).concat(["cpu.a = REG;"])};
             case "SLO": // equivalent to ASL zp:ORA zp
-                return { op: rotate(true, false).concat([
+                return { op: rotate(true, true).concat([
                     "cpu.a |= REG;",
                     "cpu.setzn(cpu.a);"
                 ]), read: true, write: true };
-
-            
             case "SHX":
                 return { op: "REG = cpu.x & ((addr>>8)+1);" };
             case "SHY":
