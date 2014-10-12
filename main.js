@@ -28,6 +28,33 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
+        
+        var BBC = utils.BBC;
+
+        self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
+                               BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+                               BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+                               BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
+
+        // default: "snapper" keys
+        self.gamepadAxisMapping = [
+                                   [],
+                                   [],
+                                   [],
+                                   []
+                                   ];
+        
+        self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
+        self.gamepadAxisMapping[0][1] = BBC.X;          // right
+        self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
+        self.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
+        self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
+        self.gamepadAxisMapping[2][1] = BBC.X;          // right
+        self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
+        self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
+
+
+
         if (queryString) {
             queryString = queryString.substring(1);
             if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
@@ -38,23 +65,49 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 var val = null;
                 if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
                 parsedQuery[key] = val;
+
                 switch (key) {
-                    case "autoboot":
-                        needsAutoboot = "boot";
-                        break;
-                    case "autochain":
-                        needsAutoboot = "chain";
-                        break;
-                    case "autorun":
-                        needsAutoboot = "run";
-                        break;
-                    case "disc":
-                    case "disc1":
-                        discImage = val;
-                        break;
-                    case "disc2":
-                        secondDiscImage = val;
-                        break;
+                case "LEFT":
+                    self.gamepadMapping[3] = BBC[val];
+                    self.gamepadAxisMapping[0][-1] = BBC[val];
+                    self.gamepadAxisMapping[2][-1] = BBC[val];
+                    break;
+                case "RIGHT":
+                    self.gamepadMapping[1] = BBC[val];
+                    self.gamepadAxisMapping[0][1] = BBC[val];
+                    self.gamepadAxisMapping[2][1] = BBC[val];
+                    break;
+                case "UP":
+                    self.gamepadMapping[0] = BBC[val];
+                    self.gamepadAxisMapping[1][-1] = BBC[val];
+                    self.gamepadAxisMapping[3][-1] = BBC[val];
+                    break;
+                case "DOWN":
+                    self.gamepadMapping[2] = BBC[val];
+                    self.gamepadAxisMapping[1][1] = BBC[val];
+                    self.gamepadAxisMapping[3][1] = BBC[val];
+                    break;
+                case "FIRE":
+                    for (var i = 0 ; i < 16 ; i++) {
+                        self.gamepadMapping[i] = BBC[val];
+                    }
+                    break;
+                case "autoboot":
+                    needsAutoboot = "boot";
+                    break;
+                case "autochain":
+                    needsAutoboot = "chain";
+                    break;
+                case "autorun":
+                    needsAutoboot = "run";
+                    break;
+                case "disc":
+                case "disc1":
+                    discImage = val;
+                    break;
+                case "disc2":
+                    secondDiscImage = val;
+                    break;
                 }
             });
         }
@@ -802,29 +855,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                             // 16 buttons
                             self.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
-                            self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
-                                BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-                                BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-                                BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
 
                             // two joysticks (so 4 axes)
                             self.gamepadAxes = [0, 0, 0, 0];
 
-                            // "snapper" keys
-                            self.gamepadAxisMapping = [
-                                [],
-                                [],
-                                [],
-                                []
-                            ];
-                            self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
-                            self.gamepadAxisMapping[0][1] = BBC.X;          // right
-                            self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
-                            self.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
-                            self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
-                            self.gamepadAxisMapping[2][1] = BBC.X;          // right
-                            self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
-                            self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
 
                         }
 
