@@ -369,8 +369,12 @@ define(['utils'], function (utils) {
                 return { op: "REG = (cpu.x & ((addr >>> 8)+1)) & 0xff;", write: true };
             case "SHY":
                 return { op: "REG = (cpu.y & ((addr >>> 8)+1)) & 0xff;", write: true };
-            case "LAX": // NB usese the c64 value for '0xee' here. I don't know what would happen on a beeb.
-                return { op: ["cpu.a = cpu.x = cpu.setzn((cpu.a|0xee) & REG);"], read: true };
+            case "LAX": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
+                return {
+                    op: [
+                        "var magic = (opcode === 0xab) ? 0xee : 0xff;",
+                        "cpu.a = cpu.x = cpu.setzn((cpu.a|magic) & REG);"
+                    ], read: true };
             case "SRE":
                 return { op: rotate(false, true).concat(["cpu.a = cpu.setzn(cpu.a ^ REG);"]),
                     read: true, write: true };

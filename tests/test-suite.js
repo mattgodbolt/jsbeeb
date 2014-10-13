@@ -21,8 +21,6 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
         } };
 
         var processor = new Cpu6502(models.CPU_TEST, dbgr, video, soundChip);
-        processor.writemem(0xfffe, 0x48);
-        processor.writemem(0xffff, 0xff);
         var irqRoutine = [
             0x48,
             0x8A,
@@ -36,38 +34,44 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
             0x6C, 0x16, 0x03,
             0x6C, 0x14, 0x03
         ];
-        for (var i = 0; i < irqRoutine.length; ++i) {
-            processor.writemem(0xff48 + i, irqRoutine[i]);
-        }
 
         function setup(filename) {
+            var i;
+            for (i = 0x0000; i < 0xffff; ++i)
+                processor.writemem(i, 0x00);
             var data = utils.loadData("tests/suite/bin/" + filename);
-            var addr = data[0] + (data[1] << 8)
+            var addr = data[0] + (data[1] << 8);
             console.log(">> Loading test '" + filename + "' at " + utils.hexword(addr));
-            for (var i = 2; i < data.length; ++i) {
+            for (i = 2; i < data.length; ++i)
                 processor.writemem(addr + i - 2, data[i]);
-            }
+            for (var i = 0; i < irqRoutine.length; ++i)
+                processor.writemem(0xff48 + i, irqRoutine[i]);
+
             processor.writemem(0x0002, 0x00);
             processor.writemem(0xa002, 0x00);
             processor.writemem(0xa003, 0x80); // Docs say put zero here, but this works better.
             processor.writemem(0x01fe, 0xff);
             processor.writemem(0x01ff, 0x7f);
+
+            // Put RTSes in some of the stubbed calls
+            processor.writemem(0xffd2, 0x60);
+            processor.writemem(0x8000, 0x60);
+            processor.writemem(0xa474, 0x60);
+            // NOP the loading routine
+            processor.writemem(0xe16f, 0xea);
+            // scan keyboard is LDA #3: RTS
+            processor.writemem(0xffe4, 0xa9);
+            processor.writemem(0xffe5, 0x03);
+            processor.writemem(0xffe6, 0x60);
+            processor.writemem(0xfffe, 0x48);
+            processor.writemem(0xffff, 0xff);
+
             processor.s = 0xfd;
             processor.p.reset();
             processor.p.i = true;
             processor.pc = 0x0801;
         }
 
-        // Put RTSes in some of the stubbed calls
-        processor.writemem(0xffd2, 0x60);
-        processor.writemem(0x8000, 0x60);
-        processor.writemem(0xa474, 0x60);
-        // NOP the loading routine
-        processor.writemem(0xe16f, 0xea);
-        // scan keyboard is LDA #3: RTS
-        processor.writemem(0xffe4, 0xa9);
-        processor.writemem(0xffe5, 0x03);
-        processor.writemem(0xffe6, 0x60);
         var curLine = "";
 
         function petToAscii(char) {

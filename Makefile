@@ -14,3 +14,4 @@ $(NPM_UP_TO_DATE): package.json
 test: npm
 	$(NODE) tests/test-node-unit.js
 	$(NODE) tests/test-node.js
+	$(NODE) tests/test-suite.js
