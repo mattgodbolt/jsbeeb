@@ -366,11 +366,11 @@ define(['utils'], function (utils) {
                     "cpu.setzn(cpu.a);"
                 ]), read: true, write: true };
             case "SHX":
-                return { op: "REG = cpu.x & ((addr>>8)+1);" };
+                return { op: "REG = (cpu.x & ((addr >>> 8)+1)) & 0xff;", write: true };
             case "SHY":
-                return { op: "REG = cpu.y & ((addr>>8)+1);" };
-            case "LAX":
-                return { op: ["cpu.a = cpu.x = cpu.setzn(REG);"], read: true };
+                return { op: "REG = (cpu.y & ((addr >>> 8)+1)) & 0xff;", write: true };
+            case "LAX": // NB usese the c64 value for '0xee' here. I don't know what would happen on a beeb.
+                return { op: ["cpu.a = cpu.x = cpu.setzn((cpu.a|0xee) & REG);"], read: true };
             case "SRE":
                 return { op: rotate(false, true).concat(["cpu.a = cpu.setzn(cpu.a ^ REG);"]),
                     read: true, write: true };
@@ -410,14 +410,15 @@ define(['utils'], function (utils) {
                     op: [
                         "REG = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"
                     ],
-                    read: true, write: true
+                    write: true
                 };
             case "SHS":
                 return {
                     op: [
-                        "cpu.s = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"
+                        "cpu.s = cpu.a & cpu.x;",
+                        "REG = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"
                     ],
-                    read: true, write: true
+                    write: true
                 };
             case "ISB":
                 return {
