@@ -651,27 +651,33 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             };
 
             this.arr = function (arg) {
-                // With thanks to both the b-em source and http://www.ffd2.com/fridge/docs/6502-NMOS.extra.opcodes
-                // for this insane "instruction". I don't have much confidence that I have this
-                // right, as I've not found a game that uses it.
-                this.a &= arg;
-                this.p.v = !!(((this.a >> 7) ^ (this.a >>> 6)) & 0x01);
-                this.a >>>= 1;
-                if (this.p.c) this.a |= 0x80;
-                if (!this.p.d) {
+                // Insane instruction. I started with b-em source, but ended up using:
+                // http://www.6502.org/users/andre/petindex/local/64doc.txt as reference,
+                // tidying up as needed and fixing a couple of typos.
+                if (this.p.d) {
+                    var temp = this.a & arg;
+
+                    var ah = temp >>> 4;
+                    var al = temp & 0x0f;
+
+                    this.p.n = this.p.c;
+                    this.a = (temp >>> 1) | (this.p.c ? 0x80 : 0x00);
+                    this.p.z = !this.a;
+                    this.p.v = (temp ^ this.a) & 0x40;
+
+                    if ((al + (al & 1)) > 5)
+                        this.a = (this.a & 0xf0) | ((this.a + 6) & 0xf);
+
+                    this.p.c = (ah + (ah & 1)) > 5;
+                    if (this.p.c)
+                        this.a = (this.a + 0x60) & 0xff;
+                } else {
+                    this.a = this.a & arg;
+                    this.p.v = !!(((this.a >> 7) ^ (this.a >>> 6)) & 0x01);
+                    this.a >>>= 1;
+                    if (this.p.c) this.a |= 0x80;
                     this.setzn(this.a);
                     this.p.c = !!(this.a & 0x40);
-                } else {
-                    // b-em checks the z and n flags based on the old carry here. I'm not
-                    // sure that's right, so I'm going with "a" instead here.
-                    this.setzn(this.a);
-                    this.p.c = false;
-                    if ((this.a & 0x0f) + (this.a & 0x01) > 5)
-                        this.a = (this.a & 0xf0) + ((this.a & 0x0f) + 6); // Do broken fixup
-                    if ((this.a & 0xf0) + (this.a & 0x10) > 0x50) {
-                        this.a += 0x60;
-                        this.p.c = true;
-                    }
                 }
             };
 
