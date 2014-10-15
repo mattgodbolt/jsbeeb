@@ -182,7 +182,7 @@ define(['utils'], function (utils) {
         };
     }
 
-    function getOp(op) {
+    function getOp(op, arg) {
         switch (op) {
             case "NOP":
                 return { op: "" };
@@ -237,6 +237,11 @@ define(['utils'], function (utils) {
             case "SBC":
                 return { op: "cpu.sbc(REG);", read: true };
             case "BIT":
+                if (arg == "imm") {
+                    // According to: http://forum.6502.org/viewtopic.php?f=2&t=2241&p=27243#p27239
+                    // the v and n flags are unaffected by BIT #xx
+                    return { op: "cpu.p.z = !(cpu.a & REG);", read: true };
+                }
                 return {
                     op: [
                         "cpu.p.z = !(cpu.a & REG);",
@@ -694,7 +699,6 @@ define(['utils'], function (utils) {
         0x08: "PHP",
         0x09: "ORA imm",
         0x0A: "ASL A",
-        0x0B: "ANC imm",
         0x0C: "TSB abs",
         0x0D: "ORA abs",
         0x0E: "ASL abs",
@@ -724,6 +728,7 @@ define(['utils'], function (utils) {
         0x30: "BMI branch",
         0x31: "AND (),y",
         0x32: "AND ()",
+        0x34: "BIT zp,x",
         0x35: "AND zp,x",
         0x36: "ROL zp,x",
         0x38: "SEC",
@@ -873,7 +878,7 @@ define(['utils'], function (utils) {
             var split = opcodeString.split(' ');
             var opcode = split[0];
             var arg = split[1];
-            var op = getOp(opcode);
+            var op = getOp(opcode, arg);
             if (!op) return null;
 
             var ig = new InstructionGen();
@@ -1138,6 +1143,30 @@ define(['utils'], function (utils) {
         }
 
         function invalidOpcode(cpu, opcode) {
+            if (is65C12) {
+                // All undefined opcodes are NOPs on 65c12 (of varying lengths)
+                switch (opcode) {
+                    case 0x02:
+                    case 0x22:
+                    case 0x42:
+                    case 0x62:
+                    case 0x82:
+                    case 0xc2:
+                    case 0xe2:
+                    case 0x44:
+                    case 0x54:
+                    case 0xd4:
+                    case 0xf4:
+                        cpu.getb();
+                        break;
+                    case 0x5c:
+                    case 0xdc:
+                    case 0xfc:
+                        cpu.getw();
+                        break;
+                }
+                return;
+            }
             cpu.pc--;  // Account for the fact we've already incremented pc.
             console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(cpu.pc));
             console.log(cpu.disassembler.disassemble(cpu.pc)[0]);
