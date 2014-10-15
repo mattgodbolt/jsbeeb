@@ -28,12 +28,15 @@ define(['fdc'], function (fdc) {
         return null;
     }
 
-    var cpuTestModel = new Model("TEST", ["TEST"], [], false, false, fdc.I8271);
-    cpuTestModel.isTest = true;
+    var cpu6502TestModel = new Model("TEST", ["TEST"], [], false, false, fdc.I8271);
+    cpu6502TestModel.isTest = true;
+    var cpu65c12TestModel = new Model("TEST", ["TEST"], [], true, false, fdc.I8271);
+    cpu65c12TestModel.isTest = true;
 
     return {
         allModels: allModels,
         findModel: findModel,
-        CPU_TEST: cpuTestModel
+        TEST_6502: cpu6502TestModel,
+        TEST_65C12: cpu65c12TestModel
     };
 });

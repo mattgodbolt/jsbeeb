@@ -20,7 +20,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
         var dbgr = { setCpu: function () {
         } };
 
-        var processor = new Cpu6502(models.CPU_TEST, dbgr, video, soundChip);
+        var processor = new Cpu6502(models.TEST_6502, dbgr, video, soundChip);
         var irqRoutine = [
             0x48,
             0x8A,
