@@ -20,4 +20,7 @@ unit-tests: npm
 timing-tests: npm
 	$(NODE) tests/test-node.js
 
+dormann-test: npm
+	$(NODE) tests/test-dormann.js
+
 test: test-suite unit-tests timing-tests
