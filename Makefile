@@ -23,4 +23,4 @@ timing-tests: npm
 dormann-test: npm
 	$(NODE) tests/test-dormann.js
 
-test: test-suite unit-tests timing-tests
+test: test-suite unit-tests timing-tests dormann-test
