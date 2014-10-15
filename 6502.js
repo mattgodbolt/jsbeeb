@@ -9,12 +9,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.c = this.z = this.i = this.d = this.v = this.n = false;
             };
             this.debugString = function () {
-                return (this.c ? "C" : "c") +
-                    (this.z ? "Z" : "z") +
-                    (this.i ? "I" : "i") +
-                    (this.d ? "D" : "d") +
+                return (this.n ? "N" : "n") +
                     (this.v ? "V" : "v") +
-                    (this.n ? "N" : "n");
+                    "xx" +
+                    (this.d ? "D" : "d") +
+                    (this.i ? "I" : "i") +
+                    (this.z ? "Z" : "z") +
+                    (this.c ? "C" : "c");
             };
 
             this.asByte = function () {
@@ -457,7 +458,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             };
 
             this.reset = function (hard) {
-                console.log("Resetting 6502");
                 var i;
                 if (hard) {
                     for (i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
@@ -496,8 +496,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     }};
                     this.sysvia.reset();
                     this.uservia.reset();
-                } else {
-                    console.log("Soft reset");
                 }
                 this.cycles = 0;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
@@ -507,7 +505,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.halted = false;
                 video.reset(this, this.sysvia);
                 if (hard) soundChip.reset();
-                console.log("Starting PC = " + hexword(this.pc));
             };
 
             this.setzn = function (v) {
@@ -589,7 +586,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 
             // For flags and stuff see URLs like:
             // http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f86911eaeaea&steps=16
-            function adcBCD(addend) { // non 65c12 version. NMOS version will need work here
+            function adcBCD(addend) {
                 var ah = 0;
                 var tempb = (self.a + addend + (self.p.c ? 1 : 0)) & 0xff;
                 self.p.z = !tempb;
@@ -613,8 +610,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 
             // With reference to c64doc: http://vice-emu.sourceforge.net/plain/64doc.txt
             // and http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f8e988eaeaea&steps=18
-            function sbcBCD(subend) { // non 65c12 version. NMOS version will need work here
-                // TODO: NMOS version. Only NMOS does the flag nonsense, and takes another cycle
+            function sbcBCD(subend) {
                 var carry = self.p.c ? 0 : 1;
                 var al = (self.a & 0xf) - (subend & 0xf) - carry;
                 var ah = (self.a >>> 4) - (subend >>> 4);
@@ -634,21 +630,74 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.a = al | (ah << 4);
             }
 
-            this.adc = function (addend) {
-                if (!this.p.d) {
-                    adcNonBCD(addend);
-                } else {
-                    adcBCD(addend);
+            function adcBCDnmos(addend) {
+                self.polltime(1); // One more cycle, apparently
+                var carry = self.p.c ? 1 : 0;
+                var al = (self.a & 0xf) + (addend & 0xf) + carry;
+                var ah = (self.a >>> 4) + (addend >>> 4);
+                if (al > 9) {
+                    al = (al - 10) & 0xf;
+                    ah++;
                 }
-            };
+                self.p.c = false;
+                if (ah > 9) {
+                    ah = (ah - 10) & 0xf;
+                    self.p.c = true;
+                }
+                self.a = self.setzn(al | (ah << 4));
+            }
 
-            this.sbc = function (subend) {
-                if (!this.p.d) {
-                    adcNonBCD(subend ^ 0xff);
-                } else {
-                    sbcBCD(subend);
+            function sbcBCDnmos(subend) {
+                self.polltime(1); // One more cycle, apparently
+                var carry = self.p.c ? 0 : 1;
+                var al = (self.a & 0xf) - (subend & 0xf) - carry;
+                var ah = (self.a >>> 4) - (subend >>> 4);
+                if (al & 0x10) {
+                    al = (al - 6) & 0xf;
+                    ah--;
                 }
-            };
+                self.p.c = true;
+                if (ah & 0x10) {
+                    ah = (ah - 6) & 0xf;
+                    self.p.c = false;
+                }
+
+                self.a = self.setzn(al | (ah << 4));
+            }
+
+            if (!model.nmos) {
+                this.adc = function (addend) {
+                    if (!this.p.d) {
+                        adcNonBCD(addend);
+                    } else {
+                        adcBCD(addend);
+                    }
+                };
+
+                this.sbc = function (subend) {
+                    if (!this.p.d) {
+                        adcNonBCD(subend ^ 0xff);
+                    } else {
+                        sbcBCD(subend);
+                    }
+                };
+            } else {
+                this.adc = function (addend) {
+                    if (!this.p.d) {
+                        adcNonBCD(addend);
+                    } else {
+                        adcBCDnmos(addend);
+                    }
+                };
+
+                this.sbc = function (subend) {
+                    if (!this.p.d) {
+                        adcNonBCD(subend ^ 0xff);
+                    } else {
+                        sbcBCDnmos(subend);
+                    }
+                };
+            }
 
             this.arr = function (arg) {
                 // Insane instruction. I started with b-em source, but ended up using:
