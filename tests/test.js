@@ -10,6 +10,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
         var log, beginTest, endTest;
 
         var tests = [
+            { test: "Test BCD", func: testBCD },
             { test: "Test timings", func: testTimings },
             { test: "Alien8 protection", func: function (whenDone) {
                 testKevinEdwards("ALIEN8", whenDone);
@@ -40,7 +41,8 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
             endTest = endTest_;
             video = new Video(frameBuffer, paint);
             soundChip = new SoundChip(10000);
-            dbgr = { setCpu: function () {} };
+            dbgr = { setCpu: function () {
+            } };
 
             nextTest();
         }
@@ -67,9 +69,10 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
             log("Running until keyboard input requested");
             var prev = processor.debugInstruction;
             processor.debugInstruction = function (addr) {
-                return addr === 0xe581;
+                if (addr === 0xe581) return true;
+                return prev ? prev.apply(prev, arguments) : false;
             };
-            runFor(10 * 1000 * 1000, function () {
+            runFor(250 * 1000 * 1000, function () {
                 processor.debugInstruction = prev;
                 runFor(10 * 1000, whenDone);
             });
@@ -112,16 +115,19 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
                 });
             }
 
-            function typeChar(c, whenDone) {
+            function typeChar(whenDone) {
                 var ch = text[i].toUpperCase();
                 var shift = false;
                 if (ch === '"') {
-                    ch = "2";
+                    ch = 50;
+                    shift = true;
+                } else if (ch == '*') {
+                    ch = utils.keyCodes.APOSTROPHE;
                     shift = true;
                 } else if (ch == '.') {
-                    ch = "\xbe";
-                }
-                ch = ch.charCodeAt(0);
+                    ch = utils.keyCodes.PERIOD;
+                } else
+                    ch = ch.charCodeAt(0);
                 if (shift) {
                     processor.sysvia.keyDown(16);
                     runFor(cycles, function () {
@@ -141,7 +147,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
                 if (i === text.length) {
                     atTheEnd();
                 } else {
-                    typeChar(text[i], function () {
+                    typeChar(function () {
                         i = i + 1;
                         typeNext();
                     });
@@ -211,6 +217,27 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
                             expectEq(expected[i * 3 + 0], irqAddr, "IRQ address wrong at " + i);
                             expectEq(expected[i * 3 + 1], a, "A differed at " + i);
                             expectEq(expected[i * 3 + 2], b, "B differed at " + i);
+                        }
+                        whenDone();
+                    });
+                });
+            });
+        }
+
+        function testBCD(whenDone) {
+            processor.fdc.loadDiscData(0, fdc.ssdLoad("/discs/bcdtest.dsd"));
+            runUntilInput(function () {
+                type('*BCDTEST', function () {
+                    var output = "";
+                    processor.debugInstruction = function (addr) {
+                        if (addr === 0xc4c0) {
+                            output += String.fromCharCode(processor.a);
+                        }
+                    };
+                    runUntilInput(function () {
+                        if (output.indexOf("PASSED") < 0) {
+                            log("Failed: ", output);
+                            failures++;
                         }
                         whenDone();
                     });
