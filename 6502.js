@@ -229,7 +229,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     case 0xfe94:
                     case 0xfe98:
                     case 0xfe9c:
-                        // TODO wd1770 support
                         if (!model.isMaster)
                             return this.fdc.read(addr);
                         break;
@@ -367,7 +366,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     case 0xfe94:
                     case 0xfe98:
                     case 0xfe9c:
-                        // TODO wd1770 support
                         if (!model.isMaster)
                             return this.fdc.write(addr, b);
                         break;
