@@ -277,6 +277,30 @@ define(['jsunzip'], function (jsunzip) {
 
     exports.hexword = hexword;
 
+    function hd(reader, start, end) {
+        var res = [];
+        var str = "";
+        var j = 0;
+        for (var i = start; i < end; ++i) {
+            str += " ";
+            str += hexbyte(reader(i));
+            if (++j == 8) str += " ";
+            if (j == 16) {
+                res.push(str);
+                str = "";
+                j = 0;
+            }
+        }
+        if (str) res.push(str);
+        var joined = "";
+        for (i = 0; i < res.length; ++i) {
+            joined += hexword(start + i * 0x10) + " :" + res[i] + "\n";
+        }
+        return joined;
+    }
+
+    exports.hd = hd;
+
     var signExtendTable = (function () {
         var table = [];
         for (var i = 0; i < 256; ++i) table[i] = i >= 128 ? i - 256 : i;

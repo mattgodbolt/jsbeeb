@@ -748,22 +748,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             ays.modal("show");
         }
 
-        function hd(obj, start, end) {
-            var str = "";
-            var j = 0;
-            for (var i = start; i < end; ++i) {
-                if (str) str += " ";
-                str += hexbyte(obj[i]);
-                if (++j == 8) str += " ";
-                if (j == 16) {
-                    console.log(str);
-                    str = "";
-                    j = 0;
-                }
-            }
-            if (str) console.log(str);
-        }
-
         function benchmarkCpu(numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
             var oldFS = frameSkip;

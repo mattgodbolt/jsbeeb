@@ -25,7 +25,12 @@ requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
             for (var i = 0; i < data.length; ++i)
                 processor.writemem(i, data[i]);
             processor.pc = 0x400;
-            processor.debugInstruction = function (addr) {
+            var log = false;
+            processor.debugInstruction = function (addr, opcode) {
+                if (log) {
+                    console.log(utils.hexword(addr) + " : " + utils.hexbyte(processor.a) + " : " + processor.disassembler.disassemble(processor.pc)[0]);
+                }
+
                 if (addr !== 0x400 && addr === processor.getPrevPc(1)) {
                     // We hit a loop to ourself.
                     return true;
@@ -38,13 +43,35 @@ requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
             return processor.pc;
         }
 
-        var addr = runTest(new Cpu6502(models.TEST_6502, dbgr, video, soundChip), '6502_functional_test', '6502');
-        // TODO: really should parse this from the lst file.
-        // But for now update this if you ever update the submodule checkout.
-        if (addr !== 0x3399) {
-            console.log("Failed at " + utils.hexword(addr));
+        function fail(processor) {
+            console.log("Failed at " + utils.hexword(processor.pc));
+            console.log("Previous PCs:");
+            for (var i = 1; i < 16; ++i) {
+                console.log("  " + utils.hexword(processor.getPrevPc(i)));
+            }
+            console.log("A: " + utils.hexbyte(processor.a));
+            console.log("X: " + utils.hexbyte(processor.x));
+            console.log("Y: " + utils.hexbyte(processor.y));
+            console.log("S: " + utils.hexbyte(processor.s));
+            console.log("P: " + utils.hexbyte(processor.p.asByte()) + " " + processor.p.debugString());
+            console.log(utils.hd(function (i) {
+                return processor.readmem(i)
+            }, 0x00, 0x40));
             process.exit(1);
         }
+
+        var cpu6502 = new Cpu6502(models.TEST_6502, dbgr, video, soundChip);
+        // TODO: really should parse this from the lst file.
+        // But for now update this if you ever update the submodule checkout.
+        if (runTest(cpu6502, '6502_functional_test', '6502') !== 0x3399)
+            fail(cpu6502);
+
+        var cpu65c12 = new Cpu6502(models.TEST_65C12, dbgr, video, soundChip);
+        // TODO: really should parse this from the lst file.
+        // But for now update this if you ever update the submodule checkout.
+        if (runTest(cpu65c12, '65C12_extended_opcodes_test', '65C12') !== 0x2373)
+            fail(cpu65c12);
+
         console.log("Success!");
     }
 );
