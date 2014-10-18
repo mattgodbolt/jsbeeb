@@ -148,7 +148,7 @@ define(['teletext_data'], function (ttData) {
             }
         }
 
-        var mcolx = 0;
+        var prevCol = 0;
         var holdClear = false;
         var holdOff = false;
 
@@ -199,7 +199,7 @@ define(['teletext_data'], function (ttData) {
                     }
                     break;
                 case 24:
-                    self.col = mcolx = self.bg;
+                    self.col = prevCol = self.bg;
                     break;
                 case 25:
                     if (self.gfx) {
@@ -247,7 +247,7 @@ define(['teletext_data'], function (ttData) {
             self.oldDbl = self.dbl;
             offset += 16;
 
-            mcolx = self.bg;
+            prevCol = self.col;
             if (data === 255) {
                 for (i = 0; i < 16; ++i) {
                     buf[offset + i] = 0xff000000;
@@ -279,7 +279,7 @@ define(['teletext_data'], function (ttData) {
             } else if (!self.dbl && self.secondHalfOfDouble) {
                 palette = self.palette[((self.bg & 7) << 3) | (self.bg & 7)];
             } else {
-                palette = self.palette[((mcolx & 7) << 3) | (self.col & 7)];
+                palette = self.palette[((self.bg & 7) << 3) | (prevCol & 7)];
             }
             var px = self.curChars[rounding];
             // Unrolling seems a good thing here, at least on Chrome.
