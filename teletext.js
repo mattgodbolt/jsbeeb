@@ -275,30 +275,35 @@ define(['teletext_data'], function (ttData) {
 
             var palette;
             if (prevFlash && self.flashOn) {
-                palette = self.palette[0];
-            } else if (!self.dbl && self.secondHalfOfDouble) {
-                palette = self.palette[((self.bg & 7) << 3) | (self.bg & 7)];
+                var flashColour = self.palette[(self.bg & 7) << 3][0];
+                for (i = 0; i < 16; ++i) {
+                    buf[offset++] = flashColour;
+                }
             } else {
-                palette = self.palette[((self.bg & 7) << 3) | (prevCol & 7)];
+                if (!self.dbl && self.secondHalfOfDouble) {
+                    palette = self.palette[((self.bg & 7) << 3) | (self.bg & 7)];
+                } else {
+                    palette = self.palette[((self.bg & 7) << 3) | (prevCol & 7)];
+                }
+                var px = self.curChars[rounding];
+                // Unrolling seems a good thing here, at least on Chrome.
+                buf[offset] = palette[px[t]];
+                buf[offset + 1] = palette[px[t + 1]];
+                buf[offset + 2] = palette[px[t + 2]];
+                buf[offset + 3] = palette[px[t + 3]];
+                buf[offset + 4] = palette[px[t + 4]];
+                buf[offset + 5] = palette[px[t + 5]];
+                buf[offset + 6] = palette[px[t + 6]];
+                buf[offset + 7] = palette[px[t + 7]];
+                buf[offset + 8] = palette[px[t + 8]];
+                buf[offset + 9] = palette[px[t + 9]];
+                buf[offset + 10] = palette[px[t + 10]];
+                buf[offset + 11] = palette[px[t + 11]];
+                buf[offset + 12] = palette[px[t + 12]];
+                buf[offset + 13] = palette[px[t + 13]];
+                buf[offset + 14] = palette[px[t + 14]];
+                buf[offset + 15] = palette[px[t + 15]];
             }
-            var px = self.curChars[rounding];
-            // Unrolling seems a good thing here, at least on Chrome.
-            buf[offset] = palette[px[t]];
-            buf[offset + 1] = palette[px[t + 1]];
-            buf[offset + 2] = palette[px[t + 2]];
-            buf[offset + 3] = palette[px[t + 3]];
-            buf[offset + 4] = palette[px[t + 4]];
-            buf[offset + 5] = palette[px[t + 5]];
-            buf[offset + 6] = palette[px[t + 6]];
-            buf[offset + 7] = palette[px[t + 7]];
-            buf[offset + 8] = palette[px[t + 8]];
-            buf[offset + 9] = palette[px[t + 9]];
-            buf[offset + 10] = palette[px[t + 10]];
-            buf[offset + 11] = palette[px[t + 11]];
-            buf[offset + 12] = palette[px[t + 12]];
-            buf[offset + 13] = palette[px[t + 13]];
-            buf[offset + 14] = palette[px[t + 14]];
-            buf[offset + 15] = palette[px[t + 15]];
 
             if (holdOff) {
                 self.holdChar = false;
