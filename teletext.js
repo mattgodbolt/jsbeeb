@@ -124,13 +124,14 @@ define(['teletext_data'], function (ttData) {
 
             self.col = 7;
             self.bg = 0;
-            self.sep = 0;
+            self.sep = false;
             self.dbl = self.oldDbl = self.secondHalfOfDouble = self.wasDbl = false;
-            self.gfx = 0;
+            self.gfx = false;
             self.flash = self.flashOn = false;
             self.flashTime = 0;
             self.heldChar = false;
             self.holdChar = 0;
+            self.nextChars = [self.chars, self.charsi];
             self.curChars = [self.chars, self.charsi];
             self.heldChars = [self.chars, self.charsi];
             self.delayBuf = [0xff, 0xff];
@@ -152,6 +153,21 @@ define(['teletext_data'], function (ttData) {
         var holdClear = false;
         var holdOff = false;
 
+        function setNextChars() {
+            if (self.gfx) {
+                if (self.sep) {
+                    self.nextChars[0] = self.sepgraph;
+                    self.nextChars[1] = self.sepgraphi;
+                } else {
+                    self.nextChars[0] = self.graph;
+                    self.nextChars[1] = self.graphi;
+                }
+            } else {
+                self.nextChars[0] = self.chars;
+                self.nextChars[1] = self.charsi;
+            }
+        }
+
         function handleControlCode(data) {
             holdClear = false;
             holdOff = false;
@@ -164,10 +180,9 @@ define(['teletext_data'], function (ttData) {
                 case 5:
                 case 6:
                 case 7:
-                    self.gfx = 0;
+                    self.gfx = false;
                     self.col = data;
-                    self.curChars[0] = self.chars;
-                    self.curChars[1] = self.charsi;
+                    setNextChars();
                     holdClear = true;
                     break;
                 case 8:
@@ -190,30 +205,18 @@ define(['teletext_data'], function (ttData) {
                 case 23:
                     self.gfx = true;
                     self.col = data & 7;
-                    if (self.sep) {
-                        self.curChars[0] = self.sepgraph;
-                        self.curChars[1] = self.sepgraphi;
-                    } else {
-                        self.curChars[0] = self.graph;
-                        self.curChars[1] = self.graphi;
-                    }
+                    setNextChars();
                     break;
                 case 24:
                     self.col = prevCol = self.bg;
                     break;
                 case 25:
-                    if (self.gfx) {
-                        self.curChars[0] = self.graph;
-                        self.curChars[1] = self.graphi;
-                    }
                     self.sep = false;
+                    setNextChars();
                     break;
                 case 26:
-                    if (self.gfx) {
-                        self.curChars[0] = self.sepgraph;
-                        self.curChars[1] = self.sepgraphi;
-                    }
                     self.sep = true;
+                    setNextChars();
                     break;
                 case 28:
                     self.bg = 0;
@@ -248,6 +251,9 @@ define(['teletext_data'], function (ttData) {
             offset += 16;
 
             prevCol = self.col;
+            self.curChars[0] = self.nextChars[0];
+            self.curChars[1] = self.nextChars[1];
+
             if (data === 255) {
                 for (i = 0; i < 16; ++i) {
                     buf[offset + i] = 0xff000000;
@@ -257,7 +263,7 @@ define(['teletext_data'], function (ttData) {
             var prevFlash = self.flash;
             if (data < 0x20) {
                 data = handleControlCode(data);
-            } else if (self.curChars[0] !== self.charsi) {
+            } else if (self.gfx) {
                 self.heldChar = data;
                 self.heldChars[0] = self.curChars[0];
                 self.heldChars[1] = self.curChars[1];
@@ -331,8 +337,8 @@ define(['teletext_data'], function (ttData) {
             self.bg = 0;
             self.holdChar = false;
             self.heldChar = 0x20;
-            self.curChars[0] = self.heldChars[0] = self.chars;
-            self.curChars[1] = self.heldChars[1] = self.charsi;
+            self.nextChars[0] = self.heldChars[0] = self.chars;
+            self.nextChars[1] = self.heldChars[1] = self.charsi;
             self.flash = false;
             self.sep = false;
             self.gfx = false;
