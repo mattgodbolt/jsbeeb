@@ -277,15 +277,18 @@ define(['jsunzip'], function (jsunzip) {
 
     exports.hexword = hexword;
 
-    function hd(reader, start, end) {
+    function hd(reader, start, end, opts) {
+        opts = opts || {};
+        var width = opts.width || 16;
+        var gap = opts.gap === undefined ? 8 : opts.gap;
         var res = [];
         var str = "";
         var j = 0;
         for (var i = start; i < end; ++i) {
             str += " ";
             str += hexbyte(reader(i));
-            if (++j == 8) str += " ";
-            if (j == 16) {
+            if (++j === gap) str += " ";
+            if (j === width) {
                 res.push(str);
                 str = "";
                 j = 0;
@@ -294,7 +297,7 @@ define(['jsunzip'], function (jsunzip) {
         if (str) res.push(str);
         var joined = "";
         for (i = 0; i < res.length; ++i) {
-            joined += hexword(start + i * 0x10) + " :" + res[i] + "\n";
+            joined += hexword(start + i * width) + " :" + res[i] + "\n";
         }
         return joined;
     }

@@ -125,7 +125,7 @@ define(['teletext_data'], function (ttData) {
             self.col = 7;
             self.bg = 0;
             self.sep = 0;
-            self.dbl = self.oldDbl = self.nextDbl = self.wasDbl = false;
+            self.dbl = self.oldDbl = self.secondHalfOfDouble = self.wasDbl = false;
             self.gfx = 0;
             self.flash = self.flashOn = false;
             self.flashTime = 0;
@@ -133,6 +133,7 @@ define(['teletext_data'], function (ttData) {
             self.holdChar = 0;
             self.curChars = [self.chars, self.charsi];
             self.heldChars = [self.chars, self.charsi];
+            self.delayBuf = [0xff, 0xff];
 
             function printerize(c, offset) {
                 for (var i = 0; i < 10; ++i) {
@@ -154,6 +155,7 @@ define(['teletext_data'], function (ttData) {
         function handleControlCode(data) {
             holdClear = false;
             holdOff = false;
+
             switch (data) {
                 case 1:
                 case 2:
@@ -239,11 +241,16 @@ define(['teletext_data'], function (ttData) {
 
         function render(buf, offset, scanline, interline, data) {
             var i;
+            // Account for the two-character delay.
+            self.delayBuf.push(data);
+            data = self.delayBuf.shift();
             self.oldDbl = self.dbl;
+            offset += 16;
+
             mcolx = self.bg;
             if (data === 255) {
                 for (i = 0; i < 16; ++i) {
-                    buf[offset + i + 16] = 0xff000000;
+                    buf[offset + i] = 0xff000000;
                 }
                 return;
             }
@@ -259,7 +266,7 @@ define(['teletext_data'], function (ttData) {
             var rounding;
             if (self.oldDbl) {
                 t += (scanline >>> 1) * 16;
-                if (self.nextDbl) t += 5 * 16;
+                if (self.secondHalfOfDouble) t += 5 * 16;
                 rounding = (interline && (scanline & 1)) ? 1 : 0;
             } else {
                 t += scanline * 16;
@@ -269,15 +276,12 @@ define(['teletext_data'], function (ttData) {
             var palette;
             if (prevFlash && self.flashOn) {
                 palette = self.palette[0];
-            } else if (!self.dbl && self.nextDbl) {
+            } else if (!self.dbl && self.secondHalfOfDouble) {
                 palette = self.palette[((self.bg & 7) << 3) | (self.bg & 7)];
             } else {
                 palette = self.palette[((mcolx & 7) << 3) | (self.col & 7)];
             }
             var px = self.curChars[rounding];
-            // There's a 2.6us delay in the output of the RGB of the SAA5050, which is
-            // about one Teletext character's worth.
-            offset += 16;
             // Unrolling seems a good thing here, at least on Chrome.
             buf[offset] = palette[px[t]];
             buf[offset + 1] = palette[px[t + 1]];
@@ -306,10 +310,10 @@ define(['teletext_data'], function (ttData) {
         }
 
         this.verticalCharEnd = function () {
-            if (self.nextDbl)
-                self.nextDbl = false;
+            if (self.secondHalfOfDouble)
+                self.secondHalfOfDouble = false;
             else
-                self.nextDbl = self.wasDbl;
+                self.secondHalfOfDouble = self.wasDbl;
         };
 
         this.vsync = function () {
