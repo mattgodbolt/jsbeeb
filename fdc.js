@@ -635,7 +635,7 @@ define(['utils'], function (utils) {
             case 5: // Step in (with update)
             case 7: // Step out (with update)
                 this.track = this.curTrack;
-            // falls through to
+            /* falls through */
             case 2: // Step
             case 4: // Step in
             case 6: // Step out

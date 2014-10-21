@@ -440,7 +440,7 @@ define(['jsunzip'], function (jsunzip) {
         self.readFloat32 = function (pos) {
             if (pos === undefined) pos = self.advance(4);
             return readFloat32(self.data, pos);
-        }
+        };
 
         self.readInt32 = function (pos) {
             if (pos === undefined) pos = self.advance(4);

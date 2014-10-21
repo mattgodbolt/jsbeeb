@@ -96,7 +96,7 @@ define([], function () {
         var lines = source.split("\n");
         for (var i = 0; i < lines.length; ++i) {
             var line = lines[i];
-            if (line == "") continue;
+            if (line === "") continue;
             var matched = line.match(/ *([0-9]+)?(.*)/);
             if (!matched) throw "Bad input line " + line;
             var lineNum = matched[1] ? parseInt(matched[1]) : lastLine + 10;

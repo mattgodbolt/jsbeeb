@@ -418,8 +418,6 @@ define(['utils'], function (utils) {
                 map(225, BBC.CAPSLOCK);
             }
 
-            var BBC = utils.BBC;
-
             map(keyCodes.EQUALS, BBC.HAT_TILDE); // ^~ on +/=
             map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
             map(keyCodes.MINUS, BBC.MINUS); // '-' / '=' mapped to underscore

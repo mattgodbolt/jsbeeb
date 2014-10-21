@@ -466,7 +466,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             processor.writemem(page + i, tokenised.charCodeAt(i));
                         }
                         processor.debugInstruction = null;
-                    }
+                    };
                     processor.debugwrite = null;
                 }
             };
@@ -853,8 +853,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                         // these two lines needed in Chrome to update state, not Firefox
                         // TODO: what about IE? (can't get Gamepads to work in IE11/IE12. Mike)
                         if (!utils.isFirefox()) {
-                            var gamepads = navigator.getGamepads();
-                            self.gamepad0 = gamepads[0];
+                            self.gamepad0 = navigator.getGamepads()[0];
                         }
 
                         //console.log(self.gamepad0.axes);
@@ -901,8 +900,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                         }
 
-                        for (var i = 0; i < 16; i++) {
-
+                        for (i = 0; i < 16; i++) {
                             if (self.gamepad0.buttons[i]) {
                                 var button = self.gamepad0.buttons[i];
 
@@ -976,13 +974,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         window.video = video;
         window.hd = function (start, end) {
             console.log(utils.hd(function (x) {
-                return processor.readmem(x)
+                return processor.readmem(x);
             }, start, end));
         };
         window.m7dump = function() {
             console.log(utils.hd(function (x) {
                 return processor.readmem(x) & 0x7f;
             }, 0x7c00, 0x7fe8, { width: 40, gap: false }));
-        }
+        };
     }
 );
