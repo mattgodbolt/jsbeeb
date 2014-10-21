@@ -35,7 +35,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
         return function Cpu6502(model, dbgr, video, soundChip, cmos) {
             var self = this;
 
-            var opcodes = model.nmos ? opcodesAll.cpu65c12(this) : opcodesAll.cpu6502(this);
+            var opcodes = model.nmos ? opcodesAll.cpu6502(this) : opcodesAll.cpu65c12(this);
 
             this.model = model;
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
@@ -553,7 +553,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.push(this.p.asByte());
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = true;
-                if (model.nmos) {
+                if (!model.nmos) {
                     this.p.d = false;
                     this.takeInt = false;
                 }
@@ -629,7 +629,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.a = al | (ah << 4);
             }
 
-            function adcBCDnmos(addend) {
+            function adcBCDcmos(addend) {
                 self.polltime(1); // One more cycle, apparently
                 var carry = self.p.c ? 1 : 0;
                 var al = (self.a & 0xf) + (addend & 0xf) + carry;
@@ -647,7 +647,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.a = self.setzn(al | (ah << 4));
             }
 
-            function sbcBCDnmos(subend) {
+            function sbcBCDcmos(subend) {
                 self.polltime(1); // One more cycle, apparently
                 var carry = self.p.c ? 0 : 1;
                 var al = (self.a & 0xf) - (subend & 0xf) - carry;
@@ -661,7 +661,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.a = self.setzn(result);
             }
 
-            if (!model.nmos) {
+            if (model.nmos) {
                 this.adc = function (addend) {
                     if (!this.p.d) {
                         adcNonBCD(addend);
@@ -682,7 +682,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     if (!this.p.d) {
                         adcNonBCD(addend);
                     } else {
-                        adcBCDnmos(addend);
+                        adcBCDcmos(addend);
                     }
                 };
 
@@ -690,7 +690,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     if (!this.p.d) {
                         adcNonBCD(subend ^ 0xff);
                     } else {
-                        sbcBCDnmos(subend);
+                        sbcBCDcmos(subend);
                     }
                 };
             }
@@ -758,7 +758,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                         this.p.i = true;
                         this.polltime(7);
                         this.nmi = false;
-                        if (model.nmos)
+                        if (!model.nmos)
                             this.p.d = false;
                     }
                 }
