@@ -37,6 +37,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 
             var opcodes = model.nmos ? opcodesAll.cpu65c12(this) : opcodesAll.cpu6502(this);
 
+            this.model = model;
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
             this.memStat = new Uint8Array(512);
@@ -637,6 +638,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     al = (al - 10) & 0xf;
                     ah++;
                 }
+                self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
                 self.p.c = false;
                 if (ah > 9) {
                     ah = (ah - 10) & 0xf;
@@ -649,18 +651,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.polltime(1); // One more cycle, apparently
                 var carry = self.p.c ? 0 : 1;
                 var al = (self.a & 0xf) - (subend & 0xf) - carry;
-                var ah = (self.a >>> 4) - (subend >>> 4);
-                if (al & 0x10) {
-                    al = (al - 6) & 0xf;
-                    ah--;
+                var result = self.a - subend - carry;
+                if (result < 0) {
+                    result -= 0x60;
                 }
-                self.p.c = true;
-                if (ah & 0x10) {
-                    ah = (ah - 6) & 0xf;
-                    self.p.c = false;
-                }
+                if (al < 0) result -= 0x06;
 
-                self.a = self.setzn(al | (ah << 4));
+                adcNonBCD(subend ^ 0xff); // For flags
+                self.a = self.setzn(result);
             }
 
             if (!model.nmos) {

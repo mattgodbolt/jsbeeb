@@ -1,5 +1,5 @@
-define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
-    function (Video, SoundChip, Cpu6502, fdc, utils, models) {
+define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
+    function (Video, SoundChip, Cpu6502, fdc, utils, models, Cmos) {
         var processor;
         var video;
         var soundChip;
@@ -7,10 +7,12 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
         var MaxCyclesPerIter = 100 * 1000;
         var hexword = utils.hexword;
         var failures = 0;
-        var log, beginTest, endTest;
+        var anyFailures = false;
+        var log, beginTest, endTest, endAll;
 
         var tests = [
-            { test: "Test BCD", func: testBCD },
+            { test: "Test BCD (65C12)", func: testBCD, model: 'Master' },
+            { test: "Test BCD (6502)", func: testBCD },
             { test: "Test timings", func: testTimings },
             { test: "Alien8 protection", func: function (whenDone) {
                 testKevinEdwards("ALIEN8", whenDone);
@@ -26,19 +28,21 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
 
         function nextTest() {
             if (testIdx === tests.length) {
-                log("All tests complete");
+                log("All tests complete:", anyFailures ? "some errors found" : "no errors");
+                endAll(anyFailures);
             } else {
-                runTest(tests[testIdx].test, tests[testIdx].func, function () {
+                runTest(tests[testIdx].test, tests[testIdx].func, tests[testIdx].model, function () {
                     testIdx++;
                     nextTest();
                 });
             }
         }
 
-        function run(log_, beginTest_, endTest_, frameBuffer, paint) {
+        function run(log_, beginTest_, endTest_, endAll_, frameBuffer, paint) {
             log = log_;
             beginTest = beginTest_;
             endTest = endTest_;
+            endAll = endAll_;
             video = new Video(frameBuffer, paint);
             soundChip = new SoundChip(10000);
             dbgr = { setCpu: function () {
@@ -68,8 +72,9 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
         function runUntilInput(whenDone) {
             log("Running until keyboard input requested");
             var prev = processor.debugInstruction;
+            var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
             processor.debugInstruction = function (addr) {
-                if (addr === 0xe581) return true;
+                if (addr === idleAddr) return true;
                 return prev ? prev.apply(prev, arguments) : false;
             };
             runFor(250 * 1000 * 1000, function () {
@@ -225,15 +230,17 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
         }
 
         function testBCD(whenDone) {
-            processor.fdc.loadDiscData(0, fdc.ssdLoad("/discs/bcdtest.dsd"));
+            processor.fdc.loadDiscData(0, fdc.ssdLoad("/discs/bcdtest.ssd"));
             runUntilInput(function () {
                 type('*BCDTEST', function () {
                     var output = "";
+                    var printAddr = processor.model.isMaster ? 0xce52 : 0xc4c0;
                     processor.debugInstruction = function (addr) {
-                        if (addr === 0xc4c0) {
+                        if (addr === printAddr) {
                             output += String.fromCharCode(processor.a);
                         }
                     };
+
                     runUntilInput(function () {
                         if (output.indexOf("PASSED") < 0) {
                             log("Failed: ", output);
@@ -264,13 +271,15 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models'],
             });
         }
 
-        function runTest(name, func, whenDone) {
+        function runTest(name, func, model, whenDone) {
+            model = model || 'B';
             log("Running", name);
             beginTest(name);
-            processor = new Cpu6502(models.findModel('B'), dbgr, video, soundChip);
+            processor = new Cpu6502(models.findModel(model), dbgr, video, soundChip, new Cmos());
             failures = 0;
             func(function () {
                 log("Finished", name);
+                if (failures) anyFailures = true;
                 endTest(name, failures);
                 whenDone();
             });

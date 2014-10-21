@@ -85,9 +85,21 @@ Please note it can take a while to run the whole test suite.
 Thanks
 ------
 
-Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. Also huge thanks to Richard Talbot-Watkins for his advice and help along the way.
+Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. 
+
+Also huge thanks to Richard Talbot-Watkins for his advice and help along the way in fathoming out the instruction timings, interrupt fun
+and for being such a good pal all these many years!
+
 Thanks to Michael Borcherds for his help; improving the keyboard layouts and handling in Javascript, reporting issues, chasing down
 game bugs and much more.
+
+Thanks to [David Banks](https://github.com/hoglet67) for his help in testing the gnarly BCD flag behaviour on real live BBCs.
+
+Cheers to [Ed Spittles](https://github.com/BigEd) for testing various interrupt timing code on a real BBC.
+
+A lot of the early development used the amazing [Visual 6502](http://visual6502.org/) as reference for intra-instruction timings. Amazing stuff.
+
+Special shout out the users of the [6502 Forums](http://forum.6502.org/)
 
 More information
 ----------------
