@@ -1,17 +1,29 @@
 define(['fdc'], function (fdc) {
-    function Model(name, synonyms, os, nmos, isMaster, fdc) {
+    function Model(name, synonyms, os, nmos, isMaster, swram, fdc) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
         this.nmos = nmos;
         this.isMaster = isMaster;
         this.Fdc = fdc;
+        this.swram = swram;
         this.isTest = false;
     }
 
+    // TODO: semi-bplus-style to get swram for exile hardcoded here
+    var beebSwram = [
+        true, true, false, false,
+        false, false, false, false,
+        false, false, false, false,
+        true, true, false, false];
+    var masterSwram = [ 
+        false, false, false, false,
+        true, true, true, true,
+        false, false, false, false,
+        false, false, false, false];
     var allModels = [
-        new Model("BBC B", ["B"], ["os.rom", "b/BASIC.ROM", "b/DFS-0.9.rom"], true, false, fdc.I8271),
-        new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, fdc.WD1770)
+        new Model("BBC B", ["B"], ["os.rom", "b/BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, fdc.I8271),
+        new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770)
     ];
 
     function findModel(name) {
@@ -28,9 +40,9 @@ define(['fdc'], function (fdc) {
         return null;
     }
 
-    var cpu6502TestModel = new Model("TEST", ["TEST"], [], true, false, fdc.I8271);
+    var cpu6502TestModel = new Model("TEST", ["TEST"], [], true, false, beebSwram, fdc.I8271);
     cpu6502TestModel.isTest = true;
-    var cpu65c12TestModel = new Model("TEST", ["TEST"], [], false, false, fdc.I8271);
+    var cpu65c12TestModel = new Model("TEST", ["TEST"], [], false, false, masterSwram, fdc.I8271);
     cpu65c12TestModel.isTest = true;
 
     return {

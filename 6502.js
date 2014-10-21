@@ -55,12 +55,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
-            // TODO: semi-bplus-style to get swram for exile hardcoded here
-            this.swram = [
-                true, true, false, false,
-                false, false, false, false,
-                false, false, false, false,
-                true, true, false, false];
 
             // BBC Master memory map (within ramRomOs array):
             // 00000 - 08000 -> base 32KB RAM
@@ -74,7 +68,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 var bankOffset = ((b & 15) << 14) + this.romOffset;
                 var offset = bankOffset - 0x8000;
                 for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
-                var swram = this.swram[b & 15] ? 1 : 2;
+                var swram = model.swram[b & 15] ? 1 : 2;
                 for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
                 if (model.isMaster && (b & 0x80)) {
                     // 4Kb RAM (private RAM - ANDY)
