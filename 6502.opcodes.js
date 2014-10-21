@@ -182,7 +182,7 @@ define(['utils'], function (utils) {
         };
     }
 
-    function getOp(op) {
+    function getOp(op, arg) {
         switch (op) {
             case "NOP":
                 return { op: "" };
@@ -237,6 +237,11 @@ define(['utils'], function (utils) {
             case "SBC":
                 return { op: "cpu.sbc(REG);", read: true };
             case "BIT":
+                if (arg == "imm") {
+                    // According to: http://forum.6502.org/viewtopic.php?f=2&t=2241&p=27243#p27239
+                    // the v and n flags are unaffected by BIT #xx
+                    return { op: "cpu.p.z = !(cpu.a & REG);", read: true };
+                }
                 return {
                     op: [
                         "cpu.p.z = !(cpu.a & REG);",
@@ -351,31 +356,89 @@ define(['utils'], function (utils) {
             case "STZ":
                 return { op: "REG = 0;", write: true };
 
-            // Undocumented opcodes
-            case "SAX":
+            // Undocumented opcodes.
+            // Many of the timings here are plain wrong.
+            // first 3 used by Zalaga, http://stardot.org.uk/forums/viewtopic.php?f=2&t=3584&p=30514
+
+            case "SAX": // stores (A AND X)
                 return { op: "REG = cpu.a & cpu.x;", write: true };
-            case "ASR":
+            case "ASR": // aka ALR equivalent to AND #&AA:LSR A
                 return { op: ["REG &= cpu.a;"].concat(
-                    rotate(false, false)).concat(["cpu.a = REG;"])};
-            case "SLO":
-                return { op: rotate(true, false).concat([
-                    // timings are off here, and (ab)uses fact there's going to be an 'addr' variable
-                    "cpu.writemem(addr, REG);",
+                    rotate(false, true)).concat(["cpu.a = REG;"])};
+            case "SLO": // equivalent to ASL zp:ORA zp
+                return { op: rotate(true, true).concat([
                     "cpu.a |= REG;",
                     "cpu.setzn(cpu.a);"
                 ]), read: true, write: true };
             case "SHX":
-                return { op: "REG = cpu.x & ((addr>>8)+1);" };
+                return { op: "REG = (cpu.x & ((addr >>> 8)+1)) & 0xff;", write: true };
             case "SHY":
-                return { op: "REG = cpu.y & ((addr>>8)+1);" };
-            case "LAX":
-                return { op: ["cpu.a = cpu.x = cpu.setzn(REG);"], read: true };
+                return { op: "REG = (cpu.y & ((addr >>> 8)+1)) & 0xff;", write: true };
+            case "LAX": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
+                return {
+                    op: [
+                        "var magic = (opcode === 0xab) ? 0xee : 0xff;",
+                        "cpu.a = cpu.x = cpu.setzn((cpu.a|magic) & REG);"
+                    ], read: true };
             case "SRE":
                 return { op: rotate(false, true).concat(["cpu.a = cpu.setzn(cpu.a ^ REG);"]),
                     read: true, write: true };
             case "RLA":
                 return { op: rotate(true, false).concat(["cpu.a = cpu.setzn(cpu.a & REG);"]),
                     read: true, write: true };
+            case "ANC":
+                return { op: ["cpu.a = cpu.setzn(cpu.a & REG); cpu.p.c = cpu.p.n;"], read: true };
+            case "ANE":
+                return { op: ["cpu.a = cpu.setzn((cpu.a | 0xee) & REG & cpu.x);"], read: true };
+            case "ARR":
+                return { op: "cpu.arr(REG);", read: true };
+            case "DCP":
+                return {
+                    op: [
+                        "REG = cpu.setzn(REG - 1);",
+                        "cpu.setzn(cpu.a - REG);",
+                        "cpu.p.c = cpu.a >= REG;"
+                    ],
+                    read: true, write: true
+                };
+            case "LAS":
+                return { op: ["cpu.a = cpu.x = cpu.s = cpu.setzn(cpu.s & REG);"], read: true };
+            case "RRA":
+                return { op: rotate(false, false).concat(["cpu.adc(REG);"]), read: true, write: true };
+            case "SBX":
+                return {
+                    op: [
+                        "var temp = cpu.a & cpu.x;",
+                        "cpu.p.c = temp >= REG;",
+                        "cpu.x = cpu.setzn(temp - REG);"
+                    ],
+                    read: true
+                };
+            case "SHA":
+                return {
+                    op: [
+                        "REG = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"
+                    ],
+                    write: true
+                };
+            case "SHS":
+                return {
+                    op: [
+                        "cpu.s = cpu.a & cpu.x;",
+                        "REG = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"
+                    ],
+                    write: true
+                };
+            case "ISB":
+                return {
+                    op: [
+                        "REG = (REG + 1) & 0xff;",
+                        "cpu.sbc(REG);"
+                    ],
+                    read: true, write: true
+                };
+            case "WAI":
+                return { op: "cpu.brk();", extra: 1 };
         }
         return null;
     }
@@ -481,14 +544,14 @@ define(['utils'], function (utils) {
         0x68: "PLA",
         0x69: "ADC imm",
         0x6A: "ROR A",
-        0x6B: "ARR",
+        0x6B: "ARR imm",
         0x6C: "JMP (abs)",
         0x6D: "ADC abs",
         0x6E: "ROR abs",
         0x6F: "RRA abs",
         0x70: "BVS branch",
         0x71: "ADC (),y",
-        0x73: "RRA (,y)",
+        0x73: "RRA (),y",
         0x74: "NOP zp,x",
         0x75: "ADC zp,x",
         0x76: "ROR zp,x",
@@ -497,6 +560,7 @@ define(['utils'], function (utils) {
         0x79: "ADC abs,y",
         0x7A: "NOP",
         0x7B: "RRA abs,y",
+        0x7C: "NOP abs,x",
         0x7D: "ADC abs,x",
         0x7E: "ROR abs,x",
         0x7F: "RRA abs,x",
@@ -511,7 +575,7 @@ define(['utils'], function (utils) {
         0x88: "DEY",
         0x89: "NOP imm",
         0x8A: "TXA",
-        0x8B: "ANE",
+        0x8B: "ANE imm",
         0x8C: "STY abs",
         0x8D: "STA abs",
         0x8E: "STX abs",
@@ -534,7 +598,7 @@ define(['utils'], function (utils) {
         0xA0: "LDY imm",
         0xA1: "LDA (,x)",
         0xA2: "LDX imm",
-        0xA3: "LAX (,y)",
+        0xA3: "LAX (,x)",
         0xA4: "LDY zp",
         0xA5: "LDA zp",
         0xA6: "LDX zp",
@@ -635,7 +699,6 @@ define(['utils'], function (utils) {
         0x08: "PHP",
         0x09: "ORA imm",
         0x0A: "ASL A",
-        0x0B: "ANC imm",
         0x0C: "TSB abs",
         0x0D: "ORA abs",
         0x0E: "ASL abs",
@@ -665,6 +728,7 @@ define(['utils'], function (utils) {
         0x30: "BMI branch",
         0x31: "AND (),y",
         0x32: "AND ()",
+        0x34: "BIT zp,x",
         0x35: "AND zp,x",
         0x36: "ROL zp,x",
         0x38: "SEC",
@@ -814,7 +878,7 @@ define(['utils'], function (utils) {
             var split = opcodeString.split(' ');
             var opcode = split[0];
             var arg = split[1];
-            var op = getOp(opcode);
+            var op = getOp(opcode, arg);
             if (!op) return null;
 
             var ig = new InstructionGen();
@@ -835,6 +899,7 @@ define(['utils'], function (utils) {
                     return [op.op];  // TODO: special cased here, would be nice to pull out of cpu
 
                 case "zp":
+                case "zpx":  // Seems to be enough to keep tests happy, but needs investigation.
                 case "zp,x":
                 case "zp,y":
                     if (arg == "zp") {
@@ -911,9 +976,8 @@ define(['utils'], function (utils) {
                     return ig.render();
 
                 case "(,x)":
-                case "(,y)":
                     ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
-                    ig.append("var zpAddr = (cpu.getb() + cpu." + arg[2] + ") & 0xff;");
+                    ig.append("var zpAddr = (cpu.getb() + cpu.x) & 0xff;");
                     ig.append("var lo, hi;");
                     ig.zpReadOp("zpAddr", "lo");
                     ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
@@ -989,9 +1053,6 @@ define(['utils'], function (utils) {
                     ig.append(op.op);
                     if (op.write) ig.writeOp("addr", "REG");
                     return ig.render();
-
-                case "zpx":
-                    return null;
 
                 default:
                     throw "Unknown arg type " + arg;
@@ -1082,6 +1143,30 @@ define(['utils'], function (utils) {
         }
 
         function invalidOpcode(cpu, opcode) {
+            if (is65C12) {
+                // All undefined opcodes are NOPs on 65c12 (of varying lengths)
+                switch (opcode) {
+                    case 0x02:
+                    case 0x22:
+                    case 0x42:
+                    case 0x62:
+                    case 0x82:
+                    case 0xc2:
+                    case 0xe2:
+                    case 0x44:
+                    case 0x54:
+                    case 0xd4:
+                    case 0xf4:
+                        cpu.getb();
+                        break;
+                    case 0x5c:
+                    case 0xdc:
+                    case 0xfc:
+                        cpu.getw();
+                        break;
+                }
+                return;
+            }
             cpu.pc--;  // Account for the fact we've already incremented pc.
             console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(cpu.pc));
             console.log(cpu.disassembler.disassemble(cpu.pc)[0]);
@@ -1107,6 +1192,6 @@ define(['utils'], function (utils) {
         },
         'cpu65c12': function (cpu) {
             return makeCpuFunctions(cpu, opcodes65c12, true);
-        },
+        }
     };
 });

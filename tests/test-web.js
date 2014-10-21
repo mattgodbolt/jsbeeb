@@ -26,7 +26,7 @@ require(['jquery', 'tests/test'], function ($, test) {
     $(function () {
         var canvas = $('#screen');
         var fb32;
-        var paint = function() {
+        var paint = function () {
         };
         if (canvas.length) {
             canvas = $('#screen')[0];
@@ -57,6 +57,7 @@ require(['jquery', 'tests/test'], function ($, test) {
         } else {
             fb32 = new Uint32Array(1280 * 1024);
         }
-        test.run(log, beginTest, endTest, fb32, paint);
+        test.run(log, beginTest, endTest, function () {
+        }, fb32, paint);
     });
 });

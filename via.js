@@ -383,229 +383,6 @@ define(['utils'], function (utils) {
             return "UK";  // Default guess of UK
         }
 
-        /**
-         * Useful references:
-         * http://www.cambiaresearch.com/articles/15/javascript-char-codes-key-codes
-         * https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
-         */
-        self.keyCodes = {
-            UNDEFINED: 0,
-            BACKSPACE: 8,
-            TAB: 9,
-            CLEAR: 12,
-            ENTER: 13,
-            SHIFT: 16,
-            CTRL: 17,
-            ALT: 18,
-            CAPSLOCK: 20,
-            ESCAPE: 27,
-            SPACE: 32,
-            PAGEUP: 33,
-            PAGEDOWN: 34,
-            END: 35,
-            HOME: 36,
-            LEFT: 37,
-            UP: 38,
-            RIGHT: 39,
-            DOWN: 40,
-            PRINTSCREEN: 44,
-            INSERT: 45,
-            DELETE: 46,
-            K0: 48,
-            K1: 49,
-            K2: 50,
-            K3: 51,
-            K4: 52,
-            K5: 53,
-            K6: 54,
-            K7: 55,
-            K8: 56,
-            K9: 57,
-            A: 65,
-            B: 66,
-            C: 67,
-            D: 68,
-            E: 69,
-            F: 70,
-            G: 71,
-            H: 72,
-            I: 73,
-            J: 74,
-            K: 75,
-            L: 76,
-            M: 77,
-            N: 78,
-            O: 79,
-            P: 80,
-            Q: 81,
-            R: 82,
-            S: 83,
-            T: 84,
-            U: 85,
-            V: 86,
-            W: 87,
-            X: 88,
-            Y: 89,
-            Z: 90,
-            /* also META on Mac */
-            WINDOWS: 91,
-            NUMPAD0: 96,
-            NUMPAD1: 97,
-            NUMPAD2: 98,
-            NUMPAD3: 99,
-            NUMPAD4: 100,
-            NUMPAD5: 101,
-            NUMPAD6: 102,
-            NUMPAD7: 103,
-            NUMPAD8: 104,
-            NUMPAD9: 105,
-            NUMPADASTERISK: 106,
-            NUMPADPLUS: 107,
-            /* on numeric keypad in eg Germany*/
-            NUMPAD_DECIMAL_COMMA: 108,
-            NUMPADMINUS: 109,
-            /* on numeric keypad */
-            NUMPAD_DECIMAL_POINT: 110,
-            NUMPADSLASH: 111,
-            F1: 112,
-            F2: 113,
-            F3: 114,
-            F4: 115,
-            F5: 116,
-            F6: 117,
-            F7: 118,
-            F8: 119,
-            F9: 120,
-            F10: 121,
-            F11: 122,
-            F12: 123,
-            NUMLOCK: 144,
-            VOLUMEUP: 174,
-            VOLUMEDOWN: 175,
-            FASTFORWARD: 176,
-            FASTREWIND: 177,
-            PLAYPAUSE: 179,
-            COMMA: 188,
-            PERIOD: 190,
-            SLASH: 191,
-            LEFT_SQUARE_BRACKET: 219,
-            BACKSLASH: 220,
-            RIGHT_SQUARE_BRACKET: 221
-        };
-
-        // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-        // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-        var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
-        var keyCodes = self.keyCodes;
-
-        if (isFirefox) {
-            keyCodes.SEMICOLON = 59;
-//          # key
-            keyCodes.HASH = 163;
-            self.keyCodes.APOSTROPHE = 222;
-//          Firefox doesn't return a keycode for this
-            keyCodes.MUTE = -1;
-            keyCodes.MINUS = 173;
-            keyCodes.EQUALS = 61;
-            keyCodes.BACK_QUOTE = 192;
-
-
-        } else {
-//          Chrome
-//          TODO: check other browsers
-//          https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
-            keyCodes.SEMICOLON = 186;
-//          # key
-            keyCodes.HASH = 222;
-            keyCodes.APOSTROPHE = 192;
-            keyCodes.MUTE = 173;
-            keyCodes.MINUS = 189;
-            keyCodes.EQUALS = 187;
-            keyCodes.BACK_QUOTE = 223;
-        }
-
-        self.BBC = {
-            SEMICOLON_PLUS: [7, 5],
-            MINUS: [7, 1],
-            LEFT_SQUARE_BRACKET: [8, 3],
-            RIGHT_SQUARE_BRACKET: [8, 5],
-            COMMA: [6, 6],
-            PERIOD: [7, 6],
-            SLASH: [8, 6],
-            SHIFTLOCK: [0, 5],
-            TAB: [0, 6],
-            RETURN: [9, 4],
-            DELETE: [9, 5],
-            COPY: [9, 6],
-            SHIFT: [0, 0],
-            ESCAPE: [0, 7],
-            CTRL: [1, 0],
-            CAPSLOCK: [0, 4],
-            LEFT: [9, 1],
-            UP: [9, 3],
-            RIGHT: [9, 7],
-            DOWN: [9, 2],
-            K0: [7, 2],
-            K1: [0, 3],
-            K2: [1, 3],
-            K3: [1, 1],
-            K4: [2, 1],
-            K5: [3, 1],
-            K6: [4, 3],
-            K7: [4, 2],
-            K8: [5, 1],
-            K9: [6, 2],
-
-            Q: [0, 1],
-            W: [1, 2],
-            E: [2, 2],
-            R: [3, 3],
-            T: [3, 2],
-            Y: [4, 4],
-            U: [5, 3],
-            I: [5, 2],
-            O: [6, 3],
-            P: [7, 3],
-
-            A: [1, 4],
-            S: [1, 5],
-            D: [2, 3],
-            F: [3, 4],
-            G: [3, 5],
-            H: [4, 5],
-            J: [5, 4],
-            K: [6, 4],
-            L: [6, 5],
-
-            Z: [1, 6],
-            X: [2, 4],
-            C: [2, 5],
-            V: [3, 6],
-            B: [4, 6],
-            N: [5, 5],
-            M: [5, 6],
-
-            F0: [0, 2],
-            F1: [1, 7],
-            F2: [2, 7],
-            F3: [3, 7],
-            F4: [4, 1],
-            F5: [4, 7],
-            F6: [5, 7],
-            F7: [6, 1],
-            F8: [6, 7],
-            F9: [7, 7],
-
-            SPACE: [2, 6],
-
-            HASH: [8, 2],
-            AT: [7, 4],
-            COLON_STAR: [8, 4],
-            PIPE_BACKSLASH: [8, 7],
-            HAT_TILDE: [8, 1]
-        };
-
-
         self.keycodeToRowCol = (function () {
             var keys = {};
 
@@ -615,24 +392,19 @@ define(['utils'], function (utils) {
                 }
                 if (typeof(s) == "string")
                     s = s.charCodeAt(0);
-                if (keys[s]) console.log("Duplicate binding for key", s, c, r, keys[s]);
+                if (keys[s]) console.log("Duplicate binding for key", s, colRow, keys[s]);
                 keys[s] = colRow;
             }
 
-            // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
-            // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-            var isFirefox = typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
             var isUKlayout = detectKeyboardLayout() == "UK";
 
-            var keyCodes = self.keyCodes;
-            var BBC = self.BBC;
+            var keyCodes = utils.keyCodes;
+            var BBC = utils.BBC;
 
             if (isUKlayout) {
-
                 map(keyCodes.HASH, BBC.HASH); // UK PC hash key maps to pound underscore
                 map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH); // pipe, backslash is pipe, backslash
                 map(keyCodes.APOSTROPHE, BBC.COLON_STAR); // maps to :*
-
             } else {
                 map(keyCodes.HASH, BBC.COLON_STAR); // maps to :*
                 map(keyCodes.BACKSLASH, BBC.HASH); // pipe, backlash is underscore, pound
@@ -640,11 +412,13 @@ define(['utils'], function (utils) {
             }
 
             // hack for Matt's laptop (Firefox bug?)
-            if (isFirefox) {
+            if (utils.isFirefox()) {
                 // Mike's UK Windows laptop returns 20 in Chrome and Firefox for Caps Lock
                 // TODO: 225 is definitely strange
                 map(225, BBC.CAPSLOCK);
             }
+
+            var BBC = utils.BBC;
 
             map(keyCodes.EQUALS, BBC.HAT_TILDE); // ^~ on +/=
             map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
@@ -724,16 +498,71 @@ define(['utils'], function (utils) {
             map(keyCodes.BACK_QUOTE, BBC.ESCAPE); // top left UK keyboard -> Escape
 
             map(keyCodes.SPACE, BBC.SPACE);
+
+            // Master
+            map(keyCodes.NUMPAD0, BBC.NUMPAD0);
+            map(keyCodes.NUMPAD1, BBC.NUMPAD1);
+            map(keyCodes.NUMPAD2, BBC.NUMPAD2);
+            map(keyCodes.NUMPAD3, BBC.NUMPAD3);
+            map(keyCodes.NUMPAD4, BBC.NUMPAD4);
+            map(keyCodes.NUMPAD5, BBC.NUMPAD5);
+            map(keyCodes.NUMPAD6, BBC.NUMPAD6);
+            map(keyCodes.NUMPAD7, BBC.NUMPAD7);
+            map(keyCodes.NUMPAD8, BBC.NUMPAD8);
+            map(keyCodes.NUMPAD9, BBC.NUMPAD9);
+            // small hack in main.js/keyCode() to make this work (Chrome only)
+            map(keyCodes.NUMPAD_DECIMAL_POINT, BBC.NUMPAD_DECIMAL_POINT);
+
+            // "natural" mapping
+            map(keyCodes.NUMPADPLUS, BBC.NUMPADPLUS);
+            map(keyCodes.NUMPADMINUS, BBC.NUMPADMINUS);
+            map(keyCodes.NUMPADSLASH, BBC.NUMPADSLASH);
+            map(keyCodes.NUMPADASTERISK, BBC.NUMPADASTERISK);
+            //map(???, BBC.NUMPADCOMMA);
+            //map(???, BBC.NUMPADHASH);
+            // no keycode for NUMPADENTER, small hack in main.js/keyCode() (Chrome only)
+            map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
+
+            // TODO: "game" mapping
+            // eg Master Dunjunz needs # Del 3 , * Enter
+            // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
+
             return keys;
         })();
+
+        self.keyboardEnabled = true;
+
+        function clearKeys() {
+            for (var i = 0; i < self.keys.length; ++i) {
+                for (var j = 0; j < self.keys[i].length; ++j) {
+                    self.keys[i][j] = false;
+                }
+            }
+            self.updateKeys();
+        }
+
+        self.disableKeyboard = function() {
+            self.keyboardEnabled = false;
+            clearKeys();
+        };
+
+        self.enableKeyboard = function() {
+            self.keyboardEnabled = true;
+            clearKeys();
+        };
+
         self.set = function (key, val) {
-            //console.log("key code: " + key);
+            if (!self.keyboardEnabled) {
+                return;
+            }
+
             var colrow = self.keycodeToRowCol[key];
             if (!colrow) {
                 console.log("Unknown keycode: " + key);
                 console.log("Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode");
                 return;
             }
+
             self.keys[colrow[0]][colrow[1]] = val;
             self.updateKeys();
         };
@@ -744,8 +573,22 @@ define(['utils'], function (utils) {
             self.set(key, 0);
         };
 
+        self.keyDownRaw = function (colrow) {
+            self.keys[colrow[0]][colrow[1]] = 1;
+            self.updateKeys();
+        };
+        self.keyUpRaw = function (colrow) {
+            self.keys[colrow[0]][colrow[1]] = 0;
+            self.updateKeys();
+        };
+        self.keyToggleRaw = function (colrow) {
+            self.keys[colrow[0]][colrow[1]] = 1 - self.keys[colrow[0]][colrow[1]];
+            self.updateKeys();
+        };
+
         self.updateKeys = function () {
-            var numCols = 10; // 13 for MASTER
+            // 10 for BBC, 13 for Master 128
+            var numCols = 13;
             var i, j;
             if (self.IC32 & 8) {
                 for (i = 0; i < numCols; ++i) {

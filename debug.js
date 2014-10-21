@@ -9,16 +9,10 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         var memloc = 0;
         var debugNode = $('#debug, #hardware_debug');
 
-        function parseAddr(s) {
-            if (s[0] == '$' || s[0] == '&') return parseInt(s.substr(1), 16);
-            if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
-            return parseInt(s, 16);
-        }
-
         function setupGoto(form, func) {
             var addr = form.find(".goto-addr");
             form.on('submit', function (e) {
-                func(parseAddr(addr.val()));
+                func(utils.parseAddr(addr.val()));
                 addr.val("");
                 addr.blur();
                 e.preventDefault();

@@ -26,5 +26,7 @@ requirejs(['tests/test'], function (test) {
     var paint = function () {
     };
     var fb32 = new Uint32Array(1280 * 1024);
-    test.run(log, beginTest, endTest, fb32, paint);
+    test.run(log, beginTest, endTest, function (fails) {
+        if (fails) process.exit(1);
+    }, fb32, paint);
 });

@@ -1,2 +1,2 @@
 install: true
-script: make test
+script: make test -j2

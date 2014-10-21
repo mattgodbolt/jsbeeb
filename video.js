@@ -160,8 +160,6 @@ define(['teletext'], function (Teletext) {
         function renderChar(x, y) {
             if (!((self.memAddress ^ self.cursorPos) & 0x3fff) && self.cursorOn) {
                 self.cursorDrawIndex = 3 - ((self.regs[8] >>> 6) & 3);
-                // TODO - hack to get mode7 cursor lined up - fix
-                if (self.teletextMode) self.cursorDrawIndex = 3;
             }
 
             var dat = 0;
@@ -291,7 +289,10 @@ define(['teletext'], function (Teletext) {
 
                 // Have we reached the end of this displayed line? (i.e. entering hblank)
                 if (self.horizChars === self.regs[1]) {
-                    if (self.teletextMode && self.displayEnabled) self.charsLeft = 3; // Teletext mode delay (TODO: understand and maybe use r8 display delay instead)
+                    if (self.teletextMode && self.displayEnabled) {
+                        // Teletext mode delay (TODO: understand and maybe use r8 display delay instead)
+                        self.charsLeft = 3;
+                    }
                     else self.charsLeft = 0;
                     self.displayEnabled = false;
                 }
@@ -324,7 +325,7 @@ define(['teletext'], function (Teletext) {
                 if (self.atStartOfInterlaceLine && self.horizChars === (self.regs[0] >>> 1)) {
                     // TODO: understand this mechanism:
                     // There seems to be a half-line at the top of the screen on alternating
-                    // interlace lines. b-em doesn this, but I've yet to understand why it is
+                    // interlace lines. b-em does this, but I've yet to understand why it is
                     // necessary.
                     self.horizChars = 0;
                     self.atStartOfInterlaceLine = false;

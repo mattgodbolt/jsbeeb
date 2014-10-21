@@ -1,6 +1,7 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'bootstrap'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models) {
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'basic-tokenise', 'bootstrap', 'jquery-visibility'],
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models, tokeniser) {
         "use strict";
+
         var processor;
         var video;
         var soundChip;
@@ -27,6 +28,31 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
+
+        var BBC = utils.BBC;
+
+        self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
+            BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+            BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+            BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
+
+        // default: "snapper" keys
+        self.gamepadAxisMapping = [
+            [],
+            [],
+            [],
+            []
+        ];
+
+        self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
+        self.gamepadAxisMapping[0][1] = BBC.X;          // right
+        self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
+        self.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
+        self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
+        self.gamepadAxisMapping[2][1] = BBC.X;          // right
+        self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
+        self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
+
         if (queryString) {
             queryString = queryString.substring(1);
             if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
@@ -37,9 +63,41 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 var val = null;
                 if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
                 parsedQuery[key] = val;
+
                 switch (key) {
+                    case "LEFT":
+                        self.gamepadMapping[3] = BBC[val];
+                        self.gamepadAxisMapping[0][-1] = BBC[val];
+                        self.gamepadAxisMapping[2][-1] = BBC[val];
+                        break;
+                    case "RIGHT":
+                        self.gamepadMapping[1] = BBC[val];
+                        self.gamepadAxisMapping[0][1] = BBC[val];
+                        self.gamepadAxisMapping[2][1] = BBC[val];
+                        break;
+                    case "UP":
+                        self.gamepadMapping[0] = BBC[val];
+                        self.gamepadAxisMapping[1][-1] = BBC[val];
+                        self.gamepadAxisMapping[3][-1] = BBC[val];
+                        break;
+                    case "DOWN":
+                        self.gamepadMapping[2] = BBC[val];
+                        self.gamepadAxisMapping[1][1] = BBC[val];
+                        self.gamepadAxisMapping[3][1] = BBC[val];
+                        break;
+                    case "FIRE":
+                        for (var i = 0; i < 16; i++) {
+                            self.gamepadMapping[i] = BBC[val];
+                        }
+                        break;
                     case "autoboot":
-                        needsAutoboot = true;
+                        needsAutoboot = "boot";
+                        break;
+                    case "autochain":
+                        needsAutoboot = "chain";
+                        break;
+                    case "autorun":
+                        needsAutoboot = "run";
                         break;
                     case "disc":
                     case "disc1":
@@ -119,12 +177,29 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         dbgr = new Debugger(video);
         function keyCode(evt) {
-            return evt.which || evt.charCode || evt.keyCode;
+            var ret = evt.which || evt.charCode || evt.keyCode;
+
+            // Firefox doesn't seem to provide a way to distinguish
+            // Enter from Keypad Enter
+            // Chrome has evt.keyLocation
+            if (evt.keyLocation == 3) {
+                switch (ret) {
+                    case utils.keyCodes.ENTER:
+                        console.log("numpad enter");
+                        return utils.keyCodes.NUMPADENTER;
+
+                    case utils.keyCodes.DELETE:
+                        console.log("numpad dot");
+                        return utils.keyCodes.NUMPAD_DECIMAL_POINT;
+                }
+            }
+
+            return ret;
         }
 
         function keyPress(evt) {
             if (running || !dbgr.enabled()) return;
-            if (keyCode(evt) === 103) {
+            if (keyCode(evt) === 103 /* lower case g */) {
                 dbgr.hide();
                 go();
                 return;
@@ -136,10 +211,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         function keyDown(evt) {
             if (!running) return;
             var code = keyCode(evt);
-            if (code === 36) {  // home
+            if (code === utils.keyCodes.HOME) {
                 utils.noteEvent('keyboard', 'press', 'home');
                 stop(true);
-            } else if (code == 123) { // F12
+            } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
                 utils.noteEvent('keyboard', 'press', 'break');
                 processor.reset(false);
                 evt.preventDefault();
@@ -237,10 +312,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         $(document).on("click", "a.sth", function () {
             var type = $(this).data('id');
-            if (type == 'discs')
+            if (type == 'discs') {
                 discSth.populate();
-            else
+            } else if (type == 'tapes') {
                 tapeSth.populate();
+            } else {
+                console.log("unknown id", type);
+            }
         });
 
         function setSthFilter(filter) {
@@ -255,16 +333,115 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             setSthFilter($('#sth-filter').val());
         });
 
+        var keysToSend;
+        var lastChar;
+
+        function sendNextChar() {
+            if (lastChar && lastChar != utils.BBC.SHIFT) {
+                processor.sysvia.keyToggleRaw(lastChar);
+            }
+
+            if (keysToSend.length === 0) {
+                // Finished
+                processor.sysvia.enableKeyboard();
+                return;
+            }
+
+            var ch = keysToSend[0];
+            var debounce = lastChar === ch;
+            lastChar = ch;
+            if (debounce) {
+                lastChar = undefined;
+                setTimeout(sendNextChar, 20);
+                return;
+            }
+
+            var time = 70;
+            if (typeof lastChar === "number") {
+                time = lastChar;
+                lastChar = undefined;
+            } else {
+                processor.sysvia.keyToggleRaw(lastChar);
+            }
+
+            // remove first character
+            keysToSend.shift();
+
+            setTimeout(sendNextChar, time);
+        }
+
+        function sendRawKeyboardToBBC() {
+            keysToSend = Array.prototype.slice.call(arguments, 0);
+            lastChar = undefined;
+            processor.sysvia.disableKeyboard();
+            sendNextChar();
+        }
+
         function autoboot(image) {
-            console.log("Autobooting");
+            var BBC = utils.BBC;
+
+            console.log("Autobooting disc");
             utils.noteEvent('init', 'autoboot', image);
-            processor.sysvia.keyDown(16);
-            setTimeout(function () {
-                // defer...so we only start counting once we've run a bit...
-                setTimeout(function () {
-                    processor.sysvia.keyUp(16);
-                }, 5000);
-            }, 0);
+
+            sendRawKeyboardToBBC(0,
+                // Shift on power-on -> run !Boot from the disc
+                BBC.SHIFT,
+                1000 // pause in ms
+            );
+        }
+
+        function autoChainTape() {
+            var BBC = utils.BBC;
+
+            console.log("Auto Chaining Tape");
+            utils.noteEvent('init', 'autochain');
+
+            sendRawKeyboardToBBC(1000,
+                // *TAPE
+                // CH.""
+                BBC.SHIFT,
+                BBC.COLON_STAR,
+                BBC.SHIFT,
+                BBC.T,
+                BBC.A,
+                BBC.P,
+                BBC.E,
+                BBC.RETURN,
+                BBC.C,
+                BBC.H,
+                BBC.PERIOD,
+                BBC.SHIFT,
+                BBC.K2,
+                BBC.K2,
+                BBC.SHIFT,
+                BBC.RETURN
+            );
+        }
+
+        function autoRunTape() {
+
+            var BBC = utils.BBC;
+
+            console.log("Auto Running Tape");
+            utils.noteEvent('init', 'autorun');
+
+            sendRawKeyboardToBBC(1000,
+                // *TAPE
+                // */
+                BBC.SHIFT,
+                BBC.COLON_STAR,
+                BBC.SHIFT,
+                BBC.T,
+                BBC.A,
+                BBC.P,
+                BBC.E,
+                BBC.RETURN,
+                BBC.SHIFT,
+                BBC.COLON_STAR,
+                BBC.SHIFT,
+                BBC.SLASH,
+                BBC.RETURN
+            );
         }
 
         if (parsedQuery.dbEnabled) {
@@ -275,7 +452,38 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             dbgr.setPatch(parsedQuery.patch);
         }
 
-        if (needsAutoboot) autoboot(discImage);
+        if (parsedQuery.loadBasic) {
+            var prog = String.fromCharCode.apply(null, utils.loadData(parsedQuery.loadBasic));
+            var tokenised = tokeniser.tokenise(prog);
+            var page = parsedQuery.page ? utils.parseAddr(parsedQuery.page) : 0x1900;
+            // Load the program immediately after the \xff of the "no program" has been
+            // written to PAGE+1
+            processor.debugwrite = function (addr, b) {
+                if (addr === (page + 1) && b == 0xff) {
+                    // Needed as the debug happens before the write takes place.
+                    processor.debugInstruction = function () {
+                        for (var i = 0; i < tokenised.length; ++i) {
+                            processor.writemem(page + i, tokenised.charCodeAt(i));
+                        }
+                        processor.debugInstruction = null;
+                    }
+                    processor.debugwrite = null;
+                }
+            };
+        }
+
+        switch (needsAutoboot) {
+            case "boot":
+                autoboot(discImage);
+                break;
+            case "chain":
+                autoChainTape();
+                break;
+            case "run":
+                autoRunTape();
+                break;
+        }
+
         function updateUrl() {
             var url = window.location.origin + window.location.pathname;
             var sep = '?';
@@ -470,17 +678,33 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         $('#model-menu a').on("click", function (e) {
             parsedQuery.model = $(e.target).attr("data-target");
 
+            console.log(parsedQuery.model);
+
             if (parsedQuery.model === "soft-reset") {
                 processor.reset(false);
             } else if (parsedQuery.model === "hard-reset") {
-                window.location.reload();
-            } else if (parsedQuery.model != model) {
+                processor.reset(true);
+            } else {
+                updateUrl();
                 areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function () {
                     window.location.reload();
                 });
             }
         });
         $("#bbc-model").text(model.name);
+
+        $('#tape-menu a').on("click", function (e) {
+            var type = $(e.target).attr("data-id");
+
+            if (type == "rewind") {
+                console.log("Rewinding tape to the start");
+
+                processor.acia.rewindTape();
+
+            } else {
+                console.log("unknown type", type);
+            }
+        });
 
         function Light(name) {
             var dom = $("#" + name);
@@ -520,22 +744,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 yesFunc();
             });
             ays.modal("show");
-        }
-
-        function hd(obj, start, end) {
-            var str = "";
-            var j = 0;
-            for (var i = start; i < end; ++i) {
-                if (str) str += " ";
-                str += hexbyte(obj[i]);
-                if (++j == 8) str += " ";
-                if (j == 16) {
-                    console.log(str);
-                    str = "";
-                    j = 0;
-                }
-            }
-            if (str) console.log(str);
         }
 
         function benchmarkCpu(numCycles) {
@@ -611,12 +819,139 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     dbgr.debug(processor.pc);
                     throw e;
                 }
-                if (running) setTimeout(runner, 0);
+                if (running) {
+                    setTimeout(runner, 0);
+
+                    // init gamepad
+                    // gamepad not necessarily available until a button press
+                    // so need to check gamepads[0] continuously
+                    if (navigator.getGamepads && !self.gamepad0) {
+                        var gamepads = navigator.getGamepads();
+                        self.gamepad0 = gamepads[0];
+
+                        if (self.gamepad0) {
+
+                            console.log("initing gamepad");
+
+                            var BBC = utils.BBC;
+
+                            // 16 buttons
+                            self.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+
+                            // two joysticks (so 4 axes)
+                            self.gamepadAxes = [0, 0, 0, 0];
+
+
+                        }
+
+
+                    }
+
+                    // process gamepad buttons
+                    if (self.gamepad0) {
+
+                        // these two lines needed in Chrome to update state, not Firefox
+                        // TODO: what about IE? (can't get Gamepads to work in IE11/IE12. Mike)
+                        if (!utils.isFirefox()) {
+                            var gamepads = navigator.getGamepads();
+                            self.gamepad0 = gamepads[0];
+                        }
+
+                        //console.log(self.gamepad0.axes);
+
+                        for (var i = 0; i < 4; i++) {
+
+                            var axisRaw = self.gamepad0.axes[i];
+                            var axis;
+
+                            // normalize to -1, 0, 1
+                            if (axisRaw < -0.01) {
+                                axis = -1;
+                            } else if (axisRaw > 0.01) {
+                                axis = 1;
+                            } else {
+                                axis = 0;
+                            }
+
+                            //console.log(i, axisRaw, axis);
+
+                            if (axis !== self.gamepadAxes[i]) {
+
+                                // tricky because transition can be
+                                // -1 to 0
+                                // -1 to 1
+                                // 0 to 1
+                                // 0 to -1
+                                // 1 to 0
+                                // 1 to -1
+                                var oldKey = self.gamepadAxisMapping[i][self.gamepadAxes[i]];
+                                if (oldKey) {
+                                    processor.sysvia.keyUpRaw(oldKey);
+                                }
+
+                                var newKey = self.gamepadAxisMapping[i][axis];
+                                if (newKey) {
+                                    processor.sysvia.keyDownRaw(newKey);
+                                }
+
+                            }
+
+                            // store new state
+                            self.gamepadAxes[i] = axis;
+
+                        }
+
+                        for (var i = 0; i < 16; i++) {
+
+                            if (self.gamepad0.buttons[i]) {
+                                var button = self.gamepad0.buttons[i];
+
+                                if (button.pressed) {
+                                    console.log("gamepad button pressed ", i, self.gamepad0.id);
+                                }
+
+                                if (button.pressed !== self.gamepadButtons[i]) {
+                                    // different to last time
+
+                                    if (button.pressed) {
+                                        processor.sysvia.keyDownRaw(self.gamepadMapping[i]);
+                                    } else {
+                                        processor.sysvia.keyUpRaw(self.gamepadMapping[i]);
+                                    }
+                                }
+
+                                // store new state
+                                self.gamepadButtons[i] = button.pressed;
+
+                            }
+
+                        }
+
+                    }
+                }
             };
             runner();
         }
 
+        var wasPreviouslyRunning = false;
+        $(document).on(
+            {
+                "hide.visibility": function () {
+                    wasPreviouslyRunning = running;
+                    if (running && !processor.acia.motorOn) {
+                        stop(false);
+                    }
+                },
+                "show.visibility": function () {
+                    if (wasPreviouslyRunning) {
+                        go();
+                    }
+                }
+            }
+        );
+
         function go() {
+            soundChip.unmute();
             running = true;
             run();
         }
@@ -625,6 +960,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             running = false;
             processor.stop();
             if (debug) dbgr.debug(processor.pc);
+            soundChip.mute();
         }
 
         // Handy shortcuts. bench/profile stuff is delayed so that they can be
@@ -638,5 +974,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         window.soundChip = soundChip;
         window.processor = processor;
         window.video = video;
+        window.hd = function (start, end) {
+            console.log(utils.hd(function (x) {
+                return processor.readmem(x)
+            }, start, end));
+        };
+        window.m7dump = function() {
+            console.log(utils.hd(function (x) {
+                return processor.readmem(x) & 0x7f;
+            }, 0x7c00, 0x7fe8, { width: 40, gap: false }));
+        }
     }
 );

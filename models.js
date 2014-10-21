@@ -6,11 +6,12 @@ define(['fdc'], function (fdc) {
         this.nmos = nmos;
         this.isMaster = isMaster;
         this.Fdc = fdc;
+        this.isTest = false;
     }
 
     var allModels = [
-        new Model("BBC B", ["B"], ["os.rom", "b/BASIC.ROM", "b/DFS-0.9.rom"], false, false, fdc.I8271),
-        new Model("BBC Master 128", ["Master"], ["master/mos3.20"], true, true, fdc.WD1770)
+        new Model("BBC B", ["B"], ["os.rom", "b/BASIC.ROM", "b/DFS-0.9.rom"], true, false, fdc.I8271),
+        new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, fdc.WD1770)
     ];
 
     function findModel(name) {
@@ -27,8 +28,15 @@ define(['fdc'], function (fdc) {
         return null;
     }
 
+    var cpu6502TestModel = new Model("TEST", ["TEST"], [], true, false, fdc.I8271);
+    cpu6502TestModel.isTest = true;
+    var cpu65c12TestModel = new Model("TEST", ["TEST"], [], false, false, fdc.I8271);
+    cpu65c12TestModel.isTest = true;
+
     return {
         allModels: allModels,
-        findModel: findModel
+        findModel: findModel,
+        TEST_6502: cpu6502TestModel,
+        TEST_65C12: cpu65c12TestModel
     };
 });

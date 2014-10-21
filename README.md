@@ -34,6 +34,7 @@ URL parameters
 * `tape=XXX` - loads tape XXX (from the `tapes/` directory)
 * `tape=|ZZZ` - loads tape ZZZ from the Stairway to Hell archive
 * `patch=P` - applies a memory patch `P`. See below.
+* `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
 
 Patches
 -------
@@ -49,7 +50,6 @@ If you're looking to help:
 * Core
   * Save state ability
   * Get the "boo" of the boot "boo-beep" working
-  * Optimization
 * Master support
   * Mostly done, but still TODOs in the code
   * Needs a UI to select it.
@@ -60,22 +60,46 @@ If you're looking to help:
   * Local discs need to be made more workable and need an "export" feature
 * `git grep -i todo`
 
-Timings
--------
-
-In the `tests` directory is a timing test program written by Rich.  It has been run on a real live BBC B and the results are in the directory.  An SSD of the same tests is in the `discs/` directory. The emulation now agrees 100% with this and there are tests to keep it in line.
-
 Tests
 -----
 
-There are some simple tests of correctness against a few timing sources. Visit the `/tests` URL to run them.
+For general correctness there are several tests in the `tests` directory, including:
+
+* Klaus Dorfmann's exhaustive test of all documented opcodes for 6502 and 65C12. 
+  This is brought in as a git submodule from a forked version of Klaus's original as it needed
+  a few tweaks to get 65C12 working.
+* hoglet's Binary Coded Decimal tests.
+* A public domain Commodore 64 6502 test suite which tests every 6502 opcode (documented or
+  otherwise) for every possible input and flags condition.
+
+For timing correctness we have:
+
+* A timing test program written by Rich.  It has been run on a real live BBC B and
+  the results are in the directory.  An SSD of the same tests is in the `discs/` directory.
+* Some of Kevin Edwards' protection systems (stripped of the games themselves). These are extremely
+  timing- and correctness-sensitive when it comes to the timers and interrupts of the BBC.
 
 Tests can be run automatically if you have `node` installed - just run `make` and it'll ensure the relevant libraries are installed, then it'll run the tests.
+Please note it can take a while to run the whole test suite.
 
 Thanks
 ------
 
-Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. Also huge thanks to Richard Talbot-Watkins for his advice and help along the way. Thanks to Michael Borcherds for his help in improving the keyboard layouts and handling in Javascript.
+Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. 
+
+Also huge thanks to Richard Talbot-Watkins for his advice and help along the way in fathoming out the instruction timings, interrupt fun
+and for being such a good pal all these many years!
+
+Thanks to Michael Borcherds for his help; improving the keyboard layouts and handling in Javascript, reporting issues, chasing down
+game bugs and much more.
+
+Thanks to [David Banks](https://github.com/hoglet67) for his help in testing the gnarly BCD flag behaviour on real live BBCs.
+
+Cheers to [Ed Spittles](https://github.com/BigEd) for testing various interrupt timing code on a real BBC.
+
+A lot of the early development used the amazing [Visual 6502](http://visual6502.org/) as reference for intra-instruction timings. Amazing stuff.
+
+Special shout out the users of the [6502 Forums](http://forum.6502.org/)
 
 More information
 ----------------

@@ -3,10 +3,32 @@ define(['utils'], function (utils) {
 
     function UefTape(stream) {
         var self = this;
-        stream.seek(10);
-        var minor = stream.readByte();
-        var major = stream.readByte();
-        if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
+
+        var dummyData, state, curByte, numDataBits, parity;
+        var numParityBits, numStopBits, carrierBefore, carrierAfter;
+
+
+        self.rewind = function() {
+            
+            dummyData = [false, false, true, false, true, false, true, false, true, true];
+            state = -1;
+            curByte = 0;
+            numDataBits = 8;
+            parity = 'N';
+            numParityBits = 0;
+            numStopBits = 1;
+            carrierBefore = 0;
+            carrierAfter = 0;
+
+            stream.seek(10);
+            var minor = stream.readByte();
+            var major = stream.readByte();
+            if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
+        }
+
+        self.rewind();
+
+
 
         function readChunk() {
             var chunkId = stream.readInt16();
@@ -28,15 +50,6 @@ define(['utils'], function (utils) {
             return secsToClocks(count / baseFrequency);
         }
 
-        var dummyData = [false, false, true, false, true, false, true, false, true, true];
-        var state = -1;
-        var curByte = 0;
-        var numDataBits = 8;
-        var parity = 'N';
-        var numParityBits = 0;
-        var numStopBits = 1;
-        var carrierBefore = 0;
-        var carrierAfter = 0;
 
         function parityOf(curByte) {
             var parity = false;
@@ -46,7 +59,7 @@ define(['utils'], function (utils) {
             }
             return parity;
         }
-
+        
         self.poll = function (acia) {
             if (!curChunk) return;
             if (state === -1) {

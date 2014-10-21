@@ -9,12 +9,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.c = this.z = this.i = this.d = this.v = this.n = false;
             };
             this.debugString = function () {
-                return (this.c ? "C" : "c") +
-                    (this.z ? "Z" : "z") +
-                    (this.i ? "I" : "i") +
-                    (this.d ? "D" : "d") +
+                return (this.n ? "N" : "n") +
                     (this.v ? "V" : "v") +
-                    (this.n ? "N" : "n");
+                    "xx" +
+                    (this.d ? "D" : "d") +
+                    (this.i ? "I" : "i") +
+                    (this.z ? "Z" : "z") +
+                    (this.c ? "C" : "c");
             };
 
             this.asByte = function () {
@@ -34,8 +35,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
         return function Cpu6502(model, dbgr, video, soundChip, cmos) {
             var self = this;
 
-            var opcodes = model.nmos ? opcodesAll.cpu65c12(this) : opcodesAll.cpu6502(this);
+            var opcodes = model.nmos ? opcodesAll.cpu6502(this) : opcodesAll.cpu65c12(this);
 
+            this.model = model;
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
             this.memStat = new Uint8Array(512);
@@ -50,7 +52,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.FEslowdown = [true, false, true, true, false, false, true, false];
             this.oldPcArray = new Uint16Array(256);
             this.oldPcIndex = 0;
-            this.getPrevPc = function(index) {
+            this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
             // TODO: semi-bplus-style to get swram for exile hardcoded here
@@ -228,7 +230,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     case 0xfe94:
                     case 0xfe98:
                     case 0xfe9c:
-                        // TODO wd1770 support
                         if (!model.isMaster)
                             return this.fdc.read(addr);
                         break;
@@ -258,7 +259,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 return addr >> 8;
             };
 
-            this.videoRead = function(addr) {
+            this.videoRead = function (addr) {
                 return this.ramRomOs[addr | self.videoDisplayPage] | 0;
             };
 
@@ -366,7 +367,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     case 0xfe94:
                     case 0xfe98:
                     case 0xfe9c:
-                        // TODO wd1770 support
                         if (!model.isMaster)
                             return this.fdc.write(addr, b);
                         break;
@@ -457,18 +457,25 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             };
 
             this.reset = function (hard) {
-                console.log("Resetting 6502");
                 var i;
                 if (hard) {
                     for (i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
-                    for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
-                    for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
-                    for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-                    for (i = 48; i < 128; ++i) this.memLook[256 + i] = 32768;
-                    for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
-                    for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
+                    if (!model.isTest) {
+                        for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
+                        for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
+                        for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
+                        for (i = 48; i < 128; ++i) this.memLook[256 + i] = 32768;
+                        for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
+                        for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
-                    for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                        for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                    } else {
+                        // Test sets everything as RAM.
+                        for (i = 0; i < 256; ++i) {
+                            this.memStat[i] = this.memStat[256 + i] = 1;
+                            this.memLook[i] = this.memLook[256 + i] = 0;
+                        }
+                    }
                     this.videoDisplayPage = 0;
                     this.disassembler = new opcodes.Disassemble(this);
                     this.sysvia = via.SysVia(this, soundChip, cmos, model.isMaster);
@@ -488,8 +495,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     }};
                     this.sysvia.reset();
                     this.uservia.reset();
-                } else {
-                    console.log("Soft reset");
                 }
                 this.cycles = 0;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
@@ -499,7 +504,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.halted = false;
                 video.reset(this, this.sysvia);
                 if (hard) soundChip.reset();
-                console.log("Starting PC = " + hexword(this.pc));
             };
 
             this.setzn = function (v) {
@@ -549,7 +553,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.push(this.p.asByte());
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = true;
-                if (model.isNmos) {
+                if (!model.nmos) {
                     this.p.d = false;
                     this.takeInt = false;
                 }
@@ -579,10 +583,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.setzn(self.a);
             }
 
-            function adcBCD(addend) { // non 65c12 version. NMOS version will need work here
+            // For flags and stuff see URLs like:
+            // http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f86911eaeaea&steps=16
+            function adcBCD(addend) {
                 var ah = 0;
                 var tempb = (self.a + addend + (self.p.c ? 1 : 0)) & 0xff;
-                if (!tempb) self.p.z = true;
+                self.p.z = !tempb;
                 var al = (self.a & 0xf) + (addend & 0xf) + (self.p.c ? 1 : 0);
                 if (al > 9) {
                     al -= 10;
@@ -590,7 +596,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     ah = 1;
                 }
                 ah += (self.a >>> 4) + (addend >>> 4);
-                if (ah & 8) self.p.n = true;
+                self.p.n = !!(ah & 8);
                 self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
                 self.p.c = false;
                 if (ah > 9) {
@@ -601,42 +607,122 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 self.a = ((al & 0xf) | (ah << 4)) & 0xff;
             }
 
-            function sbcBCD(subend) { // non 65c12 version. NMOS version will need work here
-                // TODO: NMOS version. Only NMOS does the flag nonsense, and takes another cycle
-                var hc6 = 0;
+            // With reference to c64doc: http://vice-emu.sourceforge.net/plain/64doc.txt
+            // and http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f8e988eaeaea&steps=18
+            function sbcBCD(subend) {
                 var carry = self.p.c ? 0 : 1;
-                self.p.z = self.p.n = false;
-                if (((self.a - subend) - carry) !== 0) self.p.z = true;
                 var al = (self.a & 0xf) - (subend & 0xf) - carry;
+                var ah = (self.a >>> 4) - (subend >>> 4);
                 if (al & 0x10) {
                     al = (al - 6) & 0xf;
-                    hc6 = 1;
+                    ah--;
                 }
-                var ah = (self.a >>> 4) - (subend >>> 4);
-                if (hc6) ah--;
-                if ((self.a - (subend + carry)) & 0x80) self.p.n = true;
-                self.p.v = !!((((self.a - (subend + carry)) ^ subend) & 0x80) && ((self.a ^ subend) & 0x80));
-                self.p.c = true;
                 if (ah & 0x10) {
-                    self.p.c = false;
                     ah = (ah - 6) & 0xf;
                 }
+
+                var result = self.a - subend - carry;
+                self.p.n = !!(result & 0x80);
+                self.p.z = !(result & 0xff);
+                self.p.v = !!((self.a ^ result) & (subend ^ self.a) & 0x80);
+                self.p.c = !(result & 0x100);
                 self.a = al | (ah << 4);
             }
 
-            this.adc = function (addend) {
-                if (!this.p.d) {
-                    adcNonBCD(addend);
-                } else {
-                    adcBCD(addend);
+            function adcBCDcmos(addend) {
+                self.polltime(1); // One more cycle, apparently
+                var carry = self.p.c ? 1 : 0;
+                var al = (self.a & 0xf) + (addend & 0xf) + carry;
+                var ah = (self.a >>> 4) + (addend >>> 4);
+                if (al > 9) {
+                    al = (al - 10) & 0xf;
+                    ah++;
                 }
-            };
+                self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
+                self.p.c = false;
+                if (ah > 9) {
+                    ah = (ah - 10) & 0xf;
+                    self.p.c = true;
+                }
+                self.a = self.setzn(al | (ah << 4));
+            }
 
-            this.sbc = function (subend) {
-                if (!this.p.d) {
-                    adcNonBCD(subend ^ 0xff);
+            function sbcBCDcmos(subend) {
+                self.polltime(1); // One more cycle, apparently
+                var carry = self.p.c ? 0 : 1;
+                var al = (self.a & 0xf) - (subend & 0xf) - carry;
+                var result = self.a - subend - carry;
+                if (result < 0) {
+                    result -= 0x60;
+                }
+                if (al < 0) result -= 0x06;
+
+                adcNonBCD(subend ^ 0xff); // For flags
+                self.a = self.setzn(result);
+            }
+
+            if (model.nmos) {
+                this.adc = function (addend) {
+                    if (!this.p.d) {
+                        adcNonBCD(addend);
+                    } else {
+                        adcBCD(addend);
+                    }
+                };
+
+                this.sbc = function (subend) {
+                    if (!this.p.d) {
+                        adcNonBCD(subend ^ 0xff);
+                    } else {
+                        sbcBCD(subend);
+                    }
+                };
+            } else {
+                this.adc = function (addend) {
+                    if (!this.p.d) {
+                        adcNonBCD(addend);
+                    } else {
+                        adcBCDcmos(addend);
+                    }
+                };
+
+                this.sbc = function (subend) {
+                    if (!this.p.d) {
+                        adcNonBCD(subend ^ 0xff);
+                    } else {
+                        sbcBCDcmos(subend);
+                    }
+                };
+            }
+
+            this.arr = function (arg) {
+                // Insane instruction. I started with b-em source, but ended up using:
+                // http://www.6502.org/users/andre/petindex/local/64doc.txt as reference,
+                // tidying up as needed and fixing a couple of typos.
+                if (this.p.d) {
+                    var temp = this.a & arg;
+
+                    var ah = temp >>> 4;
+                    var al = temp & 0x0f;
+
+                    this.p.n = this.p.c;
+                    this.a = (temp >>> 1) | (this.p.c ? 0x80 : 0x00);
+                    this.p.z = !this.a;
+                    this.p.v = (temp ^ this.a) & 0x40;
+
+                    if ((al + (al & 1)) > 5)
+                        this.a = (this.a & 0xf0) | ((this.a + 6) & 0xf);
+
+                    this.p.c = (ah + (ah & 1)) > 5;
+                    if (this.p.c)
+                        this.a = (this.a + 0x60) & 0xff;
                 } else {
-                    sbcBCD(subend);
+                    this.a = this.a & arg;
+                    this.p.v = !!(((this.a >> 7) ^ (this.a >>> 6)) & 0x01);
+                    this.a >>>= 1;
+                    if (this.p.c) this.a |= 0x80;
+                    this.setzn(this.a);
+                    this.p.c = !!(this.a & 0x40);
                 }
             };
 
@@ -672,7 +758,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                         this.p.i = true;
                         this.polltime(7);
                         this.nmi = false;
-                        if (model.isNmos)
+                        if (!model.nmos)
                             this.p.d = false;
                     }
                 }
@@ -683,7 +769,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.halted = true;
             };
 
-            this.loadOs.apply(this, model.os);
+            if (model.os.length)
+                this.loadOs.apply(this, model.os);
             this.reset(true);
 
             dbgr.setCpu(this);
