@@ -90,7 +90,7 @@ define(['jsunzip'], function (jsunzip) {
 
         SPACE: [2, 6],
 
-        HASH: [8, 2],
+        UNDERSCORE_POUND: [8, 2],
         AT: [7, 4],
         COLON_STAR: [8, 4],
         PIPE_BACKSLASH: [8, 7],
@@ -193,6 +193,7 @@ define(['jsunzip'], function (jsunzip) {
         Z: 90,
         /* also META on Mac */
         WINDOWS: 91,
+        MENU: 93,
         NUMPAD0: 96,
         NUMPAD1: 97,
         NUMPAD2: 98,
@@ -236,7 +237,13 @@ define(['jsunzip'], function (jsunzip) {
         LEFT_SQUARE_BRACKET: 219,
         BACKSLASH: 220,
         RIGHT_SQUARE_BRACKET: 221,
-        NUMPADENTER: 255 // hack, jsbeeb only
+        NUMPADENTER: 255, // hack, jsbeeb only
+        SHIFT_LEFT: 256, // hack, jsbeeb only
+        SHIFT_RIGHT: 257, // hack, jsbeeb only
+        ALT_LEFT: 258, // hack, jsbeeb only
+        ALT_RIGHT: 259, // hack, jsbeeb only
+        CTRL_LEFT: 260, // hack, jsbeeb only
+        CTRL_RIGHT: 261 // hack, jsbeeb only
     };
 
     var keyCodes = exports.keyCodes;

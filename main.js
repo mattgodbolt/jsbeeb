@@ -28,6 +28,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
+        
+        utils.keyLayout = "natural";
 
         var BBC = utils.BBC;
 
@@ -98,6 +100,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                         break;
                     case "autorun":
                         needsAutoboot = "run";
+                        break;
+                    case "keylayout":
+                        utils.keyLayout = (val + "").toLowerCase();
                         break;
                     case "disc":
                     case "disc1":
@@ -174,24 +179,91 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
             return soundChip;
         })();
+        
+        var lastShiftLocation = 1;
+        var lastCtrlLocation = 1;
+        var lastAltLocation = 1;
+
 
         dbgr = new Debugger(video);
         function keyCode(evt) {
             var ret = evt.which || evt.charCode || evt.keyCode;
 
-            // Firefox doesn't seem to provide a way to distinguish
-            // Enter from Keypad Enter
-            // Chrome has evt.keyLocation
-            if (evt.keyLocation == 3) {
+            var keyCodes = utils.keyCodes;
+
+            switch (evt.location) {
+            default:
+                // keyUp events seem to pass location = 0 (Chrome)
                 switch (ret) {
-                    case utils.keyCodes.ENTER:
+                    case keyCodes.SHIFT:
+                        if (lastShiftLocation == 1) {
+                            return keyCodes.SHIFT_LEFT;
+                        } else {
+                            return keyCodes.SHIFT_RIGHT;
+                        }
+
+                    case keyCodes.ALT:
+                        if (lastAltLocation == 1) {
+                            return keyCodes.ALT_LEFT;
+                        } else {
+                            return keyCodes.ALT_RIGHT;
+                        }
+
+                    case keyCodes.CTRL:
+                        if (lastCtrlLocation == 1) {
+                            return keyCodes.CTRL_LEFT;
+                        } else {
+                            return keyCodes.CTRL_RIGHT;
+                        }
+                }
+                break;
+            case 1:
+                switch (ret) {
+                    case keyCodes.SHIFT:
+                        lastShiftLocation = 1;
+                        //console.log("left shift");
+                        return keyCodes.SHIFT_LEFT;
+
+                    case keyCodes.ALT:
+                        lastAltLocation = 1;
+                        //console.log("left alt");
+                        return keyCodes.ALT_LEFT;
+
+                    case keyCodes.CTRL:
+                        lastCtrlLocation = 1;
+                        //console.log("left ctrl");
+                        return keyCodes.CTRL_LEFT;
+                }
+                break;
+            case 2:
+                switch (ret) {
+                    case keyCodes.SHIFT:
+                        lastShiftLocation = 2;
+                        //console.log("right shift");
+                        return keyCodes.SHIFT_RIGHT;
+
+                    case keyCodes.ALT:
+                        lastAltLocation = 2;
+                        //console.log("right alt");
+                        return keyCodes.ALT_RIGHT;
+
+                    case keyCodes.CTRL:
+                        lastCtrlLocation = 2;
+                        //console.log("right ctrl");
+                        return keyCodes.CTRL_RIGHT;
+                }
+                break;
+            case 3: // numpad
+                switch (ret) {
+                    case keyCodes.ENTER:
                         console.log("numpad enter");
                         return utils.keyCodes.NUMPADENTER;
 
-                    case utils.keyCodes.DELETE:
+                    case keyCodes.DELETE:
                         console.log("numpad dot");
                         return utils.keyCodes.NUMPAD_DECIMAL_POINT;
                 }
+                break;
             }
 
             return ret;
@@ -211,7 +283,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         function keyDown(evt) {
             if (!running) return;
             var code = keyCode(evt);
-            if (code === utils.keyCodes.HOME) {
+            if (code === utils.keyCodes.HOME && evt.ctrlKey) {
                 utils.noteEvent('keyboard', 'press', 'home');
                 stop(true);
             } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
@@ -219,7 +291,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 processor.reset(false);
                 evt.preventDefault();
             } else {
-                processor.sysvia.keyDown(keyCode(evt));
+                processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
                 evt.preventDefault();
             }
         }

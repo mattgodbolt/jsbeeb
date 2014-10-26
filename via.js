@@ -384,32 +384,46 @@ define(['utils'], function (utils) {
         }
 
         self.keycodeToRowCol = (function () {
-            var keys = {};
+            var keys2 = [];
 
-            function map(s, colRow) {
+            // shift pressed
+            keys2[true] = {};
+
+            // shift not pressed
+            keys2[false] = {};
+
+            // shiftDown MUST be true or false (not undefined)
+            function doMap(s, colRow, shiftDown) {
+                if (keys2[shiftDown][s]) {
+                    console.log("Duplicate binding for key", s, colRow, keys2[shiftDown][s]);
+                }
+                keys2[shiftDown][s] = colRow;
+
+            }
+
+            // shiftDown undefined -> map both
+            function map(s, colRow, shiftDown) {
+
                 if ((!s && s !== 0) || !colRow) {
                     console.log("error binding key", s, colRow);
                 }
-                if (typeof(s) == "string")
+                if (typeof(s) == "string") {
                     s = s.charCodeAt(0);
-                if (keys[s]) console.log("Duplicate binding for key", s, colRow, keys[s]);
-                keys[s] = colRow;
+                }
+
+                if (shiftDown === undefined) {
+                    doMap(s, colRow, true);
+                    doMap(s, colRow, false);
+                } else {
+                    doMap(s, colRow, shiftDown);
+                }
+
             }
 
             var isUKlayout = detectKeyboardLayout() == "UK";
 
             var keyCodes = utils.keyCodes;
             var BBC = utils.BBC;
-
-            if (isUKlayout) {
-                map(keyCodes.HASH, BBC.HASH); // UK PC hash key maps to pound underscore
-                map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH); // pipe, backslash is pipe, backslash
-                map(keyCodes.APOSTROPHE, BBC.COLON_STAR); // maps to :*
-            } else {
-                map(keyCodes.HASH, BBC.COLON_STAR); // maps to :*
-                map(keyCodes.BACKSLASH, BBC.HASH); // pipe, backlash is underscore, pound
-                map(keyCodes.APOSTROPHE, BBC.AT); // @ mapped to backtic
-            }
 
             // hack for Matt's laptop (Firefox bug?)
             if (utils.isFirefox()) {
@@ -418,40 +432,8 @@ define(['utils'], function (utils) {
                 map(225, BBC.CAPSLOCK);
             }
 
-            map(keyCodes.EQUALS, BBC.HAT_TILDE); // ^~ on +/=
-            map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
-            map(keyCodes.MINUS, BBC.MINUS); // '-' / '=' mapped to underscore
-            map(keyCodes.LEFT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET); // maps to [{
-            map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.RIGHT_SQUARE_BRACKET); // maps to ]}
-            map(keyCodes.COMMA, BBC.COMMA); // ',' / '<'
-            map(keyCodes.PERIOD, BBC.PERIOD); // '.' / '>'
-            map(keyCodes.SLASH, BBC.SLASH); // '/' / '?'
-            map(keyCodes.WINDOWS, BBC.SHIFTLOCK); // shift lock mapped to "windows" key
-            map(keyCodes.TAB, BBC.TAB); // tab
-            map(keyCodes.ENTER, BBC.RETURN); // return
-            map(keyCodes.DELETE, BBC.DELETE); // delete
-            map(keyCodes.BACKSPACE, BBC.DELETE); // delete
-            map(keyCodes.END, BBC.COPY); // copy key is end
-            map(keyCodes.F11, BBC.COPY); // copy key is end for Apple
-            map(keyCodes.SHIFT, BBC.SHIFT); // shift
-            map(keyCodes.ESCAPE, BBC.ESCAPE); // escape
-            map(keyCodes.CTRL, BBC.CTRL); // control
-            map(keyCodes.CAPSLOCK, BBC.CAPSLOCK); // caps (on Rich's/Mike's computer)
-            map(keyCodes.LEFT, BBC.LEFT); // arrow left
-            map(keyCodes.UP, BBC.UP); // arrow up
-            map(keyCodes.RIGHT, BBC.RIGHT); // arrow right
-            map(keyCodes.DOWN, BBC.DOWN); // arrow down
+            var BBC = utils.BBC;
 
-            map(keyCodes.K0, BBC.K0);
-            map(keyCodes.K1, BBC.K1);
-            map(keyCodes.K2, BBC.K2);
-            map(keyCodes.K3, BBC.K3);
-            map(keyCodes.K4, BBC.K4);
-            map(keyCodes.K5, BBC.K5);
-            map(keyCodes.K6, BBC.K6);
-            map(keyCodes.K7, BBC.K7);
-            map(keyCodes.K8, BBC.K8);
-            map(keyCodes.K9, BBC.K9);
 
             map(keyCodes.Q, BBC.Q);
             map(keyCodes.W, BBC.W);
@@ -493,9 +475,153 @@ define(['utils'], function (utils) {
             map(keyCodes.F8, BBC.F8);
             map(keyCodes.F9, BBC.F9);
 
-            map(keyCodes.BACK_QUOTE, BBC.ESCAPE); // top left UK keyboard -> Escape
-
+            // these keys are in the same place on PC and BBC keyboards
+            // including shifted characters
+            // so can be the same for "natural" and "gaming"
+            map(keyCodes.COMMA, BBC.COMMA); 
+            map(keyCodes.PERIOD, BBC.PERIOD); 
+            map(keyCodes.SLASH, BBC.SLASH);
             map(keyCodes.SPACE, BBC.SPACE);
+            map(keyCodes.TAB, BBC.TAB); 
+            map(keyCodes.ENTER, BBC.RETURN); 
+            
+            map(keyCodes.SHIFT, BBC.SHIFT);
+            // see later map(keyCodes.SHIFT_LEFT, BBC.SHIFT_LEFT);
+            map(keyCodes.SHIFT_RIGHT, BBC.SHIFT);
+
+            // other keys to map to these in "game" layout too
+            map(keyCodes.LEFT, BBC.LEFT); 
+            map(keyCodes.UP, BBC.UP);     
+            map(keyCodes.RIGHT, BBC.RIGHT);
+            map(keyCodes.DOWN, BBC.DOWN); 
+
+            if (utils.keyLayout == "natural") {
+
+                // "natural" keyboard
+
+                map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
+
+                // 1st row
+                // US Keyboard: has Tilde on <Shift>BACK_QUOTE
+                map(keyCodes.BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE); 
+
+                map(keyCodes.K2, isUKlayout ? BBC.K2 : BBC.AT, true);
+                map(keyCodes.K3, BBC.UNDERSCORE_POUND, true);
+                map(keyCodes.K7, BBC.K6, true);
+                map(keyCodes.K8, BBC.COLON_STAR, true);
+                map(keyCodes.K9, BBC.K8, true);
+                map(keyCodes.K0, BBC.K9, true);
+
+                map(keyCodes.K2, BBC.K2, false);
+                map(keyCodes.K3, BBC.K3, false);
+                map(keyCodes.K7, BBC.K7, false);
+                map(keyCodes.K8, BBC.K8, false);
+                map(keyCodes.K9, BBC.K9, false);
+                map(keyCodes.K0, BBC.K0, false);
+
+                map(keyCodes.K1, BBC.K1);
+                map(keyCodes.K4, BBC.K4);
+                map(keyCodes.K5, BBC.K5);
+                map(keyCodes.K6, BBC.K6);
+
+                map(keyCodes.MINUS, BBC.MINUS); 
+
+                // 2nd row
+                map(keyCodes.LEFT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET); 
+
+                map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.RIGHT_SQUARE_BRACKET); 
+
+
+                // 3rd row
+
+                map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
+
+                map(keyCodes.APOSTROPHE, BBC.COLON_STAR, false);
+                map(keyCodes.APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true); // <Shift>8 -> *
+
+                map(keyCodes.HASH, BBC.HAT_TILDE); // OK for <Shift> at least
+
+                map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
+
+                map(keyCodes.WINDOWS, BBC.SHIFTLOCK);
+
+                map(keyCodes.END, BBC.COPY); 
+
+                map(keyCodes.F11, BBC.COPY);
+
+                map(keyCodes.ESCAPE, BBC.ESCAPE); 
+
+                map(keyCodes.CTRL, BBC.CTRL); 
+                map(keyCodes.CTRL_LEFT, BBC.CTRL); 
+                map(keyCodes.CTRL_RIGHT, BBC.CTRL); 
+
+                map(keyCodes.CAPSLOCK, BBC.CAPSLOCK); 
+
+                map(keyCodes.DELETE, BBC.DELETE); 
+
+                map(keyCodes.BACKSPACE, BBC.DELETE); 
+
+            } else {
+                // gaming keyboard
+
+                // 1st row
+                map(keyCodes.ESCAPE, BBC.F0); 
+
+                // 2nd row
+                map(keyCodes.BACK_QUOTE, BBC.ESCAPE); 
+                map(keyCodes.K1, BBC.K1);
+                map(keyCodes.K2, BBC.K2);
+                map(keyCodes.K3, BBC.K3);
+                map(keyCodes.K4, BBC.K4);
+                map(keyCodes.K5, BBC.K5);
+                map(keyCodes.K6, BBC.K6);
+                map(keyCodes.K7, BBC.K7);
+                map(keyCodes.K8, BBC.K8);
+                map(keyCodes.K9, BBC.K9);
+                map(keyCodes.K0, BBC.K0);
+                map(keyCodes.MINUS, BBC.MINUS); 
+                map(keyCodes.EQUALS, BBC.HAT_TILDE); 
+                map(keyCodes.BACKSPACE, BBC.PIPE_BACKSLASH); 
+                map(keyCodes.INSERT, BBC.LEFT); 
+                map(keyCodes.HOME, BBC.RIGHT); 
+
+                // 3rd row
+                map(keyCodes.LEFT_SQUARE_BRACKET, BBC.AT);
+                map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET); 
+                // no key for BBC.UNDERSCORE_POUND in UK
+                // see 4th row for US mapping keyCodes.BACKSLASH
+                map(keyCodes.DELETE, BBC.UP); 
+                map(keyCodes.END, BBC.DOWN); 
+
+                // 4th row
+                // no key for BBC.CAPSLOCK (mapped to CTRL_LEFT below)
+                map(keyCodes.CAPSLOCK, BBC.CTRL); 
+                map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); 
+                map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
+                // UK keyboard (key missing on US)
+                map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
+
+                // UK has extra key \| for SHIFT
+                map(keyCodes.SHIFT_LEFT, isUKlayout ? BBC.SHIFTLOCK : BBC.SHIFT);
+                // UK: key is between SHIFT and Z
+                // US: key is above ENTER
+                map(keyCodes.BACKSLASH, isUKlayout ? BBC.SHIFT : BBC.UNDERSCORE_POUND);
+                
+                // 5th row
+                
+                // for Zalaga
+                map(keyCodes.CTRL_LEFT, BBC.CAPSLOCK);
+                map(keyCodes.ALT_LEFT, BBC.CTRL);
+
+                // should be 4th row, not enough keys
+                map(keyCodes.MENU, BBC.DELETE);
+                map(keyCodes.CTRL_RIGHT, BBC.COPY);
+
+                // not in correct location
+                map(keyCodes.ALT_RIGHT, BBC.SHIFTLOCK);
+                map(keyCodes.WINDOWS, BBC.SHIFTLOCK);
+
+            }
 
             // Master
             map(keyCodes.NUMPAD0, BBC.NUMPAD0);
@@ -518,14 +644,14 @@ define(['utils'], function (utils) {
             map(keyCodes.NUMPADASTERISK, BBC.NUMPADASTERISK);
             //map(???, BBC.NUMPADCOMMA);
             //map(???, BBC.NUMPADHASH);
-            // no keycode for NUMPADENTER, small hack in main.js/keyCode() (Chrome only)
+            // no keycode for NUMPADENTER, small hack in main.js/keyCode() 
             map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
 
             // TODO: "game" mapping
             // eg Master Dunjunz needs # Del 3 , * Enter
             // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
 
-            return keys;
+            return keys2;
         })();
 
         self.keyboardEnabled = true;
@@ -549,12 +675,12 @@ define(['utils'], function (utils) {
             clearKeys();
         };
 
-        self.set = function (key, val) {
+        self.set = function (key, val, shiftDown) {
             if (!self.keyboardEnabled) {
                 return;
             }
 
-            var colrow = self.keycodeToRowCol[key];
+            var colrow = self.keycodeToRowCol[!!shiftDown][key];
             if (!colrow) {
                 console.log("Unknown keycode: " + key);
                 console.log("Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode");
@@ -564,11 +690,14 @@ define(['utils'], function (utils) {
             self.keys[colrow[0]][colrow[1]] = val;
             self.updateKeys();
         };
-        self.keyDown = function (key) {
-            self.set(key, 1);
+        self.keyDown = function (key, shiftDown) {
+            self.set(key, 1, shiftDown);
         };
         self.keyUp = function (key) {
-            self.set(key, 0);
+            // set up for both keymaps
+            // (with and without shift)
+            self.set(key, 0, true);
+            self.set(key, 0, false);
         };
 
         self.keyDownRaw = function (colrow) {
