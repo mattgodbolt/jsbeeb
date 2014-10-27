@@ -497,7 +497,9 @@ define(['utils'], function (utils) {
             
             // TODO: these seem to to be the wrong way round for US but it works like this...
             var BACK_QUOTE = isUKlayout ? keyCodes.BACK_QUOTE : keyCodes.APOSTROPHE;
-            var APOSTROPHE = !isUKlayout ? keyCodes.BACK_QUOTE : keyCodes.APOSTROPHE;
+            var APOSTROPHE = isUKlayout ? keyCodes.APOSTROPHE : keyCodes.HASH;
+            // not on US keyboard
+            var HASH = isUKlayout ? keyCodes.HASH : BACK_QUOTE;
 
             if (utils.keyLayout == "natural") {
 
@@ -543,7 +545,7 @@ define(['utils'], function (utils) {
 
                 map(APOSTROPHE, BBC.COLON_STAR, false);
 
-                map(keyCodes.HASH, BBC.HAT_TILDE); // OK for <Shift> at least
+                map(HASH, BBC.HAT_TILDE); // OK for <Shift> at least
 
                 map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
 
@@ -603,7 +605,7 @@ define(['utils'], function (utils) {
                 map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); 
                 map(APOSTROPHE, BBC.COLON_STAR);
                 // UK keyboard (key missing on US)
-                map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
+                map(HASH, BBC.RIGHT_SQUARE_BRACKET);
 
                 // UK has extra key \| for SHIFT
                 map(keyCodes.SHIFT_LEFT, isUKlayout ? BBC.SHIFTLOCK : BBC.SHIFT);
