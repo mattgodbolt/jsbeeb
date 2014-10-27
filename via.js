@@ -494,6 +494,10 @@ define(['utils'], function (utils) {
             map(keyCodes.UP, BBC.UP);     
             map(keyCodes.RIGHT, BBC.RIGHT);
             map(keyCodes.DOWN, BBC.DOWN); 
+            
+            // TODO: these seem to to be the wrong way round for US but it works like this...
+            var BACK_QUOTE = isUKlayout ? keyCodes.BACK_QUOTE : keyCodes.APOSTROPHE;
+            var APOSTROPHE = !isUKlayout ? keyCodes.BACK_QUOTE : keyCodes.APOSTROPHE;
 
             if (utils.keyLayout == "natural") {
 
@@ -501,11 +505,12 @@ define(['utils'], function (utils) {
 
                 map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
 
-                // 1st row
                 // US Keyboard: has Tilde on <Shift>BACK_QUOTE
-                map(keyCodes.BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE); 
-
+                map(BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE); 
+                map(APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true); 
                 map(keyCodes.K2, isUKlayout ? BBC.K2 : BBC.AT, true);
+
+                // 1st row
                 map(keyCodes.K3, BBC.UNDERSCORE_POUND, true);
                 map(keyCodes.K7, BBC.K6, true);
                 map(keyCodes.K8, BBC.COLON_STAR, true);
@@ -534,10 +539,9 @@ define(['utils'], function (utils) {
 
                 // 3rd row
 
-                map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
+                map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); 
 
-                map(keyCodes.APOSTROPHE, BBC.COLON_STAR, false);
-                map(keyCodes.APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true); // <Shift>8 -> *
+                map(APOSTROPHE, BBC.COLON_STAR, false);
 
                 map(keyCodes.HASH, BBC.HAT_TILDE); // OK for <Shift> at least
 
@@ -568,7 +572,7 @@ define(['utils'], function (utils) {
                 map(keyCodes.ESCAPE, BBC.F0); 
 
                 // 2nd row
-                map(keyCodes.BACK_QUOTE, BBC.ESCAPE); 
+                map(BACK_QUOTE, BBC.ESCAPE); 
                 map(keyCodes.K1, BBC.K1);
                 map(keyCodes.K2, BBC.K2);
                 map(keyCodes.K3, BBC.K3);
@@ -597,7 +601,7 @@ define(['utils'], function (utils) {
                 // no key for BBC.CAPSLOCK (mapped to CTRL_LEFT below)
                 map(keyCodes.CAPSLOCK, BBC.CTRL); 
                 map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); 
-                map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
+                map(APOSTROPHE, BBC.COLON_STAR);
                 // UK keyboard (key missing on US)
                 map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
 
