@@ -566,6 +566,8 @@ define(['utils'], function (utils) {
                 map(keyCodes.DELETE, BBC.DELETE); 
 
                 map(keyCodes.BACKSPACE, BBC.DELETE); 
+                
+                map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
 
             } else {
                 // gaming keyboard
