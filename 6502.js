@@ -51,6 +51,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.interrupt = 0;
             this.FEslowdown = [true, false, true, true, false, false, true, false];
             this.oldPcArray = new Uint16Array(256);
+            this.oldAArray = new Uint8Array(256);
+            this.oldXArray = new Uint8Array(256);
+            this.oldYArray = new Uint8Array(256);
+            this.oldPArray = new Uint8Array(256);
             this.oldPcIndex = 0;
             this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
@@ -106,9 +110,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     this.memLook[i] = this.memLook[i + 256] = hazelOff;
                     this.memStat[i] = this.memStat[i + 256] = hazelRAM;
                 }
-                // TODO: TST bit for MOS3.5 etc. b-em uses an explicit check in readMem
-                // but I think it can be done with lookups in memLook/memStat alone, though
-                // it's read-only so may require an extra memStat.
             };
 
             this.debugread = this.debugwrite = this.debugInstruction = null;
@@ -157,6 +158,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             };
 
             this.readDevice = function (addr) {
+                if (model.isMaster && (self.acccon & 0x40)) {
+                    // TST bit of ACCCON
+                    return self.ramRomOs[this.osOffset + (addr & 0x3fff)];
+                }
                 addr &= 0xffff;
                 switch (addr & ~0x0003) {
                     case 0xfc20:
@@ -259,11 +264,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 
             this.readmem = function (addr) {
                 addr &= 0xffff;
-                if (this.debugread) this.debugread(addr);
                 if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
                     var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+                    if (this.debugread) this.debugread(addr, offset);
                     return this.ramRomOs[offset + addr] | 0;
                 } else {
+                    if (this.debugread) this.debugread(addr);
                     return this.readDevice(addr) | 0;
                 }
             };
@@ -735,6 +741,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     }
                     this.incpc();
                     this.runner.run(opcode);
+                    this.oldAArray[this.oldPcIndex] = this.a;
+                    this.oldXArray[this.oldPcIndex] = this.x;
+                    this.oldYArray[this.oldPcIndex] = this.y;
+                    this.oldPArray[this.oldPcIndex] = this.p.asByte();
                     if (this.takeInt) {
                         this.takeInt = false;
                         this.push(this.pc >>> 8);
@@ -761,6 +771,17 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 
             this.stop = function () {
                 this.halted = true;
+            };
+
+            this.dumpTime = function () {
+                for (var i = 1; i < 256; ++i) {
+                    var j = (i + this.oldPcIndex) & 255;
+                    console.log(utils.hexword(this.oldPcArray[j]),
+                        (this.disassembler.disassemble(this.oldPcArray[j], true)[0] + "                       ").substr(0, 15),
+                        utils.hexbyte(this.oldAArray[j]),
+                        utils.hexbyte(this.oldXArray[j]),
+                        utils.hexbyte(this.oldYArray[j]));
+                }
             };
 
             if (model.os.length)

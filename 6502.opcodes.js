@@ -1088,15 +1088,21 @@ define(['utils'], function (utils) {
         }
 
         function Disassemble6502(cpu) {
-            function formatAddr(addr) {
+            function formatAddr_(addr) {
                 return "<span class='instr_mem_ref'>" + hexword(addr) + "</span>";
             }
 
-            function formatJumpAddr(addr) {
+            function formatJumpAddr_(addr) {
                 return "<span class='instr_instr_ref'>" + hexword(addr) + "</span>";
             }
 
-            this.disassemble = function (addr) {
+            this.disassemble = function (addr, plain) {
+                var formatAddr = formatAddr_;
+                var formatJumpAddr = formatJumpAddr_;
+                if (plain) {
+                    formatAddr = hexword;
+                    formatJumpAddr = hexword;
+                }
                 var opcode = opcodes[cpu.readmem(addr)];
                 if (!opcode) {
                     return ["???", addr + 1];
