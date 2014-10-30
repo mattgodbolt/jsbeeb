@@ -673,12 +673,12 @@ define(['utils'], function (utils) {
             self.updateKeys();
         }
 
-        self.disableKeyboard = function() {
+        self.disableKeyboard = function () {
             self.keyboardEnabled = false;
             clearKeys();
         };
 
-        self.enableKeyboard = function() {
+        self.enableKeyboard = function () {
             self.keyboardEnabled = true;
             clearKeys();
         };
