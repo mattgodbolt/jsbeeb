@@ -528,6 +528,7 @@ define(['jsunzip'], function (jsunzip) {
             map(keyCodes.K8, BBC.K8);
             map(keyCodes.K9, BBC.K9);
             map(keyCodes.K0, BBC.K0);
+            map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
             map(keyCodes.EQUALS, BBC.HAT_TILDE); // ^~ on +/=
             map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
             map(keyCodes.MINUS, BBC.MINUS); // '-' / '=' mapped to underscore
