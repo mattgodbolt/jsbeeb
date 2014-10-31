@@ -28,8 +28,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
-        
-        utils.keyLayout = "natural";
+        var keyLayout = window.localStorage.keyLayout || "physical";
 
         var BBC = utils.BBC;
 
@@ -101,8 +100,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     case "autorun":
                         needsAutoboot = "run";
                         break;
-                    case "keylayout":
-                        utils.keyLayout = (val + "").toLowerCase();
+                    case "keyLayout":
+                        keyLayout = (val + "").toLowerCase();
                         break;
                     case "disc":
                     case "disc1":
@@ -317,7 +316,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 window.localStorage.cmosRam = JSON.stringify(data);
             }
         });
-        processor = new Cpu6502(model, dbgr, video, soundChip, cmos);
+        var emulationConfig = {keyLayout: keyLayout};
+        processor = new Cpu6502(model, dbgr, video, soundChip, cmos, emulationConfig);
 
         function sthClearList() {
             $("#sth-list li:not('.template')").remove();
@@ -764,6 +764,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             }
         });
         $("#bbc-model").text(model.name);
+
+        $('#keyboard-menu a').on("click", function (e) {
+            var type = $(e.target).attr("data-target");
+            window.localStorage.keyLayout = type;
+            parsedQuery.keyLayout = type;
+            updateUrl();
+            emulationConfig.keyLayout = type;
+            processor.updateKeyLayout();
+        });
 
         $('#tape-menu a').on("click", function (e) {
             var type = $(e.target).attr("data-id");

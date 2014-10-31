@@ -32,8 +32,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.reset();
         }
 
-        return function Cpu6502(model, dbgr, video, soundChip, cmos) {
+        return function Cpu6502(model, dbgr, video, soundChip, cmos, config) {
             var self = this;
+            if (config === undefined) config = {};
+            if (!config.keyLayout)
+                config.keyLayout = "physical";
 
             var opcodes = model.nmos ? opcodesAll.cpu6502(this) : opcodesAll.cpu65c12(this);
 
@@ -479,7 +482,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     this.videoDisplayPage = 0;
                     this.disassembler = new opcodes.Disassemble(this);
                     this.sysvia = via.SysVia(this, soundChip, cmos, model.isMaster);
-                    this.uservia = via.UserVia(this, model.isMaster);
+                    this.uservia = via.UserVia(this, model.isMaster, config.keyLayout);
                     this.acia = new Acia(this, soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
                     this.fdc = new model.Fdc(this);
@@ -504,6 +507,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.halted = false;
                 video.reset(this, this.sysvia);
                 if (hard) soundChip.reset();
+            };
+
+            this.updateKeyLayout = function() {
+                this.sysvia.setKeyLayout(config.keyLayout);
             };
 
             this.setzn = function (v) {
