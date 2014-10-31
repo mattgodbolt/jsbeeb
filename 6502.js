@@ -481,8 +481,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     }
                     this.videoDisplayPage = 0;
                     this.disassembler = new opcodes.Disassemble(this);
-                    this.sysvia = via.SysVia(this, soundChip, cmos, model.isMaster);
-                    this.uservia = via.UserVia(this, model.isMaster, config.keyLayout);
+                    this.sysvia = via.SysVia(this, soundChip, cmos, model.isMaster, config.keyLayout);
+                    this.uservia = via.UserVia(this, model.isMaster);
                     this.acia = new Acia(this, soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
                     this.fdc = new model.Fdc(this);
