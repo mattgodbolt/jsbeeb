@@ -253,7 +253,7 @@ define(['jsunzip'], function (jsunzip) {
             return "UK";
         }
         if (localStorage.keyboardLayout) {
-            return localStorage.keyboardLayout;
+            return localStorage.keyboardLayout == "US" ? "US" : "UK";
         }
         if (navigator.language) {
             if (navigator.language.toLowerCase() == "en-gb") return "UK";
@@ -265,28 +265,28 @@ define(['jsunzip'], function (jsunzip) {
 
     if (exports.isFirefox()) {
         keyCodes.SEMICOLON = 59;
-        // # key
+        // #~ key (not on US keyboard)
         keyCodes.HASH = 163;
         keyCodes.APOSTROPHE = 222;
+        keyCodes.BACK_QUOTE = 192;
         // Firefox doesn't return a keycode for this
         keyCodes.MUTE = -1;
         keyCodes.MINUS = 173;
         keyCodes.EQUALS = 61;
-        keyCodes.BACK_QUOTE = 192;
     } else {
         // Chrome
         // TODO: check other browsers
         // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
         keyCodes.SEMICOLON = 186;
-        // # key
-        keyCodes.HASH = 222;
-        keyCodes.APOSTROPHE = 192;
+        // #~ key (not on US keyboard)
+        keyCodes.HASH = isUKlayout ? 222 : 223;
+        keyCodes.APOSTROPHE = isUKlayout ? 192 : 222;
         keyCodes.MUTE = 173;
         keyCodes.MINUS = 189;
         keyCodes.EQUALS = 187;
-        keyCodes.BACK_QUOTE = 223;
+        keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
     }
-
+    
     exports.getKeyMap = function (keyLayout) {
         var keys2 = [];
 
@@ -384,21 +384,15 @@ define(['jsunzip'], function (jsunzip) {
         map(keyCodes.RIGHT, BBC.RIGHT);
         map(keyCodes.DOWN, BBC.DOWN);
 
-        // TODO: these seem to to be the wrong way round for US but it works like this...
-        var BACK_QUOTE = isUKlayout ? keyCodes.BACK_QUOTE : keyCodes.APOSTROPHE;
-        var APOSTROPHE = isUKlayout ? keyCodes.APOSTROPHE : keyCodes.HASH;
-        // not on US keyboard
-        var HASH = isUKlayout ? keyCodes.HASH : BACK_QUOTE;
-
-        if (keyLayout === "natural") {
+        if (keyLayout == "natural") {
 
             // "natural" keyboard
 
             map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
 
             // US Keyboard: has Tilde on <Shift>BACK_QUOTE
-            map(BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE);
-            map(APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true);
+            map(keyCodes.BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE);
+            map(keyCodes.APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true);
             map(keyCodes.K2, isUKlayout ? BBC.K2 : BBC.AT, true);
 
             // 1st row
@@ -431,9 +425,9 @@ define(['jsunzip'], function (jsunzip) {
 
             map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS);
 
-            map(APOSTROPHE, BBC.COLON_STAR, false);
+            map(keyCodes.APOSTROPHE, BBC.COLON_STAR, false);
 
-            map(HASH, BBC.HAT_TILDE); // OK for <Shift> at least
+            map(keyCodes.HASH, BBC.HAT_TILDE); // OK for <Shift> at least
 
             map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
 
@@ -464,7 +458,7 @@ define(['jsunzip'], function (jsunzip) {
             map(keyCodes.ESCAPE, BBC.F0);
 
             // 2nd row
-            map(BACK_QUOTE, BBC.ESCAPE);
+            map(keyCodes.BACK_QUOTE, BBC.ESCAPE);
             map(keyCodes.K1, BBC.K1);
             map(keyCodes.K2, BBC.K2);
             map(keyCodes.K3, BBC.K3);
@@ -493,9 +487,9 @@ define(['jsunzip'], function (jsunzip) {
             // no key for BBC.CAPSLOCK (mapped to CTRL_LEFT below)
             map(keyCodes.CAPSLOCK, BBC.CTRL);
             map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS);
-            map(APOSTROPHE, BBC.COLON_STAR);
+            map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
             // UK keyboard (key missing on US)
-            map(HASH, BBC.RIGHT_SQUARE_BRACKET);
+            map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
 
             // UK has extra key \| for SHIFT
             map(keyCodes.SHIFT_LEFT, isUKlayout ? BBC.SHIFTLOCK : BBC.SHIFT);
@@ -554,7 +548,9 @@ define(['jsunzip'], function (jsunzip) {
             map(keyCodes.UP, BBC.UP); // arrow up
             map(keyCodes.RIGHT, BBC.RIGHT); // arrow right
             map(keyCodes.DOWN, BBC.DOWN); // arrow down
-            map(APOSTROPHE, BBC.COLON_STAR);
+            map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
+            map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
+            map(keyCodes.BACK_QUOTE, BBC.AT);
         }
 
         // Master
@@ -568,7 +564,7 @@ define(['jsunzip'], function (jsunzip) {
         map(keyCodes.NUMPAD7, BBC.NUMPAD7);
         map(keyCodes.NUMPAD8, BBC.NUMPAD8);
         map(keyCodes.NUMPAD9, BBC.NUMPAD9);
-        // small hack in main.js/keyCode() to make this work (Chrome only)
+        // small hack in main.js/keyCode() to make this work 
         map(keyCodes.NUMPAD_DECIMAL_POINT, BBC.NUMPAD_DECIMAL_POINT);
 
         // "natural" mapping
