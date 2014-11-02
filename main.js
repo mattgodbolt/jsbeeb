@@ -581,7 +581,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 if (discImage[0] == "!") {
                     discImage = discImage.substr(1);
                     context = "Local disc";
-                    processor.fdc.loadDisc(drive, localDisc(processor.fdc, discImage));
+                    processor.fdc.loadDisc(drive, disc.localDisc(processor.fdc, discImage));
                 } else if (discImage[0] == "|") {
                     discImage = discImage.substr(1);
                     context = "Stairway to Hell";

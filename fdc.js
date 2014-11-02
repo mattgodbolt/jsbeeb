@@ -138,7 +138,7 @@ define(['utils'], function (utils) {
                         this.inWrite = false;
                         return;
                     }
-                    fdc.readDiscData(this.byteWithinSector == 255);
+                    var c = fdc.readDiscData(this.byteWithinSector == 255);
                     data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = c;
                     if (++this.byteWithinSector == 256) {
                         this.inWrite = false;
