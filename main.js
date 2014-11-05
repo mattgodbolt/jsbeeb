@@ -944,16 +944,22 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             var axisRaw = self.gamepad0.axes[i];
                             var axis;
 
+                            // Mike's XBox 360 controller, zero positions
+                            // console.log(i, axisRaw, axis);
+                            //0 -0.03456169366836548 -1
+                            //1 -0.037033677101135254 -1
+                            //2 0.055374979972839355 1
+                            //3 0.06575113534927368 1
+                            var threshold = 0.1;
+                            
                             // normalize to -1, 0, 1
-                            if (axisRaw < -0.01) {
+                            if (axisRaw < -threshold) {
                                 axis = -1;
-                            } else if (axisRaw > 0.01) {
+                            } else if (axisRaw > threshold) {
                                 axis = 1;
                             } else {
                                 axis = 0;
                             }
-
-                            //console.log(i, axisRaw, axis);
 
                             if (axis !== self.gamepadAxes[i]) {
 
