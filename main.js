@@ -1,5 +1,5 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'models', 'basic-tokenise', 'promise', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, models, tokeniser) {
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise', 'promise', 'bootstrap', 'jquery-visibility'],
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser) {
         "use strict";
 
         var processor;
@@ -476,7 +476,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         function discSthClick(item) {
             utils.noteEvent('sth', 'click', item);
-            parsedQuery.disc = "|" + item;
+            parsedQuery.disc = "sth:" + item;
             updateUrl();
             popupLoading("Loading " + item);
             loadDiscImage(parsedQuery.disc).then(function (disc) {
@@ -492,7 +492,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         function tapeSthClick(item) {
             utils.noteEvent('sth', 'clickTape', item);
-            parsedQuery.tape = "|" + item;
+            parsedQuery.tape = "sth:" + item;
             updateUrl();
             popupLoading("Loading " + item);
             loadTapeImage(parsedQuery.tape).then(
@@ -695,17 +695,34 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             dialog.modal();
         }
 
+        function splitImage(image) {
+            var match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
+            var schema = match[2] || match[1] || "";
+            image = match[3];
+            return {image: image, schema: schema};
+        }
+
         function loadDiscImage(discImage) {
             if (!discImage) return Promise.resolve(null);
-            if (discImage[0] === "!") {
-                discImage = discImage.substr(1);
+            var split = splitImage(discImage);
+            discImage = split.image;
+            var schema = split.schema;
+            if (schema[0] === "!" || schema === "local") {
                 return Promise.resolve(disc.localDisc(processor.fdc, discImage));
             }
-            if (discImage[0] === "|") {
-                discImage = discImage.substr(1);
+            if (schema === "|" || schema === "sth") {
                 return discSth.fetch(discImage).then(function (discData) {
                     return disc.ssdFor(processor.fdc, discData);
                 });
+            }
+            if (schema === "gd") {
+                var splat = discImage.match(/([^/]+)\/?(.*)/);
+                var title = "(unknown)";
+                if (splat) {
+                    discImage = splat[1];
+                    title = splat[2];
+                }
+                return gdLoad({title: title, id: discImage});
             }
 
             return disc.ssdLoad("discs/" + discImage).then(function (discData) {
@@ -714,7 +731,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         }
 
         function loadTapeImage(tapeImage) {
-            if (tapeImage[0] == '|') {
+            var split = splitImage(tapeImage);
+            tapeImage = split.image;
+            var schema = split.schema;
+
+            if (schema === '|' || schema === "sth") {
                 tapeImage = tapeImage.substr(1);
                 return tapeSth.fetch(tapeImage).then(function (image) {
                     processor.acia.setTape(tapes.loadTapeFromData(image));
@@ -768,11 +789,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         function popupLoading(msg) {
             var modal = $('#loading-dialog');
             modal.find(".loading").text(msg);
+            $('#google-drive-auth').hide();
             modal.modal("show");
         }
 
         function loadingFinished(error) {
             var modal = $('#loading-dialog');
+            $('#google-drive-auth').hide();
             if (error) {
                 modal.modal("show");
                 modal.find(".loading").text("Error: " + error);
@@ -784,6 +807,113 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             }
         }
 
+        var gdAuthed = false;
+        var googleDrive = new GoogleDriveLoader();
+
+        function gdAuth(imm) {
+            return googleDrive.authorize(imm)
+                .then(function (authed) {
+                    gdAuthed = authed;
+                    console.log("authed =", authed);
+                    return authed;
+                }, function (err) {
+                    console.log("Error handling google auth: " + err);
+                    gdModal.find('.loading').text("There was an error accessing your Google Drive account: " + err);
+                });
+        }
+
+        var googleDriveLoadingResolve, googleDriveLoadingReject;
+        $('#google-drive-auth form').on("submit", function (e) {
+            $('#google-drive-auth').hide();
+            e.preventDefault();
+            gdAuth(false).then(function (authed) {
+                if (authed) googleDriveLoadingResolve();
+                else googleDriveLoadingReject(new Error("Unable to authorize Google Drive"));
+            });
+        });
+
+        function gdLoad(cat) {
+            utils.noteEvent('google-drive', 'click', cat.title);
+            // TODO: have a onclose flush event, handle errors
+            /*
+             $(window).bind("beforeunload", function() {
+             return confirm("Do you really want to close?");
+             });
+             */
+            parsedQuery.disc = "gd:" + cat.id + "/" + cat.title;
+            updateUrl();
+            popupLoading("Loading '" + cat.title + "' from Google Drive");
+            return googleDrive.initialise()
+                .then(function (available) {
+                    console.log("Google Drive available =", available);
+                    if (!available) throw new Error("Google Drive is not available");
+                    return gdAuth(true);
+                })
+                .then(function (authed) {
+                    console.log("Google Drive authed=", authed);
+                    if (authed) {
+                        return true;
+                    } else {
+                        return new Promise(function (resolve, reject) {
+                            googleDriveLoadingResolve = resolve;
+                            googleDriveLoadingReject = reject;
+                            $('#google-drive-auth').show();
+                        });
+                    }
+                })
+                .then(function () {
+                    return googleDrive.load(processor.fdc, cat.id);
+                })
+                .then(function (ssd) {
+                    console.log("Google Drive loading finished");
+                    loadingFinished();
+                    return ssd;
+                })
+                .catch(function (error) {
+                    console.log("Google Drive loading error:", error);
+                    loadingFinished(error);
+                });
+        }
+
+        $('.if-drive-available').hide();
+        googleDrive.initialise().then(function (available) {
+            if (available) {
+                $('.if-drive-available').show();
+                gdAuth(true);
+            }
+        });
+        var gdModal = $('#google-drive');
+        $('#open-drive-link').on('click', function () {
+            if (gdAuthed) {
+                gdModal.modal("show");
+            } else {
+                gdAuth(false).then(function (authed) {
+                    if (authed) {
+                        gdModal.modal("show");
+                    }
+                });
+            }
+            return false;
+        });
+        gdModal.on('show.bs.modal', function () {
+            gdModal.find(".loading").text("Loading...").show();
+            gdModal.find("li").not(".template").remove();
+            googleDrive.cat().then(function (cat) {
+                var dbList = gdModal.find(".list");
+                gdModal.find(".loading").hide();
+                var template = dbList.find(".template");
+                $.each(cat, function (_, cat) {
+                    var row = template.clone().removeClass("template").appendTo(dbList);
+                    row.find(".name").text(cat.title);
+                    $(row).on("click", function () {
+                        gdLoad(cat).then(function (ssd) {
+                            processor.fdc.loadDisc(0, ssd);
+                        });
+                        gdModal.modal("hide");
+                    });
+                });
+            });
+        });
         var discList = $('#disc-list');
         var template = discList.find(".template");
         $.each(availableImages, function (i, image) {
@@ -797,6 +927,24 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 updateUrl();
                 $('#discs').modal("hide");
             });
+        });
+
+        $("#google-drive form").on("submit", function (e) {
+            e.preventDefault();
+            var text = $("#google-drive .disc-name").val();
+            if (!text) return;
+            popupLoading("Connecting to Google Drive");
+            $("#google-drive").modal("hide");
+            popupLoading("Creating '" + text + "' on Google Drive");
+            googleDrive.create(processor.fdc, text)
+                .then(function (result) {
+                    parsedQuery.disc = "gd:" + result.fileId + "/" + text;
+                    processor.fdc.loadDisc(0, result.disc);
+                    updateUrl();
+                    loadingFinished();
+                }, function (error) {
+                    loadingFinished(error);
+                });
         });
 
         $('#model-menu a').on("click", function (e) {
@@ -923,7 +1071,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         }, function (error) {
             showError("initialising", error);
             console.log(error);
-        });
+        }).done();
 
         function areYouSure(message, yesText, noText, yesFunc) {
             var ays = $('#are-you-sure');

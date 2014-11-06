@@ -659,6 +659,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         for (var i = 0; i < len; ++i) result[i] = dataIn.charCodeAt(i) & 0xff;
         return result;
     }
+    exports.makeBinaryData = makeBinaryData;
 
     function loadDataHttp(url) {
         return new Promise(function(resolve, reject) {

@@ -58,6 +58,7 @@ define(['utils'], function (utils) {
     }
 
     function baseSsd(fdc, data, flusher) {
+        if (data === null || data === undefined) throw new Error("Bad disc data");
         return {
             dsd: false,
             inRead: false,
@@ -884,6 +885,7 @@ define(['utils'], function (utils) {
         ssdLoad: ssdLoad,
         localDisc: localDisc,
         emptySsd: emptySsd,
-        ssdFor: ssdFor
+        ssdFor: ssdFor,
+        baseSsd: baseSsd
     };
 });
