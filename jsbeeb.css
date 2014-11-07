@@ -2,16 +2,31 @@ body {
     padding-top: 50px;
 }
 
-#screen {
+#cub-monitor {
+    display: block;
+}
+
+#cub-monitor > div {
+    width: 900px;
+    height: 760px;
+    position: relative;
     margin-left: auto;
     margin-right: auto;
+}
+
+#cub-monitor-pic {
+    position: absolute;
+}
+
+#screen {
+    position: absolute;
+    z-index: -1;
+    top: 0px;
+    left: 0px;
+    width: 869px;
+    height: 740px;
     display: block;
-    padding: 20px;
-    border: 98px solid transparent;
     background-color: black;
-    -webkit-border-image:url(images/cub-monitor.jpeg) 98 98 stretch; /* Safari 5 */
-    -o-border-image:url(images/cub-monitor.jpeg) 98 98 stretch; /* Opera */
-    border-image:url(images/cub-monitor.jpeg) 98 98 stretch;
 }
 
 #debug {
@@ -22,8 +37,8 @@ body {
     position: fixed;
     bottom: 0px;
     right: 0px;
-	font-size: 8pt;
-	font-family: monospace;
+    font-size: 8pt;
+    font-family: monospace;
 }
 
 #hardware_debug {
@@ -34,12 +49,12 @@ body {
     position: fixed;
     bottom: 80px;
     left: 0px;
-	font-size: 8pt;
-	font-family: monospace;
+    font-size: 8pt;
+    font-family: monospace;
 }
 
 #registers {
-	float: right;
+    float: right;
     text-align: right;
     width: 90px;
 }
@@ -61,19 +76,19 @@ span.accesskey {
     max-width: 6em;
 }
 
-#leds { 
+#leds {
     box-shadow: 3px 3px 5px #000;
     border-radius: 6px;
     border: 1px solid #555555;
     margin: 2px;
     padding: 2px;
-	font-size: 8pt;
+    font-size: 8pt;
     bottom: 0px;
     left: 0px;
-    position: fixed; 
+    position: fixed;
 }
 
-#leds td, th { 
+#leds td, th {
     padding: 2px;
     text-align: center
 }
@@ -96,12 +111,15 @@ div.led {
 .red.led {
     background-image: url(images/red-off-16.png);
 }
+
 .red.led.on {
     background-image: url(images/red-on-16.png);
 }
+
 .yellow.led {
     background-image: url(images/yellow-off-16.png);
 }
+
 .yellow.led.on {
     background-image: url(images/yellow-on-16.png);
 }
@@ -185,6 +203,7 @@ div.modal-body > div:not(:first-child) {
 .instr_mem_ref:hover, .instr_instr_ref:hover {
     text-decoration: underline;
 }
+
 .addr:hover {
     background-color: #330000;
 }
@@ -226,7 +245,7 @@ div.modal-body > div:not(:first-child) {
 }
 
 .template {
-	display: none;
+    display: none;
 }
 
 .initially-hidden {

@@ -50,8 +50,21 @@ define(['teletext'], function (Teletext) {
             updateFbTable();
         };
 
+        // from photographic reference, the visible border in mode 1 is
+        // top: 9px, bottom 15px, left 23, right 28. These borders are the offset
+        // at which we clip the TV picture, so they don't directly correspond to
+        // the offsets.
+        self.topBorder = 0;
+        self.bottomBorder = -5;
+        self.leftBorder = 220;
+        self.rightBorder = 180;
+
         function paint() {
-            paint_ext(320, 24 << 1, 992, (296 << 1) + 1);
+            paint_ext(
+                self.leftBorder,
+                self.topBorder << 1,
+                1280 - self.rightBorder,
+                ((320 - self.bottomBorder) << 1) + 1);
         }
 
         self.debugPaint = paint;
