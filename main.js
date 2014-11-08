@@ -31,6 +31,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var keyLayout = window.localStorage.keyLayout || "physical";
 
         var BBC = utils.BBC;
+        var keyCodes = utils.keyCodes;
 
         self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
             BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
@@ -64,8 +65,35 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 var val = null;
                 if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
                 parsedQuery[key] = val;
+                
+                console.log(utils.userKeymap);
+                
+                // eg KEY.CAPSLOCK=CTRL
+                if (key.indexOf("KEY.") === 0) {
+                    
+                    var bbcKey = val.toUpperCase();
+                    
+                    if (BBC[bbcKey]) {
+                        
+                        // remove KEY.
+                        var nativeKey = key.substring(4).toUpperCase();
+                        
+                        if (keyCodes[nativeKey]) {
+                            console.log("mapping " + nativeKey + " to " + bbcKey);
+                            utils.userKeymap.push({native:nativeKey, bbc:bbcKey})
+                        } else {
+                            console.log("unknown key: " + nativeKey);
+                        }
+                        
+                    } else {
+                        console.log("unknown BBC key: " + val);
+                    }
+                    
+                    
 
-                switch (key) {
+                } else {
+
+                    switch (key) {
                     case "LEFT":
                         self.gamepadMapping[3] = BBC[val];
                         self.gamepadAxisMapping[0][-1] = BBC[val];
@@ -110,6 +138,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     case "disc2":
                         secondDiscImage = val;
                         break;
+                    }
                 }
             });
         }

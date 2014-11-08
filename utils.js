@@ -15,6 +15,8 @@ define(['jsunzip'], function (jsunzip) {
         if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
         return parseInt(s, 16);
     };
+    
+    exports.userKeymap = [];
 
     exports.BBC = {
         SEMICOLON_PLUS: [7, 5],
@@ -299,7 +301,7 @@ define(['jsunzip'], function (jsunzip) {
         // shiftDown MUST be true or false (not undefined)
         function doMap(s, colRow, shiftDown) {
             if (keys2[shiftDown][s] && keys2[shiftDown][s] != colRow) {
-                console.log("Duplicate binding for key", s, colRow, keys2[shiftDown][s]);
+                console.log("Warning: duplicate binding for key", (shiftDown ? "<SHIFT>":"") + s, colRow, keys2[shiftDown][s]);
             }
             keys2[shiftDown][s] = colRow;
         }
@@ -321,7 +323,7 @@ define(['jsunzip'], function (jsunzip) {
                 doMap(s, colRow, shiftDown);
             }
         }
-
+        
         var BBC = exports.BBC;
 
         map(keyCodes.Q, BBC.Q);
@@ -581,6 +583,13 @@ define(['jsunzip'], function (jsunzip) {
         // eg Master Dunjunz needs # Del 3 , * Enter
         // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
 
+        // user keymapping
+        // do last (to override defaults)
+        while (exports.userKeymap.length > 0) {
+            var mapping = exports.userKeymap.pop();
+            map(keyCodes[mapping.native], BBC[mapping.bbc]);
+        }
+        
         return keys2;
     };
 
