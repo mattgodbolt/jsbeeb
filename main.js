@@ -33,12 +33,26 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var BBC = utils.BBC;
         var keyCodes = utils.keyCodes;
 
-        self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
-            BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-            BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-            BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
-
+        //self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
+        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
+        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
+        
+        self.gamepadMapping = [];
+        
         // default: "snapper" keys
+        self.gamepadMapping[14] = BBC.Z;
+        self.gamepadMapping[15] = BBC.X;
+        self.gamepadMapping[13] = BBC.SLASH;
+        self.gamepadMapping[12] = BBC.COLON_STAR;
+
+        // often <Return> = "Fire"
+        self.gamepadMapping[0] = BBC.RETURN;
+        // "start" (often <Space> to start game)
+        self.gamepadMapping[9] = BBC.SPACE;
+
+
+        // Gamepad joysticks
         self.gamepadAxisMapping = [
             [],
             [],
@@ -46,6 +60,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             []
         ];
 
+        /*
         self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
         self.gamepadAxisMapping[0][1] = BBC.X;          // right
         self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
@@ -54,6 +69,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         self.gamepadAxisMapping[2][1] = BBC.X;          // right
         self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
         self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
+        */
 
         if (queryString) {
             queryString = queryString.substring(1);
@@ -84,15 +100,119 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                         } else {
                             console.log("unknown key: " + nativeKey);
                         }
-                        
+
                     } else {
                         console.log("unknown BBC key: " + val);
                     }
+
+
+                // gamepad mapping
+                    // eg ?GP.FIRE2=RETURN
+                } else if (key.indexOf("GP.") === 0) {
+
+                    // remove GP.
+                    var gamepadKey = key.substring(3).toUpperCase();
+                    var bbcKey = val.toUpperCase();
                     
-                    
+                    // convert "1" into "K1"
+                    if ("0123456789".indexOf(bbcKey) > 0) {
+                        bbcKey = "K" + bbcKey;
+                    }
+
+                    if (BBC[bbcKey]) {
+
+                        switch (gamepadKey) {
+                        
+                        // XBox 360 Controller names
+                        case "UP2":
+                            self.gamepadAxisMapping[3][-1] = BBC[bbcKey];
+                            break;
+                        case "UP1":
+                            self.gamepadAxisMapping[1][-1] = BBC[bbcKey];
+                            break;
+                        case "UP3":
+                            self.gamepadMapping[0] = BBC[bbcKey];
+                            break;
+                        case "DOWN2":
+                            self.gamepadAxisMapping[3][1] = BBC[bbcKey];
+                            break;
+                        case "DOWN1":
+                            self.gamepadAxisMapping[1][1] = BBC[bbcKey];
+                            break;
+                        case "DOWN3":
+                            self.gamepadMapping[2] = BBC[bbcKey];
+                            break;
+                        case "LEFT2":
+                            self.gamepadAxisMapping[2][-1] = BBC[bbcKey];
+                            break;
+                        case "LEFT1":
+                            self.gamepadAxisMapping[0][-1] = BBC[bbcKey];
+                            break;
+                        case "LEFT3":
+                            self.gamepadMapping[3] = BBC[bbcKey];
+                            break;
+                        case "RIGHT2":
+                            self.gamepadAxisMapping[2][1] = BBC[bbcKey];
+                            break;
+                        case "RIGHT1":
+                            self.gamepadAxisMapping[0][1] = BBC[bbcKey];
+                            break;
+                        case "RIGHT3":
+                            self.gamepadMapping[1] = BBC[bbcKey];
+                            break;
+                        case "FIRE2":
+                            self.gamepadMapping[11] = BBC[bbcKey];
+                            break;
+                        case "FIRE1":
+                            self.gamepadMapping[10] = BBC[bbcKey];
+                            break;
+                        case "A":
+                            self.gamepadMapping[0] = BBC[bbcKey];
+                            break;
+                        case "B":
+                            self.gamepadMapping[1] = BBC[bbcKey];
+                            break;
+                        case "X":
+                            console.log("X", bbcKey);
+                            self.gamepadMapping[2] = BBC[bbcKey];
+                            break;
+                        case "Y":
+                            console.log("Y", bbcKey);
+                            self.gamepadMapping[3] = BBC[bbcKey];
+                            break;
+                        case "START":
+                            self.gamepadMapping[9] = BBC[bbcKey];
+                            break;
+                        case "BACK":
+                            self.gamepadMapping[8] = BBC[bbcKey];
+                            break;
+                        case "RB":
+                            self.gamepadMapping[5] = BBC[bbcKey];
+                            break;
+                        case "RT":
+                            self.gamepadMapping[7] = BBC[bbcKey];
+                            break;
+                        case "LB":
+                            self.gamepadMapping[4] = BBC[bbcKey];
+                            break;
+                        case "LT":
+                            self.gamepadMapping[6] = BBC[bbcKey];
+                            break;
+
+
+                        default:
+                            console.log("unknown gamepad key: " + gamepadKey);
+
+                        }
+
+
+                    } else {
+                        console.log("unknown BBC key: " + val);
+                    }
+
+
 
                 } else {
-
                     switch (key) {
                     case "LEFT":
                         self.gamepadMapping[3] = BBC[val];
@@ -979,7 +1099,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             //1 -0.037033677101135254 -1
                             //2 0.055374979972839355 1
                             //3 0.06575113534927368 1
-                            var threshold = 0.1;
+                            var threshold = 0.15;
                             
                             // normalize to -1, 0, 1
                             if (axisRaw < -threshold) {
@@ -1027,10 +1147,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                                 if (button.pressed !== self.gamepadButtons[i]) {
                                     // different to last time
 
-                                    if (button.pressed) {
-                                        processor.sysvia.keyDownRaw(self.gamepadMapping[i]);
-                                    } else {
-                                        processor.sysvia.keyUpRaw(self.gamepadMapping[i]);
+                                    if (self.gamepadMapping[i]) {
+                                        if (button.pressed) {
+                                            processor.sysvia.keyDownRaw(self.gamepadMapping[i]);
+                                        } else {
+                                            processor.sysvia.keyUpRaw(self.gamepadMapping[i]);
+                                        }
                                     }
                                 }
 
