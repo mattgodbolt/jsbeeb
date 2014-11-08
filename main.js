@@ -81,19 +81,19 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 var val = null;
                 if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
                 parsedQuery[key] = val;
-                
+
                 console.log(utils.userKeymap);
-                
+
                 // eg KEY.CAPSLOCK=CTRL
                 if (key.indexOf("KEY.") === 0) {
-                    
+
                     var bbcKey = val.toUpperCase();
-                    
+
                     if (BBC[bbcKey]) {
-                        
+
                         // remove KEY.
                         var nativeKey = key.substring(4).toUpperCase();
-                        
+
                         if (keyCodes[nativeKey]) {
                             console.log("mapping " + nativeKey + " to " + bbcKey);
                             utils.userKeymap.push({native:nativeKey, bbc:bbcKey})
@@ -106,14 +106,14 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     }
 
 
-                // gamepad mapping
+                    // gamepad mapping
                     // eg ?GP.FIRE2=RETURN
                 } else if (key.indexOf("GP.") === 0) {
 
                     // remove GP.
                     var gamepadKey = key.substring(3).toUpperCase();
                     var bbcKey = val.toUpperCase();
-                    
+
                     // convert "1" into "K1"
                     if ("0123456789".indexOf(bbcKey) > 0) {
                         bbcKey = "K" + bbcKey;
@@ -122,7 +122,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     if (BBC[bbcKey]) {
 
                         switch (gamepadKey) {
-                        
+
                         // XBox 360 Controller names
                         case "UP2":
                             self.gamepadAxisMapping[3][-1] = BBC[bbcKey];
