@@ -7,7 +7,7 @@ body {
 }
 
 #cub-monitor > div {
-    width: 900px;
+    width: 921px;
     height: 682px;
     position: relative;
     margin-left: auto;
@@ -23,7 +23,7 @@ body {
     z-index: -1;
     top: 0px;
     left: 0px;
-    width: 869px;
+    width: 921px;
     height: 682px;
     display: block;
     background-color: black;
