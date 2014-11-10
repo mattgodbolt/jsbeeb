@@ -55,7 +55,6 @@ If you're looking to help:
   * Needs a UI to select it.
   * Exile doesn't run, for some reason.
 * Save disc support
-  * I've started dropbox support, but it's not quite there yet.
   * Google Drive support would be nice
   * Local discs need to be made more workable and need an "export" feature
 * `git grep -i todo`

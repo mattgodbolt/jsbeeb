@@ -1,5 +1,5 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'dropbox', 'models', 'basic-tokenise', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, DropboxLoader, models, tokeniser) {
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'models', 'basic-tokenise', 'bootstrap', 'jquery-visibility'],
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, models, tokeniser) {
         "use strict";
 
         var processor;
@@ -12,7 +12,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var syncLights;
         var discSth;
         var tapeSth;
-        var dropbox;
         var running;
 
         var availableImages;
@@ -665,10 +664,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             );
         }
 
-        if (parsedQuery.dbEnabled) {
-            $('.hidden-unless-db-enabled').show();
-        }
-
         if (parsedQuery.patch) {
             dbgr.setPatch(parsedQuery.patch);
         }
@@ -735,17 +730,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     discImage = discImage.substr(1);
                     context = "Stairway to Hell";
                     processor.fdc.loadDiscData(drive, discSth.fetch(discImage));
-                } else if (discImage[0] == "^") {
-                    discImage = discImage.substr(1);
-                    context = "Dropbox";
-                    _.defer(function () {
-                        popupLoading("Connecting to Dropbox");
-                        var db = new DropboxLoader(function () {
-                            dropboxLoad(db, discImage);
-                        }, function (error) {
-                            loadingFinished(error);
-                        });
-                    });
                 } else {
                     processor.fdc.loadDiscData(drive, disc.ssdLoad("discs/" + discImage));
                 }
@@ -821,8 +805,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         }
 
         function loadingFinished(error) {
-            // TODO: either look for Dropbox errors here or wrap all the DB callers
-            // with wrappers to do the right thing on DB errors.
             var modal = $('#loading-dialog');
             if (error) {
                 modal.find(".loading").text("Error: " + error);
@@ -834,39 +816,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             }
         }
 
-        function dropboxLoad(dropbox, cat, create) {
-            utils.noteEvent('dropbox', 'click', cat);
-            parsedQuery.disc = "^" + cat;
-            updateUrl();
-            if (create)
-                popupLoading("Creating '" + cat + "' on Dropbox");
-            else
-                popupLoading("Loading '" + cat + "' from Dropbox");
-            dropbox.load(processor.fdc, cat, 0, function (error) {
-                loadingFinished(error);
-            });
-        }
-
-        var dropboxModal = $('#dropbox');
-        dropboxModal.on('show.bs.modal', function () {
-            dropboxModal.find(".loading").text("Loading...").show();
-            dropboxModal.find("li").not(".template").remove();
-            dropbox = new DropboxLoader(function (cat) {
-                var dbList = $("#dropbox-list");
-                $("#dropbox .loading").hide();
-                var template = dbList.find(".template");
-                $.each(cat, function (_, cat) {
-                    var row = template.clone().removeClass("template").appendTo(dbList);
-                    row.find(".name").text(cat);
-                    $(row).on("click", function () {
-                        dropboxLoad(dropbox, cat);
-                        dropboxModal.modal("hide");
-                    });
-                });
-            }, function (error) {
-                $('#dropbox .loading').text("There was an error accessing your Dropbox account: " + error);
-            });
-        });
         var discList = $('#disc-list');
         var template = discList.find(".template");
         $.each(availableImages, function (i, image) {
@@ -881,20 +830,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 $('#discs').modal("hide");
             });
         });
-        function dbCreate() {
-            var text = $("#db-disc-name").val();
-            if (!text) return false;
-            popupLoading("Connecting to Dropbox");
-            $("#dropbox").modal("hide");
-            var db = new DropboxLoader(function () {
-                dropboxLoad(db, text, true);
-            }, function (error) {
-                loadingFinished(error);
-            });
-            return false;
-        }
-
-        $("#dropbox form").on("submit", dbCreate);
 
         $('#model-menu a').on("click", function (e) {
             parsedQuery.model = $(e.target).attr("data-target");

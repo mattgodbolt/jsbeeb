@@ -13,7 +13,6 @@
             'jquery': 'lib/jquery.min',
             'jquery-visibility': 'lib/jquery-visibility',
             'bootstrap': 'lib/bootstrap.min',
-            'dropbox': 'lib/dropbox.min',
             'jsunzip': 'lib/jsunzip',
             'underscore': 'lib/underscore-min'
         },
