@@ -1,5 +1,5 @@
 require(['jquery', 'tests/test'], function ($, test) {
-    "use strict"
+    "use strict";
     var currentTest = null;
 
     function log() {
@@ -57,7 +57,6 @@ require(['jquery', 'tests/test'], function ($, test) {
         } else {
             fb32 = new Uint32Array(1280 * 1024);
         }
-        test.run(log, beginTest, endTest, function () {
-        }, fb32, paint);
+        test.run(log, beginTest, endTest, fb32, paint);
     });
 });

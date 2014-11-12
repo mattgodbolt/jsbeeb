@@ -14,6 +14,7 @@
             'jquery-visibility': 'lib/jquery-visibility',
             'bootstrap': 'lib/bootstrap.min',
             'jsunzip': 'lib/jsunzip',
+            'promise': 'lib/promise-6.0.0',
             'underscore': 'lib/underscore-min'
         },
         shim: {

@@ -5,6 +5,7 @@ var fs = require('fs');
 requirejs.config({
     paths: {
         'jsunzip': 'lib/jsunzip',
+        'promise': 'lib/promise-6.0.0',
         'underscore': 'lib/underscore-min'
     }
 });
@@ -25,8 +26,8 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
                     for (var x = minx; x < maxx; ++x) {
                         var col = fb32[1280 * y + x];
                         buf[addr++] = col & 0xff;
-                        buf[addr++] = (col>>>8) & 0xff;
-                        buf[addr++] = (col>>>16) & 0xff;
+                        buf[addr++] = (col >>> 8) & 0xff;
+                        buf[addr++] = (col >>> 16) & 0xff;
                     }
                 }
                 var png = new Png(buf, width, height);
@@ -55,12 +56,19 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
 
         var discName = "elite";
         var cpu = new Cpu6502(models.findModel('B'), dbgr, video, soundChip);
-        cpu.fdc.loadDiscData(0, disc.ssdLoad("discs/" + discName + ".ssd"));
-        cpu.sysvia.keyDown(16);
-        cpu.execute(10 * 1000 * 1000);
-        cpu.sysvia.keyUp(16);
-        for (var i = 0; i < 10; ++i) {
-            screenshotRequest = "/tmp/" + discName + "-" + i + ".png";
-            benchmarkCpu(cpu, 10 * 1000 * 1000);
-        }
+        cpu.initialise().then(function () {
+            return disc.ssdLoad("discs/" + discName + ".ssd");
+        }).then(function (data) {
+            cpu.fdc.loadDisc(0, disc.ssdFor(cpu.fdc, data));
+            cpu.sysvia.keyDown(16);
+            cpu.execute(10 * 1000 * 1000);
+            cpu.sysvia.keyUp(16);
+            for (var i = 0; i < 10; ++i) {
+                screenshotRequest = "/tmp/" + discName + "-" + i + ".png";
+                benchmarkCpu(cpu, 10 * 1000 * 1000);
+            }
+        }).catch(function (err) {
+            "use strict";
+            console.log("Got error: ", err);
+        });
     });

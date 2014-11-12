@@ -423,40 +423,45 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.loadRom = function (name, offset) {
                 name = "roms/" + name;
                 console.log("Loading ROM from " + name);
-                var data = utils.loadData(name);
-                var len = data.length;
-                if (len != 16384 && len != 8192) {
-                    throw "Broken rom file";
-                }
-                for (var i = 0; i < len; ++i) {
-                    this.ramRomOs[offset + i] = data[i];
-                }
+                return utils.loadData(name).then(function (data) {
+                    var len = data.length;
+                    if (len !== 16384 && len !== 8192) {
+                        throw new Error("Broken rom file");
+                    }
+                    for (var i = 0; i < len; ++i) {
+                        self.ramRomOs[offset + i] = data[i];
+                    }
+                });
             };
 
             this.loadOs = function (os) {
                 var i;
+                var extraRoms = Array.prototype.slice.call(arguments, 1);
                 os = "roms/" + os;
                 console.log("Loading OS from " + os);
-                var data = utils.loadData(os);
-                var len = data.length;
-                if (len < 0x4000 || (len & 0x3fff)) throw "Broken ROM file (length=" + len + ")";
-                for (i = 0; i < 0x4000; ++i) {
-                    this.ramRomOs[this.osOffset + i] = data[i];
-                }
-                var numExtraBanks = (len - 0x4000) / 0x4000;
-                var romIndex = 16 - numExtraBanks;
-                for (i = 0; i < numExtraBanks; ++i) {
-                    var srcBase = 0x4000 + 0x4000 * i;
-                    var destBase = this.romOffset + (romIndex + i) * 0x4000;
-                    for (var j = 0; j < 0x4000; ++j) {
-                        this.ramRomOs[destBase + j] = data[srcBase + j];
+                return utils.loadData(os).then(function (data) {
+                    var len = data.length;
+                    if (len < 0x4000 || (len & 0x3fff)) throw new Error("Broken ROM file (length=" + len + ")");
+                    for (i = 0; i < 0x4000; ++i) {
+                        self.ramRomOs[self.osOffset + i] = data[i];
                     }
-                }
+                    var numExtraBanks = (len - 0x4000) / 0x4000;
+                    var romIndex = 16 - numExtraBanks;
+                    for (i = 0; i < numExtraBanks; ++i) {
+                        var srcBase = 0x4000 + 0x4000 * i;
+                        var destBase = self.romOffset + (romIndex + i) * 0x4000;
+                        for (var j = 0; j < 0x4000; ++j) {
+                            self.ramRomOs[destBase + j] = data[srcBase + j];
+                        }
+                    }
+                    var awaiting = [];
 
-                for (i = 1; i < arguments.length; ++i) {
-                    romIndex--;
-                    this.loadRom(arguments[i], this.romOffset + romIndex * 0x4000);
-                }
+                    for (i = 0; i < extraRoms.length; ++i) {
+                        romIndex--;
+                        awaiting.push(self.loadRom(extraRoms[i], self.romOffset + romIndex * 0x4000));
+                    }
+                    return Promise.all(awaiting);
+                });
             };
 
             this.reset = function (hard) {
@@ -488,14 +493,18 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     this.fdc = new model.Fdc(this);
                     this.crtc = video.crtc;
                     this.ula = video.ula;
-                    this.adconverter = { read: function () {
-                        return 0xff;
-                    }, write: function () {
-                    }};
-                    this.tube = { read: function () {
-                        return 0xff;
-                    }, write: function () {
-                    }};
+                    this.adconverter = {
+                        read: function () {
+                            return 0xff;
+                        }, write: function () {
+                        }
+                    };
+                    this.tube = {
+                        read: function () {
+                            return 0xff;
+                        }, write: function () {
+                        }
+                    };
                     this.sysvia.reset();
                     this.uservia.reset();
                 }
@@ -509,7 +518,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 if (hard) soundChip.reset();
             };
 
-            this.updateKeyLayout = function() {
+            this.updateKeyLayout = function () {
                 this.sysvia.setKeyLayout(config.keyLayout);
             };
 
@@ -791,11 +800,16 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 }
             };
 
-            if (model.os.length)
-                this.loadOs.apply(this, model.os);
-            this.reset(true);
-
-            dbgr.setCpu(this);
+            this.initialise = function() {
+                var loadOsPromise = Promise.resolve();
+                if (model.os.length) {
+                    loadOsPromise = self.loadOs.apply(this, model.os);
+                }
+                return loadOsPromise.then(function () {
+                    self.reset(true);
+                    dbgr.setCpu(self);
+                });
+            };
         };
     }
 );

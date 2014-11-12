@@ -24,7 +24,7 @@ define(['utils'], function (utils) {
 
     function ssdFor(fdc, stringData) {
         var data;
-        if (typeof(stringData) != "string") {
+        if (typeof(stringData) !== "string") {
             data = stringData;
         } else {
             var len = stringData.length;
@@ -225,9 +225,6 @@ define(['utils'], function (utils) {
             cpu.NMI(self.status & 8);
         };
 
-        self.loadDiscData = function (drive, data) {
-            self.drives[drive] = ssdFor(this, data);
-        };
         self.loadDisc = function (drive, disc) {
             self.drives[drive] = disc;
         };
@@ -864,9 +861,6 @@ define(['utils'], function (utils) {
         this.error(0x88);
     };
 
-    WD1770.prototype.loadDiscData = function (drive, data) {
-        this.drives[drive] = ssdFor(this, data);
-    };
     WD1770.prototype.loadDisc = function (drive, disc) {
         this.drives[drive] = disc;
     };

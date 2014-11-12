@@ -1,4 +1,4 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'models', 'basic-tokenise', 'bootstrap', 'jquery-visibility'],
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'models', 'basic-tokenise', 'promise', 'bootstrap', 'jquery-visibility'],
     function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, models, tokeniser) {
         "use strict";
 
@@ -36,9 +36,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
         //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
         //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
-        
+
         self.gamepadMapping = [];
-        
+
         // default: "snapper" keys
         self.gamepadMapping[14] = BBC.Z;
         self.gamepadMapping[15] = BBC.X;
@@ -60,15 +60,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         ];
 
         /*
-        self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
-        self.gamepadAxisMapping[0][1] = BBC.X;          // right
-        self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
-        self.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
-        self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
-        self.gamepadAxisMapping[2][1] = BBC.X;          // right
-        self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
-        self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
-        */
+         self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
+         self.gamepadAxisMapping[0][1] = BBC.X;          // right
+         self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
+         self.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
+         self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
+         self.gamepadAxisMapping[2][1] = BBC.X;          // right
+         self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
+         self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
+         */
 
         if (queryString) {
             queryString = queryString.substring(1);
@@ -80,8 +80,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 var val = null;
                 if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
                 parsedQuery[key] = val;
-
-                console.log(utils.userKeymap);
 
                 // eg KEY.CAPSLOCK=CTRL
                 if (key.indexOf("KEY.") === 0) {
@@ -95,7 +93,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                         if (keyCodes[nativeKey]) {
                             console.log("mapping " + nativeKey + " to " + bbcKey);
-                            utils.userKeymap.push({native:nativeKey, bbc:bbcKey})
+                            utils.userKeymap.push({native: nativeKey, bbc: bbcKey});
                         } else {
                             console.log("unknown key: " + nativeKey);
                         }
@@ -122,85 +120,85 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                         switch (gamepadKey) {
 
-                        // XBox 360 Controller names
-                        case "UP2":
-                            self.gamepadAxisMapping[3][-1] = BBC[bbcKey];
-                            break;
-                        case "UP1":
-                            self.gamepadAxisMapping[1][-1] = BBC[bbcKey];
-                            break;
-                        case "UP3":
-                            self.gamepadMapping[0] = BBC[bbcKey];
-                            break;
-                        case "DOWN2":
-                            self.gamepadAxisMapping[3][1] = BBC[bbcKey];
-                            break;
-                        case "DOWN1":
-                            self.gamepadAxisMapping[1][1] = BBC[bbcKey];
-                            break;
-                        case "DOWN3":
-                            self.gamepadMapping[2] = BBC[bbcKey];
-                            break;
-                        case "LEFT2":
-                            self.gamepadAxisMapping[2][-1] = BBC[bbcKey];
-                            break;
-                        case "LEFT1":
-                            self.gamepadAxisMapping[0][-1] = BBC[bbcKey];
-                            break;
-                        case "LEFT3":
-                            self.gamepadMapping[3] = BBC[bbcKey];
-                            break;
-                        case "RIGHT2":
-                            self.gamepadAxisMapping[2][1] = BBC[bbcKey];
-                            break;
-                        case "RIGHT1":
-                            self.gamepadAxisMapping[0][1] = BBC[bbcKey];
-                            break;
-                        case "RIGHT3":
-                            self.gamepadMapping[1] = BBC[bbcKey];
-                            break;
-                        case "FIRE2":
-                            self.gamepadMapping[11] = BBC[bbcKey];
-                            break;
-                        case "FIRE1":
-                            self.gamepadMapping[10] = BBC[bbcKey];
-                            break;
-                        case "A":
-                            self.gamepadMapping[0] = BBC[bbcKey];
-                            break;
-                        case "B":
-                            self.gamepadMapping[1] = BBC[bbcKey];
-                            break;
-                        case "X":
-                            console.log("X", bbcKey);
-                            self.gamepadMapping[2] = BBC[bbcKey];
-                            break;
-                        case "Y":
-                            console.log("Y", bbcKey);
-                            self.gamepadMapping[3] = BBC[bbcKey];
-                            break;
-                        case "START":
-                            self.gamepadMapping[9] = BBC[bbcKey];
-                            break;
-                        case "BACK":
-                            self.gamepadMapping[8] = BBC[bbcKey];
-                            break;
-                        case "RB":
-                            self.gamepadMapping[5] = BBC[bbcKey];
-                            break;
-                        case "RT":
-                            self.gamepadMapping[7] = BBC[bbcKey];
-                            break;
-                        case "LB":
-                            self.gamepadMapping[4] = BBC[bbcKey];
-                            break;
-                        case "LT":
-                            self.gamepadMapping[6] = BBC[bbcKey];
-                            break;
+                            // XBox 360 Controller names
+                            case "UP2":
+                                self.gamepadAxisMapping[3][-1] = BBC[bbcKey];
+                                break;
+                            case "UP1":
+                                self.gamepadAxisMapping[1][-1] = BBC[bbcKey];
+                                break;
+                            case "UP3":
+                                self.gamepadMapping[0] = BBC[bbcKey];
+                                break;
+                            case "DOWN2":
+                                self.gamepadAxisMapping[3][1] = BBC[bbcKey];
+                                break;
+                            case "DOWN1":
+                                self.gamepadAxisMapping[1][1] = BBC[bbcKey];
+                                break;
+                            case "DOWN3":
+                                self.gamepadMapping[2] = BBC[bbcKey];
+                                break;
+                            case "LEFT2":
+                                self.gamepadAxisMapping[2][-1] = BBC[bbcKey];
+                                break;
+                            case "LEFT1":
+                                self.gamepadAxisMapping[0][-1] = BBC[bbcKey];
+                                break;
+                            case "LEFT3":
+                                self.gamepadMapping[3] = BBC[bbcKey];
+                                break;
+                            case "RIGHT2":
+                                self.gamepadAxisMapping[2][1] = BBC[bbcKey];
+                                break;
+                            case "RIGHT1":
+                                self.gamepadAxisMapping[0][1] = BBC[bbcKey];
+                                break;
+                            case "RIGHT3":
+                                self.gamepadMapping[1] = BBC[bbcKey];
+                                break;
+                            case "FIRE2":
+                                self.gamepadMapping[11] = BBC[bbcKey];
+                                break;
+                            case "FIRE1":
+                                self.gamepadMapping[10] = BBC[bbcKey];
+                                break;
+                            case "A":
+                                self.gamepadMapping[0] = BBC[bbcKey];
+                                break;
+                            case "B":
+                                self.gamepadMapping[1] = BBC[bbcKey];
+                                break;
+                            case "X":
+                                console.log("X", bbcKey);
+                                self.gamepadMapping[2] = BBC[bbcKey];
+                                break;
+                            case "Y":
+                                console.log("Y", bbcKey);
+                                self.gamepadMapping[3] = BBC[bbcKey];
+                                break;
+                            case "START":
+                                self.gamepadMapping[9] = BBC[bbcKey];
+                                break;
+                            case "BACK":
+                                self.gamepadMapping[8] = BBC[bbcKey];
+                                break;
+                            case "RB":
+                                self.gamepadMapping[5] = BBC[bbcKey];
+                                break;
+                            case "RT":
+                                self.gamepadMapping[7] = BBC[bbcKey];
+                                break;
+                            case "LB":
+                                self.gamepadMapping[4] = BBC[bbcKey];
+                                break;
+                            case "LT":
+                                self.gamepadMapping[6] = BBC[bbcKey];
+                                break;
 
 
-                        default:
-                            console.log("unknown gamepad key: " + gamepadKey);
+                            default:
+                                console.log("unknown gamepad key: " + gamepadKey);
 
                         }
 
@@ -210,53 +208,52 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     }
 
 
-
                 } else {
                     switch (key) {
-                    case "LEFT":
-                        self.gamepadMapping[3] = BBC[val];
-                        self.gamepadAxisMapping[0][-1] = BBC[val];
-                        self.gamepadAxisMapping[2][-1] = BBC[val];
-                        break;
-                    case "RIGHT":
-                        self.gamepadMapping[1] = BBC[val];
-                        self.gamepadAxisMapping[0][1] = BBC[val];
-                        self.gamepadAxisMapping[2][1] = BBC[val];
-                        break;
-                    case "UP":
-                        self.gamepadMapping[0] = BBC[val];
-                        self.gamepadAxisMapping[1][-1] = BBC[val];
-                        self.gamepadAxisMapping[3][-1] = BBC[val];
-                        break;
-                    case "DOWN":
-                        self.gamepadMapping[2] = BBC[val];
-                        self.gamepadAxisMapping[1][1] = BBC[val];
-                        self.gamepadAxisMapping[3][1] = BBC[val];
-                        break;
-                    case "FIRE":
-                        for (var i = 0; i < 16; i++) {
-                            self.gamepadMapping[i] = BBC[val];
-                        }
-                        break;
-                    case "autoboot":
-                        needsAutoboot = "boot";
-                        break;
-                    case "autochain":
-                        needsAutoboot = "chain";
-                        break;
-                    case "autorun":
-                        needsAutoboot = "run";
-                        break;
-                    case "keyLayout":
-                        keyLayout = (val + "").toLowerCase();
-                        break;
-                    case "disc":
-                    case "disc1":
-                        discImage = val;
-                        break;
-                    case "disc2":
-                        secondDiscImage = val;
-                        break;
+                        case "LEFT":
+                            self.gamepadMapping[3] = BBC[val];
+                            self.gamepadAxisMapping[0][-1] = BBC[val];
+                            self.gamepadAxisMapping[2][-1] = BBC[val];
+                            break;
+                        case "RIGHT":
+                            self.gamepadMapping[1] = BBC[val];
+                            self.gamepadAxisMapping[0][1] = BBC[val];
+                            self.gamepadAxisMapping[2][1] = BBC[val];
+                            break;
+                        case "UP":
+                            self.gamepadMapping[0] = BBC[val];
+                            self.gamepadAxisMapping[1][-1] = BBC[val];
+                            self.gamepadAxisMapping[3][-1] = BBC[val];
+                            break;
+                        case "DOWN":
+                            self.gamepadMapping[2] = BBC[val];
+                            self.gamepadAxisMapping[1][1] = BBC[val];
+                            self.gamepadAxisMapping[3][1] = BBC[val];
+                            break;
+                        case "FIRE":
+                            for (var i = 0; i < 16; i++) {
+                                self.gamepadMapping[i] = BBC[val];
+                            }
+                            break;
+                        case "autoboot":
+                            needsAutoboot = "boot";
+                            break;
+                        case "autochain":
+                            needsAutoboot = "chain";
+                            break;
+                        case "autorun":
+                            needsAutoboot = "run";
+                            break;
+                        case "keyLayout":
+                            keyLayout = (val + "").toLowerCase();
+                            break;
+                        case "disc":
+                        case "disc1":
+                            discImage = val;
+                            break;
+                        case "disc2":
+                            secondDiscImage = val;
+                            break;
                     }
                 }
             });
@@ -326,7 +323,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
             return soundChip;
         })();
-        
+
         var lastShiftLocation = 1;
         var lastCtrlLocation = 1;
         var lastAltLocation = 1;
@@ -339,78 +336,78 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             var keyCodes = utils.keyCodes;
 
             switch (evt.location) {
-            default:
-                // keyUp events seem to pass location = 0 (Chrome)
-                switch (ret) {
-                    case keyCodes.SHIFT:
-                        if (lastShiftLocation == 1) {
+                default:
+                    // keyUp events seem to pass location = 0 (Chrome)
+                    switch (ret) {
+                        case keyCodes.SHIFT:
+                            if (lastShiftLocation == 1) {
+                                return keyCodes.SHIFT_LEFT;
+                            } else {
+                                return keyCodes.SHIFT_RIGHT;
+                            }
+
+                        case keyCodes.ALT:
+                            if (lastAltLocation == 1) {
+                                return keyCodes.ALT_LEFT;
+                            } else {
+                                return keyCodes.ALT_RIGHT;
+                            }
+
+                        case keyCodes.CTRL:
+                            if (lastCtrlLocation == 1) {
+                                return keyCodes.CTRL_LEFT;
+                            } else {
+                                return keyCodes.CTRL_RIGHT;
+                            }
+                    }
+                    break;
+                case 1:
+                    switch (ret) {
+                        case keyCodes.SHIFT:
+                            lastShiftLocation = 1;
+                            //console.log("left shift");
                             return keyCodes.SHIFT_LEFT;
-                        } else {
-                            return keyCodes.SHIFT_RIGHT;
-                        }
 
-                    case keyCodes.ALT:
-                        if (lastAltLocation == 1) {
+                        case keyCodes.ALT:
+                            lastAltLocation = 1;
+                            //console.log("left alt");
                             return keyCodes.ALT_LEFT;
-                        } else {
-                            return keyCodes.ALT_RIGHT;
-                        }
 
-                    case keyCodes.CTRL:
-                        if (lastCtrlLocation == 1) {
+                        case keyCodes.CTRL:
+                            lastCtrlLocation = 1;
+                            //console.log("left ctrl");
                             return keyCodes.CTRL_LEFT;
-                        } else {
+                    }
+                    break;
+                case 2:
+                    switch (ret) {
+                        case keyCodes.SHIFT:
+                            lastShiftLocation = 2;
+                            //console.log("right shift");
+                            return keyCodes.SHIFT_RIGHT;
+
+                        case keyCodes.ALT:
+                            lastAltLocation = 2;
+                            //console.log("right alt");
+                            return keyCodes.ALT_RIGHT;
+
+                        case keyCodes.CTRL:
+                            lastCtrlLocation = 2;
+                            //console.log("right ctrl");
                             return keyCodes.CTRL_RIGHT;
-                        }
-                }
-                break;
-            case 1:
-                switch (ret) {
-                    case keyCodes.SHIFT:
-                        lastShiftLocation = 1;
-                        //console.log("left shift");
-                        return keyCodes.SHIFT_LEFT;
+                    }
+                    break;
+                case 3: // numpad
+                    switch (ret) {
+                        case keyCodes.ENTER:
+                            console.log("numpad enter");
+                            return utils.keyCodes.NUMPADENTER;
 
-                    case keyCodes.ALT:
-                        lastAltLocation = 1;
-                        //console.log("left alt");
-                        return keyCodes.ALT_LEFT;
-
-                    case keyCodes.CTRL:
-                        lastCtrlLocation = 1;
-                        //console.log("left ctrl");
-                        return keyCodes.CTRL_LEFT;
-                }
-                break;
-            case 2:
-                switch (ret) {
-                    case keyCodes.SHIFT:
-                        lastShiftLocation = 2;
-                        //console.log("right shift");
-                        return keyCodes.SHIFT_RIGHT;
-
-                    case keyCodes.ALT:
-                        lastAltLocation = 2;
-                        //console.log("right alt");
-                        return keyCodes.ALT_RIGHT;
-
-                    case keyCodes.CTRL:
-                        lastCtrlLocation = 2;
-                        //console.log("right ctrl");
-                        return keyCodes.CTRL_RIGHT;
-                }
-                break;
-            case 3: // numpad
-                switch (ret) {
-                    case keyCodes.ENTER:
-                        console.log("numpad enter");
-                        return utils.keyCodes.NUMPADENTER;
-
-                    case keyCodes.DELETE:
-                        console.log("numpad dot");
-                        return utils.keyCodes.NUMPAD_DECIMAL_POINT;
-                }
-                break;
+                        case keyCodes.DELETE:
+                            console.log("numpad dot");
+                            return utils.keyCodes.NUMPAD_DECIMAL_POINT;
+                    }
+                    break;
             }
 
             return ret;
@@ -481,14 +478,30 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             utils.noteEvent('sth', 'click', item);
             parsedQuery.disc = "|" + item;
             updateUrl();
-            loadDiscImage(0, parsedQuery.disc);
+            popupLoading("Loading " + item);
+            loadDiscImage(parsedQuery.disc).then(function (disc) {
+                processor.fdc.loadDisc(0, disc);
+            }).then(
+                function () {
+                    loadingFinished();
+                },
+                function (err) {
+                    loadingFinished(err);
+                });
         }
 
         function tapeSthClick(item) {
             utils.noteEvent('sth', 'clickTape', item);
             parsedQuery.tape = "|" + item;
             updateUrl();
-            loadTapeImage(parsedQuery.tape);
+            popupLoading("Loading " + item);
+            loadTapeImage(parsedQuery.tape).then(
+                function () {
+                    loadingFinished();
+                },
+                function (err) {
+                    loadingFinished(err);
+                });
         }
 
         function makeOnCat(onClick) {
@@ -532,9 +545,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         $(document).on("click", "a.sth", function () {
             var type = $(this).data('id');
-            if (type == 'discs') {
+            if (type === 'discs') {
                 discSth.populate();
-            } else if (type == 'tapes') {
+            } else if (type === 'tapes') {
                 tapeSth.populate();
             } else {
                 console.log("unknown id", type);
@@ -664,42 +677,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             );
         }
 
-        if (parsedQuery.patch) {
-            dbgr.setPatch(parsedQuery.patch);
-        }
-
-        if (parsedQuery.loadBasic) {
-            var prog = String.fromCharCode.apply(null, utils.loadData(parsedQuery.loadBasic));
-            var tokenised = tokeniser.tokenise(prog);
-            var page = parsedQuery.page ? utils.parseAddr(parsedQuery.page) : 0x1900;
-            // Load the program immediately after the \xff of the "no program" has been
-            // written to PAGE+1
-            processor.debugwrite = function (addr, b) {
-                if (addr === (page + 1) && b == 0xff) {
-                    // Needed as the debug happens before the write takes place.
-                    processor.debugInstruction = function () {
-                        for (var i = 0; i < tokenised.length; ++i) {
-                            processor.writemem(page + i, tokenised.charCodeAt(i));
-                        }
-                        processor.debugInstruction = null;
-                    };
-                    processor.debugwrite = null;
-                }
-            };
-        }
-
-        switch (needsAutoboot) {
-            case "boot":
-                autoboot(discImage);
-                break;
-            case "chain":
-                autoChainTape();
-                break;
-            case "run":
-                autoRunTape();
-                break;
-        }
-
         function updateUrl() {
             var url = window.location.origin + window.location.pathname;
             var sep = '?';
@@ -718,45 +695,35 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             dialog.modal();
         }
 
-        function loadDiscImage(drive, discImage) {
-            if (!discImage) return;
-            var context = "built-in image";
-            try {
-                if (discImage[0] == "!") {
-                    discImage = discImage.substr(1);
-                    context = "Local disc";
-                    processor.fdc.loadDisc(drive, disc.localDisc(processor.fdc, discImage));
-                } else if (discImage[0] == "|") {
-                    discImage = discImage.substr(1);
-                    context = "Stairway to Hell";
-                    processor.fdc.loadDiscData(drive, discSth.fetch(discImage));
-                } else {
-                    processor.fdc.loadDiscData(drive, disc.ssdLoad("discs/" + discImage));
-                }
-            } catch (e) {
-                showError("while loading disc '" + discImage + "' from " + context + " into drive " + drive, e);
+        function loadDiscImage(discImage) {
+            if (!discImage) return Promise.resolve(null);
+            if (discImage[0] === "!") {
+                discImage = discImage.substr(1);
+                return Promise.resolve(disc.localDisc(processor.fdc, discImage));
             }
-        }
+            if (discImage[0] === "|") {
+                discImage = discImage.substr(1);
+                return discSth.fetch(discImage).then(function (discData) {
+                    return disc.ssdFor(processor.fdc, discData);
+                });
+            }
 
-        if (discImage) loadDiscImage(0, discImage);
-        if (secondDiscImage) loadDiscImage(1, secondDiscImage);
+            return disc.ssdLoad("discs/" + discImage).then(function (discData) {
+                return disc.ssdFor(processor.fdc, discData);
+            });
+        }
 
         function loadTapeImage(tapeImage) {
-            var context = "built-in";
-            try {
-                if (tapeImage[0] == '|') {
-                    tapeImage = tapeImage.substr(1);
-                    context = "Stairway To Hell";
-                    processor.acia.setTape(tapes.loadTapeFromData(tapeSth.fetch(tapeImage)));
-                } else {
-                    processor.acia.setTape(tapes.loadTape(tapeImage));
-                }
-            } catch (e) {
-                showError("while loading tape '" + tapeImage + " from " + context, e);
+            if (tapeImage[0] == '|') {
+                tapeImage = tapeImage.substr(1);
+                return tapeSth.fetch(tapeImage).then(function (image) {
+                    processor.acia.setTape(tapes.loadTapeFromData(image));
+                });
             }
+            return tapes.loadTape(tapeImage).then(function (tape) {
+                processor.acia.setTape(tape);
+            });
         }
-
-        if (parsedQuery.tape) loadTapeImage(parsedQuery.tape);
 
         $('#disc_load').change(function (evt) {
             var file = evt.target.files[0];
@@ -807,10 +774,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         function loadingFinished(error) {
             var modal = $('#loading-dialog');
             if (error) {
+                modal.modal("show");
                 modal.find(".loading").text("Error: " + error);
                 setTimeout(function () {
                     modal.modal("hide");
-                }, 2000);
+                }, 5000);
             } else {
                 modal.modal("hide");
             }
@@ -897,7 +865,65 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 //        processor.debugInstruction = function (addr) {
 //            return addr == 0x8003;
 //        };
-        go();
+
+        var startPromise = processor.initialise().then(function () {
+            // Ideally would start the loads first. But their completion needs the FDC from the processor
+            var imageLoads = [];
+            if (discImage) imageLoads.push(loadDiscImage(discImage).then(function (disc) {
+                processor.fdc.loadDisc(0, disc);
+            }));
+            if (secondDiscImage) imageLoads.push(loadDiscImage(secondDiscImage).then(function (disc) {
+                processor.fdc.loadDisc(1, disc);
+            }));
+            if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
+
+            if (parsedQuery.loadBasic) {
+                imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
+                    var prog = String.fromCharCode.apply(null, data);
+                    var tokenised = tokeniser.tokenise(prog);
+                    var page = parsedQuery.page ? utils.parseAddr(parsedQuery.page) : 0x1900;
+                    // Load the program immediately after the \xff of the "no program" has been
+                    // written to PAGE+1
+                    processor.debugwrite = function (addr, b) {
+                        if (addr === (page + 1) && b == 0xff) {
+                            // Needed as the debug happens before the write takes place.
+                            processor.debugInstruction = function () {
+                                for (var i = 0; i < tokenised.length; ++i) {
+                                    processor.writemem(page + i, tokenised.charCodeAt(i));
+                                }
+                                processor.debugInstruction = null;
+                            };
+                            processor.debugwrite = null;
+                        }
+                    };
+                }));
+            }
+
+            return Promise.all(imageLoads);
+        });
+
+        startPromise.then(function () {
+            switch (needsAutoboot) {
+                case "boot":
+                    autoboot(discImage);
+                    break;
+                case "chain":
+                    autoChainTape();
+                    break;
+                case "run":
+                    autoRunTape();
+                    break;
+            }
+
+            if (parsedQuery.patch) {
+                dbgr.setPatch(parsedQuery.patch);
+            }
+
+            go();
+        }, function (error) {
+            showError("initialising", error);
+            console.log(error);
+        });
 
         function areYouSure(message, yesText, noText, yesFunc) {
             var ays = $('#are-you-sure');
@@ -1035,7 +1061,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             //2 0.055374979972839355 1
                             //3 0.06575113534927368 1
                             var threshold = 0.15;
-                            
+
                             // normalize to -1, 0, 1
                             if (axisRaw < -threshold) {
                                 axis = -1;
@@ -1150,10 +1176,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 return processor.readmem(x);
             }, start, end));
         };
-        window.m7dump = function() {
+        window.m7dump = function () {
             console.log(utils.hd(function (x) {
                 return processor.readmem(x) & 0x7f;
-            }, 0x7c00, 0x7fe8, { width: 40, gap: false }));
+            }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
     }
 );

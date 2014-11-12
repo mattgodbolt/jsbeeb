@@ -1,4 +1,4 @@
-define(['jsunzip'], function (jsunzip) {
+define(['jsunzip', 'promise'], function (jsunzip) {
     "use strict";
     var exports = {};
 
@@ -661,21 +661,31 @@ define(['jsunzip'], function (jsunzip) {
     }
 
     function loadDataHttp(url) {
-        var request = new XMLHttpRequest();
-        request.open("GET", url, false);
-        request.overrideMimeType('text/plain; charset=x-user-defined');
-        request.send(null);
-        if (request.status != 200) return null;
-        if (typeof(request.response) != "string") {
-            return request.response;
-        }
-        return makeBinaryData(request.response);
+        return new Promise(function(resolve, reject) {
+            var request = new XMLHttpRequest();
+            request.open("GET", url, true);
+            request.overrideMimeType('text/plain; charset=x-user-defined');
+            request.onload = function() {
+                if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));
+                if (typeof(request.response) !== "string") {
+                    resolve(request.response);
+                } else {
+                    resolve(makeBinaryData(request.response));
+                }
+            };
+            request.onerror = function() {
+              reject(new Error("A network error occurred loading " + url));
+            };
+            request.send(null);
+        });
     }
 
     function loadDataNode(url) {
-        var fs = require('fs');
-        if (url[0] == '/') url = "." + url;
-        return fs.readFileSync(url);
+        return new Promise(function(resolve, reject){
+            var fs = require('fs');
+            if (url[0] == '/') url = "." + url;
+            resolve(fs.readFileSync(url));
+        });
     }
 
     if (exports.runningInNode) {

@@ -4,6 +4,7 @@ requirejs.config({
     baseUrl: ".",
     paths: {
         'jsunzip': 'lib/jsunzip',
+        'promise': 'lib/promise-6.0.0',
         'underscore': 'lib/underscore-min',
         'test': 'tests/test'
     }
