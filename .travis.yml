@@ -1,2 +1,5 @@
 install: true
-script: make test -j2
+env:
+    - TEST_SUITE=short-tests
+    - TEST_SUITE=long-tests
+script: "make test -j2 $TEST_SUITE"
