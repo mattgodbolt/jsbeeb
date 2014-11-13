@@ -108,14 +108,14 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
                     var filename = "";
                     for (var i = 0; i < filenameLen; ++i)
                         filename += petToAscii(processor.readmem(filenameAddr + i));
-                    if (filename == "trap17") {
+                    if (filename === "trap17") {
                         console.log("All tests complete");
                         process.exit(0);
                     }
 
                     setup(filename);
                     processor.pc--; // Account for the instruction fetch
-                    break;
+                    return true; // Break out of the 'anIter' loop
                 case 0x8000:
                 case 0xa474: // Fail
                     if (curLine.length) console.log(curLine);
@@ -128,7 +128,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
         };
 
         function anIter() {
-            processor.execute(1000000);
+            processor.execute(1000 * 1000 * 1000);
             setTimeout(anIter, 0);
         }
 
