@@ -113,7 +113,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
                         process.exit(0);
                     }
 
-                    setup(filename);
+                    setup(filename).then(anIter);
                     processor.pc--; // Account for the instruction fetch
                     return true; // Break out of the 'anIter' loop
                 case 0x8000:
@@ -128,8 +128,9 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
         };
 
         function anIter() {
-            processor.execute(1000 * 1000 * 1000);
-            setTimeout(anIter, 0);
+            for (;;) {
+                if (!processor.execute(10 * 1000 * 1000)) return;
+            }
         }
 
         processor.initialise().then(function () {
