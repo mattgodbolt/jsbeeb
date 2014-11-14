@@ -501,7 +501,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                     };
                     this.tube = {
                         read: function () {
-                            return 0xff;
+                            return 0xfe;
                         }, write: function () {
                         }
                     };
