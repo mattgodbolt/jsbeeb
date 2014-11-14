@@ -885,7 +885,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     // Load the program immediately after the \xff of the "no program" has been
                     // written to PAGE+1
                     processor.debugwrite = function (addr, b) {
-                        if (addr === (page + 1) && b == 0xff) {
+                        if (addr === (page + 1) && b === 0xff) {
                             // Needed as the debug happens before the write takes place.
                             processor.debugInstruction = function () {
                                 for (var i = 0; i < tokenised.length; ++i) {

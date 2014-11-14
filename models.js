@@ -22,7 +22,9 @@ define(['fdc'], function (fdc) {
         false, false, false, false,
         false, false, false, false];
     var allModels = [
-        new Model("BBC B", ["B"], ["os.rom", "b/BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, fdc.I8271),
+        new Model("BBC B", ["B"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, fdc.I8271),
+        new Model("BBC B (1770)", ["B1770"], ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
+            true, false, beebSwram, fdc.WD1770),
         new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770)
     ];
 
@@ -30,10 +32,10 @@ define(['fdc'], function (fdc) {
         name = name.toLowerCase();
         for (var i = 0; i < allModels.length; ++i) {
             var model = allModels[i];
-            if (model.name.toLowerCase() == name)
+            if (model.name.toLowerCase() === name)
                 return model;
             for (var j = 0; j < model.synonyms.length; ++j) {
-                if (model.synonyms[j].toLowerCase() == name)
+                if (model.synonyms[j].toLowerCase() === name)
                     return model;
             }
         }
