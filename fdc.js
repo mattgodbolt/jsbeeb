@@ -220,6 +220,7 @@ define(['utils'], function (utils) {
         self.written = false;
         self.verify = false;
         self.drives = [emptySsd(this), emptySsd(this)];
+        self.readyTimer = 0;
 
         self.NMI = function () {
             cpu.NMI(self.status & 8);
@@ -308,12 +309,14 @@ define(['utils'], function (utils) {
             self.paramReq = numParams(self.command);
             self.status = 0x80;
             if (!self.paramReq) {
-                if (self.command == 0x2c) {
+                if (self.command === 0x2c) {
                     // read drive status
                     self.status = 0x10;
                     self.result = 0x88 | (self.curTrack[self.curDrive] ? 0 : 2);
-                    if (self.driveSel & 1) self.result |= 0x04;
-                    if (self.driveSel & 2) self.result |= 0x40;
+                    if (self.readyTimer === 0) {
+                        if (self.driveSel & 1) self.result |= 0x04;
+                        if (self.driveSel & 2) self.result |= 0x40;
+                    } else if (self.readyTimer === 1) self.readyTimer = 0; // Ready for next time
                 } else {
                     self.result = 0x18;
                     self.status = 0x18;
@@ -369,6 +372,12 @@ define(['utils'], function (utils) {
         }
 
         function spinup() {
+            // TODO: not sure where this should go, or for how long. This is a workaround for EliteA
+            if (!self.motorOn[self.curDrive]) {
+                self.readyTimer = 1000000; // Apparently takes a half second to spin up
+            } else {
+                self.readyTimer = 1000;  // little bit of time for each command (so, really, spinup is a bad place to put this)
+            }
             self.isActive = true;
             self.motorOn[self.curDrive] = true;
             self.motorSpin[self.curDrive] = 0;
@@ -568,6 +577,10 @@ define(['utils'], function (utils) {
                         self.motorOn[i] = false;
                 }
                 self.isActive = self.motorOn[0] || self.motorOn[1];
+            }
+            if (this.readyTimer > 1) {
+                this.readyTimer -= cycles;
+                if (this.readyTimer < 1) this.readyTimer = 1;
             }
         };
     }
