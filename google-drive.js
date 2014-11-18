@@ -164,13 +164,16 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
         function makeDisc(fdc, data, fileId, editable) {
             var flusher = null;
             if (editable) {
+                console.log("Making editable disc");
                 flusher = _.debounce(function () {
                     save(fileId, data).then(function () {
                         console.log("Saved ok");
                     });
                 }, 2000);
+            } else {
+                console.log("Making read-only disc");
             }
-            return baseSsd(fdc, data, editable, flusher);
+            return baseSsd(fdc, data, flusher);
         }
 
         self.load = function (fdc, fileId) {

@@ -75,7 +75,7 @@ define(['utils'], function (utils) {
             side: -1,
             notFound: 0,
             flush: function () {
-                flusher();
+                if (flusher) flusher();
             },
             seek: function (track) {
                 this.seekOffset = track * 10 * 256;
