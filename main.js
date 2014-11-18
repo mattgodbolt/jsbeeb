@@ -730,7 +730,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             var reader = new FileReader();
             utils.noteEvent('local', 'click'); // NB no filename here
             reader.onload = function (e) {
-                processor.fdc.loadDiscData(0, e.target.result);
+                processor.fdc.loadDisc(0, disc.ssdFor(processor.fdc, e.target.result));
                 delete parsedQuery.disc;
                 updateUrl();
                 $('#discs').modal("hide");
