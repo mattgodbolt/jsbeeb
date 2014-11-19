@@ -96,6 +96,8 @@ Thanks to [David Banks](https://github.com/hoglet67) for his help in testing the
 
 Cheers to [Ed Spittles](https://github.com/BigEd) for testing various interrupt timing code on a real BBC.
 
+Thanks to Chris Jordan for his thorough testing, bug reports, ideas and help.
+
 A lot of the early development used the amazing [Visual 6502](http://visual6502.org/) as reference for intra-instruction timings. Amazing stuff.
 
 Special shout out the users of the [6502 Forums](http://forum.6502.org/)
