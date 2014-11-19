@@ -68,9 +68,9 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
             });
         }
 
-        function createFile(name, data) {
+        function saveFile(name, data, idOrNone) {
             var metadata = {
-                'title': name + '.ssd',
+                'title': name,
                 'parents': ["jsbeeb disc images"],
                 'mimeType': MIME_TYPE
             };
@@ -88,29 +88,13 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
                 close_delim;
 
             var request = gapi.client.request({
-                'path': '/upload/drive/v2/files',
-                'method': 'POST',
-                'params': {'uploadType': 'multipart'},
+                'path': '/upload/drive/v2/files' + (idOrNone ? "/" + idOrNone : ""),
+                'method': idOrNone ? 'PUT' : 'POST',
+                'params': {'uploadType': 'multipart', 'newRevision': false},
                 'headers': {
                     'Content-Type': 'multipart/mixed; boundary="' + boundary + '"'
                 },
                 'body': multipartRequestBody
-            });
-            return request;
-        }
-
-        function save(fileId, data) {
-            var request = gapi.client.request({
-                'path': '/upload/drive/v2/files/' + fileId,
-                'method': 'PUT',
-                'params': {
-                    'uploadType': 'media',
-                    'newRevision': false
-                },
-                'headers': {
-                    'Content-Type': MIME_TYPE
-                },
-                'body': String.fromCharCode.apply(null, data)
             });
             return request;
         }
@@ -124,10 +108,10 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
             var data = new Uint8Array(100 * 1024);
             for (var i = 0; i < Math.max(12, name.length); ++i)
                 data[i] = name.charCodeAt(i) & 0xff;
-            return createFile(name, data)
+            return saveFile(name, data)
                 .then(function (response) {
                     var meta = response.result;
-                    return {fileId: meta.id, disc: makeDisc(fdc, data, meta.id, true)};
+                    return {fileId: meta.id, disc: makeDisc(fdc, data, meta)};
                 });
         };
 
@@ -159,17 +143,19 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
             }
         }
 
-        function makeDisc(fdc, data, fileId, editable) {
+        function makeDisc(fdc, data, meta) {
             var flusher = null;
-            if (data.length < 100 * 1024)
+            if (data.length < 100 * 1024) {
                 throw new Error("Invalid disc data: expected at least 100KB image (found " + data.length + " byte image)");
-            if (editable) {
+                //data = new Uint8Array(100*1024);
+            }
+            if (meta.editable) {
                 console.log("Making editable disc");
                 flusher = _.debounce(function () {
-                    save(fileId, data).then(function () {
+                    saveFile(meta.title, data, meta.id).then(function () {
                         console.log("Saved ok");
                     });
-                }, 2000);
+                }, 200);
             } else {
                 console.log("Making read-only disc");
             }
@@ -177,14 +163,14 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
         }
 
         self.load = function (fdc, fileId) {
-            var editable = false;
+            var meta = false;
             return loadMetadata(fileId)
                 .then(function (response) {
-                    editable = response.result.editable;
+                    meta = response.result;
                     return downloadFile(response.result);
                 })
                 .then(function (data) {
-                    return makeDisc(fdc, data, fileId, editable);
+                    return makeDisc(fdc, data, meta);
                 });
         };
 
