@@ -75,7 +75,7 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
                 'mimeType': MIME_TYPE
             };
 
-            var base64Data = btoa(btoa(String.fromCharCode.apply(null, data)));
+            var base64Data = btoa(String.fromCharCode.apply(null, data));
             var multipartRequestBody =
                 delimiter +
                 'Content-Type: application/json\r\n\r\n' +
@@ -100,7 +100,6 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
         }
 
         function save(fileId, data) {
-            var str = String.fromCharCode.apply(null, data);
             var request = gapi.client.request({
                 'path': '/upload/drive/v2/files/' + fileId,
                 'method': 'PUT',
@@ -111,7 +110,7 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
                 'headers': {
                     'Content-Type': MIME_TYPE
                 },
-                'body': str
+                'body': String.fromCharCode.apply(null, data)
             });
             return request;
         }
