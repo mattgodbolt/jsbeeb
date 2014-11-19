@@ -922,9 +922,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             elem.find(".description").text(image.desc);
             $(elem).on("click", function () {
                 utils.noteEvent('images', 'click', image.file);
-                processor.fdc.loadDiscData(0, disc.ssdLoad("discs/" + image.file));
                 parsedQuery.disc = image.file;
                 updateUrl();
+                loadDiscImage(parsedQuery.disc).then(function (disc) {
+                    processor.fdc.loadDisc(0, disc);
+                });
                 $('#discs').modal("hide");
             });
         });
