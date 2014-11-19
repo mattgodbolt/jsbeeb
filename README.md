@@ -29,10 +29,10 @@ URL parameters
 * `autoboot` - fakes a shift break
 * `disc1=XXX` - loads disc XXX (from the `discs/` directory) into drive 1
 * `disc2=XXX` - as above
-* `disc1=!YYY` - creates a local disk YYY which will be kept in browser local storage
-* `disc1=|ZZZ` - loads disc ZZZ from the Stairway to Hell archive
+* `disc1=local:YYY` - creates a local disk YYY which will be kept in browser local storage
+* `disc1=sth:ZZZ` - loads disc ZZZ from the Stairway to Hell archive
 * `tape=XXX` - loads tape XXX (from the `tapes/` directory)
-* `tape=|ZZZ` - loads tape ZZZ from the Stairway to Hell archive
+* `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
 * `patch=P` - applies a memory patch `P`. See below.
 * `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
 
