@@ -97,7 +97,14 @@ define(['teletext'], function (Teletext) {
             return t;
         }();
 
-        var fbTable = new Uint32Array(256 * 16);
+        var fbTableBuffer = new ArrayBuffer(256 * 16 * 4);
+        var fbTable = new Uint32Array(fbTableBuffer);
+        var fbTable8 = [];
+        var fbTable16 = [];
+        for (var fbSet = 0; fbSet < 256; ++fbSet) {
+            fbTable8.push(new Uint32Array(fbTableBuffer, fbSet * 16 * 4, 8));
+            fbTable16.push(new Uint32Array(fbTableBuffer, fbSet * 16 * 4, 16));
+        }
         var fbTableDirty = true;
 
         function updateFbTable() {
@@ -108,6 +115,12 @@ define(['teletext'], function (Teletext) {
 
             fbTableDirty = false;
         }
+
+        var blankBuffer = new ArrayBuffer(16 * 4);
+        var blank8 = new Uint32Array(blankBuffer, 0, 8);
+        var blank16 = new Uint32Array(blankBuffer);
+        for (var b16 = 0; b16 < 16; ++b16)
+            blank16[b16] = self.collook[0];
 
         self.reset(null);
 
@@ -145,7 +158,7 @@ define(['teletext'], function (Teletext) {
             fb32[destOffset + 7] = fbTable[tblOff + 7];
         }
 
-        function blitFb(dat, destOffset, numPixels) {
+        function blitFb_1(dat, destOffset, numPixels) {
             var tblOff = dat << 4;
             blitFb8(tblOff, destOffset);
             if (numPixels === 16) {
@@ -153,13 +166,64 @@ define(['teletext'], function (Teletext) {
             }
         }
 
-        function clearFb(destOffset, numPixels) {
+        function blitFb_2(dat, destOffset, numPixels) {
+            if (numPixels === 8) {
+                self.fb32.set(fbTable8[dat], destOffset);
+            } else {
+                self.fb32.set(fbTable16[dat], destOffset);
+            }
+        }
+
+        function clearFb_1(destOffset, numPixels) {
             var black = self.collook[0];
             var fb32 = self.fb32;
             while (numPixels--) {
                 fb32[destOffset++] = black;
             }
         }
+
+        function clearFb_2(destOffset, numPixels) {
+            self.fb32.set(numPixels === 8 ? blank8 : blank16, destOffset);
+        }
+
+        var blitFb = blitFb_1;
+        var clearFb = clearFb_1;
+
+        function pickBlitters() {
+            console.log("Choosing video blit routines");
+            function timeBlitters() {
+                var start = Date.now();
+                for (var i = 0; i < 256 * 256; ++i) {
+                    blitFb(i & 0xff, (i >> 8) * 1280, 16);
+                }
+                for (i = 0; i < 256 * 256; ++i) {
+                    clearFb((i >> 8) * 1280, 16);
+                }
+                return Date.now() - start;
+            }
+
+            var wins = [0, 0];
+            for (var round = 0; round < 10; ++round) {
+                blitFb = blitFb_1;
+                clearFb = clearFb_1;
+                var fb1Time = timeBlitters();
+                blitFb = blitFb_2;
+                clearFb = clearFb_2;
+                var fb2Time = timeBlitters();
+                wins[fb1Time < fb2Time ? 0 : 1]++;
+            }
+            if (wins[0] > wins[1]) {
+                blitFb = blitFb_1;
+                clearFb = clearFb_1;
+                console.log("Using explicit array copies (" + wins[0] + " to " + wins[1] + ")");
+            } else {
+                blitFb = blitFb_2;
+                clearFb = clearFb_2;
+                console.log("Using array.set() methods (" + wins[1] + " to " + wins[0] + ")");
+            }
+        }
+
+        pickBlitters();
 
         function handleCursor(offset) {
             if (self.cursorOnThisFrame && (self.ulactrl & cursorTable[self.cursorDrawIndex])) {
