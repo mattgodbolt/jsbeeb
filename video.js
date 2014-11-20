@@ -281,7 +281,7 @@ define(['teletext'], function (Teletext) {
                 self.charScanLine = (self.charScanLine + 1) & 31;
                 self.memAddress = self.startOfLineMemAddr;
                 if (--self.verticalAdjust === 0) {
-                    self.vDisplayEnabled = true;
+                    self.vDisplayEnabled = self.regs[6] > 0;
                     self.memAddress = self.startOfLineMemAddr = (self.regs[13] | (self.regs[12] << 8)) & 0x3fff;
                     self.charScanLine = 0;
                 }
@@ -302,7 +302,7 @@ define(['teletext'], function (Teletext) {
                     self.vertChars = 0;
                     self.verticalAdjust = self.regs[5]; // load fractional adjustment
                     if (!self.verticalAdjust) {
-                        self.vDisplayEnabled = true;
+                        self.vDisplayEnabled = self.regs[6] > 0;
                         self.memAddress = self.startOfLineMemAddr = (self.regs[13] | (self.regs[12] << 8)) & 0x3fff;
                     }
                     self.frameCount++;
