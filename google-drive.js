@@ -71,7 +71,7 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
         function saveFile(name, data, idOrNone) {
             var metadata = {
                 'title': name,
-                'parents': ["jsbeeb disc images"],
+                'parents': ["jsbeeb disc images"], // TODO: parents doesn't work; also should probably prevent overwriting this on every save
                 'mimeType': MIME_TYPE
             };
 
