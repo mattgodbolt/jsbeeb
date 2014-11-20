@@ -267,6 +267,19 @@ define(['teletext'], function (Teletext) {
             self.memAddress++;
         }
 
+        var prevFirstX = -1;
+
+        function updateLeftBorder() {
+            var firstX = startX();
+            if (firstX === prevFirstX) return;
+            prevFirstX = firstX;
+            for (var y = 0; y < 768; ++y) {
+                for (var x = 0; x < firstX; ++x) {
+                    clearFb(y * 1280 + x * 8, 8);
+                }
+            }
+        }
+
         self.endOfLine = function () {
             self.horizChars = 0;
 
@@ -435,6 +448,9 @@ define(['teletext'], function (Teletext) {
                 if (addr & 1) {
                     video.regs[curReg] = val & crtcmask[curReg];
                     switch (curReg) {
+                        case 3:
+                            updateLeftBorder();
+                            break;
                         case 8:
                             self.ilSyncAndVideo = (self.regs[8] & 3) === 3;
                             self.blanked = (self.regs[8] & 0x30) === 0x30;
@@ -485,6 +501,7 @@ define(['teletext'], function (Teletext) {
                     }
                     self.ulactrl = val;
                     self.pixelsPerChar = (val & 0x10) ? 8 : 16;
+                    updateLeftBorder();
                     self.halfClock = !(val & 0x10);
                     var newMode = (val >>> 2) & 3;
                     if (newMode !== self.ulaMode) {
