@@ -1059,19 +1059,23 @@ define(['utils'], function (utils) {
             }
         }
 
+        function getIndentedSource(indent, opcodeNum) {
+            var opcode = opcodes[opcodeNum];
+            var lines = null;
+            if (opcode) {
+                lines = getInstruction(opcode, false);
+            }
+            if (!lines) {
+                lines = ["this.invalidOpcode(cpu, 0x" + utils.hexbyte(opcodeNum) + ");"];
+            }
+            lines = ["// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"].concat(lines);
+            return indent + lines.join("\n" + indent);
+        }
+
         function generate6502B(min, max, tab) {
             tab = tab || "";
             if (min === max || min === max - 1) {
-                var opcode = opcodes[min];
-                var lines = null;
-                if (opcode) {
-                    lines = getInstruction(opcode, false);
-                }
-                if (!lines) {
-                    lines = ["this.invalidOpcode(cpu, opcode);"];
-                }
-                lines = ["// " + utils.hexbyte(min) + " - " + opcode + "\n"].concat(lines);
-                return tab + lines.join("\n" + tab);
+                return getIndentedSource(tab, min);
             }
             var mid = (min + max) >>> 1;
             return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ") + "\n" + tab + "}\n";
@@ -1085,6 +1089,29 @@ define(['utils'], function (utils) {
             var text = "\"use strict\";\nopcode|=0;\nvar REG, cpu = this.cpu;\n";
             text += generate6502B(0, 256);
             return new Function("opcode", text); // jshint ignore:line
+        }
+
+        function generate6502Switch() {
+            var text = "\"use strict\";\nopcode|=0;\nvar REG, cpu = this.cpu;\n";
+            text += "switch (opcode) {\n";
+            for (var opcode = 0; opcode < 256; ++opcode) {
+                text += "case 0x" + utils.hexbyte(opcode) + ":\n";
+                text += getIndentedSource("  ", opcode);
+                text += "break;\n";
+            }
+            text += "}\n";
+            return new Function("opcode", text); // jshint ignore:line
+        }
+
+        function generate6502JumpTable() {
+            var funcs = [];
+            for (var opcode = 0; opcode < 256; ++opcode) {
+                funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode)); // jshint ignore:line
+            }
+            return function exec(opcode) {
+                "use switch";
+                return funcs[opcode](this.cpu);
+            };
         }
 
         function Disassemble6502(cpu) {
@@ -1182,7 +1209,16 @@ define(['utils'], function (utils) {
 
         Runner.prototype.invalidOpcode = invalidOpcode;
         Runner.prototype.cpu = cpu;
-        Runner.prototype.run = generate6502Binary();
+        if (utils.isFirefox()) {
+            // Firefox seems to be fastest with a jump table.
+            // Would be nicer to benchmark this.
+            Runner.prototype.run = generate6502JumpTable();
+        } else {
+            // The binary search seems to be the win in general.
+            Runner.prototype.run = generate6502Binary();
+        }
+        // Chrome doesn't like having 256 entries in a switch.
+        //Runner.prototype.run = generate6502Switch();
 
         return {
             Disassemble: Disassemble6502,
