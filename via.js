@@ -347,7 +347,7 @@ define(['utils'], function (utils) {
         return self;
     }
 
-    function sysvia(cpu, soundChip, cmos, isMaster, initialLayout) {
+    function sysvia(cpu, video, soundChip, cmos, isMaster, initialLayout) {
         "use strict";
         var self = via(cpu, 0x01);
 
@@ -356,12 +356,8 @@ define(['utils'], function (utils) {
         self.keyrow = 0;
         self.sdbout = 0;
         self.sdbval = 0;
-        self.scrsize = 0;
         self.capsLockLight = false;
         self.shiftLockLight = false;
-        self.getScrSize = function () {
-            return self.scrsize;
-        };
         self.keys = [];
         for (var i = 0; i < 16; ++i) {
             self.keys[i] = new Uint8Array(16);
@@ -485,7 +481,7 @@ define(['utils'], function (utils) {
             self.capsLockLight = !(self.IC32 & 0x40);
             self.shiftLockLight = !(self.IC32 & 0x80);
 
-            self.scrsize = ((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0);
+            video.setScreenSize(((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0));
             if (isMaster) cmos.write(self.IC32, self.sdbval);
         };
 

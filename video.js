@@ -3,7 +3,6 @@ define(['teletext'], function (Teletext) {
         "use strict";
         var self = this;
         self.fb32 = fb32;
-        self.paint = paint;
         self.collook = new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
             0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]);
@@ -48,6 +47,7 @@ define(['teletext'], function (Teletext) {
             self.blanked = false;
             self.vsyncIrqHighLines = 0;
             updateFbTable();
+            updateMemAddrLow();
         };
 
         // from photographic reference, the visible border in mode 1 is
@@ -132,7 +132,7 @@ define(['teletext'], function (Teletext) {
         function renderBlank(x, y) {
             var offset = y * 1280 + x;
             if (self.charsLeft) {
-                if (self.charsLeft != 1) {
+                if (self.charsLeft !== 1) {
                     self.teletext.render(fb32, offset, self.charScanLine, false, 0xff);
                 }
                 self.charsLeft--;
@@ -234,30 +234,46 @@ define(['teletext'], function (Teletext) {
             if (++self.cursorDrawIndex === 7) self.cursorDrawIndex = 0;
         }
 
+        self.memAddrLow = 0;
+        function updateMemAddrLow() {
+            if (self.ilSyncAndVideo) {
+                self.memAddrLow = ((self.charScanLine & 3) << 1) | self.inInterlacedLine;
+            } else {
+                self.memAddrLow = self.charScanLine & 7;
+            }
+        }
+
+        self.screenSize = 0;
+        self.setScreenSize = function (viaScreenSize) {
+            self.screenSize = screenlen[viaScreenSize];
+        };
+
+        function readVideoMem() {
+            if (self.memAddress & 0x2000) {
+                return self.cpu.videoRead(0x7c00 | (self.memAddress & 0x3ff));
+            } else {
+                var addr = self.memAddrLow | (self.memAddress << 3);
+                if (addr & 0x8000) addr -= self.screenSize;
+                return self.cpu.videoRead(addr & 0x7fff);
+            }
+        }
+
         function renderChar(x, y) {
             if (!((self.memAddress ^ self.cursorPos) & 0x3fff) && self.cursorOn) {
                 self.cursorDrawIndex = 3 - ((self.regs[8] >>> 6) & 3);
             }
 
-            var dat = 0;
-            if (self.memAddress & 0x2000) {
-                dat = self.cpu.videoRead(0x7c00 | (self.memAddress & 0x3ff));
-            } else {
-                var addr = self.ilSyncAndVideo ? ((self.memAddress << 3) | ((self.charScanLine & 3) << 1) | self.inInterlacedLine)
-                    : ((self.memAddress << 3) | (self.charScanLine & 7));
-                if (addr & 0x8000) addr -= screenlen[self.sysvia.getScrSize()];
-                dat = self.cpu.videoRead(addr & 0x7fff) | 0;
-            }
             if (x < 1280) {
-                var offset = (y * 1280 + x) | 0;
-                var fb32 = self.fb32;
-                var fbOffset = offset;
+                var offset = y * 1280 + x;
                 if (self.blanked || ((self.charScanLine & 8) && !self.teletextMode)) {
-                    clearFb(fbOffset, self.pixelsPerChar);
-                } else if (self.teletextMode) {
-                    self.teletext.render(fb32, offset, self.charScanLine, self.oddFrame, dat & 0x7f);
+                    clearFb(offset, self.pixelsPerChar);
                 } else {
-                    blitFb(dat, fbOffset, self.pixelsPerChar);
+                    var dat = readVideoMem();
+                    if (self.teletextMode) {
+                        self.teletext.render(self.fb32, offset, self.charScanLine, self.oddFrame, dat & 0x7f);
+                    } else {
+                        blitFb(dat, offset, self.pixelsPerChar);
+                    }
                 }
 
                 if (self.cursorDrawIndex) {
@@ -293,6 +309,7 @@ define(['teletext'], function (Teletext) {
                 // Handling top few vertical adjust lines.
                 self.charScanLine = (self.charScanLine + 1) & 31;
                 self.memAddress = self.startOfLineMemAddr;
+                updateMemAddrLow();
                 if (--self.verticalAdjust === 0) {
                     self.vDisplayEnabled = self.regs[6] > 0;
                     self.memAddress = self.startOfLineMemAddr = (self.regs[13] | (self.regs[12] << 8)) & 0x3fff;
@@ -300,8 +317,9 @@ define(['teletext'], function (Teletext) {
                 }
             } else if (self.charScanLine === self.regs[9] || (self.ilSyncAndVideo && self.charScanLine === (self.regs[9] >>> 1))) {
                 // end of a vertical character
-                self.startOfLineMemAddr = self.memAddress;
                 self.charScanLine = 0;
+                self.startOfLineMemAddr = self.memAddress;
+                updateMemAddrLow();
                 self.cursorOn = self.cursorOff = false;
                 self.teletext.verticalCharEnd();
                 var oldVertChars = self.vertChars;
@@ -326,6 +344,7 @@ define(['teletext'], function (Teletext) {
                     // vertical sync position
                     self.oddFrame = !self.oddFrame;
                     self.inInterlacedLine = !!(self.oddFrame && (self.regs[8] & 1));
+                    updateMemAddrLow();
                     if (self.oddFrame) self.atStartOfInterlaceLine = !!(self.regs[8] & 1);
                     if (self.clocks > 2) {
                         paint();
@@ -340,6 +359,7 @@ define(['teletext'], function (Teletext) {
             } else {
                 self.charScanLine = (self.charScanLine + 1) & 31;
                 self.memAddress = self.startOfLineMemAddr;
+                updateMemAddrLow();
             }
 
             self.teletext.endline();
@@ -454,6 +474,7 @@ define(['teletext'], function (Teletext) {
                         case 8:
                             self.ilSyncAndVideo = (self.regs[8] & 3) === 3;
                             self.blanked = (self.regs[8] & 0x30) === 0x30;
+                            updateMemAddrLow();
                             break;
                         case 14:
                         case 15:
