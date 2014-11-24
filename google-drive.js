@@ -4,7 +4,7 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
         var self = this;
         var MIME_TYPE = 'application/vnd.jsbeeb.disc-image';
         var CLIENT_ID = '356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com';
-        var SCOPES = 'https://www.googleapis.com/auth/drive';
+        var SCOPES = 'https://www.googleapis.com/auth/drive.file';
         var gapi = null;
         var baseSsd = fdc.baseSsd;
 
