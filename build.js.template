@@ -1,0 +1,12 @@
+{
+    COMMON_SETTINGS,
+    appDir: "build",
+    dir: "DEPLOY_DIR",
+    generateSourceMaps: true,
+    modules: [{name: "main"}],
+    optimize: "uglify2",
+    optimizeCss: "standard.keepLines",
+    preserveLicenseComments: false,
+    removeCombined: true,
+    useStrict: true
+}
