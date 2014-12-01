@@ -736,7 +736,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             var schema = split.schema;
 
             if (schema === '|' || schema === "sth") {
-                tapeImage = tapeImage.substr(1);
                 return tapeSth.fetch(tapeImage).then(function (image) {
                     processor.acia.setTape(tapes.loadTapeFromData(image));
                 });
