@@ -142,13 +142,13 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             }
             var nextPc = nextInstruction(cpu.pc);
             stepUntil(function () {
-                return cpu.pc == nextPc;
+                return cpu.pc === nextPc;
             });
         }
 
         function isReturn(addr) {
             var result = disassemble(addr);
-            if (result[0] == "RTS")
+            if (result[0] === "RTS")
                 return true;
             return false;
         }
@@ -171,7 +171,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 var addr = startingPoint & 0xffff;
                 while (addr < address) {
                     var result = disassemble(addr);
-                    if (result[1] == address && result[0] != "???") {
+                    if (result[1] === address && result[0] != "???") {
                         return addr;
                     }
                     addr = result[1];
@@ -335,7 +335,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         this.setPatch = function (patch) {
             _.each(patch.split(";"), function (inst) {
-                if (inst[0] == '@') {
+                if (inst[0] === '@') {
                     var at = parseInt(inst.substr(1, 4), 16);
                     inst = inst.substr(5);
                     if (!patchInstructions[at])
