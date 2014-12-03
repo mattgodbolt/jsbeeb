@@ -1,5 +1,6 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise', 'promise', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser) {
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
+        'canvas', 'promise', 'bootstrap', 'jquery-visibility'],
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser, Canvas) {
         "use strict";
 
         var processor;
@@ -275,31 +276,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var yieldsPerFrame = 1;
         var cyclesPerYield = cyclesPerFrame / yieldsPerFrame;
 
-        var canvas = $('#screen')[0];
-        var ctx = canvas.getContext('2d');
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, 1280, 768);
-        var backBuffer = document.createElement("canvas");
-        backBuffer.width = 1280;
-        backBuffer.height = 768;
-        var backCtx = backBuffer.getContext("2d");
-        var imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
-        var fb8 = imageData.data;
-        var canvasWidth = canvas.width;
-        var canvasHeight = canvas.height;
-
-        function paint(minx, miny, maxx, maxy) {
+        var canvas = new Canvas($('#screen')[0]);
+        video = new Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;
             frames = 0;
-            var width = maxx - minx;
-            var height = maxy - miny;
-            backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
-            ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvasWidth, canvasHeight);
-        }
-
-        var fb32 = new Uint32Array(fb8.buffer);
-        video = new Video(fb32, paint);
+            canvas.paint(minx, miny, maxx, maxy);
+        });
 
         soundChip = (function () {
             var context = null;
