@@ -1,6 +1,6 @@
 require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
         'canvas', 'promise', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser, Canvas) {
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser, canvas) {
         "use strict";
 
         var processor;
@@ -276,7 +276,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var yieldsPerFrame = 1;
         var cyclesPerYield = cyclesPerFrame / yieldsPerFrame;
 
-        var canvas = new Canvas($('#screen')[0]);
+        var canvas = parsedQuery.glEnabled ? canvas.bestCanvas($('#screen')[0]) : new canvas.Canvas($('#screen')[0]);
         video = new Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;

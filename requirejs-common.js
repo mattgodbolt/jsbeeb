@@ -17,11 +17,12 @@
             'gapi': 'lib/gapi',
             'jsunzip': 'lib/jsunzip',
             'promise': 'lib/promise-6.0.0',
-            'underscore': 'lib/underscore-min'
+            'underscore': 'lib/underscore-min',
+            'webgl-debug': 'lib/webgl-debug'
         },
         shim: {
-            'underscore': { exports: '_' },
-            'bootstrap': [ 'jquery' ]
+            'underscore': {exports: '_'},
+            'bootstrap': ['jquery']
         }
     });
 })();

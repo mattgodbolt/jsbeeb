@@ -203,7 +203,7 @@ define(['teletext'], function (Teletext) {
             }
 
             var wins = [0, 0];
-            for (var round = 0; round < 10; ++round) {
+            for (var round = 0; round < 20; ++round) {
                 blitFb = blitFb_1;
                 clearFb = clearFb_1;
                 var fb1Time = timeBlitters();
