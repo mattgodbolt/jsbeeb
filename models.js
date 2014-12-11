@@ -17,7 +17,7 @@ define(['fdc'], function (fdc) {
         false, false, false, false,
         false, false, false, false,
         true, true, false, false];
-    var masterSwram = [ 
+    var masterSwram = [
         false, false, false, false,
         true, true, true, true,
         false, false, false, false,
