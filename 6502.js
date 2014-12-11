@@ -1136,8 +1136,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 return loadOsPromise.then(function () {
                     self.reset(true);
                     dbgr.setCpu(self);
-                    if (model.tube)
-                        dbgr.setCpu(self.tube);
+                    //if (model.tube)
+                    //    dbgr.setCpu(self.tube);
                 });
             };
         };

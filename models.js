@@ -25,10 +25,11 @@ define(['fdc'], function (fdc) {
     var tube65c02 = new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false);
     var allModels = [
         new Model("BBC B", ["B"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, fdc.I8271),
+        new Model("BBC B (with 65c02 Tube)", ["B-Tube"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, fdc.I8271, tube65c02),
         new Model("BBC B (1770)", ["B1770"], ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
             true, false, beebSwram, fdc.WD1770),
         new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770),
-        new Model("BBC Master 128", ["MasterTurbo"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770, tube65c02),
+        new Model("BBC Master Turbo", ["MasterTurbo"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770, tube65c02),
     ];
 
     function findModel(name) {
