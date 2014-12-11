@@ -50,6 +50,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         function setupVia(node, via) {
             var updates = [];
+            if (!via) return function () {};
             $.each(["ora", "orb", "ira", "irb", "ddra", "ddrb",
                 "acr", "pcr", "ifr", "ier", "t1c", "t1l", "t2c", "t2l"], function (_, elem) {
                 var row = node.find(".template").clone().removeClass("template").appendTo(node);
@@ -59,7 +60,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                     updates.push(function () {
                         var reg = via[elem];
                         value.text(hexbyte((reg >> 16) & 0xff) +
-                            hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
+                        hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
                     });
                 } else {
                     updates.push(function () {
@@ -303,6 +304,10 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                     break;
                 case 'n':
                     step();
+                    break;
+                case 'N':
+                    cpu.execute(1);
+                    self.debug(cpu.pc);
                     break;
                 case 'm':
                     stepOver();

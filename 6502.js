@@ -32,15 +32,568 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.reset();
         }
 
+        function base6502(cpu, model) {
+            cpu.model = model;
+            cpu.a = cpu.x = cpu.y = cpu.s = 0;
+            cpu.pc = 0;
+            cpu.opcodes = model.nmos ? opcodesAll.cpu6502(cpu) : opcodesAll.cpu65c12(cpu);
+            cpu.disassembler = new cpu.opcodes.Disassemble(cpu);
+
+            cpu.incpc = function () {
+                cpu.pc = (cpu.pc + 1) & 0xffff;
+            };
+
+            cpu.getb = function () {
+                var result = cpu.readmem(cpu.pc);
+                cpu.incpc();
+                return result | 0;
+            };
+
+            cpu.getw = function () {
+                var result = cpu.readmem(cpu.pc) | 0;
+                cpu.incpc();
+                result |= (cpu.readmem(cpu.pc) | 0) << 8;
+                cpu.incpc();
+                return result | 0;
+            };
+
+            cpu.checkInt = function () {
+                cpu.takeInt = (cpu.interrupt && !cpu.p.i);
+            };
+
+            cpu.setzn = function (v) {
+                v &= 0xff;
+                cpu.p.z = !v;
+                cpu.p.n = !!(v & 0x80);
+                return v | 0;
+            };
+
+            cpu.push = function (v) {
+                cpu.writememZpStack(0x100 + cpu.s, v);
+                cpu.s = (cpu.s - 1) & 0xff;
+            };
+
+            cpu.pull = function () {
+                cpu.s = (cpu.s + 1) & 0xff;
+                return cpu.readmemZpStack(0x100 + cpu.s);
+            };
+
+            cpu.NMI = function (nmi) {
+                cpu.nmi = !!nmi;
+            };
+
+            cpu.brk = function () {
+                var nextByte = cpu.pc + 1;
+                cpu.push(nextByte >>> 8);
+                cpu.push(nextByte & 0xff);
+                cpu.push(cpu.p.asByte());
+                cpu.pc = cpu.readmem(0xfffe) | (cpu.readmem(0xffff) << 8);
+                cpu.p.i = true;
+                if (!model.nmos) {
+                    cpu.p.d = false;
+                    cpu.takeInt = false;
+                }
+            };
+
+            cpu.branch = function (taken) {
+                var offset = signExtend(cpu.getb());
+                if (!taken) {
+                    cpu.polltime(1);
+                    cpu.checkInt();
+                    cpu.polltime(1);
+                    return;
+                }
+                var newPc = (cpu.pc + offset) & 0xffff;
+                var pageCrossed = !!((cpu.pc & 0xff00) ^ (newPc & 0xff00));
+                cpu.pc = newPc;
+                cpu.polltime(pageCrossed ? 3 : 1);
+                cpu.checkInt();
+                cpu.polltime(pageCrossed ? 1 : 2);
+            };
+
+            function adcNonBCD(addend) {
+                var result = (cpu.a + addend + (cpu.p.c ? 1 : 0));
+                cpu.p.v = !!((cpu.a ^ result) & (addend ^ result) & 0x80);
+                cpu.p.c = !!(result & 0x100);
+                cpu.a = result & 0xff;
+                cpu.setzn(cpu.a);
+            }
+
+            // For flags and stuff see URLs like:
+            // http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f86911eaeaea&steps=16
+            function adcBCD(addend) {
+                var ah = 0;
+                var tempb = (cpu.a + addend + (cpu.p.c ? 1 : 0)) & 0xff;
+                cpu.p.z = !tempb;
+                var al = (cpu.a & 0xf) + (addend & 0xf) + (cpu.p.c ? 1 : 0);
+                if (al > 9) {
+                    al -= 10;
+                    al &= 0xf;
+                    ah = 1;
+                }
+                ah += (cpu.a >>> 4) + (addend >>> 4);
+                cpu.p.n = !!(ah & 8);
+                cpu.p.v = !((cpu.a ^ addend) & 0x80) && !!((cpu.a ^ (ah << 4)) & 0x80);
+                cpu.p.c = false;
+                if (ah > 9) {
+                    cpu.p.c = true;
+                    ah -= 10;
+                    ah &= 0xf;
+                }
+                cpu.a = ((al & 0xf) | (ah << 4)) & 0xff;
+            }
+
+            // With reference to c64doc: http://vice-emu.sourceforge.net/plain/64doc.txt
+            // and http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f8e988eaeaea&steps=18
+            function sbcBCD(subend) {
+                var carry = cpu.p.c ? 0 : 1;
+                var al = (cpu.a & 0xf) - (subend & 0xf) - carry;
+                var ah = (cpu.a >>> 4) - (subend >>> 4);
+                if (al & 0x10) {
+                    al = (al - 6) & 0xf;
+                    ah--;
+                }
+                if (ah & 0x10) {
+                    ah = (ah - 6) & 0xf;
+                }
+
+                var result = cpu.a - subend - carry;
+                cpu.p.n = !!(result & 0x80);
+                cpu.p.z = !(result & 0xff);
+                cpu.p.v = !!((cpu.a ^ result) & (subend ^ cpu.a) & 0x80);
+                cpu.p.c = !(result & 0x100);
+                cpu.a = al | (ah << 4);
+            }
+
+            function adcBCDcmos(addend) {
+                cpu.polltime(1); // One more cycle, apparently
+                var carry = cpu.p.c ? 1 : 0;
+                var al = (cpu.a & 0xf) + (addend & 0xf) + carry;
+                var ah = (cpu.a >>> 4) + (addend >>> 4);
+                if (al > 9) {
+                    al = (al - 10) & 0xf;
+                    ah++;
+                }
+                cpu.p.v = !((cpu.a ^ addend) & 0x80) && !!((cpu.a ^ (ah << 4)) & 0x80);
+                cpu.p.c = false;
+                if (ah > 9) {
+                    ah = (ah - 10) & 0xf;
+                    cpu.p.c = true;
+                }
+                cpu.a = cpu.setzn(al | (ah << 4));
+            }
+
+            function sbcBCDcmos(subend) {
+                cpu.polltime(1); // One more cycle, apparently
+                var carry = cpu.p.c ? 0 : 1;
+                var al = (cpu.a & 0xf) - (subend & 0xf) - carry;
+                var result = cpu.a - subend - carry;
+                if (result < 0) {
+                    result -= 0x60;
+                }
+                if (al < 0) result -= 0x06;
+
+                adcNonBCD(subend ^ 0xff); // For flags
+                cpu.a = cpu.setzn(result);
+            }
+
+            if (model.nmos) {
+                cpu.adc = function (addend) {
+                    if (!cpu.p.d) {
+                        adcNonBCD(addend);
+                    } else {
+                        adcBCD(addend);
+                    }
+                };
+
+                cpu.sbc = function (subend) {
+                    if (!cpu.p.d) {
+                        adcNonBCD(subend ^ 0xff);
+                    } else {
+                        sbcBCD(subend);
+                    }
+                };
+            } else {
+                cpu.adc = function (addend) {
+                    if (!cpu.p.d) {
+                        adcNonBCD(addend);
+                    } else {
+                        adcBCDcmos(addend);
+                    }
+                };
+
+                cpu.sbc = function (subend) {
+                    if (!cpu.p.d) {
+                        adcNonBCD(subend ^ 0xff);
+                    } else {
+                        sbcBCDcmos(subend);
+                    }
+                };
+            }
+
+            cpu.arr = function (arg) {
+                // Insane instruction. I started with b-em source, but ended up using:
+                // http://www.6502.org/users/andre/petindex/local/64doc.txt as reference,
+                // tidying up as needed and fixing a couple of typos.
+                if (cpu.p.d) {
+                    var temp = cpu.a & arg;
+
+                    var ah = temp >>> 4;
+                    var al = temp & 0x0f;
+
+                    cpu.p.n = cpu.p.c;
+                    cpu.a = (temp >>> 1) | (cpu.p.c ? 0x80 : 0x00);
+                    cpu.p.z = !cpu.a;
+                    cpu.p.v = (temp ^ cpu.a) & 0x40;
+
+                    if ((al + (al & 1)) > 5)
+                        cpu.a = (cpu.a & 0xf0) | ((cpu.a + 6) & 0xf);
+
+                    cpu.p.c = (ah + (ah & 1)) > 5;
+                    if (cpu.p.c)
+                        cpu.a = (cpu.a + 0x60) & 0xff;
+                } else {
+                    cpu.a = cpu.a & arg;
+                    cpu.p.v = !!(((cpu.a >> 7) ^ (cpu.a >>> 6)) & 0x01);
+                    cpu.a >>>= 1;
+                    if (cpu.p.c) cpu.a |= 0x80;
+                    cpu.setzn(cpu.a);
+                    cpu.p.c = !!(cpu.a & 0x40);
+                }
+            };
+
+            cpu.runner = cpu.opcodes.runInstruction;
+        }
+
+        function Tube6502(model, cpu) {
+            var self = this;
+            base6502(this, model);
+
+            this.cycles = 0;
+            this.romPaged = true;
+            this.memory = new Uint8Array(65536);
+            this.rom = new Uint8Array(4096);
+            this.p = new Flags();
+
+            this.ph1 = new Uint8Array(24);
+            this.ph2 = 0;
+            this.ph3 = new Uint8Array(2);
+            this.ph4 = 0;
+            this.hp1 = 0;
+            this.hp2 = 0;
+            this.hp3 = new Uint8Array(2);
+            this.hp4 = 0;
+            this.hstat = new Uint8Array(4);
+            this.pstat = new Uint8Array(4);
+            this.r1stat = 0;
+            this.ph1pos = 0;
+            this.ph3pos = 0;
+            this.hp3pos = 0;
+
+            this.updateInterrupts = function () {
+                this.interrupt = false;
+                this.nmi = false;
+                cpu.interrupt &= ~8;
+
+                // Host interrupt
+                if ((this.r1stat & 0x01) && (this.hstat[3] & 0x80)) cpu.interrupt |= 8;
+
+                // Parasite interrupts
+                if (((this.r1stat & 0x02) && (this.pstat[0] & 0x80)) ||
+                    ((this.r1stat & 0x04) && (this.pstat[3] & 0x80))) this.interrupt = true;
+
+                if (this.r1stat & 0x08) {
+                    var hp3Size = (this.r1stat & 0x10) ? 1 : 0;
+                    if ((this.hp3pos > hp3Size) || this.ph3pos === 0) this.nmi = true;
+                }
+            };
+
+            this.reset = function () {
+                this.romPaged = true;
+                this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
+                this.p.i = true;
+                console.log("Tube initialized to start at $" + hexword(this.pc));
+                this.ph1pos = this.hp3pos = 0;
+                this.ph3pos = 1;
+                this.r1stat = 0;
+                this.hstat[0] = this.hstat[1] = this.hstat[3] = 0x40;
+                this.hstat[2] = 0xc0;
+                this.pstat[0] = this.pstat[1] = this.pstat[2] = this.pstat[3] = 0x40;
+            };
+
+            this.readmem = function (offset) {
+                if ((offset & 0xfff8) === 0xfef8) {
+                    return this.parasiteRead(offset);
+                }
+                if (this.romPaged && (offset & 0xf000) === 0xf000) {
+                    return this.rom[offset & 0xfff];
+                }
+                return this.memory[offset & 0xffff];
+            };
+            this.readmemZpStack = function (offset) {
+                return this.memory[offset & 0xffff];
+            };
+            this.writemem = function (addr, b) {
+                if ((addr & 0xfff8) === 0xfef8) {
+                    return this.parasiteWrite(addr, b);
+                }
+                this.memory[addr & 0xffff] = b;
+            };
+            this.writememZpStack = function (addr, b) {
+                this.memory[addr & 0xffff] = b;
+            };
+
+            this.polltime = function (cycles) {
+                this.cycles -= cycles;
+            };
+            this.polltimeAddr = this.polltime;
+
+            this.read = function (addr) {
+                var result = 0xfe;
+                switch (addr & 7) {
+                    case 0:
+                        result = (this.hstat[0] & 0xc0) | this.r1stat;
+                        break;
+                    case 1:
+                        result = this.ph1[0];
+                        for (var i = 0; i < 23; ++i) this.ph1[i] = this.ph1[i + 1];
+                        this.pstat[0] |= 0x40;
+                        if (!--this.ph1pos) {
+                            this.hstat[0] &= ~0x80;
+                        }
+                        break;
+                    case 2:
+                        result = this.hstat[1];
+                        break;
+                    case 3:
+                        result = this.ph2;
+                        if (this.hstat[1] & 0x80) {
+                            this.hstat[1] &= ~0x80;
+                            this.pstat[1] |= 0x40;
+                        }
+                        break;
+                    case 4:
+                        result = this.hstat[2];
+                        break;
+                    case 5:
+                        result = this.ph3[0];
+                        if (this.ph3pos > 0) {
+                            this.ph3[0] = this.ph3[1];
+                            this.pstat[2] |= 0x40;
+                            if (!--this.ph3pos) this.hstat[2] &= ~0x80;
+                        }
+                        break;
+                    case 6:
+                        result = this.hstat[3];
+                        break;
+                    case 7:
+                        result = this.ph4;
+                        if (this.hstat[3] & 0x80) {
+                            this.hstat[3] &= ~0x80;
+                            this.pstat[3] |= 0x40;
+                        }
+                        break;
+                }
+                this.updateInterrupts();
+                if (this.debug) console.log("host read " + hexword(addr) + " = " + utils.hexbyte(result));
+                return result;
+            };
+            this.write = function (addr, b) {
+                if (this.debug) console.log("host write " + hexword(addr) + " = " + utils.hexbyte(b));
+                switch (addr & 7) {
+                    case 0:
+                        if (b & 0x80) this.r1stat |= b & 0x3f;
+                        else this.r1stat &= ~(b & 0x3f);
+                        this.hstat[0] = (this.hstat[0] & 0xc0) | (b & 0x3f);
+                        break;
+                    case 1:
+                        this.hp1 = b;
+                        this.pstat[0] |= 0x80;
+                        this.hstat[0] &= ~0x40;
+                        break;
+                    case 3:
+                        this.hp2 = b;
+                        this.pstat[1] |= 0x80;
+                        this.hstat[1] &= ~0x40;
+                        break;
+                    case 5:
+                        if (this.r1stat & 0x10) {
+                            if (this.hp3pos < 2)
+                                this.hp3[this.hp3pos++] = b;
+                            if (this.hp3pos === 2) {
+                                this.pstat[2] |= 0x80;
+                                this.hstat[2] &= ~0x40;
+                            }
+                        } else {
+                            this.hp3[0] = b;
+                            this.hp3pos = 1;
+                            this.pstat[2] |= 0x80;
+                            this.hstat[2] &= ~0x40;
+                        }
+                        break;
+                    case 7:
+                        this.hp4 = b;
+                        this.pstat[3] |= 0x80;
+                        this.hstat[3] &= ~0x40;
+                        break;
+                }
+                this.updateInterrupts();
+            };
+            this.parasiteRead = function (addr) {
+                var result = 0;
+                switch (addr & 7) {
+                    case 0: // Stat
+                        this.romPaged = false;
+                        result = this.pstat[0] | this.r1stat;
+                        break;
+                    case 1:
+                        result = this.hp1;
+                        if (this.pstat[0] & 0x80) {
+                            this.pstat[0] &= ~0x80;
+                            this.hstat[0] |= 0x40;
+                        }
+                        break;
+                    case 2:
+                        result = this.pstat[1];
+                        break;
+                    case 3:
+                        result = this.hp2;
+                        if (this.pstat[1] & 0x80) {
+                            this.pstat[1] &= ~0x80;
+                            this.hstat[1] |= 0x40;
+                        }
+                        break;
+                    case 4:
+                        result = this.pstat[2];
+                        break;
+                    case 5:
+                        result = this.hp3[0];
+                        if (this.hp3pos > 0) {
+                            this.hp3[0] = this.hp3[1];
+                            if (!--this.hp3pos) {
+                                this.pstat[2] &= ~0x80;
+                                this.hstat[2] |= 0x40;
+                            }
+                        }
+                        break;
+                    case 6:
+                        result = this.pstat[3];
+                        break;
+                    case 7:
+                        result = this.hp4;
+                        if (this.pstat[3] & 0x80) {
+                            this.pstat[3] &= ~0x80;
+                            this.hstat[3] |= 0x40;
+                        }
+                        break;
+                }
+                this.updateInterrupts();
+                if (this.debug) console.log("parasite read " + hexword(addr) + " = " + utils.hexbyte(result));
+                return result;
+            };
+
+            this.parasiteWrite = function (addr, b) {
+                if (this.debug) console.log("parasite write " + hexword(addr) + " = " + utils.hexbyte(b));
+                switch (addr & 7) {
+                    case 1:
+                        if (this.ph1pos < 24) {
+                            this.ph1[this.ph1pos++] = b;
+                            this.hstat[0] |= 0x80;
+                            if (this.ph1pos === 24)
+                                this.pstat[0] &= ~0x40;
+                        }
+                        break;
+                    case 3:
+                        this.ph2 = b;
+                        this.hstat[1] |= 0x80;
+                        this.pstat[1] &= ~0x40;
+                        break;
+                    case 5:
+                        if (this.r1stat & 0x10) {
+                            if (this.ph3pos < 2)
+                                this.ph3[this.ph3pos++] = b;
+                            if (this.ph3pos === 2) {
+                                this.hstat[2] |= 0x80;
+                                this.pstat[2] &= ~0x40;
+                            }
+                        } else {
+                            this.ph3[0] = b;
+                            this.ph3pos = 1;
+                            this.hstat[2] |= 0x80;
+                            this.pstat[2] &= ~0x40;
+                        }
+                        break;
+                    case 7:
+                        this.ph4 = b;
+                        this.hstat[3] |= 0x80;
+                        this.pstat[3] &= ~0x40;
+                        break;
+                }
+                this.updateInterrupts();
+            };
+
+            this.execute = function (cycles) {
+                this.cycles += cycles * 2;
+                if (this.cycles < 3) return;
+                while (this.cycles > 0) {
+                    var opcode = this.readmem(this.pc);
+                    this.incpc();
+                    this.runner.run(opcode);
+                    if (this.takeInt) {
+                        this.takeInt = false;
+                        this.push(this.pc >>> 8);
+                        this.push(this.pc & 0xff);
+                        this.push(this.p.asByte() & ~0x10);
+                        this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
+                        this.p.i = true;
+                        this.polltime(7);
+                    }
+                    if (this.nmi) {
+                        this.push(this.pc >>> 8);
+                        this.push(this.pc & 0xff);
+                        this.push(this.p.asByte() & ~0x10);
+                        this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
+                        this.p.i = true;
+                        this.polltime(7);
+                        this.nmi = false;
+                        if (!model.nmos)
+                            this.p.d = false;
+                    }
+                }
+            };
+
+            this.loadOs = function () {
+                console.log("Loading tube rom from roms/" + model.os);
+                return utils.loadData("roms/" + model.os).then(function (data) {
+                    var len = data.length;
+                    if (len !== 2048) throw new Error("Broken ROM file (length=" + len + ")");
+                    for (var i = 0; i < len; ++i) {
+                        self.rom[i + 2048] = data[i];
+                    }
+                });
+            };
+        }
+
+        function FakeTube() {
+            this.read = function () {
+                return 0xfe;
+            };
+            this.write = function () {
+            };
+            this.execute = function () {
+            };
+            this.reset = function () {
+            };
+        }
+
         return function Cpu6502(model, dbgr, video, soundChip, cmos, config) {
             var self = this;
             if (config === undefined) config = {};
             if (!config.keyLayout)
                 config.keyLayout = "physical";
 
-            var opcodes = model.nmos ? opcodesAll.cpu6502(this) : opcodesAll.cpu65c12(this);
+            base6502(this, model);
 
-            this.model = model;
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
             this.memStat = new Uint8Array(512);
@@ -48,7 +601,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
             this.romOffset = 128 * 1024;
             this.osOffset = this.romOffset + 16 * 16 * 1024;
-            this.a = this.x = this.y = this.s = 0;
             this.romsel = 0;
             this.acccon = 0;
             this.interrupt = 0;
@@ -62,6 +614,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
             this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
+            this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
 
             // BBC Master memory map (within ramRomOs array):
             // 00000 - 08000 -> base 32KB RAM
@@ -398,28 +951,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 //                stop(true);
             };
 
-            this.incpc = function () {
-                this.pc = (this.pc + 1) & 0xffff;
-            };
-
-            this.getb = function () {
-                var result = this.readmem(this.pc);
-                this.incpc();
-                return result | 0;
-            };
-
-            this.getw = function () {
-                var result = this.readmem(this.pc) | 0;
-                this.incpc();
-                result |= (this.readmem(this.pc) | 0) << 8;
-                this.incpc();
-                return result | 0;
-            };
-
-            this.checkInt = function () {
-                this.takeInt = (this.interrupt && !this.p.i);
-            };
-
             this.loadRom = function (name, offset) {
                 name = "roms/" + name;
                 console.log("Loading ROM from " + name);
@@ -485,7 +1016,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                         }
                     }
                     this.videoDisplayPage = 0;
-                    this.disassembler = new opcodes.Disassemble(this);
                     this.sysvia = via.SysVia(this, video, soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
                     this.acia = new Acia(this, soundChip.toneGenerator);
@@ -499,15 +1029,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                         }, write: function () {
                         }
                     };
-                    this.tube = {
-                        read: function () {
-                            return 0xfe;
-                        }, write: function () {
-                        }
-                    };
                     this.sysvia.reset();
                     this.uservia.reset();
                 }
+                this.tube.reset();
                 this.cycles = 0;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p = new Flags();
@@ -520,23 +1045,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
 
             this.updateKeyLayout = function () {
                 this.sysvia.setKeyLayout(config.keyLayout);
-            };
-
-            this.setzn = function (v) {
-                v &= 0xff;
-                this.p.z = !v;
-                this.p.n = !!(v & 0x80);
-                return v | 0;
-            };
-
-            this.push = function (v) {
-                this.writememZpStack(0x100 + this.s, v);
-                this.s = (this.s - 1) & 0xff;
-            };
-
-            this.pull = function () {
-                this.s = (this.s + 1) & 0xff;
-                return this.readmemZpStack(0x100 + this.s);
             };
 
             this.polltimeAddr = function (cycles, addr) {
@@ -556,193 +1064,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 this.acia.polltime(cycles);
                 video.polltime(cycles);
                 soundChip.polltime(cycles);
+                this.tube.execute(cycles);
             };
-
-            this.NMI = function (nmi) {
-                this.nmi = !!nmi;
-            };
-
-            this.brk = function () {
-                var nextByte = this.pc + 1;
-                this.push(nextByte >>> 8);
-                this.push(nextByte & 0xff);
-                this.push(this.p.asByte());
-                this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
-                this.p.i = true;
-                if (!model.nmos) {
-                    this.p.d = false;
-                    this.takeInt = false;
-                }
-            };
-
-            this.branch = function (taken) {
-                var offset = signExtend(this.getb());
-                if (!taken) {
-                    this.polltime(1);
-                    this.checkInt();
-                    this.polltime(1);
-                    return;
-                }
-                var newPc = (this.pc + offset) & 0xffff;
-                var pageCrossed = !!((this.pc & 0xff00) ^ (newPc & 0xff00));
-                this.pc = newPc;
-                this.polltime(pageCrossed ? 3 : 1);
-                this.checkInt();
-                this.polltime(pageCrossed ? 1 : 2);
-            };
-
-            function adcNonBCD(addend) {
-                var result = (self.a + addend + (self.p.c ? 1 : 0));
-                self.p.v = !!((self.a ^ result) & (addend ^ result) & 0x80);
-                self.p.c = !!(result & 0x100);
-                self.a = result & 0xff;
-                self.setzn(self.a);
-            }
-
-            // For flags and stuff see URLs like:
-            // http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f86911eaeaea&steps=16
-            function adcBCD(addend) {
-                var ah = 0;
-                var tempb = (self.a + addend + (self.p.c ? 1 : 0)) & 0xff;
-                self.p.z = !tempb;
-                var al = (self.a & 0xf) + (addend & 0xf) + (self.p.c ? 1 : 0);
-                if (al > 9) {
-                    al -= 10;
-                    al &= 0xf;
-                    ah = 1;
-                }
-                ah += (self.a >>> 4) + (addend >>> 4);
-                self.p.n = !!(ah & 8);
-                self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
-                self.p.c = false;
-                if (ah > 9) {
-                    self.p.c = true;
-                    ah -= 10;
-                    ah &= 0xf;
-                }
-                self.a = ((al & 0xf) | (ah << 4)) & 0xff;
-            }
-
-            // With reference to c64doc: http://vice-emu.sourceforge.net/plain/64doc.txt
-            // and http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f8e988eaeaea&steps=18
-            function sbcBCD(subend) {
-                var carry = self.p.c ? 0 : 1;
-                var al = (self.a & 0xf) - (subend & 0xf) - carry;
-                var ah = (self.a >>> 4) - (subend >>> 4);
-                if (al & 0x10) {
-                    al = (al - 6) & 0xf;
-                    ah--;
-                }
-                if (ah & 0x10) {
-                    ah = (ah - 6) & 0xf;
-                }
-
-                var result = self.a - subend - carry;
-                self.p.n = !!(result & 0x80);
-                self.p.z = !(result & 0xff);
-                self.p.v = !!((self.a ^ result) & (subend ^ self.a) & 0x80);
-                self.p.c = !(result & 0x100);
-                self.a = al | (ah << 4);
-            }
-
-            function adcBCDcmos(addend) {
-                self.polltime(1); // One more cycle, apparently
-                var carry = self.p.c ? 1 : 0;
-                var al = (self.a & 0xf) + (addend & 0xf) + carry;
-                var ah = (self.a >>> 4) + (addend >>> 4);
-                if (al > 9) {
-                    al = (al - 10) & 0xf;
-                    ah++;
-                }
-                self.p.v = !((self.a ^ addend) & 0x80) && !!((self.a ^ (ah << 4)) & 0x80);
-                self.p.c = false;
-                if (ah > 9) {
-                    ah = (ah - 10) & 0xf;
-                    self.p.c = true;
-                }
-                self.a = self.setzn(al | (ah << 4));
-            }
-
-            function sbcBCDcmos(subend) {
-                self.polltime(1); // One more cycle, apparently
-                var carry = self.p.c ? 0 : 1;
-                var al = (self.a & 0xf) - (subend & 0xf) - carry;
-                var result = self.a - subend - carry;
-                if (result < 0) {
-                    result -= 0x60;
-                }
-                if (al < 0) result -= 0x06;
-
-                adcNonBCD(subend ^ 0xff); // For flags
-                self.a = self.setzn(result);
-            }
-
-            if (model.nmos) {
-                this.adc = function (addend) {
-                    if (!this.p.d) {
-                        adcNonBCD(addend);
-                    } else {
-                        adcBCD(addend);
-                    }
-                };
-
-                this.sbc = function (subend) {
-                    if (!this.p.d) {
-                        adcNonBCD(subend ^ 0xff);
-                    } else {
-                        sbcBCD(subend);
-                    }
-                };
-            } else {
-                this.adc = function (addend) {
-                    if (!this.p.d) {
-                        adcNonBCD(addend);
-                    } else {
-                        adcBCDcmos(addend);
-                    }
-                };
-
-                this.sbc = function (subend) {
-                    if (!this.p.d) {
-                        adcNonBCD(subend ^ 0xff);
-                    } else {
-                        sbcBCDcmos(subend);
-                    }
-                };
-            }
-
-            this.arr = function (arg) {
-                // Insane instruction. I started with b-em source, but ended up using:
-                // http://www.6502.org/users/andre/petindex/local/64doc.txt as reference,
-                // tidying up as needed and fixing a couple of typos.
-                if (this.p.d) {
-                    var temp = this.a & arg;
-
-                    var ah = temp >>> 4;
-                    var al = temp & 0x0f;
-
-                    this.p.n = this.p.c;
-                    this.a = (temp >>> 1) | (this.p.c ? 0x80 : 0x00);
-                    this.p.z = !this.a;
-                    this.p.v = (temp ^ this.a) & 0x40;
-
-                    if ((al + (al & 1)) > 5)
-                        this.a = (this.a & 0xf0) | ((this.a + 6) & 0xf);
-
-                    this.p.c = (ah + (ah & 1)) > 5;
-                    if (this.p.c)
-                        this.a = (this.a + 0x60) & 0xff;
-                } else {
-                    this.a = this.a & arg;
-                    this.p.v = !!(((this.a >> 7) ^ (this.a >>> 6)) & 0x01);
-                    this.a >>>= 1;
-                    if (this.p.c) this.a |= 0x80;
-                    this.setzn(this.a);
-                    this.p.c = !!(this.a & 0x40);
-                }
-            };
-
-            this.runner = opcodes.runInstruction;
 
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
@@ -800,14 +1123,21 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial'],
                 }
             };
 
-            this.initialise = function() {
+            this.initialise = function () {
                 var loadOsPromise = Promise.resolve();
                 if (model.os.length) {
                     loadOsPromise = self.loadOs.apply(this, model.os);
                 }
+                if (model.tube) {
+                    loadOsPromise = loadOsPromise.then(function () {
+                        return self.tube.loadOs();
+                    });
+                }
                 return loadOsPromise.then(function () {
                     self.reset(true);
                     dbgr.setCpu(self);
+                    if (model.tube)
+                        dbgr.setCpu(self.tube);
                 });
             };
         };

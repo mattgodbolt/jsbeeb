@@ -1,5 +1,5 @@
 define(['fdc'], function (fdc) {
-    function Model(name, synonyms, os, nmos, isMaster, swram, fdc) {
+    function Model(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -8,6 +8,7 @@ define(['fdc'], function (fdc) {
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
+        this.tube = tube;
     }
 
     // TODO: semi-bplus-style to get swram for exile hardcoded here
@@ -21,11 +22,13 @@ define(['fdc'], function (fdc) {
         true, true, true, true,
         false, false, false, false,
         false, false, false, false];
+    var tube65c02 = new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false);
     var allModels = [
         new Model("BBC B", ["B"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, fdc.I8271),
         new Model("BBC B (1770)", ["B1770"], ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
             true, false, beebSwram, fdc.WD1770),
-        new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770)
+        new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770),
+        new Model("BBC Master 128", ["MasterTurbo"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770, tube65c02),
     ];
 
     function findModel(name) {
