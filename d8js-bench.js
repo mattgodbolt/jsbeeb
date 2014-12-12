@@ -57,7 +57,7 @@ function benchmark(frames) {
     while (frame < frames) {
         video.polltime(6);
     }
-    var end = Date.now()
+    var end = Date.now();
     var taken = end - start;
     print("Took " + taken + "ms to run " + frames + " frames, " + (taken / frames) + "ms/frame");
 }
@@ -78,7 +78,7 @@ video.ula.write(1, 0xf5);
 
 ///////////////////////////////////////////////////
 // Run it for a couple of emulated seconds, to warm it up
-video.polltime(2 * 1000000);
+video.polltime(2 * 2 * 1000000);
 
 // And now benchmark for a large number of frames
 benchmark(5000);
