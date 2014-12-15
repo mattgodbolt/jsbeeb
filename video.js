@@ -259,7 +259,7 @@ define(['teletext'], function (Teletext) {
         }
 
         function renderChar(x, y) {
-            if (!((self.memAddress ^ self.cursorPos) & 0x3fff) && self.cursorOn) {
+            if (self.cursorOn && !((self.memAddress ^ self.cursorPos) & 0x3fff)) {
                 self.cursorDrawIndex = 3 - ((self.regs[8] >>> 6) & 3);
             }
 
