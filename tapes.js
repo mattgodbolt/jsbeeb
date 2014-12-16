@@ -8,8 +8,8 @@ define(['utils'], function (utils) {
         var numParityBits, numStopBits, carrierBefore, carrierAfter;
 
 
-        self.rewind = function() {
-            
+        self.rewind = function () {
+
             dummyData = [false, false, true, false, true, false, true, false, true, true];
             state = -1;
             curByte = 0;
@@ -24,11 +24,9 @@ define(['utils'], function (utils) {
             var minor = stream.readByte();
             var major = stream.readByte();
             if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
-        }
+        };
 
         self.rewind();
-
-
 
         function readChunk() {
             var chunkId = stream.readInt16();
@@ -59,7 +57,7 @@ define(['utils'], function (utils) {
             }
             return parity;
         }
-        
+
         self.poll = function (acia) {
             if (!curChunk) return;
             if (state === -1) {
@@ -72,6 +70,7 @@ define(['utils'], function (utils) {
 
             acia.setDCD(false);
 
+            var gap;
             switch (curChunk.id) {
                 case 0x0000:
                     console.log("Origin: " + curChunk.stream.readNulString());
@@ -171,12 +170,12 @@ define(['utils'], function (utils) {
                     console.log("Frequency change ", baseFrequency);
                     break;
                 case 0x0112:
-                    var gap = 1 / (2 * curChunk.stream.readInt16() * baseFrequency);
+                    gap = 1 / (2 * curChunk.stream.readInt16() * baseFrequency);
                     console.log("Tape gap of " + gap + "s");
                     acia.tone(0);
                     return secsToClocks(gap);
                 case 0x0116:
-                    var gap = curChunk.stream.readFloat32();
+                    gap = curChunk.stream.readFloat32();
                     console.log("Tape gap of " + gap + "s");
                     acia.tone(0);
                     return secsToClocks(gap);

@@ -1,481 +1,517 @@
 <!DOCTYPE HTML>
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="author" content="Matt Godbolt">
-        <meta name="description" content="A Javascript BBC Micro emulator">
-        <title>JSBeeb - Javascript BBC Micro emulator</title>
-        <link rel="stylesheet" href="lib/bootstrap.min.css" type="text/css">
-        <link rel="stylesheet" href="jsbeeb.css" type="text/css">
-        <link rel="shortcut icon" href="/favicon.ico">
-        <script type="text/javascript" src="lib/require.js"></script>
-        <script type="text/javascript">
-            require(['requirejs-common'], function() {
-                require(['main']);
-            });
-        </script>
-<script>
-  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Matt Godbolt">
+    <meta name="description" content="A Javascript BBC Micro emulator">
+    <title>JSBeeb - Javascript BBC Micro emulator</title>
+    <link rel="stylesheet" href="lib/bootstrap.min.css" type="text/css">
+    <link rel="stylesheet" href="jsbeeb.css" type="text/css">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <script type="text/javascript" src="lib/require.js"></script>
+    <script type="text/javascript">
+        require(['requirejs-common'], function () {
+            require(['main']);
+        });
+    </script>
+    <script>
+        (function (i, s, o, g, r, a, m) {
+            i['GoogleAnalyticsObject'] = r;
+            i[r] = i[r] || function () {
+                (i[r].q = i[r].q || []).push(arguments)
+            }, i[r].l = 1 * new Date();
+            a = s.createElement(o),
+                    m = s.getElementsByTagName(o)[0];
+            a.async = 1;
+            a.src = g;
+            m.parentNode.insertBefore(a, m)
+        })(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
 
-  ga('create', 'UA-55180-8', 'godbolt.org');
-  ga('send', 'pageview');
+        ga('create', 'UA-55180-8', 'godbolt.org');
+        ga('send', 'pageview');
 
-</script>
-<script type="text/javascript">
-    (function() {
-     var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
-     po.src = 'https://apis.google.com/js/plusone.js';
-     var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
-     })();
-</script>
+    </script>
+    <script type="text/javascript">
+        (function () {
+            var po = document.createElement('script');
+            po.type = 'text/javascript';
+            po.async = true;
+            po.src = 'https://apis.google.com/js/plusone.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(po, s);
+        })();
+    </script>
 
-    </head>
+</head>
 
-    <body>
+<body>
 
-    <div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
-        <div class="container">
-            <div class="navbar-header">
-                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
-                    <span class="sr-only">Toggle navigation</span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                </button>
-                <a class="navbar-brand" href="#">jsbeeb - a Javascript BBC micro emulator</a>
-            </div>
-            <div class="collapse navbar-collapse">
-                <ul class="nav navbar-nav">
-                    <li class="dropdown btn-group">
-                        <button type="button" href="#" class="btn btn-default navbar-btn dropdown-toggle" data-toggle="dropdown"><span id="bbc-model">BBC B</span><span class="caret"></span></button>
-                        <ul class="dropdown-menu" role="menu" id="model-menu">
-                            <li><a href="#" data-target="B">BBC B</a></li>
-                            <li><a href="#" data-target="Master">BBC Master 128</a></li>
-                            <li><a href="#" data-target="hard-reset">Hard reset</a></li>
-                            <li><a href="#" data-target="soft-reset">Soft reset</a></li>
-                         </ul>
-                    </li>
-                    <li class="dropdown">
-                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Discs<b class="caret"></b></a>
-                        <ul class="dropdown-menu">
-                            <li><a href="#sth" class="sth" data-id="discs" data-toggle="modal" data-target="#sth">From STH archive</a></li>
-                            <li class="hidden-unless-db-enabled"><a href="#dropbox" data-toggle="modal"
-                                                                    data-target="#dropbox">From Dropbox</a></li>
-                            <li><a href="#discs" data-toggle="modal" data-target="#discs">From examples or local</a>
-                            </li>
-                        </ul>
-                    </li>
-                    <li class="dropdown">
-                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Tapes<b class="caret"></b></a>
-                        <ul class="dropdown-menu" id="tape-menu">
-                            <li><a href="#sth" class="sth" data-toggle="modal" data-id="tapes" data-target="#sth">From STH archive</a></li>
-                            <li><a data-id="rewind" >Rewind tape</a></li>
-                            <li><a href="#discs" data-toggle="modal" data-target="#tapes">From local file</a>
-                            </li>
-                        </ul>
-                    </li>
-                    <li class="dropdown">
-                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
-                        <ul class="dropdown-menu">
-                            <li class="social">
-                                <g:plusone annotation="inline" width="150"></g:plusone>
-                            </li>
-                            <li class="social"><a href="https://twitter.com/share" class="twitter-share-button"
-                                                  data-via="mattgodbolt">Tweet</a>
-                                <script>!function (d, s, id) {
-                                    var js, fjs = d.getElementsByTagName(s)[0];
-                                    if (!d.getElementById(id)) {
-                                        js = d.createElement(s);
-                                        js.id = id;
-                                        js.src = "//platform.twitter.com/widgets.js";
-                                        fjs.parentNode.insertBefore(js, fjs);
-                                    }
-                                }(document, "script", "twitter-wjs");</script>
-                            </li>
-                        </ul>
-                    </li>
-                    <li class="dropdown">
-                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">Contact<b class="caret"></b></a>
-                        <ul class="dropdown-menu">
-                            <li><a href="https://plus.google.com/105166465490735292917" rel="author">About Matt</a></li>
-                            <li><a href="mailto:matt@godbolt.org">Contact Matt</a></li>
-                        </ul>
-                    </li>
-                    <li><a href="#help" data-toggle="modal" data-target="#help">Help</a></li>
-                    <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
-                </ul>
-            </div>
-            <!--/.nav-collapse -->
+<div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+    <div class="container">
+        <div class="navbar-header">
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            <a class="navbar-brand" href="#">jsbeeb - a Javascript BBC micro emulator</a>
+        </div>
+        <div class="collapse navbar-collapse">
+            <ul class="nav navbar-nav">
+                <li class="dropdown btn-group">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown"><span id="bbc-model">BBC B</span><b class="caret"></b></a>
+                    <ul class="dropdown-menu" role="menu" id="model-menu">
+                        <li><a href="#" data-target="B">BBC B</a></li>
+                        <li><a href="#" data-target="Master">BBC Master 128</a></li>
+                        <li><a href="#" data-target="MasterTurbo">BBC Master Turbo</a></li>
+                        <li><a href="#" data-target="hard-reset">Hard reset</a></li>
+                        <li><a href="#" data-target="soft-reset">Soft reset</a></li>
+                    </ul>
+                </li>
+                <li class="dropdown btn-group">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Keyboard<b class="caret"></b></a>
+                    <ul class="dropdown-menu" role="menu" id="keyboard-menu">
+                        <li><a href="#" data-target="physical">Physical: '*' is next to Enter/Return</a></li>
+                        <li><a href="#" data-target="natural">Natural: '*' is shift-8</a></li>
+                        <li><a href="#" data-target="gaming">Gaming: handy for games like Zalaga</a></li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Discs<b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="#sth" class="sth" data-id="discs" data-toggle="modal" data-target="#sth">From STH
+                            archive</a></li>
+                        <li><a href="#discs" data-toggle="modal" data-target="#discs">From examples or local</a></li>
+                        <li class="if-drive-available">
+                            <a href="#google-drive" id="open-drive-link">From Google Drive</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Cassettes<b class="caret"></b></a>
+                    <ul class="dropdown-menu" id="tape-menu">
+                        <li><a href="#sth" class="sth" data-toggle="modal" data-id="tapes" data-target="#sth">From STH
+                            archive</a></li>
+                        <li><a data-id="rewind">Rewind cassette</a></li>
+                        <li><a href="#discs" data-toggle="modal" data-target="#tapes">From local file</a>
+                        </li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        <li class="social">
+                            <g:plusone annotation="inline" width="150"></g:plusone>
+                        </li>
+                        <li class="social"><a href="https://twitter.com/share" class="twitter-share-button"
+                                              data-via="mattgodbolt">Tweet</a>
+                            <script>!function (d, s, id) {
+                                var js, fjs = d.getElementsByTagName(s)[0];
+                                if (!d.getElementById(id)) {
+                                    js = d.createElement(s);
+                                    js.id = id;
+                                    js.src = "//platform.twitter.com/widgets.js";
+                                    fjs.parentNode.insertBefore(js, fjs);
+                                }
+                            }(document, "script", "twitter-wjs");</script>
+                        </li>
+                    </ul>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Contact<b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="https://plus.google.com/105166465490735292917" rel="author">About Matt</a></li>
+                        <li><a href="mailto:matt@godbolt.org">Contact Matt</a></li>
+                    </ul>
+                </li>
+                <li><a href="#help" data-toggle="modal" data-target="#help">Help</a></li>
+                <li><a href="#about" data-toggle="modal" data-target="#info">About</a></li>
+            </ul>
+        </div>
+        <!--/.nav-collapse -->
+    </div>
+</div>
+
+<div class="container">
+    <div id="cub-monitor">
+        <div>
+            <img id="#cub-monitor-pic" width="921" height="682" src="images/cub-monitor.png">
+            <canvas id="screen" width="921" height="682"></canvas>
         </div>
     </div>
-
-    <div class="container">
-        <canvas id="screen" width="699" height="567"></canvas>
-        <div id="leds">
+    <div id="leds">
+        <table>
+            <thead>
+            <tr>
+                <th>cassette<br>motor</th>
+                <th>caps<br>lock</th>
+                <th>shift<br>lock</th>
+                <th>drive<br>0/2</th>
+                <th>drive<br>1/3</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>
+                    <div class="red led" id="motorlight"></div>
+                </td>
+                <td>
+                    <div class="red led" id="capslight"></div>
+                </td>
+                <td>
+                    <div class="red led" id="shiftlight"></div>
+                </td>
+                <td>
+                    <div class="yellow led" id="drive0"></div>
+                </td>
+                <td>
+                    <div class="yellow led" id="drive1"></div>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div id="debug" class="initially-hidden">
+        <div class="debug-container">
+            <form class="form-inline" role="form" id="goto-mem-addr-form">
+                <div class="form-group">
+                    <label accesskey="m" class="control-label"><span class="accesskey">M</span>em
+                        addr:</label>
+                    <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
+                </div>
+            </form>
+            <div id="memory">
+                <div class="template"><span class="dis_addr">0000</span><span
+                        class="mem_bytes">11 22 33 44 55 66 77 88</span><span
+                        class="mem_asc">ABCDEFG</span></div>
+            </div>
+        </div>
+        <div class="debug-container">
+            <form class="form-inline" role="form" id="goto-dis-addr-form">
+                <div class="form-group">
+                    <label accesskey="a" class="control-label"><span class="accesskey">A</span>ddr:</label>
+                    <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
+                </div>
+            </form>
+            <div id="disassembly">
+                <div class="template"><span class="dis_addr">0000</span><span
+                        class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span
+                        class="disassembly">LDA (&amp;70), X</span></div>
+            </div>
+        </div>
+        <div id="registers">
+            <div>
+                <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span><span
+                    class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span><span
+                    class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
+            </div>
+            <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
+            <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
+            <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
+            <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
+            <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
+        </div>
+    </div>
+    <div id="hardware_debug" class="initially-hidden">
+        <div class="via_regs" id="sysvia">
+            <h6>System VIA</h6>
             <table>
-                <thead>
-                <tr>
-                    <th>cassette<br>motor</th>
-                    <th>caps<br>lock</th>
-                    <th>shift<br>lock</th>
-                    <th>drive<br>0/2</th>
-                    <th>drive<br>1/3</th>
-                </tr>
-                </thead>
                 <tbody>
-                <tr>
-                    <td>
-                        <div class="red led" id="motorlight"></div>
-                    </td>
-                    <td>
-                        <div class="red led" id="capslight"></div>
-                    </td>
-                    <td>
-                        <div class="red led" id="shiftlight"></div>
-                    </td>
-                    <td>
-                        <div class="yellow led" id="drive0"></div>
-                    </td>
-                    <td>
-                        <div class="yellow led" id="drive1"></div>
-                    </td>
+                <tr class="template">
+                    <th><span class="register"></span>:</th>
+                    <td class="value"></td>
                 </tr>
                 </tbody>
             </table>
         </div>
-        <div id="debug" class="initially-hidden">
-            <div class="debug-container">
-                <form class="form-inline" role="form" id="goto-mem-addr-form">
-                    <div class="form-group">
-                        <label accesskey="m" class="control-label"><span class="accesskey">M</span>em
-                            addr:</label>
-                        <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
-                    </div>
-                </form>
-                <div id="memory">
-                    <div class="template"><span class="dis_addr">0000</span><span class="mem_bytes">11 22 33 44 55 66 77 88</span><span
-                            class="mem_asc">ABCDEFG</span></div>
+        <div class="via_regs" id="uservia">
+            <h6>User VIA</h6>
+            <table>
+                <tbody>
+                <tr class="template">
+                    <th><span class="register"></span>:</th>
+                    <td class="value"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="info">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">About jsbeeb</h4>
+            </div>
+            <div class="modal-body">
+                <div>By <a href="http://xania.org/">Matt Godbolt</a>. Based on Tom Walker's <a
+                        href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to him for open sourcing his
+                    code. Big thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by
+                    default is the amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian
+                        Bell</a> for making it available).
+                </div>
+                <div>Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome
+                    or Firefox. Still very much work in progress: keep coming back for bugfixes and more features!
+                </div>
+                <div>Cycle-accurate emulation greatly helped by the fantastic <a href="http://www.visual6502.org/">Visual
+                    6502</a> Project. Consider donating to them if you enjoy this stuff as much as I do!
+                </div>
+                <div>If you're looking for more information on the BBC or to find like-minded people to chat about
+                    the hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot
+                        forums</a>.
                 </div>
             </div>
-            <div class="debug-container">
-                <form class="form-inline" role="form" id="goto-dis-addr-form">
-                    <div class="form-group">
-                        <label accesskey="a" class="control-label"><span class="accesskey">A</span>ddr:</label>
-                        <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
-                    </div>
-                </form>
-                <div id="disassembly">
-                    <div class="template"><span class="dis_addr">0000</span><span
-                            class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span
-                            class="disassembly">LDA (&amp;70), X</span></div>
+            <!-- model-body -->
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+        <!-- /.modal-content -->
+    </div>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+
+<div class="modal fade" id="help">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">Help</h4>
+            </div>
+            <div class="modal-body">
+                <div>This is an emulator for the <a href="http://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>
+                    Model B, a popular home computer in the UK in the 1980s.
+                </div>
+                <div>The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC,
+                    one would press <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The keyboard
+                    of the BBC is slightly different from a modern PC, notably in the placement of the symbol
+                    characters. Also, the current keyboard layout is optimized for a US keyboard; I am working on
+                    improving this situation.
+                </div>
+                <h5>Handy key mappings</h5>
+                <table class="keymap">
+                    <tr>
+                        <th>BBC</th>
+                        <th>PC</th>
+                        <th>OSX</th>
+                    </tr>
+                    <tr>
+                        <td><span class="function key">F0</span></td>
+                        <td><span class="key">F10</span></td>
+                        <td><span class="key">F10</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="key">BREAK</span></td>
+                        <td><span class="key">F12</span></td>
+                        <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
+                    </tr>
+                    <tr>
+                        <td><span class="key">COPY</span></td>
+                        <td><span class="key">End</span></td>
+                        <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="dbl key">*<br>:</span></div>
+                        </td>
+                        <td>TODO</td>
+                        <td>TODO</td>
+                    </tr>
+                    <tr>
+                        <td>Debug</td>
+                        <td><span class="key">Ctrl-Home</span></td>
+                        <td>TODO</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+        <!-- /.modal-content -->
+    </div>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+
+<div class="modal fade" id="discs">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">Load disc image</h4>
+            </div>
+            <div class="modal-body">
+                <ul id="disc-list">
+                    <li class="template"><a href="#"><span class="name"></span></a> - <span
+                            class="description"></span></li>
+                </ul>
+                To load a custom disc image, get an SSD file and load it below. Search the web, or check somewhere
+                like <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these. Be aware the
+                images are usually stored in a ZIP file, and you'll need to unzip first.
+                <div class="disc">
+                    <label>Load local SSD file: <input type="file" id="disc_load" accept=".ssd,image/*"></label>
                 </div>
             </div>
-            <div id="registers">
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+        <!-- /.modal-content -->
+    </div>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+
+<div class="modal fade" id="tapes">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">Load cassette image</h4>
+            </div>
+            <div class="modal-body">
+                To load a custom cassette image, get a UEF file and load it below.
+                <div class="tape">
+                    <label>Load local UEF file: <input type="file" id="tape_load" accept=".uef,image/*"></label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+        <!-- /.modal-content -->
+    </div>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+
+<div class="modal fade" id="google-drive">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">Load or create disc from your <a href="https://drive.google.com/">Google Drive</a>
+                    account</h4>
+
+                <div class="loading">Loading...</div>
+            </div>
+            <div class="modal-body">
                 <div>
-                    <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span><span
-                        class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span><span
-                        class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
-                </div>
-                <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
-                <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
-                <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
-                <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
-                <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
-            </div>
-        </div>
-        <div id="hardware_debug" class="initially-hidden">
-            <div class="via_regs" id="sysvia">
-                <h6>System VIA</h6>
-                <table>
-                    <tbody>
-                    <tr class="template">
-                        <th><span class="register"></span>:</th>
-                        <td class="value"></td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="via_regs" id="uservia">
-                <h6>User VIA</h6>
-                <table>
-                    <tbody>
-                    <tr class="template">
-                        <th><span class="register"></span>:</th>
-                        <td class="value"></td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="info">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">About jsbeeb</h4>
-                </div>
-                <div class="modal-body">
-                    <div>By <a href="http://xania.org/">Matt Godbolt</a>. Based on Tom Walker's <a
-                            href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to him for open sourcing his
-                        code. Big thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by
-                        default is the amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian
-                            Bell</a> for making it available).
-                    </div>
-                    <div>Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome
-                        or Firefox. Still very much work in progress: keep coming back for bugfixes and more features!
-                    </div>
-                    <div>Cycle-accurate emulation greatly helped by the fantastic <a href="http://www.visual6502.org/">Visual
-                        6502</a> Project. Consider donating to them if you enjoy this stuff as much as I do!
-                    </div>
-                    <div>If you're looking for more information on the BBC or to find like-minded people to chat about
-                        the hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot
-                            forums</a>.
-                    </div>
-                </div>
-                <!-- model-body -->
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
-            </div>
-            <!-- /.modal-content -->
-        </div>
-        <!-- /.modal-dialog -->
-    </div>
-    <!-- /.modal -->
-
-    <div class="modal fade" id="help">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">Help</h4>
-                </div>
-                <div class="modal-body">
-                    <div>This is an emulator for the <a href="http://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>
-                        Model B, a popular home computer in the UK in the 1980s.
-                    </div>
-                    <div>The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC,
-                        one would press <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The keyboard
-                        of the BBC is slightly different from a modern PC, notably in the placement of the symbol
-                        characters. Also, the current keyboard layout is optimized for a US keyboard; I am working on
-                        improving this situation.
-                    </div>
-                    <h5>Handy key mappings</h5>
-                    <table class="keymap">
-                        <tr>
-                            <th>BBC</th>
-                            <th>PC</th>
-                            <th>OSX</th>
-                        </tr>
-                        <tr>
-                            <td><span class="function key">F0</span></td>
-                            <td><span class="key">F10</span></td>
-                            <td><span class="key">F10</span></td>
-                        </tr>
-                        <tr>
-                            <td><span class="key">BREAK</span></td>
-                            <td><span class="key">F12</span></td>
-                            <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
-                        </tr>
-                        <tr>
-                            <td><span class="key">COPY</span></td>
-                            <td><span class="key">End</span></td>
-                            <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="dbl key">*<br>:</span>
-                            </td>
-                            <td>TODO</td>
-                            <td>TODO</td>
-                        </tr>
-                        <tr>
-                            <td>Debug</td>
-                            <td><span class="key">Home</span></td>
-                            <td>TODO</td>
-                        </tr>
-                    </table>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
-            </div>
-            <!-- /.modal-content -->
-        </div>
-        <!-- /.modal-dialog -->
-    </div>
-    <!-- /.modal -->
-
-    <div class="modal fade" id="discs">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">Load disc image</h4>
-                </div>
-                <div class="modal-body">
-                    <ul id="disc-list">
-                        <li class="template"><a href="#"><span class="name"></span></a> - <span
-                                class="description"></span></li>
-                    </ul>
-                    To load a custom disc image, get an SSD file and load it below. Search the web, or check somewhere
-                    like <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these. Be aware the
-                    images are usually stored in a ZIP file, and you'll need to unzip first.
-                    <div class="disc">
-                        <label>Load local SSD file: <input type="file" id="disc_load"
-                                                           accept=".ssd,image/*"></input></label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
-            </div>
-            <!-- /.modal-content -->
-        </div>
-        <!-- /.modal-dialog -->
-    </div>
-    <!-- /.modal -->
-
-    <div class="modal fade" id="tapes">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">Load tape image</h4>
-                </div>
-                <div class="modal-body">
-                    To load a custom tape image, get a UEF file and load it below.
-                    <div class="tape">
-                        <label>Load local UEF file: <input type="file" id="tape_load"
-                                                           accept=".uef,image/*"></input></label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
-            </div>
-            <!-- /.modal-content -->
-        </div>
-        <!-- /.modal-dialog -->
-    </div>
-    <!-- /.modal -->
-
-    <div class="modal fade" id="dropbox">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">Load or create disc from your <a href="https://www.dropbox.com/">Dropbox</a>
-                        account</h4>
-
-                    <div class="loading">Loading...</div>
-                </div>
-                <div class="modal-body">
-                    <ul id="dropbox-list">
+                    <ul class ="list">
                         <li class="template"><a href="#"><span class="name"></span></a></li>
                     </ul>
                     <div>
                         <form class="form-horizontal well" role="form" action="#">
-                            <input type="text" placeholder="Create disc..." autofocus id="db-disc-name">
+                            <input type="text" placeholder="Create disc..." autofocus class="disc-name">
                             <button type="submit" class="btn btn-default create-button">Create</button>
                         </form>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn" data-dismiss="modal">Close</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+        <!-- /.modal-content -->
+    </div>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+
+<div class="modal fade" id="loading-dialog">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-body">
+                <h4 class="modal-title loading"></h4>
+                <div style="display:none" id="google-drive-auth">
+                    Google Drive requires you to authorize jsbeeb to access your files by logging in.<br>
+                    Please click Authorize to open a Google Drive pop-up to authenticate and give permission to jsbeeb.
+                    <form class="form-horizontal well" role="form" action="#">
+                        <button type="submit" class="btn btn-default create-button">Authorize</button>
+                    </form>
                 </div>
             </div>
-            <!-- /.modal-content -->
         </div>
-        <!-- /.modal-dialog -->
+        <!-- /.modal-content -->
     </div>
-    <!-- /.modal -->
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
 
-    <div class="modal fade" id="loading-dialog">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-body">
-                    <h4 class="modal-title loading"></h4>
+<div class="modal fade" id="sth">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">Load from <a href="http://www.stairwaytohell.com/">Stairway to Hell</a>
+                    archive</h4>
+
+                <div class="loading">Loading catalog from STH archive...</div>
+                <div class="filter">
+                    <input type="text" placeholder="Filter..." autofocus id="sth-filter">
                 </div>
             </div>
-            <!-- /.modal-content -->
-        </div>
-        <!-- /.modal-dialog -->
-    </div>
-    <!-- /.modal -->
-
-    <div class="modal fade" id="sth">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">Load from <a href="http://www.stairwaytohell.com/">Stairway to Hell</a>
-                        archive</h4>
-
-                    <div class="loading">Loading catalog from STH archive...</div>
-                    <div class="filter">
-                        <input type="text" placeholder="Filter..." autofocus id="sth-filter">
-                    </div>
-                </div>
-                <div class="modal-body">
-                    <ul id="sth-list">
-                        <li class="template"><a href="#"><span class="name"></span></a></li>
-                    </ul>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
+            <div class="modal-body">
+                <ul id="sth-list">
+                    <li class="template"><a href="#"><span class="name"></span></a></li>
+                </ul>
             </div>
-            <!-- /.modal-content -->
-        </div>
-        <!-- /.modal-dialog -->
-    </div>
-    <!-- /.modal -->
-
-    <div class="modal fade" id="error-dialog">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">An error occurred - sorry!</h4>
-                    <div>While <span class="context"></span>:</div>
-                    <div class="error"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
             </div>
-            <!-- /.modal-content -->
         </div>
-        <!-- /.modal-dialog -->
+        <!-- /.modal-content -->
     </div>
-    <!-- /.modal -->
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
 
-    <div class="modal fade" id="are-you-sure">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                    <h4 class="modal-title">Are you sure?</h4>
-                    <div class="context"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default ays-no" data-dismiss="modal">No</button>
-                    <button type="button" class="btn ays-yes">Yes</button>
-                </div>
+<div class="modal fade" id="error-dialog">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">An error occurred - sorry!</h4>
+
+                <div>While <span class="context"></span>:</div>
+                <div class="error"></div>
             </div>
-            <!-- /.modal-content -->
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
         </div>
-        <!-- /.modal-dialog -->
+        <!-- /.modal-content -->
     </div>
-    <!-- /.modal -->
-    </body>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+
+<div class="modal fade" id="are-you-sure">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">Are you sure?</h4>
+
+                <div class="context"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default ays-no" data-dismiss="modal">No</button>
+                <button type="button" class="btn ays-yes">Yes</button>
+            </div>
+        </div>
+        <!-- /.modal-content -->
+    </div>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+</body>
 </html>
 

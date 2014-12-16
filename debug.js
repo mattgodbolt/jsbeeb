@@ -50,6 +50,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         function setupVia(node, via) {
             var updates = [];
+            if (!via) return function () {};
             $.each(["ora", "orb", "ira", "irb", "ddra", "ddrb",
                 "acr", "pcr", "ifr", "ier", "t1c", "t1l", "t2c", "t2l"], function (_, elem) {
                 var row = node.find(".template").clone().removeClass("template").appendTo(node);
@@ -59,7 +60,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                     updates.push(function () {
                         var reg = via[elem];
                         value.text(hexbyte((reg >> 16) & 0xff) +
-                            hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
+                        hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
                     });
                 } else {
                     updates.push(function () {
@@ -142,13 +143,13 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             }
             var nextPc = nextInstruction(cpu.pc);
             stepUntil(function () {
-                return cpu.pc == nextPc;
+                return cpu.pc === nextPc;
             });
         }
 
         function isReturn(addr) {
             var result = disassemble(addr);
-            if (result[0] == "RTS")
+            if (result[0] === "RTS")
                 return true;
             return false;
         }
@@ -171,7 +172,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 var addr = startingPoint & 0xffff;
                 while (addr < address) {
                     var result = disassemble(addr);
-                    if (result[1] == address && result[0] != "???") {
+                    if (result[1] === address && result[0] != "???") {
                         return addr;
                     }
                     addr = result[1];
@@ -304,6 +305,10 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 case 'n':
                     step();
                     break;
+                case 'N':
+                    cpu.execute(1);
+                    self.debug(cpu.pc);
+                    break;
                 case 'm':
                     stepOver();
                     break;
@@ -335,7 +340,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         this.setPatch = function (patch) {
             _.each(patch.split(";"), function (inst) {
-                if (inst[0] == '@') {
+                if (inst[0] === '@') {
                     var at = parseInt(inst.substr(1, 4), 16);
                     inst = inst.substr(5);
                     if (!patchInstructions[at])

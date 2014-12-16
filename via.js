@@ -347,7 +347,7 @@ define(['utils'], function (utils) {
         return self;
     }
 
-    function sysvia(cpu, soundChip, cmos, isMaster) {
+    function sysvia(cpu, video, soundChip, cmos, isMaster, initialLayout) {
         "use strict";
         var self = via(cpu, 0x01);
 
@@ -356,12 +356,8 @@ define(['utils'], function (utils) {
         self.keyrow = 0;
         self.sdbout = 0;
         self.sdbval = 0;
-        self.scrsize = 0;
         self.capsLockLight = false;
         self.shiftLockLight = false;
-        self.getScrSize = function () {
-            return self.scrsize;
-        };
         self.keys = [];
         for (var i = 0; i < 16; ++i) {
             self.keys[i] = new Uint8Array(16);
@@ -369,166 +365,11 @@ define(['utils'], function (utils) {
 
         self.setVBlankInt = self.setca1;
 
-        function detectKeyboardLayout() {
-            if (utils.runningInNode) {
-                return "UK";
-            }
-            if (localStorage.keyboardLayout) {
-                return localStorage.keyboardLayout;
-            }
-            if (navigator.language) {
-                if (navigator.language.toLowerCase() == "en-gb") return "UK";
-                if (navigator.language.toLowerCase() == "en-us") return "US";
-            }
-            return "UK";  // Default guess of UK
-        }
-
-        self.keycodeToRowCol = (function () {
-            var keys = {};
-
-            function map(s, colRow) {
-                if ((!s && s !== 0) || !colRow) {
-                    console.log("error binding key", s, colRow);
-                }
-                if (typeof(s) == "string")
-                    s = s.charCodeAt(0);
-                if (keys[s]) console.log("Duplicate binding for key", s, colRow, keys[s]);
-                keys[s] = colRow;
-            }
-
-            var isUKlayout = detectKeyboardLayout() == "UK";
-
-            var keyCodes = utils.keyCodes;
-            var BBC = utils.BBC;
-
-            if (isUKlayout) {
-                map(keyCodes.HASH, BBC.HASH); // UK PC hash key maps to pound underscore
-                map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH); // pipe, backslash is pipe, backslash
-                map(keyCodes.APOSTROPHE, BBC.COLON_STAR); // maps to :*
-            } else {
-                map(keyCodes.HASH, BBC.COLON_STAR); // maps to :*
-                map(keyCodes.BACKSLASH, BBC.HASH); // pipe, backlash is underscore, pound
-                map(keyCodes.APOSTROPHE, BBC.AT); // @ mapped to backtic
-            }
-
-            // hack for Matt's laptop (Firefox bug?)
-            if (utils.isFirefox()) {
-                // Mike's UK Windows laptop returns 20 in Chrome and Firefox for Caps Lock
-                // TODO: 225 is definitely strange
-                map(225, BBC.CAPSLOCK);
-            }
-
-            var BBC = utils.BBC;
-
-            map(keyCodes.EQUALS, BBC.HAT_TILDE); // ^~ on +/=
-            map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
-            map(keyCodes.MINUS, BBC.MINUS); // '-' / '=' mapped to underscore
-            map(keyCodes.LEFT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET); // maps to [{
-            map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.RIGHT_SQUARE_BRACKET); // maps to ]}
-            map(keyCodes.COMMA, BBC.COMMA); // ',' / '<'
-            map(keyCodes.PERIOD, BBC.PERIOD); // '.' / '>'
-            map(keyCodes.SLASH, BBC.SLASH); // '/' / '?'
-            map(keyCodes.WINDOWS, BBC.SHIFTLOCK); // shift lock mapped to "windows" key
-            map(keyCodes.TAB, BBC.TAB); // tab
-            map(keyCodes.ENTER, BBC.RETURN); // return
-            map(keyCodes.DELETE, BBC.DELETE); // delete
-            map(keyCodes.BACKSPACE, BBC.DELETE); // delete
-            map(keyCodes.END, BBC.COPY); // copy key is end
-            map(keyCodes.F11, BBC.COPY); // copy key is end for Apple
-            map(keyCodes.SHIFT, BBC.SHIFT); // shift
-            map(keyCodes.ESCAPE, BBC.ESCAPE); // escape
-            map(keyCodes.CTRL, BBC.CTRL); // control
-            map(keyCodes.CAPSLOCK, BBC.CAPSLOCK); // caps (on Rich's/Mike's computer)
-            map(keyCodes.LEFT, BBC.LEFT); // arrow left
-            map(keyCodes.UP, BBC.UP); // arrow up
-            map(keyCodes.RIGHT, BBC.RIGHT); // arrow right
-            map(keyCodes.DOWN, BBC.DOWN); // arrow down
-
-            map(keyCodes.K0, BBC.K0);
-            map(keyCodes.K1, BBC.K1);
-            map(keyCodes.K2, BBC.K2);
-            map(keyCodes.K3, BBC.K3);
-            map(keyCodes.K4, BBC.K4);
-            map(keyCodes.K5, BBC.K5);
-            map(keyCodes.K6, BBC.K6);
-            map(keyCodes.K7, BBC.K7);
-            map(keyCodes.K8, BBC.K8);
-            map(keyCodes.K9, BBC.K9);
-
-            map(keyCodes.Q, BBC.Q);
-            map(keyCodes.W, BBC.W);
-            map(keyCodes.E, BBC.E);
-            map(keyCodes.R, BBC.R);
-            map(keyCodes.T, BBC.T);
-            map(keyCodes.Y, BBC.Y);
-            map(keyCodes.U, BBC.U);
-            map(keyCodes.I, BBC.I);
-            map(keyCodes.O, BBC.O);
-            map(keyCodes.P, BBC.P);
-
-            map(keyCodes.A, BBC.A);
-            map(keyCodes.S, BBC.S);
-            map(keyCodes.D, BBC.D);
-            map(keyCodes.F, BBC.F);
-            map(keyCodes.G, BBC.G);
-            map(keyCodes.H, BBC.H);
-            map(keyCodes.J, BBC.J);
-            map(keyCodes.K, BBC.K);
-            map(keyCodes.L, BBC.L);
-
-            map(keyCodes.Z, BBC.Z);
-            map(keyCodes.X, BBC.X);
-            map(keyCodes.C, BBC.C);
-            map(keyCodes.V, BBC.V);
-            map(keyCodes.B, BBC.B);
-            map(keyCodes.N, BBC.N);
-            map(keyCodes.M, BBC.M);
-
-            map(keyCodes.F10, BBC.F0); // F0 (mapped to F10)
-            map(keyCodes.F1, BBC.F1);
-            map(keyCodes.F2, BBC.F2);
-            map(keyCodes.F3, BBC.F3);
-            map(keyCodes.F4, BBC.F4);
-            map(keyCodes.F5, BBC.F5);
-            map(keyCodes.F6, BBC.F6);
-            map(keyCodes.F7, BBC.F7);
-            map(keyCodes.F8, BBC.F8);
-            map(keyCodes.F9, BBC.F9);
-
-            map(keyCodes.BACK_QUOTE, BBC.ESCAPE); // top left UK keyboard -> Escape
-
-            map(keyCodes.SPACE, BBC.SPACE);
-
-            // Master
-            map(keyCodes.NUMPAD0, BBC.NUMPAD0);
-            map(keyCodes.NUMPAD1, BBC.NUMPAD1);
-            map(keyCodes.NUMPAD2, BBC.NUMPAD2);
-            map(keyCodes.NUMPAD3, BBC.NUMPAD3);
-            map(keyCodes.NUMPAD4, BBC.NUMPAD4);
-            map(keyCodes.NUMPAD5, BBC.NUMPAD5);
-            map(keyCodes.NUMPAD6, BBC.NUMPAD6);
-            map(keyCodes.NUMPAD7, BBC.NUMPAD7);
-            map(keyCodes.NUMPAD8, BBC.NUMPAD8);
-            map(keyCodes.NUMPAD9, BBC.NUMPAD9);
-            // small hack in main.js/keyCode() to make this work (Chrome only)
-            map(keyCodes.NUMPAD_DECIMAL_POINT, BBC.NUMPAD_DECIMAL_POINT);
-
-            // "natural" mapping
-            map(keyCodes.NUMPADPLUS, BBC.NUMPADPLUS);
-            map(keyCodes.NUMPADMINUS, BBC.NUMPADMINUS);
-            map(keyCodes.NUMPADSLASH, BBC.NUMPADSLASH);
-            map(keyCodes.NUMPADASTERISK, BBC.NUMPADASTERISK);
-            //map(???, BBC.NUMPADCOMMA);
-            //map(???, BBC.NUMPADHASH);
-            // no keycode for NUMPADENTER, small hack in main.js/keyCode() (Chrome only)
-            map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
-
-            // TODO: "game" mapping
-            // eg Master Dunjunz needs # Del 3 , * Enter
-            // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
-
-            return keys;
-        })();
+        self.setKeyLayout = function(map) {
+            console.log("Using " + map + " key layout");
+            self.keycodeToRowCol = utils.getKeyMap(map);
+        };
+        self.setKeyLayout(initialLayout);
 
         self.keyboardEnabled = true;
 
@@ -541,22 +382,22 @@ define(['utils'], function (utils) {
             self.updateKeys();
         }
 
-        self.disableKeyboard = function() {
+        self.disableKeyboard = function () {
             self.keyboardEnabled = false;
             clearKeys();
         };
 
-        self.enableKeyboard = function() {
+        self.enableKeyboard = function () {
             self.keyboardEnabled = true;
             clearKeys();
         };
 
-        self.set = function (key, val) {
+        self.set = function (key, val, shiftDown) {
             if (!self.keyboardEnabled) {
                 return;
             }
 
-            var colrow = self.keycodeToRowCol[key];
+            var colrow = self.keycodeToRowCol[!!shiftDown][key];
             if (!colrow) {
                 console.log("Unknown keycode: " + key);
                 console.log("Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode");
@@ -566,11 +407,14 @@ define(['utils'], function (utils) {
             self.keys[colrow[0]][colrow[1]] = val;
             self.updateKeys();
         };
-        self.keyDown = function (key) {
-            self.set(key, 1);
+        self.keyDown = function (key, shiftDown) {
+            self.set(key, 1, shiftDown);
         };
         self.keyUp = function (key) {
-            self.set(key, 0);
+            // set up for both keymaps
+            // (with and without shift)
+            self.set(key, 0, true);
+            self.set(key, 0, false);
         };
 
         self.keyDownRaw = function (colrow) {
@@ -637,7 +481,7 @@ define(['utils'], function (utils) {
             self.capsLockLight = !(self.IC32 & 0x40);
             self.shiftLockLight = !(self.IC32 & 0x80);
 
-            self.scrsize = ((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0);
+            video.setScreenSize(((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0));
             if (isMaster) cmos.write(self.IC32, self.sdbval);
         };
 

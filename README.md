@@ -29,10 +29,10 @@ URL parameters
 * `autoboot` - fakes a shift break
 * `disc1=XXX` - loads disc XXX (from the `discs/` directory) into drive 1
 * `disc2=XXX` - as above
-* `disc1=!YYY` - creates a local disk YYY which will be kept in browser local storage
-* `disc1=|ZZZ` - loads disc ZZZ from the Stairway to Hell archive
+* `disc1=local:YYY` - creates a local disk YYY which will be kept in browser local storage
+* `disc1=sth:ZZZ` - loads disc ZZZ from the Stairway to Hell archive
 * `tape=XXX` - loads tape XXX (from the `tapes/` directory)
-* `tape=|ZZZ` - loads tape ZZZ from the Stairway to Hell archive
+* `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
 * `patch=P` - applies a memory patch `P`. See below.
 * `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
 
@@ -55,7 +55,6 @@ If you're looking to help:
   * Needs a UI to select it.
   * Exile doesn't run, for some reason.
 * Save disc support
-  * I've started dropbox support, but it's not quite there yet.
   * Google Drive support would be nice
   * Local discs need to be made more workable and need an "export" feature
 * `git grep -i todo`
@@ -96,6 +95,8 @@ game bugs and much more.
 Thanks to [David Banks](https://github.com/hoglet67) for his help in testing the gnarly BCD flag behaviour on real live BBCs.
 
 Cheers to [Ed Spittles](https://github.com/BigEd) for testing various interrupt timing code on a real BBC.
+
+Thanks to Chris Jordan for his thorough testing, bug reports, ideas and help.
 
 A lot of the early development used the amazing [Visual 6502](http://visual6502.org/) as reference for intra-instruction timings. Amazing stuff.
 

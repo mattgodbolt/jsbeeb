@@ -24,7 +24,7 @@ define(['utils'], function (utils) {
 
     function ssdFor(fdc, stringData) {
         var data;
-        if (typeof(stringData) != "string") {
+        if (typeof(stringData) !== "string") {
             data = stringData;
         } else {
             var len = stringData.length;
@@ -58,6 +58,7 @@ define(['utils'], function (utils) {
     }
 
     function baseSsd(fdc, data, flusher) {
+        if (data === null || data === undefined) throw new Error("Bad disc data");
         return {
             dsd: false,
             inRead: false,
@@ -74,7 +75,7 @@ define(['utils'], function (utils) {
             side: -1,
             notFound: 0,
             flush: function () {
-                flusher();
+                if (flusher) flusher();
             },
             seek: function (track) {
                 this.seekOffset = track * 10 * 256;
@@ -138,7 +139,7 @@ define(['utils'], function (utils) {
                         this.inWrite = false;
                         return;
                     }
-                    fdc.readDiscData(this.byteWithinSector == 255);
+                    var c = fdc.readDiscData(this.byteWithinSector == 255);
                     data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = c;
                     if (++this.byteWithinSector == 256) {
                         this.inWrite = false;
@@ -220,14 +221,12 @@ define(['utils'], function (utils) {
         self.written = false;
         self.verify = false;
         self.drives = [emptySsd(this), emptySsd(this)];
+        self.readyTimer = 0;
 
         self.NMI = function () {
             cpu.NMI(self.status & 8);
         };
 
-        self.loadDiscData = function (drive, data) {
-            self.drives[drive] = ssdFor(this, data);
-        };
         self.loadDisc = function (drive, disc) {
             self.drives[drive] = disc;
         };
@@ -311,12 +310,14 @@ define(['utils'], function (utils) {
             self.paramReq = numParams(self.command);
             self.status = 0x80;
             if (!self.paramReq) {
-                if (self.command == 0x2c) {
+                if (self.command === 0x2c) {
                     // read drive status
                     self.status = 0x10;
                     self.result = 0x88 | (self.curTrack[self.curDrive] ? 0 : 2);
-                    if (self.driveSel & 1) self.result |= 0x04;
-                    if (self.driveSel & 2) self.result |= 0x40;
+                    if (self.readyTimer === 0) {
+                        if (self.driveSel & 1) self.result |= 0x04;
+                        if (self.driveSel & 2) self.result |= 0x40;
+                    } else if (self.readyTimer === 1) self.readyTimer = 0; // Ready for next time
                 } else {
                     self.result = 0x18;
                     self.status = 0x18;
@@ -372,6 +373,12 @@ define(['utils'], function (utils) {
         }
 
         function spinup() {
+            // TODO: not sure where this should go, or for how long. This is a workaround for EliteA
+            if (!self.motorOn[self.curDrive]) {
+                self.readyTimer = 1000000; // Apparently takes a half second to spin up
+            } else {
+                self.readyTimer = 1000;  // little bit of time for each command (so, really, spinup is a bad place to put this)
+            }
             self.isActive = true;
             self.motorOn[self.curDrive] = true;
             self.motorSpin[self.curDrive] = 0;
@@ -572,6 +579,10 @@ define(['utils'], function (utils) {
                 }
                 self.isActive = self.motorOn[0] || self.motorOn[1];
             }
+            if (this.readyTimer > 1) {
+                this.readyTimer -= cycles;
+                if (this.readyTimer < 1) this.readyTimer = 1;
+            }
         };
     }
 
@@ -635,7 +646,7 @@ define(['utils'], function (utils) {
             case 5: // Step in (with update)
             case 7: // Step out (with update)
                 this.track = this.curTrack;
-            // falls through to
+            /* falls through */
             case 2: // Step
             case 4: // Step in
             case 6: // Step out
@@ -864,9 +875,6 @@ define(['utils'], function (utils) {
         this.error(0x88);
     };
 
-    WD1770.prototype.loadDiscData = function (drive, data) {
-        this.drives[drive] = ssdFor(this, data);
-    };
     WD1770.prototype.loadDisc = function (drive, disc) {
         this.drives[drive] = disc;
     };
@@ -877,6 +885,7 @@ define(['utils'], function (utils) {
         ssdLoad: ssdLoad,
         localDisc: localDisc,
         emptySsd: emptySsd,
-        ssdFor: ssdFor
+        ssdFor: ssdFor,
+        baseSsd: baseSsd
     };
 });

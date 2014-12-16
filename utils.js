@@ -1,4 +1,4 @@
-define(['jsunzip'], function (jsunzip) {
+define(['jsunzip', 'promise'], function (jsunzip) {
     "use strict";
     var exports = {};
 
@@ -15,6 +15,8 @@ define(['jsunzip'], function (jsunzip) {
         if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
         return parseInt(s, 16);
     };
+    
+    exports.userKeymap = [];
 
     exports.BBC = {
         SEMICOLON_PLUS: [7, 5],
@@ -90,7 +92,7 @@ define(['jsunzip'], function (jsunzip) {
 
         SPACE: [2, 6],
 
-        HASH: [8, 2],
+        UNDERSCORE_POUND: [8, 2],
         AT: [7, 4],
         COLON_STAR: [8, 4],
         PIPE_BACKSLASH: [8, 7],
@@ -193,6 +195,7 @@ define(['jsunzip'], function (jsunzip) {
         Z: 90,
         /* also META on Mac */
         WINDOWS: 91,
+        MENU: 93,
         NUMPAD0: 96,
         NUMPAD1: 97,
         NUMPAD2: 98,
@@ -236,34 +239,359 @@ define(['jsunzip'], function (jsunzip) {
         LEFT_SQUARE_BRACKET: 219,
         BACKSLASH: 220,
         RIGHT_SQUARE_BRACKET: 221,
-        NUMPADENTER: 255 // hack, jsbeeb only
+        NUMPADENTER: 255, // hack, jsbeeb only
+        SHIFT_LEFT: 256, // hack, jsbeeb only
+        SHIFT_RIGHT: 257, // hack, jsbeeb only
+        ALT_LEFT: 258, // hack, jsbeeb only
+        ALT_RIGHT: 259, // hack, jsbeeb only
+        CTRL_LEFT: 260, // hack, jsbeeb only
+        CTRL_RIGHT: 261 // hack, jsbeeb only
     };
 
     var keyCodes = exports.keyCodes;
 
+    function detectKeyboardLayout() {
+        if (exports.runningInNode) {
+            return "UK";
+        }
+        if (localStorage.keyboardLayout) {
+            return localStorage.keyboardLayout == "US" ? "US" : "UK";
+        }
+        if (navigator.language) {
+            if (navigator.language.toLowerCase() == "en-gb") return "UK";
+            if (navigator.language.toLowerCase() == "en-us") return "US";
+        }
+        return "UK";  // Default guess of UK
+    }
+    var isUKlayout = detectKeyboardLayout() == "UK";
+
     if (exports.isFirefox()) {
         keyCodes.SEMICOLON = 59;
-        // # key
+        // #~ key (not on US keyboard)
         keyCodes.HASH = 163;
         keyCodes.APOSTROPHE = 222;
+        keyCodes.BACK_QUOTE = 192;
         // Firefox doesn't return a keycode for this
         keyCodes.MUTE = -1;
         keyCodes.MINUS = 173;
         keyCodes.EQUALS = 61;
-        keyCodes.BACK_QUOTE = 192;
     } else {
         // Chrome
         // TODO: check other browsers
         // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
         keyCodes.SEMICOLON = 186;
-        // # key
-        keyCodes.HASH = 222;
-        keyCodes.APOSTROPHE = 192;
+        // #~ key (not on US keyboard)
+        keyCodes.HASH = isUKlayout ? 222 : 223;
+        keyCodes.APOSTROPHE = isUKlayout ? 192 : 222;
         keyCodes.MUTE = 173;
         keyCodes.MINUS = 189;
         keyCodes.EQUALS = 187;
-        keyCodes.BACK_QUOTE = 223;
+        keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
     }
+    
+    exports.getKeyMap = function (keyLayout) {
+        var keys2 = [];
+
+        // shift pressed
+        keys2[true] = {};
+
+        // shift not pressed
+        keys2[false] = {};
+
+        // shiftDown MUST be true or false (not undefined)
+        function doMap(s, colRow, shiftDown) {
+            if (keys2[shiftDown][s] && keys2[shiftDown][s] != colRow) {
+                console.log("Warning: duplicate binding for key", (shiftDown ? "<SHIFT>":"") + s, colRow, keys2[shiftDown][s]);
+            }
+            keys2[shiftDown][s] = colRow;
+        }
+
+        // shiftDown undefined -> map both
+        function map(s, colRow, shiftDown) {
+
+            if ((!s && s !== 0) || !colRow) {
+                console.log("error binding key", s, colRow);
+            }
+            if (typeof(s) == "string") {
+                s = s.charCodeAt(0);
+            }
+
+            if (shiftDown === undefined) {
+                doMap(s, colRow, true);
+                doMap(s, colRow, false);
+            } else {
+                doMap(s, colRow, shiftDown);
+            }
+        }
+        
+        var BBC = exports.BBC;
+
+        map(keyCodes.Q, BBC.Q);
+        map(keyCodes.W, BBC.W);
+        map(keyCodes.E, BBC.E);
+        map(keyCodes.R, BBC.R);
+        map(keyCodes.T, BBC.T);
+        map(keyCodes.Y, BBC.Y);
+        map(keyCodes.U, BBC.U);
+        map(keyCodes.I, BBC.I);
+        map(keyCodes.O, BBC.O);
+        map(keyCodes.P, BBC.P);
+
+        map(keyCodes.A, BBC.A);
+        map(keyCodes.S, BBC.S);
+        map(keyCodes.D, BBC.D);
+        map(keyCodes.F, BBC.F);
+        map(keyCodes.G, BBC.G);
+        map(keyCodes.H, BBC.H);
+        map(keyCodes.J, BBC.J);
+        map(keyCodes.K, BBC.K);
+        map(keyCodes.L, BBC.L);
+
+        map(keyCodes.Z, BBC.Z);
+        map(keyCodes.X, BBC.X);
+        map(keyCodes.C, BBC.C);
+        map(keyCodes.V, BBC.V);
+        map(keyCodes.B, BBC.B);
+        map(keyCodes.N, BBC.N);
+        map(keyCodes.M, BBC.M);
+
+        map(keyCodes.F10, BBC.F0); // F0 (mapped to F10)
+        map(keyCodes.F1, BBC.F1);
+        map(keyCodes.F2, BBC.F2);
+        map(keyCodes.F3, BBC.F3);
+        map(keyCodes.F4, BBC.F4);
+        map(keyCodes.F5, BBC.F5);
+        map(keyCodes.F6, BBC.F6);
+        map(keyCodes.F7, BBC.F7);
+        map(keyCodes.F8, BBC.F8);
+        map(keyCodes.F9, BBC.F9);
+
+        // these keys are in the same place on PC and BBC keyboards
+        // including shifted characters
+        // so can be the same for "natural" and "gaming"
+        map(keyCodes.COMMA, BBC.COMMA);
+        map(keyCodes.PERIOD, BBC.PERIOD);
+        map(keyCodes.SLASH, BBC.SLASH);
+        map(keyCodes.SPACE, BBC.SPACE);
+        map(keyCodes.TAB, BBC.TAB);
+        map(keyCodes.ENTER, BBC.RETURN);
+
+        map(keyCodes.SHIFT, BBC.SHIFT);
+        // see later map(keyCodes.SHIFT_LEFT, BBC.SHIFT_LEFT);
+        map(keyCodes.SHIFT_RIGHT, BBC.SHIFT);
+
+        // other keys to map to these in "game" layout too
+        map(keyCodes.LEFT, BBC.LEFT);
+        map(keyCodes.UP, BBC.UP);
+        map(keyCodes.RIGHT, BBC.RIGHT);
+        map(keyCodes.DOWN, BBC.DOWN);
+
+        if (keyLayout == "natural") {
+
+            // "natural" keyboard
+
+            map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
+
+            // US Keyboard: has Tilde on <Shift>BACK_QUOTE
+            map(keyCodes.BACK_QUOTE, isUKlayout ? BBC.UNDERSCORE_POUND : BBC.HAT_TILDE);
+            map(keyCodes.APOSTROPHE, isUKlayout ? BBC.AT : BBC.K2, true);
+            map(keyCodes.K2, isUKlayout ? BBC.K2 : BBC.AT, true);
+
+            // 1st row
+            map(keyCodes.K3, BBC.UNDERSCORE_POUND, true);
+            map(keyCodes.K7, BBC.K6, true);
+            map(keyCodes.K8, BBC.COLON_STAR, true);
+            map(keyCodes.K9, BBC.K8, true);
+            map(keyCodes.K0, BBC.K9, true);
+
+            map(keyCodes.K2, BBC.K2, false);
+            map(keyCodes.K3, BBC.K3, false);
+            map(keyCodes.K7, BBC.K7, false);
+            map(keyCodes.K8, BBC.K8, false);
+            map(keyCodes.K9, BBC.K9, false);
+            map(keyCodes.K0, BBC.K0, false);
+
+            map(keyCodes.K1, BBC.K1);
+            map(keyCodes.K4, BBC.K4);
+            map(keyCodes.K5, BBC.K5);
+            map(keyCodes.K6, BBC.K6);
+
+            map(keyCodes.MINUS, BBC.MINUS);
+
+            // 2nd row
+            map(keyCodes.LEFT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET);
+
+            map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.RIGHT_SQUARE_BRACKET);
+
+            // 3rd row
+
+            map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS);
+
+            map(keyCodes.APOSTROPHE, BBC.COLON_STAR, false);
+
+            map(keyCodes.HASH, BBC.HAT_TILDE); // OK for <Shift> at least
+
+            map(keyCodes.EQUALS, BBC.SEMICOLON_PLUS); // OK for <Shift> at least
+
+            map(keyCodes.WINDOWS, BBC.SHIFTLOCK);
+
+            map(keyCodes.END, BBC.COPY);
+
+            map(keyCodes.F11, BBC.COPY);
+
+            map(keyCodes.ESCAPE, BBC.ESCAPE);
+
+            map(keyCodes.CTRL, BBC.CTRL);
+            map(keyCodes.CTRL_LEFT, BBC.CTRL);
+            map(keyCodes.CTRL_RIGHT, BBC.CTRL);
+
+            map(keyCodes.CAPSLOCK, BBC.CAPSLOCK);
+
+            map(keyCodes.DELETE, BBC.DELETE);
+
+            map(keyCodes.BACKSPACE, BBC.DELETE);
+
+            map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
+
+        } else if (keyLayout == "gaming") {
+            // gaming keyboard
+
+            // 1st row
+            map(keyCodes.ESCAPE, BBC.F0);
+
+            // 2nd row
+            map(keyCodes.BACK_QUOTE, BBC.ESCAPE);
+            map(keyCodes.K1, BBC.K1);
+            map(keyCodes.K2, BBC.K2);
+            map(keyCodes.K3, BBC.K3);
+            map(keyCodes.K4, BBC.K4);
+            map(keyCodes.K5, BBC.K5);
+            map(keyCodes.K6, BBC.K6);
+            map(keyCodes.K7, BBC.K7);
+            map(keyCodes.K8, BBC.K8);
+            map(keyCodes.K9, BBC.K9);
+            map(keyCodes.K0, BBC.K0);
+            map(keyCodes.MINUS, BBC.MINUS);
+            map(keyCodes.EQUALS, BBC.HAT_TILDE);
+            map(keyCodes.BACKSPACE, BBC.PIPE_BACKSLASH);
+            map(keyCodes.INSERT, BBC.LEFT);
+            map(keyCodes.HOME, BBC.RIGHT);
+
+            // 3rd row
+            map(keyCodes.LEFT_SQUARE_BRACKET, BBC.AT);
+            map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET);
+            // no key for BBC.UNDERSCORE_POUND in UK
+            // see 4th row for US mapping keyCodes.BACKSLASH
+            map(keyCodes.DELETE, BBC.UP);
+            map(keyCodes.END, BBC.DOWN);
+
+            // 4th row
+            // no key for BBC.CAPSLOCK (mapped to CTRL_LEFT below)
+            map(keyCodes.CAPSLOCK, BBC.CTRL);
+            map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS);
+            map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
+            // UK keyboard (key missing on US)
+            map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
+
+            // UK has extra key \| for SHIFT
+            map(keyCodes.SHIFT_LEFT, isUKlayout ? BBC.SHIFTLOCK : BBC.SHIFT);
+            // UK: key is between SHIFT and Z
+            // US: key is above ENTER
+            map(keyCodes.BACKSLASH, isUKlayout ? BBC.SHIFT : BBC.UNDERSCORE_POUND);
+
+            // 5th row
+
+            // for Zalaga
+            map(keyCodes.CTRL_LEFT, BBC.CAPSLOCK);
+            map(keyCodes.ALT_LEFT, BBC.CTRL);
+
+            // should be 4th row, not enough keys
+            map(keyCodes.MENU, BBC.DELETE);
+            map(keyCodes.CTRL_RIGHT, BBC.COPY);
+
+            // not in correct location
+            map(keyCodes.ALT_RIGHT, BBC.SHIFTLOCK);
+            map(keyCodes.WINDOWS, BBC.SHIFTLOCK);
+        } else {
+            // Physical, and default
+            map(keyCodes.K1, BBC.K1);
+            map(keyCodes.K2, BBC.K2);
+            map(keyCodes.K3, BBC.K3);
+            map(keyCodes.K4, BBC.K4);
+            map(keyCodes.K5, BBC.K5);
+            map(keyCodes.K6, BBC.K6);
+            map(keyCodes.K7, BBC.K7);
+            map(keyCodes.K8, BBC.K8);
+            map(keyCodes.K9, BBC.K9);
+            map(keyCodes.K0, BBC.K0);
+            map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
+            map(keyCodes.EQUALS, BBC.HAT_TILDE); // ^~ on +/=
+            map(keyCodes.SEMICOLON, BBC.SEMICOLON_PLUS); // ';' / '+'
+            map(keyCodes.MINUS, BBC.MINUS); // '-' / '=' mapped to underscore
+            map(keyCodes.LEFT_SQUARE_BRACKET, BBC.LEFT_SQUARE_BRACKET); // maps to [{
+            map(keyCodes.RIGHT_SQUARE_BRACKET, BBC.RIGHT_SQUARE_BRACKET); // maps to ]}
+            map(keyCodes.COMMA, BBC.COMMA); // ',' / '<'
+            map(keyCodes.PERIOD, BBC.PERIOD); // '.' / '>'
+            map(keyCodes.SLASH, BBC.SLASH); // '/' / '?'
+            map(keyCodes.WINDOWS, BBC.SHIFTLOCK); // shift lock mapped to "windows" key
+            map(keyCodes.TAB, BBC.TAB); // tab
+            map(keyCodes.ENTER, BBC.RETURN); // return
+            map(keyCodes.DELETE, BBC.DELETE); // delete
+            map(keyCodes.BACKSPACE, BBC.DELETE); // delete
+            map(keyCodes.END, BBC.COPY); // copy key is end
+            map(keyCodes.F11, BBC.COPY); // copy key is end for Apple
+            map(keyCodes.SHIFT, BBC.SHIFT); // shift
+            map(keyCodes.ESCAPE, BBC.ESCAPE); // escape
+            map(keyCodes.CTRL, BBC.CTRL);
+            map(keyCodes.CTRL_LEFT, BBC.CTRL);
+            map(keyCodes.CTRL_RIGHT, BBC.CTRL);
+            map(keyCodes.CAPSLOCK, BBC.CAPSLOCK); // caps (on Rich's/Mike's computer)
+            map(keyCodes.LEFT, BBC.LEFT); // arrow left
+            map(keyCodes.UP, BBC.UP); // arrow up
+            map(keyCodes.RIGHT, BBC.RIGHT); // arrow right
+            map(keyCodes.DOWN, BBC.DOWN); // arrow down
+            map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
+            map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
+            map(keyCodes.BACK_QUOTE, BBC.AT);
+        }
+
+        // Master
+        map(keyCodes.NUMPAD0, BBC.NUMPAD0);
+        map(keyCodes.NUMPAD1, BBC.NUMPAD1);
+        map(keyCodes.NUMPAD2, BBC.NUMPAD2);
+        map(keyCodes.NUMPAD3, BBC.NUMPAD3);
+        map(keyCodes.NUMPAD4, BBC.NUMPAD4);
+        map(keyCodes.NUMPAD5, BBC.NUMPAD5);
+        map(keyCodes.NUMPAD6, BBC.NUMPAD6);
+        map(keyCodes.NUMPAD7, BBC.NUMPAD7);
+        map(keyCodes.NUMPAD8, BBC.NUMPAD8);
+        map(keyCodes.NUMPAD9, BBC.NUMPAD9);
+        // small hack in main.js/keyCode() to make this work 
+        map(keyCodes.NUMPAD_DECIMAL_POINT, BBC.NUMPAD_DECIMAL_POINT);
+
+        // "natural" mapping
+        map(keyCodes.NUMPADPLUS, BBC.NUMPADPLUS);
+        map(keyCodes.NUMPADMINUS, BBC.NUMPADMINUS);
+        map(keyCodes.NUMPADSLASH, BBC.NUMPADSLASH);
+        map(keyCodes.NUMPADASTERISK, BBC.NUMPADASTERISK);
+        //map(???, BBC.NUMPADCOMMA);
+        //map(???, BBC.NUMPADHASH);
+        // no keycode for NUMPADENTER, small hack in main.js/keyCode()
+        map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
+
+        // TODO: "game" mapping
+        // eg Master Dunjunz needs # Del 3 , * Enter
+        // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
+
+        // user keymapping
+        // do last (to override defaults)
+        while (exports.userKeymap.length > 0) {
+            var mapping = exports.userKeymap.pop();
+            map(keyCodes[mapping.native], BBC[mapping.bbc]);
+        }
+        
+        return keys2;
+    };
 
     function hexbyte(value) {
         return ((value >> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
@@ -331,23 +659,34 @@ define(['jsunzip'], function (jsunzip) {
         for (var i = 0; i < len; ++i) result[i] = dataIn.charCodeAt(i) & 0xff;
         return result;
     }
+    exports.makeBinaryData = makeBinaryData;
 
     function loadDataHttp(url) {
-        var request = new XMLHttpRequest();
-        request.open("GET", url, false);
-        request.overrideMimeType('text/plain; charset=x-user-defined');
-        request.send(null);
-        if (request.status != 200) return null;
-        if (typeof(request.response) != "string") {
-            return request.response;
-        }
-        return makeBinaryData(request.response);
+        return new Promise(function(resolve, reject) {
+            var request = new XMLHttpRequest();
+            request.open("GET", url, true);
+            request.overrideMimeType('text/plain; charset=x-user-defined');
+            request.onload = function() {
+                if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));
+                if (typeof(request.response) !== "string") {
+                    resolve(request.response);
+                } else {
+                    resolve(makeBinaryData(request.response));
+                }
+            };
+            request.onerror = function() {
+              reject(new Error("A network error occurred loading " + url));
+            };
+            request.send(null);
+        });
     }
 
     function loadDataNode(url) {
-        var fs = require('fs');
-        if (url[0] == '/') url = "." + url;
-        return fs.readFileSync(url);
+        return new Promise(function(resolve, reject){
+            var fs = require('fs');
+            if (url[0] == '/') url = "." + url;
+            resolve(fs.readFileSync(url));
+        });
     }
 
     if (exports.runningInNode) {
@@ -440,7 +779,7 @@ define(['jsunzip'], function (jsunzip) {
         self.readFloat32 = function (pos) {
             if (pos === undefined) pos = self.advance(4);
             return readFloat32(self.data, pos);
-        }
+        };
 
         self.readInt32 = function (pos) {
             if (pos === undefined) pos = self.advance(4);

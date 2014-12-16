@@ -94,7 +94,7 @@ define([], function () {
                 console.log("rewinding tape");
                 self.tape.rewind();
             }
-        }
+        };
 
         var runCounter = 0;
         var cyclesPerPoll = (2 * 1000 * 1000) / 30;
@@ -146,9 +146,7 @@ function TapefileTape(stream) {
 
     self.rewind = function() {
         stream.seek(10);
-        console.log("poi");
-    }
-
+    };
 
     self.poll = function (acia) {
         if (stream.eof()) return 100000;

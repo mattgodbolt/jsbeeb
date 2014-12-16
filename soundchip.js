@@ -43,11 +43,11 @@ define([], function () {
         }
 
         this.toneGenerator = {
-            mute: function() {
+            mute: function () {
                 catchUp();
                 sineOn = false;
             },
-            tone: function(freq) {
+            tone: function (freq) {
                 catchUp();
                 sineOn = true;
                 sineStep = (freq / sampleRate) * sineTableSize;
@@ -174,7 +174,6 @@ define([], function () {
             }
         }
 
-
         function advance(time) {
             var num = time * samplesPerCycle + residual;
             var rounded = num | 0;
@@ -191,19 +190,26 @@ define([], function () {
 
         function poke(value) {
             catchUp();
+            var latchData = !!(value & 0x80);
+            if (latchData)
+                latchedChannel = (value >> 5) & 3;
             if ((value & 0x90) == 0x90) {
                 // Volume setting
-                var channel = (value >> 5) & 3;
                 var newVolume = value & 0x0f;
-                volume[channel] = volumeTable[newVolume];
-            } else if ((value & 0x90) == 0x80) {
-                latchedChannel = (value >> 5) & 3;
-                register[latchedChannel] = (register[latchedChannel] & ~0x0f) | (value & 0x0f);
-                if (latchedChannel == 3) {
-                    noisePoked();
-                }
+                volume[latchedChannel] = volumeTable[newVolume];
             } else {
-                register[latchedChannel] = (register[latchedChannel] & 0x0f) | ((value & 0x3f) << 4);
+                // Data of some sort.
+                if (latchedChannel == 3) {
+                    // For noise channel we always update the bottom bits of the register.
+                    register[latchedChannel] = value & 0x0f;
+                    noisePoked();
+                } else if (latchData) {
+                    // Low 4 bits
+                    register[latchedChannel] = (register[latchedChannel] & ~0x0f) | (value & 0x0f);
+                } else {
+                    // High bits
+                    register[latchedChannel] = (register[latchedChannel] & 0x0f) | ((value & 0x3f) << 4);
+                }
             }
         }
 
@@ -228,10 +234,10 @@ define([], function () {
         this.enable = function (e) {
             enabled = e;
         };
-        this.mute = function() {
+        this.mute = function () {
             enabled = false;
         };
-        this.unmute = function() {
+        this.unmute = function () {
             enabled = true;
         };
     };

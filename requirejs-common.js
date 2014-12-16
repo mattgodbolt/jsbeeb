@@ -10,16 +10,19 @@
     requirejs.config({
         baseUrl: getBasePath(),
         paths: {
+            'async': 'lib/requirejs-async',
             'jquery': 'lib/jquery.min',
             'jquery-visibility': 'lib/jquery-visibility',
             'bootstrap': 'lib/bootstrap.min',
-            'dropbox': 'lib/dropbox.min',
+            'gapi': 'lib/gapi',
             'jsunzip': 'lib/jsunzip',
-            'underscore': 'lib/underscore-min'
+            'promise': 'lib/promise-6.0.0',
+            'underscore': 'lib/underscore-min',
+            'webgl-debug': 'lib/webgl-debug'
         },
         shim: {
-            'underscore': { exports: '_' },
-            'bootstrap': [ 'jquery' ]
+            'underscore': {exports: '_'},
+            'bootstrap': ['jquery']
         }
     });
 })();
