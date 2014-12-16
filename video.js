@@ -1,10 +1,17 @@
 define(['teletext'], function (Teletext) {
+    "use strict";
     return function Video(fb32_, paint_ext_) {
-        "use strict";
-        this.fb32 = fb32_;
-        this.collook = new Uint32Array([
+        function makeFast32(u32) {
+            // Firefox is ~5% faster with signed 32-bit arrays. Chrome is the same speed
+            // either way, so here we unconditionally wrap all u32 buffers as i32.
+            // Having a function do this makes it easy to test u32 vs i32, and means we
+            // keep the rest of the code using u32 (which makes more sense to me).
+            return new Int32Array(u32.buffer);
+        }
+        this.fb32 = makeFast32(fb32_);
+        this.collook = makeFast32(new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
-            0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]);
+            0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]));
         this.screenLen = new Uint16Array([0x4000, 0x5000, 0x2000, 0x2800]);
         this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
         this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x10, 0x20]);
@@ -45,7 +52,7 @@ define(['teletext'], function (Teletext) {
             this.verticalAdjust = 0; // Vertical adjust remaining
             this.vblankLowLineCount = 0;
             this.charsLeft = 0; // chars left hanging off end of mode 7 line (due to delays, TODOs here)
-            this.ulaPal = new Uint32Array(16);
+            this.ulaPal = makeFast32(new Uint32Array(16));
             this.actualPal = new Uint8Array(16);
             this.atStartOfInterlaceLine = 0;
             this.inInterlacedLine = 0;
@@ -100,12 +107,12 @@ define(['teletext'], function (Teletext) {
         }(this);
 
         this.fbTableBuffer = new ArrayBuffer(256 * 16 * 4);
-        this.fbTable = new Uint32Array(this.fbTableBuffer);
+        this.fbTable = makeFast32(new Uint32Array(this.fbTableBuffer));
         this.fbTable8 = [];
         this.fbTable16 = [];
         for (var fbSet = 0; fbSet < 256; ++fbSet) {
-            this.fbTable8.push(new Uint32Array(this.fbTableBuffer, fbSet * 16 * 4, 8));
-            this.fbTable16.push(new Uint32Array(this.fbTableBuffer, fbSet * 16 * 4, 16));
+            this.fbTable8.push(makeFast32(new Uint32Array(this.fbTableBuffer, fbSet * 16 * 4, 8)));
+            this.fbTable16.push(makeFast32(new Uint32Array(this.fbTableBuffer, fbSet * 16 * 4, 16)));
         }
         this.fbTableDirty = true;
 
@@ -119,8 +126,8 @@ define(['teletext'], function (Teletext) {
         };
 
         this.blankBuffer = new ArrayBuffer(16 * 4);
-        this.blank8 = new Uint32Array(this.blankBuffer, 0, 8);
-        this.blank16 = new Uint32Array(this.blankBuffer);
+        this.blank8 = makeFast32(new Uint32Array(this.blankBuffer, 0, 8));
+        this.blank16 = makeFast32(new Uint32Array(this.blankBuffer));
         for (var b16 = 0; b16 < 16; ++b16)
             this.blank16[b16] = this.collook[0];
 
