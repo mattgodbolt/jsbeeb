@@ -276,7 +276,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var yieldsPerFrame = 1;
         var cyclesPerYield = cyclesPerFrame / yieldsPerFrame;
 
-        var canvas = parsedQuery.glEnabled ? canvasLib.bestCanvas($('#screen')[0]) : new canvasLib.Canvas($('#screen')[0]);
+        var tryGl = parsedQuery.glEnabled == undefined || !!parsedQuery.glEnabled;
+        var canvas = tryGl ? canvasLib.bestCanvas($('#screen')[0]) : new canvasLib.Canvas($('#screen')[0]);
         video = new Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;
