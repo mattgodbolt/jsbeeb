@@ -101,12 +101,6 @@ define(['teletext', 'utils'], function (Teletext, utils) {
 
         this.fbTableBuffer = new ArrayBuffer(256 * 16 * 4);
         this.fbTable = utils.makeFast32(new Uint32Array(this.fbTableBuffer));
-        this.fbTable8 = [];
-        this.fbTable16 = [];
-        for (var fbSet = 0; fbSet < 256; ++fbSet) {
-            this.fbTable8.push(utils.makeFast32(new Uint32Array(this.fbTableBuffer, fbSet * 16 * 4, 8)));
-            this.fbTable16.push(utils.makeFast32(new Uint32Array(this.fbTableBuffer, fbSet * 16 * 4, 16)));
-        }
         this.fbTableDirty = true;
 
         this.updateFbTable = function() {
@@ -117,12 +111,6 @@ define(['teletext', 'utils'], function (Teletext, utils) {
 
             this.fbTableDirty = false;
         };
-
-        this.blankBuffer = new ArrayBuffer(16 * 4);
-        this.blank8 = utils.makeFast32(new Uint32Array(this.blankBuffer, 0, 8));
-        this.blank16 = utils.makeFast32(new Uint32Array(this.blankBuffer));
-        for (var b16 = 0; b16 < 16; ++b16)
-            this.blank16[b16] = this.collook[0];
 
         this.renderBlank = function(x, y) {
             var offset = y * 1280 + x;
@@ -154,7 +142,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             fb32[destOffset + 7] = fbTable[tblOff + 7];
         };
 
-        this.blitFb_1 = function(dat, destOffset, numPixels) {
+        this.blitFb = function(dat, destOffset, numPixels) {
             var tblOff = dat << 4;
             this.blitFb8(tblOff, destOffset);
             if (numPixels === 16) {
@@ -162,64 +150,13 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             }
         };
 
-        this.blitFb_2 = function(dat, destOffset, numPixels) {
-            if (numPixels === 8) {
-                this.fb32.set(this.fbTable8[dat], destOffset);
-            } else {
-                this.fb32.set(this.fbTable16[dat], destOffset);
-            }
-        };
-
-        this.clearFb_1 = function(destOffset, numPixels) {
+        this.clearFb = function(destOffset, numPixels) {
             var black = this.collook[0];
             var fb32 = this.fb32;
             while (numPixels--) {
                 fb32[destOffset++] = black;
             }
         };
-
-        this.clearFb_2 = function(destOffset, numPixels) {
-            this.fb32.set(numPixels === 8 ? this.blank8 : this.blank16, destOffset);
-        };
-
-        this.blitFb = this.blitFb_1;
-        this.clearFb = this.clearFb_1;
-
-        this.pickBlitters = function() {
-            console.log("Choosing video blit routines");
-            function timeBlitters(o) {
-                var start = Date.now();
-                for (var i = 0; i < 256 * 256; ++i) {
-                    o.blitFb(i & 0xff, (i >> 8) * 1280, 16);
-                }
-                for (i = 0; i < 256 * 256; ++i) {
-                    o.clearFb((i >> 8) * 1280, 16);
-                }
-                return Date.now() - start;
-            }
-
-            var wins = [0, 0];
-            for (var round = 0; round < 20; ++round) {
-                this.blitFb = this.blitFb_1;
-                this.clearFb = this.clearFb_1;
-                var fb1Time = timeBlitters(this);
-                this.blitFb = this.blitFb_2;
-                this.clearFb = this.clearFb_2;
-                var fb2Time = timeBlitters(this);
-                wins[fb1Time < fb2Time ? 0 : 1]++;
-            }
-            if (wins[0] > wins[1]) {
-                this.blitFb = this.blitFb_1;
-                this.clearFb = this.clearFb_1;
-                console.log("Using explicit array copies (" + wins[0] + " to " + wins[1] + ")");
-            } else {
-                this.blitFb = this.blitFb_2;
-                this.clearFb = this.clearFb_2;
-                console.log("Using array.set() methods (" + wins[1] + " to " + wins[0] + ")");
-            }
-        };
-
-        this.pickBlitters();
 
         this.handleCursor = function(offset) {
             if (this.cursorOnThisFrame && (this.ulactrl & this.cursorTable[this.cursorDrawIndex])) {
