@@ -15,7 +15,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
         return parseInt(s, 16);
     };
-    
+
     exports.userKeymap = [];
 
     exports.BBC = {
@@ -263,6 +263,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         }
         return "UK";  // Default guess of UK
     }
+
     var isUKlayout = detectKeyboardLayout() == "UK";
 
     if (exports.isFirefox()) {
@@ -288,7 +289,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         keyCodes.EQUALS = 187;
         keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
     }
-    
+
     exports.getKeyMap = function (keyLayout) {
         var keys2 = [];
 
@@ -301,7 +302,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         // shiftDown MUST be true or false (not undefined)
         function doMap(s, colRow, shiftDown) {
             if (keys2[shiftDown][s] && keys2[shiftDown][s] != colRow) {
-                console.log("Warning: duplicate binding for key", (shiftDown ? "<SHIFT>":"") + s, colRow, keys2[shiftDown][s]);
+                console.log("Warning: duplicate binding for key", (shiftDown ? "<SHIFT>" : "") + s, colRow, keys2[shiftDown][s]);
             }
             keys2[shiftDown][s] = colRow;
         }
@@ -323,7 +324,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
                 doMap(s, colRow, shiftDown);
             }
         }
-        
+
         var BBC = exports.BBC;
 
         map(keyCodes.Q, BBC.Q);
@@ -589,7 +590,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             var mapping = exports.userKeymap.pop();
             map(keyCodes[mapping.native], BBC[mapping.bbc]);
         }
-        
+
         return keys2;
     };
 
@@ -659,14 +660,15 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         for (var i = 0; i < len; ++i) result[i] = dataIn.charCodeAt(i) & 0xff;
         return result;
     }
+
     exports.makeBinaryData = makeBinaryData;
 
     function loadDataHttp(url) {
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
             var request = new XMLHttpRequest();
             request.open("GET", url, true);
             request.overrideMimeType('text/plain; charset=x-user-defined');
-            request.onload = function() {
+            request.onload = function () {
                 if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));
                 if (typeof(request.response) !== "string") {
                     resolve(request.response);
@@ -674,15 +676,15 @@ define(['jsunzip', 'promise'], function (jsunzip) {
                     resolve(makeBinaryData(request.response));
                 }
             };
-            request.onerror = function() {
-              reject(new Error("A network error occurred loading " + url));
+            request.onerror = function () {
+                reject(new Error("A network error occurred loading " + url));
             };
             request.send(null);
         });
     }
 
     function loadDataNode(url) {
-        return new Promise(function(resolve, reject){
+        return new Promise(function (resolve, reject) {
             var fs = require('fs');
             if (url[0] == '/') url = "." + url;
             resolve(fs.readFileSync(url));
@@ -828,6 +830,14 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     }
 
     exports.DataStream = DataStream;
+
+    exports.makeFast32 = function (u32) {
+        // Firefox is ~5% faster with signed 32-bit arrays. Chrome is the same speed
+        // either way, so here we unconditionally wrap all u32 buffers as i32.
+        // Having a function do this makes it easy to test u32 vs i32, and means we
+        // keep the rest of the code using u32 (which makes more sense to me).
+        return new Int32Array(u32.buffer);
+    };
 
     return exports;
 });

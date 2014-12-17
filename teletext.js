@@ -1,16 +1,31 @@
-define(['teletext_data'], function (ttData) {
-    return function Teletext() {
-        "use strict";
-        var self = this;
+define(['teletext_data', 'utils'], function (ttData, utils) {
+    "use strict";
 
-        self.chars = new Uint8Array(96 * 160);
-        self.charsi = new Uint8Array(96 * 160);
-        self.graph = new Uint8Array(96 * 160);
-        self.graphi = new Uint8Array(96 * 160);
-        self.sepgraph = new Uint8Array(96 * 160);
-        self.sepgraphi = new Uint8Array(96 * 160);
+    function Teletext() {
+        this.chars = new Uint8Array(96 * 160);
+        this.charsi = new Uint8Array(96 * 160);
+        this.graph = new Uint8Array(96 * 160);
+        this.graphi = new Uint8Array(96 * 160);
+        this.sepgraph = new Uint8Array(96 * 160);
+        this.sepgraphi = new Uint8Array(96 * 160);
+        this.prevCol = 0;
+        this.holdClear = false;
+        this.holdOff = false;
+        this.col = 7;
+        this.bg = 0;
+        this.sep = false;
+        this.dbl = this.oldDbl = this.secondHalfOfDouble = this.wasDbl = false;
+        this.gfx = false;
+        this.flash = this.flashOn = false;
+        this.flashTime = 0;
+        this.heldChar = false;
+        this.holdChar = 0;
+        this.nextChars = [this.chars, this.charsi];
+        this.curChars = [this.chars, this.charsi];
+        this.heldChars = [this.chars, this.charsi];
+        this.delayBuf = [0xff, 0xff];
 
-        function init() {
+        this.init = function () {
             var Data = ttData.makeChars();
             var i, x, x2, stat, offs1, offs2, j, y, o, p;
             // turn the 1s into 15s (?)
@@ -35,21 +50,21 @@ define(['teletext_data'], function (ttData) {
                 for (j = 0; j < 16; ++j) {
                     o = offs2 + j;
                     if (!j) {
-                        self.graph[o] = self.graphi[o] = Data.graphics[offs1];
-                        self.sepgraph[o] = self.sepgraphi[o] = Data.separated[offs1];
-                    } else if (j == 15) {
-                        self.graph[o] = self.graphi[o] = Data.graphics[offs1 + 5];
-                        self.sepgraph[o] = self.sepgraphi[o] = Data.separated[offs1 + 5];
+                        this.graph[o] = this.graphi[o] = Data.graphics[offs1];
+                        this.sepgraph[o] = this.sepgraphi[o] = Data.separated[offs1];
+                    } else if (j === 15) {
+                        this.graph[o] = this.graphi[o] = Data.graphics[offs1 + 5];
+                        this.sepgraph[o] = this.sepgraphi[o] = Data.separated[offs1 + 5];
                     } else {
-                        self.graph[o] = self.graphi[o] = Data.graphics[offs1 + x2];
-                        self.sepgraph[o] = self.sepgraphi[o] = Data.separated[offs1 + x2];
+                        this.graph[o] = this.graphi[o] = Data.graphics[offs1 + x2];
+                        this.sepgraph[o] = this.sepgraphi[o] = Data.separated[offs1 + x2];
                     }
                     x += 5 / 15;
                     if (x >= 1) {
                         x2++;
                         x -= 1;
                     }
-                    self.charsi[o] = 0;
+                    this.charsi[o] = 0;
                 }
                 offs1 += 6;
                 offs2 += 16;
@@ -88,53 +103,39 @@ define(['teletext_data'], function (ttData) {
                 for (j = 0; j < 16; ++j) {
                     o = offs2 + j;
                     p = offs1 + x2;
-                    self.chars[o] = lerp(tempi2[p], tempi2[p + 1], x);
-                    self.charsi[o] = lerp(tempi[p], tempi[p + 1], x);
+                    this.chars[o] = lerp(tempi2[p], tempi2[p + 1], x);
+                    this.charsi[o] = lerp(tempi[p], tempi[p + 1], x);
                     x += 11 / 15;
                     if (x >= 1) {
                         x2++;
                         x -= 1;
                     }
                     if (i >= 320 && i < 640) {
-                        self.graph[o] = self.sepgraph[o] = self.chars[o];
-                        self.graphi[o] = self.sepgraphi[o] = self.charsi[o];
+                        this.graph[o] = this.sepgraph[o] = this.chars[o];
+                        this.graphi[o] = this.sepgraphi[o] = this.charsi[o];
                     }
                 }
                 offs1 += 12;
                 offs2 += 16;
             }
 
-            function B(x) {
+            function clamp(x) {
                 x *= 255 / 15;
                 if (x < 0) return 0;
                 if (x > 255) return 255;
                 return x | 0;
             }
 
-            self.palette = [];
+            this.palette = [];
             for (i = 0; i < 64; ++i) {
-                self.palette[i] = new Uint32Array(16);
+                this.palette[i] = utils.makeFast32(new Uint32Array(16));
                 for (var c = 0; c < 16; ++c) {
                     var r = ((i & 1) >> 0) * c + ((i & 8) >> 3) * (15 - c);
                     var g = ((i & 2) >> 1) * c + ((i & 16) >> 4) * (15 - c);
                     var b = ((i & 4) >> 2) * c + ((i & 32) >> 5) * (15 - c);
-                    self.palette[i][c] = 0xff000000 | (B(b) << 16) | (B(g) << 8) | (B(r) << 0);
+                    this.palette[i][c] = 0xff000000 | (clamp(b) << 16) | (clamp(g) << 8) | (clamp(r) << 0);
                 }
             }
-
-            self.col = 7;
-            self.bg = 0;
-            self.sep = false;
-            self.dbl = self.oldDbl = self.secondHalfOfDouble = self.wasDbl = false;
-            self.gfx = false;
-            self.flash = self.flashOn = false;
-            self.flashTime = 0;
-            self.heldChar = false;
-            self.holdChar = 0;
-            self.nextChars = [self.chars, self.charsi];
-            self.curChars = [self.chars, self.charsi];
-            self.heldChars = [self.chars, self.charsi];
-            self.delayBuf = [0xff, 0xff];
 
             function printerize(c, offset) {
                 for (var i = 0; i < 10; ++i) {
@@ -147,207 +148,202 @@ define(['teletext_data'], function (ttData) {
                     console.log(i + " " + thing);
                 }
             }
-        }
-
-        var prevCol = 0;
-        var holdClear = false;
-        var holdOff = false;
-
-        function setNextChars() {
-            if (self.gfx) {
-                if (self.sep) {
-                    self.nextChars[0] = self.sepgraph;
-                    self.nextChars[1] = self.sepgraphi;
-                } else {
-                    self.nextChars[0] = self.graph;
-                    self.nextChars[1] = self.graphi;
-                }
-            } else {
-                self.nextChars[0] = self.chars;
-                self.nextChars[1] = self.charsi;
-            }
-        }
-
-        function handleControlCode(data) {
-            holdClear = false;
-            holdOff = false;
-
-            switch (data) {
-                case 1:
-                case 2:
-                case 3:
-                case 4:
-                case 5:
-                case 6:
-                case 7:
-                    self.gfx = false;
-                    self.col = data;
-                    setNextChars();
-                    holdClear = true;
-                    break;
-                case 8:
-                    self.flash = true;
-                    break;
-                case 9:
-                    self.flash = false;
-                    break;
-                case 12:
-                case 13:
-                    self.dbl = !!(data & 1);
-                    if (self.dbl) self.wasDbl = true;
-                    break;
-                case 17:
-                case 18:
-                case 19:
-                case 20:
-                case 21:
-                case 22:
-                case 23:
-                    self.gfx = true;
-                    self.col = data & 7;
-                    setNextChars();
-                    break;
-                case 24:
-                    self.col = prevCol = self.bg;
-                    break;
-                case 25:
-                    self.sep = false;
-                    setNextChars();
-                    break;
-                case 26:
-                    self.sep = true;
-                    setNextChars();
-                    break;
-                case 28:
-                    self.bg = 0;
-                    break;
-                case 29:
-                    self.bg = self.col;
-                    break;
-                case 30:
-                    self.holdChar = true;
-                    break;
-                case 31:
-                    holdOff = true;
-                    break;
-            }
-            if (self.holdChar && self.dbl === self.oldDbl) {
-                data = self.heldChar;
-                if (data >= 0x40 && data < 0x60) data = 0x20;
-                self.curChars[0] = self.heldChars[0];
-                self.curChars[1] = self.heldChars[1];
-            } else {
-                data = 0x20;
-            }
-            return data;
-        }
-
-        function render(buf, offset, scanline, interline, data) {
-            var i;
-            // Account for the two-character delay.
-            self.delayBuf.push(data);
-            data = self.delayBuf.shift();
-            self.oldDbl = self.dbl;
-            offset += 16;
-
-            prevCol = self.col;
-            self.curChars[0] = self.nextChars[0];
-            self.curChars[1] = self.nextChars[1];
-
-            if (data === 255) {
-                for (i = 0; i < 16; ++i) {
-                    buf[offset + i] = 0xff000000;
-                }
-                return;
-            }
-            var prevFlash = self.flash;
-            if (data < 0x20) {
-                data = handleControlCode(data);
-            } else if (self.gfx) {
-                self.heldChar = data;
-                self.heldChars[0] = self.curChars[0];
-                self.heldChars[1] = self.curChars[1];
-            }
-            var t = (data - 0x20) * 160;
-            var rounding;
-            if (self.oldDbl) {
-                t += (scanline >>> 1) * 16;
-                if (self.secondHalfOfDouble) t += 5 * 16;
-                rounding = (interline && (scanline & 1)) ? 1 : 0;
-            } else {
-                t += scanline * 16;
-                rounding = interline ? 1 : 0;
-            }
-
-            var palette;
-            if (prevFlash && self.flashOn) {
-                var flashColour = self.palette[(self.bg & 7) << 3][0];
-                for (i = 0; i < 16; ++i) {
-                    buf[offset++] = flashColour;
-                }
-            } else {
-                if (!self.dbl && self.secondHalfOfDouble) {
-                    palette = self.palette[((self.bg & 7) << 3) | (self.bg & 7)];
-                } else {
-                    palette = self.palette[((self.bg & 7) << 3) | (prevCol & 7)];
-                }
-                var px = self.curChars[rounding];
-                // Unrolling seems a good thing here, at least on Chrome.
-                buf[offset] = palette[px[t]];
-                buf[offset + 1] = palette[px[t + 1]];
-                buf[offset + 2] = palette[px[t + 2]];
-                buf[offset + 3] = palette[px[t + 3]];
-                buf[offset + 4] = palette[px[t + 4]];
-                buf[offset + 5] = palette[px[t + 5]];
-                buf[offset + 6] = palette[px[t + 6]];
-                buf[offset + 7] = palette[px[t + 7]];
-                buf[offset + 8] = palette[px[t + 8]];
-                buf[offset + 9] = palette[px[t + 9]];
-                buf[offset + 10] = palette[px[t + 10]];
-                buf[offset + 11] = palette[px[t + 11]];
-                buf[offset + 12] = palette[px[t + 12]];
-                buf[offset + 13] = palette[px[t + 13]];
-                buf[offset + 14] = palette[px[t + 14]];
-                buf[offset + 15] = palette[px[t + 15]];
-            }
-
-            if (holdOff) {
-                self.holdChar = false;
-                self.heldChar = 32;
-            }
-            if (holdClear) {
-                self.heldChar = 32;
-            }
-        }
-
-        this.verticalCharEnd = function () {
-            if (self.secondHalfOfDouble)
-                self.secondHalfOfDouble = false;
-            else
-                self.secondHalfOfDouble = self.wasDbl;
         };
+        this.init();
+    }
 
-        this.vsync = function () {
-            if (++self.flashTime == 48) self.flashTime = 0;
-            self.flashOn = self.flashTime < 16;
-        };
-
-        this.endline = function () {
-            self.col = 7;
-            self.bg = 0;
-            self.holdChar = false;
-            self.heldChar = 0x20;
-            self.nextChars[0] = self.heldChars[0] = self.chars;
-            self.nextChars[1] = self.heldChars[1] = self.charsi;
-            self.flash = false;
-            self.sep = false;
-            self.gfx = false;
-
-            self.dbl = self.wasDbl = false;
-        };
-
-        this.render = render;
-
-        init();
+    Teletext.prototype.setNextChars = function () {
+        if (this.gfx) {
+            if (this.sep) {
+                this.nextChars[0] = this.sepgraph;
+                this.nextChars[1] = this.sepgraphi;
+            } else {
+                this.nextChars[0] = this.graph;
+                this.nextChars[1] = this.graphi;
+            }
+        } else {
+            this.nextChars[0] = this.chars;
+            this.nextChars[1] = this.charsi;
+        }
     };
+
+    Teletext.prototype.handleControlCode = function (data) {
+        this.holdClear = false;
+        this.holdOff = false;
+
+        switch (data) {
+            case 1:
+            case 2:
+            case 3:
+            case 4:
+            case 5:
+            case 6:
+            case 7:
+                this.gfx = false;
+                this.col = data;
+                this.setNextChars();
+                this.holdClear = true;
+                break;
+            case 8:
+                this.flash = true;
+                break;
+            case 9:
+                this.flash = false;
+                break;
+            case 12:
+            case 13:
+                this.dbl = !!(data & 1);
+                if (this.dbl) this.wasDbl = true;
+                break;
+            case 17:
+            case 18:
+            case 19:
+            case 20:
+            case 21:
+            case 22:
+            case 23:
+                this.gfx = true;
+                this.col = data & 7;
+                this.setNextChars();
+                break;
+            case 24:
+                this.col = this.prevCol = this.bg;
+                break;
+            case 25:
+                this.sep = false;
+                this.setNextChars();
+                break;
+            case 26:
+                this.sep = true;
+                this.setNextChars();
+                break;
+            case 28:
+                this.bg = 0;
+                break;
+            case 29:
+                this.bg = this.col;
+                break;
+            case 30:
+                this.holdChar = true;
+                break;
+            case 31:
+                this.holdOff = true;
+                break;
+        }
+        if (this.holdChar && this.dbl === this.oldDbl) {
+            data = this.heldChar;
+            if (data >= 0x40 && data < 0x60) data = 0x20;
+            this.curChars[0] = this.heldChars[0];
+            this.curChars[1] = this.heldChars[1];
+        } else {
+            data = 0x20;
+        }
+        return data;
+    };
+
+    Teletext.prototype.render = function (buf, offset, scanline, interline, data) {
+        var i;
+        // Account for the two-character delay.
+        this.delayBuf.push(data);
+        data = this.delayBuf.shift();
+        this.oldDbl = this.dbl;
+        offset += 16;
+
+        this.prevCol = this.col;
+        this.curChars[0] = this.nextChars[0];
+        this.curChars[1] = this.nextChars[1];
+
+        if (data === 255) {
+            for (i = 0; i < 16; ++i) {
+                buf[offset + i] = 0xff000000;
+            }
+            return;
+        }
+        var prevFlash = this.flash;
+        if (data < 0x20) {
+            data = this.handleControlCode(data);
+        } else if (this.gfx) {
+            this.heldChar = data;
+            this.heldChars[0] = this.curChars[0];
+            this.heldChars[1] = this.curChars[1];
+        }
+        var t = (data - 0x20) * 160;
+        var rounding;
+        if (this.oldDbl) {
+            t += (scanline >>> 1) * 16;
+            if (this.secondHalfOfDouble) t += 5 * 16;
+            rounding = (interline && (scanline & 1)) ? 1 : 0;
+        } else {
+            t += scanline * 16;
+            rounding = interline ? 1 : 0;
+        }
+
+        var palette;
+        if (prevFlash && this.flashOn) {
+            var flashColour = this.palette[(this.bg & 7) << 3][0];
+            for (i = 0; i < 16; ++i) {
+                buf[offset++] = flashColour;
+            }
+        } else {
+            if (!this.dbl && this.secondHalfOfDouble) {
+                palette = this.palette[((this.bg & 7) << 3) | (this.bg & 7)];
+            } else {
+                palette = this.palette[((this.bg & 7) << 3) | (this.prevCol & 7)];
+            }
+            var px = this.curChars[rounding];
+            // Unrolling seems a good thing here, at least on Chrome.
+            buf[offset] = palette[px[t]];
+            buf[offset + 1] = palette[px[t + 1]];
+            buf[offset + 2] = palette[px[t + 2]];
+            buf[offset + 3] = palette[px[t + 3]];
+            buf[offset + 4] = palette[px[t + 4]];
+            buf[offset + 5] = palette[px[t + 5]];
+            buf[offset + 6] = palette[px[t + 6]];
+            buf[offset + 7] = palette[px[t + 7]];
+            buf[offset + 8] = palette[px[t + 8]];
+            buf[offset + 9] = palette[px[t + 9]];
+            buf[offset + 10] = palette[px[t + 10]];
+            buf[offset + 11] = palette[px[t + 11]];
+            buf[offset + 12] = palette[px[t + 12]];
+            buf[offset + 13] = palette[px[t + 13]];
+            buf[offset + 14] = palette[px[t + 14]];
+            buf[offset + 15] = palette[px[t + 15]];
+        }
+
+        if (this.holdOff) {
+            this.holdChar = false;
+            this.heldChar = 32;
+        }
+        if (this.holdClear) {
+            this.heldChar = 32;
+        }
+    };
+
+    Teletext.prototype.verticalCharEnd = function () {
+        if (this.secondHalfOfDouble)
+            this.secondHalfOfDouble = false;
+        else
+            this.secondHalfOfDouble = this.wasDbl;
+    };
+
+    Teletext.prototype.vsync = function () {
+        if (++this.flashTime === 48) this.flashTime = 0;
+        this.flashOn = this.flashTime < 16;
+    };
+
+    Teletext.prototype.endline = function () {
+        this.col = 7;
+        this.bg = 0;
+        this.holdChar = false;
+        this.heldChar = 0x20;
+        this.nextChars[0] = this.heldChars[0] = this.chars;
+        this.nextChars[1] = this.heldChars[1] = this.charsi;
+        this.flash = false;
+        this.sep = false;
+        this.gfx = false;
+
+        this.dbl = this.wasDbl = false;
+    };
+
+    return Teletext;
 });
