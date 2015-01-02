@@ -50,12 +50,7 @@ If you're looking to help:
 * Core
   * Save state ability
   * Get the "boo" of the boot "boo-beep" working
-* Master support
-  * Mostly done, but still TODOs in the code
-  * Needs a UI to select it.
-  * Exile doesn't run, for some reason.
 * Save disc support
-  * Google Drive support would be nice
   * Local discs need to be made more workable and need an "export" feature
 * `git grep -i todo`
 
@@ -89,7 +84,7 @@ Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to 
 Also huge thanks to Richard Talbot-Watkins for his advice and help along the way in fathoming out the instruction timings, interrupt fun
 and for being such a good pal all these many years!
 
-Thanks to Michael Borcherds for his help; improving the keyboard layouts and handling in Javascript, reporting issues, chasing down
+Thanks to [Michael Borcherds](https://twitter.com/mike_geogebra) for his help; improving the keyboard layouts and handling in Javascript, reporting issues, chasing down
 game bugs and much more.
 
 Thanks to [David Banks](https://github.com/hoglet67) for his help in testing the gnarly BCD flag behaviour on real live BBCs.
