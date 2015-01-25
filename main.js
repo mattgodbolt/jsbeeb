@@ -708,6 +708,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 }
                 return gdLoad({title: title, id: discImage});
             }
+            if (schema === "http" || schema === "https") {
+                return utils.loadData(schema + "://" + discImage).then(function(discData) {
+                    return disc.ssdFor(processor.fdc, discData);
+                });
+            }
 
             return disc.ssdLoad("discs/" + discImage).then(function (discData) {
                 return disc.ssdFor(processor.fdc, discData);

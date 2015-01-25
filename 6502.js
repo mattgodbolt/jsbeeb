@@ -266,7 +266,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
         }
 
         function Tube6502(model, cpu) {
-            var self = this;
             base6502(this, model);
 
             this.cycles = 0;
@@ -355,11 +354,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
 
             this.loadOs = function () {
                 console.log("Loading tube rom from roms/" + model.os);
+                var tubeRom = this.rom;
                 return utils.loadData("roms/" + model.os).then(function (data) {
                     var len = data.length;
                     if (len !== 2048) throw new Error("Broken ROM file (length=" + len + ")");
                     for (var i = 0; i < len; ++i) {
-                        self.rom[i + 2048] = data[i];
+                        tubeRom[i + 2048] = data[i];
                     }
                 });
             };
@@ -377,14 +377,15 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             };
         }
 
-        return function Cpu6502(model, dbgr, video, soundChip, cmos, config) {
-            var self = this;
+        return function Cpu6502(model, dbgr, video_, soundChip_, cmos, config) {
             if (config === undefined) config = {};
             if (!config.keyLayout)
                 config.keyLayout = "physical";
 
             base6502(this, model);
 
+            this.video = video_;
+            this.soundChip = soundChip_;
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
             this.memStat = new Uint8Array(512);
@@ -441,7 +442,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 // LYNNE lives at 0xb000 in our map, but the offset we use here is 0x8000
                 // as the video circuitry will already be looking at 0x3000 or so above
                 // the offset.
-                self.videoDisplayPage = (b & 1) ? 0x8000 : 0x0000;
+                this.videoDisplayPage = (b & 1) ? 0x8000 : 0x0000;
                 // The RAM the processor sees for writes when executing OS instructions
                 // is controlled by the "E" bit.
                 this.memStatOffsetByIFetchBank[0xc] = this.memStatOffsetByIFetchBank[0xd] = (b & 2) ? 256 : 0;
@@ -505,9 +506,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             };
 
             this.readDevice = function (addr) {
-                if (model.isMaster && (self.acccon & 0x40)) {
+                if (model.isMaster && (this.acccon & 0x40)) {
                     // TST bit of ACCCON
-                    return self.ramRomOs[this.osOffset + (addr & 0x3fff)];
+                    return this.ramRomOs[this.osOffset + (addr & 0x3fff)];
                 }
                 addr &= 0xffff;
                 switch (addr & ~0x0003) {
@@ -606,7 +607,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             };
 
             this.videoRead = function (addr) {
-                return this.ramRomOs[addr | self.videoDisplayPage] | 0;
+                return this.ramRomOs[addr | this.videoDisplayPage] | 0;
             };
 
             this.readmem = function (addr) {
@@ -745,13 +746,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             this.loadRom = function (name, offset) {
                 name = "roms/" + name;
                 console.log("Loading ROM from " + name);
+                var ramRomOs = this.ramRomOs;
                 return utils.loadData(name).then(function (data) {
                     var len = data.length;
                     if (len !== 16384 && len !== 8192) {
                         throw new Error("Broken rom file");
                     }
                     for (var i = 0; i < len; ++i) {
-                        self.ramRomOs[offset + i] = data[i];
+                        ramRomOs[offset + i] = data[i];
                     }
                 });
             };
@@ -761,26 +763,28 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 var extraRoms = Array.prototype.slice.call(arguments, 1);
                 os = "roms/" + os;
                 console.log("Loading OS from " + os);
+                var ramRomOs = this.ramRomOs;
+                var capturedThis = this;
                 return utils.loadData(os).then(function (data) {
                     var len = data.length;
                     if (len < 0x4000 || (len & 0x3fff)) throw new Error("Broken ROM file (length=" + len + ")");
                     for (i = 0; i < 0x4000; ++i) {
-                        self.ramRomOs[self.osOffset + i] = data[i];
+                        ramRomOs[capturedThis.osOffset + i] = data[i];
                     }
                     var numExtraBanks = (len - 0x4000) / 0x4000;
                     var romIndex = 16 - numExtraBanks;
                     for (i = 0; i < numExtraBanks; ++i) {
                         var srcBase = 0x4000 + 0x4000 * i;
-                        var destBase = self.romOffset + (romIndex + i) * 0x4000;
+                        var destBase = capturedThis.romOffset + (romIndex + i) * 0x4000;
                         for (var j = 0; j < 0x4000; ++j) {
-                            self.ramRomOs[destBase + j] = data[srcBase + j];
+                            ramRomOs[destBase + j] = data[srcBase + j];
                         }
                     }
                     var awaiting = [];
 
                     for (i = 0; i < extraRoms.length; ++i) {
                         romIndex--;
-                        awaiting.push(self.loadRom(extraRoms[i], self.romOffset + romIndex * 0x4000));
+                        awaiting.push(capturedThis.loadRom(extraRoms[i], capturedThis.romOffset + romIndex * 0x4000));
                     }
                     return Promise.all(awaiting);
                 });
@@ -807,13 +811,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                         }
                     }
                     this.videoDisplayPage = 0;
-                    this.sysvia = via.SysVia(this, video, soundChip, cmos, model.isMaster, config.keyLayout);
+                    this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
-                    this.acia = new Acia(this, soundChip.toneGenerator);
+                    this.acia = new Acia(this, this.soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
                     this.fdc = new model.Fdc(this);
-                    this.crtc = video.crtc;
-                    this.ula = video.ula;
+                    this.crtc = this.video.crtc;
+                    this.ula = this.video.ula;
                     this.adconverter = {
                         read: function () {
                             return 0xff;
@@ -830,8 +834,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 this.p.i = true;
                 this.nmi = false;
                 this.halted = false;
-                video.reset(this, this.sysvia);
-                if (hard) soundChip.reset();
+                this.video.reset(this, this.sysvia);
+                if (hard) this.soundChip.reset();
             };
 
             this.updateKeyLayout = function () {
@@ -853,8 +857,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 this.uservia.polltime(cycles);
                 this.fdc.polltime(cycles);
                 this.acia.polltime(cycles);
-                video.polltime(cycles);
-                soundChip.polltime(cycles);
+                this.video.polltime(cycles);
+                this.soundChip.polltime(cycles);
                 this.tube.execute(cycles);
             };
 
@@ -917,18 +921,19 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             this.initialise = function () {
                 var loadOsPromise = Promise.resolve();
                 if (model.os.length) {
-                    loadOsPromise = self.loadOs.apply(this, model.os);
+                    loadOsPromise = this.loadOs.apply(this, model.os);
                 }
+                var capturedThis = this;
                 if (model.tube) {
                     loadOsPromise = loadOsPromise.then(function () {
-                        return self.tube.loadOs();
+                        return capturedThis.tube.loadOs();
                     });
                 }
                 return loadOsPromise.then(function () {
-                    self.reset(true);
-                    dbgr.setCpu(self);
+                    capturedThis.reset(true);
+                    dbgr.setCpu(capturedThis);
                     //if (model.tube)
-                    //    dbgr.setCpu(self.tube);
+                    //    dbgr.setCpu(capturedThis.tube);
                 });
             };
         };
