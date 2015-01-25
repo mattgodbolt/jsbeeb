@@ -1,5 +1,4 @@
-// To be run directly from 'js' or 'd8'. Exercises just the video code in as representative
-// a way as I can easily achieve.
+// To be run directly from 'js' or 'd8'.
 
 ///////////////////////////////////////////////////
 // Enough of the code assumes there's a console.log that I've just made one here
@@ -25,67 +24,51 @@ requirejs.config({
         'underscore': 'lib/underscore-min'
     }
 });
-
-fs = {};
+function setTimeout(fn, delay) { fn(); }
 ///////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////
-// Set up of the video object and its fake callbacks.
-requirejs(['video'], function (Video) {
-    "use strict";
-    var fb32 = new Uint32Array(1280 * 1024);
-    var frame = 0;
-
-    function paint() {
-        frame++;
-    }
-
-    var video = new Video(fb32, paint);
-    var fakeCpu = {
-        videoRead: function (addr) {
-            return addr & 0xff; // Proxy for having real data
-        }
-    };
-    var noop = function () {
-    };
-    var fakeVia = {
-        setVBlankInt: noop
-    };
-    video.reset(fakeCpu, fakeVia);
-    ///////////////////////////////////////////////////
-
-    function benchmark(frames) {
+requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
+    function (Video, Cpu6502, SoundChip, disc, models) {
         "use strict";
-        print("Benchmarking over " + frames + " frames...");
-        // Profiles N frames, a few cycles at a time (like the CPU would do).
-        frame = 0;
-        var start = Date.now();
-        while (frame < frames) {
-            video.polltime(6);
+        var fb32 = new Uint32Array(1280 * 1024);
+        var frame = 0;
+
+        function paint() {
+            frame++;
         }
-        var end = Date.now();
-        var taken = end - start;
-        print("Took " + taken + "ms to run " + frames + " frames, " + (taken / frames) + "ms/frame");
+
+        var noop = function () {
+        };
+        var dbgr = { setCpu: noop };
+        var video = new Video(fb32, paint);
+        var soundChip = new SoundChip(10000);
+
+        function benchmarkCpu(cpu, numCycles) {
+            numCycles = numCycles || 10 * 1000 * 1000;
+            console.log("Benchmarking over " + numCycles + " cpu cycles");
+            var startTime = Date.now();
+            cpu.execute(numCycles);
+            var endTime = Date.now();
+            var msTaken = endTime - startTime;
+            var virtualMhz = (numCycles / msTaken) / 1000;
+            console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
+            console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
+        }
+
+        var discName = "elite";
+        var cpu = new Cpu6502(models.findModel('B'), dbgr, video, soundChip);
+        cpu.initialise().then(function () {
+            return disc.ssdLoad("discs/" + discName + ".ssd");
+        }).then(function (data) {
+            cpu.fdc.loadDisc(0, disc.ssdFor(cpu.fdc, data));
+            cpu.sysvia.keyDown(16);
+            cpu.execute(10 * 1000 * 1000);
+            cpu.sysvia.keyUp(16);
+            benchmarkCpu(cpu, 100 * 1000 * 1000);
+        }).catch(function (err) {
+            "use strict";
+            console.log("Got error: ", err);
+        });
     }
-
-    ///////////////////////////////////////////////////
-    // Set up registers for MODE 2
-    var MODE2_REGS = [127, 80, 98, 40, 38, 0, 32, 35, 1, 7, 103, 8, 6, 0, 6, 4];
-    MODE2_REGS.forEach(function (val, reg) {
-        video.crtc.write(0, reg);
-        video.crtc.write(1, val);
-    });
-    var MODE2_PALETTE = [7, 6, 5, 4, 3, 2, 1, 0, 15, 14, 13, 12, 11, 10, 9, 8];
-    MODE2_PALETTE.forEach(function (val, reg) {
-        video.ula.write(0, (reg << 4) | val);
-    });
-    video.ula.write(1, 0xf5);
-    ///////////////////////////////////////////////////
-
-    ///////////////////////////////////////////////////
-    // Run it for a couple of emulated seconds, to warm it up
-    video.polltime(2 * 2 * 1000000);
-
-    // And now benchmark for a large number of frames
-    benchmark(5000);
-});
+);

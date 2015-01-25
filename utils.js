@@ -685,9 +685,20 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     function loadDataNode(url) {
         return new Promise(function (resolve, reject) {
-            var fs = require('fs');
-            if (url[0] == '/') url = "." + url;
-            resolve(fs.readFileSync(url));
+            if (typeof(readbuffer) !== "undefined") {
+                // d8 shell
+                var buffer = readbuffer(url);
+                resolve(new Uint8Array(buffer));
+            } else if (typeof(read) !== "undefined") {
+                // SpiderMonkey shell
+                var bytes = read(url, "binary");
+                resolve(bytes);
+            } else {
+                // Node
+                var fs = require('fs');
+                if (url[0] == '/') url = "." + url;
+                resolve(fs.readFileSync(url));
+            }
         });
     }
 
