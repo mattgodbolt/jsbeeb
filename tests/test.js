@@ -64,12 +64,17 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
             log("Running until keyboard input requested");
             var prev = processor.debugInstruction;
             var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+            var hit = false;
             processor.debugInstruction = function (addr) {
-                if (addr === idleAddr) return true;
+                if (addr === idleAddr) {
+                    hit = true;
+                    return true;
+                }
                 return prev ? prev.apply(prev, arguments) : false;
             };
             return runFor(250 * 1000 * 1000).then(function () {
                 processor.debugInstruction = prev;
+                if (!hit) log("Failed to hit breakpoint");
                 return runFor(10 * 1000);
             });
         }
@@ -263,6 +268,13 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
             });
         }
 
-        return {run: run};
+        return {
+            setProcessor: function (proc) {
+                processor = proc;
+            },
+            run: run,
+            runUntilInput: runUntilInput,
+            type: type
+        };
     }
 );

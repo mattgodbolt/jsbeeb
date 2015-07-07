@@ -112,7 +112,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         }
 
         function stepUntil(f) {
-            cpu.cycles = 0; // TODO: this prevents the cpu from running any residual cycles. look into a better solution
+            cpu.targetCycles = cpu.currentCycles; // TODO: this prevents the cpu from running any residual cycles. look into a better solution
             for (var i = 0; i < 65536; i++) {
                 cpu.execute(1);
                 if (f()) break;

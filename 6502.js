@@ -318,7 +318,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 return this.tube.hostRead(addr);
             };
 
-            this.write = function(addr, b) {
+            this.write = function (addr, b) {
                 this.tube.hostWrite(addr, b);
             };
 
@@ -614,11 +614,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 addr &= 0xffff;
                 if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
                     var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
-                    if (this.debugread) this.debugread(addr, offset);
-                    return this.ramRomOs[offset + addr] | 0;
+                    var res = this.ramRomOs[offset + addr];
+                    if (this.debugread) this.debugread(addr, res, offset);
+                    return res | 0;
                 } else {
-                    if (this.debugread) this.debugread(addr);
-                    return this.readDevice(addr) | 0;
+                    var res = this.readDevice(addr);
+                    if (this.debugread) this.debugread(addr, res, 0);
+                    return res | 0;
                 }
             };
 
@@ -830,7 +832,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                     this.uservia.reset();
                 }
                 this.tube.reset();
-                this.cycles = 0;
+                this.targetCycles = 0;
+                this.currentCycles = 0;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p = new Flags();
                 this.p.i = true;
@@ -847,14 +850,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             this.polltimeAddr = function (cycles, addr) {
                 cycles = cycles | 0;
                 if (this.is1MHzAccess(addr)) {
-                    cycles += 1 + ((cycles ^ this.cycles) & 1);
+                    cycles += 1 + ((cycles ^ this.currentCycles) & 1);
                 }
                 this.polltime(cycles);
             };
 
             this.polltime = function (cycles) {
                 cycles |= 0;
-                this.cycles -= cycles;
+                this.currentCycles += cycles;
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
                 this.fdc.polltime(cycles);
@@ -866,8 +869,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
 
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
-                this.cycles += numCyclesToRun;
-                while (!this.halted && this.cycles > 0) {
+                this.targetCycles += numCyclesToRun;
+                while (!this.halted && this.currentCycles < this.targetCycles) {
                     this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
                     this.oldPcArray[this.oldPcIndex] = this.pc;
                     this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
