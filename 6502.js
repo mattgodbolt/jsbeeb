@@ -810,6 +810,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                             this.memLook[i] = this.memLook[256 + i] = 0;
                         }
                     }
+                    for (i = 0; i < this.romOffset; ++i)
+                        this.ramRomOs[i] = 0xff;
                     this.videoDisplayPage = 0;
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
