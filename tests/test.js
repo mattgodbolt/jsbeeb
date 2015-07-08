@@ -62,31 +62,32 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
 
         function runUntilInput() {
             log("Running until keyboard input requested");
-            var prev = processor.debugInstruction;
             var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-            processor.debugInstruction = function (addr) {
-                if (addr === idleAddr) return true;
-                return prev ? prev.apply(prev, arguments) : false;
-            };
+            var hit = false;
+            var hook = processor.debugInstruction.add(function (addr) {
+                if (addr === idleAddr) {
+                    hit = true;
+                    return true;
+                }
+            });
             return runFor(250 * 1000 * 1000).then(function () {
-                processor.debugInstruction = prev;
+                hook.remove();
+                if (!hit) log("Failed to hit breakpoint");
                 return runFor(10 * 1000);
             });
         }
 
         function runUntilAddress(targetAddr, maxInstr) {
             log("Running until $" + hexword(targetAddr));
-            var prev = processor.debugInstruction;
             var hit = false;
-            processor.debugInstruction = function (addr) {
+            var hook = processor.debugInstruction.add(function (addr) {
                 if (addr === targetAddr) {
                     hit = true;
                     return true;
                 }
-                return prev ? prev.apply(prev, arguments) : false;
-            };
+            });
             return runFor(maxInstr).then(function () {
-                processor.debugInstruction = prev;
+                hook.remove();
                 return hit;
             });
         }
@@ -205,6 +206,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
 
         function testBCD() {
             var output = "";
+            var hook;
             return fdc.ssdLoad("/discs/bcdtest.ssd").then(function (data) {
                 processor.fdc.loadDisc(0, fdc.ssdFor(processor.fdc, data));
                 return runUntilInput();
@@ -212,13 +214,14 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
                 return type("*BCDTEST");
             }).then(function () {
                 var printAddr = processor.model.isMaster ? 0xce52 : 0xc4c0;
-                processor.debugInstruction = function (addr) {
+                hook = processor.debugInstruction.add(function (addr) {
                     if (addr === printAddr) {
                         output += String.fromCharCode(processor.a);
                     }
-                };
+                });
                 return runUntilInput();
             }).then(function () {
+                hook.remove();
                 if (output.indexOf("PASSED") < 0) {
                     log("Failed: ", output);
                     failures++;
@@ -233,14 +236,15 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
             }).then(function () {
                 return type('CHAIN "B.' + name + '"');
             }).then(function () {
-                processor.debugInstruction = function (addr) {
+                var hook = processor.debugInstruction.add(function (addr) {
                     if (addr === 0xfff4 && processor.a === 200 && processor.x === 3) {
                         log("Failed");
                         return true;
                     }
                     return false;
-                };
+                });
                 return runUntilAddress(0xe00, 100 * 1000 * 1000).then(function (hit) {
+                    hook.remove();
                     expectEq(true, hit, "Decoded and hit end of protection");
                 });
             });
@@ -263,6 +267,13 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
             });
         }
 
-        return {run: run};
+        return {
+            setProcessor: function (proc) {
+                processor = proc;
+            },
+            run: run,
+            runUntilInput: runUntilInput,
+            type: type
+        };
     }
 );

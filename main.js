@@ -267,16 +267,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         var model = models.findModel(parsedQuery.model || guessModelFromUrl());
 
-        var framesPerSecond = 50;
-        var targetTimeout = 1000 / framesPerSecond;
-        var adjustedTimeout = targetTimeout;
-        var lastFrame = null;
         var clocksPerSecond = 2 * 1000 * 1000;
-        var cyclesPerFrame = clocksPerSecond / framesPerSecond;
-        var yieldsPerFrame = 1;
-        var cyclesPerYield = cyclesPerFrame / yieldsPerFrame;
+        var MaxCyclesPerFrame = clocksPerSecond / 10;
 
-        var tryGl = parsedQuery.glEnabled == undefined || !!parsedQuery.glEnabled;
+        var tryGl = true;
+        if (parsedQuery.glEnabled !== undefined) {
+            tryGl = parsedQuery.glEnabled === "true";
+        }
         var canvas = tryGl ? canvasLib.bestCanvas($('#screen')[0]) : new canvasLib.Canvas($('#screen')[0]);
         video = new Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
@@ -709,7 +706,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 return gdLoad({title: title, id: discImage});
             }
             if (schema === "http" || schema === "https") {
-                return utils.loadData(schema + "://" + discImage).then(function(discData) {
+                return utils.loadData(schema + "://" + discImage).then(function (discData) {
                     return disc.ssdFor(processor.fdc, discData);
                 });
             }
@@ -1115,32 +1112,23 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             console.profileEnd();
         }
 
-        function run() {
-            if (!running) return;
-            var now = Date.now();
-            if (lastFrame) {
-                // Try and tweak the timeout to achieve target frame rate.
-                var timeSinceLast = now - lastFrame;
-                if (timeSinceLast < 2 * targetTimeout) {
-                    // Ignore huge delays (e.g. trips in and out of the debugger)
-                    var diff = timeSinceLast - targetTimeout;
-                    adjustedTimeout -= 0.01 * diff;
-                }
-            }
-            lastFrame = now;
-            setTimeout(run, adjustedTimeout);
+        var last = 0;
 
-            var count = 0;
-            var runner = function () {
-                if (!running) return;
-                if (count++ == yieldsPerFrame) {
-                    syncLights();
-                    return;
-                }
+        function draw(now) {
+            if (!running) {
+                last = 0;
+                return;
+            }
+            requestAnimationFrame(draw);
+            checkGamepads();
+            syncLights();
+            if (last !== 0) {
+                var sinceLast = now - last;
+                var cycles = (sinceLast * clocksPerSecond / 1000) | 0;
+                cycles = Math.min(cycles, MaxCyclesPerFrame);
                 try {
-                    if (!processor.execute(cyclesPerYield)) {
+                    if (!processor.execute(cycles)) {
                         stop(true);
-                        return;
                     }
                 } catch (e) {
                     running = false;
@@ -1148,124 +1136,113 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     dbgr.debug(processor.pc);
                     throw e;
                 }
-                if (running) {
-                    setTimeout(runner, 0);
+            }
+            last = now;
+        }
 
-                    // init gamepad
-                    // gamepad not necessarily available until a button press
-                    // so need to check gamepads[0] continuously
-                    if (navigator.getGamepads && !self.gamepad0) {
-                        var gamepads = navigator.getGamepads();
-                        self.gamepad0 = gamepads[0];
+        function checkGamepads() {
+            // init gamepad
+            // gamepad not necessarily available until a button press
+            // so need to check gamepads[0] continuously
+            if (navigator.getGamepads && !self.gamepad0) {
+                var gamepads = navigator.getGamepads();
+                self.gamepad0 = gamepads[0];
 
-                        if (self.gamepad0) {
+                if (self.gamepad0) {
+                    console.log("initing gamepad");
+                    var BBC = utils.BBC;
 
-                            console.log("initing gamepad");
+                    // 16 buttons
+                    self.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
 
-                            var BBC = utils.BBC;
+                    // two joysticks (so 4 axes)
+                    self.gamepadAxes = [0, 0, 0, 0];
+                }
+            }
 
-                            // 16 buttons
-                            self.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+            // process gamepad buttons
+            if (self.gamepad0) {
+                // these two lines needed in Chrome to update state, not Firefox
+                // TODO: what about IE? (can't get Gamepads to work in IE11/IE12. Mike)
+                if (!utils.isFirefox()) {
+                    self.gamepad0 = navigator.getGamepads()[0];
+                }
 
-                            // two joysticks (so 4 axes)
-                            self.gamepadAxes = [0, 0, 0, 0];
+                for (var i = 0; i < 4; i++) {
+                    var axisRaw = self.gamepad0.axes[i];
+                    var axis;
 
+                    // Mike's XBox 360 controller, zero positions
+                    // console.log(i, axisRaw, axis);
+                    //0 -0.03456169366836548 -1
+                    //1 -0.037033677101135254 -1
+                    //2 0.055374979972839355 1
+                    //3 0.06575113534927368 1
+                    var threshold = 0.15;
 
+                    // normalize to -1, 0, 1
+                    if (axisRaw < -threshold) {
+                        axis = -1;
+                    } else if (axisRaw > threshold) {
+                        axis = 1;
+                    } else {
+                        axis = 0;
+                    }
+
+                    if (axis !== self.gamepadAxes[i]) {
+
+                        // tricky because transition can be
+                        // -1 to 0
+                        // -1 to 1
+                        // 0 to 1
+                        // 0 to -1
+                        // 1 to 0
+                        // 1 to -1
+                        var oldKey = self.gamepadAxisMapping[i][self.gamepadAxes[i]];
+                        if (oldKey) {
+                            processor.sysvia.keyUpRaw(oldKey);
                         }
 
+                        var newKey = self.gamepadAxisMapping[i][axis];
+                        if (newKey) {
+                            processor.sysvia.keyDownRaw(newKey);
+                        }
 
                     }
 
-                    // process gamepad buttons
-                    if (self.gamepad0) {
+                    // store new state
+                    self.gamepadAxes[i] = axis;
+                }
 
-                        // these two lines needed in Chrome to update state, not Firefox
-                        // TODO: what about IE? (can't get Gamepads to work in IE11/IE12. Mike)
-                        if (!utils.isFirefox()) {
-                            self.gamepad0 = navigator.getGamepads()[0];
+                for (i = 0; i < 16; i++) {
+                    if (self.gamepad0.buttons[i]) {
+                        var button = self.gamepad0.buttons[i];
+
+                        if (button.pressed) {
+                            console.log("gamepad button pressed ", i, self.gamepad0.id);
                         }
 
-                        //console.log(self.gamepad0.axes);
+                        if (button.pressed !== self.gamepadButtons[i]) {
+                            // different to last time
 
-                        for (var i = 0; i < 4; i++) {
-
-                            var axisRaw = self.gamepad0.axes[i];
-                            var axis;
-
-                            // Mike's XBox 360 controller, zero positions
-                            // console.log(i, axisRaw, axis);
-                            //0 -0.03456169366836548 -1
-                            //1 -0.037033677101135254 -1
-                            //2 0.055374979972839355 1
-                            //3 0.06575113534927368 1
-                            var threshold = 0.15;
-
-                            // normalize to -1, 0, 1
-                            if (axisRaw < -threshold) {
-                                axis = -1;
-                            } else if (axisRaw > threshold) {
-                                axis = 1;
-                            } else {
-                                axis = 0;
-                            }
-
-                            if (axis !== self.gamepadAxes[i]) {
-
-                                // tricky because transition can be
-                                // -1 to 0
-                                // -1 to 1
-                                // 0 to 1
-                                // 0 to -1
-                                // 1 to 0
-                                // 1 to -1
-                                var oldKey = self.gamepadAxisMapping[i][self.gamepadAxes[i]];
-                                if (oldKey) {
-                                    processor.sysvia.keyUpRaw(oldKey);
-                                }
-
-                                var newKey = self.gamepadAxisMapping[i][axis];
-                                if (newKey) {
-                                    processor.sysvia.keyDownRaw(newKey);
-                                }
-
-                            }
-
-                            // store new state
-                            self.gamepadAxes[i] = axis;
-
-                        }
-
-                        for (i = 0; i < 16; i++) {
-                            if (self.gamepad0.buttons[i]) {
-                                var button = self.gamepad0.buttons[i];
-
+                            if (self.gamepadMapping[i]) {
                                 if (button.pressed) {
-                                    console.log("gamepad button pressed ", i, self.gamepad0.id);
+                                    processor.sysvia.keyDownRaw(self.gamepadMapping[i]);
+                                } else {
+                                    processor.sysvia.keyUpRaw(self.gamepadMapping[i]);
                                 }
-
-                                if (button.pressed !== self.gamepadButtons[i]) {
-                                    // different to last time
-
-                                    if (self.gamepadMapping[i]) {
-                                        if (button.pressed) {
-                                            processor.sysvia.keyDownRaw(self.gamepadMapping[i]);
-                                        } else {
-                                            processor.sysvia.keyUpRaw(self.gamepadMapping[i]);
-                                        }
-                                    }
-                                }
-
-                                // store new state
-                                self.gamepadButtons[i] = button.pressed;
-
                             }
-
                         }
 
+                        // store new state
+                        self.gamepadButtons[i] = button.pressed;
                     }
                 }
-            };
-            runner();
+            }
+        }
+
+        function run() {
+            requestAnimationFrame(draw);
         }
 
         var wasPreviouslyRunning = false;

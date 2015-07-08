@@ -318,7 +318,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 return this.tube.hostRead(addr);
             };
 
-            this.write = function(addr, b) {
+            this.write = function (addr, b) {
                 this.tube.hostWrite(addr, b);
             };
 
@@ -460,18 +460,19 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 }
             };
 
-            this.debugread = this.debugwrite = this.debugInstruction = null;
+            this._debugRead = this._debugWrite = this._debugInstruction = null;
 
             // Works for unpaged RAM only (ie stack and zp)
             this.readmemZpStack = function (addr) {
                 addr &= 0xffff;
-                if (this.debugread) this.debugread(addr);
-                return this.ramRomOs[addr];
+                var res = this.ramRomOs[addr];
+                if (this._debugRead) this._debugRead(addr, 0, res);
+                return res|0;
             };
             this.writememZpStack = function (addr, b) {
                 addr &= 0xffff;
                 b |= 0;
-                if (this.debugwrite) this.debugwrite(addr, b);
+                if (this._debugWrite) this._debugWrite(addr, b);
                 this.ramRomOs[addr] = b;
             };
 
@@ -612,20 +613,23 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
 
             this.readmem = function (addr) {
                 addr &= 0xffff;
+                var res = 0;
                 if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
                     var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
-                    if (this.debugread) this.debugread(addr, offset);
-                    return this.ramRomOs[offset + addr] | 0;
+                    res = this.ramRomOs[offset + addr];
+                    if (this._debugRead) this._debugRead(addr, res, offset);
+                    return res | 0;
                 } else {
-                    if (this.debugread) this.debugread(addr);
-                    return this.readDevice(addr) | 0;
+                     res = this.readDevice(addr);
+                    if (this._debugRead) this._debugRead(addr, res, 0);
+                    return res | 0;
                 }
             };
 
             this.writemem = function (addr, b) {
                 addr &= 0xffff;
                 b |= 0;
-                if (this.debugwrite) this.debugwrite(addr, b);
+                if (this._debugWrite) this._debugWrite(addr, b);
                 if (this.memStat[this.memStatOffset + (addr >>> 8)] === 1) {
                     var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
                     this.ramRomOs[offset + addr] = b;
@@ -810,6 +814,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                             this.memLook[i] = this.memLook[256 + i] = 0;
                         }
                     }
+                    for (i = 0; i < this.romOffset; ++i)
+                        this.ramRomOs[i] = 0xff;
                     this.videoDisplayPage = 0;
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
@@ -828,7 +834,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                     this.uservia.reset();
                 }
                 this.tube.reset();
-                this.cycles = 0;
+                this.targetCycles = 0;
+                this.currentCycles = 0;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p = new Flags();
                 this.p.i = true;
@@ -845,14 +852,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             this.polltimeAddr = function (cycles, addr) {
                 cycles = cycles | 0;
                 if (this.is1MHzAccess(addr)) {
-                    cycles += 1 + ((cycles ^ this.cycles) & 1);
+                    cycles += 1 + ((cycles ^ this.currentCycles) & 1);
                 }
                 this.polltime(cycles);
             };
 
             this.polltime = function (cycles) {
                 cycles |= 0;
-                this.cycles -= cycles;
+                this.currentCycles += cycles;
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
                 this.fdc.polltime(cycles);
@@ -864,13 +871,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
 
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
-                this.cycles += numCyclesToRun;
-                while (!this.halted && this.cycles > 0) {
+                this.targetCycles += numCyclesToRun;
+                while (!this.halted && this.currentCycles < this.targetCycles) {
                     this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
                     this.oldPcArray[this.oldPcIndex] = this.pc;
                     this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
-                    if (this.debugInstruction && this.getPrevPc(2) !== this.pc && this.debugInstruction(this.pc, opcode)) {
+                    if (this._debugInstruction && this.getPrevPc(2) !== this.pc && this._debugInstruction(this.pc, opcode)) {
                         return false;
                     }
                     this.incpc();
@@ -906,6 +913,42 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
             this.stop = function () {
                 this.halted = true;
             };
+
+            function DebugHook(cpu, functionName) {
+                this.cpu = cpu;
+                this.functionName = functionName;
+                this.handlers = [];
+                this.add = function(handler) {
+                    var self = this;
+                    this.handlers.push(handler);
+                    if (!this.cpu[this.functionName]) {
+                        this.cpu[this.functionName] = function() {
+                            for (var i = 0; i < self.handlers.length; ++i) {
+                                var handler = self.handlers[i];
+                                if (handler.apply(handler, arguments)) {
+                                    return true;
+                                }
+                            }
+                            return false;
+                        };
+                    }
+                    handler.remove = function() {
+                        self.remove(handler);
+                    };
+                    return handler;
+                };
+                this.remove = function(handler) {
+                    var i = this.handlers.indexOf(handler);
+                    if (i < 0) throw "Unable to find debug hook handler";
+                    this.handlers = this.handlers.slice(0, i).concat(this.handlers.slice(i + 1));
+                    if (this.handlers.length === 0) {
+                        this.cpu[this.functionName] = null;
+                    }
+                };
+            }
+            this.debugInstruction = new DebugHook(this, '_debugInstruction');
+            this.debugRead = new DebugHook(this, '_debugRead');
+            this.debugWrite = new DebugHook(this, '_debugWrite');
 
             this.dumpTime = function () {
                 for (var i = 1; i < 256; ++i) {

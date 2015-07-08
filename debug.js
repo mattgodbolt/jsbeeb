@@ -112,7 +112,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         }
 
         function stepUntil(f) {
-            cpu.cycles = 0; // TODO: this prevents the cpu from running any residual cycles. look into a better solution
+            cpu.targetCycles = cpu.currentCycles; // TODO: this prevents the cpu from running any residual cycles. look into a better solution
             for (var i = 0; i < 65536; i++) {
                 cpu.execute(1);
                 if (f()) break;
@@ -123,7 +123,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         function step() {
             var curpc = cpu.pc;
             stepUntil(function () {
-                return cpu.pc != curpc;
+                return cpu.pc !== curpc;
             });
         }
 
@@ -131,10 +131,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         function isUnconditionalJump(addr) {
             var result = disassemble(addr);
-            if (result[0].match(/^(JMP|RTS|BRA)/)) {
-                return true;
-            }
-            return false;
+            return !!result[0].match(/^(JMP|RTS|BRA)/);
         }
 
         function stepOver() {
@@ -149,9 +146,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         function isReturn(addr) {
             var result = disassemble(addr);
-            if (result[0] === "RTS")
-                return true;
-            return false;
+            return result[0] === "RTS";
         }
 
         function stepOut() {
@@ -160,7 +155,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 if (cpu.s >= s && isReturn(cpu.pc)) {
                     var nextInstr = nextInstruction(cpu.pc);
                     step();
-                    return cpu.pc != nextInstr;
+                    return cpu.pc !== nextInstr;
                 }
                 return false;
             });
@@ -168,11 +163,11 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         function prevInstruction(address) {
             address &= 0xffff;
-            for (var startingPoint = address - 20; startingPoint != address; startingPoint++) {
+            for (var startingPoint = address - 20; startingPoint !== address; startingPoint++) {
                 var addr = startingPoint & 0xffff;
                 while (addr < address) {
                     var result = disassemble(addr);
-                    if (result[1] === address && result[0] != "???") {
+                    if (result[1] === address && result[0] !== "???") {
                         return addr;
                     }
                     addr = result[1];
@@ -323,7 +318,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         function execPatch(inst) {
             var insts = inst.split(",");
-            if (insts.length != 1) {
+            if (insts.length !== 1) {
                 _.each(insts, execPatch);
                 return;
             }
@@ -351,17 +346,17 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 }
             });
             if (Object.keys(patchInstructions).length !== 0) {
-                cpu.debugInstruction = function (pc) {
+                var hook = cpu.debugInstruction.add(function (pc) {
                     var insts = patchInstructions[pc];
                     if (!insts) return false;
                     _.each(insts, execPatch);
                     delete patchInstructions[pc];
                     if (Object.keys(patchInstructions).length === 0) {
                         console.log("All patches done");
-                        cpu.debugInstruction = null;
+                        hook.remove();
                     }
                     return false;
-                };
+                });
             }
         };
     };
