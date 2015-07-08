@@ -68,7 +68,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
         }).then(function (data) {
             cpu.fdc.loadDisc(0, disc.ssdFor(cpu.fdc, data));
             var trace = false;
-            cpu.debugInstruction = function (addr) {
+            cpu.debugInstruction.add(function (addr) {
                 //if (addr === 0x11ae) {
                 if (addr === 0x2949) {
                     cpu.dumpTime();
@@ -78,17 +78,17 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
                     trace = false;
                     return true;
                 }
-            };
-            cpu.debugwrite = function (addr, val) {
+            });
+            cpu.debugWrite.add(function (addr, val) {
                 if (trace) {
                     console.log(utils.hexword(cpu.pc) + ": " + utils.hexword(addr) + " => " + utils.hexbyte(val));
                 }
-            };
-            cpu.debugread = function (addr, val) {
+            });
+            cpu.debugRead.add(function (addr, val) {
                 if (trace) {
                     console.log(utils.hexword(cpu.pc) + ": " + utils.hexword(addr) + " <= " + utils.hexbyte(val));
                 }
-            };
+            });
             cpu.sysvia.disableKeyboard();
             cpu.sysvia.keyToggleRaw(utils.BBC.SHIFT);
             function exec(c) {

@@ -351,17 +351,17 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 }
             });
             if (Object.keys(patchInstructions).length !== 0) {
-                cpu.debugInstruction = function (pc) {
+                var hook = cpu.debugInstruction.add(function (pc) {
                     var insts = patchInstructions[pc];
                     if (!insts) return false;
                     _.each(insts, execPatch);
                     delete patchInstructions[pc];
                     if (Object.keys(patchInstructions).length === 0) {
                         console.log("All patches done");
-                        cpu.debugInstruction = null;
+                        hook.remove();
                     }
                     return false;
-                };
+                });
             }
         };
     };
