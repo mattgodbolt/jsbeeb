@@ -91,7 +91,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
             return String.fromCharCode(char);
         }
 
-        processor.debugInstruction = function (addr) {
+        processor.debugInstruction.add(function (addr) {
             switch (addr) {
                 case 0xffd2:
                     if (processor.a == 13) {
@@ -125,7 +125,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
                     break;
             }
             return false;
-        };
+        });
 
         function anIter() {
             for (;;) {
