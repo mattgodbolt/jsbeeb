@@ -997,10 +997,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             cassette.update(processor.acia.motorOn);
         };
 
-//        processor.debugInstruction = function (addr) {
-//            return addr == 0x8003;
-//        };
-
         var startPromise = processor.initialise().then(function () {
             // Ideally would start the loads first. But their completion needs the FDC from the processor
             var imageLoads = [];
@@ -1019,18 +1015,18 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     var page = parsedQuery.page ? utils.parseAddr(parsedQuery.page) : 0x1900;
                     // Load the program immediately after the \xff of the "no program" has been
                     // written to PAGE+1
-                    processor.debugwrite = function (addr, b) {
+                    var writeHook = processor.debugWrite.add(function (addr, b) {
                         if (addr === (page + 1) && b === 0xff) {
                             // Needed as the debug happens before the write takes place.
-                            processor.debugInstruction = function () {
+                            var debugHook = processor.debugInstruction.add(function () {
                                 for (var i = 0; i < tokenised.length; ++i) {
                                     processor.writemem(page + i, tokenised.charCodeAt(i));
                                 }
-                                processor.debugInstruction = null;
-                            };
-                            processor.debugwrite = null;
+                                debugHook.remove();
+                            });
+                            writeHook.remove();
                         }
-                    };
+                    });
                 }));
             }
 
