@@ -28,7 +28,6 @@ define([], function () {
         this.time -= cycles;
         if (this.time > 0) return;
         this.time = 0;
-        console.log("adc");
         var val = 0x0000;
         // TODO: switch on bottom two bits of adc_status and pick a value corresponding
         // to the appropriate axis.
