@@ -19,7 +19,8 @@ define([], function () {
     };
     Adc.prototype.write = function (addr, val) {
         if ((addr & 3) !== 0) return;
-        this.time = 50 * 1000; // utterly made up
+        // 8 bit conversion takes 4ms whereas 10 bit conversions take 10ms, according to AUG
+        this.time = this.status = (val & 0x08) ? 20000 : 8000;
         this.status = (val & 0x0f) | 0x80;
         this.sysvia.setcb1(true);
     };
