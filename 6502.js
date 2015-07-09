@@ -1,5 +1,5 @@
-define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
-    function (utils, opcodesAll, via, Acia, Serial, Tube) {
+define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
+    function (utils, opcodesAll, via, Acia, Serial, Tube, Adc) {
         "use strict";
         var hexword = utils.hexword;
         var signExtend = utils.signExtend;
@@ -824,12 +824,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                     this.fdc = new model.Fdc(this);
                     this.crtc = this.video.crtc;
                     this.ula = this.video.ula;
-                    this.adconverter = {
-                        read: function () {
-                            return 0xff;
-                        }, write: function () {
-                        }
-                    };
+                    this.adconverter = new Adc(this.sysvia);
                     this.sysvia.reset();
                     this.uservia.reset();
                 }
@@ -866,6 +861,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube'],
                 this.acia.polltime(cycles);
                 this.video.polltime(cycles);
                 this.soundChip.polltime(cycles);
+                this.adconverter.polltime(cycles);
                 this.tube.execute(cycles);
             };
 
