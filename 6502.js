@@ -884,7 +884,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     this.oldPArray[this.oldPcIndex] = this.p.asByte();
                     if (this.takeInt) {
                         this.takeInt = false;
-                        if (window.slut) console.log("Took int: ", this.interrupt);
                         this.push(this.pc >>> 8);
                         this.push(this.pc & 0xff);
                         this.push(this.p.asByte() & ~0x10);
@@ -893,7 +892,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                         this.polltime(7);
                     }
                     if (this.nmi) {
-                        if (window.slut) console.log("Took nmi: ", this.nmi);
                         this.push(this.pc >>> 8);
                         this.push(this.pc & 0xff);
                         this.push(this.p.asByte() & ~0x10);
@@ -905,7 +903,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                             this.p.d = false;
                     }
                 }
-                window.slut=false;
                 return true;
             };
 
