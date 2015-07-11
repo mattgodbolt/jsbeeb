@@ -726,7 +726,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     processor.acia.setTape(tapes.loadTapeFromData(image));
                 });
             }
-            return tapes.loadTape(tapeImage).then(function (tape) {
+            return tapes.loadTape("tapes/" + tapeImage).then(function (tape) {
                 processor.acia.setTape(tape);
             });
         }
