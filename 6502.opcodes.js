@@ -185,7 +185,7 @@ define(['utils'], function (utils) {
     function getOp(op, arg) {
         switch (op) {
             case "NOP":
-                return { op: "" };
+                return { op: "", read: arg !== undefined };
             case "BRK":
                 return { op: "cpu.brk();", extra: 6 };
             case "CLC":
