@@ -633,7 +633,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         }
 
         function autoRunTape() {
-
             var BBC = utils.BBC;
 
             console.log("Auto Running Tape");
@@ -654,6 +653,21 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 BBC.COLON_STAR,
                 BBC.SHIFT,
                 BBC.SLASH,
+                BBC.RETURN
+            );
+        }
+
+        function autoRunBasic() {
+            var BBC = utils.BBC;
+
+            console.log("Auto Running basic");
+            utils.noteEvent('init', 'autorunbasic');
+
+            sendRawKeyboardToBBC(1000,
+                // RUN
+                BBC.R,
+                BBC.U,
+                BBC.N,
                 BBC.RETURN
             );
         }
@@ -1009,20 +1023,32 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
             if (parsedQuery.loadBasic) {
+                var needsRun = needsAutoboot === "run";
+                needsAutoboot = "";
                 imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
                     var prog = String.fromCharCode.apply(null, data);
                     var tokenised = tokeniser.tokenise(prog);
-                    var page = parsedQuery.page ? utils.parseAddr(parsedQuery.page) : 0x1900;
                     // Load the program immediately after the \xff of the "no program" has been
                     // written to PAGE+1
                     var writeHook = processor.debugWrite.add(function (addr, b) {
-                        if (addr === (page + 1) && b === 0xff) {
+                        var page = processor.readmem(0x18) << 8;
+                        if (page >= 0xe00 && addr === (page + 1) && b === 0xff) {
                             // Needed as the debug happens before the write takes place.
                             var debugHook = processor.debugInstruction.add(function () {
                                 for (var i = 0; i < tokenised.length; ++i) {
                                     processor.writemem(page + i, tokenised.charCodeAt(i));
                                 }
+                                // Now set VARTOP (0x12/3) and TOP(0x02/3)
+                                var end = page + tokenised.length;
+                                var endLow = end & 0xff;
+                                var endHigh = (end >>> 8) & 0xff;
+                                processor.writemem(0x02, endLow);
+                                processor.writemem(0x03, endHigh);
+                                processor.writemem(0x12, endLow);
+                                processor.writemem(0x13, endHigh);
                                 debugHook.remove();
+                                if (needsRun)
+                                    autoRunBasic();
                             });
                             writeHook.remove();
                         }

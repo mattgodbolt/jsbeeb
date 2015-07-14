@@ -57,21 +57,16 @@ define([], function () {
                     candidateToken = candidateToken.substr(0, candidateToken.length - 1);
                 }
                 if (line.length >= candidateToken.length &&
-                    line.substr(0, candidateToken.length) == candidateToken) {
-                    result += String.fromCharCode(i + 0x80);
-                    line = line.substr(candidateToken.length);
-                    found = candidateToken;
-                    break;
+                    line.substr(0, candidateToken.length) == candidateToken &&
+                    (!found || found.token.length < candidateToken.length)) {
+                    found = {token: candidateToken, charCode: i + 0x80};
                 }
             }
-            if (!found) { // Normal text
-                result += line[0];
-                if (line[0] !== ' ')
-                    atStart = line[0] == ':';
-                line = line.substr(1);
-            } else {
+            if (found) {
+                result += String.fromCharCode(found.charCode);
+                line = line.substr(found.token.length);
                 atStart = false;
-                if (found == "GOTO") {
+                if (found.token === "GOTO" || found.token === "GOSUB") {
                     // Skip whitespace
                     while (line && line[0] == ' ') {
                         result += line[0];
@@ -85,6 +80,11 @@ define([], function () {
                         result += encodeGoto(num);
                     }
                 }
+            } else { // Normal text
+                result += line[0];
+                if (line[0] !== ' ')
+                    atStart = line[0] == ':';
+                line = line.substr(1);
             }
         }
         return result;
@@ -103,9 +103,9 @@ define([], function () {
             lastLine = lineNum;
             var tokens = tokeniseLine(matched[2]);
             out = out + '\r' +
-                String.fromCharCode(lineNum >>> 8) +
-                String.fromCharCode(lineNum & 0xff) +
-                String.fromCharCode(tokens.length + 4) + tokens;
+            String.fromCharCode(lineNum >>> 8) +
+            String.fromCharCode(lineNum & 0xff) +
+            String.fromCharCode(tokens.length + 4) + tokens;
         }
         out = out + '\r' + '\xff';
         return out;
