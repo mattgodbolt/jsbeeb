@@ -422,11 +422,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         }
 
         function keyUp(evt) {
-            if (!running) return;
+            // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
             processor.sysvia.keyUp(keyCode(evt));
+            if (!running) return;
             evt.preventDefault();
         }
 
+        $(window).blur(function() {
+            processor.sysvia.clearKeys();
+        });
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;

@@ -381,6 +381,7 @@ define(['utils'], function (utils) {
             }
             self.updateKeys();
         }
+        self.clearKeys = clearKeys;
 
         self.disableKeyboard = function () {
             self.keyboardEnabled = false;
