@@ -435,6 +435,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
 
+        window.onbeforeunload = function() {
+            if (running && processor.sysvia.hasAnyKeyDown()) {
+                return "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
+                        "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+            }
+        };
+
         var cmos = new Cmos({
             load: function () {
                 if (window.localStorage.cmosRam) {

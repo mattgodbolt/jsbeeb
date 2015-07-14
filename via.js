@@ -365,7 +365,7 @@ define(['utils'], function (utils) {
 
         self.setVBlankInt = self.setca1;
 
-        self.setKeyLayout = function(map) {
+        self.setKeyLayout = function (map) {
             console.log("Using " + map + " key layout");
             self.keycodeToRowCol = utils.getKeyMap(map);
         };
@@ -381,6 +381,7 @@ define(['utils'], function (utils) {
             }
             self.updateKeys();
         }
+
         self.clearKeys = clearKeys;
 
         self.disableKeyboard = function () {
@@ -429,6 +430,19 @@ define(['utils'], function (utils) {
         self.keyToggleRaw = function (colrow) {
             self.keys[colrow[0]][colrow[1]] = 1 - self.keys[colrow[0]][colrow[1]];
             self.updateKeys();
+        };
+        self.hasAnyKeyDown = function () {
+            // 10 for BBC, 13 for Master 128
+            var numCols = 13;
+            var i, j;
+            for (i = 0; i < numCols; ++i) {
+                for (j = 0; j < 8; ++j) {
+                    if (self.keys[i][j]) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         };
 
         self.updateKeys = function () {
