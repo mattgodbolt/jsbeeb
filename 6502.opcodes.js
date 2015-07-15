@@ -377,7 +377,13 @@ define(['utils'], function (utils) {
             case "LAX": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
                 return {
                     op: [
-                        "var magic = (opcode === 0xab) ? 0xee : 0xff;",
+                        "var magic = 0xff;",
+                        "cpu.a = cpu.x = cpu.setzn((cpu.a|magic) & REG);"
+                    ], read: true };
+            case "LXA": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
+                return {
+                    op: [
+                        "var magic = 0xee;",
                         "cpu.a = cpu.x = cpu.setzn((cpu.a|magic) & REG);"
                     ], read: true };
             case "SRE":
@@ -606,7 +612,7 @@ define(['utils'], function (utils) {
         0xA8: "TAY",
         0xA9: "LDA imm",
         0xAA: "TAX",
-        0xAB: "LAX imm",
+        0xAB: "LXA imm",
         0xAC: "LDY abs",
         0xAD: "LDA abs",
         0xAE: "LDX abs",
