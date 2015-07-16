@@ -1,3 +1,4 @@
+sudo: false
 install: true
 env:
     - TEST_SUITE=short-tests

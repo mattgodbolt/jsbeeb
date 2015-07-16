@@ -501,6 +501,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 return null;
             };
 
+            this.readArea = function(addr, len) {
+                var str = "";
+                for (var i = 0; i < len; ++i) {
+                    str += utils.hexbyte(this.readmem(addr + i));
+                }
+                return str;
+            };
+
             this.is1MHzAccess = function (addr) {
                 addr &= 0xffff;
                 return (addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >> 5) & 7]));

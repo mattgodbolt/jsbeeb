@@ -25,3 +25,15 @@ exports.testColon = function(test) {
     test.equals(tokens, "\r\x00\x0a\x0f\xf1 \x93:\xd3=&6000\r\xff");
     test.done();
 };
+
+exports.testMode = function(test) {
+    var tokens = t.tokenise("IF0ELSEMODE0");
+    test.equals(tokens, "\r\x00\x0a\x09\xe70\x8b\xeb0\r\xff");
+    test.done();
+};
+
+exports.testOneLineTetris = function(test) {
+    var tokens = t.tokenise("d=d:IFd VDUd:p=POINT(64*POS,1E3-VPOS*32):RETURN ELSEMODE2:GCOL0,-9:CLG");
+    test.equals(tokens, "\r\x00\x0a\x2dd=d:\xe7d \xefd:p=\xb064*\xb1,1E3-\xbc*32):\xf8 \x8b\xeb2:\xe60,-9:\xda\r\xff");
+    test.done();
+};

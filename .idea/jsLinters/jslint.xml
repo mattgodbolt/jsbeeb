@@ -2,8 +2,14 @@
 <project version="4">
   <component name="JSLintConfiguration">
     <option bitwise="true" />
+    <option browser="true" />
+    <option devel="true" />
     <option indent="4" />
     <option maxerr="50" />
+    <option maxlen="100" />
+    <option node="true" />
     <option plusplus="true" />
+    <option predef="window,Uint8Array,Uint16Array,Uint32Array,Int8Array,Int16Array,Int32Array,define" />
+    <option vars="true" />
   </component>
 </project>

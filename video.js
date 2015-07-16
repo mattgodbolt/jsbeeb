@@ -1,7 +1,7 @@
 define(['teletext', 'utils'], function (Teletext, utils) {
     "use strict";
-    return function Video(fb32_, paint_ext_) {
-        this.fb32 = utils.makeFast32(fb32_);
+    return function Video(fb32_param, paint_ext_param) {
+        this.fb32 = utils.makeFast32(fb32_param);
         this.collook = utils.makeFast32(new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
             0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]));
@@ -19,7 +19,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         this.leftBorder = 220;
         this.rightBorder = 180;
 
-        this.paint_ext = paint_ext_;
+        this.paint_ext = paint_ext_param;
 
         this.reset = function (cpu, via) {
             this.cpu = cpu;
@@ -44,7 +44,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             this.charScanLine = 0;
             this.verticalAdjust = 0; // Vertical adjust remaining
             this.vblankLowLineCount = 0;
-            this.charsLeft = 0; // chars left hanging off end of mode 7 line (due to delays, TODOs here)
+            this.charsLeft = 0; // chars left hanging off end of mode 7 line (due to delays)
             this.ulaPal = utils.makeFast32(new Uint32Array(16));
             this.actualPal = new Uint8Array(16);
             this.atStartOfInterlaceLine = 0;
@@ -61,27 +61,28 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             this.updateMemAddrLow();
         };
 
-        this.paint = function() {
+        this.paint = function () {
             this.paint_ext(
                 this.leftBorder,
                 this.topBorder << 1,
                 1280 - this.rightBorder,
-                ((320 - this.bottomBorder) << 1) + 1);
+                ((320 - this.bottomBorder) << 1) + 1
+            );
         };
 
         this.debugPaint = this.paint;
 
-        this.table4bppOffset = function(ulamode, byte) {
+        this.table4bppOffset = function (ulamode, byte) {
             return ulamode * 256 * 16 + byte * 16;
         };
 
         this.table4bpp = function (o) {
             var t = new Uint8Array(4 * 256 * 16);
-            var i;
-            for (var b = 0; b < 256; ++b) {
-                var temp = b;
+            var i, b, temp, left;
+            for (b = 0; b < 256; ++b) {
+                temp = b;
                 for (i = 0; i < 16; ++i) {
-                    var left = 0;
+                    left = 0;
                     if (temp & 2) left |= 1;
                     if (temp & 8) left |= 2;
                     if (temp & 32) left |= 4;
@@ -103,7 +104,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         this.fbTable = utils.makeFast32(new Uint32Array(this.fbTableBuffer));
         this.fbTableDirty = true;
 
-        this.updateFbTable = function() {
+        this.updateFbTable = function () {
             var offset = this.table4bppOffset(this.ulaMode, 0);
             for (var i = 0; i < 256 * 16; ++i) {
                 this.fbTable[i] = this.ulaPal[this.table4bpp[offset + i]];
@@ -112,7 +113,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             this.fbTableDirty = false;
         };
 
-        this.renderBlank = function(x, y) {
+        this.renderBlank = function (x, y) {
             var offset = y * 1280 + x;
             if (this.charsLeft) {
                 if (this.charsLeft !== 1) {
@@ -127,7 +128,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             }
         };
 
-        this.blitFb8 = function(tblOff, destOffset) {
+        this.blitFb8 = function (tblOff, destOffset) {
             tblOff |= 0;
             destOffset |= 0;
             var fb32 = this.fb32;
@@ -142,7 +143,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             fb32[destOffset + 7] = fbTable[tblOff + 7];
         };
 
-        this.blitFb = function(dat, destOffset, numPixels) {
+        this.blitFb = function (dat, destOffset, numPixels) {
             var tblOff = dat << 4;
             this.blitFb8(tblOff, destOffset);
             if (numPixels === 16) {
@@ -150,7 +151,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             }
         };
 
-        this.clearFb = function(destOffset, numPixels) {
+        this.clearFb = function (destOffset, numPixels) {
             var black = this.collook[0];
             var fb32 = this.fb32;
             while (numPixels--) {
@@ -158,7 +159,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             }
         };
 
-        this.handleCursor = function(offset) {
+        this.handleCursor = function (offset) {
             if (this.cursorOnThisFrame && (this.ulactrl & this.cursorTable[this.cursorDrawIndex])) {
                 for (var i = 0; i < this.pixelsPerChar; ++i) {
                     this.fb32[offset + i] ^= 0x00ffffff;
@@ -168,7 +169,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         };
 
         this.memAddrLow = 0;
-        this.updateMemAddrLow = function() {
+        this.updateMemAddrLow = function () {
             if (this.ilSyncAndVideo) {
                 this.memAddrLow = ((this.charScanLine & 3) << 1) | this.inInterlacedLine;
             } else {
@@ -181,7 +182,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             this.screenSize = this.screenLen[viaScreenSize];
         };
 
-        this.readVideoMem = function() {
+        this.readVideoMem = function () {
             if (this.memAddress & 0x2000) {
                 return this.cpu.videoRead(0x7c00 | (this.memAddress & 0x3ff));
             } else {
@@ -191,7 +192,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             }
         };
 
-        this.renderChar = function(x, y) {
+        this.renderChar = function (x, y) {
             if (this.cursorOn && !((this.memAddress ^ this.cursorPos) & 0x3fff)) {
                 this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
             }
@@ -216,7 +217,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             this.memAddress++;
         };
 
-        this.updateLeftBorder = function() {
+        this.updateLeftBorder = function () {
             var firstX = this.startX();
             if (firstX === this.prevFirstX) return;
             this.prevFirstX = firstX;
@@ -314,7 +315,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             // adc, mouse? seriously?
         };
 
-        this.startX = function() {
+        this.startX = function () {
             return (128 - ((this.regs[3] & 0xf) * this.pixelsPerChar / 2)) | 0;
         };
 
