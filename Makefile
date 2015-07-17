@@ -28,7 +28,7 @@ dist: npm
 	@rm -rf out/build out/dist
 	@mkdir -p out/dist
 	@mkdir -p out/build
-	cp -r *.js *.css *.html *.txt *.ico discs tapes images lib roms out/build
+	cp -r *.js *.css *.html *.txt *.ico discs tapes basic images lib roms out/build
 	m4 -DDEPLOY_DIR=$(shell pwd)/out/dist '-DCOMMON_SETTINGS=$(shell $(NODE) -e 'requirejs = {config: function(c) { c.baseUrl = "."; console.log(JSON.stringify(c)); }}; require("./requirejs-common.js");' | sed 's/^.\(.*\).$$/\1/')' build.js.template > out/build.js
 	cd out/build && $(shell pwd)/node_modules/requirejs/bin/r.js -o ../build.js
 
