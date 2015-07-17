@@ -738,25 +738,48 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     exports.readFloat32 = readFloat32;
 
     function ungzip(data) {
-        var dataOffset = 10;
-        if (data[3] & 0x02) dataOffset += 2; // Header CRC
-        if (data[3] & 0x04) {
-            dataOffset += 2 + readInt16(data, dataOffset); // FEXTRA
-        }
-        if (data[3] & 0x08) {
-            while (data[dataOffset] !== 0) dataOffset++; // FILENAME
-            dataOffset++;
-        }
-        if (data[3] & 0x10) {
-            while (data[dataOffset] !== 0) dataOffset++; // FCOMMENT
-            dataOffset++;
-        }
         var tinf = new jsunzip.TINF();
         tinf.init();
-        var uncompressedSize = readInt32(data, data.length - 4);
-        var result = tinf.uncompress(data, dataOffset, uncompressedSize);
-        if (result.status === 0) return result.data;
-        throw "Unable to ungzip";
+        var results = [];
+        while (data.length) {
+            if (results.length > 1000) throw new Error("Seems like something went wrong");
+            if (data[0] !== 0x1f || data[1] !== 0x8b) throw new Error("Corrupt data");
+            var dataOffset = 10;
+            if (data[3] & 0x02) dataOffset += 2; // Header CRC
+            if (data[3] & 0x04) {
+                dataOffset += 2 + readInt16(data, dataOffset); // FEXTRA
+            }
+            if (data[3] & 0x08) {
+                while (data[dataOffset] !== 0) dataOffset++; // FILENAME
+                dataOffset++;
+            }
+            if (data[3] & 0x10) {
+                while (data[dataOffset] !== 0) dataOffset++; // FCOMMENT
+                dataOffset++;
+            }
+            var maxDecompressSize = 16384;
+            var result;
+            for (; ;) {
+                // Loop around trying to decompress this block, doubling in size if we can't fit a block.
+                result = tinf.uncompress(data, dataOffset, maxDecompressSize);
+                if (result.status !== 0) throw "Unable to ungzip";
+                if (result.dataSize < maxDecompressSize) break;
+                maxDecompressSize *= 2;
+            }
+            results.push(result.data.subarray(0, result.dataSize));
+            var nextOffset = result.offset + 8; // skip CRC and uncompressed length
+            data = data.subarray(nextOffset);
+        }
+        var total = results.reduce(function (prev, cur) {
+            return prev + cur.length;
+        }, 0);
+        var finalData = new Uint8Array(total);
+        var offset = 0;
+        results.forEach(function (res) {
+            finalData.set(res, offset);
+            offset += res.length;
+        });
+        return finalData;
     }
 
     exports.ungzip = ungzip;
@@ -766,11 +789,12 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         self.name = name_;
         self.pos = 0;
         self.data = makeBinaryData(data_);
-        if (!dontUnzip_ && self.data && self.data.length > 4 && self.data[0] === 0x1f && self.data[1] === 0x8b && self.data[2] === 0x08) {
+        if (!dontUnzip_ && self.data && self.data.length > 4 && self.data[0] === 0x1f && self.data[1] === 0x8b) {
+            console.log("Ungzipping " + name_);
             self.data = ungzip(self.data);
         }
         if (!self.data) {
-            throw new Error("No data");
+            throw new Error("No data in " + name_);
         }
 
         self.end = self.data.length;
