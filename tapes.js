@@ -204,7 +204,7 @@ define(['utils'], function (utils) {
 
     function loadTape(name) {
         console.log("Loading tape from " + name);
-        return utils.loadData(name).then(function(data){
+        return utils.loadData(name).then(function (data) {
             return loadTapeFromData(name, data);
         });
     }

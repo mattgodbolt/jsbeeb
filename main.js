@@ -748,7 +748,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
             if (schema === '|' || schema === "sth") {
                 return tapeSth.fetch(tapeImage).then(function (image) {
-                    processor.acia.setTape(tapes.loadTapeFromData(image));
+                    processor.acia.setTape(tapes.loadTapeFromData(tapeImage, image));
                 });
             }
             return tapes.loadTape("tapes/" + tapeImage).then(function (tape) {
@@ -774,7 +774,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             var reader = new FileReader();
             utils.noteEvent('local', 'clickTape'); // NB no filename here
             reader.onload = function (e) {
-                processor.acia.setTape(tapes.loadTapeFromData(e.target.result));
+                processor.acia.setTape(tapes.loadTapeFromData("local file", e.target.result));
                 delete parsedQuery.tape;
                 updateUrl();
                 $('#tapes').modal("hide");
@@ -988,8 +988,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         $('#tape-menu a').on("click", function (e) {
             var type = $(e.target).attr("data-id");
+            if (type === undefined) return;
 
-            if (type == "rewind") {
+            if (type === "rewind") {
                 console.log("Rewinding tape to the start");
 
                 processor.acia.rewindTape();
