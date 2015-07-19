@@ -24,12 +24,18 @@ dormann-test: npm
 short-tests: unit-tests timing-tests dormann-test
 long-tests: test-suite 
 
+HASH := $(shell git rev-parse HEAD)
+
 dist: npm
 	@rm -rf out/build out/dist
 	@mkdir -p out/dist
 	@mkdir -p out/build
 	cp -r *.js *.css *.html *.txt *.ico discs tapes basic images lib roms out/build
-	m4 -DDEPLOY_DIR=$(shell pwd)/out/dist '-DCOMMON_SETTINGS=$(shell $(NODE) -e 'requirejs = {config: function(c) { c.baseUrl = "."; console.log(JSON.stringify(c)); }}; require("./requirejs-common.js");' | sed 's/^.\(.*\).$$/\1/')' build.js.template > out/build.js
+	for BASEFILE in main requirejs-common; do \
+		perl -pi -e "s/require\(\['$${BASEFILE}'\]/require(['$${BASEFILE}-$(HASH)']/" out/build/index.html; \
+		mv out/build/$${BASEFILE}.js out/build/$${BASEFILE}-$(HASH).js; \
+	done
+	m4 -DHASH=$(HASH) -DDEPLOY_DIR=$(shell pwd)/out/dist '-DCOMMON_SETTINGS=$(shell $(NODE) -e 'requirejs = {config: function(c) { c.baseUrl = "."; console.log(JSON.stringify(c)); }}; require("./requirejs-common.js");' | sed 's/^.\(.*\).$$/\1/')' build.js.template > out/build.js
 	cd out/build && $(shell pwd)/node_modules/requirejs/bin/r.js -o ../build.js
 
 clean:
