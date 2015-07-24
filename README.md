@@ -61,7 +61,7 @@ Tests
 
 For general correctness there are several tests in the `tests` directory, including:
 
-* Klaus Dorfmann's exhaustive test of all documented opcodes for 6502 and 65C12. 
+* Klaus Dormann's exhaustive test of all documented opcodes for 6502 and 65C12. 
   This is brought in as a git submodule from a forked version of Klaus's original as it needed
   a few tweaks to get 65C12 working.
 * hoglet's Binary Coded Decimal tests.
