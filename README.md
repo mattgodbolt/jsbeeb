@@ -35,6 +35,8 @@ URL parameters
 * `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
 * `patch=P` - applies a memory patch `P`. See below.
 * `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
+* `autorun` - types `*TAPE` then `*/` to run from tape. In conjunction with `loadBasic` it types `RUN`.
+* `autochain` - types `*TAPE` then `CH.""` to run from tape.a
 
 Patches
 -------
@@ -59,7 +61,7 @@ Tests
 
 For general correctness there are several tests in the `tests` directory, including:
 
-* Klaus Dorfmann's exhaustive test of all documented opcodes for 6502 and 65C12. 
+* Klaus Dormann's exhaustive test of all documented opcodes for 6502 and 65C12. 
   This is brought in as a git submodule from a forked version of Klaus's original as it needed
   a few tweaks to get 65C12 working.
 * hoglet's Binary Coded Decimal tests.
