@@ -428,17 +428,17 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             evt.preventDefault();
         }
 
-        $(window).blur(function() {
+        $(window).blur(function () {
             processor.sysvia.clearKeys();
         });
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
 
-        window.onbeforeunload = function() {
+        window.onbeforeunload = function () {
             if (running && processor.sysvia.hasAnyKeyDown()) {
                 return "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-                        "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+                    "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
             }
         };
 
@@ -558,48 +558,52 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             setSthFilter($('#sth-filter').val());
         });
 
-        var keysToSend;
-        var lastChar;
-
-        function sendNextChar() {
-            if (lastChar && lastChar != utils.BBC.SHIFT) {
-                processor.sysvia.keyToggleRaw(lastChar);
-            }
-
-            if (keysToSend.length === 0) {
-                // Finished
-                processor.sysvia.enableKeyboard();
-                return;
-            }
-
-            var ch = keysToSend[0];
-            var debounce = lastChar === ch;
-            lastChar = ch;
-            if (debounce) {
-                lastChar = undefined;
-                setTimeout(sendNextChar, 20);
-                return;
-            }
-
-            var time = 70;
-            if (typeof lastChar === "number") {
-                time = lastChar;
-                lastChar = undefined;
-            } else {
-                processor.sysvia.keyToggleRaw(lastChar);
-            }
-
-            // remove first character
-            keysToSend.shift();
-
-            setTimeout(sendNextChar, time);
-        }
-
         function sendRawKeyboardToBBC() {
-            keysToSend = Array.prototype.slice.call(arguments, 0);
-            lastChar = undefined;
+            var keysToSend = Array.prototype.slice.call(arguments, 0);
+            var lastChar;
+            var nextKeyCycles = 0;
             processor.sysvia.disableKeyboard();
-            sendNextChar();
+
+            var sendCharHook = processor.debugInstruction.add(function nextCharHook() {
+                if (processor.currentCycles < nextKeyCycles) {
+                    return;
+                }
+
+                if (lastChar && lastChar != utils.BBC.SHIFT) {
+                    processor.sysvia.keyToggleRaw(lastChar);
+                }
+
+                if (keysToSend.length === 0) {
+                    // Finished
+                    processor.sysvia.enableKeyboard();
+                    sendCharHook.remove();
+                    return;
+                }
+
+                var ch = keysToSend[0];
+                var debounce = lastChar === ch;
+                lastChar = ch;
+                var clocksPerMilli = clocksPerSecond / 1000;
+                if (debounce) {
+                    lastChar = undefined;
+                    nextKeyCycles = processor.currentCycles + clocksPerMilli * 30;
+                    return;
+                }
+
+                var time = 50;
+                if (typeof lastChar === "number") {
+                    time = lastChar;
+                    lastChar = undefined;
+                } else {
+                    processor.sysvia.keyToggleRaw(lastChar);
+                }
+
+                // remove first character
+                keysToSend.shift();
+
+                var cyclesTilNext = clocksPerMilli * time;
+                nextKeyCycles = processor.currentCycles + cyclesTilNext;
+            });
         }
 
         function autoboot(image) {
