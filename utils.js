@@ -645,6 +645,18 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     exports.signExtend = signExtend;
 
+    exports.bench = function() {
+        for (var j = 0; j < 10; ++j) {
+            var res = 0;
+            var start = Date.now();
+            for (var i = 0; i < 4096 * 1024; ++i) {
+                res += signExtend(i & 0xff);
+            }
+            var tt = Date.now() - start;
+            console.log(res, tt);
+        }
+    };
+
     exports.noteEvent = function noteEvent(category, type, label) {
         if (!exports.runningInNode && window.location.origin == "http://bbc.godbolt.org") {
             // Only note events on the public site
