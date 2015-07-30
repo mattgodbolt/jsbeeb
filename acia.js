@@ -100,8 +100,8 @@ define([], function () {
         self.setTape = function (tape) {
             self.tape = tape;
         };
-        
-        self.rewindTape = function() {
+
+        self.rewindTape = function () {
             if (self.tape) {
                 console.log("rewinding tape");
                 self.tape.rewind();
@@ -161,7 +161,7 @@ function TapefileTape(stream) {
         return Math.floor(bitsPerByte * cpp);
     }
 
-    self.rewind = function() {
+    self.rewind = function () {
         stream.seek(10);
     };
 

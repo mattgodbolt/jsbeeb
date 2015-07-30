@@ -291,8 +291,10 @@ define(['utils'], function (utils) {
             this.time = 200;
         };
 
-        var paramMap = {0x35: 4, 0x29: 1, 0x2c: 0, 0x3d: 1, 0x3a: 2, 0x13: 3, 0x0b: 3,
-            0x1b: 3, 0x1f: 3, 0x23: 5 };
+        var paramMap = {
+            0x35: 4, 0x29: 1, 0x2c: 0, 0x3d: 1, 0x3a: 2, 0x13: 3, 0x0b: 3,
+            0x1b: 3, 0x1f: 3, 0x23: 5
+        };
 
         function numParams(command) {
             var found = paramMap[command];

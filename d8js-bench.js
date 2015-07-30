@@ -24,7 +24,9 @@ requirejs.config({
         'underscore': 'lib/underscore-min'
     }
 });
-function setTimeout(fn, delay) { fn(); }
+function setTimeout(fn, delay) {
+    fn();
+}
 ///////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////
@@ -40,7 +42,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
 
         var noop = function () {
         };
-        var dbgr = { setCpu: noop };
+        var dbgr = {setCpu: noop};
         var video = new Video(fb32, paint);
         var soundChip = new SoundChip(10000);
 

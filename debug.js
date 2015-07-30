@@ -50,7 +50,8 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         function setupVia(node, via) {
             var updates = [];
-            if (!via) return function () {};
+            if (!via) return function () {
+            };
             $.each(["ora", "orb", "ira", "irb", "ddra", "ddrb",
                 "acr", "pcr", "ifr", "ier", "t1c", "t1l", "t2c", "t2l"], function (_, elem) {
                 var row = node.find(".template").clone().removeClass("template").appendTo(node);

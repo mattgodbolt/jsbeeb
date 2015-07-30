@@ -5,13 +5,13 @@ define([], function () {
         var sampleDecrement = soundchipFreq / sampleRate;
         var samplesPerCycle = sampleRate / (2 * 1000 * 1000); // TODO hacky here
 
-        var register = [ 0, 0, 0, 0 ];
+        var register = [0, 0, 0, 0];
         this.registers = register; // for debug
-        var counter = [ 0, 0, 0, 0 ];
-        var outputBit = [ false, false, false, false ];
-        var volume = [ 0, 0, 0, 0 ];
+        var counter = [0, 0, 0, 0];
+        var outputBit = [false, false, false, false];
+        var volume = [0, 0, 0, 0];
         this.volume = volume;  // for debug
-        var generators = [ null, null, null, null, null ];
+        var generators = [null, null, null, null, null];
 
         var volumeTable = [];
         var f = 1.0;
