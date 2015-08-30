@@ -470,12 +470,19 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             utils.noteEvent('sth', 'click', item);
             parsedQuery.disc = "sth:" + item;
             updateUrl();
+            var needsAutoboot = parsedQuery.autoboot !== undefined;
+            if (needsAutoboot) {
+                processor.reset(true);
+            }
             popupLoading("Loading " + item);
             loadDiscImage(parsedQuery.disc).then(function (disc) {
                 processor.fdc.loadDisc(0, disc);
             }).then(
                 function () {
                     loadingFinished();
+                    if (needsAutoboot) {
+                        autoboot(item);
+                    }
                 },
                 function (err) {
                     loadingFinished(err);
@@ -534,6 +541,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
         tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
+
+        $('#sth .autoboot').click(function () {
+            if ($('#sth .autoboot').prop('checked')) {
+                parsedQuery.autoboot = "";
+            } else {
+                delete parsedQuery.autoboot;
+            }
+            updateUrl();
+        });
 
         $(document).on("click", "a.sth", function () {
             var type = $(this).data('id');
@@ -1078,6 +1094,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         startPromise.then(function () {
             switch (needsAutoboot) {
                 case "boot":
+                    $("#sth .autoboot").prop('checked', true);
                     autoboot(discImage);
                     break;
                 case "chain":
@@ -1085,6 +1102,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                     break;
                 case "run":
                     autoRunTape();
+                    break;
+                default:
+                    $("#sth .autoboot").prop('checked', false);
                     break;
             }
 
