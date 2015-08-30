@@ -66,7 +66,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
         cpu.initialise().then(function () {
             return disc.ssdLoad("discs/" + discName + ".ssd");
         }).then(function (data) {
-            cpu.fdc.loadDisc(0, disc.ssdFor(cpu.fdc, data));
+            cpu.fdc.loadDisc(0, disc.ssdFor(cpu.fdc, false, data));
             var trace = false;
             cpu.debugInstruction.add(function (addr) {
                 //if (addr === 0x11ae) {
