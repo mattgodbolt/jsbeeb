@@ -467,7 +467,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 addr &= 0xffff;
                 var res = this.ramRomOs[addr];
                 if (this._debugRead) this._debugRead(addr, 0, res);
-                return res|0;
+                return res | 0;
             };
             this.writememZpStack = function (addr, b) {
                 addr &= 0xffff;
@@ -501,7 +501,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 return null;
             };
 
-            this.readArea = function(addr, len) {
+            this.readArea = function (addr, len) {
                 var str = "";
                 for (var i = 0; i < len; ++i) {
                     str += utils.hexbyte(this.readmem(addr + i));
@@ -628,7 +628,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     if (this._debugRead) this._debugRead(addr, res, offset);
                     return res | 0;
                 } else {
-                     res = this.readDevice(addr);
+                    res = this.readDevice(addr);
                     if (this._debugRead) this._debugRead(addr, res, 0);
                     return res | 0;
                 }
@@ -922,11 +922,11 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 this.cpu = cpu;
                 this.functionName = functionName;
                 this.handlers = [];
-                this.add = function(handler) {
+                this.add = function (handler) {
                     var self = this;
                     this.handlers.push(handler);
                     if (!this.cpu[this.functionName]) {
-                        this.cpu[this.functionName] = function() {
+                        this.cpu[this.functionName] = function () {
                             for (var i = 0; i < self.handlers.length; ++i) {
                                 var handler = self.handlers[i];
                                 if (handler.apply(handler, arguments)) {
@@ -936,12 +936,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                             return false;
                         };
                     }
-                    handler.remove = function() {
+                    handler.remove = function () {
                         self.remove(handler);
                     };
                     return handler;
                 };
-                this.remove = function(handler) {
+                this.remove = function (handler) {
                     var i = this.handlers.indexOf(handler);
                     if (i < 0) throw "Unable to find debug hook handler";
                     this.handlers = this.handlers.slice(0, i).concat(this.handlers.slice(i + 1));
@@ -950,6 +950,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     }
                 };
             }
+
             this.debugInstruction = new DebugHook(this, '_debugInstruction');
             this.debugRead = new DebugHook(this, '_debugRead');
             this.debugWrite = new DebugHook(this, '_debugWrite');

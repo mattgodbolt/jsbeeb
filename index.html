@@ -352,11 +352,11 @@
                     <li class="template"><a href="#"><span class="name"></span></a> - <span
                             class="description"></span></li>
                 </ul>
-                To load a custom disc image, get an SSD file and load it below. Search the web, or check somewhere
+                To load a custom disc image, get an SSD or DSD file and load it below. Search the web, or check somewhere
                 like <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these. Be aware the
                 images are usually stored in a ZIP file, and you'll need to unzip first.
                 <div class="disc">
-                    <label>Load local SSD file: <input type="file" id="disc_load" accept=".ssd,image/*"></label>
+                    <label>Load local SSD or DSD file: <input type="file" id="disc_load" accept=".ssd,.dsd,image/*"></label>
                 </div>
             </div>
             <div class="modal-footer">
@@ -464,6 +464,7 @@
                 </ul>
             </div>
             <div class="modal-footer">
+                <label class="pull-left checkbox-inline"><input type="checkbox" class="autoboot" value="">Autoboot</label>
                 <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
             </div>
         </div>

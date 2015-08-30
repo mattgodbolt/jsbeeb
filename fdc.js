@@ -1,7 +1,7 @@
 // Floppy disc controller and assorted utils.
 define(['utils'], function (utils) {
     "use strict";
-    function ssdLoad(name) {
+    function load(name) {
         console.log("Loading disc from " + name);
         return utils.loadData(name);
     }
@@ -22,7 +22,7 @@ define(['utils'], function (utils) {
         return result;
     }
 
-    function ssdFor(fdc, stringData) {
+    function discFor(fdc, isDsd, stringData) {
         var data;
         if (typeof(stringData) !== "string") {
             data = stringData;
@@ -31,7 +31,7 @@ define(['utils'], function (utils) {
             data = new Uint8Array(len);
             for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
         }
-        return baseSsd(fdc, data);
+        return baseDisc(fdc, isDsd, data);
     }
 
     function localDisc(fdc, name) {
@@ -50,17 +50,17 @@ define(['utils'], function (utils) {
             data = new Uint8Array(len);
             for (i = 0; i < len; ++i) data[i] = dataString.charCodeAt(i) & 0xff;
         }
-        return baseSsd(fdc, data, function () {
+        return baseDisc(fdc, false, data, function () {
             var str = "";
             for (var i = 0; i < data.length; ++i) str += String.fromCharCode(data[i]);
             localStorage[discName] = str;
         });
     }
 
-    function baseSsd(fdc, data, flusher) {
+    function baseDisc(fdc, isDsd, data, flusher) {
         if (data === null || data === undefined) throw new Error("Bad disc data");
         return {
-            dsd: false,
+            dsd: isDsd,
             inRead: false,
             inWrite: false,
             inFormat: false,
@@ -291,8 +291,10 @@ define(['utils'], function (utils) {
             this.time = 200;
         };
 
-        var paramMap = {0x35: 4, 0x29: 1, 0x2c: 0, 0x3d: 1, 0x3a: 2, 0x13: 3, 0x0b: 3,
-            0x1b: 3, 0x1f: 3, 0x23: 5 };
+        var paramMap = {
+            0x35: 4, 0x29: 1, 0x2c: 0, 0x3d: 1, 0x3a: 2, 0x13: 3, 0x0b: 3,
+            0x1b: 3, 0x1f: 3, 0x23: 5
+        };
 
         function numParams(command) {
             var found = paramMap[command];
@@ -882,10 +884,10 @@ define(['utils'], function (utils) {
     return {
         I8271: I8271,
         WD1770: WD1770,
-        ssdLoad: ssdLoad,
+        load: load,
         localDisc: localDisc,
         emptySsd: emptySsd,
-        ssdFor: ssdFor,
-        baseSsd: baseSsd
+        discFor: discFor,
+        baseDisc: baseDisc
     };
 });

@@ -3,7 +3,7 @@ define(['utils', 'jquery', 'jsunzip'], function (utils, $, jsunzip) {
     "use strict";
     return function StairwayToHell(onStart, onCat, onError, tape) {
         var self = this;
-        var baseUrl = tape ? "http://bbc.godbolt.org/sth/tapeimages/" : "http://bbc.godbolt.org/sth/diskimages/";
+        var baseUrl = tape ? "https://bbc.godbolt.org/sth/tapeimages/" : "https://bbc.godbolt.org/sth/diskimages/";
 
         var catalogUrl = "reclist.php?sort=name&filter=.zip";
         var catalog = [];
