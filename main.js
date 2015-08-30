@@ -722,7 +722,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             }
             if (schema === "|" || schema === "sth") {
                 return discSth.fetch(discImage).then(function (discData) {
-                    return disc.ssdFor(processor.fdc, false, discData);
+                    return disc.discFor(processor.fdc, false, discData);
                 });
             }
             if (schema === "gd") {
@@ -736,12 +736,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             }
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + discImage).then(function (discData) {
-                    return disc.ssdFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
+                    return disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
                 });
             }
 
-            return disc.ssdLoad("discs/" + discImage).then(function (discData) {
-                return disc.ssdFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
+            return disc.load("discs/" + discImage).then(function (discData) {
+                return disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
             });
         }
 
@@ -765,7 +765,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             var reader = new FileReader();
             utils.noteEvent('local', 'click'); // NB no filename here
             reader.onload = function (e) {
-                processor.fdc.loadDisc(0, disc.ssdFor(processor.fdc, /\.dsd$/i.test(file.name), e.target.result));
+                processor.fdc.loadDisc(0, disc.discFor(processor.fdc, /\.dsd$/i.test(file.name), e.target.result));
                 delete parsedQuery.disc;
                 updateUrl();
                 $('#discs').modal("hide");

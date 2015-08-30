@@ -6,7 +6,7 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
         var CLIENT_ID = '356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com';
         var SCOPES = 'https://www.googleapis.com/auth/drive.file';
         var gapi = null;
-        var baseSsd = fdc.baseSsd;
+        var baseSsd = fdc.baseDisc;
 
         self.initialise = function () {
             return new Promise(function (resolve) {
