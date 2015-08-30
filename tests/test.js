@@ -185,7 +185,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
                 0x45A6, 0xC0, 0x00,
                 0x0000, 0x00, 0x00,
             ];
-            return fdc.ssdLoad("/discs/TestTimings.ssd").then(function (data) {
+            return fdc.ssdLoad("discs/TestTimings.ssd").then(function (data) {
                 processor.fdc.loadDisc(0, fdc.ssdFor(processor.fdc, data));
                 return runUntilInput();
             }).then(function () {
@@ -207,7 +207,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
         function testBCD() {
             var output = "";
             var hook;
-            return fdc.ssdLoad("/discs/bcdtest.ssd").then(function (data) {
+            return fdc.ssdLoad("discs/bcdtest.ssd").then(function (data) {
                 processor.fdc.loadDisc(0, fdc.ssdFor(processor.fdc, data));
                 return runUntilInput();
             }).then(function () {
@@ -230,7 +230,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
         }
 
         function testKevinEdwards(name) { // Well, at least his protection system...
-            return fdc.ssdLoad("/discs/Protection.ssd").then(function (data) {
+            return fdc.ssdLoad("discs/Protection.ssd").then(function (data) {
                 processor.fdc.loadDisc(0, fdc.ssdFor(processor.fdc, data));
                 return runUntilInput();
             }).then(function () {
