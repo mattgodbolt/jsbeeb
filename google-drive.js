@@ -159,7 +159,7 @@ define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
             } else {
                 console.log("Making read-only disc");
             }
-            return baseSsd(fdc, data, flusher);
+            return baseSsd(fdc, false, data, flusher);
         }
 
         self.load = function (fdc, fileId) {

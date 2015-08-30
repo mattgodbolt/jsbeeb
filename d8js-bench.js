@@ -63,7 +63,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
         cpu.initialise().then(function () {
             return disc.ssdLoad("discs/" + discName + ".ssd");
         }).then(function (data) {
-            cpu.fdc.loadDisc(0, disc.ssdFor(cpu.fdc, data));
+            cpu.fdc.loadDisc(0, disc.ssdFor(cpu.fdc, false, data));
             cpu.sysvia.keyDown(16);
             cpu.execute(10 * 1000 * 1000);
             cpu.sysvia.keyUp(16);

@@ -22,7 +22,7 @@ define(['utils'], function (utils) {
         return result;
     }
 
-    function ssdFor(fdc, stringData) {
+    function ssdFor(fdc, isDsd, stringData) {
         var data;
         if (typeof(stringData) !== "string") {
             data = stringData;
@@ -31,7 +31,7 @@ define(['utils'], function (utils) {
             data = new Uint8Array(len);
             for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
         }
-        return baseSsd(fdc, data);
+        return baseSsd(fdc, isDsd, data);
     }
 
     function localDisc(fdc, name) {
@@ -50,17 +50,17 @@ define(['utils'], function (utils) {
             data = new Uint8Array(len);
             for (i = 0; i < len; ++i) data[i] = dataString.charCodeAt(i) & 0xff;
         }
-        return baseSsd(fdc, data, function () {
+        return baseSsd(fdc, false, data, function () {
             var str = "";
             for (var i = 0; i < data.length; ++i) str += String.fromCharCode(data[i]);
             localStorage[discName] = str;
         });
     }
 
-    function baseSsd(fdc, data, flusher) {
+    function baseSsd(fdc, isDsd, data, flusher) {
         if (data === null || data === undefined) throw new Error("Bad disc data");
         return {
-            dsd: false,
+            dsd: isDsd,
             inRead: false,
             inWrite: false,
             inFormat: false,
