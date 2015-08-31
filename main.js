@@ -255,6 +255,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                         case "disc2":
                             secondDiscImage = val;
                             break;
+                        case "embed":
+                            $(".embed-hide").hide();
+                            $("#about").append(" jsbeeb");
+                            break;
                     }
                 }
             });
