@@ -37,6 +37,7 @@ URL parameters
 * `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
 * `autorun` - types `*TAPE` then `*/` to run from tape. In conjunction with `loadBasic` it types `RUN`.
 * `autochain` - types `*TAPE` then `CH.""` to run from tape.a
+* `embed` - Adjust the navigation entries to make the page clearer within a 921x733 iframe in a third-party site.
 
 Patches
 -------
