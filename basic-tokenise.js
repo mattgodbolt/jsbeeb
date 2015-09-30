@@ -44,22 +44,25 @@ define([], function () {
     function tokeniseLine(line) {
         var result = "";
         var atStart = true;
+        var inQuote = false;
         while (line) {
             var found = null;
-            for (var i = 0; i < BASIC_TOKENS.length; ++i) {
-                var candidateToken = BASIC_TOKENS[i];
-                if (candidateToken[0] === '<') continue;
-                if (candidateToken[0] === '=') {
-                    if (atStart) continue;
-                    candidateToken = candidateToken.substr(1);
-                } else if (candidateToken[candidateToken.length - 1] === '=') {
-                    if (!atStart) continue;
-                    candidateToken = candidateToken.substr(0, candidateToken.length - 1);
-                }
-                if (line.length >= candidateToken.length &&
-                    line.substr(0, candidateToken.length) == candidateToken &&
-                    (!found || found.token.length < candidateToken.length)) {
-                    found = {token: candidateToken, charCode: i + 0x80};
+            if (!inQuote) {
+                for (var i = 0; i < BASIC_TOKENS.length; ++i) {
+                    var candidateToken = BASIC_TOKENS[i];
+                    if (candidateToken[0] === '<') continue;
+                    if (candidateToken[0] === '=') {
+                        if (atStart) continue;
+                        candidateToken = candidateToken.substr(1);
+                    } else if (candidateToken[candidateToken.length - 1] === '=') {
+                        if (!atStart) continue;
+                        candidateToken = candidateToken.substr(0, candidateToken.length - 1);
+                    }
+                    if (line.length >= candidateToken.length &&
+                        line.substr(0, candidateToken.length) == candidateToken &&
+                        (!found || found.token.length < candidateToken.length)) {
+                        found = {token: candidateToken, charCode: i + 0x80};
+                    }
                 }
             }
             if (found) {
@@ -81,6 +84,8 @@ define([], function () {
                     }
                 }
             } else { // Normal text
+                if (line[0] == '"') 
+                    inQuote = !inQuote;
                 result += line[0];
                 if (line[0] !== ' ')
                     atStart = line[0] == ':';

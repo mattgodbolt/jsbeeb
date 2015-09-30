@@ -37,3 +37,9 @@ exports.testOneLineTetris = function(test) {
     test.equals(tokens, "\r\x00\x0a\x2dd=d:\xe7d \xefd:p=\xb064*\xb1,1E3-\xbc*32):\xf8 \x8b\xeb2:\xe60,-9:\xda\r\xff");
     test.done();
 };
+
+exports.testStringsWithTokens = function(test) {
+    var tokens = t.tokenise("PRINT \"IF \"\"IF\"\" IF\"");
+    test.equals(tokens, "\r\x00\x0a\x14\xf1 \"IF \"\"IF\"\" IF\"\r\xff");
+    test.done();
+};
