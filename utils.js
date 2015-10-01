@@ -645,7 +645,10 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     exports.signExtend = signExtend;
 
-    exports.bench = function() {
+    exports.noop = function noop() {
+    };
+
+    exports.bench = function () {
         for (var j = 0; j < 10; ++j) {
             var res = 0;
             var start = Date.now();

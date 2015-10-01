@@ -51,10 +51,13 @@ define(['fdc'], function (fdc) {
     var cpu65c12TestModel = new Model("TEST", ["TEST"], [], false, false, masterSwram, fdc.I8271);
     cpu65c12TestModel.isTest = true;
 
+    var basicOnly = new Model("Basic only", ["Basic only"], ["master/mos3.20"], false, true, masterSwram, fdc.WD1770);
+
     return {
         allModels: allModels,
         findModel: findModel,
         TEST_6502: cpu6502TestModel,
-        TEST_65C12: cpu65c12TestModel
+        TEST_65C12: cpu65c12TestModel,
+        basicOnly: basicOnly
     };
 });

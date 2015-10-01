@@ -1063,7 +1063,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 needsAutoboot = "";
                 imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
                     var prog = String.fromCharCode.apply(null, data);
-                    var tokenised = tokeniser.tokenise(prog);
+                    return tokeniser.create().then(function(t) {
+                        return t.tokenise(prog);
+                    });
+                }).then(function(tokenised) {
                     // Load the program immediately after the \xff of the "no program" has been
                     // written to PAGE+1
                     var writeHook = processor.debugWrite.add(function (addr, b) {
