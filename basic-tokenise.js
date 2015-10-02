@@ -3,7 +3,7 @@ define(['models', '6502', 'utils', 'video', 'soundchip'],
         "use strict";
 
         function create() {
-            var video = new Video(new Uint32Array(1280 * 1024), utils.noop);
+            var video = new Video.FakeVideo();
             var soundChip = new SoundChip(10000);
             var dbgr = {
                 setCpu: utils.noop

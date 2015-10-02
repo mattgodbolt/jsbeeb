@@ -15,7 +15,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
         var fb32 = new Uint32Array(1280 * 768);
         var frame = 0;
         var screenshotRequest = null;
-        var video = new Video(fb32, function (minx, miny, maxx, maxy) {
+        var video = new Video.Video(fb32, function (minx, miny, maxx, maxy) {
             frame++;
             if (screenshotRequest) {
                 var width = maxx - minx;

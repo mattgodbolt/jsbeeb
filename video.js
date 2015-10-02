@@ -1,6 +1,6 @@
 define(['teletext', 'utils'], function (Teletext, utils) {
     "use strict";
-    return function Video(fb32_param, paint_ext_param) {
+    function Video(fb32_param, paint_ext_param) {
         this.fb32 = utils.makeFast32(fb32_param);
         this.collook = utils.makeFast32(new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
@@ -476,5 +476,23 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             for (var x = 0; x < 1280; ++x)
                 this.fb32[y * 1280 + x] = 0;
         this.paint(0, 0, 1280, 768);
+    }
+
+    function FakeVideo() {
+        this.reset = function () {
+        };
+        this.ula = this.crtc = {
+            read: function () {
+                return 0xff;
+            },
+            write: utils.noop
+        };
+        this.polltime = utils.noop;
+        this.setScreenSize = utils.noop;
+    }
+
+    return {
+        Video: Video,
+        FakeVideo: FakeVideo
     };
 });
