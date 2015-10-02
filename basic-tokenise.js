@@ -23,13 +23,21 @@ define(['models', '6502', 'utils', 'video', 'soundchip'],
                     cpu.writemem(offset + i, line.charCodeAt(i));
                 }
                 cpu.writemem(offset + line.length, 0x0d);
+                var safety = 20 * 1000 * 1000;
                 while (cpu.s <= 0xf0) {
                     cpu.execute(1);
+                    if (--safety == 0) {
+                        break;
+                    }
                 }
                 var endOffset = cpu.readmem(0x37) | (cpu.readmem(0x38) << 8);
                 var result = "";
                 for (i = offset; i < endOffset; ++i) {
                     result += String.fromCharCode(cpu.readmem(i));
+                }
+                if (safety == 0) {
+                    throw new Error("Unable to tokenize '" + line + "' - got as far as '" + result 
+                            + "' pc=" + utils.hexword(cpu.pc));
                 }
                 return result;
             };
