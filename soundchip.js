@@ -243,7 +243,7 @@ define(['utils'], function (utils) {
     }
 
     function FakeSoundChip() {
-        this.reset = this.enable = this.mute = this.unmte = this.render = this.poke = this.polltime = utils.noop;
+        this.reset = this.enable = this.mute = this.unmute = this.render = this.poke = this.polltime = utils.noop;
         this.toneGenerator = this;
     }
 
