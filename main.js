@@ -279,7 +279,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             tryGl = parsedQuery.glEnabled === "true";
         }
         var canvas = tryGl ? canvasLib.bestCanvas($('#screen')[0]) : new canvasLib.Canvas($('#screen')[0]);
-        video = new Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
+        video = new Video.Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;
             frames = 0;
@@ -293,9 +293,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             } else if (typeof(webkitAudioContext) !== 'undefined') {
                 context = new webkitAudioContext(); // jshint ignore:line
             } else {
-                return new SoundChip(10000);
+                return new SoundChip.FakeSoundChip();
             }
-            soundChip = new SoundChip(context.sampleRate);
+            soundChip = new SoundChip.SoundChip(context.sampleRate);
             jsAudioNode = context.createScriptProcessor(2048, 0, 1);
             function pumpAudio(event) {
                 var outBuffer = event.outputBuffer;

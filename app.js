@@ -41,7 +41,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
             setCpu: function () {
             }
         };
-        var soundChip = new SoundChip(10000);
+        var soundChip = new SoundChip.FakeSoundChip();
 
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;

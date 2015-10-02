@@ -1,6 +1,6 @@
-define([], function () {
+define(['utils'], function (utils) {
     "use strict";
-    return function SoundChip(sampleRate) {
+    function SoundChip(sampleRate) {
         var soundchipFreq = 4000000.0 / 16;
         var sampleDecrement = soundchipFreq / sampleRate;
         var samplesPerCycle = sampleRate / (2 * 1000 * 1000); // TODO hacky here
@@ -240,5 +240,15 @@ define([], function () {
         this.unmute = function () {
             enabled = true;
         };
-    };
+    }
+
+    function FakeSoundChip() {
+        this.reset = this.enable = this.mute = this.unmte = this.render = this.poke = this.polltime = utils.noop;
+        this.toneGenerator = this;
+    }
+
+    return {
+        SoundChip: SoundChip,
+        FakeSoundChip: FakeSoundChip
+    }
 });

@@ -15,7 +15,7 @@ requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
         "use strict";
 
         var video = new Video.FakeVideo();
-        var soundChip = new SoundChip(10000);
+        var soundChip = new SoundChip.FakeSoundChip();
         var dbgr = {
             setCpu: function () {
             }

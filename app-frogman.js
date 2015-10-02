@@ -45,7 +45,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
                 console.log("yikes " + addr);
             }
         };
-        var soundChip = new SoundChip(44000);
+        var soundChip = new SoundChip.SoundChip(44000);
 
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;

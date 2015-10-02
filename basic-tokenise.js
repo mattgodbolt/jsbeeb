@@ -4,7 +4,7 @@ define(['models', '6502', 'utils', 'video', 'soundchip'],
 
         function create() {
             var video = new Video.FakeVideo();
-            var soundChip = new SoundChip(10000);
+            var soundChip = new SoundChip.FakeSoundChip();
             var dbgr = {
                 setCpu: utils.noop
             };

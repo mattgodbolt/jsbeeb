@@ -9,7 +9,7 @@ var dbgr = {
 };
 var models = requirejs('models');
 var video = new Video.FakeVideo();
-var soundChip = new SoundChip(10000);
+var soundChip = new SoundChip.FakeSoundChip();
 var cpu = new Cpu6502(models.TEST_65C12, dbgr, video, soundChip, new Cmos());
 
 exports.bcd65c12sbc1 = function (test) {
