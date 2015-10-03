@@ -889,5 +889,42 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         return new Int32Array(u32.buffer);
     };
 
+    exports.unzipDiscImage = function unzipDiscImage(data) {
+        var unzip = new jsunzip.JSUnzip();
+        console.log("Attempting to unzip");
+        var result = unzip.open(data);
+        if (!result.status) {
+            throw new Error("Error unzipping ", result.error);
+        }
+        var uncompressed = null;
+        var knownExtensions = {
+            'uef': true,
+            'ssd': true,
+            'dsd': true
+        };
+        var loadedFile;
+        for (var f in unzip.files) {
+            var match = f.match(/.*\.([a-z]+)/i);
+            if (!match || !knownExtensions[match[1].toLowerCase()]) {
+                console.log("Skipping file", f);
+                continue;
+            }
+            if (uncompressed) {
+                console.log("Ignoring", f, "as already found a file");
+                continue;
+            }
+            loadedFile = f;
+            uncompressed = unzip.read(f);
+        }
+        if (!uncompressed) {
+            throw new Error("Couldn't find any compatible files in the archive");
+        }
+        if (!uncompressed.status) {
+            throw new Error("Failed to uncompress file '" + loadedFile + "' - " + uncompressed.error);
+        }
+        console.log("Unzipped '" + loadedFile + "'");
+        return {data: uncompressed.data, name: loadedFile};
+    };
+
     return exports;
 });

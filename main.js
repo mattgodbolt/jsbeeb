@@ -756,6 +756,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             }
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + discImage).then(function (discData) {
+                    if (/\.zip/i.test(discImage)) {
+                        var unzipped = utils.unzipDiscImage(discData);
+                        discData = unzipped.data;
+                        discImage = unzipped.name;
+                    }
                     return disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
                 });
             }
@@ -1063,10 +1068,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 needsAutoboot = "";
                 imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
                     var prog = String.fromCharCode.apply(null, data);
-                    return tokeniser.create().then(function(t) {
+                    return tokeniser.create().then(function (t) {
                         return t.tokenise(prog);
                     });
-                }).then(function(tokenised) {
+                }).then(function (tokenised) {
                     // Load the program immediately after the \xff of the "no program" has been
                     // written to PAGE+1
                     var writeHook = processor.debugWrite.add(function (addr, b) {
