@@ -169,8 +169,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         };
 
         this.clearFb = function (destOffset, numPixels) {
-//          var black = 0xFF000000;
-            var black = 0xff220022;//this.collook[0];
+            var black = 0xFF000000;
             var fb32 = this.fb32;
             while (numPixels--) {
                 fb32[destOffset++] = black;
