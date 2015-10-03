@@ -502,7 +502,7 @@ define(['utils'], function (utils) {
             self.capsLockLight = !(self.IC32 & 0x40);
             self.shiftLockLight = !(self.IC32 & 0x80);
 
-            video.setScreenSize(((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0));
+            video.setScreenAdd(((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0));
             if (isMaster) cmos.write(self.IC32, self.sdbval);
         };
 

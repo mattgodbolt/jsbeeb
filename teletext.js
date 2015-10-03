@@ -2,12 +2,6 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
     "use strict";
 
     function Teletext() {
-        this.chars = new Uint8Array(96 * 160);
-        this.charsi = new Uint8Array(96 * 160);
-        this.graph = new Uint8Array(96 * 160);
-        this.graphi = new Uint8Array(96 * 160);
-        this.sepgraph = new Uint8Array(96 * 160);
-        this.sepgraphi = new Uint8Array(96 * 160);
         this.prevCol = 0;
         this.holdClear = false;
         this.holdOff = false;
@@ -20,134 +14,105 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
         this.flashTime = 0;
         this.heldChar = false;
         this.holdChar = 0;
-        this.nextChars = [this.chars, this.charsi];
-        this.curChars = [this.chars, this.charsi];
-        this.heldChars = [this.chars, this.charsi];
-        this.delayBuf = [0xff, 0xff];
+        this.dataQueue = [0, 0, 0, 0];
+        
+        this.normalGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
+        this.graphicsGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
+        this.separatedGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
+        this.colour = utils.makeFast32(new Uint32Array(256));
+        
+        this.nextGlyphs = this.normalGlyphs;
+        this.curGlyphs = this.normalGlyphs;
+        this.heldGlyphs = this.normalGlyphs;
 
         this.init = function () {
-            var Data = ttData.makeChars();
-            var i, x, x2, stat, offs1, offs2, j, y, o, p;
-            // turn the 1s into 15s (?)
-            for (i = 0; i < 96 * 60; ++i) {
-                Data.normal[i] *= 15;
-                Data.graphics[i] *= 15;
-                Data.separated[i] *= 15;
-            }
-            // Double width for antialiasing.
-            var tempi2 = new Uint8Array(96 * 120);
-            for (i = 0; i < 96 * 120; ++i)
-                tempi2[i] = Data.normal[i >>> 1];
-            var tempi = new Uint8Array(96 * 120);
+            var charData = ttData.makeChars();
+            var i, x, x2, stat, offs1, offs2, j, k, y, o, p;
 
-            function lerp(a, b, x) {
-                return a * (1 - x) + b * x;
+            // Build palette
+            var gamma = 1.0 / 2.2;
+            for (i = 0; i < 256; ++i) {
+                var alpha = (i & 3) / 3.0;
+                var foregroundR = !!(i & 4);
+                var foregroundG = !!(i & 8);
+                var foregroundB = !!(i & 16);
+                var backgroundR = !!(i & 32);
+                var backgroundG = !!(i & 64);
+                var backgroundB = !!(i & 128);
+                // Gamma-corrected blending
+                var blendedR = Math.pow(foregroundR * alpha + backgroundR * (1.0 - alpha), gamma) * 240;
+                var blendedG = Math.pow(foregroundG * alpha + backgroundG * (1.0 - alpha), gamma) * 240;
+                var blendedB = Math.pow(foregroundB * alpha + backgroundB * (1.0 - alpha), gamma) * 240;
+                this.colour[i] = blendedR | (blendedG << 8) | (blendedB << 16) | (0xFF << 24);
             }
-
-            offs1 = offs2 = 0;
-            for (i = 0; i < 960; ++i) {
-                x = x2 = 0;
-                for (j = 0; j < 16; ++j) {
-                    o = offs2 + j;
-                    if (!j) {
-                        this.graph[o] = this.graphi[o] = Data.graphics[offs1];
-                        this.sepgraph[o] = this.sepgraphi[o] = Data.separated[offs1];
-                    } else if (j === 15) {
-                        this.graph[o] = this.graphi[o] = Data.graphics[offs1 + 5];
-                        this.sepgraph[o] = this.sepgraphi[o] = Data.separated[offs1 + 5];
-                    } else {
-                        this.graph[o] = this.graphi[o] = Data.graphics[offs1 + x2];
-                        this.sepgraph[o] = this.sepgraphi[o] = Data.separated[offs1 + x2];
-                    }
-                    x += 5 / 15;
-                    if (x >= 1) {
-                        x2++;
-                        x -= 1;
-                    }
-                    this.charsi[o] = 0;
-                }
-                offs1 += 6;
-                offs2 += 16;
-            }
-
-            offs1 = offs2 = 0;
-            for (i = 0; i < 96; ++i) {
-                for (y = 0; y < 10; ++y) {
-                    for (x = 0; x < 6; ++x) {
-                        stat = 0;
-                        if (y != 9) {
-                            var basePos = offs1 + y * 6 + x;
-                            var above = Data.normal[basePos];
-                            var below = Data.normal[basePos + 6];
-                            var left = Data.normal[basePos - 1];
-                            var right = Data.normal[basePos + 1];
-                            var belowLeft = Data.normal[basePos + 5];
-                            var belowRight = Data.normal[basePos + 7];
-                            if (above && below) stat = 3;
-                            if (x > 0 && above && belowLeft && !left) stat |= 1;
-                            if (x > 0 && below && left && !belowLeft) stat |= 1;
-                            if (x < 5 && above && belowRight && !right) stat |= 2;
-                            if (x < 6 && below && right && !belowRight) stat |= 2;
+            
+            function makeHiResGlyphs(dest) {
+                var index = 0;
+                for (var c = 0; c < 96; ++c) {
+                    
+                    function getLoResGlyphRow(row) {
+                        if (row < 0 || row >= 20) {
+                            return 0;
+                        } else {
+                            var index = c * 60 + (row >> 1) * 6;
+                            var result = 0;
+                            for (var x = 0; x < 6; ++x) {
+                                result |= ((charData[index++] * 3) << (x * 2));
+                            }
+                            return result;
                         }
-                        tempi[offs2] = (stat & 1) ? 15 : 0;
-                        tempi[offs2 + 1] = (stat & 2) ? 15 : 0;
-                        offs2 += 2;
+                    }
+                    
+                    function combineRows(a, b) {
+                        return a | ((a >> 1) & b & ~(b >> 1)) | ((a << 1) & b & ~(b << 1));
+                    }
+                    
+                    for (var row = 0; row < 20; ++row) {
+                        var data = combineRows(getLoResGlyphRow(row), getLoResGlyphRow(row + ((row & 1) ? 1 : -1)));
+                        dest[index++] = ((data & 0x1) * 0x7) + ((data & 0x2) * 0x14) + ((data & 0x4) * 0x34) + ((data & 0x8) * 0xE0) +
+                                        ((data & 0x10) * 0x280) + ((data & 0x20) * 0x680) + ((data & 0x40) * 0x1C00) + ((data & 0x80) * 0x5000) +
+                                        ((data & 0x100) * 0xD000) + ((data & 0x200) * 0x38000) + ((data & 0x400) * 0xA0000) + ((data & 0x800) * 0x1A0000);
                     }
                 }
-                offs1 += 60;
             }
-
-            offs1 = offs2 = 0;
-            for (i = 0; i < 960; ++i) {
-                x = x2 = 0;
-                for (j = 0; j < 16; ++j) {
-                    o = offs2 + j;
-                    p = offs1 + x2;
-                    this.chars[o] = lerp(tempi2[p], tempi2[p + 1], x);
-                    this.charsi[o] = lerp(tempi[p], tempi[p + 1], x);
-                    x += 11 / 15;
-                    if (x >= 1) {
-                        x2++;
-                        x -= 1;
-                    }
-                    if (i >= 320 && i < 640) {
-                        this.graph[o] = this.sepgraph[o] = this.chars[o];
-                        this.graphi[o] = this.sepgraphi[o] = this.charsi[o];
+            
+            makeHiResGlyphs(this.normalGlyphs);
+            
+            function setGraphicsBlock(c, x, y, w, h, sep, n) {
+                for (var yy = 0; yy < h; ++yy) {
+                    for (var xx = 0; xx < w; ++xx) {
+                        charData[c * 60 + (y + yy) * 6 + (x + xx)] = (sep && (xx === 0 || yy === 0)) ? 0 : n;
                     }
                 }
-                offs1 += 12;
-                offs2 += 16;
             }
-
-            function clamp(x) {
-                x *= 255 / 15;
-                if (x < 0) return 0;
-                if (x > 255) return 255;
-                return x | 0;
-            }
-
-            this.palette = [];
-            for (i = 0; i < 64; ++i) {
-                this.palette[i] = utils.makeFast32(new Uint32Array(16));
-                for (var c = 0; c < 16; ++c) {
-                    var r = ((i & 1) >> 0) * c + ((i & 8) >> 3) * (15 - c);
-                    var g = ((i & 2) >> 1) * c + ((i & 16) >> 4) * (15 - c);
-                    var b = ((i & 4) >> 2) * c + ((i & 32) >> 5) * (15 - c);
-                    this.palette[i][c] = 0xff000000 | (clamp(b) << 16) | (clamp(g) << 8) | (clamp(r) << 0);
+            
+            // Build graphics character set
+            for (var c = 0; c < 96; ++c) {
+                if (!(c & 32)) {
+                    setGraphicsBlock(c, 0, 0, 3, 3, false, !!(c & 1));
+                    setGraphicsBlock(c, 3, 0, 3, 3, false, !!(c & 2));
+                    setGraphicsBlock(c, 0, 3, 3, 4, false, !!(c & 4));
+                    setGraphicsBlock(c, 3, 3, 3, 4, false, !!(c & 8));
+                    setGraphicsBlock(c, 0, 7, 3, 3, false, !!(c & 16));
+                    setGraphicsBlock(c, 3, 7, 3, 3, false, !!(c & 64));
                 }
             }
-
-            function printerize(c, offset) {
-                for (var i = 0; i < 10; ++i) {
-                    var thing = "";
-                    for (var j = 0; j < 16; ++j) {
-                        if (c[offset + i * 16 + j]) {
-                            thing += "*";
-                        } else thing += ".";
-                    }
-                    console.log(i + " " + thing);
+            
+            makeHiResGlyphs(this.graphicsGlyphs);
+                
+            // Build separated graphics character set
+            for (var c = 0; c < 96; ++c) {
+                if (!(c & 32)) {
+                    setGraphicsBlock(c, 0, 0, 3, 3, true, !!(c & 1));
+                    setGraphicsBlock(c, 3, 0, 3, 3, true, !!(c & 2));
+                    setGraphicsBlock(c, 0, 3, 3, 4, true, !!(c & 4));
+                    setGraphicsBlock(c, 3, 3, 3, 4, true, !!(c & 8));
+                    setGraphicsBlock(c, 0, 7, 3, 3, true, !!(c & 16));
+                    setGraphicsBlock(c, 3, 7, 3, 3, true, !!(c & 64));
                 }
             }
+            
+            makeHiResGlyphs(this.separatedGlyphs);
         };
         this.init();
     }
@@ -155,15 +120,12 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
     Teletext.prototype.setNextChars = function () {
         if (this.gfx) {
             if (this.sep) {
-                this.nextChars[0] = this.sepgraph;
-                this.nextChars[1] = this.sepgraphi;
+                this.nextGlyphs = this.separatedGlyphs;
             } else {
-                this.nextChars[0] = this.graph;
-                this.nextChars[1] = this.graphi;
+                this.nextGlyphs = this.graphicsGlyphs;
             }
         } else {
-            this.nextChars[0] = this.chars;
-            this.nextChars[1] = this.charsi;
+            this.nextGlyphs = this.normalGlyphs;
         }
     };
 
@@ -233,81 +195,68 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
         if (this.holdChar && this.dbl === this.oldDbl) {
             data = this.heldChar;
             if (data >= 0x40 && data < 0x60) data = 0x20;
-            this.curChars[0] = this.heldChars[0];
-            this.curChars[1] = this.heldChars[1];
+            this.curGlyphs = this.heldGlyphs;
         } else {
             data = 0x20;
         }
         return data;
     };
 
-    Teletext.prototype.render = function (buf, offset, scanline, interline, data) {
+    Teletext.prototype.fetchData = function (data) {
+        this.dataQueue.shift();
+        this.dataQueue.push(data & 0x7F);
+    };
+    
+    Teletext.prototype.render = function (buf, offset, scanline) {
         var i;
-        // Account for the two-character delay.
-        this.delayBuf.push(data);
-        data = this.delayBuf.shift();
+        var data = this.dataQueue[0];
         this.oldDbl = this.dbl;
-        offset += 16;
 
         this.prevCol = this.col;
-        this.curChars[0] = this.nextChars[0];
-        this.curChars[1] = this.nextChars[1];
+        this.curGlyphs = this.nextGlyphs;
 
-        if (data === 255) {
-            for (i = 0; i < 16; ++i) {
-                buf[offset + i] = 0xff000000;
-            }
-            return;
-        }
         var prevFlash = this.flash;
         if (data < 0x20) {
             data = this.handleControlCode(data);
         } else if (this.gfx) {
             this.heldChar = data;
-            this.heldChars[0] = this.curChars[0];
-            this.heldChars[1] = this.curChars[1];
+            this.heldGlyphs = this.curGlyphs;
         }
-        var t = (data - 0x20) * 160;
-        var rounding;
+        
         if (this.oldDbl) {
-            t += (scanline >>> 1) * 16;
-            if (this.secondHalfOfDouble) t += 5 * 16;
-            rounding = (interline && (scanline & 1)) ? 1 : 0;
-        } else {
-            t += scanline * 16;
-            rounding = interline ? 1 : 0;
+            scanline = (scanline >>> 1);
+            if (this.secondHalfOfDouble) {
+                scanline += 10;
+            }
         }
-
-        var palette;
-        if (prevFlash && this.flashOn) {
-            var flashColour = this.palette[(this.bg & 7) << 3][0];
+        var chardef = this.curGlyphs[(data - 32) * 20 + scanline];
+        
+        if ((prevFlash && this.flashOn) || (this.secondHalfOfDouble && !this.dbl)) {
+            var backgroundColour = this.colour[(this.bg & 7) << 5];
             for (i = 0; i < 16; ++i) {
-                buf[offset++] = flashColour;
+                buf[offset++] = backgroundColour;
             }
         } else {
-            if (!this.dbl && this.secondHalfOfDouble) {
-                palette = this.palette[((this.bg & 7) << 3) | (this.bg & 7)];
-            } else {
-                palette = this.palette[((this.bg & 7) << 3) | (this.prevCol & 7)];
-            }
-            var px = this.curChars[rounding];
+            var paletteIndex = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
+
             // Unrolling seems a good thing here, at least on Chrome.
-            buf[offset] = palette[px[t]];
-            buf[offset + 1] = palette[px[t + 1]];
-            buf[offset + 2] = palette[px[t + 2]];
-            buf[offset + 3] = palette[px[t + 3]];
-            buf[offset + 4] = palette[px[t + 4]];
-            buf[offset + 5] = palette[px[t + 5]];
-            buf[offset + 6] = palette[px[t + 6]];
-            buf[offset + 7] = palette[px[t + 7]];
-            buf[offset + 8] = palette[px[t + 8]];
-            buf[offset + 9] = palette[px[t + 9]];
-            buf[offset + 10] = palette[px[t + 10]];
-            buf[offset + 11] = palette[px[t + 11]];
-            buf[offset + 12] = palette[px[t + 12]];
-            buf[offset + 13] = palette[px[t + 13]];
-            buf[offset + 14] = palette[px[t + 14]];
-            buf[offset + 15] = palette[px[t + 15]];
+            // TODO: see if that's still the case
+            buf[offset] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 1] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 2] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 3] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 4] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 5] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 6] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 7] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 8] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 9] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 10] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 11] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 12] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 13] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 14] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            buf[offset + 15] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
         }
 
         if (this.holdOff) {
@@ -336,8 +285,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
         this.bg = 0;
         this.holdChar = false;
         this.heldChar = 0x20;
-        this.nextChars[0] = this.heldChars[0] = this.chars;
-        this.nextChars[1] = this.heldChars[1] = this.charsi;
+        this.nextGlyphs = this.heldGlyphs = this.normalGlyphs;
         this.flash = false;
         this.sep = false;
         this.gfx = false;
