@@ -1072,29 +1072,24 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                         return t.tokenise(prog);
                     });
                 }).then(function (tokenised) {
-                    // Load the program immediately after the \xff of the "no program" has been
-                    // written to PAGE+1
-                    var writeHook = processor.debugWrite.add(function (addr, b) {
+                    var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+                    var hook = processor.debugInstruction.add(function (addr) {
+                        if (addr !== idleAddr) return;
                         var page = processor.readmem(0x18) << 8;
-                        if (page >= 0xe00 && addr === (page + 1) && b === 0xff) {
-                            // Needed as the debug happens before the write takes place.
-                            var debugHook = processor.debugInstruction.add(function () {
-                                for (var i = 0; i < tokenised.length; ++i) {
-                                    processor.writemem(page + i, tokenised.charCodeAt(i));
-                                }
-                                // Now set VARTOP (0x12/3) and TOP(0x02/3)
-                                var end = page + tokenised.length;
-                                var endLow = end & 0xff;
-                                var endHigh = (end >>> 8) & 0xff;
-                                processor.writemem(0x02, endLow);
-                                processor.writemem(0x03, endHigh);
-                                processor.writemem(0x12, endLow);
-                                processor.writemem(0x13, endHigh);
-                                debugHook.remove();
-                                if (needsRun)
-                                    autoRunBasic();
-                            });
-                            writeHook.remove();
+                        for (var i = 0; i < tokenised.length; ++i) {
+                            processor.writemem(page + i, tokenised.charCodeAt(i));
+                        }
+                        // Set VARTOP (0x12/3) and TOP(0x02/3)
+                        var end = page + tokenised.length;
+                        var endLow = end & 0xff;
+                        var endHigh = (end >>> 8) & 0xff;
+                        processor.writemem(0x02, endLow);
+                        processor.writemem(0x03, endHigh);
+                        processor.writemem(0x12, endLow);
+                        processor.writemem(0x13, endHigh);
+                        hook.remove();
+                        if (needsRun) {
+                            autoRunBasic();
                         }
                     });
                 }));
