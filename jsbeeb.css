@@ -87,6 +87,12 @@ span.accesskey {
     left: 0px;
     position: fixed;
 }
+/* hide the LED headers when the LEDs would likely cover the screen */
+@media screen and (max-width: 1200px) and (max-height: 700px) {
+    #leds thead {
+        display: none;
+    }
+}
 
 #leds td, th {
     padding: 2px;
