@@ -7,8 +7,8 @@ body {
 }
 
 #cub-monitor > div {
-    width: 921px;
-    height: 682px;
+    width: 896px;
+    height: 648px;
     position: relative;
     margin-left: auto;
     margin-right: auto;
@@ -21,10 +21,10 @@ body {
 #screen {
     position: absolute;
     z-index: -1;
-    top: 0px;
+    top: 8px;
     left: 0px;
-    width: 921px;
-    height: 682px;
+    width: 896px;
+    height: 600px;
     display: block;
     background-color: black;
 }
