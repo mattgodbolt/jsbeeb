@@ -15,6 +15,43 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         this.screenAddrAdd = new Uint16Array([0x4000, 0x3000, 0x6000, 0x5800]);
         this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
         this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x10, 0x20]);
+        this.regs = new Uint8Array(32);
+        this.bitmapX = 0;
+        this.bitmapY = 0;
+        this.clocks = 0;
+        this.oddClock = false;
+        this.frameCount = 0;
+        this.inHSync = false;
+        this.inVSync = false;
+        this.inVertAdjust = false;
+        this.hpulseWidth = 0;
+        this.vpulseWidth = 0;
+        this.hpulseCounter = 0;
+        this.vpulseCounter = 0;
+        this.dispEnabled = 0;
+        this.horizCounter = 0;
+        this.vertCounter = 0;
+        this.scanlineCounter = 0;
+        this.addr = 0;
+        this.addrLine = 0;
+        this.lineStartAddr = 0;
+        this.nextLineStartAddr = 0;
+        this.ulactrl = 0;
+        this.pixelsPerChar = 8;
+        this.halfClock = false;
+        this.ulaMode = 0;
+        this.teletextMode = false;
+        this.displayEnableSkew = 0;
+        this.ulaPal = utils.makeFast32(new Uint32Array(16));
+        this.actualPal = new Uint8Array(16);
+        this.drawHalfScanline = false;
+        this.oddFrame = false;
+        this.teletext = new Teletext();
+        this.cursorOn = this.cursorOff = this.cursorOnThisFrame = false;
+        this.cursorDrawIndex = 0;
+        this.cursorPos = 0;
+        this.interlacedSyncAndVideo = false;
+        this.doubledScanlines = true;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -26,47 +63,9 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         this.reset = function (cpu, via) {
             this.cpu = cpu;
             this.sysvia = via;
-            this.regs = new Uint8Array(32);
-            this.bitmapX = 0;
-            this.bitmapY = 0;
-            this.clocks = 0;
-            this.oddClock = false;
-            this.frameCount = 0;
-            this.inHSync = false;
-            this.inVSync = false;
-            this.inVertAdjust = false;
-            this.hpulseWidth = 0;
-            this.vpulseWidth = 0;
-            this.hpulseCounter = 0;
-            this.vpulseCounter = 0;
-            this.dispEnabled = 0;
-            this.horizCounter = 0;
-            this.vertCounter = 0;
-            this.scanlineCounter = 0;
-            this.addr = 0;
-            this.addrLine = 0;
-            this.lineStartAddr = 0;
-            this.nextLineStartAddr = 0;
-            this.ulactrl = 0;
-            this.pixelsPerChar = 8;
-            this.halfClock = false;
-            this.ulaMode = 0;
-            this.teletextMode = false;
-            this.displayEnableSkew = 0;
-            this.ulaPal = utils.makeFast32(new Uint32Array(16));
-            this.actualPal = new Uint8Array(16);
-            this.drawHalfScanline = false;
-            this.oddFrame = false;
-            this.teletext = new Teletext();
-            this.cursorOn = this.cursorOff = this.cursorOnThisFrame = false;
-            this.cursorDrawIndex = 0;
-            this.cursorPos = 0;
-            this.interlacedSyncAndVideo = false;
-            this.doubledScanlines = true;
-
             this.updateFbTable();
         };
-
+        
         this.paint = function () {
             this.paint_ext(
                 this.leftBorder,
