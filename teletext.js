@@ -63,11 +63,16 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                 return a | ((a >> 1) & b & ~(b >> 1)) | ((a << 1) & b & ~(b << 1));
             }
 
-            function makeHiResGlyphs(dest) {
+            function makeHiResGlyphs(dest, graphicsGlyphs) {
                 var index = 0;
                 for (var c = 0; c < 96; ++c) {
                     for (var row = 0; row < 20; ++row) {
-                        var data = combineRows(getLoResGlyphRow(c, row), getLoResGlyphRow(c, row + ((row & 1) ? 1 : -1)));
+                        var data;
+                        if (!graphicsGlyphs || !!(c & 32)) {
+                            data = combineRows(getLoResGlyphRow(c, row), getLoResGlyphRow(c, row + ((row & 1) ? 1 : -1)));
+                        } else {
+                            data = getLoResGlyphRow(c, row);
+                        }
                         dest[index++] = ((data & 0x1) * 0x7) + ((data & 0x2) * 0x14) + ((data & 0x4) * 0x34) + ((data & 0x8) * 0xE0) +
                             ((data & 0x10) * 0x280) + ((data & 0x20) * 0x680) + ((data & 0x40) * 0x1C00) + ((data & 0x80) * 0x5000) +
                             ((data & 0x100) * 0xD000) + ((data & 0x200) * 0x38000) + ((data & 0x400) * 0xA0000) + ((data & 0x800) * 0x1A0000);
@@ -75,7 +80,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                 }
             }
 
-            makeHiResGlyphs(this.normalGlyphs);
+            makeHiResGlyphs(this.normalGlyphs, false);
 
             function setGraphicsBlock(c, x, y, w, h, sep, n) {
                 for (var yy = 0; yy < h; ++yy) {
@@ -97,7 +102,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                 }
             }
 
-            makeHiResGlyphs(this.graphicsGlyphs);
+            makeHiResGlyphs(this.graphicsGlyphs, true);
 
             // Build separated graphics character set
             for (c = 0; c < 96; ++c) {
@@ -111,7 +116,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                 }
             }
 
-            makeHiResGlyphs(this.separatedGlyphs);
+            makeHiResGlyphs(this.separatedGlyphs, true);
         };
         this.init();
     }
