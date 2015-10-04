@@ -177,11 +177,12 @@ define(['teletext', 'utils'], function (Teletext, utils) {
 
         this.handleCursor = function (offset) {
             if (this.cursorOnThisFrame && (this.ulactrl & this.cursorTable[this.cursorDrawIndex])) {
-                for (var i = 0; i < this.pixelsPerChar; ++i) {
+                var i;
+                for (i = 0; i < this.pixelsPerChar; ++i) {
                     this.fb32[offset + i] ^= 0x00ffffff;
                 }
                 if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
-                    for (var i = 0; i < this.pixelsPerChar; ++i) {
+                    for (i = 0; i < this.pixelsPerChar; ++i) {
                         this.fb32[offset + 1024 + i] ^= 0x00ffffff;
                     }
                 }

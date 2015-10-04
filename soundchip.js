@@ -250,5 +250,5 @@ define(['utils'], function (utils) {
     return {
         SoundChip: SoundChip,
         FakeSoundChip: FakeSoundChip
-    }
+    };
 });

@@ -60,7 +60,6 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
             cpu.sysvia.keyUp(16);
             benchmarkCpu(cpu, 100 * 1000 * 1000);
         }).catch(function (err) {
-            "use strict";
             console.log("Got error: ", err);
         });
     }

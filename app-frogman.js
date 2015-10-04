@@ -103,20 +103,17 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
             var first = 1564809;
             console.log(first);
             exec(first);
-            console.log("now = " + cpu.currentCycles
-            + " " + utils.hexword(cpu.pc));
+            console.log("now = " + cpu.currentCycles + " " + utils.hexword(cpu.pc));
             cpu.sysvia.enableKeyboard();
             var second = 2097489 - cpu.currentCycles;
             console.log(second);
             exec(second);
-            console.log("now = " + cpu.currentCycles
-            + " " + utils.hexword(cpu.pc));
+            console.log("now = " + cpu.currentCycles + " " + utils.hexword(cpu.pc));
             cpu.sysvia.keyDown(49);
             var third = 2363365 - cpu.currentCycles;
             console.log(third);
             exec(third);
-            console.log("now = " + cpu.currentCycles
-            + " " + utils.hexword(cpu.pc));
+            console.log("now = " + cpu.currentCycles + " " + utils.hexword(cpu.pc));
             cpu.sysvia.keyUp(49);
             console.log("Typed 1");
             for (var i = 0; i < 2; ++i) {

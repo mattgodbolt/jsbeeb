@@ -1142,7 +1142,6 @@ define(['utils'], function (utils) {
                 funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode)); // jshint ignore:line
             }
             return function exec(opcode) {
-                "use strict";
                 return funcs[opcode](this.cpu);
             };
         }

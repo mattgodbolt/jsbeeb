@@ -26,7 +26,7 @@ define(['models', '6502', 'utils', 'video', 'soundchip'],
                 var safety = 20 * 1000 * 1000;
                 while (cpu.s <= 0xf0) {
                     cpu.execute(1);
-                    if (--safety == 0) {
+                    if (--safety === 0) {
                         break;
                     }
                 }
@@ -35,9 +35,8 @@ define(['models', '6502', 'utils', 'video', 'soundchip'],
                 for (i = offset; i < endOffset; ++i) {
                     result += String.fromCharCode(cpu.readmem(i));
                 }
-                if (safety == 0) {
-                    throw new Error("Unable to tokenize '" + line + "' - got as far as '" + result 
-                            + "' pc=" + utils.hexword(cpu.pc));
+                if (safety === 0) {
+                    throw new Error("Unable to tokenize '" + line + "' - got as far as '" + result + "' pc=" + utils.hexword(cpu.pc));
                 }
                 return result;
             };
@@ -47,7 +46,7 @@ define(['models', '6502', 'utils', 'video', 'soundchip'],
                 var lineNum = lineSplit[1] ? parseInt(lineSplit[1]) : lineNumIfNotSpec;
                 var tokens = callTokeniser(lineSplit[2]);
                 return '\r' +
-                    String.fromCharCode((lineNum>>8) & 0xff) +
+                    String.fromCharCode((lineNum >> 8) & 0xff) +
                     String.fromCharCode(lineNum & 0xff) +
                     String.fromCharCode(tokens.length + 4) + tokens;
             };

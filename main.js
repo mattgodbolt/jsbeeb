@@ -83,9 +83,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 parsedQuery[key] = val;
 
                 // eg KEY.CAPSLOCK=CTRL
+                var bbcKey;
                 if (key.indexOf("KEY.") === 0) {
 
-                    var bbcKey = val.toUpperCase();
+                    bbcKey = val.toUpperCase();
 
                     if (BBC[bbcKey]) {
 
@@ -110,7 +111,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                     // remove GP.
                     var gamepadKey = key.substring(3).toUpperCase();
-                    var bbcKey = val.toUpperCase();
+                    bbcKey = val.toUpperCase();
 
                     // convert "1" into "K1"
                     if ("0123456789".indexOf(bbcKey) > 0) {
@@ -330,6 +331,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             } else {
                                 return keyCodes.SHIFT_RIGHT;
                             }
+                            break;
 
                         case keyCodes.ALT:
                             if (lastAltLocation == 1) {
@@ -337,6 +339,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             } else {
                                 return keyCodes.ALT_RIGHT;
                             }
+                            break;
 
                         case keyCodes.CTRL:
                             if (lastCtrlLocation == 1) {
@@ -344,6 +347,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             } else {
                                 return keyCodes.CTRL_RIGHT;
                             }
+                            break;
                     }
                     break;
                 case 1:
