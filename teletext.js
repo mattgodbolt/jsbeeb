@@ -46,7 +46,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                 this.colour[i] = blendedR | (blendedG << 8) | (blendedB << 16) | (0xFF << 24);
             }
 
-            function getLoResGlyphRow(row) {
+            function getLoResGlyphRow(c, row) {
                 if (row < 0 || row >= 20) {
                     return 0;
                 } else {
@@ -67,7 +67,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                 var index = 0;
                 for (var c = 0; c < 96; ++c) {
                     for (var row = 0; row < 20; ++row) {
-                        var data = combineRows(getLoResGlyphRow(row), getLoResGlyphRow(row + ((row & 1) ? 1 : -1)));
+                        var data = combineRows(getLoResGlyphRow(c, row), getLoResGlyphRow(c, row + ((row & 1) ? 1 : -1)));
                         dest[index++] = ((data & 0x1) * 0x7) + ((data & 0x2) * 0x14) + ((data & 0x4) * 0x34) + ((data & 0x8) * 0xE0) +
                             ((data & 0x10) * 0x280) + ((data & 0x20) * 0x680) + ((data & 0x40) * 0x1C00) + ((data & 0x80) * 0x5000) +
                             ((data & 0x100) * 0xD000) + ((data & 0x200) * 0x38000) + ((data & 0x400) * 0xA0000) + ((data & 0x800) * 0x1A0000);
@@ -100,7 +100,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
             makeHiResGlyphs(this.graphicsGlyphs);
 
             // Build separated graphics character set
-            for (var c = 0; c < 96; ++c) {
+            for (c = 0; c < 96; ++c) {
                 if (!(c & 32)) {
                     setGraphicsBlock(c, 0, 0, 3, 3, true, !!(c & 1));
                     setGraphicsBlock(c, 3, 0, 3, 3, true, !!(c & 2));
