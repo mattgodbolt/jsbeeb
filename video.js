@@ -22,12 +22,11 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         this.rightBorder = 3 * 16;
 
         this.paint_ext = paint_ext_param;
-        
+
         this.reset = function (cpu, via) {
             this.cpu = cpu;
-            this.sysvia = via;            
+            this.sysvia = via;
             this.regs = new Uint8Array(32);
-            
             this.bitmapX = 0;
             this.bitmapY = 0;
             this.clocks = 0;
@@ -47,7 +46,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             this.addr = 0;
             this.addrLine = 0;
             this.lineStartAddr = 0;
-            this.nextLineStartAddr = 0;            
+            this.nextLineStartAddr = 0;
             this.ulactrl = 0;
             this.pixelsPerChar = 8;
             this.halfClock = false;
@@ -214,7 +213,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                 this.blitFb(dat, offset, this.pixelsPerChar, this.doubledScanlines && !this.interlacedSyncAndVideo);
             }
         };
-        
+
         this.endOfFrame = function () {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
@@ -223,9 +222,9 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
             this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         };
-        
+
         this.endOfLine = function () {
-            
+
             var cursorEnd = this.interlacedSyncAndVideo ? (this.regs[11] >>> 1) : this.regs[11];
             if (this.scanlineCounter === cursorEnd) {
                 this.cursorOn = false;
@@ -241,9 +240,9 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                     this.sysvia.setVBlankInt(false);
                 }
             }
-                        
+
             var numScanlines = this.inVertAdjust ? (this.regs[5] - 1) : (this.interlacedSyncAndVideo ? (this.regs[9] >>> 1) : this.regs[9]);
-            if (this.scanlineCounter === numScanlines) {                
+            if (this.scanlineCounter === numScanlines) {
                 // New screen row
                 if (this.inVertAdjust) {
                     // Finished vertical adjust
@@ -265,7 +264,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                         if (this.vertCounter === this.regs[7]) {
                             this.inVSync = true;
                             this.vpulseCounter = 0;
-                        
+
                             this.oddFrame = !this.oddFrame;
                             if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
                             if (this.clocks > 2) { // TODO: wat?
@@ -278,7 +277,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                         }
                     }
                 }
-                
+
                 this.scanlineCounter = 0;
                 this.teletext.verticalCharEnd();
                 this.lineStartAddr = this.nextLineStartAddr;
@@ -298,7 +297,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                 }
                 this.addrLine += (this.interlacedSyncAndVideo ? 2 : 1);
             }
-                
+
             this.addr = this.lineStartAddr;
             this.teletext.endline();
 
@@ -313,23 +312,23 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         // Main drawing routine
         this.polltime = function (clocks) {
             if (this.fbTableDirty) this.updateFbTable();
-            
+
             while (clocks--) {
                 this.clocks++;
                 this.oddClock = !this.oddClock;
                 if (!this.halfClock || this.oddClock) {
-                    
+
                     // Handle HSync
                     if (this.inHSync) {
                         this.hpulseCounter = (this.hpulseCounter + 1) & 0x0F;
                         if (this.hpulseCounter === (this.hpulseWidth >>> 1)) {
                             this.bitmapX = 0;
-                            
+
                             // Half-clock horizontal movement
                             if (this.hpulseWidth & 1) {
                                 this.bitmapX = -4;
                             }
-                            
+
                             this.bitmapY++;
                             // If no VSync occurs this frame, go back to the top and force a repaint
                             if (this.bitmapY >= 384) {
@@ -341,33 +340,33 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                             this.inHSync = false;
                         }
                     }
-                    
+
                     // Handle delayed display enable due to skew
                     if (this.horizCounter === this.displayEnableSkew + (this.teletextMode ? 2 : 0)) {
                         this.dispEnabled |= SKEWDISPENABLE;
                     }
-                    
+
                     // Latch next line screen address in case we are in the last line of a character row
                     if (this.horizCounter === this.regs[1]) {
                         this.nextLineStartAddr = this.addr;
                     }
-                    
+
                     // Handle end of horizontal displayed, accounting for display enable skew
                     if (this.horizCounter === this.regs[1] + this.displayEnableSkew + (this.teletextMode ? 2 : 0)) {
                         this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
                     }
-                    
+
                     // Initiate HSync
                     if (this.horizCounter === this.regs[2]) {
                         this.inHSync = true;
                         this.hpulseCounter = 0;
                     }
-                    
+
                     // Handle cursor
                     if (this.horizCounter < this.regs[1] && this.cursorOn && !((this.addr ^ this.cursorPos) & 0x3fff)) {
                         this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
                     }
-                    
+
                     // Read data from address pointer if both horizontal and vertical display enabled
                     var dat;
                     if ((this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE)) {
@@ -376,14 +375,14 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                         if (this.teletextMode) {
                             this.teletext.fetchData(dat);
                         }
-                        
+
                         this.addr++;
                     }
 
                     // Render data or border depending on display enable state
 //                    var renderY = (this.bitmapY << 1) | ((this.oddFrame && !!(this.regs[8] & 1)) ? 1 : 0);    // emulate 'shaky' interlace
                     var renderY = (this.bitmapY << 1) | ((this.oddFrame && (this.interlacedSyncAndVideo || !this.doubledScanlines)) ? 1 : 0);
-                                        
+
                     if (this.bitmapX >= 0 && this.bitmapX < 1024 && renderY < 625) {
                         var offset = renderY * 1024 + this.bitmapX;
                         if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
@@ -391,7 +390,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                         } else {
                             this.renderBlank(offset);
                         }
-                    
+
                         if (this.cursorDrawIndex) {
                             this.handleCursor(offset);
                         }
@@ -415,9 +414,9 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                         this.horizCounter = (this.horizCounter + 1) & 0xff;
                     }
                 }
-                
+
                 this.bitmapX += 8;
-                
+
             } // matches while
         };
         ////////////////////
@@ -513,7 +512,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                 this.video.teletextMode = !!(val & 2);
             }
         };
-        
+
         this.ula = new Ula(this);
 
         this.reset(null);
@@ -521,10 +520,11 @@ define(['teletext', 'utils'], function (Teletext, utils) {
         for (var y = 0; y < 625; ++y)
             for (var x = 0; x < 1024; ++x)
                 this.fb32[y * 1024 + x] = 0;
-//        this.paint(0, 0, 1024, 625);
+        this.paint(0, 0, 1024, 625);
     }
 
     function FakeVideo() {
+        "use strict";
         this.reset = function () {
         };
         this.ula = this.crtc = {
@@ -534,7 +534,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             write: utils.noop
         };
         this.polltime = utils.noop;
-        this.setScreenSize = utils.noop;
+        this.setScreenAdd = utils.noop;
     }
 
     return {

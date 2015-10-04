@@ -15,12 +15,12 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
         this.heldChar = false;
         this.holdChar = 0;
         this.dataQueue = [0, 0, 0, 0];
-        
+
         this.normalGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
         this.graphicsGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
         this.separatedGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
         this.colour = utils.makeFast32(new Uint32Array(256));
-        
+
         this.nextGlyphs = this.normalGlyphs;
         this.curGlyphs = this.normalGlyphs;
         this.heldGlyphs = this.normalGlyphs;
@@ -69,14 +69,14 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                     for (var row = 0; row < 20; ++row) {
                         var data = combineRows(getLoResGlyphRow(row), getLoResGlyphRow(row + ((row & 1) ? 1 : -1)));
                         dest[index++] = ((data & 0x1) * 0x7) + ((data & 0x2) * 0x14) + ((data & 0x4) * 0x34) + ((data & 0x8) * 0xE0) +
-                                        ((data & 0x10) * 0x280) + ((data & 0x20) * 0x680) + ((data & 0x40) * 0x1C00) + ((data & 0x80) * 0x5000) +
-                                        ((data & 0x100) * 0xD000) + ((data & 0x200) * 0x38000) + ((data & 0x400) * 0xA0000) + ((data & 0x800) * 0x1A0000);
+                            ((data & 0x10) * 0x280) + ((data & 0x20) * 0x680) + ((data & 0x40) * 0x1C00) + ((data & 0x80) * 0x5000) +
+                            ((data & 0x100) * 0xD000) + ((data & 0x200) * 0x38000) + ((data & 0x400) * 0xA0000) + ((data & 0x800) * 0x1A0000);
                     }
                 }
             }
-            
+
             makeHiResGlyphs(this.normalGlyphs);
-            
+
             function setGraphicsBlock(c, x, y, w, h, sep, n) {
                 for (var yy = 0; yy < h; ++yy) {
                     for (var xx = 0; xx < w; ++xx) {
@@ -84,7 +84,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                     }
                 }
             }
-            
+
             // Build graphics character set
             for (var c = 0; c < 96; ++c) {
                 if (!(c & 32)) {
@@ -96,9 +96,9 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                     setGraphicsBlock(c, 3, 7, 3, 3, false, !!(c & 64));
                 }
             }
-            
+
             makeHiResGlyphs(this.graphicsGlyphs);
-                
+
             // Build separated graphics character set
             for (var c = 0; c < 96; ++c) {
                 if (!(c & 32)) {
@@ -110,7 +110,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                     setGraphicsBlock(c, 3, 7, 3, 3, true, !!(c & 64));
                 }
             }
-            
+
             makeHiResGlyphs(this.separatedGlyphs);
         };
         this.init();
@@ -205,7 +205,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
         this.dataQueue.shift();
         this.dataQueue.push(data & 0x7F);
     };
-    
+
     Teletext.prototype.render = function (buf, offset, scanline) {
         var i;
         var data = this.dataQueue[0];
@@ -221,7 +221,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
             this.heldChar = data;
             this.heldGlyphs = this.curGlyphs;
         }
-        
+
         if (this.oldDbl) {
             scanline = (scanline >>> 1);
             if (this.secondHalfOfDouble) {
@@ -229,7 +229,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
             }
         }
         var chardef = this.curGlyphs[(data - 32) * 20 + scanline];
-        
+
         if ((prevFlash && this.flashOn) || (this.secondHalfOfDouble && !this.dbl)) {
             var backgroundColour = this.colour[(this.bg & 7) << 5];
             for (i = 0; i < 16; ++i) {
@@ -238,24 +238,11 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
         } else {
             var paletteIndex = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
 
-            // Unrolling seems a good thing here, at least on Chrome.
-            // TODO: see if that's still the case
-            buf[offset] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 1] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 2] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 3] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 4] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 5] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 6] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 7] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 8] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 9] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 10] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 11] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 12] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 13] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 14] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
-            buf[offset + 15] = this.colour[paletteIndex + (chardef & 3)]; chardef >>>= 2;
+            // TODO: see if we should unroll here (we used to, before it got more complex).
+            for (var pixel = 0; pixel < 16; ++pixel) {
+                buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
+                chardef >>>= 2;
+            }
         }
 
         if (this.holdOff) {
