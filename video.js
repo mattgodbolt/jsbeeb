@@ -1,6 +1,13 @@
 define(['teletext', 'utils'], function (Teletext, utils) {
-    "use strict";
+    const VDISPENABLE = 1 << 0,
+        HDISPENABLE = 1 << 1,
+        SKEWDISPENABLE = 1 << 2,
+        SCANLINEDISPENABLE = 1 << 3,
+        USERDISPENABLE = 1 << 4,
+        EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE;
+
     function Video(fb32_param, paint_ext_param) {
+        "use strict";
         this.fb32 = utils.makeFast32(fb32_param);
         this.collook = utils.makeFast32(new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
@@ -16,13 +23,6 @@ define(['teletext', 'utils'], function (Teletext, utils) {
 
         this.paint_ext = paint_ext_param;
         
-        const VDISPENABLE = 1<<0,
-              HDISPENABLE = 1<<1,
-              SKEWDISPENABLE = 1<<2,
-              SCANLINEDISPENABLE = 1<<3,
-              USERDISPENABLE = 1<<4,
-              EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE;
-
         this.reset = function (cpu, via) {
             this.cpu = cpu;
             this.sysvia = via;            

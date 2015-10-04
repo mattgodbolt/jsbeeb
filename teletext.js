@@ -45,28 +45,27 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
                 var blendedB = Math.pow(foregroundB * alpha + backgroundB * (1.0 - alpha), gamma) * 240;
                 this.colour[i] = blendedR | (blendedG << 8) | (blendedB << 16) | (0xFF << 24);
             }
-            
+
+            function getLoResGlyphRow(row) {
+                if (row < 0 || row >= 20) {
+                    return 0;
+                } else {
+                    var index = c * 60 + (row >> 1) * 6;
+                    var result = 0;
+                    for (var x = 0; x < 6; ++x) {
+                        result |= ((charData[index++] * 3) << (x * 2));
+                    }
+                    return result;
+                }
+            }
+
+            function combineRows(a, b) {
+                return a | ((a >> 1) & b & ~(b >> 1)) | ((a << 1) & b & ~(b << 1));
+            }
+
             function makeHiResGlyphs(dest) {
                 var index = 0;
                 for (var c = 0; c < 96; ++c) {
-                    
-                    function getLoResGlyphRow(row) {
-                        if (row < 0 || row >= 20) {
-                            return 0;
-                        } else {
-                            var index = c * 60 + (row >> 1) * 6;
-                            var result = 0;
-                            for (var x = 0; x < 6; ++x) {
-                                result |= ((charData[index++] * 3) << (x * 2));
-                            }
-                            return result;
-                        }
-                    }
-                    
-                    function combineRows(a, b) {
-                        return a | ((a >> 1) & b & ~(b >> 1)) | ((a << 1) & b & ~(b << 1));
-                    }
-                    
                     for (var row = 0; row < 20; ++row) {
                         var data = combineRows(getLoResGlyphRow(row), getLoResGlyphRow(row + ((row & 1) ? 1 : -1)));
                         dest[index++] = ((data & 0x1) * 0x7) + ((data & 0x2) * 0x14) + ((data & 0x4) * 0x34) + ((data & 0x8) * 0xE0) +
