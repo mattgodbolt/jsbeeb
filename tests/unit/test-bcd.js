@@ -8,11 +8,8 @@ var dbgr = {
     }
 };
 var models = requirejs('models');
-var paint = function () {
-};
-var fb32 = new Uint32Array(1280 * 1024);
-var video = new Video(fb32, paint);
-var soundChip = new SoundChip(10000);
+var video = new Video.FakeVideo();
+var soundChip = new SoundChip.FakeSoundChip();
 var cpu = new Cpu6502(models.TEST_65C12, dbgr, video, soundChip, new Cmos());
 
 exports.bcd65c12sbc1 = function (test) {

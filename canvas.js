@@ -5,10 +5,10 @@ define(['webgl-debug'], function (webglDebug) {
         this.ctx = canvas.getContext('2d');
         if (this.ctx === null) throw new Error("Unable to get a 2D context");
         this.ctx.fillStyle = 'black';
-        this.ctx.fillRect(0, 0, 1280, 768);
+        this.ctx.fillRect(0, 0, 1024, 625);
         this.backBuffer = window.document.createElement("canvas");
-        this.backBuffer.width = 1280;
-        this.backBuffer.height = 768;
+        this.backBuffer.width = 1024;
+        this.backBuffer.height = 625;
         this.backCtx = this.backBuffer.getContext("2d");
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.canvasWidth = canvas.width;
@@ -67,8 +67,8 @@ define(['webgl-debug'], function (webglDebug) {
         checkedGl.linkProgram(program);
         checkedGl.useProgram(program);
 
-        var width = 1280;
-        var height = 768;
+        var width = 1024;
+        var height = 1024;
 
         this.fb8 = new Uint8Array(width * height * 4);
         this.fb32 = new Uint32Array(this.fb8.buffer);
@@ -95,7 +95,6 @@ define(['webgl-debug'], function (webglDebug) {
         checkedGl.enableVertexAttribArray(uvAttrLoc);
         var uvBuffer = checkedGl.createBuffer();
         checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, uvBuffer);
-        checkedGl.bufferData(checkedGl.ARRAY_BUFFER, new Float32Array([0, 1, 0, 0, 1, 1, 1, 0]), checkedGl.STATIC_DRAW);
         checkedGl.vertexAttribPointer(uvAttrLoc, 2, checkedGl.FLOAT, false, 0, 0);
 
         checkedGl.activeTexture(gl.TEXTURE0);
@@ -106,7 +105,7 @@ define(['webgl-debug'], function (webglDebug) {
         this.paint = function (minx, miny, maxx, maxy) {
             var gl = this.gl;
             // We can't specify a stride for the source, so have to use the full width.
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, miny, width, maxy - miny, gl.RGBA, gl.UNSIGNED_BYTE, this.fb8);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, miny, width, maxy - miny, gl.RGBA, gl.UNSIGNED_BYTE, this.fb8.subarray(miny * width * 4, maxy * width * 4));
 
             if (lastMinX !== minx || lastMinY !== miny || lastMaxX !== maxx || lastMaxY !== maxy) {
                 lastMinX = minx;
@@ -126,7 +125,7 @@ define(['webgl-debug'], function (webglDebug) {
                 uvFloatArray[6] = maxx;
                 uvFloatArray[7] = miny;
                 gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
-                gl.bufferData(gl.ARRAY_BUFFER, uvFloatArray, gl.STATIC_DRAW);
+                gl.bufferData(gl.ARRAY_BUFFER, uvFloatArray, gl.DYNAMIC_DRAW);
             }
 
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);

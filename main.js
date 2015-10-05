@@ -83,9 +83,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 parsedQuery[key] = val;
 
                 // eg KEY.CAPSLOCK=CTRL
+                var bbcKey;
                 if (key.indexOf("KEY.") === 0) {
 
-                    var bbcKey = val.toUpperCase();
+                    bbcKey = val.toUpperCase();
 
                     if (BBC[bbcKey]) {
 
@@ -110,7 +111,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                     // remove GP.
                     var gamepadKey = key.substring(3).toUpperCase();
-                    var bbcKey = val.toUpperCase();
+                    bbcKey = val.toUpperCase();
 
                     // convert "1" into "K1"
                     if ("0123456789".indexOf(bbcKey) > 0) {
@@ -255,6 +256,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                         case "disc2":
                             secondDiscImage = val;
                             break;
+                        case "embed":
+                            $(".embed-hide").hide();
+                            $("#about").append(" jsbeeb");
+                            break;
                     }
                 }
             });
@@ -275,7 +280,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             tryGl = parsedQuery.glEnabled === "true";
         }
         var canvas = tryGl ? canvasLib.bestCanvas($('#screen')[0]) : new canvasLib.Canvas($('#screen')[0]);
-        video = new Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
+        video = new Video.Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;
             frames = 0;
@@ -289,9 +294,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             } else if (typeof(webkitAudioContext) !== 'undefined') {
                 context = new webkitAudioContext(); // jshint ignore:line
             } else {
-                return new SoundChip(10000);
+                return new SoundChip.FakeSoundChip();
             }
-            soundChip = new SoundChip(context.sampleRate);
+            soundChip = new SoundChip.SoundChip(context.sampleRate);
             jsAudioNode = context.createScriptProcessor(2048, 0, 1);
             function pumpAudio(event) {
                 var outBuffer = event.outputBuffer;
@@ -326,6 +331,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             } else {
                                 return keyCodes.SHIFT_RIGHT;
                             }
+                            break;
 
                         case keyCodes.ALT:
                             if (lastAltLocation == 1) {
@@ -333,6 +339,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             } else {
                                 return keyCodes.ALT_RIGHT;
                             }
+                            break;
 
                         case keyCodes.CTRL:
                             if (lastCtrlLocation == 1) {
@@ -340,6 +347,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                             } else {
                                 return keyCodes.CTRL_RIGHT;
                             }
+                            break;
                     }
                     break;
                 case 1:
@@ -752,6 +760,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             }
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + discImage).then(function (discData) {
+                    if (/\.zip/i.test(discImage)) {
+                        var unzipped = utils.unzipDiscImage(discData);
+                        discData = unzipped.data;
+                        discImage = unzipped.name;
+                    }
                     return disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
                 });
             }
@@ -1059,30 +1072,28 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 needsAutoboot = "";
                 imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
                     var prog = String.fromCharCode.apply(null, data);
-                    var tokenised = tokeniser.tokenise(prog);
-                    // Load the program immediately after the \xff of the "no program" has been
-                    // written to PAGE+1
-                    var writeHook = processor.debugWrite.add(function (addr, b) {
+                    return tokeniser.create().then(function (t) {
+                        return t.tokenise(prog);
+                    });
+                }).then(function (tokenised) {
+                    var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+                    var hook = processor.debugInstruction.add(function (addr) {
+                        if (addr !== idleAddr) return;
                         var page = processor.readmem(0x18) << 8;
-                        if (page >= 0xe00 && addr === (page + 1) && b === 0xff) {
-                            // Needed as the debug happens before the write takes place.
-                            var debugHook = processor.debugInstruction.add(function () {
-                                for (var i = 0; i < tokenised.length; ++i) {
-                                    processor.writemem(page + i, tokenised.charCodeAt(i));
-                                }
-                                // Now set VARTOP (0x12/3) and TOP(0x02/3)
-                                var end = page + tokenised.length;
-                                var endLow = end & 0xff;
-                                var endHigh = (end >>> 8) & 0xff;
-                                processor.writemem(0x02, endLow);
-                                processor.writemem(0x03, endHigh);
-                                processor.writemem(0x12, endLow);
-                                processor.writemem(0x13, endHigh);
-                                debugHook.remove();
-                                if (needsRun)
-                                    autoRunBasic();
-                            });
-                            writeHook.remove();
+                        for (var i = 0; i < tokenised.length; ++i) {
+                            processor.writemem(page + i, tokenised.charCodeAt(i));
+                        }
+                        // Set VARTOP (0x12/3) and TOP(0x02/3)
+                        var end = page + tokenised.length;
+                        var endLow = end & 0xff;
+                        var endHigh = (end >>> 8) & 0xff;
+                        processor.writemem(0x02, endLow);
+                        processor.writemem(0x03, endHigh);
+                        processor.writemem(0x12, endLow);
+                        processor.writemem(0x13, endHigh);
+                        hook.remove();
+                        if (needsRun) {
+                            autoRunBasic();
                         }
                     });
                 }));

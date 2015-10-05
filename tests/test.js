@@ -23,8 +23,8 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
             log = log_;
             beginTest = beginTest_;
             endTest = endTest_;
-            video = new Video(frameBuffer, paint);
-            soundChip = new SoundChip(10000);
+            video = new Video.Video(frameBuffer, paint);
+            soundChip = new SoundChip.FakeSoundChip();
             dbgr = {
                 setCpu: function () {
                 }

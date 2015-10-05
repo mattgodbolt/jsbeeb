@@ -33,18 +33,9 @@ function setTimeout(fn, delay) {
 requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
     function (Video, Cpu6502, SoundChip, disc, models) {
         "use strict";
-        var fb32 = new Uint32Array(1280 * 1024);
         var frame = 0;
-
-        function paint() {
-            frame++;
-        }
-
-        var noop = function () {
-        };
-        var dbgr = {setCpu: noop};
-        var video = new Video(fb32, paint);
-        var soundChip = new SoundChip(10000);
+        var video = new Video.FakeVideo();
+        var soundChip = new SoundChip.FakeSoundChip();
 
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
@@ -69,7 +60,6 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
             cpu.sysvia.keyUp(16);
             benchmarkCpu(cpu, 100 * 1000 * 1000);
         }).catch(function (err) {
-            "use strict";
             console.log("Got error: ", err);
         });
     }

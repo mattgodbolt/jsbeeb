@@ -14,10 +14,8 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
     function (Video, SoundChip, Cpu6502, fdc, utils, models) {
         "use strict";
 
-        var paint = function () {
-        };
-        var video = new Video(new Uint32Array(1280 * 1024), paint);
-        var soundChip = new SoundChip(10000);
+        var video = new Video.FakeVideo();
+        var soundChip = new SoundChip.FakeSoundChip();
         var dbgr = { setCpu: function () {
         } };
 

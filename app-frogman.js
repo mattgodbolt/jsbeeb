@@ -16,7 +16,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
         var fb32 = new Uint32Array(1280 * 768);
         var frame = 0;
         var screenshotRequest = null;
-        var video = new Video(fb32, function (minx, miny, maxx, maxy) {
+        var video = new Video.Video(fb32, function (minx, miny, maxx, maxy) {
             frame++;
             if (screenshotRequest) {
                 var width = maxx - minx;
@@ -45,7 +45,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
                 console.log("yikes " + addr);
             }
         };
-        var soundChip = new SoundChip(44000);
+        var soundChip = new SoundChip.SoundChip(44000);
 
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
@@ -103,20 +103,17 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
             var first = 1564809;
             console.log(first);
             exec(first);
-            console.log("now = " + cpu.currentCycles
-            + " " + utils.hexword(cpu.pc));
+            console.log("now = " + cpu.currentCycles + " " + utils.hexword(cpu.pc));
             cpu.sysvia.enableKeyboard();
             var second = 2097489 - cpu.currentCycles;
             console.log(second);
             exec(second);
-            console.log("now = " + cpu.currentCycles
-            + " " + utils.hexword(cpu.pc));
+            console.log("now = " + cpu.currentCycles + " " + utils.hexword(cpu.pc));
             cpu.sysvia.keyDown(49);
             var third = 2363365 - cpu.currentCycles;
             console.log(third);
             exec(third);
-            console.log("now = " + cpu.currentCycles
-            + " " + utils.hexword(cpu.pc));
+            console.log("now = " + cpu.currentCycles + " " + utils.hexword(cpu.pc));
             cpu.sysvia.keyUp(49);
             console.log("Typed 1");
             for (var i = 0; i < 2; ++i) {

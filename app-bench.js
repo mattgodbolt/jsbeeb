@@ -8,8 +8,8 @@ requirejs.config({
     }
 });
 
-requirejs(['video', '6502', 'soundchip', 'fdc', 'utils'],
-    function (Video, Cpu6502, SoundChip, disc, utils) {
+requirejs(['utils'],
+    function (utils) {
         utils.bench();
     }
 );
