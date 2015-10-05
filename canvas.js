@@ -26,7 +26,7 @@ define(['webgl-debug'], function (webglDebug) {
 
     function GlCanvas(canvas) {
         var glAttrs = {depth: false, stencil: false};
-        var gl = canvas.getContext('webgl', glAttrs) || canvas.gContext('experimental-webgl', glAttrs);
+        var gl = canvas.getContext('webgl', glAttrs) || canvas.getContext('experimental-webgl', glAttrs);
         this.gl = gl;
         if (!gl) {
             throw new Error("Unable to create a GL context");
