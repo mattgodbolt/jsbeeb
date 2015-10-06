@@ -36,7 +36,7 @@ define(['utils'], function (utils) {
             ca1: 0, ca2: 0,
             justhit: 0,
 
-            reset: function () {
+            reset: function (hard) {
                 self.ora = self.orb = 0xff;
                 self.ddra = self.ddrb = 0xff;
                 self.ifr = self.ier = 0x00;

@@ -60,10 +60,12 @@ define(['teletext', 'utils'], function (Teletext, utils) {
 
         this.paint_ext = paint_ext_param;
 
-        this.reset = function (cpu, via) {
+        this.reset = function (cpu, via, hard) {
             this.cpu = cpu;
             this.sysvia = via;
-            this.updateFbTable();
+            if (hard) {
+                this.updateFbTable();
+            }
         };
         
         this.paint = function () {

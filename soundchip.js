@@ -221,7 +221,8 @@ define(['utils'], function (utils) {
 
         this.render = render;
         this.poke = poke;
-        this.reset = function () {
+        this.reset = function (hard) {
+            if (!hard) return;
             for (var i = 0; i < 4; ++i) {
                 counter[i] = 0;
                 register[i] = 0;
