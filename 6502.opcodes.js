@@ -1232,11 +1232,9 @@ define(['utils'], function (utils) {
                 }
                 return;
             }
+            // Anything else is a HLT. Just hang forever...
             cpu.pc--;  // Account for the fact we've already incremented pc.
-            console.log("Invalid opcode " + hexbyte(opcode) + " at " + hexword(cpu.pc));
-            console.log(cpu.disassembler.disassemble(cpu.pc)[0]);
-            utils.noteEvent('exception', 'invalid opcode', hexbyte(opcode));
-            throw new Error('Invalid opcode');
+            cpu.polltime(1); // Take up some time though. Else we'll spin forever
         }
 
         Runner.prototype.invalidOpcode = invalidOpcode;
