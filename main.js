@@ -421,7 +421,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 stop(true);
             } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
                 utils.noteEvent('keyboard', 'press', 'break');
-                processor.reset(false);
+                processor.setReset(true);
                 evt.preventDefault();
             } else {
                 processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
@@ -431,8 +431,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         function keyUp(evt) {
             // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
-            processor.sysvia.keyUp(keyCode(evt));
+            var code = keyCode(evt);
+            processor.sysvia.keyUp(code);
             if (!running) return;
+            if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
+                processor.setReset(false);
+            }
             evt.preventDefault();
         }
 

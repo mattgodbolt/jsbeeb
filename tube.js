@@ -34,7 +34,7 @@ define(['utils'],
             this.parasiteCpu.nmi = !!((this.r1stat & 0x08) && ((this.hp3pos > hp3Size) || this.ph3pos === 0));
         };
 
-        Tube.prototype.reset = function () {
+        Tube.prototype.reset = function (hard) {
             this.ph1pos = this.hp3pos = 0;
             this.ph3pos = 1;
             this.r1stat = 0;

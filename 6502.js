@@ -276,12 +276,12 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
 
             this.tube = new Tube(cpu, this);
 
-            this.reset = function () {
+            this.reset = function (hard) {
                 this.romPaged = true;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p.i = true;
                 console.log("Tube initialized to start at $" + hexword(this.pc));
-                this.tube.reset();
+                this.tube.reset(hard);
             };
 
             this.readmem = function (offset) {
@@ -403,6 +403,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.oldYArray = new Uint8Array(256);
             this.oldPArray = new Uint8Array(256);
             this.oldPcIndex = 0;
+            this.resetLine = true;
             this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
@@ -802,6 +803,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 });
             };
 
+            this.setReset = function(resetOn) {
+                this.resetLine = !resetOn;
+            };
+
             this.reset = function (hard) {
                 var i;
                 if (hard) {
@@ -833,19 +838,21 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     this.crtc = this.video.crtc;
                     this.ula = this.video.ula;
                     this.adconverter = new Adc(this.sysvia);
-                    this.sysvia.reset();
-                    this.uservia.reset();
+                    this.sysvia.reset(hard);
+                    this.uservia.reset(hard);
                 }
-                this.tube.reset();
-                this.targetCycles = 0;
-                this.currentCycles = 0;
+                this.tube.reset(hard);
+                if (hard) {
+                    this.targetCycles = 0;
+                    this.currentCycles = 0;
+                }
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p = new Flags();
                 this.p.i = true;
                 this.nmi = false;
                 this.halted = false;
-                this.video.reset(this, this.sysvia);
-                if (hard) this.soundChip.reset();
+                this.video.reset(this, this.sysvia, hard);
+                if (hard) this.soundChip.reset(hard);
             };
 
             this.updateKeyLayout = function () {
@@ -890,6 +897,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     this.oldXArray[this.oldPcIndex] = this.x;
                     this.oldYArray[this.oldPcIndex] = this.y;
                     this.oldPArray[this.oldPcIndex] = this.p.asByte();
+                    if (!this.resetLine) {
+                        this.reset(false);
+                    }
                     if (this.takeInt) {
                         this.takeInt = false;
                         this.push(this.pc >>> 8);
