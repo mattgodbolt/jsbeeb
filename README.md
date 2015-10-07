@@ -38,6 +38,7 @@ URL parameters
 * `autorun` - types `*TAPE` then `*/` to run from tape. In conjunction with `loadBasic` it types `RUN`.
 * `autochain` - types `*TAPE` then `CH.""` to run from tape.a
 * `embed` - Adjust the navigation entries to make the page clearer within a 921x733 iframe in a third-party site.
+* `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
 
 Patches
 -------

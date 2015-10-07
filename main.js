@@ -32,6 +32,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         var BBC = utils.BBC;
         var keyCodes = utils.keyCodes;
+        var cpuMultiplier = 1;
 
         //self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
         //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
@@ -272,7 +273,11 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         var model = models.findModel(parsedQuery.model || guessModelFromUrl());
 
-        var clocksPerSecond = 2 * 1000 * 1000;
+        if (parsedQuery.cpuMultiplier) {
+            cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
+            console.log("CPU multiplier set to " + cpuMultiplier);
+        }
+        var clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000)|0;
         var MaxCyclesPerFrame = clocksPerSecond / 10;
 
         var tryGl = true;
@@ -465,7 +470,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 window.localStorage.cmosRam = JSON.stringify(data);
             }
         });
-        var emulationConfig = {keyLayout: keyLayout};
+        var emulationConfig = {
+            keyLayout: keyLayout,
+            cpuMultiplier: cpuMultiplier
+        };
         processor = new Cpu6502(model, dbgr, video, soundChip, cmos, emulationConfig);
 
         function sthClearList() {

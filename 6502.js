@@ -381,6 +381,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             if (config === undefined) config = {};
             if (!config.keyLayout)
                 config.keyLayout = "physical";
+            if (!config.cpuMultiplier)
+                config.cpuMultiplier = 1;
 
             base6502(this, model);
 
@@ -404,6 +406,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.oldPArray = new Uint8Array(256);
             this.oldPcIndex = 0;
             this.resetLine = true;
+            this.cpuMultiplier = config.cpuMultiplier;
             this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
@@ -867,9 +870,14 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 this.polltime(cycles);
             };
 
+            this.peripheralCycles = 0;
             this.polltime = function (cycles) {
                 cycles |= 0;
                 this.currentCycles += cycles;
+                this.peripheralCycles += cycles;
+                cycles = (this.peripheralCycles / this.cpuMultiplier)|0;
+                if (!cycles) return;
+                this.peripheralCycles -= (cycles * this.cpuMultiplier)|0;
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
                 this.fdc.polltime(cycles);
