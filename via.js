@@ -496,8 +496,7 @@ define(['utils'], function (utils) {
                 self.IC32 &= ~(1 << (val & 7));
 
             self.updateSdb();
-            if (!(self.IC32 & 1) && (oldIC32 & 1))
-                soundChip.poke(self.sdbval);
+            soundChip.updateSlowDataBus(self.sdbval, !(self.IC32 & 1));
 
             self.capsLockLight = !(self.IC32 & 0x40);
             self.shiftLockLight = !(self.IC32 & 0x80);

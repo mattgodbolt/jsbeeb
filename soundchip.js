@@ -144,8 +144,16 @@ define(['utils'], function (utils) {
             cyclesPending = 0;
         }
 
+        var activeClock = 0;
         this.polltime = function (cycles) {
             cyclesPending += cycles;
+            // Only sample the input register on a sound chip clock, which is every eight CPU cycles.
+            if ((activeClock + cycles) >= 8 && this.active) {
+                advance(8 - activeClock);
+                poke(this.slowDataBus);
+            }
+            // Ensure we keep active clock low enough to not cause problems.
+            activeClock = (activeClock + cycles) & 7;
         };
 
         var residual = 0;
@@ -193,13 +201,13 @@ define(['utils'], function (utils) {
             var latchData = !!(value & 0x80);
             if (latchData)
                 latchedChannel = (value >> 5) & 3;
-            if ((value & 0x90) == 0x90) {
+            if ((value & 0x90) === 0x90) {
                 // Volume setting
                 var newVolume = value & 0x0f;
                 volume[latchedChannel] = volumeTable[newVolume];
             } else {
                 // Data of some sort.
-                if (latchedChannel == 3) {
+                if (latchedChannel === 3) {
                     // For noise channel we always update the bottom bits of the register.
                     register[latchedChannel] = value & 0x0f;
                     noisePoked();
@@ -220,7 +228,12 @@ define(['utils'], function (utils) {
         generators[4] = sineChannel;
 
         this.render = render;
-        this.poke = poke;
+        this.active = false;
+        this.slowDataBus = 0;
+        this.updateSlowDataBus = function(slowDataBus, active) {
+            this.slowDataBus = slowDataBus;
+            this.active = active;
+        };
         this.reset = function (hard) {
             if (!hard) return;
             for (var i = 0; i < 4; ++i) {
@@ -244,7 +257,7 @@ define(['utils'], function (utils) {
     }
 
     function FakeSoundChip() {
-        this.reset = this.enable = this.mute = this.unmute = this.render = this.poke = this.polltime = utils.noop;
+        this.reset = this.enable = this.mute = this.unmute = this.render = this.updateSlowDataBus = this.polltime = utils.noop;
         this.toneGenerator = this;
     }
 
