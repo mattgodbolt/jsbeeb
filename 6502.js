@@ -280,7 +280,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 this.romPaged = true;
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p.i = true;
-                console.log("Tube initialized to start at $" + hexword(this.pc));
                 this.tube.reset(hard);
             };
 
