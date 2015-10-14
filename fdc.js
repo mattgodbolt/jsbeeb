@@ -2,7 +2,7 @@
 define(['utils'], function (utils) {
     "use strict";
     function load(name) {
-        console.log("Loading disc from " + name);
+        console.log("Loading disc from " + name); // todo support zip files
         return utils.loadData(name);
     }
 
