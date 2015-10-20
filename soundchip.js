@@ -1,9 +1,18 @@
 define(['utils'], function (utils) {
     "use strict";
     function SoundChip(sampleRate) {
-        var soundchipFreq = 4000000.0 / 16;
-        var sampleDecrement = soundchipFreq / sampleRate;
-        var samplesPerCycle = sampleRate / (2 * 1000 * 1000); // TODO hacky here
+        var cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here
+        // 4MHz input signal. Internal divide-by-8
+        var soundchipFreq = 4000000.0 / 8;
+        // Square wave changes every time a counter hits zero. Thus a full wave
+        // needs to be 2x counter zeros.
+        var waveDecrementPerSecond = soundchipFreq / 2;
+        // Each sample in the buffer represents (1/sampleRate) time, so each time
+        // we generate a sample, we need to decrement the counters by this amount:
+        var sampleDecrement = waveDecrementPerSecond / sampleRate;
+        // How many samples are generated per CPU cycle.
+        var samplesPerCycle = sampleRate * cpuFreq;
+        var minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
         var register = [0, 0, 0, 0];
         this.registers = register; // for debug
@@ -144,16 +153,20 @@ define(['utils'], function (utils) {
             cyclesPending = 0;
         }
 
-        var activeClock = 0;
+        var activeCountdown = 0;
         this.polltime = function (cycles) {
             cyclesPending += cycles;
-            // Only sample the input register on a sound chip clock, which is every eight CPU cycles.
-            if ((activeClock + cycles) >= 8 && this.active) {
-                advance(8 - activeClock);
-                poke(this.slowDataBus);
+            if (activeCountdown) {
+                activeCountdown -= cycles;
+                if (activeCountdown <= 0) {
+                    if (this.active) {
+                        advance(-activeCountdown);
+                        cyclesPending += activeCountdown;
+                        poke(this.slowDataBus);
+                    }
+                    activeCountdown = 0;
+                }
             }
-            // Ensure we keep active clock low enough to not cause problems.
-            activeClock = (activeClock + cycles) & 7;
         };
 
         var residual = 0;
@@ -232,6 +245,9 @@ define(['utils'], function (utils) {
         this.slowDataBus = 0;
         this.updateSlowDataBus = function(slowDataBus, active) {
             this.slowDataBus = slowDataBus;
+            if (active && !this.active) {
+                activeCountdown = minCyclesWELow;
+            }
             this.active = active;
         };
         this.reset = function (hard) {
