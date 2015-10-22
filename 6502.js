@@ -972,8 +972,10 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.debugRead = new DebugHook(this, '_debugRead');
             this.debugWrite = new DebugHook(this, '_debugWrite');
 
-            this.dumpTime = function () {
-                for (var i = 1; i < 256; ++i) {
+            this.dumpTime = function (maxToShow) {
+                if (!maxToShow) maxToShow = 256;
+                if (maxToShow > 256) maxToShow = 256;
+                for (var i = 1; i < maxToShow; ++i) {
                     var j = (i + this.oldPcIndex) & 255;
                     console.log(utils.hexword(this.oldPcArray[j]),
                         (this.disassembler.disassemble(this.oldPcArray[j], true)[0] + "                       ").substr(0, 15),
