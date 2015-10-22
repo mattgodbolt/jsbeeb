@@ -61,7 +61,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                     updates.push(function () {
                         var reg = via[elem];
                         value.text(hexbyte((reg >> 16) & 0xff) +
-                        hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
+                            hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
                     });
                 } else {
                     updates.push(function () {
@@ -186,6 +186,8 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             /* later, more clevers */
         }
 
+        var breakpoints = {};
+
         function labelHtml(addr) {
             var name = addressName(addr);
             if (name) {
@@ -226,18 +228,37 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             });
         }
 
-        function instrClick(address) {
-            return function () {
-                disassStack.push(disassPc);
-                updateDisassembly(address);
-            };
+        function instrClick(e) {
+            var info = $(e.target).closest('.dis_elem').data();
+            disassStack.push(disassPc);
+            updateDisassembly(info.ref);
         }
 
-        function memClick(address) {
-            return function () {
-                updateMemory(address);
-            };
+        function memClick(e) {
+            var info = $(e.target).closest('.dis_elem').data();
+            updateMemory(info.ref);
         }
+
+        function toggleBreakpoint(address) {
+            if (breakpoints[address]) {
+                console.log("Removing breakpoint from address " + utils.hexword(address));
+                breakpoints[address].remove();
+                breakpoints[address] = undefined;
+            } else {
+                console.log("Adding breakpoint to address " + utils.hexword(address));
+                breakpoints[address] = cpu.debugInstruction.add(function (x) {
+                    return x === address;
+                });
+            }
+        }
+
+        function bpClick(e) {
+            var address = $(e.target).closest('.dis_elem').data().addr;
+            toggleBreakpoint(address);
+            $(e.target).toggleClass('active', !!breakpoints[address]);
+        }
+
+        disass.find('.bp_gutter').click(bpClick);
 
         function updateDisassembly(address) {
             disassPc = address;
@@ -251,9 +272,11 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 elem.toggleClass('highlight', address === disassPc);
                 elem.find('.instr_bytes').text(dump.hex);
                 elem.find('.instr_asc').text(dump.asc);
-                elem.find('.disassembly').html(result[0]);
-                elem.find('.instr_mem_ref').click(memClick(result[2]));
-                elem.find('.instr_instr_ref').click(instrClick(result[2]));
+                var disNode = elem.find('.disassembly').html(result[0]);
+                disNode.find('.instr_mem_ref').click(memClick);
+                disNode.find('.instr_instr_ref').click(instrClick);
+                elem.find('.bp_gutter').toggleClass('active', !!breakpoints[address]);
+                elem.data({addr: address, ref: result[2]});
                 return result[1];
             }
 
@@ -285,6 +308,10 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                     break;
                 case 'j':
                     updateDisassembly(nextInstruction(disassPc));
+                    break;
+                case 't':
+                    toggleBreakpoint(disassPc);
+                    updateDisassembly(disassPc);
                     break;
                 case 'u':
                     updateMemory(memloc + 8);
