@@ -895,7 +895,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     this.oldPcArray[this.oldPcIndex] = this.pc;
                     this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
-                    if (this._debugInstruction && this.getPrevPc(2) !== this.pc && this._debugInstruction(this.pc, opcode)) {
+                    if (this._debugInstruction && this.getPrevPc(1) !== this.pc && this._debugInstruction(this.pc, opcode)) {
                         return false;
                     }
                     this.incpc();
