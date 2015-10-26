@@ -162,19 +162,42 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             });
         }
 
+        // Some attempt at making prevInstruction more accurate; score the sequence of instructions leading
+        // up to the target byall "common" instructions as a point. The highest-scoring run of instructions
+        // is picked as the most likely, and the previous from that is used. Common instructions here mean
+        // loads, stores, branches, compares, arithmetic and carry-set/clear that don't use "unusual"
+        // indexing modes like abs,X, abs,Y and (zp,X).
+        // Good test cases:
+        //   Repton 2 @ 2cbb
+        //   MOS @ cfc8
+        // also, just starting from the back of ROM and going up...
+        var commonInstructions = /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORR|AND|INC|DEC).*/;
+        var uncommonInstrucions = /.*,\s*([XY]|X\))$/;
+
         function prevInstruction(address) {
             address &= 0xffff;
+            var bestAddr = address - 1;
+            var bestScore = 0;
             for (var startingPoint = address - 20; startingPoint !== address; startingPoint++) {
+                var score = 0;
                 var addr = startingPoint & 0xffff;
                 while (addr < address) {
                     var result = disassemble(addr);
-                    if (result[1] === address && result[0] !== "???") {
-                        return addr;
+                    if (result[0] == cpu.pc) score += 10; // huge boost if this instruction was executed
+                    if (result[0].match(commonInstructions) && !result[0].match(uncommonInstrucions)) {
+                        score++;
+                    }
+                    if (result[1] === address) {
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestAddr = addr;
+                            break;
+                        }
                     }
                     addr = result[1];
                 }
             }
-            return address - 1;
+            return bestAddr;
         }
 
         function nextInstruction(address) {
