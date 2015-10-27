@@ -890,14 +890,16 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
                 this.targetCycles += numCyclesToRun;
+                var first = true;
                 while (!this.halted && this.currentCycles < this.targetCycles) {
                     this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
                     this.oldPcArray[this.oldPcIndex] = this.pc;
                     this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
-                    if (this._debugInstruction && this.getPrevPc(1) !== this.pc && this._debugInstruction(this.pc, opcode)) {
+                    if (this._debugInstruction && !first && this._debugInstruction(this.pc, opcode)) {
                         return false;
                     }
+                    first = false;
                     this.incpc();
                     this.runner.run(opcode);
                     this.oldAArray[this.oldPcIndex] = this.a;

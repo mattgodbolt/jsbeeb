@@ -32,7 +32,7 @@ requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
                         console.log(utils.hexword(addr) + " : " + utils.hexbyte(processor.a) + " : " + processor.disassembler.disassemble(processor.pc)[0]);
                     }
 
-                    return !!(addr !== 0x400 && addr === processor.getPrevPc(1));
+                    return addr !== 0x400 && addr === processor.getPrevPc(1);
                 });
                 console.log("Running Dormann " + name + " tests...");
                 while (processor.execute(1000000)) {
