@@ -346,6 +346,28 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             }
         }
 
+        disass.bind('wheel', function (evt) {
+            var deltaY = evt.originalEvent.deltaY;
+            if (deltaY === 0) return;
+            var addr = disassPc;
+            var func = deltaY < 0 ? prevInstruction : nextInstruction;
+            deltaY = Math.abs(deltaY);
+            while (deltaY > 0) {
+                addr = func(addr);
+                deltaY -= 30;
+            }
+            updateDisassembly(addr);
+            evt.preventDefault();
+        });
+
+        memview.bind('wheel', function (evt) {
+            var deltaY = evt.originalEvent.deltaY;
+            if (deltaY === 0) return;
+            var steps = (deltaY / 20) | 0;
+            updateMemory(memloc + 8 * steps);
+            evt.preventDefault();
+        });
+
         this.keyPress = function (key) {
             if ($(":focus").length > 0) {
                 return false;
