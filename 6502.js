@@ -634,6 +634,15 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 }
             };
 
+            this.peekmem = function(addr) {
+                if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
+                    var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+                    return this.ramRomOs[offset + addr];
+                } else {
+                    return 0xff;// TODO; peekDevice -- this.peekDevice(addr);
+                }
+            };
+
             this.writemem = function (addr, b) {
                 addr &= 0xffff;
                 b |= 0;

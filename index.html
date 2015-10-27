@@ -20,8 +20,8 @@
         (function (i, s, o, g, r, a, m) {
             i['GoogleAnalyticsObject'] = r;
             i[r] = i[r] || function () {
-                (i[r].q = i[r].q || []).push(arguments)
-            }, i[r].l = 1 * new Date();
+                        (i[r].q = i[r].q || []).push(arguments)
+                    }, i[r].l = 1 * new Date();
             a = s.createElement(o),
                     m = s.getElementsByTagName(o)[0];
             a.async = 1;
@@ -57,12 +57,14 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a class="navbar-brand" href="http://bbc.godbolt.org/" target="_top">jsbeeb - a Javascript BBC micro emulator</a>
+            <a class="navbar-brand" href="http://bbc.godbolt.org/" target="_top">jsbeeb - a Javascript BBC micro
+                emulator</a>
         </div>
         <div class="collapse navbar-collapse">
             <ul class="nav navbar-nav">
                 <li class="dropdown btn-group">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown"><span id="bbc-model">BBC B</span><b class="caret"></b></a>
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown"><span id="bbc-model">BBC B</span><b
+                            class="caret"></b></a>
                     <ul class="dropdown-menu" role="menu" id="model-menu">
                         <li><a href="#" data-target="B">BBC B</a></li>
                         <li><a href="#" data-target="Master">BBC Master 128</a></li>
@@ -185,8 +187,9 @@
             </form>
             <div id="memory">
                 <div class="template"><span class="dis_addr">0000</span><span
-                        class="mem_bytes">11 22 33 44 55 66 77 88</span><span
-                        class="mem_asc">ABCDEFG</span></div>
+                        class="mem_bytes"><span>11</span> <span>22</span> <span>33</span> <span>44</span> <span>55</span> <span>66</span> <span>77</span> <span>88</span></span><span
+                        class="mem_asc"><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span></span>
+                </div>
             </div>
         </div>
         <div class="debug-container">
@@ -352,11 +355,13 @@
                     <li class="template"><a href="#"><span class="name"></span></a> - <span
                             class="description"></span></li>
                 </ul>
-                To load a custom disc image, get an SSD or DSD file and load it below. Search the web, or check somewhere
+                To load a custom disc image, get an SSD or DSD file and load it below. Search the web, or check
+                somewhere
                 like <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these. Be aware the
                 images are usually stored in a ZIP file, and you'll need to unzip first.
                 <div class="disc">
-                    <label>Load local SSD or DSD file: <input type="file" id="disc_load" accept=".ssd,.dsd,image/*"></label>
+                    <label>Load local SSD or DSD file: <input type="file" id="disc_load"
+                                                              accept=".ssd,.dsd,image/*"></label>
                 </div>
             </div>
             <div class="modal-footer">
@@ -397,14 +402,15 @@
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title">Load or create disc from your <a href="https://drive.google.com/">Google Drive</a>
+                <h4 class="modal-title">Load or create disc from your <a href="https://drive.google.com/">Google
+                    Drive</a>
                     account</h4>
 
                 <div class="loading">Loading...</div>
             </div>
             <div class="modal-body">
                 <div>
-                    <ul class ="list">
+                    <ul class="list">
                         <li class="template"><a href="#"><span class="name"></span></a></li>
                     </ul>
                     <div>
@@ -430,6 +436,7 @@
         <div class="modal-content">
             <div class="modal-body">
                 <h4 class="modal-title loading"></h4>
+
                 <div style="display:none" id="google-drive-auth">
                     Google Drive requires you to authorize jsbeeb to access your files by logging in.<br>
                     Please click Authorize to open a Google Drive pop-up to authenticate and give permission to jsbeeb.
@@ -464,7 +471,8 @@
                 </ul>
             </div>
             <div class="modal-footer">
-                <label class="pull-left checkbox-inline"><input type="checkbox" class="autoboot" value="">Autoboot</label>
+                <label class="pull-left checkbox-inline"><input type="checkbox" class="autoboot"
+                                                                value="">Autoboot</label>
                 <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
             </div>
         </div>

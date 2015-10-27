@@ -1162,7 +1162,7 @@ define(['utils'], function (utils) {
                     formatAddr = hexword;
                     formatJumpAddr = hexword;
                 }
-                var opcode = opcodes[cpu.readmem(addr)];
+                var opcode = opcodes[cpu.peekmem(addr)];
                 if (!opcode) {
                     return ["???", addr + 1];
                 }
@@ -1180,27 +1180,27 @@ define(['utils'], function (utils) {
                 }
                 switch (param) {
                     case "imm":
-                        return [split[0] + " #$" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
+                        return [split[0] + " #$" + hexbyte(cpu.peekmem(addr + 1)) + suffix, addr + 2];
                     case "abs":
                         var formatter = (split[0] == "JMP" || split[0] == "JSR") ? formatJumpAddr : formatAddr;
-                        destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
+                        destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
                         return [split[0] + " $" + formatter(destAddr) + suffix, addr + 3, destAddr];
                     case "branch":
-                        destAddr = addr + signExtend(cpu.readmem(addr + 1)) + 2;
+                        destAddr = addr + signExtend(cpu.peekmem(addr + 1)) + 2;
                         return [split[0] + " $" + formatJumpAddr(destAddr) + suffix, addr + 2, destAddr];
                     case "zp":
-                        return [split[0] + " $" + hexbyte(cpu.readmem(addr + 1)) + suffix, addr + 2];
+                        return [split[0] + " $" + hexbyte(cpu.peekmem(addr + 1)) + suffix, addr + 2];
                     case "(,x)":
-                        return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ", X)" + suffix, addr + 2];
+                        return [split[0] + " ($" + hexbyte(cpu.peekmem(addr + 1)) + ", X)" + suffix, addr + 2];
                     case "()":
-                        return [split[0] + " ($" + hexbyte(cpu.readmem(addr + 1)) + ")" + suffix, addr + 2];
+                        return [split[0] + " ($" + hexbyte(cpu.peekmem(addr + 1)) + ")" + suffix, addr + 2];
                     case "(abs)":
-                        destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
-                        indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
+                        destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
+                        indDest = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
                         return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
                     case "(abs,x)":
-                        destAddr = cpu.readmem(addr + 1) | (cpu.readmem(addr + 2) << 8);
-                        indDest = cpu.readmem(destAddr) | (cpu.readmem(destAddr + 1) << 8);
+                        destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
+                        indDest = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
                         return [split[0] + " ($" + formatJumpAddr(destAddr) + ",x)" + suffix, addr + 3, indDest];
                 }
                 return [opcode, addr + 1];

@@ -27,6 +27,9 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         var enabled = false;
 
         function enable(e) {
+            if (enabled && !e) {
+                updatePrevMem();
+            }
             enabled = e;
             debugNode.toggle(enabled);
         }
@@ -132,6 +135,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         }
 
         function step() {
+            updatePrevMem();
             var curpc = cpu.pc;
             stepUntil(function () {
                 return cpu.pc !== curpc;
@@ -146,6 +150,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         }
 
         function stepOver() {
+            updatePrevMem();
             if (isUnconditionalJump(cpu.pc)) {
                 return step();
             }
@@ -161,6 +166,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         }
 
         function stepOut() {
+            updatePrevMem();
             var s = cpu.s;
             stepUntil(function () {
                 if (cpu.s >= s && isReturn(cpu.pc)) {
@@ -230,20 +236,29 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             }
         }
 
+        var prevDump = [];
+
+        function updatePrevMem() {
+            for (var i = 0; i < 65536; ++i) {
+                prevDump[i] = cpu.peekmem(i);
+            }
+        }
+
         function memdump(from, to) {
-            var hex = "";
-            var asc = "";
+            var hex = [];
+            var asc = [];
+            var changed = [];
             for (var i = from; i < to; ++i) {
-                if (hex !== "") hex += " ";
-                var b = cpu.readmem(i);
-                hex += hexbyte(b);
+                var b = cpu.peekmem(i);
+                hex.push(hexbyte(b));
+                changed.push(i < prevDump.length && prevDump[i] !== b);
                 if (b >= 32 && b < 128) {
-                    asc += String.fromCharCode(b);
+                    asc.push(String.fromCharCode(b));
                 } else {
-                    asc += ".";
+                    asc.push(".");
                 }
             }
-            return {hex: hex, asc: asc};
+            return {hex: hex, asc: asc, changed: changed};
         }
 
         function updateMemory(newAddr) {
@@ -255,8 +270,12 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 $(this).find('.dis_addr').html(labelHtml(addr));
                 $(this).toggleClass('highlight', addr === memloc);
                 var dump = memdump(addr, addr + 8);
-                $(this).find('.mem_bytes').text(dump.hex);
-                $(this).find('.mem_asc').text(dump.asc);
+                var bytes = $(this).find('.mem_bytes span');
+                var ascii = $(this).find('.mem_asc span');
+                for (var i = 0; i < 8; ++i) {
+                    $(bytes[i]).text(dump.hex[i]).toggleClass("changed", dump.changed[i]);
+                    $(ascii[i]).text(dump.asc[i]).toggleClass("changed", dump.changed[i]);
+                }
                 addr += 8;
             });
         }
@@ -303,8 +322,8 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                 elem.find('.dis_addr').html(labelHtml(address));
                 elem.toggleClass('current', address === cpu.pc);
                 elem.toggleClass('highlight', address === disassPc);
-                elem.find('.instr_bytes').text(dump.hex);
-                elem.find('.instr_asc').text(dump.asc);
+                elem.find('.instr_bytes').text(dump.hex.join(" "));
+                elem.find('.instr_asc').text(dump.asc.join(""));
                 var disNode = elem.find('.disassembly').html(result[0]);
                 disNode.find('.instr_mem_ref').click(memClick);
                 disNode.find('.instr_instr_ref').click(instrClick);
@@ -362,6 +381,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
                     step();
                     break;
                 case 'N':
+                    updatePrevMem();
                     cpu.execute(1);
                     self.debug(cpu.pc);
                     break;
