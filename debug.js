@@ -48,24 +48,34 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         var uservia;
         var sysvia;
 
+        function updateElem(elem, val) {
+            var prevVal = elem.text();
+            if (prevVal !== val) {
+                elem.text(val);
+            }
+            elem.toggleClass("changed", prevVal !== val && prevVal !== "");
+        }
+
         function setupVia(node, via) {
             var updates = [];
-            if (!via) return function () {
-            };
-            $.each(["ora", "orb", "ira", "irb", "ddra", "ddrb",
-                "acr", "pcr", "ifr", "ier", "t1c", "t1l", "t2c", "t2l"], function (_, elem) {
+            if (!via) return utils.noop;
+            var regs = ["ora", "orb", "ira", "irb", "ddra", "ddrb",
+                "acr", "pcr", "ifr", "ier",
+                "t1c", "t1l", "t2c", "t2l", "IC32", "sdbval", "sdbout"];
+            $.each(regs, function (_, elem) {
+                if (via[elem] === undefined) return;
                 var row = node.find(".template").clone().removeClass("template").appendTo(node);
                 row.find(".register").text(elem.toUpperCase());
                 var value = row.find(".value");
                 if (elem.match(/t[12][cl]/)) {
                     updates.push(function () {
                         var reg = via[elem];
-                        value.text(hexbyte((reg >> 16) & 0xff) +
+                        updateElem(value, hexbyte((reg >> 16) & 0xff) +
                             hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
                     });
                 } else {
                     updates.push(function () {
-                        value.text(hexbyte(via[elem]));
+                        updateElem(value, hexbyte(via[elem]));
                     });
                 }
             });
@@ -102,13 +112,13 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         };
 
         function updateRegisters() {
-            $("#cpu6502_a").text(hexbyte(cpu.a));
-            $("#cpu6502_x").text(hexbyte(cpu.x));
-            $("#cpu6502_y").text(hexbyte(cpu.y));
-            $("#cpu6502_s").text(hexbyte(cpu.s));
-            $("#cpu6502_pc").text(hexword(cpu.pc));
+            updateElem($("#cpu6502_a"), hexbyte(cpu.a));
+            updateElem($("#cpu6502_x"), hexbyte(cpu.x));
+            updateElem($("#cpu6502_y"), hexbyte(cpu.y));
+            updateElem($("#cpu6502_s"), hexbyte(cpu.s));
+            updateElem($("#cpu6502_pc"), hexword(cpu.pc));
             ["c", "z", "i", "d", "v", "n"].forEach(function (flag) {
-                $("#cpu6502_flag_" + flag).text(cpu.p[flag] ? flag.toUpperCase() : flag);
+                updateElem($("#cpu6502_flag_" + flag), cpu.p[flag] ? flag.toUpperCase() : flag);
             });
         }
 

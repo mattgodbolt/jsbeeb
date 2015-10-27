@@ -489,7 +489,6 @@ define(['utils'], function (utils) {
         };
 
         self.writeIC32 = function (val) { // addressable latch
-            var oldIC32 = self.IC32;
             if (val & 8)
                 self.IC32 |= (1 << (val & 7));
             else
