@@ -612,8 +612,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     case 0xfefc:
                         return this.tube.read(addr);
                 }
-//                console.log("Unhandled peripheral read of", addr);
-//                stop(true);
                 if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
                 return addr >> 8;
             };
@@ -754,8 +752,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     case 0xfefc:
                         return this.tube.write(addr, b);
                 }
-//                console.log("Unhandled peripheral write to", addr);
-//                stop(true);
             };
 
             this.loadRom = function (name, offset) {
@@ -1001,8 +997,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 return loadOsPromise.then(function () {
                     capturedThis.reset(true);
                     dbgr.setCpu(capturedThis);
-                    //if (model.tube)
-                    //    dbgr.setCpu(capturedThis.tube);
                 });
             };
         };
