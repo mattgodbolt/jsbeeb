@@ -402,7 +402,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.oldAArray = new Uint8Array(256);
             this.oldXArray = new Uint8Array(256);
             this.oldYArray = new Uint8Array(256);
-            this.oldPArray = new Uint8Array(256);
             this.oldPcIndex = 0;
             this.resetLine = true;
             this.cpuMultiplier = config.cpuMultiplier;
@@ -901,7 +900,6 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     this.oldAArray[this.oldPcIndex] = this.a;
                     this.oldXArray[this.oldPcIndex] = this.x;
                     this.oldYArray[this.oldPcIndex] = this.y;
-                    this.oldPArray[this.oldPcIndex] = this.p.asByte();
                     if (!this.resetLine) {
                         this.reset(false);
                     }
