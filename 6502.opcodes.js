@@ -1172,11 +1172,13 @@ define(['utils'], function (utils) {
                 }
                 var param = split[1] || "";
                 var suffix = "";
+                var suffix2 = "";
                 var index = param.match(/(.*),([xy])$/);
                 var destAddr, indDest;
                 if (index) {
                     param = index[1];
                     suffix = "," + index[2].toUpperCase();
+                    suffix2 = " + " + index[2].toUpperCase();
                 }
                 switch (param) {
                     case "imm":
@@ -1193,11 +1195,13 @@ define(['utils'], function (utils) {
                     case "(,x)":
                         return [split[0] + " ($" + hexbyte(cpu.peekmem(addr + 1)) + ", X)" + suffix, addr + 2];
                     case "()":
-                        return [split[0] + " ($" + hexbyte(cpu.peekmem(addr + 1)) + ")" + suffix, addr + 2];
+                        destAddr = cpu.peekmem(addr + 1);
+                        destAddr = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
+                        return [split[0] + " ($" + hexbyte(cpu.peekmem(addr + 1)) + ")" + suffix + " ; $" + utils.hexword(destAddr) + suffix2, addr + 2];
                     case "(abs)":
                         destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
                         indDest = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
-                        return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix, addr + 3, indDest];
+                        return [split[0] + " ($" + formatJumpAddr(destAddr) + ")" + suffix + " ; $" + utils.hexword(indDest) + suffix2, addr + 3, indDest];
                     case "(abs,x)":
                         destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
                         indDest = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
