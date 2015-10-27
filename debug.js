@@ -179,9 +179,9 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         }
 
         // Some attempt at making prevInstruction more accurate; score the sequence of instructions leading
-        // up to the target byall "common" instructions as a point. The highest-scoring run of instructions
-        // is picked as the most likely, and the previous from that is used. Common instructions here mean
-        // loads, stores, branches, compares, arithmetic and carry-set/clear that don't use "unusual"
+        // up to the target by counting all "common" instructions as a point. The highest-scoring run of
+        // instructions is picked as the most likely, and the previous from that is used. Common instructions
+        // here mean loads, stores, branches, compares, arithmetic and carry-set/clear that don't use "unusual"
         // indexing modes like abs,X, abs,Y and (zp,X).
         // Good test cases:
         //   Repton 2 @ 2cbb
