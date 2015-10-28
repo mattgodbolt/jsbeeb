@@ -53,7 +53,7 @@ requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
             console.log("S: " + utils.hexbyte(processor.s));
             console.log("P: " + utils.hexbyte(processor.p.asByte()) + " " + processor.p.debugString());
             console.log(utils.hd(function (i) {
-                return processor.readmem(i)
+                return processor.readmem(i);
             }, 0x00, 0x40));
             process.exit(1);
         }

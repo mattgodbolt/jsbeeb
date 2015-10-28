@@ -11,12 +11,24 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
         var log, beginTest, endTest;
 
         var tests = [
-            { test: "Test BCD (65C12)", func: testBCD, model: 'Master'},
-            { test: "Test BCD (6502)", func: testBCD},
-            { test: "Test timings", func: testTimings},
-            { test: "Alien8 protection", func: function () { return testKevinEdwards("ALIEN8"); }},
-            { test: "Nightshade protection", func: function () { return testKevinEdwards("NIGHTSH"); }},
-            { test: "Lunar Jetman protection", func: function () { return testKevinEdwards("JETMAN"); }}
+            {test: "Test BCD (65C12)", func: testBCD, model: 'Master'},
+            {test: "Test BCD (6502)", func: testBCD},
+            {test: "Test timings", func: testTimings},
+            {
+                test: "Alien8 protection", func: function () {
+                return testKevinEdwards("ALIEN8");
+            }
+            },
+            {
+                test: "Nightshade protection", func: function () {
+                return testKevinEdwards("NIGHTSH");
+            }
+            },
+            {
+                test: "Lunar Jetman protection", func: function () {
+                return testKevinEdwards("JETMAN");
+            }
+            }
         ];
 
         function run(log_, beginTest_, endTest_, frameBuffer, paint) {
@@ -141,13 +153,13 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
 
         var currentTest = null;
 
-        function log() {
+        log = function () {
             console.log.apply(console, arguments);
             var msg = Array.prototype.join.call(arguments, " ");
             if (currentTest) {
                 currentTest.find(".template").clone().removeClass("template").text(msg).appendTo(currentTest);
             }
-        }
+        };
 
         function expectEq(expected, actual, msg) {
             if (actual !== expected) {

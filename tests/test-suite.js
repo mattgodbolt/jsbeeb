@@ -43,7 +43,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
                 console.log(">> Loading test '" + filename + "' at " + utils.hexword(addr));
                 for (i = 2; i < data.length; ++i)
                     processor.writemem(addr + i - 2, data[i]);
-                for (var i = 0; i < irqRoutine.length; ++i)
+                for (i = 0; i < irqRoutine.length; ++i)
                     processor.writemem(0xff48 + i, irqRoutine[i]);
 
                 processor.writemem(0x0002, 0x00);
@@ -83,7 +83,6 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
             else if (char >= 0x41 && char <= 0x5a)
                 char = char - 0x41 + 97;
             else if (char < 32 || char >= 127) {
-                return char.toString() + ' ';
                 char = 46;
             }
             return String.fromCharCode(char);
