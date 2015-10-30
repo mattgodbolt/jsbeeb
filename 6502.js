@@ -634,7 +634,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 }
             };
 
-            this.peekmem = function(addr) {
+            this.peekmem = function (addr) {
                 if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
                     var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
                     return this.ramRomOs[offset + addr];
@@ -809,7 +809,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 });
             };
 
-            this.setReset = function(resetOn) {
+            this.setReset = function (resetOn) {
                 this.resetLine = !resetOn;
             };
 
@@ -878,9 +878,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 cycles |= 0;
                 this.currentCycles += cycles;
                 this.peripheralCycles += cycles;
-                cycles = (this.peripheralCycles / this.cpuMultiplier)|0;
+                cycles = (this.peripheralCycles / this.cpuMultiplier) | 0;
                 if (!cycles) return;
-                this.peripheralCycles -= (cycles * this.cpuMultiplier)|0;
+                this.peripheralCycles -= (cycles * this.cpuMultiplier) | 0;
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
                 this.fdc.polltime(cycles);
@@ -977,17 +977,23 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.debugRead = new DebugHook(this, '_debugRead');
             this.debugWrite = new DebugHook(this, '_debugWrite');
 
-            this.dumpTime = function (maxToShow) {
+            this.dumpTime = function (maxToShow, func) {
                 if (!maxToShow) maxToShow = 256;
                 if (maxToShow > 256) maxToShow = 256;
-                for (var i = 1; i < maxToShow; ++i) {
-                    var j = (i + this.oldPcIndex) & 255;
-                    console.log(utils.hexword(this.oldPcArray[j]),
-                        (this.disassembler.disassemble(this.oldPcArray[j], true)[0] + "                       ").substr(0, 15),
-                        utils.hexbyte(this.oldAArray[j]),
-                        utils.hexbyte(this.oldXArray[j]),
-                        utils.hexbyte(this.oldYArray[j]));
+                var disassembler = this.disassembler;
+                func = func || function (pc, a, x, y) {
+                        var dis = disassembler.disassemble(pc, true)[0];
+                        console.log(utils.hexword(pc),
+                            (dis + "                       ").substr(0, 15),
+                            utils.hexbyte(a),
+                            utils.hexbyte(x),
+                            utils.hexbyte(y));
+                    };
+                for (var i = maxToShow - 2; i >= 0; --i) {
+                    var j = (this.oldPcIndex - i) & 255;
+                    func(this.oldPcArray[j], this.oldAArray[j], this.oldXArray[j], this.oldYArray[j]);
                 }
+                func(this.pc, this.a, this.x, this.y);
             };
 
             this.initialise = function () {
