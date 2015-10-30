@@ -894,6 +894,13 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
                 this.targetCycles += numCyclesToRun;
+                // To prevent issues with wrapping around / overflowing the accuracy that poxy Javascript numbers have,
+                // find the smaller of the target and current cycles, and subtract that from both, to keep the domain
+                // low. Take care to preserve the bottom bit though; as that encodes whether we're on an even or odd
+                // bus cycle.
+                var subtraction = Math.min(this.targetCycles, this.currentCycles) & 0xfffffffe;
+                this.targetCycles -= subtraction;
+                this.currentCycles -= subtraction;
                 var first = true;
                 while (!this.halted && this.currentCycles < this.targetCycles) {
                     this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
