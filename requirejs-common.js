@@ -22,7 +22,8 @@
         },
         shim: {
             'underscore': {exports: '_'},
-            'bootstrap': ['jquery']
+            'bootstrap': ['jquery'],
+            'jquery-visibility': ['jquery']
         }
     });
 })();
