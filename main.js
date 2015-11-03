@@ -1,6 +1,6 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'gamepads', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
         'canvas', 'promise', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib) {
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepads, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib) {
         "use strict";
 
         var processor;
@@ -14,6 +14,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var discSth;
         var tapeSth;
         var running;
+        var gamepad = new Gamepads();
 
         var availableImages;
         var discImage;
@@ -34,44 +35,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         var keyCodes = utils.keyCodes;
         var cpuMultiplier = 1;
 
-        //self.gamepadMapping = [BBC.COLON_STAR, BBC.X, BBC.SLASH, BBC.Z,
-        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE,
-        //    BBC.SPACE, BBC.SPACE, BBC.SPACE, BBC.SPACE];
-
-        self.gamepadMapping = [];
-
-        // default: "snapper" keys
-        self.gamepadMapping[14] = BBC.Z;
-        self.gamepadMapping[15] = BBC.X;
-        self.gamepadMapping[13] = BBC.SLASH;
-        self.gamepadMapping[12] = BBC.COLON_STAR;
-
-        // often <Return> = "Fire"
-        self.gamepadMapping[0] = BBC.RETURN;
-        // "start" (often <Space> to start game)
-        self.gamepadMapping[9] = BBC.SPACE;
-
-
-        // Gamepad joysticks
-        self.gamepadAxisMapping = [
-            [],
-            [],
-            [],
-            []
-        ];
-
-        /*
-         self.gamepadAxisMapping[0][-1] = BBC.Z;          // left
-         self.gamepadAxisMapping[0][1] = BBC.X;          // right
-         self.gamepadAxisMapping[1][-1] = BBC.COLON_STAR; // up
-         self.gamepadAxisMapping[1][1] = BBC.SLASH;      // down
-         self.gamepadAxisMapping[2][-1] = BBC.Z;          // left
-         self.gamepadAxisMapping[2][1] = BBC.X;          // right
-         self.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
-         self.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
-         */
-
         if (queryString) {
             queryString = queryString.substring(1);
             if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
@@ -86,157 +49,32 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 // eg KEY.CAPSLOCK=CTRL
                 var bbcKey;
                 if (key.indexOf("KEY.") === 0) {
-
                     bbcKey = val.toUpperCase();
 
                     if (BBC[bbcKey]) {
-
-                        // remove KEY.
-                        var nativeKey = key.substring(4).toUpperCase();
-
+                        var nativeKey = key.substring(4).toUpperCase(); // remove KEY.
                         if (keyCodes[nativeKey]) {
                             console.log("mapping " + nativeKey + " to " + bbcKey);
                             utils.userKeymap.push({native: nativeKey, bbc: bbcKey});
                         } else {
                             console.log("unknown key: " + nativeKey);
                         }
-
                     } else {
                         console.log("unknown BBC key: " + val);
                     }
-
-
+                } else if (key.indexOf("GP.") === 0) {
                     // gamepad mapping
                     // eg ?GP.FIRE2=RETURN
-                } else if (key.indexOf("GP.") === 0) {
-
-                    // remove GP.
-                    var gamepadKey = key.substring(3).toUpperCase();
-                    bbcKey = val.toUpperCase();
-
-                    // convert "1" into "K1"
-                    if ("0123456789".indexOf(bbcKey) > 0) {
-                        bbcKey = "K" + bbcKey;
-                    }
-
-                    if (BBC[bbcKey]) {
-
-                        switch (gamepadKey) {
-
-                            // XBox 360 Controller names
-                            case "UP2":
-                                self.gamepadAxisMapping[3][-1] = BBC[bbcKey];
-                                break;
-                            case "UP1":
-                                self.gamepadAxisMapping[1][-1] = BBC[bbcKey];
-                                break;
-                            case "UP3":
-                                self.gamepadMapping[0] = BBC[bbcKey];
-                                break;
-                            case "DOWN2":
-                                self.gamepadAxisMapping[3][1] = BBC[bbcKey];
-                                break;
-                            case "DOWN1":
-                                self.gamepadAxisMapping[1][1] = BBC[bbcKey];
-                                break;
-                            case "DOWN3":
-                                self.gamepadMapping[2] = BBC[bbcKey];
-                                break;
-                            case "LEFT2":
-                                self.gamepadAxisMapping[2][-1] = BBC[bbcKey];
-                                break;
-                            case "LEFT1":
-                                self.gamepadAxisMapping[0][-1] = BBC[bbcKey];
-                                break;
-                            case "LEFT3":
-                                self.gamepadMapping[3] = BBC[bbcKey];
-                                break;
-                            case "RIGHT2":
-                                self.gamepadAxisMapping[2][1] = BBC[bbcKey];
-                                break;
-                            case "RIGHT1":
-                                self.gamepadAxisMapping[0][1] = BBC[bbcKey];
-                                break;
-                            case "RIGHT3":
-                                self.gamepadMapping[1] = BBC[bbcKey];
-                                break;
-                            case "FIRE2":
-                                self.gamepadMapping[11] = BBC[bbcKey];
-                                break;
-                            case "FIRE1":
-                                self.gamepadMapping[10] = BBC[bbcKey];
-                                break;
-                            case "A":
-                                self.gamepadMapping[0] = BBC[bbcKey];
-                                break;
-                            case "B":
-                                self.gamepadMapping[1] = BBC[bbcKey];
-                                break;
-                            case "X":
-                                console.log("X", bbcKey);
-                                self.gamepadMapping[2] = BBC[bbcKey];
-                                break;
-                            case "Y":
-                                console.log("Y", bbcKey);
-                                self.gamepadMapping[3] = BBC[bbcKey];
-                                break;
-                            case "START":
-                                self.gamepadMapping[9] = BBC[bbcKey];
-                                break;
-                            case "BACK":
-                                self.gamepadMapping[8] = BBC[bbcKey];
-                                break;
-                            case "RB":
-                                self.gamepadMapping[5] = BBC[bbcKey];
-                                break;
-                            case "RT":
-                                self.gamepadMapping[7] = BBC[bbcKey];
-                                break;
-                            case "LB":
-                                self.gamepadMapping[4] = BBC[bbcKey];
-                                break;
-                            case "LT":
-                                self.gamepadMapping[6] = BBC[bbcKey];
-                                break;
-
-
-                            default:
-                                console.log("unknown gamepad key: " + gamepadKey);
-
-                        }
-
-
-                    } else {
-                        console.log("unknown BBC key: " + val);
-                    }
-
-
+                    var gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
+                    gamepad.remap(gamepadKey, val.toUpperCase());
                 } else {
                     switch (key) {
                         case "LEFT":
-                            self.gamepadMapping[3] = BBC[val];
-                            self.gamepadAxisMapping[0][-1] = BBC[val];
-                            self.gamepadAxisMapping[2][-1] = BBC[val];
-                            break;
                         case "RIGHT":
-                            self.gamepadMapping[1] = BBC[val];
-                            self.gamepadAxisMapping[0][1] = BBC[val];
-                            self.gamepadAxisMapping[2][1] = BBC[val];
-                            break;
                         case "UP":
-                            self.gamepadMapping[0] = BBC[val];
-                            self.gamepadAxisMapping[1][-1] = BBC[val];
-                            self.gamepadAxisMapping[3][-1] = BBC[val];
-                            break;
                         case "DOWN":
-                            self.gamepadMapping[2] = BBC[val];
-                            self.gamepadAxisMapping[1][1] = BBC[val];
-                            self.gamepadAxisMapping[3][1] = BBC[val];
-                            break;
                         case "FIRE":
-                            for (var i = 0; i < 16; i++) {
-                                self.gamepadMapping[i] = BBC[val];
-                            }
+                            gamepad.remap(key, val.toUpperCase());
                             break;
                         case "autoboot":
                             needsAutoboot = "boot";
@@ -277,7 +115,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
             cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
             console.log("CPU multiplier set to " + cpuMultiplier);
         }
-        var clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000)|0;
+        var clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
         var MaxCyclesPerFrame = clocksPerSecond / 10;
 
         var tryGl = true;
@@ -1201,7 +1039,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 return;
             }
             requestAnimationFrame(draw);
-            checkGamepads();
+            gamepad.update();
             syncLights();
             if (last !== 0) {
                 var sinceLast = now - last;
@@ -1219,107 +1057,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 }
             }
             last = now;
-        }
-
-        function checkGamepads() {
-            // init gamepad
-            // gamepad not necessarily available until a button press
-            // so need to check gamepads[0] continuously
-            if (navigator.getGamepads && !self.gamepad0) {
-                var gamepads = navigator.getGamepads();
-                self.gamepad0 = gamepads[0];
-
-                if (self.gamepad0) {
-                    console.log("initing gamepad");
-                    var BBC = utils.BBC;
-
-                    // 16 buttons
-                    self.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
-
-                    // two joysticks (so 4 axes)
-                    self.gamepadAxes = [0, 0, 0, 0];
-                }
-            }
-
-            // process gamepad buttons
-            if (self.gamepad0) {
-                // these two lines needed in Chrome to update state, not Firefox
-                // TODO: what about IE? (can't get Gamepads to work in IE11/IE12. Mike)
-                if (!utils.isFirefox()) {
-                    self.gamepad0 = navigator.getGamepads()[0];
-                }
-
-                for (var i = 0; i < 4; i++) {
-                    var axisRaw = self.gamepad0.axes[i];
-                    var axis;
-
-                    // Mike's XBox 360 controller, zero positions
-                    // console.log(i, axisRaw, axis);
-                    //0 -0.03456169366836548 -1
-                    //1 -0.037033677101135254 -1
-                    //2 0.055374979972839355 1
-                    //3 0.06575113534927368 1
-                    var threshold = 0.15;
-
-                    // normalize to -1, 0, 1
-                    if (axisRaw < -threshold) {
-                        axis = -1;
-                    } else if (axisRaw > threshold) {
-                        axis = 1;
-                    } else {
-                        axis = 0;
-                    }
-
-                    if (axis !== self.gamepadAxes[i]) {
-
-                        // tricky because transition can be
-                        // -1 to 0
-                        // -1 to 1
-                        // 0 to 1
-                        // 0 to -1
-                        // 1 to 0
-                        // 1 to -1
-                        var oldKey = self.gamepadAxisMapping[i][self.gamepadAxes[i]];
-                        if (oldKey) {
-                            processor.sysvia.keyUpRaw(oldKey);
-                        }
-
-                        var newKey = self.gamepadAxisMapping[i][axis];
-                        if (newKey) {
-                            processor.sysvia.keyDownRaw(newKey);
-                        }
-
-                    }
-
-                    // store new state
-                    self.gamepadAxes[i] = axis;
-                }
-
-                for (i = 0; i < 16; i++) {
-                    if (self.gamepad0.buttons[i]) {
-                        var button = self.gamepad0.buttons[i];
-
-                        if (button.pressed) {
-                            console.log("gamepad button pressed ", i, self.gamepad0.id);
-                        }
-
-                        if (button.pressed !== self.gamepadButtons[i]) {
-                            // different to last time
-
-                            if (self.gamepadMapping[i]) {
-                                if (button.pressed) {
-                                    processor.sysvia.keyDownRaw(self.gamepadMapping[i]);
-                                } else {
-                                    processor.sysvia.keyUpRaw(self.gamepadMapping[i]);
-                                }
-                            }
-                        }
-
-                        // store new state
-                        self.gamepadButtons[i] = button.pressed;
-                    }
-                }
-            }
         }
 
         function run() {
