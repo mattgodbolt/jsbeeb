@@ -435,11 +435,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         function sendRawKeyboardToBBC() {
             var keysToSend = Array.prototype.slice.call(arguments, 0);
             var lastChar;
-            var nextKeyCycles = 0;
+            var nextKeyMillis = 0;
             processor.sysvia.disableKeyboard();
 
             var sendCharHook = processor.debugInstruction.add(function nextCharHook() {
-                if (processor.currentCycles < nextKeyCycles) {
+                var millis = processor.cycleSeconds * 1000 + processor.currentCycles / (clocksPerSecond / 1000);
+                if (millis < nextKeyMillis) {
                     return;
                 }
 
@@ -460,7 +461,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 var clocksPerMilli = clocksPerSecond / 1000;
                 if (debounce) {
                     lastChar = undefined;
-                    nextKeyCycles = processor.currentCycles + clocksPerMilli * 30;
+                    nextKeyMillis = millis + 30;
                     return;
                 }
 
@@ -475,8 +476,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
                 // remove first character
                 keysToSend.shift();
 
-                var cyclesTilNext = clocksPerMilli * time;
-                nextKeyCycles = processor.currentCycles + cyclesTilNext;
+                nextKeyMillis = millis + time;
             });
         }
 

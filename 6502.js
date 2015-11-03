@@ -851,6 +851,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 if (hard) {
                     this.targetCycles = 0;
                     this.currentCycles = 0;
+                    this.cycleSeconds = 0;
                 }
                 this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
                 this.p = new Flags();
@@ -895,12 +896,15 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 this.halted = false;
                 this.targetCycles += numCyclesToRun;
                 // To prevent issues with wrapping around / overflowing the accuracy that poxy Javascript numbers have,
-                // find the smaller of the target and current cycles, and subtract that from both, to keep the domain
-                // low. Take care to preserve the bottom bit though; as that encodes whether we're on an even or odd
-                // bus cycle.
-                var subtraction = Math.min(this.targetCycles, this.currentCycles) & 0xfffffffe;
-                this.targetCycles -= subtraction;
-                this.currentCycles -= subtraction;
+                // find the smaller of the target and current cycles, and if that's over one second's worth; subtract
+                // that from both, to keep the domain low (while accumulating seconds). Take care to preserve the bottom
+                // bit though; as that encodes whether we're on an even or odd bus cycle.
+                var smaller = Math.min(this.targetCycles, this.currentCycles) & 0xfffffffe;
+                if (smaller >= 2 * 1000 * 1000) {
+                    this.targetCycles -= 2 * 1000 * 1000;
+                    this.currentCycles -= 2 * 1000 * 1000;
+                    this.cycleSeconds++;
+                }
                 var first = true;
                 while (!this.halted && this.currentCycles < this.targetCycles) {
                     this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
