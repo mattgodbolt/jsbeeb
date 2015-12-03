@@ -85,7 +85,7 @@ define(['teletext_data', 'utils'], function (ttData, utils) {
             function setGraphicsBlock(c, x, y, w, h, sep, n) {
                 for (var yy = 0; yy < h; ++yy) {
                     for (var xx = 0; xx < w; ++xx) {
-                        charData[c * 60 + (y + yy) * 6 + (x + xx)] = (sep && (xx === 0 || yy === 0)) ? 0 : n;
+                        charData[c * 60 + (y + yy) * 6 + (x + xx)] = (sep && (xx === 0 || yy === (h-1))) ? 0 : n;
                     }
                 }
             }
