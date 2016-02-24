@@ -111,6 +111,16 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         var model = models.findModel(parsedQuery.model || guessModelFromUrl());
 
+        if (parsedQuery.sbLeft) {
+            $('.sidebar.left img').attr("src", parsedQuery.sbLeft);
+        }
+        if (parsedQuery.sbRight) {
+            $('.sidebar.right img').attr("src", parsedQuery.sbRight);
+        }
+        if (parsedQuery.sbBottom) {
+            $('.sidebar.bottom img').attr("src", parsedQuery.sbBottom);
+        }
+
         if (parsedQuery.cpuMultiplier) {
             cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
             console.log("CPU multiplier set to " + cpuMultiplier);
