@@ -111,15 +111,24 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
         var model = models.findModel(parsedQuery.model || guessModelFromUrl());
 
-        if (parsedQuery.sbLeft) {
-            $('.sidebar.left img').attr("src", parsedQuery.sbLeft);
+        function sbBind(div, url, onload) {
+            if (!url) return;
+            var img = div.find("img");
+            img.attr("src", url).bind("load", function () {
+                onload(div, img);
+                img.show();
+            }).hide();
         }
-        if (parsedQuery.sbRight) {
-            $('.sidebar.right img').attr("src", parsedQuery.sbRight);
-        }
-        if (parsedQuery.sbBottom) {
-            $('.sidebar.bottom img').attr("src", parsedQuery.sbBottom);
-        }
+
+        sbBind($(".sidebar.left"), parsedQuery.sbLeft, function (div, img) {
+            div.css({left: -img.width() - 5});
+        });
+        sbBind($(".sidebar.right"), parsedQuery.sbRight, function (div, img) {
+            div.css({right: -img.width() - 5});
+        });
+        sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
+            div.css({bottom: -img.height()});
+        });
 
         if (parsedQuery.cpuMultiplier) {
             cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);

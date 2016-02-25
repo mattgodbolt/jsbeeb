@@ -39,7 +39,7 @@ URL parameters
 * `autochain` - types `*TAPE` then `CH.""` to run from tape.a
 * `embed` - Adjust the navigation entries to make the page clearer within a 921x733 iframe in a third-party site.
 * `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
-* `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right should be 200x648 and the bottom image should be 896x100.
+* `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into problems on smaller screens; bottom taller than 100 or so similarly.
 
 Patches
 -------
