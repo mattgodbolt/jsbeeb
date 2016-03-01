@@ -110,6 +110,10 @@ span.accesskey {
     #leds thead {
         display: none;
     }
+
+    div.led {
+        vertical-align: middle;
+    }
 }
 
 #leds td, th {
