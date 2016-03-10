@@ -3,9 +3,7 @@ define(['utils', 'jquery', 'jsunzip'], function (utils, $, jsunzip) {
     "use strict";
     return function StairwayToHell(onStart, onCat, onError, tape) {
         var self = this;
-        var baseUrl = "http://www.stairwaytohell.com/bbc/archive/";
-        if (document.location.protocol === "https:") // use proxy if accessing via https
-            baseUrl = "https://bbc.godbolt.org/sth/";
+        var baseUrl = document.location.protocol + "//www.stairwaytohell.com/bbc/archive/";
         if (tape) baseUrl += "tapeimages/"; else baseUrl += "diskimages/";
 
         var catalogUrl = "reclist.php?sort=name&filter=.zip";
