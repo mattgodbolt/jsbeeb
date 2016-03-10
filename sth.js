@@ -1,9 +1,12 @@
-// Accesses STH archive via a proxy on the bbc.godbolt.org website
+// Accesses STH archive.
 define(['utils', 'jquery', 'jsunzip'], function (utils, $, jsunzip) {
     "use strict";
     return function StairwayToHell(onStart, onCat, onError, tape) {
         var self = this;
-        var baseUrl = tape ? "https://bbc.godbolt.org/sth/tapeimages/" : "https://bbc.godbolt.org/sth/diskimages/";
+        var baseUrl = "http://www.stairwaytohell.com/bbc/archive/";
+        if (document.location.protocol === "https:") // use proxy if accessing via https
+            baseUrl = "https://bbc.godbolt.org/sth/";
+        if (tape) baseUrl += "tapeimages/"; else baseUrl += "diskimages/";
 
         var catalogUrl = "reclist.php?sort=name&filter=.zip";
         var catalog = [];
