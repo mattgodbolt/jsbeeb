@@ -67,7 +67,7 @@ define(['teletext', 'utils'], function (Teletext, utils) {
                 this.updateFbTable();
             }
         };
-        
+
         this.paint = function () {
             this.paint_ext(
                 this.leftBorder,
@@ -77,7 +77,61 @@ define(['teletext', 'utils'], function (Teletext, utils) {
             );
         };
 
-        this.debugPaint = this.paint;
+        function copyFb(dest, src) {
+            for (var i = 0; i < 1024 * 768; ++i) {
+                dest[i] = src[i];
+            }
+        }
+
+        var debugPrevScreen = null;
+
+        this.debugOffset = function (x, y) {
+            if (x < 0 || x >= 1024) return -1;
+            if (y < 0 || y >= 768) return -1;
+            var renderY = (y << 1) | ((this.oddFrame && (this.interlacedSyncAndVideo || !this.doubledScanlines)) ? 1 : 0);
+            return renderY * 1024 + x;
+        };
+
+        function lerp1(a, b, alpha) {
+            var val = (b - a) * alpha + a;
+            if (val < 0) val = 0;
+            if (val > 255) val = 255;
+            return val;
+        }
+
+        function lerp(col1, col2, alpha) {
+            if (alpha < 0) alpha = 0;
+            if (alpha > 1) alpha = 1;
+            var r1 = (col1 >>> 16) & 0xff;
+            var g1 = (col1 >>> 8) & 0xff;
+            var b1 = (col1 >>> 0) & 0xff;
+            var r2 = (col2 >>> 16) & 0xff;
+            var g2 = (col2 >>> 8) & 0xff;
+            var b2 = (col2 >>> 0) & 0xff;
+            var red = lerp1(r1, r2, alpha);
+            var green = lerp1(g1, g2, alpha);
+            var blue = lerp1(b1, b2, alpha);
+            return 0xff000000 | (red << 16) | (green << 8) | blue;
+        }
+
+        this.debugPaint = function () {
+            if (!debugPrevScreen) {
+                debugPrevScreen = new Uint32Array(1024 * 768);
+            }
+            copyFb(debugPrevScreen, this.fb32);
+            var dotSize = 10;
+            var x, y;
+            for (y = -dotSize; y <= dotSize; y++) {
+                for (x = -dotSize; x <= dotSize; ++x) {
+                    var dist = Math.sqrt(x * x + y * y) / dotSize;
+                    if (dist > 1) continue;
+                    var offset = this.debugOffset(this.bitmapX + x, this.bitmapY + y);
+                    this.fb32[offset] = lerp(this.fb32[offset], 0xffffff, Math.pow(1 - dist, 2));
+                }
+            }
+            this.paint();
+            copyFb(this.fb32, debugPrevScreen);
+        };
 
         this.table4bppOffset = function (ulamode, byte) {
             return ulamode * 256 * 16 + byte * 16;
