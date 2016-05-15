@@ -329,7 +329,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
         });
         var emulationConfig = {
             keyLayout: keyLayout,
-            cpuMultiplier: cpuMultiplier
+            cpuMultiplier: cpuMultiplier,
+            videoCyclesBatch: parsedQuery.videoCyclesBatch
         };
         processor = new Cpu6502(model, dbgr, video, soundChip, cmos, emulationConfig);
 

@@ -405,6 +405,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.oldPcIndex = 0;
             this.resetLine = true;
             this.cpuMultiplier = config.cpuMultiplier;
+            this.videoCyclesBatch = config.videoCyclesBatch | 0;
             this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
@@ -875,10 +876,19 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             };
 
             this.peripheralCycles = 0;
-            this.polltime = function (cycles) {
+            this.videoCycles = 0;
+
+            // Slow version allows video batching and cpu multipliers
+            this.polltimeSlow = function (cycles) {
                 cycles |= 0;
                 this.currentCycles += cycles;
                 this.peripheralCycles += cycles;
+                this.videoCycles += cycles;
+                cycles = (this.videoCycles / this.cpuMultiplier) | 0;
+                if (cycles > this.videoCyclesBatch) {
+                    this.video.polltime(cycles);
+                    this.videoCycles -= (cycles * this.cpuMultiplier) | 0;
+                }
                 cycles = (this.peripheralCycles / this.cpuMultiplier) | 0;
                 if (!cycles) return;
                 this.peripheralCycles -= (cycles * this.cpuMultiplier) | 0;
@@ -886,11 +896,30 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 this.uservia.polltime(cycles);
                 this.fdc.polltime(cycles);
                 this.acia.polltime(cycles);
-                this.video.polltime(cycles);
                 this.soundChip.polltime(cycles);
                 this.adconverter.polltime(cycles);
                 this.tube.execute(cycles);
             };
+
+            // Faster, but more limited version
+            this.polltimeFast = function (cycles) {
+                cycles |= 0;
+                this.currentCycles += cycles;
+                this.video.polltime(cycles);
+                this.sysvia.polltime(cycles);
+                this.uservia.polltime(cycles);
+                this.fdc.polltime(cycles);
+                this.acia.polltime(cycles);
+                this.soundChip.polltime(cycles);
+                this.adconverter.polltime(cycles);
+                this.tube.execute(cycles);
+            };
+
+            if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {
+                this.polltime = this.polltimeFast;
+            } else {
+                this.polltime = this.polltimeSlow;
+            }
 
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
