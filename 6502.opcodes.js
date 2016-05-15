@@ -1257,7 +1257,7 @@ define(['utils'], function (utils) {
         return {
             Disassemble: Disassemble6502,
             runInstruction: new Runner(),
-            opcodes: opcodes6502,
+            opcodes: opcodes,
             getInstruction: getInstruction
         };
     }

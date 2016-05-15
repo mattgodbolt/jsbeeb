@@ -48,7 +48,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth'
 
                 // eg KEY.CAPSLOCK=CTRL
                 var bbcKey;
-                if (key.indexOf("KEY.") === 0) {
+                if (key.toUpperCase().indexOf("KEY.") === 0) {
                     bbcKey = val.toUpperCase();
 
                     if (BBC[bbcKey]) {
