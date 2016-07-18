@@ -1049,10 +1049,9 @@ define(['utils'], function (utils) {
                     return ig.render();
 
                 case "(abs)":
-                    ig.tick(3);
+                    ig.tick(is65C12 ? 4 : 3);
                     ig.append("var addr = cpu.getw() | 0;");
                     if (is65C12) {
-                        // Timing probably wrong here TODO
                         ig.append("var nextAddr = (addr + 1) & 0xffff;");
                     } else {
                         ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
