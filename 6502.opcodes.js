@@ -1074,7 +1074,7 @@ define(['utils'], function (utils) {
                     return ig.render();
 
                 case "()":
-                    // This is somewhat guessed-at, from timings. TODO
+                    // Timing here is guessed at, but appears to be correct.
                     ig.tick(2);
                     ig.append("var zpAddr = cpu.getb() | 0;");
                     ig.append("var lo, hi;");
