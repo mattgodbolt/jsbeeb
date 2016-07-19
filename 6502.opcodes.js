@@ -250,13 +250,13 @@ define(['utils'], function (utils) {
                     read: true
                 };
             case "ROL":
-                return {op: rotate(true, false), read: true, write: true};
+                return {op: rotate(true, false), read: true, write: true, rotate: true};
             case "ROR":
-                return {op: rotate(false, false), read: true, write: true};
+                return {op: rotate(false, false), read: true, write: true, rotate: true};
             case "ASL":
-                return {op: rotate(true, true), read: true, write: true};
+                return {op: rotate(true, true), read: true, write: true, rotate: true};
             case "LSR":
-                return {op: rotate(false, true), read: true, write: true};
+                return {op: rotate(false, true), read: true, write: true, rotate: true};
             case "EOR":
                 return {op: ["cpu.a = cpu.setzn(cpu.a ^ REG);"], read: true};
             case "AND":
@@ -971,16 +971,24 @@ define(['utils'], function (utils) {
                     ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
                     ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                     ig.tick(3);
-                    if (op.read && !op.write) {
+                    if ((op.read && !op.write)) {
                         // For non-RMW, we only pay the cost of the spurious read if the address carried.
                         ig = ig.split("addrWithCarry !== addrNonCarry");
                         ig.ifTrue.readOp("addrNonCarry");
                         ig.readOp("addrWithCarry", "REG");
                     } else if (op.read) {
-                        // For RMW we always have a spurious read and then a spurious write
-                        ig.readOp("addrNonCarry");
-                        ig.readOp("addrWithCarry", "REG");
-                        ig.writeOp("addrWithCarry", "REG");
+                        if (is65C12 && op.rotate) {
+                            // For rotates on the 65c12, there's an optimization to avoid the extra cycle with no carry
+                            ig = ig.split("addrWithCarry !== addrNonCarry");
+                            ig.ifTrue.readOp("addrNonCarry");
+                            ig.readOp("addrWithCarry", "REG");
+                            ig.writeOp("addrWithCarry", "REG");
+                        } else {
+                            // For RMW we always have a spurious read and then a spurious write
+                            ig.readOp("addrNonCarry");
+                            ig.readOp("addrWithCarry", "REG");
+                            ig.writeOp("addrWithCarry", "REG");
+                        }
                     } else if (op.write) {
                         // Pure stores still exhibit a read at the non-carried address.
                         ig.readOp("addrNonCarry");
