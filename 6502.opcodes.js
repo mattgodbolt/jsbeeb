@@ -47,8 +47,9 @@ define(['utils'], function (utils) {
         return "cpu.push(cpu." + reg + ");";
     }
 
-    function InstructionGen() {
+    function InstructionGen(is65c12) {
         var self = this;
+        self.is65c12 = is65c12;
         self.ops = {};
         self.cycle = 0;
 
@@ -85,18 +86,21 @@ define(['utils'], function (utils) {
         self.tick = function (cycles) {
             self.cycle += (cycles || 1);
         };
-        self.readOp = function (addr, reg) {
+        self.readOp = function (addr, reg, spurious) {
             self.cycle++;
             var op;
             if (reg)
                 op = reg + " = cpu.readmem(" + addr + ");";
             else
                 op = "cpu.readmem(" + addr + ");";
+            if (spurious) op += " // spurious";
             self.append(self.cycle, op, true, addr);
         };
-        self.writeOp = function (addr, reg) {
+        self.writeOp = function (addr, reg, spurious) {
             self.cycle++;
-            self.append(self.cycle, "cpu.writemem(" + addr + ", " + reg + ");", true, addr);
+            var op = "cpu.writemem(" + addr + ", " + reg + ");";
+            if (spurious) op += " // spurious";
+            self.append(self.cycle, op, true, addr);
         };
         self.zpReadOp = function (addr, reg) {
             self.cycle++;
@@ -110,6 +114,13 @@ define(['utils'], function (utils) {
             if (self.cycle < 2) self.cycle = 2;
             self.prepend(self.cycle - 1, "cpu.checkInt();", true);
             return self.renderInternal(startCycle);
+        };
+        self.spuriousOp = function (addr, reg) {
+            if (self.is65c12) {
+                self.readOp(addr, reg, true);
+            } else {
+                self.writeOp(addr, reg, true);
+            }
         };
         self.renderInternal = function (startCycle) {
             startCycle = startCycle || 0;
@@ -145,19 +156,19 @@ define(['utils'], function (utils) {
             });
         };
         self.split = function (condition) {
-            return new SplitInstruction(this, condition);
+            return new SplitInstruction(this, condition, self.is65c12);
         };
     }
 
-    function SplitInstruction(preamble, condition) {
+    function SplitInstruction(preamble, condition, is65c12) {
         var self = this;
         self.preamble = preamble;
-        self.ifTrue = new InstructionGen();
+        self.ifTrue = new InstructionGen(is65c12);
         self.ifTrue.tick(preamble.cycle);
-        self.ifFalse = new InstructionGen();
+        self.ifFalse = new InstructionGen(is65c12);
         self.ifFalse.tick(preamble.cycle);
 
-        ["append", "prepend", "readOp", "writeOp"].forEach(function (op) {
+        ["append", "prepend", "readOp", "writeOp", "spuriousOp"].forEach(function (op) {
             self[op] = function () {
                 self.ifTrue[op].apply(self.ifTrue, arguments);
                 self.ifFalse[op].apply(self.ifFalse, arguments);
@@ -905,7 +916,7 @@ define(['utils'], function (utils) {
         0xFE: "INC abs,x"
     };
 
-    function makeCpuFunctions(cpu, opcodes, is65C12) {
+    function makeCpuFunctions(cpu, opcodes, is65c12) {
 
         function getInstruction(opcodeString, needsReg) {
             var split = opcodeString.split(' ');
@@ -914,10 +925,9 @@ define(['utils'], function (utils) {
             var op = getOp(opcode, arg);
             if (!op) return null;
 
-            var ig = new InstructionGen();
+            var ig = new InstructionGen(is65c12);
             if (needsReg) ig.append("var REG = 0|0;");
 
-            // TODO: spurious writes don't happen on is65C12 (cf p48 of Atherton book)
             switch (arg) {
                 case undefined:
                     // Many of these ops need a little special casing.
@@ -929,7 +939,7 @@ define(['utils'], function (utils) {
                     return ig.render();
 
                 case "branch":
-                    return [op.op];  // TODO: special cased here, would be nice to pull out of cpu
+                    return [op.op];  // special cased here, would be nice to pull out of cpu
 
                 case "zp":
                 case "zpx":  // Seems to be enough to keep tests happy, but needs investigation.
@@ -958,7 +968,7 @@ define(['utils'], function (utils) {
                     ig.append("var addr = cpu.getw() | 0;");
                     if (op.read) {
                         ig.readOp("addr", "REG");
-                        if (op.write) ig.writeOp("addr", "REG");
+                        if (op.write) ig.spuriousOp("addr", "REG");
                     }
                     ig.append(op.op);
                     if (op.write) ig.writeOp("addr", "REG");
@@ -977,17 +987,17 @@ define(['utils'], function (utils) {
                         ig.ifTrue.readOp("addrNonCarry");
                         ig.readOp("addrWithCarry", "REG");
                     } else if (op.read) {
-                        if (is65C12 && op.rotate) {
+                        if (is65c12 && op.rotate) {
                             // For rotates on the 65c12, there's an optimization to avoid the extra cycle with no carry
                             ig = ig.split("addrWithCarry !== addrNonCarry");
                             ig.ifTrue.readOp("addrNonCarry");
                             ig.readOp("addrWithCarry", "REG");
                             ig.writeOp("addrWithCarry", "REG");
                         } else {
-                            // For RMW we always have a spurious read and then a spurious write
+                            // For RMW we always have a spurious read and then a spurious read or write
                             ig.readOp("addrNonCarry");
                             ig.readOp("addrWithCarry", "REG");
-                            ig.writeOp("addrWithCarry", "REG");
+                            ig.spuriousOp("addrWithCarry", "REG");
                         }
                     } else if (op.write) {
                         // Pure stores still exhibit a read at the non-carried address.
@@ -1044,10 +1054,10 @@ define(['utils'], function (utils) {
                         ig.ifTrue.readOp("addrNonCarry");
                         ig.readOp("addrWithCarry", "REG");
                     } else if (op.read) {
-                        // For RMW we always have a spurious read and then a spurious write
+                        // For RMW we always have a spurious read and then a spurious read or write
                         ig.readOp("addrNonCarry");
                         ig.readOp("addrWithCarry", "REG");
-                        ig.writeOp("addrWithCarry", "REG");
+                        ig.spuriousOp("addrWithCarry", "REG");
                     } else if (op.write) {
                         // Pure stores still exhibit a read at the non-carried address.
                         ig.readOp("addrNonCarry");
@@ -1057,9 +1067,9 @@ define(['utils'], function (utils) {
                     return ig.render();
 
                 case "(abs)":
-                    ig.tick(is65C12 ? 4 : 3);
+                    ig.tick(is65c12 ? 4 : 3);
                     ig.append("var addr = cpu.getw() | 0;");
-                    if (is65C12) {
+                    if (is65c12) {
                         ig.append("var nextAddr = (addr + 1) & 0xffff;");
                     } else {
                         ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
@@ -1219,7 +1229,7 @@ define(['utils'], function (utils) {
         }
 
         function invalidOpcode(cpu, opcode) {
-            if (is65C12) {
+            if (is65c12) {
                 // All undefined opcodes are NOPs on 65c12 (of varying lengths)
                 switch (opcode) {
                     case 0x02:
