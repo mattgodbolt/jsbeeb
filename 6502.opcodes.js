@@ -53,10 +53,6 @@ define(['utils'], function (utils) {
         self.ops = {};
         self.cycle = 0;
 
-        self.flush = function () {
-            self.append(self.cycle, "", true);
-        };
-
         function appendOrPrepend(combiner, cycle, op, exact, addr) {
             if (op === undefined) {
                 op = cycle;
@@ -66,7 +62,7 @@ define(['utils'], function (utils) {
             if (typeof(op) == "string") op = [op];
             if (self.ops[cycle]) {
                 self.ops[cycle].op = combiner(self.ops[cycle].op, op);
-                self.ops[cycle].exact |= exact;
+                if (exact) self.ops[cycle].exact = true;
                 if (!self.ops[cycle].addr) self.ops[cycle].addr = addr;
             } else
                 self.ops[cycle] = {op: op, exact: exact, addr: addr};
@@ -934,7 +930,6 @@ define(['utils'], function (utils) {
                     if (op.read || op.write) throw "Unsupported " + opcodeString;
                     ig.append(op.preop);
                     ig.tick(Math.max(2, 1 + (op.extra || 0)));
-                    ig.flush();
                     ig.append(op.op);
                     return ig.render();
 
@@ -955,7 +950,6 @@ define(['utils'], function (utils) {
                     if (op.read) {
                         ig.zpReadOp("addr", "REG");
                         if (op.write) {
-                            ig.flush();
                             ig.tick(1);  // Spurious write
                         }
                     }
