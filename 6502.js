@@ -106,9 +106,9 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 var newPc = (cpu.pc + offset) & 0xffff;
                 var pageCrossed = !!((cpu.pc & 0xff00) ^ (newPc & 0xff00));
                 cpu.pc = newPc;
-                cpu.polltime(pageCrossed ? 3 : 1);
+                cpu.polltime(pageCrossed ? 3 : 2);
                 cpu.checkInt();
-                cpu.polltime(pageCrossed ? 1 : 2);
+                cpu.polltime(1);
             };
 
             function adcNonBCD(addend) {
