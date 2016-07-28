@@ -30,7 +30,7 @@ dist: npm
 	@rm -rf out/build out/dist
 	@mkdir -p out/dist
 	@mkdir -p out/build
-	cp -r *.js *.css *.html *.txt *.ico discs tapes basic images lib roms out/build
+	cp -r *.js *.css *.html *.txt *.ico discs tapes basic images lib roms sounds out/build
 	for BASEFILE in main requirejs-common; do \
 		perl -pi -e "s/require\(\['$${BASEFILE}'\]/require(['$${BASEFILE}-$(HASH)']/" out/build/index.html; \
 		mv out/build/$${BASEFILE}.js out/build/$${BASEFILE}-$(HASH).js; \
