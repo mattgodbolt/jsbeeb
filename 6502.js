@@ -376,7 +376,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             };
         }
 
-        return function Cpu6502(model, dbgr, video_, soundChip_, cmos, config) {
+        return function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config) {
             if (config === undefined) config = {};
             if (!config.keyLayout)
                 config.keyLayout = "physical";
@@ -387,6 +387,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
 
             this.video = video_;
             this.soundChip = soundChip_;
+            this.ddNoise = ddNoise_;
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
             this.memStat = new Uint8Array(512);
@@ -406,6 +407,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             this.resetLine = true;
             this.cpuMultiplier = config.cpuMultiplier;
             this.videoCyclesBatch = config.videoCyclesBatch | 0;
+            this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
             this.getPrevPc = function (index) {
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
@@ -841,7 +843,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                     this.uservia = via.UserVia(this, model.isMaster);
                     this.acia = new Acia(this, this.soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
-                    this.fdc = new model.Fdc(this);
+                    this.fdc = new model.Fdc(this, this.ddNoise);
                     this.crtc = this.video.crtc;
                     this.ula = this.video.ula;
                     this.adconverter = new Adc(this.sysvia);

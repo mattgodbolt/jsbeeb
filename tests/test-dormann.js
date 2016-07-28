@@ -10,16 +10,9 @@ requirejs.config({
     }
 });
 
-requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
-    function (Video, SoundChip, Cpu6502, utils, models) {
+requirejs(['fake6502', 'utils'],
+    function (Fake6502, utils) {
         "use strict";
-
-        var video = new Video.FakeVideo();
-        var soundChip = new SoundChip.FakeSoundChip();
-        var dbgr = {
-            setCpu: function () {
-            }
-        };
 
         function runTest(processor, test, name) {
             return utils.loadData("tests/6502_65C02_functional_tests/bin_files/" + test + ".bin").then(function (data) {
@@ -58,7 +51,7 @@ requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
             process.exit(1);
         }
 
-        var cpu6502 = new Cpu6502(models.TEST_6502, dbgr, video, soundChip);
+        var cpu6502 = Fake6502.fake6502();
         var test6502 = cpu6502.initialise().then(function () {
             return runTest(cpu6502, '6502_functional_test', '6502');
         }).then(function (addr) {
@@ -69,7 +62,7 @@ requirejs(['video', 'soundchip', '6502', 'utils', 'models'],
         });
 
         var test65c12 = test6502.then(function () {
-            var cpu65c12 = new Cpu6502(models.TEST_65C12, dbgr, video, soundChip);
+            var cpu65c12 = Fake6502.fake65C12();
             return cpu65c12.initialise().then(function () {
                 return runTest(cpu65c12, '65C12_extended_opcodes_test', '65C12');
             }).then(function (addr) {

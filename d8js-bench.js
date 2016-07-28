@@ -30,13 +30,9 @@ function setTimeout(fn, delay) {
 ///////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////
-requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
-    function (Video, Cpu6502, SoundChip, disc, models) {
+requirejs(['fake6502', 'fdc', 'models'],
+    function (Fake6502, disc, models) {
         "use strict";
-        var frame = 0;
-        var video = new Video.FakeVideo();
-        var soundChip = new SoundChip.FakeSoundChip();
-
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
             console.log("Benchmarking over " + numCycles + " cpu cycles");
@@ -50,7 +46,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
         }
 
         var discName = "elite";
-        var cpu = new Cpu6502(models.findModel('B'), dbgr, video, soundChip);
+        var cpu = Fake6502.fake6502(models.findModel('B'));
         cpu.initialise().then(function () {
             return disc.load("discs/" + discName + ".ssd");
         }).then(function (data) {

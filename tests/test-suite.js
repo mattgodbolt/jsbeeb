@@ -10,16 +10,11 @@ requirejs.config({
     }
 });
 
-requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
-    function (Video, SoundChip, Cpu6502, fdc, utils, models) {
+requirejs(['fake6502', 'utils', 'promise'],
+    function (Fake6502, utils) {
         "use strict";
 
-        var video = new Video.FakeVideo();
-        var soundChip = new SoundChip.FakeSoundChip();
-        var dbgr = { setCpu: function () {
-        } };
-
-        var processor = new Cpu6502(models.TEST_6502, dbgr, video, soundChip);
+        var processor = Fake6502.fake6502();
         var irqRoutine = [
             0x48,
             0x8A,
@@ -38,7 +33,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
             var i;
             for (i = 0x0000; i < 0xffff; ++i)
                 processor.writemem(i, 0x00);
-            return utils.loadData("tests/suite/bin/" + filename).then(function(data){
+            return utils.loadData("tests/suite/bin/" + filename).then(function (data) {
                 var addr = data[0] + (data[1] << 8);
                 console.log(">> Loading test '" + filename + "' at " + utils.hexword(addr));
                 for (i = 2; i < data.length; ++i)
@@ -100,7 +95,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
                     processor.writemem(0x030c, 0x00);
                     break;
                 case 0xe16f:
-                    var filenameAddr = processor.readmem(0xbb) | (processor.readmem(0xbc)<<8);
+                    var filenameAddr = processor.readmem(0xbb) | (processor.readmem(0xbc) << 8);
                     var filenameLen = processor.readmem(0xb7);
                     var filename = "";
                     for (var i = 0; i < filenameLen; ++i)
@@ -125,7 +120,7 @@ requirejs(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'promise'],
         });
 
         function anIter() {
-            for (;;) {
+            for (; ;) {
                 if (!processor.execute(10 * 1000 * 1000)) return;
             }
         }

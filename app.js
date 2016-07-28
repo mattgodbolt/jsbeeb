@@ -10,8 +10,8 @@ requirejs.config({
     }
 });
 
-requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
-    function (Video, Cpu6502, SoundChip, disc, models) {
+requirejs(['video', '6502', 'fdc', 'models'],
+    function (Video, Cpu6502, disc, models) {
         var fb32 = new Uint32Array(1280 * 768);
         var frame = 0;
         var screenshotRequest = null;
@@ -37,11 +37,6 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
                 screenshotRequest = null;
             }
         });
-        var dbgr = {
-            setCpu: function () {
-            }
-        };
-        var soundChip = new SoundChip.FakeSoundChip();
 
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
@@ -55,7 +50,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models'],
         }
 
         var discName = "elite";
-        var cpu = new Cpu6502(models.findModel('B'), dbgr, video, soundChip);
+        var cpu = Fake6502.fake6502(models.findModel('B'), {video: video});
         cpu.initialise().then(function () {
             return disc.load("discs/" + discName + ".ssd");
         }).then(function (data) {

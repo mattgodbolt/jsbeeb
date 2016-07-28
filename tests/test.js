@@ -1,9 +1,7 @@
-define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
-    function (Video, SoundChip, Cpu6502, fdc, utils, models, Cmos) {
+define(['video', 'fake6502', 'fdc', 'utils', 'models'],
+    function (Video, Fake6502, fdc, utils, models) {
         var processor;
         var video;
-        var soundChip;
-        var dbgr;
         var MaxCyclesPerIter = 100 * 1000;
         var hexword = utils.hexword;
         var failures = 0;
@@ -38,11 +36,6 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
             beginTest = beginTest_;
             endTest = endTest_;
             video = new Video.Video(frameBuffer, paint);
-            soundChip = new SoundChip.FakeSoundChip();
-            dbgr = {
-                setCpu: function () {
-                }
-            };
 
             return tests.reduce(function (p, test) {
                 return p.then(function () {
@@ -292,7 +285,7 @@ define(['video', 'soundchip', '6502', 'fdc', 'utils', 'models', 'cmos'],
             model = model || 'B';
             log("Running", name);
             beginTest(name);
-            processor = new Cpu6502(models.findModel(model), dbgr, video, soundChip, new Cmos());
+            processor = Fake6502.fake6502(models.findModel(model), {video: video});
             failures = 0;
             return processor.initialise().then(func).then(function () {
                 log("Finished", name);

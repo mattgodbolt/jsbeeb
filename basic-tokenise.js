@@ -1,14 +1,9 @@
-define(['models', '6502', 'utils', 'video', 'soundchip'],
-    function (models, Cpu6502, utils, Video, SoundChip) {
+define(['utils', 'models', 'fake6502'],
+    function (utils, models, Fake6502) {
         "use strict";
 
         function create() {
-            var video = new Video.FakeVideo();
-            var soundChip = new SoundChip.FakeSoundChip();
-            var dbgr = {
-                setCpu: utils.noop
-            };
-            var cpu = new Cpu6502(models.basicOnly, dbgr, video, soundChip);
+            var cpu = Fake6502.fake6502(models.basicOnly);
             var callTokeniser = function (line) {
                 // With thanks to http://8bs.com/basic/basic4-8db2.htm
                 cpu.pc = 0x8db2;
