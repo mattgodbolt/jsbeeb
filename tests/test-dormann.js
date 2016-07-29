@@ -10,28 +10,52 @@ requirejs.config({
     }
 });
 
-requirejs(['fake6502', 'utils'],
-    function (Fake6502, utils) {
+requirejs(['fake6502', 'utils', 'underscore'],
+    function (Fake6502, utils, _) {
         "use strict";
 
         function runTest(processor, test, name) {
-            return utils.loadData("tests/6502_65C02_functional_tests/bin_files/" + test + ".bin").then(function (data) {
-                for (var i = 0; i < data.length; ++i)
-                    processor.writemem(i, data[i]);
-                processor.pc = 0x400;
-                var log = false;
-                processor.debugInstruction.add(function (addr, opcode) {
-                    if (log) {
-                        console.log(utils.hexword(addr) + " : " + utils.hexbyte(processor.a) + " : " + processor.disassembler.disassemble(processor.pc)[0]);
-                    }
+            var base = "tests/6502_65C02_functional_tests/bin_files/" + test;
 
-                    return addr !== 0x400 && addr === processor.getPrevPc(1);
+            function parseSuccess(listing) {
+                var expectedPc = null;
+                var next = false;
+                var successRe = /^\s*success\b\s*(;.*)?$/;
+                _.each(listing.split("\n"), function (line) {
+                    if (next) {
+                        next = false;
+                        expectedPc = parseInt(line.match(/^([0-9a-fA-F]+)/)[1], 16);
+                        console.log("Found success address $" + utils.hexword(expectedPc));
+                    } else {
+                        next = !!line.match(successRe);
+                    }
                 });
-                console.log("Running Dormann " + name + " tests...");
-                while (processor.execute(1000000)) {
-                }
-                return processor.pc;
-            });
+                if (expectedPc === null) throw "Unable to parse";
+                return expectedPc;
+            }
+
+            return Promise.all([
+                utils.loadData(base + ".lst"),
+                utils.loadData(base + ".bin")])
+                .then(function (results) {
+                    var expectedPc = parseSuccess(results[0].toString());
+                    var data = results[1];
+                    for (var i = 0; i < data.length; ++i)
+                        processor.writemem(i, data[i]);
+                    processor.pc = 0x400;
+                    var log = false;
+                    processor.debugInstruction.add(function (addr, opcode) {
+                        if (log) {
+                            console.log(utils.hexword(addr) + " : " + utils.hexbyte(processor.a) + " : " + processor.disassembler.disassemble(processor.pc)[0]);
+                        }
+
+                        return addr !== 0x400 && addr === processor.getPrevPc(1);
+                    });
+                    console.log("Running Dormann " + name + " tests...");
+                    while (processor.execute(1000000)) {
+                    }
+                    return processor.pc === expectedPc;
+                });
         }
 
         function fail(processor) {
@@ -54,10 +78,8 @@ requirejs(['fake6502', 'utils'],
         var cpu6502 = Fake6502.fake6502();
         var test6502 = cpu6502.initialise().then(function () {
             return runTest(cpu6502, '6502_functional_test', '6502');
-        }).then(function (addr) {
-            // TODO: really should parse this from the lst file.
-            // But for now update this if you ever update the submodule checkout.
-            if (addr !== 0x3399)
+        }).then(function (success) {
+            if (!success)
                 fail(cpu6502);
         });
 
@@ -65,16 +87,17 @@ requirejs(['fake6502', 'utils'],
             var cpu65c12 = Fake6502.fake65C12();
             return cpu65c12.initialise().then(function () {
                 return runTest(cpu65c12, '65C12_extended_opcodes_test', '65C12');
-            }).then(function (addr) {
-                // TODO: really should parse this from the lst file.
-                // But for now update this if you ever update the submodule checkout.
-                if (addr !== 0x2373)
+            }).then(function (success) {
+                if (!success)
                     fail(cpu65c12);
             });
         });
 
         test65c12.then(function () {
             console.log("Success!");
+        }).catch(function (e) {
+            console.log('Exception in test: ', e);
+            process.exit(1);
         });
     }
 );
