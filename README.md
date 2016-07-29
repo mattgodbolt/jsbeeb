@@ -3,14 +3,16 @@
 jsbeeb - Javascript BBC Micro emulator
 --------------------------------------
 
-A 32K BBC Model B micro computer emulator in Javascript.  Runs on Firefox and Chrome.
-Key mappings you may find useful:
+A BBC Micro emulator in Javascript.  Runs on Firefox, Chrome and Microsoft Edge. Emulates a 32K BBC B (with sideways RAM)
+and a 128K BBC Master. The BBC had a somewhat different-looking keyboard to a modern PC, and so it's useful to 
+know some of the mappings:
 
 * BBC F0 is F10
 * BBC Break key is F12
 * BBC star is on " (if it doesn't work for you try shift-2)
 
-To play right now, visit [http://bbc.godbolt.org/](http://bbc.godbolt.org/)
+To play right now, visit [http://bbc.godbolt.org/](http://bbc.godbolt.org/). To load the default disc image (Elite in
+this case), press shift-F12 (which is shift-Break on the BBC).
 
 Getting set up to run locally
 -----------------------------
@@ -46,7 +48,7 @@ Patches
 -------
 Patches can be applied by making a `patch=P` URL parameter.  `P` is a sequence of semicolon separated patches of the form `@XXXX,YYYY:ZZZZZ,...` where the `@XXXX` specifies a PC address to breakpoint, the `YYYY` is the address to patch and the `ZZZZ` is the data to write at address `YYYY`. The `@` part is optional, but is handy to ensure the code you want to patch has actually loaded. For example: `patch=@31a6,0769:6e4c4d48465a` which is a patch for the default Elite image. Once the PC has reached `$31a6`, the bytes at `0769` are replaced with `6e4c4d48465a`.
 
-TODO
+Things left to do
 ----
 
 If you're looking to help:
@@ -55,11 +57,17 @@ If you're looking to help:
   * Play lots of games and report issues either on [github](https://github.com/mattgodbolt/jsbeeb/issues) or by email (matt@godbolt.org).
 * Core
   * Save state ability
-  * Get the "boo" of the boot "boo-beep" working
+    * Once we have this I'd love to get some "reverse step" debugging support
+  * Get the "boo" of the boot "boo-beep" working (disabled currently as the Javascript startup makes the sound dreadfully
+    choppy on Chrome at least).
 * Save disc support
   * Local discs need to be made more workable and need an "export" feature
+  * Multiple discs need a UI
 * `git grep -i todo`
-
+* Optimisation
+  * While every attempt to make things fast has been made, I'm sure there's some more clever things that can be done without
+    compromising emulation accuracy
+  
 Tests
 -----
 
@@ -78,6 +86,7 @@ For timing correctness we have:
   the results are in the directory.  An SSD of the same tests is in the `discs/` directory.
 * Some of Kevin Edwards' protection systems (stripped of the games themselves). These are extremely
   timing- and correctness-sensitive when it comes to the timers and interrupts of the BBC.
+* Some 65C12-specific read-modify-write tests written by Ed Spittles.
 
 Tests can be run automatically if you have `node` installed - just run `make` and it'll ensure the relevant libraries are installed, then it'll run the tests.
 Please note it can take a while to run the whole test suite.
@@ -85,15 +94,15 @@ Please note it can take a while to run the whole test suite.
 Thanks
 ------
 
-Based on Tom Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to him for his hard work and for open sourcing his code. 
+jsbeeb was heavily based on Sarah Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to her for her hard work and for open sourcing her code. 
 
-Also huge thanks to Richard Talbot-Watkins for his advice and help along the way in fathoming out the instruction timings, interrupt fun
-and for being such a good pal all these many years!
+Huge thanks to Richard Talbot-Watkins for his advice and help along the way in fathoming out the instruction timings, interrupt fun,
+video code rewrite and for being such a good pal all these many years!
 
 Thanks to [Michael Borcherds](https://twitter.com/mike_geogebra) for his help; improving the keyboard layouts and handling in Javascript, reporting issues, chasing down
 game bugs and much more.
 
-Thanks to [David Banks](https://github.com/hoglet67) for his help in testing the gnarly BCD flag behaviour on real live BBCs.
+Thanks to [David Banks](https://github.com/hoglet67) (hoglet) for his help in testing the gnarly BCD flag behaviour on real live BBCs.
 
 Cheers to [Ed Spittles](https://github.com/BigEd) for testing various interrupt timing code on a real BBC.
 
@@ -108,4 +117,5 @@ More information
 
 I've written a lot of how the innards work on [my blog](http://xania.org) in the [emulation](http://xania.org/Emulation-archive) section.  
 I gave a presentation on how it all fits together at work, and posted the [video up on YouTube](https://www.youtube.com/watch?v=37jyHQT7fXQ). 
-I'll be presenting more at [GOTO Chicago 2016](http://gotocon.com/chicago-2016/presentation/Emulating%20a%206502%20system%20in%20Javascript).
+I presented again at [GOTO Chicago 2016](http://gotocon.com/chicago-2016/presentation/Emulating%20a%206502%20system%20in%20Javascript), and I'm
+hoping they post the video up.
