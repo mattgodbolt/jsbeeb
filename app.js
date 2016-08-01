@@ -10,8 +10,8 @@ requirejs.config({
     }
 });
 
-requirejs(['video', '6502', 'fdc', 'models'],
-    function (Video, Cpu6502, disc, models) {
+requirejs(['video', 'fake6502', 'fdc', 'models'],
+    function (Video, Fake6502, disc, models) {
         var fb32 = new Uint32Array(1280 * 768);
         var frame = 0;
         var screenshotRequest = null;

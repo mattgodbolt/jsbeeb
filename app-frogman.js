@@ -11,8 +11,8 @@ requirejs.config({
     }
 });
 
-requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'utils'],
-    function (Video, Cpu6502, SoundChip, disc, models, test, utils) {
+requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'utils'],
+    function (Video, Fake6502, SoundChip, disc, models, test, utils) {
         var fb32 = new Uint32Array(1280 * 768);
         var frame = 0;
         var screenshotRequest = null;
@@ -38,14 +38,6 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
                 screenshotRequest = null;
             }
         });
-        var dbgr = {
-            setCpu: function () {
-            },
-            debug: function(addr) {
-                console.log("yikes " + addr);
-            }
-        };
-        var soundChip = new SoundChip.SoundChip(44000);
 
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
@@ -59,9 +51,7 @@ requirejs(['video', '6502', 'soundchip', 'fdc', 'models', 'tests/test.js', 'util
         }
 
         var discName = "frogman";
-        var cpu = new Cpu6502(models.findModel('B'), dbgr, video, soundChip, {}, {
-            keyLayout: 'physical'
-        });
+        var cpu = Fake6502.fake6502(models.findModel('B'), {video: video});
         test.setProcessor(cpu);
         cpu.initialise().then(function () {
             return disc.load("discs/" + discName + ".ssd");
