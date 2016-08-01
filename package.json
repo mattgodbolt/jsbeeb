@@ -11,7 +11,7 @@
   "dependencies": {
       "requirejs": ">=2.1.15",
       "nodeunit": "0.9.x",
-      "png": "3.0.x"
+      "node-png": "0.4.x"
   },
-  "license": "GPLv3"
+  "license": "GPL-3.0"
 }

@@ -1,6 +1,6 @@
 // frogman runner, was useful in debugging the protection system.
 var requirejs = require('requirejs');
-var Png = require('png').Png;
+var Png = require('node-png').PNG;
 var fs = require('fs');
 
 requirejs.config({
@@ -21,20 +21,19 @@ requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', '
             if (screenshotRequest) {
                 var width = maxx - minx;
                 var height = maxy - miny;
-                var buf = new Buffer(width * height * 3);
                 var addr = 0;
+                var png = new Png({width: width, height: height});
                 for (var y = miny; y < maxy; ++y) {
                     for (var x = minx; x < maxx; ++x) {
                         var col = fb32[1280 * y + x];
-                        buf[addr++] = col & 0xff;
-                        buf[addr++] = (col >>> 8) & 0xff;
-                        buf[addr++] = (col >>> 16) & 0xff;
+                        png.data[addr++] = col & 0xff;
+                        png.data[addr++] = (col >>> 8) & 0xff;
+                        png.data[addr++] = (col >>> 16) & 0xff;
+                        png.data[addr++] = 0xff;
                     }
                 }
-                var png = new Png(buf, width, height);
-                var pngImage = png.encodeSync();
-                console.log("Saving " + width + "x" + height + " screenshot to " + screenshotRequest);
-                fs.writeFileSync(screenshotRequest, pngImage.toString('binary'), 'binary');
+                console.log("Scheduling save of " + width + "x" + height + " screenshot to " + screenshotRequest);
+                png.pack().pipe(fs.createWriteStream(screenshotRequest));
                 screenshotRequest = null;
             }
         });
