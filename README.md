@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/mattgodbolt/jsbeeb.svg?branch=master)](https://travis-ci.org/mattgodbolt/jsbeeb)
+[![Codewake](https://www.codewake.com/badges/ask_question_flat_square.svg)](https://www.codewake.com/p/jsbeeb)
 
 jsbeeb - Javascript BBC Micro emulator
 --------------------------------------
