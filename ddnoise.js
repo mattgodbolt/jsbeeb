@@ -16,8 +16,14 @@ define(['utils', 'underscore', 'promise'], function (utils, _) {
 
     function loadSounds(context, sounds) {
         return Promise.all(_.map(sounds, function (sound) {
+            // Safari doesn't support the Promise stuff directly, so we create
+            // our own Promise here.
             return utils.loadData(sound).then(function (data) {
-                return context.decodeAudioData(data.buffer);
+                return new Promise(function (resolve, reject) {
+                    context.decodeAudioData(data.buffer, function (decodedData) {
+                        resolve(decodedData);
+                    });
+                });
             });
         })).then(function (loaded) {
             var keys = _.keys(sounds);
