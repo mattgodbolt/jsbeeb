@@ -152,7 +152,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         });
 
         var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
-            : typeOf(webkitAudioContext !== 'undefined') ? new webkitAudioContext()
+            : typeof webkitAudioContext !== 'undefined'? new webkitAudioContext()
             : null;
 
         if (audioContext) {
