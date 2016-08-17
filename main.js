@@ -9,7 +9,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         var soundChip;
         var ddNoise;
         var dbgr;
-        var jsAudioNode;  // has to remain to keep thing alive
         var frames = 0;
         var frameSkip = 0;
         var syncLights;
@@ -157,13 +156,15 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         if (audioContext) {
             soundChip = new SoundChip.SoundChip(audioContext.sampleRate);
-            jsAudioNode = audioContext.createScriptProcessor(2048, 0, 1);
-            jsAudioNode.onaudioprocess = function pumpAudio(event) {
+            // NB must be assigned to some kind of object else it seems to get GC'd by
+            // Safari...
+            soundChip.jsAudioNode = audioContext.createScriptProcessor(2048, 0, 1);
+            soundChip.jsAudioNode.onaudioprocess = function pumpAudio(event) {
                 var outBuffer = event.outputBuffer;
                 var chan = outBuffer.getChannelData(0);
                 soundChip.render(chan, 0, chan.length);
             };
-            jsAudioNode.connect(audioContext.destination);
+            soundChip.jsAudioNode.connect(audioContext.destination);
             ddNoise = new DdNoise.DdNoise(audioContext);
         } else {
             soundChip = new SoundChip.FakeSoundChip();

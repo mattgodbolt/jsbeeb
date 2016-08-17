@@ -12,6 +12,8 @@ define(['utils', 'underscore', 'promise'], function (utils, _) {
         this.gain = context.createGain();
         this.gain.gain.value = VOLUME;
         this.gain.connect(context.destination);
+        // workaround for older safaris that GC sounds when they're playing...
+        this.playing = [];
     }
 
     function loadSounds(context, sounds) {
@@ -62,13 +64,15 @@ define(['utils', 'underscore', 'promise'], function (utils, _) {
         var self = this;
         return new Promise(function (resolve, reject) {
             var source = self.context.createBufferSource();
-            source.buffer = sound;
             source.loop = !!loop;
+            source.buffer = sound;
             source.connect(self.gain);
-            if (!source.loop) {
-                source.onended = resolve;
-            }
+            source.onended = function() {
+                self.playing = _.without(self.playing, source);
+	        if (!source.loop) resolve();
+	    };
             source.start();
+            self.playing.push(source);
             if (source.loop) {
                 resolve(source);
             }
