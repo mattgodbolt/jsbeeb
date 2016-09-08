@@ -86,20 +86,20 @@ define(['utils'], function (utils) {
         var lfsr = 0;
 
         function shiftLfsrWhiteNoise() {
-            var bit = (lfsr & 1) ^ ((lfsr & (1 << 3)) >> 3);
-            lfsr = (lfsr >> 1) | (bit << 15);
+            var bit = (lfsr & 1) ^ ((lfsr & (1 << 1)) >> 1);
+            lfsr = (lfsr >> 1) | (bit << 14);
         }
 
         function shiftLfsrPeriodicNoise() {
             lfsr >>= 1;
-            if (lfsr === 0) lfsr = 1 << 15;
+            if (lfsr === 0) lfsr = 1 << 14;
         }
 
         var shiftLfsr = shiftLfsrWhiteNoise;
 
         function noisePoked() {
             shiftLfsr = register[3] & 4 ? shiftLfsrWhiteNoise : shiftLfsrPeriodicNoise;
-            lfsr = 1 << 15;
+            lfsr = 1 << 14;
         }
 
         function addFor(channel) {
