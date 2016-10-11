@@ -7,7 +7,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
         var disass = $('#disassembly');
         var memview = $('#memory');
         var memloc = 0;
-        var debugNode = $('#debug, #hardware_debug');
+        var debugNode = $('#debug, #hardware_debug, #crtc_debug');
 
         function setupGoto(form, func) {
             var addr = form.find(".goto-addr");
@@ -50,6 +50,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
 
         var uservia;
         var sysvia;
+        var crtc;
 
         function updateElem(elem, val) {
             var prevVal = elem.text();
@@ -91,11 +92,60 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             return update;
         }
 
+        function setupCrtc(node, video) {
+            if (!video) return utils.noop;
+            var updates = [];
+
+            var regNode = node.find('.crtc_regs');
+
+            function makeRow(node, text) {
+                var row = node.find(".template").clone().removeClass("template").appendTo(node);
+                row.find(".register").text(text);
+                return row.find(".value");
+            }
+
+            for (var i = 0; i < 16; ++i) {
+                (function (i) {
+                    var value = makeRow(regNode, "R" + i);
+                    updates.push(function () {
+                        updateElem(value, hexbyte(video.regs[i]));
+                    });
+                })(i);
+            }
+
+            var stateNode = node.find('.crtc_state');
+            var others = [
+                'bitmapX', 'bitmapY', 'dispEnabled',
+                'horizCounter', 'inHSync', 'scanlineCounter', 'vertCounter', 'inVSync', 'inVertAdjust',
+                'addr', 'addrLine', 'lineStartAddr', 'nextLineStartAddr'];
+            $.each(others, function (_, elem) {
+                var value = makeRow(stateNode, elem);
+                if (typeof(video[elem]) === "boolean") {
+                    updates.push(function () {
+                        updateElem(value, video[elem] ? "true" : "false");
+                    });
+                } else {
+                    updates.push(function () {
+                        updateElem(value, hexword(video[elem]));
+                    });
+                }
+            });
+
+            var update = function () {
+                $.each(updates, function (_, up) {
+                    up();
+                });
+            };
+            update();
+            return update;
+        }
+
         this.setCpu = function (c) {
             cpu = c;
             disassemble = c.disassembler.disassemble;
             sysvia = setupVia($('#sysvia'), c.sysvia);
             uservia = setupVia($('#uservia'), c.uservia);
+            crtc = setupCrtc($('#crtc_debug'), c.video);
         };
 
         var disassPc = null;
@@ -107,6 +157,7 @@ define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
             updateMemory();
             sysvia();
             uservia();
+            crtc();
             video.debugPaint();
         };
 

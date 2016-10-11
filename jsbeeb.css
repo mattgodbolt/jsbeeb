@@ -18,14 +18,17 @@ body {
     position: absolute;
     z-index: -2;
 }
+
 .sidebar.right {
     right: -205px;
     top: 0px;
 }
+
 .sidebar.left {
     left: -205px;
     top: 0px;
 }
+
 .sidebar.bottom {
     bottom: -100px;
 }
@@ -75,7 +78,28 @@ body {
     width: 90px;
 }
 
+#crtc_debug {
+    background-color: #333333;
+    border: 1px solid #555555;
+    margin: 2px;
+    padding: 2px;
+    position: fixed;
+    top: 80px;
+    right: 0px;
+    font-size: 8pt;
+    font-family: monospace;
+}
+
+h6.dbg { text-align: center }
 .via_regs {
+    display: inline-block;
+}
+
+.crtc_regs {
+    display: inline-block;
+}
+
+.crtc_state {
     display: inline-block;
 }
 

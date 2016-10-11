@@ -179,6 +179,30 @@
             </tbody>
         </table>
     </div>
+    <div id="crtc_debug" class="initially-hidden">
+        <div class="crtc_state">
+            <h6 class="dbg">6845 state</h6>
+            <table>
+                <tbody>
+                <tr class="template">
+                    <th><span class="register"></span>:</th>
+                    <td class="value"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="crtc_regs">
+            <h6 class="dbg">6845 regs</h6>
+            <table>
+                <tbody>
+                <tr class="template">
+                    <th><span class="register"></span>:</th>
+                    <td class="value"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
     <div id="debug" class="initially-hidden">
         <div class="debug-container">
             <form class="form-inline" role="form" id="goto-mem-addr-form">
@@ -223,7 +247,7 @@
     </div>
     <div id="hardware_debug" class="initially-hidden">
         <div class="via_regs" id="sysvia">
-            <h6>System VIA</h6>
+            <h6 class="dbg">System VIA</h6>
             <table>
                 <tbody>
                 <tr class="template">
@@ -234,7 +258,7 @@
             </table>
         </div>
         <div class="via_regs" id="uservia">
-            <h6>User VIA</h6>
+            <h6 class="dbg">User VIA</h6>
             <table>
                 <tbody>
                 <tr class="template">
@@ -387,7 +411,8 @@
             <div class="modal-body">
                 To load a custom cassette image, get a UEF file and load it below.
                 <div class="tape">
-                    <label>Load local UEF file: <input type="file" id="tape_load" accept=".uef,application/binary"></label>
+                    <label>Load local UEF file: <input type="file" id="tape_load"
+                                                       accept=".uef,application/binary"></label>
                 </div>
             </div>
             <div class="modal-footer">
