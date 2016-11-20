@@ -766,7 +766,8 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
             };
 
             this.loadRom = function (name, offset) {
-                name = "roms/" + name;
+                if (name.indexOf('http') !== 0)
+                    name = "roms/" + name;
                 console.log("Loading ROM from " + name);
                 var ramRomOs = this.ramRomOs;
                 return utils.loadData(name).then(function (data) {
@@ -782,7 +783,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
 
             this.loadOs = function (os) {
                 var i;
-                var extraRoms = Array.prototype.slice.call(arguments, 1);
+                var extraRoms = Array.prototype.slice.call(arguments, 1).concat(config.extraRoms);
                 os = "roms/" + os;
                 console.log("Loading OS from " + os);
                 var ramRomOs = this.ramRomOs;

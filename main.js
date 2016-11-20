@@ -19,6 +19,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         var availableImages;
         var discImage;
+        var extraRoms = [];
         if (typeof starCat === 'function') {
             availableImages = starCat();
 
@@ -92,6 +93,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                         case "disc":
                         case "disc1":
                             discImage = val;
+                            break;
+                        case "rom":
+                            extraRoms.push(val);
                             break;
                         case "disc2":
                             secondDiscImage = val;
@@ -328,7 +332,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         var emulationConfig = {
             keyLayout: keyLayout,
             cpuMultiplier: cpuMultiplier,
-            videoCyclesBatch: parsedQuery.videoCyclesBatch
+            videoCyclesBatch: parsedQuery.videoCyclesBatch,
+            extraRoms: extraRoms
         };
         processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
 

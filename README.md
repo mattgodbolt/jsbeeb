@@ -44,6 +44,7 @@ URL parameters
 * `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
 * `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into problems on smaller screens; bottom taller than 100 or so similarly.
 * `videoCyclesBatch` - the number of video cycles to batch up befofre running the video emulation. Defaults to zero: anything higher leads to emulation inaccuracies. Useful for showing why accuracy is important, even if less efficient.
+* `rom` - load the given URL or path as an extra ROM. If a URL is provided, that URL must allow cross-site requests. Doesn't (yet) support the sth: pseudo URL unlike `disc` and `tape`.
 
 Patches
 -------
