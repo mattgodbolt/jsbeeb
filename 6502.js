@@ -382,6 +382,7 @@ define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
                 config.keyLayout = "physical";
             if (!config.cpuMultiplier)
                 config.cpuMultiplier = 1;
+            config.extraRoms = config.extraRoms || [];
 
             base6502(this, model);
 
