@@ -1,5 +1,6 @@
 sudo: false
 install: true
+language: node_js
 env:
     - TEST_SUITE=short-tests
     - TEST_SUITE=long-tests
