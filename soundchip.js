@@ -1,4 +1,4 @@
-define(['utils'], function (utils) {
+define(['./utils'], function (utils) {
     "use strict";
     function SoundChip(sampleRate) {
         var cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here

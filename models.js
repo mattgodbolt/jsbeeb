@@ -1,4 +1,4 @@
-define(['fdc'], function (fdc) {
+define(['./fdc'], function (fdc) {
     function Model(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
         this.name = name;
         this.synonyms = synonyms;

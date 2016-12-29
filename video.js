@@ -1,4 +1,4 @@
-define(['teletext', 'utils'], function (Teletext, utils) {
+define(['./teletext', './utils'], function (Teletext, utils) {
     const VDISPENABLE = 1 << 0,
         HDISPENABLE = 1 << 1,
         SKEWDISPENABLE = 1 << 2,

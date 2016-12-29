@@ -1,4 +1,4 @@
-define(['utils', '6502.opcodes', 'via', 'acia', 'serial', 'tube', 'adc'],
+define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', './adc'],
     function (utils, opcodesAll, via, Acia, Serial, Tube, Adc) {
         "use strict";
         var hexword = utils.hexword;

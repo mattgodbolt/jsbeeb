@@ -678,10 +678,13 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     exports.makeBinaryData = makeBinaryData;
 
+    var baseUrl = "";
+    exports.setBaseUrl = function(url) { baseUrl = url; }
+
     function loadDataHttp(url) {
         return new Promise(function (resolve, reject) {
             var request = new XMLHttpRequest();
-            request.open("GET", url, true);
+            request.open("GET", baseUrl + url, true);
             request.overrideMimeType('text/plain; charset=x-user-defined');
             request.onload = function () {
                 if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));

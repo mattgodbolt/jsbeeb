@@ -1,4 +1,4 @@
-define(['utils'], function (utils) {
+define(['./utils'], function (utils) {
     const ORB = 0x0,
         ORA = 0x1,
         DDRB = 0x2,

@@ -1,4 +1,4 @@
-define(['teletext_data', 'utils'], function (ttData, utils) {
+define(['./teletext_data', './utils'], function (ttData, utils) {
     "use strict";
 
     function Teletext() {

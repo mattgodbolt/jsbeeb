@@ -1,4 +1,4 @@
-define(['jquery', 'underscore', 'utils'], function ($, _, utils) {
+define(['jquery', 'underscore', './utils'], function ($, _, utils) {
     "use strict";
     var hexbyte = utils.hexbyte;
     var hexword = utils.hexword;

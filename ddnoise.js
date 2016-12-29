@@ -1,4 +1,4 @@
-define(['utils', 'underscore', 'promise'], function (utils, _) {
+define(['./utils', 'underscore', 'promise'], function (utils, _) {
     "use strict";
 
     var IDLE = 0, SPIN_UP = 1, SPINNING = 2;
