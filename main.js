@@ -1,14 +1,13 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'cmos', 'sth', 'gamepads', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
+require(['jquery', 'utils', 'video', 'soundchip', 'debug', '6502', 'cmos', 'sth', 'gamepads', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
         'canvas', 'promise', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, DdNoise, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepads, disc,
-              starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib) {
+    function ($, utils, Video, SoundChip, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepads, disc, starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib) {
         "use strict";
 
         var processor;
         var video;
         var soundChip;
-        var ddNoise;
         var dbgr;
+        var jsAudioNode;  // has to remain to keep thing alive
         var frames = 0;
         var frameSkip = 0;
         var syncLights;
@@ -19,7 +18,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         var availableImages;
         var discImage;
-        var extraRoms = [];
         if (typeof starCat === 'function') {
             availableImages = starCat();
 
@@ -94,9 +92,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                         case "disc1":
                             discImage = val;
                             break;
-                        case "rom":
-                            extraRoms.push(val);
-                            break;
                         case "disc2":
                             secondDiscImage = val;
                             break;
@@ -154,30 +149,33 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             canvas.paint(minx, miny, maxx, maxy);
         });
 
-        var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
-            : typeof webkitAudioContext !== 'undefined'? new webkitAudioContext()
-            : null;
-
-        if (audioContext) {
-            soundChip = new SoundChip.SoundChip(audioContext.sampleRate);
-            // NB must be assigned to some kind of object else it seems to get GC'd by
-            // Safari...
-            soundChip.jsAudioNode = audioContext.createScriptProcessor(2048, 0, 1);
-            soundChip.jsAudioNode.onaudioprocess = function pumpAudio(event) {
+        soundChip = (function () {
+            var context = null;
+            if (typeof AudioContext !== 'undefined') {
+                context = new AudioContext();
+            } else if (typeof(webkitAudioContext) !== 'undefined') {
+                context = new webkitAudioContext(); // jshint ignore:line
+            } else {
+                return new SoundChip.FakeSoundChip();
+            }
+            soundChip = new SoundChip.SoundChip(context.sampleRate);
+            jsAudioNode = context.createScriptProcessor(2048, 0, 1);
+            function pumpAudio(event) {
                 var outBuffer = event.outputBuffer;
                 var chan = outBuffer.getChannelData(0);
                 soundChip.render(chan, 0, chan.length);
-            };
-            soundChip.jsAudioNode.connect(audioContext.destination);
-            ddNoise = new DdNoise.DdNoise(audioContext);
-        } else {
-            soundChip = new SoundChip.FakeSoundChip();
-            ddNoise = new DdNoise.FakeDdNoise();
-        }
+            }
+
+            jsAudioNode.onaudioprocess = pumpAudio;
+            jsAudioNode.connect(context.destination);
+
+            return soundChip;
+        })();
 
         var lastShiftLocation = 1;
         var lastCtrlLocation = 1;
         var lastAltLocation = 1;
+
 
         dbgr = new Debugger(video);
         function keyCode(evt) {
@@ -332,10 +330,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         var emulationConfig = {
             keyLayout: keyLayout,
             cpuMultiplier: cpuMultiplier,
-            videoCyclesBatch: parsedQuery.videoCyclesBatch,
-            extraRoms: extraRoms
+            videoCyclesBatch: parsedQuery.videoCyclesBatch
         };
-        processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
+        processor = new Cpu6502(model, dbgr, video, soundChip, cmos, emulationConfig);
 
         function sthClearList() {
             $("#sth-list li:not('.template')").remove();
@@ -657,6 +654,18 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                     processor.acia.setTape(tapes.loadTapeFromData(tapeImage, image));
                 });
             }
+
+            if (schema === "http" || schema === "https") {
+                return utils.loadData(schema + "://" + tapeImage).then(function (tapeData) {
+                    if (/\.zip/i.test(tapeImage)) {
+                        var unzipped = utils.unzipDiscImage(tapeData);
+                        tapeData = unzipped.data;
+                        tapeImage = unzipped.name;
+                    }
+                    processor.acia.setTape(tapes.loadTapeFromData(tapeImage, tapeData));
+                });
+            }
+ 
             return tapes.loadTape("tapes/" + tapeImage).then(function (tape) {
                 processor.acia.setTape(tape);
             });
@@ -929,52 +938,51 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             cassette.update(processor.acia.motorOn);
         };
 
-        var startPromise = Promise.all([ddNoise.initialise(), processor.initialise()])
-            .then(function () {
-                // Ideally would start the loads first. But their completion needs the FDC from the processor
-                var imageLoads = [];
-                if (discImage) imageLoads.push(loadDiscImage(discImage).then(function (disc) {
-                    processor.fdc.loadDisc(0, disc);
-                }));
-                if (secondDiscImage) imageLoads.push(loadDiscImage(secondDiscImage).then(function (disc) {
-                    processor.fdc.loadDisc(1, disc);
-                }));
-                if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
+        var startPromise = processor.initialise().then(function () {
+            // Ideally would start the loads first. But their completion needs the FDC from the processor
+            var imageLoads = [];
+            if (discImage) imageLoads.push(loadDiscImage(discImage).then(function (disc) {
+                processor.fdc.loadDisc(0, disc);
+            }));
+            if (secondDiscImage) imageLoads.push(loadDiscImage(secondDiscImage).then(function (disc) {
+                processor.fdc.loadDisc(1, disc);
+            }));
+            if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
-                if (parsedQuery.loadBasic) {
-                    var needsRun = needsAutoboot === "run";
-                    needsAutoboot = "";
-                    imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
-                        var prog = String.fromCharCode.apply(null, data);
-                        return tokeniser.create().then(function (t) {
-                            return t.tokenise(prog);
-                        });
-                    }).then(function (tokenised) {
-                        var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-                        var hook = processor.debugInstruction.add(function (addr) {
-                            if (addr !== idleAddr) return;
-                            var page = processor.readmem(0x18) << 8;
-                            for (var i = 0; i < tokenised.length; ++i) {
-                                processor.writemem(page + i, tokenised.charCodeAt(i));
-                            }
-                            // Set VARTOP (0x12/3) and TOP(0x02/3)
-                            var end = page + tokenised.length;
-                            var endLow = end & 0xff;
-                            var endHigh = (end >>> 8) & 0xff;
-                            processor.writemem(0x02, endLow);
-                            processor.writemem(0x03, endHigh);
-                            processor.writemem(0x12, endLow);
-                            processor.writemem(0x13, endHigh);
-                            hook.remove();
-                            if (needsRun) {
-                                autoRunBasic();
-                            }
-                        });
-                    }));
-                }
+            if (parsedQuery.loadBasic) {
+                var needsRun = needsAutoboot === "run";
+                needsAutoboot = "";
+                imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
+                    var prog = String.fromCharCode.apply(null, data);
+                    return tokeniser.create().then(function (t) {
+                        return t.tokenise(prog);
+                    });
+                }).then(function (tokenised) {
+                    var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+                    var hook = processor.debugInstruction.add(function (addr) {
+                        if (addr !== idleAddr) return;
+                        var page = processor.readmem(0x18) << 8;
+                        for (var i = 0; i < tokenised.length; ++i) {
+                            processor.writemem(page + i, tokenised.charCodeAt(i));
+                        }
+                        // Set VARTOP (0x12/3) and TOP(0x02/3)
+                        var end = page + tokenised.length;
+                        var endLow = end & 0xff;
+                        var endHigh = (end >>> 8) & 0xff;
+                        processor.writemem(0x02, endLow);
+                        processor.writemem(0x03, endHigh);
+                        processor.writemem(0x12, endLow);
+                        processor.writemem(0x13, endHigh);
+                        hook.remove();
+                        if (needsRun) {
+                            autoRunBasic();
+                        }
+                    });
+                }));
+            }
 
-                return Promise.all(imageLoads);
-            });
+            return Promise.all(imageLoads);
+        });
 
         startPromise.then(function () {
             switch (needsAutoboot) {
@@ -1106,7 +1114,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         function go() {
             soundChip.unmute();
-            ddNoise.unmute();
             running = true;
             run();
         }
@@ -1116,7 +1123,6 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             processor.stop();
             if (debug) dbgr.debug(processor.pc);
             soundChip.mute();
-            ddNoise.mute();
         }
 
         // Handy shortcuts. bench/profile stuff is delayed so that they can be
@@ -1141,5 +1147,4 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
     }
-)
-;
+);
