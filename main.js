@@ -657,6 +657,18 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                     processor.acia.setTape(tapes.loadTapeFromData(tapeImage, image));
                 });
             }
+
+            if (schema === "http" || schema === "https") {
+                return utils.loadData(schema + "://" + tapeImage).then(function (tapeData) {
+                    if (/\.zip/i.test(tapeImage)) {
+                        var unzipped = utils.unzipDiscImage(tapeData);
+                        tapeData = unzipped.data;
+                        tapeImage = unzipped.name;
+                    }
+                    processor.acia.setTape(tapes.loadTapeFromData(tapeImage, tapeData));
+                });
+            }
+
             return tapes.loadTape("tapes/" + tapeImage).then(function (tape) {
                 processor.acia.setTape(tape);
             });
