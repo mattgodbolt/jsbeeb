@@ -1,5 +1,5 @@
-define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', './adc', './scheduler'],
-    function (utils, opcodesAll, via, Acia, Serial, Tube, Adc, scheduler) {
+define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', './adc', './scheduler', './touchscreen'],
+    function (utils, opcodesAll, via, Acia, Serial, Tube, Adc, scheduler, TouchScreen) {
         "use strict";
         var hexword = utils.hexword;
         var signExtend = utils.signExtend;
@@ -847,7 +847,8 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     this.soundChip.setScheduler(this.scheduler);
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
-                    this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler);
+                    this.touchScreen = new TouchScreen();
+                    this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
                     this.serial = new Serial(this.acia);
                     this.fdc = new model.Fdc(this, this.ddNoise, this.scheduler);
                     this.crtc = this.video.crtc;

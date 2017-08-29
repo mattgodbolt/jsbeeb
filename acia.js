@@ -3,11 +3,13 @@ define([], function () {
     // Some info:
     // http://www.playvectrex.com/designit/lecture/UP12.HTM
     // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
-    return function Acia(cpu, toneGen, scheduler) {
+    return function Acia(cpu, toneGen, scheduler, rs423Handler) {
         var self = this;
         self.sr = 0x02;
         self.cr = 0x00;
         self.dr = 0x00;
+        self.rs423Handler = rs423Handler;
+        self.rs423Selected = false;
         self.motorOn = false;
         // TODO: set clearToSend accordingly; at the moment it stays low.
         // would need to be updated based on the "other end" of the link, and
@@ -51,25 +53,25 @@ define([], function () {
             } else {
                 var result = (self.sr & 0x7f) | (self.sr & self.cr & 0x80);
                 if (!self.clearToSend) result &= ~0x02; // Mask off TDRE if not CTS
+                result = result | 0x02 | 0x08;
                 return result;
             }
         };
 
         self.write = function (addr, val) {
             if (addr & 1) {
-                // Ignore sends, except for clearing the TDRE.
                 self.sr &= ~0x02;
                 // It's not clear how long this can take; it's when the shift register is loaded.
                 // That could be straight away if not already tx-ing, but as we don't really tx,
                 // be conservative here.
                 self.txCompleteTask.reschedule(2000);
                 updateIrq();
+                if (self.rs423Selected && self.rs423Handler) self.rs423Handler.onTransmit(val);
             } else {
                 if ((val & 0x03) === 0x03) {
                     // According to the 6850 docs writing 3 here doesn't affect any CR bits, but
                     // just resets the device.
                     self.reset();
-                    return;
                 } else {
                     self.cr = val;
                 }
@@ -77,6 +79,7 @@ define([], function () {
         };
 
         self.selectRs423 = function (selected) {
+            self.rs423Selected = !!selected;
             if (selected) {
                 self.sr &= ~0x04; // Clear DCD
             } else {

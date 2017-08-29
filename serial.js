@@ -1,4 +1,4 @@
-define([], function () {
+define(['utils'], function (utils) {
     return function Serial(acia) {
         "use strict";
 
@@ -13,6 +13,7 @@ define([], function () {
         var table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
 
         function write(addr, val) {
+            console.log("write of", utils.hexbyte(val), "to", utils.hexword(addr));
             val &= 0xff;
             self.reg = val;
             self.transmitRate = val & 0x07;
@@ -23,6 +24,7 @@ define([], function () {
         }
 
         function read() {
+            console.log("Moo");
             write(0, 0xfe);
             return 0;
         }
