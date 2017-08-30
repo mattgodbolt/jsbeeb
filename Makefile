@@ -38,6 +38,9 @@ dist: npm
 	m4 -DHASH=$(HASH) -DDEPLOY_DIR=$(shell pwd)/out/dist '-DCOMMON_SETTINGS=$(shell $(NODE) -e 'requirejs = {config: function(c) { c.baseUrl = "."; console.log(JSON.stringify(c)); }}; require("./requirejs-common.js");' | sed 's/^.\(.*\).$$/\1/')' build.js.template > out/build.js
 	cd out/build && $(shell pwd)/node_modules/requirejs/bin/r.js -o ../build.js
 
+upload: dist
+	aws s3 sync out/dist/ s3://bbc.godbolt.org/$(BRANCH)
+
 clean:
 	@rm -rf out
 
@@ -47,4 +50,4 @@ spotless: clean
 test: short-tests long-tests
 
 .PHONY: test short-tests test dormann-test timing-tests unit-tests test-suite npm 
-.PHONY: all dist clean spotless
+.PHONY: all dist clean spotless upload
