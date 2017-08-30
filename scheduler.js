@@ -62,8 +62,9 @@ define([], function () {
     Scheduler.prototype.polltime = function (ticks) {
         this.epoch += ticks;
         while (this.scheduled && this.scheduled.expireEpoch <= this.epoch) {
-            this.scheduled.onExpire();
-            this.scheduled.cancel();
+            var head = this.scheduled;
+            head.cancel();  // cancel first
+            head.onExpire();  // expiry may reschedule
         }
     };
 
@@ -81,6 +82,11 @@ define([], function () {
     };
 
     Task.prototype.schedule = function (delay) {
+        this.scheduler.schedule(this, delay);
+    };
+
+    Task.prototype.reschedule = function (delay) {
+        this.scheduler.cancel(this);
         this.scheduler.schedule(this, delay);
     };
 

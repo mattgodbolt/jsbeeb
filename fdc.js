@@ -1,6 +1,7 @@
 // Floppy disc controller and assorted utils.
 define(['./utils'], function (utils) {
     "use strict";
+
     function load(name) {
         console.log("Loading disc from " + name); // todo support zip files
         return utils.loadData(name);
@@ -122,7 +123,7 @@ define(['./utils'], function (utils) {
                 this.sectorOffset = side ? 10 * 256 : 0;
                 this.byteWithinSector = 0;
             },
-            poll: function () {
+            poll: function () { // TODO somehow replace this with a scheduler approach.
                 this.time++;
                 if (this.time < 16) return;
                 this.time = 0;
@@ -169,7 +170,7 @@ define(['./utils'], function (utils) {
                             fdc.discData(0);
                             break;
                         case 6:
-                            this.inRead = false;
+                            this.inReadAddr = false;
                             fdc.discFinishRead();
                             this.rsector++;
                             if (this.rsector === 10) this.rsector = 0;
@@ -198,7 +199,7 @@ define(['./utils'], function (utils) {
         };
     }
 
-    function I8271(cpu, noise) {
+    function I8271(cpu, noise, scheduler) {
         var self = this;
         self.status = 0;
         self.result = 0;
@@ -212,19 +213,40 @@ define(['./utils'], function (utils) {
         self.curSector = 0;
         self.phase = 0;
         self.command = 0xff;
-        self.time = 0;
+        self.callbackTask = scheduler.newTask(function () {
+            callback();
+        });
         self.paramNum = 0;
         self.paramReq = 0;
         self.driveTime = 0;
         self.motorTime = 0;
         self.params = new Uint8Array(8);
-        self.isActive = false;
         self.motorOn = [false, false];
-        self.motorSpin = [0, 0];
+        self.motorSpinDownTask = [
+            scheduler.newTask(function () {
+                self.motorOn[0] = false;
+                noise.spinDown(); // TODO multiple discs!
+            }),
+            scheduler.newTask(function () {
+                self.motorOn[1] = false;
+                noise.spinDown(); // TODO multiple discs!
+            })
+        ];
         self.written = false;
         self.verify = false;
         self.drives = [emptySsd(this), emptySsd(this)];
-        self.readyTimer = 0;
+        self.pendingReady = false;
+        self.ready = true;
+        self.readyTask = scheduler.newTask(function () {
+            self.pendingReady = true;
+        });
+
+        self.driveTask = scheduler.newTask(function () {
+            if (self.drives[self.curDrive])
+                self.drives[self.curDrive].poll();
+            self.driveTask.schedule(16);
+        });
+        self.driveTask.schedule(16);  // TODO not this
 
         self.NMI = function () {
             cpu.NMI(self.status & 8);
@@ -254,7 +276,7 @@ define(['./utils'], function (utils) {
             self.result = result;
             self.status = 0x18;
             self.NMI();
-            self.time = 0;
+            self.callbackTask.cancel();
             setspindown();
         }
 
@@ -291,7 +313,8 @@ define(['./utils'], function (utils) {
             return self.data;
         };
         self.discFinishRead = function () {
-            this.time = 200;
+            self.callbackTask.cancel();
+            self.callbackTask.schedule(200);
         };
 
         var paramMap = {
@@ -319,15 +342,15 @@ define(['./utils'], function (utils) {
                     // read drive status
                     self.status = 0x10;
                     self.result = 0x88 | (self.curTrack[self.curDrive] ? 0 : 2);
-                    if (self.readyTimer === 0) {
+                    if (self.ready) {
                         if (self.driveSel & 1) self.result |= 0x04;
                         if (self.driveSel & 2) self.result |= 0x40;
-                    } else if (self.readyTimer === 1) self.readyTimer = 0; // Ready for next time
+                    } else if (self.pendingReady) self.ready = true; // Ready for next time
                 } else {
                     self.result = 0x18;
                     self.status = 0x18;
                     self.NMI();
-                    self.time = 0;
+                    self.callbackTask.cancel();
                 }
             }
         }
@@ -349,7 +372,7 @@ define(['./utils'], function (utils) {
                 default:
                     self.result = self.status = 0x18;
                     self.NMI();
-                    self.time = 0;
+                    self.callbackTask.cancel();
                     break;
             }
         }
@@ -372,27 +395,30 @@ define(['./utils'], function (utils) {
                 default:
                     self.result = self.status = 0x18;
                     self.NMI();
-                    self.time = 0;
+                    self.callbackTask.cancel();
                     break;
             }
         }
 
         function spinup() {
             // TODO: not sure where this should go, or for how long. This is a workaround for EliteA
+            self.ready = false;
+            self.pendingReady = false;
+            self.readyTask.cancel();
             if (!self.motorOn[self.curDrive]) {
-                self.readyTimer = (0.5 * cpu.peripheralCyclesPerSecond) | 0; // Apparently takes a half second to spin up
+                self.readyTask.schedule((0.5 * cpu.peripheralCyclesPerSecond) | 0); // Apparently takes a half second to spin up
             } else {
-                self.readyTimer = 1000;  // little bit of time for each command (so, really, spinup is a bad place to put this)
+                self.readyTask.schedule(1000);  // little bit of time for each command (so, really, spinup is a bad place to put this)
             }
-            self.isActive = true;
             self.motorOn[self.curDrive] = true;
-            self.motorSpin[self.curDrive] = 0;
+            self.motorSpinDownTask[self.curDrive].cancel();
             noise.spinUp();
         }
 
         function setspindown() {
-            if (self.motorOn[self.curDrive])
-                self.motorSpin[self.curDrive] = 40000;
+            if (self.motorOn[self.curDrive]) {
+                self.motorSpinDownTask[self.curDrive].reschedule(40000 * 128);
+            }
         }
 
         function seek(track) {
@@ -400,7 +426,8 @@ define(['./utils'], function (utils) {
             self.realTrack[self.curDrive] += track - self.curTrack[self.curDrive];
             var diff = self.drives[self.curDrive].seek(self.realTrack[self.curDrive]);
             var seekLen = (noise.seek(diff) * cpu.peripheralCyclesPerSecond) | 0;
-            self.time = Math.max(200, seekLen);
+            self.callbackTask.cancel();
+            self.callbackTask.schedule(Math.max(200, seekLen));
         }
 
         var debugByte = 0;
@@ -445,7 +472,7 @@ define(['./utils'], function (utils) {
                     self.result = 0x18;
                     self.status = 0x18;
                     self.NMI();
-                    self.time = 0;
+                    self.callbackTask.cancel();
                     break;
             }
         }
@@ -494,7 +521,6 @@ define(['./utils'], function (utils) {
         }
 
         function callback() {
-            self.time = 0;
             switch (self.command) {
                 case 0x29: // Seek
                     self.curTrack[self.curDrive] = self.params[0];
@@ -560,41 +586,9 @@ define(['./utils'], function (utils) {
                     break;
             }
         }
-
-        self.polltime = function (cycles) {
-            cycles = cycles | 0;
-            if (!self.isActive) return;
-            if (self.time) {
-                self.time -= cycles;
-                if (self.time <= 0) {
-                    callback();
-                }
-            }
-            self.driveTime -= cycles;
-            if (self.driveTime <= 0) {
-                self.driveTime += 16;
-                if (self.drives[self.curDrive])
-                    self.drives[self.curDrive].poll();
-            }
-            self.motorTime -= cycles;
-            if (self.motorTime <= 0) {
-                self.motorTime += 128;
-                for (var i = 0; i < 2; ++i) {
-                    if (self.motorSpin[i] && --self.motorSpin[i] === 0) {
-                        self.motorOn[i] = false;
-                        noise.spinDown(); // TODO multiple discs!
-                    }
-                }
-                self.isActive = self.motorOn[0] || self.motorOn[1];
-            }
-            if (this.readyTimer > 1) {
-                this.readyTimer -= cycles;
-                if (this.readyTimer < 1) this.readyTimer = 1;
-            }
-        };
     }
 
-    function WD1770(cpu, noise) {
+    function WD1770(cpu, noise, scheduler) {
         this.cpu = cpu;
         this.noise = noise;
         this.isActive = false;
@@ -774,9 +768,9 @@ define(['./utils'], function (utils) {
         return this.drives[this.curDrive];
     };
 
-    WD1770.prototype.seek = function(addr) {
+    WD1770.prototype.seek = function (addr) {
         var diff = this.curDisc().seek(addr);
-        var seekTime = (this.noise.seek(diff) * this.cpu.peripheralCyclesPerSecond)|0;
+        var seekTime = (this.noise.seek(diff) * this.cpu.peripheralCyclesPerSecond) | 0;
         this.time = Math.max(200, seekTime);
     };
 

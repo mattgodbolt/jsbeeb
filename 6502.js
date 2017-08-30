@@ -1,5 +1,5 @@
-define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', './adc'],
-    function (utils, opcodesAll, via, Acia, Serial, Tube, Adc) {
+define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', './adc', './scheduler'],
+    function (utils, opcodesAll, via, Acia, Serial, Tube, Adc, scheduler) {
         "use strict";
         var hexword = utils.hexword;
         var signExtend = utils.signExtend;
@@ -841,14 +841,15 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     for (i = 0; i < this.romOffset; ++i)
                         this.ramRomOs[i] = 0xff;
                     this.videoDisplayPage = 0;
+                    this.scheduler = new scheduler.Scheduler();
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
                     this.acia = new Acia(this, this.soundChip.toneGenerator);
                     this.serial = new Serial(this.acia);
-                    this.fdc = new model.Fdc(this, this.ddNoise);
+                    this.fdc = new model.Fdc(this, this.ddNoise, this.scheduler);
                     this.crtc = this.video.crtc;
                     this.ula = this.video.ula;
-                    this.adconverter = new Adc(this.sysvia);
+                    this.adconverter = new Adc(this.sysvia, this.scheduler);
                     this.sysvia.reset(hard);
                     this.uservia.reset(hard);
                 }
@@ -898,10 +899,9 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.peripheralCycles -= (cycles * this.cpuMultiplier) | 0;
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
-                this.fdc.polltime(cycles);
+                this.scheduler.polltime(cycles);
                 this.acia.polltime(cycles);
                 this.soundChip.polltime(cycles);
-                this.adconverter.polltime(cycles);
                 this.tube.execute(cycles);
             };
 
@@ -912,10 +912,9 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.video.polltime(cycles);
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
-                this.fdc.polltime(cycles);
+                this.scheduler.polltime(cycles);
                 this.acia.polltime(cycles);
                 this.soundChip.polltime(cycles);
-                this.adconverter.polltime(cycles);
                 this.tube.execute(cycles);
             };
 
