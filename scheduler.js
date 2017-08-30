@@ -1,7 +1,7 @@
 define([], function () {
     "use strict";
 
-    const MaxHeadroom = 0xffffffff;
+    var MaxHeadroom = 0xffffffff;
 
     function Scheduler() {
         this.scheduled = null;
