@@ -169,7 +169,7 @@ define(['./utils'], function (utils) {
                             fdc.discData(0);
                             break;
                         case 6:
-                            this.inRead = false;
+                            this.inReadAddr = false;
                             fdc.discFinishRead();
                             this.rsector++;
                             if (this.rsector === 10) this.rsector = 0;
