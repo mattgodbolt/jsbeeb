@@ -2,6 +2,8 @@
 define(['./utils'], function (utils) {
     "use strict";
 
+    var DiscTimeSlice = 16 * 16;
+
     function load(name) {
         console.log("Loading disc from " + name); // todo support zip files
         return utils.loadData(name);
@@ -13,13 +15,15 @@ define(['./utils'], function (utils) {
             seek: function () {
                 return 0;
             },
-            poll: function () {
-                if (this.notFound && --this.notFound === 0) fdc.notFound();
+            setScheduler: function (scheduler) {
+                this.notFoundTask = scheduler.newTask(function () {
+                    fdc.notFound();
+                });
             }
         };
 
         result.read = result.write = result.address = result.format = function () {
-            this.notFound = 500 * 16;
+            this.notFoundTask.reschedule(500 * DiscTimeSlice);
         };
         return result;
     }
@@ -63,19 +67,14 @@ define(['./utils'], function (utils) {
         if (data === null || data === undefined) throw new Error("Bad disc data");
         return {
             dsd: isDsd,
-            inRead: false,
-            inWrite: false,
-            inFormat: false,
             byteWithinSector: 0,
             writeProt: !flusher,
             seekOffset: 0,
             sectorOffset: 0,
             formatSector: 0,
-            time: 0,
             rsector: 0,
             track: -1,
             side: -1,
-            notFound: 0,
             flush: function () {
                 if (flusher) flusher();
             },
@@ -88,7 +87,7 @@ define(['./utils'], function (utils) {
             },
             check: function (track, side, density) {
                 if (this.track !== track || density || (side && !this.dsd)) {
-                    this.notFound = 500;
+                    this.notFoundTask.reschedule(500 * DiscTimeSlice);
                     return false;
                 }
                 return true;
@@ -96,62 +95,62 @@ define(['./utils'], function (utils) {
             read: function (sector, track, side, density) {
                 if (!this.check(track, side, density)) return;
                 this.side = side;
-                this.inRead = true;
+                this.readTask.reschedule(DiscTimeSlice);
                 this.sectorOffset = sector * 256 + (side ? 10 * 256 : 0);
                 this.byteWithinSector = 0;
             },
             write: function (sector, track, side, density) {
                 if (!this.check(track, side, density)) return;
                 this.side = side;
-                this.inWrite = true;
+                // NB in old code this used to override "time" to be -1000, which immediately forced a write.
+                // I'm not sure why that was required. So I'm ignoring it here. Any funny disc write bugs might be
+                // traceable to this change.
+                this.writeTask.reschedule(DiscTimeSlice);
                 this.sectorOffset = sector * 256 + (side ? 10 * 256 : 0);
                 this.byteWithinSector = 0;
-                this.time = -1000; // TODO wtf?
             },
             address: function (track, side, density) {
                 if (!this.check(track, side, density)) return;
                 this.side = side;
-                this.inReadAddr = true;
+                this.readAddrTask.reschedule(DiscTimeSlice);
                 this.byteWithinSector = 0;
                 this.rsector = 0;
             },
             format: function (track, side, density) {
                 if (!this.check(track, side, density)) return;
                 this.side = side;
-                this.inFormat = true;
+                this.formatTask.reschedule(DiscTimeSlice);
                 this.formatSector = 0;
                 this.sectorOffset = side ? 10 * 256 : 0;
                 this.byteWithinSector = 0;
             },
-            poll: function () { // TODO somehow replace this with a scheduler approach.
-                this.time++;
-                if (this.time < 16) return;
-                this.time = 0;
-                if (this.notFound && --this.notFound === 0) {
+            setScheduler: function (scheduler) {
+                this.notFoundTask = scheduler.newTask(function () {
                     fdc.notFound();
-                }
-                if (this.inRead) {
+                });
+                this.readTask = scheduler.newTask(function () {
                     fdc.discData(data[this.seekOffset + this.sectorOffset + this.byteWithinSector]);
                     if (++this.byteWithinSector == 256) {
-                        this.inRead = false;
                         fdc.discFinishRead();
+                    } else {
+                        this.readTask.reschedule(DiscTimeSlice);
                     }
-                }
-                if (this.inWrite) {
+                }.bind(this));
+                this.writeTask = scheduler.newTask(function () {
                     if (this.writeProt) {
                         fdc.writeProtect();
-                        this.inWrite = false;
                         return;
                     }
                     var c = fdc.readDiscData(this.byteWithinSector == 255);
                     data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = c;
                     if (++this.byteWithinSector == 256) {
-                        this.inWrite = false;
                         fdc.discFinishRead();
                         this.flush();
+                    } else {
+                        this.writeTask.reschedule(DiscTimeSlice);
                     }
-                }
-                if (this.inReadAddr) {
+                }.bind(this));
+                this.readAddrTask = scheduler.newTask(function () {
                     switch (this.byteWithinSector) {
                         case 0:
                             fdc.discData(this.track);
@@ -170,18 +169,17 @@ define(['./utils'], function (utils) {
                             fdc.discData(0);
                             break;
                         case 6:
-                            this.inReadAddr = false;
                             fdc.discFinishRead();
                             this.rsector++;
                             if (this.rsector === 10) this.rsector = 0;
-                            break;
+                            return;
                     }
                     this.byteWithinSector++;
-                }
-                if (this.inFormat) {
+                    this.readAddrTask.reschedule(DiscTimeSlice);
+                }.bind(this));
+                this.formatTask = scheduler.newTask(function () {
                     if (this.writeProt) {
                         fdc.writeProtect();
-                        this.inFormat = false;
                         return;
                     }
                     data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = 0;
@@ -189,12 +187,13 @@ define(['./utils'], function (utils) {
                         this.byteWithinSector = 0;
                         this.sectorOffset += 256;
                         if (++this.formatSector === 10) {
-                            this.inFormat = false;
                             fdc.discFinishRead();
                             this.flush();
+                        } else {
+                            this.formatTask.reschedule(DiscTimeSlice);
                         }
                     }
-                }
+                }.bind(this));
             }
         };
     }
@@ -241,19 +240,13 @@ define(['./utils'], function (utils) {
             self.pendingReady = true;
         });
 
-        self.driveTask = scheduler.newTask(function () {
-            if (self.drives[self.curDrive])
-                self.drives[self.curDrive].poll();
-            self.driveTask.schedule(16);
-        });
-        self.driveTask.schedule(16);  // TODO not this
-
         self.NMI = function () {
             cpu.NMI(self.status & 8);
         };
 
         self.loadDisc = function (drive, disc) {
             self.drives[drive] = disc;
+            disc.setScheduler(scheduler);
         };
 
         self.read = function (addr) {
