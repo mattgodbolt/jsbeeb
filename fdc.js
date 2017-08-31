@@ -139,13 +139,13 @@ define(['./utils'], function (utils) {
                 if (++this.formatSector === 10) {
                     this.fdc.discFinishRead();
                     this.flush();
-                } else {
-                    this.formatTask.reschedule(DiscTimeSlice);
+                    return;
                 }
             }
+            this.formatTask.reschedule(DiscTimeSlice);
         }.bind(this));
         BaseDisc.prototype.flush = function () {
-            if (this.flusher) flusher();
+            if (this.flusher) this.flusher();
         };
         BaseDisc.prototype.seek = function (track) {
             this.seekOffset = track * 10 * 256;
