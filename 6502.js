@@ -842,6 +842,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                         this.ramRomOs[i] = 0xff;
                     this.videoDisplayPage = 0;
                     this.scheduler = new scheduler.Scheduler();
+                    this.soundChip.setScheduler(this.scheduler);
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
                     this.acia = new Acia(this, this.soundChip.toneGenerator);
@@ -901,7 +902,6 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.uservia.polltime(cycles);
                 this.scheduler.polltime(cycles);
                 this.acia.polltime(cycles);
-                this.soundChip.polltime(cycles);
                 this.tube.execute(cycles);
             };
 
@@ -914,7 +914,6 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.uservia.polltime(cycles);
                 this.scheduler.polltime(cycles);
                 this.acia.polltime(cycles);
-                this.soundChip.polltime(cycles);
                 this.tube.execute(cycles);
             };
 

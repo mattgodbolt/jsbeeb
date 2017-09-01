@@ -60,12 +60,14 @@ define([], function () {
     };
 
     Scheduler.prototype.polltime = function (ticks) {
-        this.epoch += ticks;
-        while (this.scheduled && this.scheduled.expireEpoch <= this.epoch) {
+        var targetEpoch = this.epoch + ticks;
+        while (this.scheduled && this.scheduled.expireEpoch <= targetEpoch) {
             var head = this.scheduled;
+            this.epoch = head.expireEpoch;
             head.cancel();  // cancel first
             head.onExpire();  // expiry may reschedule
         }
+        this.epoch = targetEpoch;
     };
 
     Scheduler.prototype.headroom = function () {

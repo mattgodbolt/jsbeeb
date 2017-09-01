@@ -1,5 +1,6 @@
 define(['./utils'], function (utils) {
     "use strict";
+
     function SoundChip(sampleRate) {
         var cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here
         // 4MHz input signal. Internal divide-by-8
@@ -144,29 +145,27 @@ define(['./utils'], function (utils) {
             }
         }
 
-        var cyclesPending = 0;
+        var scheduler = {epoch: 0};
+        var lastRunEpoch = 0;
 
         function catchUp() {
-            if (cyclesPending) {
+            var cyclesPending = scheduler.epoch - lastRunEpoch;
+            if (cyclesPending > 0) {
                 advance(cyclesPending);
             }
-            cyclesPending = 0;
+            lastRunEpoch = scheduler.epoch;
         }
 
-        var activeCountdown = 0;
-        this.polltime = function (cycles) {
-            cyclesPending += cycles;
-            if (activeCountdown) {
-                activeCountdown -= cycles;
-                if (activeCountdown <= 0) {
-                    if (this.active) {
-                        advance(-activeCountdown);
-                        cyclesPending += activeCountdown;
-                        poke(this.slowDataBus);
-                    }
-                    activeCountdown = 0;
+        var activeTask = null;
+        this.setScheduler = function (scheduler_) {
+            scheduler = scheduler_;
+            lastRunEpoch = scheduler.epoch;
+            // TODO: need to retest with Repton2
+            activeTask = scheduler.newTask(function () {
+                if (this.active) {
+                    poke(this.slowDataBus);
                 }
-            }
+            }.bind(this));
         };
 
         var residual = 0;
@@ -178,6 +177,7 @@ define(['./utils'], function (utils) {
         } else {
             buffer = new Float32Array(maxBufferSize);
         }
+
         function render(out, offset, length) {
             catchUp();
             var fromBuffer = position > length ? length : position;
@@ -243,10 +243,10 @@ define(['./utils'], function (utils) {
         this.render = render;
         this.active = false;
         this.slowDataBus = 0;
-        this.updateSlowDataBus = function(slowDataBus, active) {
+        this.updateSlowDataBus = function (slowDataBus, active) {
             this.slowDataBus = slowDataBus;
             if (active && !this.active) {
-                activeCountdown = minCyclesWELow;
+                activeTask.reschedule(minCyclesWELow);
             }
             this.active = active;
         };
@@ -259,7 +259,7 @@ define(['./utils'], function (utils) {
             }
             noisePoked();
             advance(100000);
-            cyclesPending = 0;
+            this.setScheduler(scheduler);
         };
         this.enable = function (e) {
             enabled = e;
@@ -273,7 +273,7 @@ define(['./utils'], function (utils) {
     }
 
     function FakeSoundChip() {
-        this.reset = this.enable = this.mute = this.unmute = this.render = this.updateSlowDataBus = this.polltime = utils.noop;
+        this.reset = this.enable = this.mute = this.unmute = this.render = this.updateSlowDataBus = this.setScheduler = utils.noop;
         this.toneGenerator = this;
     }
 

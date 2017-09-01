@@ -171,4 +171,17 @@ exports.testSortOrderCab = function (test) {
     test.done();
 };
 
-// TODO: handle time overflow
+exports.testEpochWorksProperly = function (test) {
+    var s = new Scheduler();
+    s.polltime(12346);
+    var epochBefore = s.epoch;
+    var epochAtCall = 0;
+    s.newTask(function () {
+        epochAtCall = s.epoch;
+    }).schedule(4);
+    s.polltime(9974);
+    test.equals(4, epochAtCall - epochBefore);
+    test.done();
+};
+
+// TODO: handle time overflow - has to inform anyone with the epoch cached
