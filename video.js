@@ -593,6 +593,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
         this.polltime = utils.noop;
         this.setScreenAdd = utils.noop;
+        this.regs = new Uint8Array(32);
     }
 
     return {
