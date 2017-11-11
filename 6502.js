@@ -845,7 +845,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     this.soundChip.setScheduler(this.scheduler);
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
-                    this.acia = new Acia(this, this.soundChip.toneGenerator);
+                    this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler);
                     this.serial = new Serial(this.acia);
                     this.fdc = new model.Fdc(this, this.ddNoise, this.scheduler);
                     this.crtc = this.video.crtc;
@@ -901,7 +901,6 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
                 this.scheduler.polltime(cycles);
-                this.acia.polltime(cycles);
                 this.tube.execute(cycles);
             };
 
@@ -913,7 +912,6 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.sysvia.polltime(cycles);
                 this.uservia.polltime(cycles);
                 this.scheduler.polltime(cycles);
-                this.acia.polltime(cycles);
                 this.tube.execute(cycles);
             };
 
@@ -1024,13 +1022,13 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 if (maxToShow > 256) maxToShow = 256;
                 var disassembler = this.disassembler;
                 func = func || function (pc, a, x, y) {
-                        var dis = disassembler.disassemble(pc, true)[0];
-                        console.log(utils.hexword(pc),
-                            (dis + "                       ").substr(0, 15),
-                            utils.hexbyte(a),
-                            utils.hexbyte(x),
-                            utils.hexbyte(y));
-                    };
+                    var dis = disassembler.disassemble(pc, true)[0];
+                    console.log(utils.hexword(pc),
+                        (dis + "                       ").substr(0, 15),
+                        utils.hexbyte(a),
+                        utils.hexbyte(x),
+                        utils.hexbyte(y));
+                };
                 for (var i = maxToShow - 2; i >= 0; --i) {
                     var j = (this.oldPcIndex - i) & 255;
                     func(this.oldPcArray[j], this.oldAArray[j], this.oldXArray[j], this.oldYArray[j]);

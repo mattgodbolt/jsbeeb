@@ -3,7 +3,7 @@ define([], function () {
     // Some info:
     // http://www.playvectrex.com/designit/lecture/UP12.HTM
     // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
-    return function Acia(cpu, toneGen) {
+    return function Acia(cpu, toneGen, scheduler) {
         var self = this;
         self.sr = 0x02;
         self.cr = 0x00;
@@ -13,7 +13,6 @@ define([], function () {
         // would need to be updated based on the "other end" of the link, and
         // we would need to generate IRQs appropriately when TDRE goes high.
         self.clearToSend = false;
-        self.txTimeRemaining = 0;
 
         function updateIrq() {
             if (self.sr & self.cr & 0x80) {
@@ -35,8 +34,13 @@ define([], function () {
         };
 
         self.setMotor = function (on) {
+            if (on && !self.motorOn)
+                run();
+            else {
+                toneGen.mute();
+                self.runTask.cancel();
+            }
             self.motorOn = on;
-            if (!on) toneGen.mute();
         };
 
         self.read = function (addr) {
@@ -58,7 +62,7 @@ define([], function () {
                 // It's not clear how long this can take; it's when the shift register is loaded.
                 // That could be straight away if not already tx-ing, but as we don't really tx,
                 // be conservative here.
-                self.txTimeRemaining = 2000;
+                self.txCompleteTask.reschedule(2000);
                 updateIrq();
             } else {
                 if ((val & 0x03) === 0x03) {
@@ -108,35 +112,21 @@ define([], function () {
             }
         };
 
-        var runCounter = 0;
-        var cyclesPerPoll = (2 * 1000 * 1000) / 30;
         var serialReceiveRate = 19200;
 
         self.setSerialReceive = function (rate) {
             serialReceiveRate = rate;
         };
 
+        self.txCompleteTask = scheduler.newTask(function () {
+            self.sr |= 0x02; // set the TDRE
+        });
+
         function run() {
-            if (self.tape) return self.tape.poll(self);
-            return 100000;
+            self.runTask.reschedule(self.tape.poll(self));
         }
 
-        self.polltime = function (cycles) {
-            if (self.txTimeRemaining) {
-                if (--self.txTimeRemaining === 0) {
-                    self.sr |= 0x02; // set the TDRE
-                }
-            }
-            if (!self.motorOn) return;
-            runCounter -= cycles;
-            if (runCounter <= 0) {
-                runCounter += run();
-            }
-        };
-
-        self.secondsToPolls = function (sec) {
-            return Math.floor(2 * 1000 * 1000 * sec / cyclesPerPoll);
-        };
+        self.runTask = scheduler.newTask(run);
     };
 });
 
