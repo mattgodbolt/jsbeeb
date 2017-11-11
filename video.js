@@ -18,6 +18,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.regs = new Uint8Array(32);
         this.bitmapX = 0;
         this.bitmapY = 0;
+        this.renderY = 0;
         this.clocks = 0;
         this.oddClock = false;
         this.frameCount = 0;
@@ -327,6 +328,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                                 this.paint();
                             }
                             this.bitmapY = 0;
+                            this.updateRenderY();
                             this.sysvia.setVBlankInt(true);
                             this.teletext.vsync();
                             this.clocks = 0;
@@ -364,6 +366,34 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
 
+        this.handleHSync = function () {
+            this.hpulseCounter = (this.hpulseCounter + 1) & 0x0F;
+            if (this.hpulseCounter === (this.hpulseWidth >>> 1)) {
+                this.bitmapX = 0;
+
+                // Half-clock horizontal movement
+                if (this.hpulseWidth & 1) {
+                    this.bitmapX = -4;
+                }
+
+                this.bitmapY++;
+                // If no VSync occurs this frame, go back to the top and force a repaint
+                if (this.bitmapY >= 384) {
+                    // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
+                    this.bitmapY = 0;
+                    this.paint();
+                }
+                this.updateRenderY();
+            } else if (this.hpulseCounter === (this.regs[3] & 0x0F)) {
+                this.inHSync = false;
+            }
+        };
+
+        this.updateRenderY = function () {
+            // this.renderY = (this.bitmapY << 1) | ((this.oddFrame && !!(this.regs[8] & 1)) ? 1 : 0);    // emulate 'shaky' interlace
+            this.renderY = (this.bitmapY << 1) | ((this.oddFrame && (this.interlacedSyncAndVideo || !this.doubledScanlines)) ? 1 : 0);
+        };
+
         ////////////////////
         // Main drawing routine
         this.polltime = function (clocks) {
@@ -375,42 +405,18 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 if (!this.halfClock || this.oddClock) {
 
                     // Handle HSync
-                    if (this.inHSync) {
-                        this.hpulseCounter = (this.hpulseCounter + 1) & 0x0F;
-                        if (this.hpulseCounter === (this.hpulseWidth >>> 1)) {
-                            this.bitmapX = 0;
-
-                            // Half-clock horizontal movement
-                            if (this.hpulseWidth & 1) {
-                                this.bitmapX = -4;
-                            }
-
-                            this.bitmapY++;
-                            // If no VSync occurs this frame, go back to the top and force a repaint
-                            if (this.bitmapY >= 384) {
-                                // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
-                                this.bitmapY = 0;
-                                this.paint();
-                            }
-                        } else if (this.hpulseCounter === (this.regs[3] & 0x0F)) {
-                            this.inHSync = false;
-                        }
-                    }
+                    if (this.inHSync) this.handleHSync();
 
                     // Handle delayed display enable due to skew
-                    if (this.horizCounter === this.displayEnableSkew + (this.teletextMode ? 2 : 0)) {
-                        this.dispEnabled |= SKEWDISPENABLE;
-                    }
+                    var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
+                    if (this.horizCounter === displayEnablePos) this.dispEnabled |= SKEWDISPENABLE;
 
                     // Latch next line screen address in case we are in the last line of a character row
-                    if (this.horizCounter === this.regs[1]) {
-                        this.nextLineStartAddr = this.addr;
-                    }
+                    if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
 
                     // Handle end of horizontal displayed, accounting for display enable skew
-                    if (this.horizCounter === this.regs[1] + this.displayEnableSkew + (this.teletextMode ? 2 : 0)) {
+                    if (this.horizCounter === this.regs[1] + displayEnablePos)
                         this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
-                    }
 
                     // Initiate HSync
                     if (this.horizCounter === this.regs[2]) {
@@ -424,7 +430,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     }
 
                     // Read data from address pointer if both horizontal and vertical display enabled
-                    var dat;
+                    var dat = 0;
                     if ((this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE)) {
 
                         dat = this.readVideoMem();
@@ -436,20 +442,15 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     }
 
                     // Render data or border depending on display enable state
-//                    var renderY = (this.bitmapY << 1) | ((this.oddFrame && !!(this.regs[8] & 1)) ? 1 : 0);    // emulate 'shaky' interlace
-                    var renderY = (this.bitmapY << 1) | ((this.oddFrame && (this.interlacedSyncAndVideo || !this.doubledScanlines)) ? 1 : 0);
-
-                    if (this.bitmapX >= 0 && this.bitmapX < 1024 && renderY < 625) {
-                        var offset = renderY * 1024 + this.bitmapX;
+                    if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.renderY < 625) {
+                        var offset = this.renderY * 1024 + this.bitmapX;
                         if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                             this.renderChar(offset, dat);
                         } else {
                             this.renderBlank(offset);
                         }
 
-                        if (this.cursorDrawIndex) {
-                            this.handleCursor(offset);
-                        }
+                        if (this.cursorDrawIndex) this.handleCursor(offset);
                     }
 
                     // Handle horizontal total
@@ -503,6 +504,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         break;
                     case 8:
                         this.video.interlacedSyncAndVideo = (val & 3) === 3;
+                        this.video.updateRenderY();
                         var skew = (val & 0x30) >>> 4;
                         if (skew < 3) {
                             this.video.displayEnableSkew = skew;
