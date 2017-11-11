@@ -254,7 +254,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                         cpu.a = (cpu.a + 0x60) & 0xff;
                 } else {
                     cpu.a = cpu.a & arg;
-                    cpu.p.v = !!(((cpu.a >> 7) ^ (cpu.a >>> 6)) & 0x01);
+                    cpu.p.v = !!(((cpu.a >>> 7) ^ (cpu.a >>> 6)) & 0x01);
                     cpu.a >>>= 1;
                     if (cpu.p.c) cpu.a |= 0x80;
                     cpu.setzn(cpu.a);
@@ -517,7 +517,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
 
             this.is1MHzAccess = function (addr) {
                 addr &= 0xffff;
-                return (addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >> 5) & 7]));
+                return (addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >>> 5) & 7]));
             };
 
             this.readDevice = function (addr) {
@@ -616,7 +616,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                         return this.tube.read(addr);
                 }
                 if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
-                return addr >> 8;
+                return addr >>> 8;
             };
 
             this.videoRead = function (addr) {

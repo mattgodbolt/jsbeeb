@@ -353,7 +353,7 @@ define(['./utils'], function (utils) {
                 return {
                     op: [
                         "var pushAddr = cpu.pc - 1;",
-                        "cpu.push(pushAddr >> 8);",
+                        "cpu.push(pushAddr >>> 8);",
                         "cpu.push(pushAddr & 0xff);",
                         "cpu.pc = addr;"], extra: 3
                 };

@@ -12,7 +12,7 @@ define(['utils', 'models', 'fake6502'],
                 cpu.writemem(0x3b, 0x00);
                 cpu.writemem(0x3c, 0x00);
                 cpu.writemem(0x37, offset & 0xff);
-                cpu.writemem(0x38, (offset >> 8) & 0xff);
+                cpu.writemem(0x38, (offset >>> 8) & 0xff);
                 cpu.writemem(0xfe30, 12);
                 for (var i = 0; i < line.length; ++i) {
                     cpu.writemem(offset + i, line.charCodeAt(i));
@@ -41,7 +41,7 @@ define(['utils', 'models', 'fake6502'],
                 var lineNum = lineSplit[1] ? parseInt(lineSplit[1]) : lineNumIfNotSpec;
                 var tokens = callTokeniser(lineSplit[2]);
                 return '\r' +
-                    String.fromCharCode((lineNum >> 8) & 0xff) +
+                    String.fromCharCode((lineNum >>> 8) & 0xff) +
                     String.fromCharCode(lineNum & 0xff) +
                     String.fromCharCode(tokens.length + 4) + tokens;
             };

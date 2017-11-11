@@ -74,8 +74,8 @@ define(['jquery', 'underscore', './utils'], function ($, _, utils) {
                 if (elem.match(/t[12][cl]/)) {
                     updates.push(function () {
                         var reg = via[elem];
-                        updateElem(value, hexbyte((reg >> 16) & 0xff) +
-                            hexbyte((reg >> 8) & 0xff) + hexbyte(reg & 0xff));
+                        updateElem(value, hexbyte((reg >>> 16) & 0xff) +
+                            hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff));
                     });
                 } else {
                     updates.push(function () {
