@@ -108,6 +108,10 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                 }
             });
         }
+
+        if (parsedQuery.frameSkip)
+            frameSkip = parseInt(parsedQuery.frameSkip);
+
         function guessModelFromUrl() {
             if (window.location.hostname.indexOf("bbc") === 0) return "B";
             if (window.location.hostname.indexOf("master") === 0) return "Master";
@@ -153,10 +157,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             frames = 0;
             canvas.paint(minx, miny, maxx, maxy);
         });
+        if (parsedQuery.fakeVideo !== undefined)
+            video = new Video.FakeVideo();
 
         var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
-            : typeof webkitAudioContext !== 'undefined'? new webkitAudioContext()
-            : null;
+            : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
+                : null;
 
         if (audioContext) {
             soundChip = new SoundChip.SoundChip(audioContext.sampleRate);
@@ -180,6 +186,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         var lastAltLocation = 1;
 
         dbgr = new Debugger(video);
+
         function keyCode(evt) {
             var ret = evt.which || evt.charCode || evt.keyCode;
 
@@ -714,6 +721,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                 go();
             }
         });
+
         function popupLoading(msg) {
             var modal = $('#loading-dialog');
             modal.find(".loading").text(msg);
@@ -1031,9 +1039,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             numCycles = numCycles || 10 * 1000 * 1000;
             var oldFS = frameSkip;
             frameSkip = 1000000;
-            var startTime = Date.now();
+            var startTime = performance.now();
             processor.execute(numCycles);
-            var endTime = Date.now();
+            var endTime = performance.now();
             frameSkip = oldFS;
             var msTaken = endTime - startTime;
             var virtualMhz = (numCycles / msTaken) / 1000;
@@ -1045,9 +1053,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             numCycles = numCycles || 10 * 1000 * 1000;
             var oldFS = frameSkip;
             frameSkip = 1000000;
-            var startTime = Date.now();
+            var startTime = perfomance.now();
             video.polltime(numCycles);
-            var endTime = Date.now();
+            var endTime = perfomance.now();
             frameSkip = oldFS;
             var msTaken = endTime - startTime;
             var virtualMhz = (numCycles / msTaken) / 1000;
@@ -1069,6 +1077,31 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         var last = 0;
 
+        var virtualSpeedUpdater = new function () {
+            this.cycles = 0;
+            this.time = 0;
+            this.v = $('.virtualMHz');
+
+            this.update = function (cycles, time) {
+                this.cycles += cycles;
+                this.time += time;
+            };
+
+            this.display = function () {
+                // MRG would be nice to graph instantaneous speed to get some idea where the time goes.
+                if (this.cycles) {
+                    var thisMHz = this.cycles / this.time / 1000;
+                    this.v.text(thisMHz.toFixed(1));
+                    if (this.cycles >= 10 * 2 * 1000 * 1000) {
+                        this.cycles = this.time = 0;
+                    }
+                }
+                setTimeout(this.display.bind(this), 3333);
+            };
+
+            this.display();
+        };
+
         function draw(now) {
             if (!running) {
                 last = 0;
@@ -1082,9 +1115,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                 var cycles = (sinceLast * clocksPerSecond / 1000) | 0;
                 cycles = Math.min(cycles, MaxCyclesPerFrame);
                 try {
+                    var begin = performance.now();
                     if (!processor.execute(cycles)) {
                         stop(true);
                     }
+                    var end = performance.now();
+                    virtualSpeedUpdater.update(cycles, end - begin);
                 } catch (e) {
                     running = false;
                     utils.noteEvent('exception', 'thrown', e.stack);

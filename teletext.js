@@ -50,7 +50,7 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
                 if (row < 0 || row >= 20) {
                     return 0;
                 } else {
-                    var index = c * 60 + (row >> 1) * 6;
+                    var index = c * 60 + (row >>> 1) * 6;
                     var result = 0;
                     for (var x = 0; x < 6; ++x) {
                         result |= ((charData[index++] * 3) << (x * 2));
@@ -60,7 +60,7 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
             }
 
             function combineRows(a, b) {
-                return a | ((a >> 1) & b & ~(b >> 1)) | ((a << 1) & b & ~(b << 1));
+                return a | ((a >>> 1) & b & ~(b >>> 1)) | ((a << 1) & b & ~(b << 1));
             }
 
             function makeHiResGlyphs(dest, graphicsGlyphs) {

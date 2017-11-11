@@ -87,8 +87,8 @@ define(['./utils'], function (utils) {
         var lfsr = 0;
 
         function shiftLfsrWhiteNoise() {
-            var bit = (lfsr & 1) ^ ((lfsr & (1 << 1)) >> 1);
-            lfsr = (lfsr >> 1) | (bit << 14);
+            var bit = (lfsr & 1) ^ ((lfsr & (1 << 1)) >>> 1);
+            lfsr = (lfsr >>> 1) | (bit << 14);
         }
 
         function shiftLfsrPeriodicNoise() {
@@ -213,7 +213,7 @@ define(['./utils'], function (utils) {
             catchUp();
             var latchData = !!(value & 0x80);
             if (latchData)
-                latchedChannel = (value >> 5) & 3;
+                latchedChannel = (value >>> 5) & 3;
             if ((value & 0x90) === 0x90) {
                 // Volume setting
                 var newVolume = value & 0x0f;

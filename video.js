@@ -154,9 +154,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     temp |= 1;
                 }
                 for (i = 0; i < 16; ++i) {
-                    t[o.table4bppOffset(2, b) + i] = t[o.table4bppOffset(3, b) + (i >> 1)];
-                    t[o.table4bppOffset(1, b) + i] = t[o.table4bppOffset(3, b) + (i >> 2)];
-                    t[o.table4bppOffset(0, b) + i] = t[o.table4bppOffset(3, b) + (i >> 3)];
+                    t[o.table4bppOffset(2, b) + i] = t[o.table4bppOffset(3, b) + (i >>> 1)];
+                    t[o.table4bppOffset(1, b) + i] = t[o.table4bppOffset(3, b) + (i >>> 2)];
+                    t[o.table4bppOffset(0, b) + i] = t[o.table4bppOffset(3, b) + (i >>> 3)];
                 }
             }
             return t;
@@ -593,6 +593,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
         this.polltime = utils.noop;
         this.setScreenAdd = utils.noop;
+        this.regs = new Uint8Array(32);
     }
 
     return {

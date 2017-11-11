@@ -36,7 +36,7 @@ define([], function () {
         var val = 0x0000;
         // TODO: switch on bottom two bits of adc_status and pick a value corresponding
         // to the appropriate axis.
-        this.status = (this.status & 0x0f) | 0x40 | ((val >> 10) & 0x03);
+        this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;
         this.high = (val >>> 8) & 0xff;
         this.sysvia.setcb1(false);

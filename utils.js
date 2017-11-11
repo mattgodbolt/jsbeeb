@@ -595,13 +595,13 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     };
 
     function hexbyte(value) {
-        return ((value >> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
+        return ((value >>> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
     }
 
     exports.hexbyte = hexbyte;
 
     function hexword(value) {
-        return hexbyte(value >> 8) + hexbyte(value & 0xff);
+        return hexbyte(value >>> 8) + hexbyte(value & 0xff);
     }
 
     exports.hexword = hexword;
