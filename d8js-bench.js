@@ -54,7 +54,7 @@ requirejs(['fake6502', 'fdc', 'models'],
             cpu.sysvia.keyDown(16);
             cpu.execute(10 * 1000 * 1000);
             cpu.sysvia.keyUp(16);
-            benchmarkCpu(cpu, 100 * 1000 * 1000);
+            benchmarkCpu(cpu, 400 * 1000 * 1000);
         }).catch(function (err) {
             console.log("Got error: ", err);
         });
