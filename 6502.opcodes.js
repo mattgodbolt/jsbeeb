@@ -1254,16 +1254,10 @@ define(['./utils'], function (utils) {
 
         Runner.prototype.invalidOpcode = invalidOpcode;
         Runner.prototype.cpu = cpu;
-        if (utils.isFirefox()) {
-            // Firefox seems to be fastest with a jump table.
-            // Would be nicer to benchmark this.
-            Runner.prototype.run = generate6502JumpTable();
-        } else {
-            // The binary search seems to be the win in general.
-            Runner.prototype.run = generate6502Binary();
-        }
-        // Chrome doesn't like having 256 entries in a switch.
-        //Runner.prototype.run = generate6502Switch();
+        // We used to use jump tables for Firefox, and binary search for everything else.
+        // Chrome used to have a problem with 256 entries in a switch, but that seems to have been fixed.
+        // We now use a jump table for everything.
+        Runner.prototype.run = generate6502JumpTable();
 
         return {
             Disassemble: Disassemble6502,
