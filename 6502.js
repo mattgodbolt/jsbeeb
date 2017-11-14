@@ -38,6 +38,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             cpu.pc = 0;
             cpu.opcodes = model.nmos ? opcodesAll.cpu6502(cpu) : opcodesAll.cpu65c12(cpu);
             cpu.disassembler = new cpu.opcodes.Disassemble(cpu);
+            cpu.tracing = false;
 
             cpu.incpc = function () {
                 cpu.pc = (cpu.pc + 1) & 0xffff;
@@ -410,6 +411,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             this.videoCyclesBatch = config.videoCyclesBatch | 0;
             this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
             this.getPrevPc = function (index) {
+                if (!this.tracing) throw new Error("Tracing not enabled");
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
             this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
@@ -925,6 +927,27 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.polltime = this.polltimeSlow;
             }
 
+            this.handleIrq = function () {
+                this.takeInt = false;
+                this.push(this.pc >>> 8);
+                this.push(this.pc & 0xff);
+                this.push(this.p.asByte() & ~0x10);
+                this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
+                this.p.i = true;
+                this.polltime(7);
+            }
+
+            this.handleNmi = function () {
+                this.push(this.pc >>> 8);
+                this.push(this.pc & 0xff);
+                this.push(this.p.asByte() & ~0x10);
+                this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
+                this.p.i = true;
+                this.polltime(7);
+                this.nmi = false;
+                if (!model.nmos)
+                    this.p.d = false;
+            };
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
                 this.targetCycles += numCyclesToRun;
@@ -938,10 +961,21 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     this.currentCycles -= 2 * 1000 * 1000;
                     this.cycleSeconds++;
                 }
+                // Any tracing or debugging means we need to run the potentially slower version: the debug read or
+                // debug write might change tracing or other debugging while we're running.
+                if (this.tracing || this._debugInstruction || this._debugRead || this._debugWrite) {
+                    return this.executeInternal();
+                } else {
+                    return this.executeInternalFast();
+                }
+            };
+            this.executeInternal = function () {
                 var first = true;
                 while (!this.halted && this.currentCycles < this.targetCycles) {
-                    this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
-                    this.oldPcArray[this.oldPcIndex] = this.pc;
+                    if (this.tracing) {
+                        this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
+                        this.oldPcArray[this.oldPcIndex] = this.pc;
+                    }
                     this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
                     if (this._debugInstruction && !first && this._debugInstruction(this.pc, opcode)) {
@@ -950,35 +984,29 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     first = false;
                     this.incpc();
                     this.runner.run(opcode);
-                    this.oldAArray[this.oldPcIndex] = this.a;
-                    this.oldXArray[this.oldPcIndex] = this.x;
-                    this.oldYArray[this.oldPcIndex] = this.y;
-                    if (!this.resetLine) {
-                        this.reset(false);
+                    if (this.tracing) {
+                        this.oldAArray[this.oldPcIndex] = this.a;
+                        this.oldXArray[this.oldPcIndex] = this.x;
+                        this.oldYArray[this.oldPcIndex] = this.y;
                     }
-                    if (this.takeInt) {
-                        this.takeInt = false;
-                        this.push(this.pc >>> 8);
-                        this.push(this.pc & 0xff);
-                        this.push(this.p.asByte() & ~0x10);
-                        this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
-                        this.p.i = true;
-                        this.polltime(7);
-                    }
-                    if (this.nmi) {
-                        this.push(this.pc >>> 8);
-                        this.push(this.pc & 0xff);
-                        this.push(this.p.asByte() & ~0x10);
-                        this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
-                        this.p.i = true;
-                        this.polltime(7);
-                        this.nmi = false;
-                        if (!model.nmos)
-                            this.p.d = false;
-                    }
+                    if (!this.resetLine) this.reset(false);
+                    if (this.takeInt) this.handleIrq();
+                    if (this.nmi) this.handleNmi();
                 }
                 return true;
-            };
+            }
+            this.executeInternalFast = function () {
+                while (!this.halted && this.currentCycles < this.targetCycles) {
+                    this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
+                    var opcode = this.readmem(this.pc);
+                    this.incpc();
+                    this.runner.run(opcode);
+                    if (!this.resetLine) this.reset(false);
+                    if (this.takeInt) this.handleIrq();
+                    if (this.nmi) this.handleNmi();
+                }
+                return true;
+            }
 
             this.stop = function () {
                 this.halted = true;
@@ -1026,13 +1054,13 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 if (maxToShow > 256) maxToShow = 256;
                 var disassembler = this.disassembler;
                 func = func || function (pc, a, x, y) {
-                        var dis = disassembler.disassemble(pc, true)[0];
-                        console.log(utils.hexword(pc),
-                            (dis + "                       ").substr(0, 15),
-                            utils.hexbyte(a),
-                            utils.hexbyte(x),
-                            utils.hexbyte(y));
-                    };
+                    var dis = disassembler.disassemble(pc, true)[0];
+                    console.log(utils.hexword(pc),
+                        (dis + "                       ").substr(0, 15),
+                        utils.hexbyte(a),
+                        utils.hexbyte(x),
+                        utils.hexbyte(y));
+                };
                 for (var i = maxToShow - 2; i >= 0; --i) {
                     var j = (this.oldPcIndex - i) & 255;
                     func(this.oldPcArray[j], this.oldAArray[j], this.oldXArray[j], this.oldYArray[j]);
