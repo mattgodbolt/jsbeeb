@@ -1103,16 +1103,18 @@ define(['./utils'], function (utils) {
             }
         }
 
-        function getIndentedSource(indent, opcodeNum) {
+        function getIndentedSource(indent, opcodeNum, needsReg) {
             var opcode = opcodes[opcodeNum];
             var lines = null;
             if (opcode) {
-                lines = getInstruction(opcode, false);
+                lines = getInstruction(opcode, !!needsReg);
             }
             if (!lines) {
                 lines = ["this.invalidOpcode(cpu, 0x" + utils.hexbyte(opcodeNum) + ");"];
             }
-            lines = ["// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"].concat(lines);
+            lines = [
+                "\"use strict\";",
+                "// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"].concat(lines);
             return indent + lines.join("\n" + indent);
         }
 
@@ -1150,7 +1152,7 @@ define(['./utils'], function (utils) {
         function generate6502JumpTable() {
             var funcs = [];
             for (var opcode = 0; opcode < 256; ++opcode) {
-                funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode)); // jshint ignore:line
+                funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode, true)); // jshint ignore:line
             }
             return function exec(opcode) {
                 return funcs[opcode].call(this, this.cpu);
