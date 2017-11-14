@@ -1103,16 +1103,18 @@ define(['./utils'], function (utils) {
             }
         }
 
-        function getIndentedSource(indent, opcodeNum) {
+        function getIndentedSource(indent, opcodeNum, needsReg) {
             var opcode = opcodes[opcodeNum];
             var lines = null;
             if (opcode) {
-                lines = getInstruction(opcode, false);
+                lines = getInstruction(opcode, !!needsReg);
             }
             if (!lines) {
                 lines = ["this.invalidOpcode(cpu, 0x" + utils.hexbyte(opcodeNum) + ");"];
             }
-            lines = ["// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"].concat(lines);
+            lines = [
+                "\"use strict\";",
+                "// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"].concat(lines);
             return indent + lines.join("\n" + indent);
         }
 
@@ -1150,10 +1152,10 @@ define(['./utils'], function (utils) {
         function generate6502JumpTable() {
             var funcs = [];
             for (var opcode = 0; opcode < 256; ++opcode) {
-                funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode)); // jshint ignore:line
+                funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode, true)); // jshint ignore:line
             }
             return function exec(opcode) {
-                return funcs[opcode](this.cpu);
+                return funcs[opcode].call(this, this.cpu);
             };
         }
 
@@ -1254,16 +1256,10 @@ define(['./utils'], function (utils) {
 
         Runner.prototype.invalidOpcode = invalidOpcode;
         Runner.prototype.cpu = cpu;
-        if (utils.isFirefox()) {
-            // Firefox seems to be fastest with a jump table.
-            // Would be nicer to benchmark this.
-            Runner.prototype.run = generate6502JumpTable();
-        } else {
-            // The binary search seems to be the win in general.
-            Runner.prototype.run = generate6502Binary();
-        }
-        // Chrome doesn't like having 256 entries in a switch.
-        //Runner.prototype.run = generate6502Switch();
+        // We used to use jump tables for Firefox, and binary search for everything else.
+        // Chrome used to have a problem with 256 entries in a switch, but that seems to have been fixed.
+        // We now use a jump table for everything.
+        Runner.prototype.run = generate6502JumpTable();
 
         return {
             Disassemble: Disassemble6502,
