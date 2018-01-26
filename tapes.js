@@ -188,6 +188,53 @@ define(['utils'], function (utils) {
         };
     }
 
+
+    function TapefileTape(stream) {
+        "use strict";
+        var self = this;
+
+        self.count = 0;
+        self.stream = stream;
+
+        var dividerTable = [1, 16, 64, -1];
+
+        function rate(acia) {
+            var bitsPerByte = 9;
+            if (!(acia.cr & 0x80)) {
+                bitsPerByte++; // Not totally correct if the AUG is to be believed.
+            }
+            var divider = dividerTable[acia.cr & 0x03];
+            // http://beebwiki.mdfs.net/index.php/Serial_ULA says the serial rate is ignored
+            // for cassette mode.
+            var cpp = (2 * 1000 * 1000) / (19200 / divider);
+            return Math.floor(bitsPerByte * cpp);
+        }
+
+        self.rewind = function () {
+            stream.seek(10);
+        };
+
+        self.poll = function (acia) {
+            if (stream.eof()) return 100000;
+            var byte = stream.readByte();
+            if (byte === 0xff) {
+                byte = stream.readByte();
+                if (byte === 0) {
+                    acia.setDCD(false);
+                    return 0;
+                } else if (byte === 0x04) {
+                    acia.setDCD(true);
+                    // Simulate 5 seconds of carrier.
+                    return 5 * 2 * 1000 * 1000;
+                } else if (byte !== 0xff) {
+                    throw "Got a weird byte in the tape";
+                }
+            }
+            acia.receive(byte);
+            return rate(acia);
+        };
+    }
+
     function loadTapeFromData(name, data) {
         var stream = new utils.DataStream(name, data);
         if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
