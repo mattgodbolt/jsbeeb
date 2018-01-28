@@ -37,10 +37,10 @@ define([], function () {
 
         self.setMotor = function (on) {
             if (on && !self.motorOn)
-                run();
+                runTape();
             else {
                 toneGen.mute();
-                self.runTask.cancel();
+                self.runTapeTask.cancel();
             }
             self.motorOn = on;
         };
@@ -79,12 +79,16 @@ define([], function () {
         };
 
         self.selectRs423 = function (selected) {
+            var needsRun = selected && !self.rs423Selected;
+            if (!selected) self.runRs423Task.cancel();
             self.rs423Selected = !!selected;
+
             if (selected) {
                 self.sr &= ~0x04; // Clear DCD
             } else {
                 self.sr &= ~0x08; // Clear CTS
             }
+            if (needsRun) runRs423();
         };
 
         self.setDCD = function (level) {
@@ -125,10 +129,24 @@ define([], function () {
             self.sr |= 0x02; // set the TDRE
         });
 
-        function run() {
-            if (self.tape) self.runTask.reschedule(self.tape.poll(self));
+        function runTape() {
+            if (self.tape) self.runTapeTask.reschedule(self.tape.poll(self));
         }
 
-        self.runTask = scheduler.newTask(run);
+        self.runTapeTask = scheduler.newTask(runTape);
+
+        function runRs423() {
+            if (!rs423Handler) return;
+            var rcv = self.rs423Handler.tryReceive();
+            if (rcv >= 0)
+                self.receive(rcv);
+            self.runRs423Task.reschedule(100000)
+        }
+
+        self.runRs423Task = scheduler.newTask(runRs423);
+
+        self.secondsToPolls = function (sec) {
+            return Math.floor(2 * 1000 * 1000 * sec / cyclesPerPoll);
+        };
     };
 });
