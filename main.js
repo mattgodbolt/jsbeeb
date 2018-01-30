@@ -150,7 +150,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         if (parsedQuery.glEnabled !== undefined) {
             tryGl = parsedQuery.glEnabled === "true";
         }
-        var canvas = tryGl ? canvasLib.bestCanvas($('#screen')[0]) : new canvasLib.Canvas($('#screen')[0]);
+        var $screen = $('#screen');
+        var canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
         video = new Video.Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;
@@ -310,6 +311,16 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             }
             evt.preventDefault();
         }
+
+        var $cub = $('#cub-monitor');
+        $cub.on('mousemove mousedown mouseup', function (evt) {
+            var cubOffset = $cub.offset();
+            var screenOffset = $screen.offset();
+            var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
+            var y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
+            processor.touchScreen.onMouse(x, y, evt.buttons);
+            evt.preventDefault();
+        });
 
         $(window).blur(function () {
             processor.sysvia.clearKeys();

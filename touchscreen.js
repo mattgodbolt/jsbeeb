@@ -2,38 +2,18 @@ define(['./utils'],
     function (utils) {
         "use strict";
 
-        function Fifo(capacity) {
-            this.buffer = new Uint8Array(capacity);
-            this.size = 0;
-            this.wPtr = 0;
-            this.rPtr = 0;
-        }
-
-        Fifo.prototype.put = function (b) {
-            if (this.size == buffer.length) return;
-            buffer[this.wPtr % buffer.length] = b;
-            this.wPtr++;
-            this.size++;
-        };
-
-        Fifo.prototype.get = function () {
-            if (this.size === 0) return;
-            var res = buffer[this.rPtr % buffer.length];
-            this.rPtr++;
-            this.size--;
-            return res;
-        };
-
-        return function TouchScreen(mouseFunc) {
+        return function TouchScreen() {
             var self = this;
-            this.mouseFunc = mouseFunc;
             this.lastMouse = [];
-            this.outBuffer = new Uint8Array(16);
+            this.mouse = [];
+            this.outBuffer = new utils.Fifo(16);
             this.delay = 0;
-            this.mode = 0
+            this.mode = 0;
+            this.onMouse = function (x, y, button) {
+                this.mouse = {x: x, y: y, button: button};
+            };
             this.onTransmit = function (val) {
-                val = String.fromCharCode(val);
-                switch (val) {
+                switch (String.fromCharCode(val)) {
                     case 'M':
                         self.mode = 0;
                         break;
@@ -47,7 +27,7 @@ define(['./utils'],
                     case '7':
                     case '8':
                     case '9':
-                        self.mode = 10 * self.mode + val - '0';
+                        self.mode = 10 * self.mode + val - '0'.charCodeAt(0);
                         break;
                     case '.':
                         break;
@@ -59,18 +39,41 @@ define(['./utils'],
             };
             this.tryReceive = function () {
                 if (self.mode == 129 || self.mode == 130) self.doRead(true);
-                if (this.outBuffer.size) return this.outBuffer.get();
+                if (self.mode == 129 || self.mode == 130) self.doRead(true);
+                if (self.outBuffer.size) {
+                    var foo = self.outBuffer.get();
+                    return foo;
+                }
                 return -1;
             };
             this.store = function (byte) {
-                this.outBuffer.put(byte);
+                self.outBuffer.put(byte);
             };
-            this.doRead = function (ifChanged) {
-                var newMouse = this.mouseFunc();
-                if (ifChanged && newMouse == this.lastMouse) return;
-                this.lastMouse = newMouse;
-                if (newMouse.pressed) {
 
+            function doScale(val, scale, margin) {
+                val = (val - margin) / (1 - 2 * margin);
+                return val * scale;
+            }
+
+            this.doRead = function (ifChanged) {
+                var scaleX = 120, marginX = 0.13;
+                var scaleY = 100, marginY = 0.03;
+                var scaledX = doScale(self.mouse.x, scaleX, marginX);
+                var scaledY = doScale(1 - self.mouse.y, scaleY, marginY);
+                // if (scaledX > 1 || scaledX < 0 || scaledY > 1 || scaledY < 0) return;
+                if (ifChanged &&
+                    self.mouse.x === self.lastMouse.x &&
+                    self.mouse.y === self.lastMouse.y &&
+                    self.mouse.button === self.lastMouse.button) return;
+                self.lastMouse = self.mouse;
+                // Mostly made up values, tweaked to seem basically right.
+                var x = Math.min(255, Math.max(0, scaledX)) | 0;
+                var y = Math.min(255, Math.max(0, scaledY)) | 0;
+                if (self.mouse.button) {
+                    self.store(0x40 | ((x & 0xf0) >>> 4));
+                    self.store(0x40 | (x & 0x0f));
+                    self.store(0x40 | ((y & 0xf0) >>> 4));
+                    self.store(0x40 | (y & 0x0f));
                 } else {
                     self.store(0x4f);
                     self.store(0x4f);

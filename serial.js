@@ -13,7 +13,6 @@ define(['utils'], function (utils) {
         var table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
 
         function write(addr, val) {
-            console.log("write of", utils.hexbyte(val), "to", utils.hexword(addr));
             val &= 0xff;
             self.reg = val;
             self.transmitRate = val & 0x07;
@@ -24,7 +23,6 @@ define(['utils'], function (utils) {
         }
 
         function read() {
-            console.log("Moo");
             write(0, 0xfe);
             return 0;
         }

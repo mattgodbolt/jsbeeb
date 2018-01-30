@@ -140,7 +140,9 @@ define([], function () {
             var rcv = self.rs423Handler.tryReceive();
             if (rcv >= 0)
                 self.receive(rcv);
-            self.runRs423Task.reschedule(100000)
+            // NB this is 8192 in beeb-em source, but that's 8192 calls to "PollHardware", not cycles. 4096 seems to be
+            // a good number though...
+            self.runRs423Task.reschedule(4096);
         }
 
         self.runRs423Task = scheduler.newTask(runRs423);

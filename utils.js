@@ -679,7 +679,9 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     exports.makeBinaryData = makeBinaryData;
 
     var baseUrl = "";
-    exports.setBaseUrl = function(url) { baseUrl = url; }
+    exports.setBaseUrl = function (url) {
+        baseUrl = url;
+    }
 
     function loadDataHttp(url) {
         return new Promise(function (resolve, reject) {
@@ -928,6 +930,30 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         console.log("Unzipped '" + loadedFile + "'");
         return {data: uncompressed.data, name: loadedFile};
     };
+
+    function Fifo(capacity) {
+        this.buffer = new Uint8Array(capacity);
+        this.size = 0;
+        this.wPtr = 0;
+        this.rPtr = 0;
+    }
+
+    Fifo.prototype.put = function (b) {
+        if (this.size == this.buffer.length) return;
+        this.buffer[this.wPtr % this.buffer.length] = b;
+        this.wPtr++;
+        this.size++;
+    };
+
+    Fifo.prototype.get = function () {
+        if (this.size === 0) return;
+        var res = this.buffer[this.rPtr % this.buffer.length];
+        this.rPtr++;
+        this.size--;
+        return res;
+    };
+
+    exports.Fifo = Fifo;
 
     return exports;
 });
