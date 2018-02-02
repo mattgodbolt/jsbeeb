@@ -3,6 +3,7 @@ define([], function () {
     // Some info:
     // http://www.playvectrex.com/designit/lecture/UP12.HTM
     // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
+    // http://www.classiccmp.org/dunfield/r/6850.pdf
     return function Acia(cpu, toneGen, scheduler, rs423Handler) {
         var self = this;
         self.sr = 0x02;
@@ -47,7 +48,7 @@ define([], function () {
 
         self.read = function (addr) {
             if (addr & 1) {
-                self.sr &= ~0x81;
+                self.sr &= ~0xa1;
                 updateIrq();
                 return self.dr;
             } else {
@@ -74,6 +75,7 @@ define([], function () {
                     self.reset();
                 } else {
                     self.cr = val;
+                    self.setSerialReceive(self.serialReceiveRate);
                 }
             }
         };
@@ -103,8 +105,13 @@ define([], function () {
 
         self.receive = function (byte) {
             byte |= 0;
-            self.dr = byte;
-            self.sr |= 0x81;
+            if (self.sr & 0x01) {
+                // Overrun.
+                self.sr |= 0xa0;
+            } else {
+                self.dr = byte;
+                self.sr |= 0x81;
+            }
             updateIrq();
         };
 
@@ -119,11 +126,58 @@ define([], function () {
             }
         };
 
-        var serialReceiveRate = 19200;
+        self.secondsToPolls = function (sec) {
+            return Math.floor(2 * 1000 * 1000 * sec) | 0;
+        };
+
+        self.serialReceiveRate = 0;
+        self.serialReceiveCyclesPerByte = 0;
+
+        self.numBitsPerByte = function () {
+            var wordLength = (self.cr & 0x10) ? 8 : 7;
+            var stopBits, parityBits;
+            switch ((self.cr >>> 2) & 7) {
+                case 0:
+                    stopBits = 2;
+                    parityBits = 1;
+                    break;
+                case 1:
+                    stopBits = 2;
+                    parityBits = 1;
+                    break;
+                case 2:
+                    stopBits = q;
+                    parityBits = q;
+                    break;
+                case 3:
+                    stopBits = 1;
+                    parityBits = 1;
+                    break;
+                case 4:
+                    stopBits = 2;
+                    parityBits = 0;
+                    break;
+                case 5:
+                    stopBits = 1;
+                    parityBits = 0;
+                    break;
+                case 6:
+                    stopBits = 1;
+                    parityBits = 1;
+                    break;
+                case 7:
+                    stopBits = 1;
+                    parityBits = 1;
+                    break;
+            }
+            return wordLength + stopBits + parityBits;
+        };
 
         self.setSerialReceive = function (rate) {
-            serialReceiveRate = rate;
+            self.serialReceiveRate = rate;
+            self.serialReceiveCyclesPerByte = self.secondsToPolls(self.numBitsPerByte() / rate);
         };
+        self.setSerialReceive(19200);
 
         self.txCompleteTask = scheduler.newTask(function () {
             self.sr |= 0x02; // set the TDRE
@@ -138,17 +192,10 @@ define([], function () {
         function runRs423() {
             if (!rs423Handler) return;
             var rcv = self.rs423Handler.tryReceive();
-            if (rcv >= 0)
-                self.receive(rcv);
-            // NB this is 8192 in beeb-em source, but that's 8192 calls to "PollHardware", not cycles. 4096 seems to be
-            // a good number though...
-            self.runRs423Task.reschedule(4096);
+            if (rcv >= 0) self.receive(rcv);
+            self.runRs423Task.reschedule(self.serialReceiveCyclesPerByte);
         }
 
         self.runRs423Task = scheduler.newTask(runRs423);
-
-        self.secondsToPolls = function (sec) {
-            return Math.floor(2 * 1000 * 1000 * sec / cyclesPerPoll);
-        };
     };
 });

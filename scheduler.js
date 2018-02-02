@@ -96,5 +96,14 @@ define([], function () {
         this.scheduler.cancel(this);
     };
 
+    Task.prototype.ensureScheduled = function (state, delay) {
+        if (!!state) {
+            if (!this.scheduled())
+                this.schedule(delay);
+        } else {
+            this.cancel();
+        }
+    };
+
     return {Scheduler: Scheduler};
 });

@@ -938,15 +938,29 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         this.rPtr = 0;
     }
 
+    Fifo.prototype.full = function() {
+        return this.size == this.buffer.length;
+    };
+
+    Fifo.prototype.empty = function() {
+        return this.size == 0;
+    };
+
+    Fifo.prototype.clear = function() {
+        this.size = 0;
+        this.wPtr = 0;
+        this.rPtr = 0;
+    }
+
     Fifo.prototype.put = function (b) {
-        if (this.size == this.buffer.length) return;
+        if (this.full()) return;
         this.buffer[this.wPtr % this.buffer.length] = b;
         this.wPtr++;
         this.size++;
     };
 
     Fifo.prototype.get = function () {
-        if (this.size === 0) return;
+        if (this.empty()) return;
         var res = this.buffer[this.rPtr % this.buffer.length];
         this.rPtr++;
         this.size--;

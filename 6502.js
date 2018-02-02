@@ -847,7 +847,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     this.soundChip.setScheduler(this.scheduler);
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
                     this.uservia = via.UserVia(this, model.isMaster);
-                    this.touchScreen = new TouchScreen();
+                    this.touchScreen = new TouchScreen(this.scheduler);
                     this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
                     this.serial = new Serial(this.acia);
                     this.fdc = new model.Fdc(this, this.ddNoise, this.scheduler);

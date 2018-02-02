@@ -2,9 +2,11 @@ define(['./utils'],
     function (utils) {
         "use strict";
 
-        return function TouchScreen() {
+        return function TouchScreen(scheduler) {
             var self = this;
-            this.lastMouse = [];
+            var PollCycles = 90000; // made up number, seems to be ok
+            this.scheduler = scheduler;
+            this.lastOutput = [0, 0, 0, 0];
             this.mouse = [];
             this.outBuffer = new utils.Fifo(16);
             this.delay = 0;
@@ -12,6 +14,11 @@ define(['./utils'],
             this.onMouse = function (x, y, button) {
                 this.mouse = {x: x, y: y, button: button};
             };
+            this.poll = function () {
+                self.doRead(true);
+                self.pollTask.reschedule(PollCycles);
+            };
+            this.pollTask = this.scheduler.newTask(this.poll);
             this.onTransmit = function (val) {
                 switch (String.fromCharCode(val)) {
                     case 'M':
@@ -32,18 +39,15 @@ define(['./utils'],
                     case '.':
                         break;
                     case '?':
-                        if (self.mode == 1)
+                        if (self.mode === 1)
                             self.doRead(false);
                         break;
                 }
+                self.pollTask.ensureScheduled(self.mode === 129 || self.mode === 130, PollCycles);
             };
             this.tryReceive = function () {
-                if (self.mode == 129 || self.mode == 130) self.doRead(true);
-                if (self.mode == 129 || self.mode == 130) self.doRead(true);
-                if (self.outBuffer.size) {
-                    var foo = self.outBuffer.get();
-                    return foo;
-                }
+                if (self.outBuffer.size)
+                    return self.outBuffer.get();
                 return -1;
             };
             this.store = function (byte) {
@@ -60,26 +64,23 @@ define(['./utils'],
                 var scaleY = 100, marginY = 0.03;
                 var scaledX = doScale(self.mouse.x, scaleX, marginX);
                 var scaledY = doScale(1 - self.mouse.y, scaleY, marginY);
-                // if (scaledX > 1 || scaledX < 0 || scaledY > 1 || scaledY < 0) return;
-                if (ifChanged &&
-                    self.mouse.x === self.lastMouse.x &&
-                    self.mouse.y === self.lastMouse.y &&
-                    self.mouse.button === self.lastMouse.button) return;
-                self.lastMouse = self.mouse;
-                // Mostly made up values, tweaked to seem basically right.
+                var toSend = [0x4f, 0x4f, 0x4f, 0x4f];
                 var x = Math.min(255, Math.max(0, scaledX)) | 0;
                 var y = Math.min(255, Math.max(0, scaledY)) | 0;
                 if (self.mouse.button) {
-                    self.store(0x40 | ((x & 0xf0) >>> 4));
-                    self.store(0x40 | (x & 0x0f));
-                    self.store(0x40 | ((y & 0xf0) >>> 4));
-                    self.store(0x40 | (y & 0x0f));
-                } else {
-                    self.store(0x4f);
-                    self.store(0x4f);
-                    self.store(0x4f);
-                    self.store(0x4f);
+                    toSend[0] = 0x40 | ((x & 0xf0) >>> 4);
+                    toSend[1] = 0x40 | (x & 0x0f);
+                    toSend[2] = 0x40 | ((y & 0xf0) >>> 4);
+                    toSend[3] = 0x40 | (y & 0x0f);
                 }
+                if (ifChanged &&
+                        toSend[0] === self.lastOutput[0] &&
+                        toSend[1] === self.lastOutput[1] &&
+                        toSend[2] === self.lastOutput[2] &&
+                        toSend[3] === self.lastOutput[3]) return;
+                self.lastOutput = toSend;
+                for (var i = 0; i < 4; ++i)
+                    self.store(toSend[i]);
                 self.store('.'.charCodeAt(0));
             };
         };
