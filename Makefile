@@ -39,7 +39,7 @@ dist: npm
 	cd out/build && $(shell pwd)/node_modules/requirejs/bin/r.js -o ../build.js
 
 upload: dist
-	aws s3 sync out/dist/ s3://bbc.godbolt.org/$(BRANCH)
+	aws s3 sync out/dist/ s3://bbc.godbolt.org/$(BRANCH) --cache-control max-age=30 --metadata-directive REPLACE
 
 clean:
 	@rm -rf out
