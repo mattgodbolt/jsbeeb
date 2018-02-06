@@ -4,9 +4,9 @@ define(['./utils'],
 
         return function TouchScreen(scheduler) {
             var self = this;
-            var PollCycles = 90000; // made up number, seems to be ok
+            var PollHz = 8; // Made up
+            var PollCycles = 2 * 1000 * 1000 / PollHz;
             this.scheduler = scheduler;
-            this.lastOutput = [0, 0, 0, 0];
             this.mouse = [];
             this.outBuffer = new utils.Fifo(16);
             this.delay = 0;
@@ -15,7 +15,7 @@ define(['./utils'],
                 this.mouse = {x: x, y: y, button: button};
             };
             this.poll = function () {
-                self.doRead(true);
+                self.doRead();
                 self.pollTask.reschedule(PollCycles);
             };
             this.pollTask = this.scheduler.newTask(this.poll);
@@ -40,13 +40,13 @@ define(['./utils'],
                         break;
                     case '?':
                         if (self.mode === 1)
-                            self.doRead(false);
+                            self.doRead();
                         break;
                 }
                 self.pollTask.ensureScheduled(self.mode === 129 || self.mode === 130, PollCycles);
             };
-            this.tryReceive = function () {
-                if (self.outBuffer.size)
+            this.tryReceive = function (rts) {
+                if (self.outBuffer.size && rts)
                     return self.outBuffer.get();
                 return -1;
             };
@@ -59,7 +59,7 @@ define(['./utils'],
                 return val * scale;
             }
 
-            this.doRead = function (ifChanged) {
+            this.doRead = function () {
                 var scaleX = 120, marginX = 0.13;
                 var scaleY = 100, marginY = 0.03;
                 var scaledX = doScale(self.mouse.x, scaleX, marginX);
@@ -73,12 +73,6 @@ define(['./utils'],
                     toSend[2] = 0x40 | ((y & 0xf0) >>> 4);
                     toSend[3] = 0x40 | (y & 0x0f);
                 }
-                if (ifChanged &&
-                        toSend[0] === self.lastOutput[0] &&
-                        toSend[1] === self.lastOutput[1] &&
-                        toSend[2] === self.lastOutput[2] &&
-                        toSend[3] === self.lastOutput[3]) return;
-                self.lastOutput = toSend;
                 for (var i = 0; i < 4; ++i)
                     self.store(toSend[i]);
                 self.store('.'.charCodeAt(0));

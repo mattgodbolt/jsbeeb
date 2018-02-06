@@ -81,16 +81,13 @@ define([], function () {
         };
 
         self.selectRs423 = function (selected) {
-            var needsRun = selected && !self.rs423Selected;
-            if (!selected) self.runRs423Task.cancel();
             self.rs423Selected = !!selected;
-
-            if (selected) {
+            if (self.rs423Selected) {
                 self.sr &= ~0x04; // Clear DCD
             } else {
                 self.sr &= ~0x08; // Clear CTS
             }
-            if (needsRun) runRs423();
+            self.runRs423Task.ensureScheduled(self.rs423Selected, self.serialReceiveCyclesPerByte);
         };
 
         self.setDCD = function (level) {
@@ -107,6 +104,7 @@ define([], function () {
             byte |= 0;
             if (self.sr & 0x01) {
                 // Overrun.
+                console.log("Serial overrun");
                 self.sr |= 0xa0;
             } else {
                 self.dr = byte;
@@ -126,7 +124,7 @@ define([], function () {
             }
         };
 
-        self.secondsToPolls = function (sec) {
+        self.secondsToCycles = function (sec) {
             return Math.floor(2 * 1000 * 1000 * sec) | 0;
         };
 
@@ -173,9 +171,16 @@ define([], function () {
             return wordLength + stopBits + parityBits;
         };
 
+        self.rts = function () {
+            // True iff CR6 = 0 or CR5 and CR6 are both 1.
+            if ((self.cr & 0x40) === 0) return true;
+            if ((self.cr & 0x60) === 0x60) return true;
+            return false;
+        };
+
         self.setSerialReceive = function (rate) {
             self.serialReceiveRate = rate;
-            self.serialReceiveCyclesPerByte = self.secondsToPolls(self.numBitsPerByte() / rate);
+            self.serialReceiveCyclesPerByte = self.secondsToCycles(self.numBitsPerByte() / rate);
         };
         self.setSerialReceive(19200);
 
@@ -191,7 +196,7 @@ define([], function () {
 
         function runRs423() {
             if (!rs423Handler) return;
-            var rcv = self.rs423Handler.tryReceive();
+            var rcv = self.rs423Handler.tryReceive(self.rts());
             if (rcv >= 0) self.receive(rcv);
             self.runRs423Task.reschedule(self.serialReceiveCyclesPerByte);
         }
