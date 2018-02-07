@@ -149,13 +149,13 @@ define(['./utils'], function (utils) {
         };
         BaseDisc.prototype.seek = function (track) {
             this.seekOffset = track * 10 * 256;
-            if (this.dsd) this.seekOffset <<= 1;
+            if (this.isDsd) this.seekOffset <<= 1;
             var oldTrack = this.track;
             this.track = track;
             return this.track - oldTrack;
         };
         BaseDisc.prototype.check = function (track, side, density) {
-            if (this.track !== track || density || (side && !this.dsd)) {
+            if (this.track !== track || density || (side && !this.isDsd)) {
                 this.notFoundTask.reschedule(500 * DiscTimeSlice);
                 return false;
             }
@@ -631,7 +631,7 @@ define(['./utils'], function (utils) {
     };
 
     WD1770.prototype.track0 = function () {
-        return this.curTrack === 0 ? 0x04 : 0x00;
+        return this.curTrack === 0 ? 0x00 : 0x04;
     };
 
     WD1770.prototype.callback = function () {
