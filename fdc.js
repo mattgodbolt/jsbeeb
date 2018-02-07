@@ -26,7 +26,7 @@ define(['./utils'], function (utils) {
         return result;
     }
 
-    function discFor(fdc, isDsd, stringData) {
+    function discFor(fdc, isDsd, stringData, onChange) {
         var data;
         if (typeof(stringData) !== "string") {
             data = stringData;
@@ -35,7 +35,25 @@ define(['./utils'], function (utils) {
             data = new Uint8Array(len);
             for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
         }
-        return new BaseDisc(fdc, isDsd, data);
+        var prevData = new Uint8Array(data);
+
+        function changed() {
+            var changed = false;
+            for (var i = 0; i < data.length; ++i) {
+                if (data[i] !== prevData[i]) {
+                    prevData[i] = data[i];
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        return new BaseDisc(fdc, isDsd, data, function () {
+            if (!changed()) return;
+            if (onChange) {
+                onChange(data);
+            }
+        });
     }
 
     function localDisc(fdc, name) {

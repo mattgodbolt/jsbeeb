@@ -635,6 +635,12 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             if (schema[0] === "!" || schema === "local") {
                 return Promise.resolve(disc.localDisc(processor.fdc, discImage));
             }
+            // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
+            // Consider:
+            // * hashing contents and making a local disc image named by original disc hash, save by that, and offer
+            //   to load the modified disc on load.
+            // * popping up a message that notes the disc has changed, and offers a way to make a local image
+            // * Dialog box (ugh) saying "is this ok?"
             if (schema === "|" || schema === "sth") {
                 return discSth.fetch(discImage).then(function (discData) {
                     return disc.discFor(processor.fdc, false, discData);
