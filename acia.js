@@ -144,8 +144,8 @@ define([], function () {
                     parityBits = 1;
                     break;
                 case 2:
-                    stopBits = q;
-                    parityBits = q;
+                    stopBits = 1;
+                    parityBits = 1;
                     break;
                 case 3:
                     stopBits = 1;

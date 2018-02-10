@@ -21,6 +21,9 @@ timing-tests: npm
 dormann-test: npm
 	$(NODE) tests/test-dormann.js
 
+lint: npm
+	$(NODE) ./node_modules/.bin/jshint $(shell find -name '*.js' -not -path './node_modules/*' -not -path './out/*' -not -path './lib/*' -not -path './tests/*')
+
 short-tests: unit-tests timing-tests dormann-test
 long-tests: test-suite 
 
@@ -47,7 +50,7 @@ clean:
 spotless: clean
 	@rm -f $(NPM_UP_TO_DATE)
 
-test: short-tests long-tests
+test: short-tests long-tests lint
 
 .PHONY: test short-tests test dormann-test timing-tests unit-tests test-suite npm 
 .PHONY: all dist clean spotless upload

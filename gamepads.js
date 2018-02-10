@@ -162,7 +162,7 @@ define(['utils'],
             }
         };
 
-        GamePad.prototype.update = function () {
+        GamePad.prototype.update = function (sysvia) {
             // init gamepad
             // gamepad not necessarily available until a button press
             // so need to check gamepads[0] continuously
@@ -172,8 +172,6 @@ define(['utils'],
 
                 if (this.gamepad0) {
                     console.log("initing gamepad");
-                    var BBC = utils.BBC;
-
                     // 16 buttons
                     this.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
 
@@ -222,12 +220,12 @@ define(['utils'],
                         // 1 to -1
                         var oldKey = this.gamepadAxisMapping[i][this.gamepadAxes[i]];
                         if (oldKey) {
-                            processor.sysvia.keyUpRaw(oldKey);
+                            sysvia.keyUpRaw(oldKey);
                         }
 
                         var newKey = this.gamepadAxisMapping[i][axis];
                         if (newKey) {
-                            processor.sysvia.keyDownRaw(newKey);
+                            sysvia.keyDownRaw(newKey);
                         }
 
                     }
@@ -245,9 +243,9 @@ define(['utils'],
 
                             if (this.gamepadMapping[i]) {
                                 if (button.pressed) {
-                                    processor.sysvia.keyDownRaw(this.gamepadMapping[i]);
+                                    sysvia.keyDownRaw(this.gamepadMapping[i]);
                                 } else {
-                                    processor.sysvia.keyUpRaw(this.gamepadMapping[i]);
+                                    sysvia.keyUpRaw(this.gamepadMapping[i]);
                                 }
                             }
                         }

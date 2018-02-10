@@ -6,7 +6,7 @@ define([], function () {
     function Scheduler() {
         this.scheduled = null;
         this.epoch = 0;
-    };
+    }
 
     function Task(scheduler, onExpire) {
         this.scheduler = scheduler;
@@ -14,7 +14,7 @@ define([], function () {
         this.expireEpoch = 0;
         this.onExpire = onExpire;
         this._scheduled = false;
-    };
+    }
 
     Scheduler.prototype.schedule = function (task, delay) {
         if (task.scheduler !== this) {
@@ -48,7 +48,7 @@ define([], function () {
         if (!task.scheduled()) return;
         if (!task.prev) {
             // First element, we need to update the head element.
-            this.scheduled = task.next
+            this.scheduled = task.next;
         } else {
             task.prev.next = task.next;
         }

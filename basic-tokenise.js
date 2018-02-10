@@ -1,4 +1,4 @@
-define(['utils', 'models', 'fake6502'],
+define(['utils', 'models', 'fake6502', 'promise'],
     function (utils, models, Fake6502) {
         "use strict";
 

@@ -34,7 +34,7 @@ require(['jquery', 'tests/test'], function ($, test) {
             ctx.fillStyle = 'black';
             ctx.fillRect(0, 0, 1280, 768);
             if (!ctx.getImageData) {
-                alert('Unsupported browser');
+                window.alert('Unsupported browser');
                 return;
             }
             var backBuffer = document.createElement("canvas");

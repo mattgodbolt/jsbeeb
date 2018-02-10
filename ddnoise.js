@@ -124,7 +124,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
         FakeDdNoise.prototype.mute = FakeDdNoise.prototype.unmute = utils.noop;
     FakeDdNoise.prototype.seek = function () {
         return 0;
-    }
+    };
     FakeDdNoise.prototype.initialize = function () {
         return Promise.resolve();
     };

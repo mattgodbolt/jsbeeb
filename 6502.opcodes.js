@@ -28,7 +28,7 @@ define(['./utils'], function (utils) {
     }
 
     function pull(reg) {
-        if (reg == 'p') {
+        if (reg === 'p') {
             return [
                 "var tempFlags = cpu.pull();",
                 "cpu.p.c = !!(tempFlags & 0x01);",
@@ -43,7 +43,7 @@ define(['./utils'], function (utils) {
     }
 
     function push(reg) {
-        if (reg == 'p') return "cpu.push(cpu.p.asByte());";
+        if (reg === 'p') return "cpu.push(cpu.p.asByte());";
         return "cpu.push(cpu." + reg + ");";
     }
 
@@ -59,7 +59,7 @@ define(['./utils'], function (utils) {
                 cycle = self.cycle;
             }
             exact = exact || false;
-            if (typeof(op) == "string") op = [op];
+            if (typeof(op) === "string") op = [op];
             if (self.ops[cycle]) {
                 self.ops[cycle].op = combiner(self.ops[cycle].op, op);
                 if (exact) self.ops[cycle].exact = true;
@@ -244,7 +244,7 @@ define(['./utils'], function (utils) {
             case "SBC":
                 return {op: "cpu.sbc(REG);", read: true};
             case "BIT":
-                if (arg == "imm") {
+                if (arg === "imm") {
                     // According to: http://forum.6502.org/viewtopic.php?f=2&t=2241&p=27243#p27239
                     // the v and n flags are unaffected by BIT #xx
                     return {op: "cpu.p.z = !(cpu.a & REG);", read: true};
@@ -940,7 +940,7 @@ define(['./utils'], function (utils) {
                 case "zpx":  // Seems to be enough to keep tests happy, but needs investigation.
                 case "zp,x":
                 case "zp,y":
-                    if (arg == "zp") {
+                    if (arg === "zp") {
                         ig.tick(2);
                         ig.append("var addr = cpu.getb() | 0;");
                     } else {
@@ -1197,7 +1197,7 @@ define(['./utils'], function (utils) {
                     case "imm":
                         return [split[0] + " #$" + hexbyte(cpu.peekmem(addr + 1)) + suffix, addr + 2];
                     case "abs":
-                        var formatter = (split[0] == "JMP" || split[0] == "JSR") ? formatJumpAddr : formatAddr;
+                        var formatter = (split[0] === "JMP" || split[0] === "JSR") ? formatJumpAddr : formatAddr;
                         destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
                         return [split[0] + " $" + formatter(destAddr) + suffix, addr + 3, destAddr];
                     case "branch":

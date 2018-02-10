@@ -1,4 +1,5 @@
 define([], function () {
+    "use strict";
     return function starCat() {
         return [
             { name: 'Elite', desc: 'An 8-bit classic. Hit F10 to launch from the space station, then use <, >, S, X and A to fly around.', file: 'elite.ssd' },

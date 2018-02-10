@@ -11,7 +11,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     };
 
     exports.parseAddr = function (s) {
-        if (s[0] == '$' || s[0] == '&') return parseInt(s.substr(1), 16);
+        if (s[0] === '$' || s[0] === '&') return parseInt(s.substr(1), 16);
         if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
         return parseInt(s, 16);
     };
@@ -301,7 +301,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
         // shiftDown MUST be true or false (not undefined)
         function doMap(s, colRow, shiftDown) {
-            if (keys2[shiftDown][s] && keys2[shiftDown][s] != colRow) {
+            if (keys2[shiftDown][s] && keys2[shiftDown][s] !== colRow) {
                 console.log("Warning: duplicate binding for key", (shiftDown ? "<SHIFT>" : "") + s, colRow, keys2[shiftDown][s]);
             }
             keys2[shiftDown][s] = colRow;
@@ -313,7 +313,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             if ((!s && s !== 0) || !colRow) {
                 console.log("error binding key", s, colRow);
             }
-            if (typeof(s) == "string") {
+            if (typeof(s) === "string") {
                 s = s.charCodeAt(0);
             }
 
@@ -387,7 +387,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         map(keyCodes.RIGHT, BBC.RIGHT);
         map(keyCodes.DOWN, BBC.DOWN);
 
-        if (keyLayout == "natural") {
+        if (keyLayout === "natural") {
 
             // "natural" keyboard
 
@@ -454,7 +454,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
             map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
 
-        } else if (keyLayout == "gaming") {
+        } else if (keyLayout === "gaming") {
             // gaming keyboard
 
             // 1st row
@@ -661,7 +661,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     };
 
     exports.noteEvent = function noteEvent(category, type, label) {
-        if (!exports.runningInNode && window.location.origin == "http://bbc.godbolt.org") {
+        if (!exports.runningInNode && window.location.origin === "https://bbc.godbolt.org") {
             // Only note events on the public site
             ga('send', 'event', category, type, label);
         }
@@ -681,7 +681,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     var baseUrl = "";
     exports.setBaseUrl = function (url) {
         baseUrl = url;
-    }
+    };
 
     function loadDataHttp(url) {
         return new Promise(function (resolve, reject) {
@@ -707,16 +707,16 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         return new Promise(function (resolve, reject) {
             if (typeof(readbuffer) !== "undefined") {
                 // d8 shell
-                var buffer = readbuffer(url);
+                var buffer = readbuffer(url); // jshint ignore:line
                 resolve(new Uint8Array(buffer));
             } else if (typeof(read) !== "undefined") {
                 // SpiderMonkey shell
-                var bytes = read(url, "binary");
+                var bytes = read(url, "binary"); // jshint ignore:line
                 resolve(bytes);
             } else {
                 // Node
                 var fs = require('fs');
-                if (url[0] == '/') url = "." + url;
+                if (url[0] === '/') url = "." + url;
                 resolve(fs.readFileSync(url));
             }
         });
@@ -939,18 +939,18 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     }
 
     Fifo.prototype.full = function() {
-        return this.size == this.buffer.length;
+        return this.size === this.buffer.length;
     };
 
     Fifo.prototype.empty = function() {
-        return this.size == 0;
+        return this.size === 0;
     };
 
     Fifo.prototype.clear = function() {
         this.size = 0;
         this.wPtr = 0;
         this.rPtr = 0;
-    }
+    };
 
     Fifo.prototype.put = function (b) {
         if (this.full()) return;

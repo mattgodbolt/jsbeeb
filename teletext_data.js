@@ -1,3 +1,4 @@
+"use strict";
 define({
 // Extremely heavily based on b-em.
 /* jshint laxcomma:true */

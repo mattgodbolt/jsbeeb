@@ -1,4 +1,5 @@
 // To be run directly from 'js' or 'd8'.
+"use strict";
 
 ///////////////////////////////////////////////////
 // Enough of the code assumes there's a console.log that I've just made one here
@@ -11,10 +12,9 @@ var console = {
 
 ///////////////////////////////////////////////////
 // Gook to simulate enough of requirejs to get Video to load
-load('./lib/require.js');
+load('./lib/require.js'); // jshint ignore:line
 requirejs.load = function (context, moduleName, url) {
-    "use strict";
-    load(url);
+    load(url); // jshint ignore:line
     context.completeLoad(moduleName);
 };
 requirejs.config({
@@ -32,7 +32,6 @@ function setTimeout(fn, delay) {
 ///////////////////////////////////////////////////
 requirejs(['fake6502', 'fdc', 'models'],
     function (Fake6502, disc, models) {
-        "use strict";
         function benchmarkCpu(cpu, numCycles) {
             numCycles = numCycles || 10 * 1000 * 1000;
             console.log("Benchmarking over " + numCycles + " cpu cycles");

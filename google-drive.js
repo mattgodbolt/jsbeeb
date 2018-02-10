@@ -1,4 +1,4 @@
-define(['jquery', 'utils', 'fdc'], function ($, utils, fdc) {
+define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, fdc, _) {
     "use strict";
     return function GoogleDriveLoader() {
         var self = this;

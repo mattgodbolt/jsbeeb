@@ -949,7 +949,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = true;
                 this.polltime(7);
-            }
+            };
 
             this.handleNmi = function () {
                 this.push(this.pc >>> 8);
@@ -1008,7 +1008,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     if (this.nmi) this.handleNmi();
                 }
                 return true;
-            }
+            };
             this.executeInternalFast = function () {
                 while (!this.halted && this.currentCycles < this.targetCycles) {
                     this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
@@ -1020,7 +1020,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     if (this.nmi) this.handleNmi();
                 }
                 return true;
-            }
+            };
 
             this.stop = function () {
                 this.halted = true;

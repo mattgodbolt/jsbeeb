@@ -104,7 +104,7 @@ define(['utils'], function (utils) {
                         numDataBits = curChunk.stream.readByte();
                         parity = curChunk.stream.readByte();
                         numStopBits = curChunk.stream.readByte();
-                        numParityBits = parity != 'N' ? 1 : 0;
+                        numParityBits = parity !== 'N' ? 1 : 0;
                         console.log("Defined data with " + numDataBits + String.fromCharCode(parity) + numStopBits);
                         state = 0;
                     }
@@ -121,7 +121,7 @@ define(['utils'], function (utils) {
                         state++;
                     } else if (state < (1 + numDataBits + numParityBits)) {
                         var bit = parityOf(curByte);
-                        if (parity == 'N') bit = !bit;
+                        if (parity === 'N') bit = !bit;
                         acia.tone(bit ? (2 * baseFrequency) : baseFrequency);
                         state++;
                     } else if (state < (1 + numDataBits + numParityBits + numStopBits)) {
@@ -190,7 +190,6 @@ define(['utils'], function (utils) {
 
 
     function TapefileTape(stream) {
-        "use strict";
         var self = this;
 
         self.count = 0;
@@ -241,7 +240,7 @@ define(['utils'], function (utils) {
             console.log("Detected a 'tapefile' tape");
             return new TapefileTape(stream);
         }
-        if (stream.readNulString(0) == "UEF File!") {
+        if (stream.readNulString(0) === "UEF File!") {
             console.log("Detected a UEF tape");
             return new UefTape(stream);
         }

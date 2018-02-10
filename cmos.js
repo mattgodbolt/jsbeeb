@@ -1,6 +1,6 @@
 define([], function () {
+    "use strict";
     return function (persistence) {
-        "use strict";
         var store = null;
         if (persistence) {
             store = persistence.load();

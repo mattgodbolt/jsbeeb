@@ -105,7 +105,7 @@ define(['jquery', 'underscore', './utils'], function ($, _, utils) {
             }
 
             for (var i = 0; i < 16; ++i) {
-                (function (i) {
+                (function (i) { // jshint ignore:line
                     var value = makeRow(regNode, "R" + i);
                     updates.push(function () {
                         updateElem(value, hexbyte(video.regs[i]));
@@ -250,7 +250,7 @@ define(['jquery', 'underscore', './utils'], function ($, _, utils) {
                 var addr = startingPoint & 0xffff;
                 while (addr < address) {
                     var result = disassemble(addr);
-                    if (result[0] == cpu.pc) score += 10; // huge boost if this instruction was executed
+                    if (result[0] === cpu.pc) score += 10; // huge boost if this instruction was executed
                     if (result[0].match(commonInstructions) && !result[0].match(uncommonInstrucions)) {
                         score++;
                     }

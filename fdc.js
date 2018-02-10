@@ -38,14 +38,14 @@ define(['./utils'], function (utils) {
         var prevData = new Uint8Array(data);
 
         function changed() {
-            var changed = false;
+            var res = false;
             for (var i = 0; i < data.length; ++i) {
                 if (data[i] !== prevData[i]) {
                     prevData[i] = data[i];
-                    changed = true;
+                    res = true;
                 }
             }
-            return changed;
+            return res;
         }
 
         return new BaseDisc(fdc, isDsd, data, function () {
@@ -98,7 +98,7 @@ define(['./utils'], function (utils) {
         }.bind(this));
         this.readTask = fdc.scheduler.newTask(function () {
             this.fdc.discData(this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector]);
-            if (++this.byteWithinSector == 256) {
+            if (++this.byteWithinSector === 256) {
                 this.fdc.discFinishRead();
             } else {
                 this.readTask.reschedule(DiscTimeSlice);
@@ -109,15 +109,15 @@ define(['./utils'], function (utils) {
                 this.fdc.writeProtect();
                 return;
             }
-            var c = this.fdc.readDiscData(this.byteWithinSector == 255);
+            var c = this.fdc.readDiscData(this.byteWithinSector === 255);
             this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = c;
-            if (++this.byteWithinSector == 256) {
+            if (++this.byteWithinSector === 256) {
                 this.fdc.discFinishRead();
                 this.flush();
             } else {
                 this.writeTask.reschedule(DiscTimeSlice);
             }
-        }.bind(this))
+        }.bind(this));
         this.readAddrTask = fdc.scheduler.newTask(function () {
             switch (this.byteWithinSector) {
                 case 0:
@@ -151,7 +151,7 @@ define(['./utils'], function (utils) {
                 return;
             }
             this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = 0;
-            if (++this.byteWithinSector == 256) {
+            if (++this.byteWithinSector === 256) {
                 this.byteWithinSector = 0;
                 this.sectorOffset += 256;
                 if (++this.formatSector === 10) {
@@ -337,7 +337,7 @@ define(['./utils'], function (utils) {
         function command(val) {
             if (self.status & 0x80) return;
             self.command = val & 0x3f;
-            if (self.command == 0x17) self.command = 0x13;
+            if (self.command === 0x17) self.command = 0x13;
             self.driveSel = val >>> 6;
             self.curDrive = (val & 0x80) ? 1 : 0;
             self.paramNum = 0;

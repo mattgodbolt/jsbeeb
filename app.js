@@ -1,3 +1,4 @@
+"use strict";
 var requirejs = require('requirejs');
 var Png = require('node-png').PNG;
 var fs = require('fs');
@@ -62,7 +63,6 @@ requirejs(['video', 'fake6502', 'fdc', 'models'],
                 benchmarkCpu(cpu, 10 * 1000 * 1000);
             }
         }).catch(function (err) {
-            "use strict";
             console.log("Got error: ", err);
         });
     });

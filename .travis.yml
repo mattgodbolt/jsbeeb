@@ -4,4 +4,5 @@ language: node_js
 env:
     - TEST_SUITE=short-tests
     - TEST_SUITE=long-tests
+    - TEST_SUITE=lint
 script: make -j2 ${TEST_SUITE}

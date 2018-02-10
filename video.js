@@ -1,4 +1,5 @@
 define(['./teletext', './utils'], function (Teletext, utils) {
+    "use strict";
     const VDISPENABLE = 1 << 0,
         HDISPENABLE = 1 << 1,
         SKEWDISPENABLE = 1 << 2,
@@ -7,7 +8,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE;
 
     function Video(fb32_param, paint_ext_param) {
-        "use strict";
         this.fb32 = utils.makeFast32(fb32_param);
         this.collook = utils.makeFast32(new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
@@ -582,7 +582,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
     }
 
     function FakeVideo() {
-        "use strict";
         this.reset = function () {
         };
         this.ula = this.crtc = {

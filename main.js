@@ -1,6 +1,7 @@
-require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'cmos', 'sth', 'gamepads', 'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
+require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'cmos', 'sth', 'gamepads',
+        'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
         'canvas', 'promise', 'bootstrap', 'jquery-visibility'],
-    function ($, utils, Video, SoundChip, DdNoise, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepads, disc,
+    function ($, _, utils, Video, SoundChip, DdNoise, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepad, disc,
               starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib) {
         "use strict";
 
@@ -15,7 +16,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         var discSth;
         var tapeSth;
         var running;
-        var gamepad = new Gamepads();
+        var gamepad = new Gamepad();
 
         var availableImages;
         var discImage;
@@ -162,8 +163,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         if (parsedQuery.fakeVideo !== undefined)
             video = new Video.FakeVideo();
 
-        var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
-            : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
+        var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext() // jshint ignore:line
+            : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext() // jshint ignore:line
                 : null;
 
         if (audioContext) {
@@ -199,7 +200,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                     // keyUp events seem to pass location = 0 (Chrome)
                     switch (ret) {
                         case keyCodes.SHIFT:
-                            if (lastShiftLocation == 1) {
+                            if (lastShiftLocation === 1) {
                                 return keyCodes.SHIFT_LEFT;
                             } else {
                                 return keyCodes.SHIFT_RIGHT;
@@ -207,7 +208,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                             break;
 
                         case keyCodes.ALT:
-                            if (lastAltLocation == 1) {
+                            if (lastAltLocation === 1) {
                                 return keyCodes.ALT_LEFT;
                             } else {
                                 return keyCodes.ALT_RIGHT;
@@ -215,7 +216,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                             break;
 
                         case keyCodes.CTRL:
-                            if (lastCtrlLocation == 1) {
+                            if (lastCtrlLocation === 1) {
                                 return keyCodes.CTRL_LEFT;
                             } else {
                                 return keyCodes.CTRL_RIGHT;
@@ -310,7 +311,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
                 utils.noteEvent('keyboard', 'press', 'home');
                 stop(true);
-            } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
+            } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
                 utils.noteEvent('keyboard', 'press', 'break');
                 processor.setReset(true);
                 evt.preventDefault();
@@ -331,7 +332,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                     handler(false, code);
                     evt.preventDefault();
                 }
-            } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
+            } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
                 processor.setReset(false);
             }
             evt.preventDefault();
@@ -378,13 +379,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
         if (true /* keyswitch */) {
             var switchState = 0xff;
 
-            function switchKey(down, code) {
+            var switchKey = function (down, code) {
                 var bit = 1 << (code - utils.keyCodes.K1);
                 if (down)
                     switchState &= (0xff ^ bit);
                 else
                     switchState |= bit;
-            }
+            };
 
             for (var idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
                 emuKeyHandlers[idx] = switchKey;
@@ -537,7 +538,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                     return;
                 }
 
-                if (lastChar && lastChar != utils.BBC.SHIFT) {
+                if (lastChar && lastChar !== utils.BBC.SHIFT) {
                     processor.sysvia.keyToggleRaw(lastChar);
                 }
 
@@ -1122,9 +1123,9 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             numCycles = numCycles || 10 * 1000 * 1000;
             var oldFS = frameSkip;
             frameSkip = 1000000;
-            var startTime = perfomance.now();
+            var startTime = performance.now();
             video.polltime(numCycles);
-            var endTime = perfomance.now();
+            var endTime = performance.now();
             frameSkip = oldFS;
             var msTaken = endTime - startTime;
             var virtualMhz = (numCycles / msTaken) / 1000;
@@ -1146,7 +1147,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         var last = 0;
 
-        var virtualSpeedUpdater = new function () {
+        function VirtualSpeedUpdater() {
             this.cycles = 0;
             this.time = 0;
             this.v = $('.virtualMHz');
@@ -1169,7 +1170,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             };
 
             this.display();
-        };
+        }
+        var virtualSpeedUpdater = new VirtualSpeedUpdater();
 
         function draw(now) {
             if (!running) {
@@ -1177,7 +1179,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                 return;
             }
             requestAnimationFrame(draw);
-            gamepad.update();
+            gamepad.update(processor.sysvia);
             syncLights();
             if (last !== 0) {
                 var sinceLast = now - last;
