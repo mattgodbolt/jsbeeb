@@ -2,7 +2,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     "use strict";
 
     var IDLE = 0, SPIN_UP = 1, SPINNING = 2;
-    var VOLUME = 0.3;
+    var VOLUME = 0.25;
 
     function DdNoise(context) {
         this.context = context;
@@ -67,10 +67,10 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
             source.loop = !!loop;
             source.buffer = sound;
             source.connect(self.gain);
-            source.onended = function() {
+            source.onended = function () {
                 self.playing = _.without(self.playing, source);
-	        if (!source.loop) resolve();
-	    };
+                if (!source.loop) resolve();
+            };
             source.start();
             self.playing.push(source);
             if (source.loop) {
@@ -80,7 +80,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     };
 
     DdNoise.prototype.spinUp = function () {
-        if (this.state == SPINNING || this.state == SPIN_UP) return;
+        if (this.state === SPINNING || this.state === SPIN_UP) return;
         this.state = SPIN_UP;
         var self = this;
         self.play(self.sounds.motorOn).then(function () {
@@ -92,7 +92,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     };
 
     DdNoise.prototype.spinDown = function () {
-        if (this.state == IDLE) return;
+        if (this.state === IDLE) return;
         this.state = IDLE;
         if (this.motor) {
             this.motor.stop();
@@ -102,14 +102,10 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     };
 
     DdNoise.prototype.seek = function (diff) {
-        var dir;
-        if (diff < 0) {
-            dir = true;
-            diff = -diff;
-        }
+        if (diff < 0) diff = -diff;
         if (diff === 0) return 0;
         else if (diff === 1) return this.oneShot(this.sounds.step);
-        else if (diff < 7) return this.oneShot(this.sounds.seek);
+        else if (diff < 10) return this.oneShot(this.sounds.seek);
         else if (diff < 30) return this.oneShot(this.sounds.seek2);
         else return this.oneShot(this.sounds.seek3);
     };
@@ -125,7 +121,10 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     }
 
     FakeDdNoise.prototype.spinUp = FakeDdNoise.prototype.spinDown =
-        FakeDdNoise.prototype.mute = FakeDdNoise.prototype.unmute = FakeDdNoise.prototype.seek = utils.noop;
+        FakeDdNoise.prototype.mute = FakeDdNoise.prototype.unmute = utils.noop;
+    FakeDdNoise.prototype.seek = function () {
+        return 0;
+    }
     FakeDdNoise.prototype.initialize = function () {
         return Promise.resolve();
     };

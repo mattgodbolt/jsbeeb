@@ -431,7 +431,8 @@ define(['./utils'], function (utils) {
             spinup();
             self.realTrack[self.curDrive] += track - self.curTrack[self.curDrive];
             var diff = self.drives[self.curDrive].seek(self.realTrack[self.curDrive]);
-            var seekLen = (noise.seek(diff) * cpu.peripheralCyclesPerSecond) | 0;
+            // Let disc noises overlap by ~10%
+            var seekLen = (noise.seek(diff) * 0.9 * cpu.peripheralCyclesPerSecond) | 0;
             self.callbackTask.cancel();
             self.callbackTask.schedule(Math.max(200, seekLen));
         }
@@ -449,7 +450,7 @@ define(['./utils'], function (utils) {
 
         function parameter(val) {
             if (self.paramNum < 5) self.params[self.paramNum++] = val;
-            if (self.paramNum != self.paramReq) return;
+            if (self.paramNum !== self.paramReq) return;
             switch (self.command) {
                 case 0x35: // Specify.
                     self.status = 0;

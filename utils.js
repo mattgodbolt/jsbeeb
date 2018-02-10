@@ -255,16 +255,16 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             return "UK";
         }
         if (localStorage.keyboardLayout) {
-            return localStorage.keyboardLayout == "US" ? "US" : "UK";
+            return localStorage.keyboardLayout === "US" ? "US" : "UK";
         }
         if (navigator.language) {
-            if (navigator.language.toLowerCase() == "en-gb") return "UK";
-            if (navigator.language.toLowerCase() == "en-us") return "US";
+            if (navigator.language.toLowerCase() === "en-gb") return "UK";
+            if (navigator.language.toLowerCase() === "en-us") return "US";
         }
         return "UK";  // Default guess of UK
     }
 
-    var isUKlayout = detectKeyboardLayout() == "UK";
+    var isUKlayout = detectKeyboardLayout() === "UK";
 
     if (exports.isFirefox()) {
         keyCodes.SEMICOLON = 59;

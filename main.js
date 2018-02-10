@@ -40,7 +40,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         if (queryString) {
             queryString = queryString.substring(1);
-            if (queryString[queryString.length - 1] == '/')  // workaround for shonky python web server
+            if (queryString[queryString.length - 1] === '/')  // workaround for shonky python web server
                 queryString = queryString.substring(0, queryString.length - 1);
             queryString.split("&").forEach(function (keyval) {
                 var keyAndVal = keyval.split("=");
@@ -343,12 +343,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             var screenOffset = $screen.offset();
             var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
             var y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
-            processor.touchScreen.onMouse(x, y, evt.buttons);
+            if (processor.touchScreen)
+                processor.touchScreen.onMouse(x, y, evt.buttons);
             evt.preventDefault();
         });
 
         $(window).blur(function () {
-            processor.sysvia.clearKeys();
+            if (processor.sysvia) processor.sysvia.clearKeys();
         });
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
