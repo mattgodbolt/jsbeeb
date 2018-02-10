@@ -35,6 +35,7 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         var BBC = utils.BBC;
         var keyCodes = utils.keyCodes;
+        var emuKeyHandlers = {};
         var cpuMultiplier = 1;
 
         if (queryString) {
@@ -276,7 +277,8 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
 
         function keyPress(evt) {
             if (running || !dbgr.enabled()) return;
-            if (keyCode(evt) === 103 /* lower case g */) {
+            var code = keyCode(evt);
+            if (code === 103 /* lower case g */) {
                 dbgr.hide();
                 go();
                 return;
@@ -285,10 +287,27 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             if (handled) evt.preventDefault();
         }
 
+        emuKeyHandlers[utils.keyCodes.S] = function (down, code) {
+            if (down) {
+                utils.noteEvent('keyboard', 'press', 'S');
+                stop(true);
+            }
+        };
+        emuKeyHandlers[utils.keyCodes.R] = function (down, code) {
+            if (down)
+                window.location.reload();
+        };
+
         function keyDown(evt) {
             if (!running) return;
             var code = keyCode(evt);
-            if (code === utils.keyCodes.HOME && evt.ctrlKey) {
+            if (evt.altKey) {
+                var handler = emuKeyHandlers[code];
+                if (handler) {
+                    handler(true, code);
+                    evt.preventDefault();
+                }
+            } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
                 utils.noteEvent('keyboard', 'press', 'home');
                 stop(true);
             } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
@@ -306,7 +325,13 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
             var code = keyCode(evt);
             processor.sysvia.keyUp(code);
             if (!running) return;
-            if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
+            if (evt.altKey) {
+                var handler = emuKeyHandlers[code];
+                if (handler) {
+                    handler(false, code);
+                    evt.preventDefault();
+                }
+            } else if (code == utils.keyCodes.F12 || code == utils.keyCodes.BREAK) {
                 processor.setReset(false);
             }
             evt.preventDefault();
@@ -347,11 +372,37 @@ require(['jquery', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'c
                 window.localStorage.cmosRam = JSON.stringify(data);
             }
         });
+
+        var userPort = null;
+        if (true /* keyswitch */) {
+            var switchState = 0xff;
+
+            function switchKey(down, code) {
+                var bit = 1 << (code - utils.keyCodes.K1);
+                if (down)
+                    switchState &= (0xff ^ bit);
+                else
+                    switchState |= bit;
+            }
+
+            for (var idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
+                emuKeyHandlers[idx] = switchKey;
+            }
+            userPort = {
+                write: function (val) {
+                },
+                read: function () {
+                    return switchState;
+                }
+            };
+        }
+
         var emulationConfig = {
             keyLayout: keyLayout,
             cpuMultiplier: cpuMultiplier,
             videoCyclesBatch: parsedQuery.videoCyclesBatch,
-            extraRoms: extraRoms
+            extraRoms: extraRoms,
+            userPort: userPort
         };
         processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
 

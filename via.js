@@ -37,8 +37,10 @@ define(['./utils'], function (utils) {
             justhit: 0,
 
             reset: function (hard) {
-                self.ora = self.orb = 0xff;
-                self.ddra = self.ddrb = 0xff;
+                // http://archive.6502.org/datasheets/mos_6522_preliminary_nov_1977.pdf
+                // "Reset sets all registers to zero except t1 t2 and sr"
+                self.ora = self.orb = 0x00;
+                self.ddra = self.ddrb = 0x00;
                 self.ifr = self.ier = 0x00;
                 self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
                 self.t1hit = self.t2hit = true;
@@ -528,7 +530,7 @@ define(['./utils'], function (utils) {
         return self;
     }
 
-    function uservia(cpu, isMaster) {
+    function uservia(cpu, isMaster, userPortPeripheral) {
         "use strict";
         var self = via(cpu, 0x02);
 
@@ -537,7 +539,7 @@ define(['./utils'], function (utils) {
         };
 
         self.writePortB = function (val) {
-            // user port
+            userPortPeripheral.write(val);
         };
 
         self.readPortA = function () {
@@ -545,7 +547,7 @@ define(['./utils'], function (utils) {
         };
 
         self.readPortB = function () {
-            return 0xff; // user port (TODO: mouse, compact joystick)
+            return userPortPeripheral.read();
         };
         self.reset();
         return self;

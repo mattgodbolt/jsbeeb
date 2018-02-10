@@ -377,13 +377,30 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             };
         }
 
-        return function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config) {
+        function FakeUserPort() {
+            return {
+                write: function (val) {
+                },
+                read: function () {
+                    return 0xff;
+                }
+            };
+        }
+
+        function fixUpConfig(config) {
             if (config === undefined) config = {};
             if (!config.keyLayout)
                 config.keyLayout = "physical";
             if (!config.cpuMultiplier)
                 config.cpuMultiplier = 1;
+            if (!config.userPort)
+                config.userPort = new FakeUserPort();
             config.extraRoms = config.extraRoms || [];
+            return config;
+        }
+
+        return function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config) {
+            config = fixUpConfig(config);
 
             base6502(this, model);
 
@@ -846,7 +863,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     this.scheduler = new scheduler.Scheduler();
                     this.soundChip.setScheduler(this.scheduler);
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
-                    this.uservia = via.UserVia(this, model.isMaster);
+                    this.uservia = via.UserVia(this, model.isMaster, config.userPort);
                     this.touchScreen = new TouchScreen(this.scheduler);
                     this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
                     this.serial = new Serial(this.acia);
