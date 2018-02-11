@@ -50,6 +50,14 @@ Patches
 -------
 Patches can be applied by making a `patch=P` URL parameter.  `P` is a sequence of semicolon separated patches of the form `@XXXX,YYYY:ZZZZZ,...` where the `@XXXX` specifies a PC address to breakpoint, the `YYYY` is the address to patch and the `ZZZZ` is the data to write at address `YYYY`. The `@` part is optional, but is handy to ensure the code you want to patch has actually loaded. For example: `patch=@31a6,0769:6e4c4d48465a` which is a patch for the default Elite image. Once the PC has reached `$31a6`, the bytes at `0769` are replaced with `6e4c4d48465a`.
 
+Loading BASIC files from GitHub gists
+----
+* Create a gist with your code. https://gist.github.com/ - here's an [example](https://gist.github.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341)
+* Get the "Raw" link by clicking "raw" and copying the URL . In the case above that's: https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas
+* Add that after "https://bbc.godbolt.org/?autorun&loadBasic=" or similar, for example, [this link](https://bbc.godbolt.org/?loadBasic=https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas&autorun)
+
+Note that every update you make means you need to make a new raw link.
+
 Things left to do
 ----
 
