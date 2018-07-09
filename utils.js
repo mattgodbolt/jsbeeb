@@ -556,6 +556,12 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             map(keyCodes.BACK_QUOTE, BBC.AT);
         }
 
+        // Swap APOSTROPHE and BACK_QUOTE key codes around for Mac users.
+        if (window.navigator.userAgent.indexOf("Mac") !== -1) {
+            map(keyCodes.BACK_QUOTE, BBC.COLON_STAR);
+            map(keyCodes.APOSTROPHE, BBC.AT);
+        }
+
         // Master
         map(keyCodes.NUMPAD0, BBC.NUMPAD0);
         map(keyCodes.NUMPAD1, BBC.NUMPAD1);
