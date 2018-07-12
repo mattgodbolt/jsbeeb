@@ -290,6 +290,14 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
     }
 
+    // Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
+    // Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
+    if (window && window.navigator.userAgent.indexOf("Mac") !== -1) {
+        keyCodes.BACK_QUOTE = 192;
+        keyCodes.APOSTROPHE = 222;
+        keyCodes.HASH = 223;
+    }
+
     exports.getKeyMap = function (keyLayout) {
         var keys2 = [];
 
@@ -554,12 +562,6 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
             map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
             map(keyCodes.BACK_QUOTE, BBC.AT);
-        }
-
-        // Swap APOSTROPHE and BACK_QUOTE key codes around for Mac users.
-        if (window.navigator.userAgent.indexOf("Mac") !== -1) {
-            map(keyCodes.BACK_QUOTE, BBC.COLON_STAR);
-            map(keyCodes.APOSTROPHE, BBC.AT);
         }
 
         // Master
