@@ -292,12 +292,10 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     // Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
     // Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
-    if (window) {
-        if (window.navigator.userAgent.indexOf("Mac") !== -1) {
-            keyCodes.BACK_QUOTE = 192;
-            keyCodes.APOSTROPHE = 222;
-            keyCodes.HASH = 223;
-        }
+    if (!exports.runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
+        keyCodes.BACK_QUOTE = 192;
+        keyCodes.APOSTROPHE = 222;
+        keyCodes.HASH = 223;
     }
 
     exports.getKeyMap = function (keyLayout) {
@@ -948,15 +946,15 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         this.rPtr = 0;
     }
 
-    Fifo.prototype.full = function() {
+    Fifo.prototype.full = function () {
         return this.size === this.buffer.length;
     };
 
-    Fifo.prototype.empty = function() {
+    Fifo.prototype.empty = function () {
         return this.size === 0;
     };
 
-    Fifo.prototype.clear = function() {
+    Fifo.prototype.clear = function () {
         this.size = 0;
         this.wPtr = 0;
         this.rPtr = 0;
