@@ -33,7 +33,7 @@ define([], function () {
     };
 
     Adc.prototype.onComplete = function () {
-        var val = 0x0000;
+        var val = 0x8000;
         // TODO: switch on bottom two bits of adc_status and pick a value corresponding
         // to the appropriate axis.
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
