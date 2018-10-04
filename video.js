@@ -64,9 +64,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.reset = function (cpu, via, hard) {
             this.cpu = cpu;
             this.sysvia = via;
-            if (hard) {
-                this.updateFbTable();
-            }
         };
 
         this.paint = function () {
@@ -134,11 +131,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             copyFb(this.fb32, debugPrevScreen);
         };
 
-        this.table4bppOffset = function (ulamode, byte) {
-            return ulamode * 256 * 16 + byte * 16;
-        };
+        function table4bppOffset(ulamode, byte) {
+            return (ulamode << 12) | (byte << 4);
+        }
 
-        this.table4bpp = function (o) {
+        this.table4bpp = function () {
             var t = new Uint8Array(4 * 256 * 16);
             var i, b, temp, left;
             for (b = 0; b < 256; ++b) {
@@ -149,31 +146,18 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     if (temp & 8) left |= 2;
                     if (temp & 32) left |= 4;
                     if (temp & 128) left |= 8;
-                    t[o.table4bppOffset(3, b) + i] = left;
+                    t[table4bppOffset(3, b) + i] = left;
                     temp <<= 1;
                     temp |= 1;
                 }
                 for (i = 0; i < 16; ++i) {
-                    t[o.table4bppOffset(2, b) + i] = t[o.table4bppOffset(3, b) + (i >>> 1)];
-                    t[o.table4bppOffset(1, b) + i] = t[o.table4bppOffset(3, b) + (i >>> 2)];
-                    t[o.table4bppOffset(0, b) + i] = t[o.table4bppOffset(3, b) + (i >>> 3)];
+                    t[table4bppOffset(2, b) + i] = t[table4bppOffset(3, b) + (i >>> 1)];
+                    t[table4bppOffset(1, b) + i] = t[table4bppOffset(3, b) + (i >>> 2)];
+                    t[table4bppOffset(0, b) + i] = t[table4bppOffset(3, b) + (i >>> 3)];
                 }
             }
             return t;
-        }(this);
-
-        this.fbTableBuffer = new ArrayBuffer(256 * 16 * 4);
-        this.fbTable = utils.makeFast32(new Uint32Array(this.fbTableBuffer));
-        this.fbTableDirty = true;
-
-        this.updateFbTable = function () {
-            var offset = this.table4bppOffset(this.ulaMode, 0);
-            for (var i = 0; i < 256 * 16; ++i) {
-                this.fbTable[i] = this.ulaPal[this.table4bpp[offset + i]];
-            }
-
-            this.fbTableDirty = false;
-        };
+        }();
 
         this.renderBlank = function (offset) {
             this.clearFb(offset, this.pixelsPerChar);
@@ -189,37 +173,22 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
         };
 
-        this.blitFb8 = function (tblOff, destOffset, doubled) {
-            tblOff |= 0;
+        this.blitFb = function (dat, destOffset, numPixels, doubledY) {
             destOffset |= 0;
+            numPixels |= 0;
+            var offset = table4bppOffset(this.ulaMode, dat);
             var fb32 = this.fb32;
-            var fbTable = this.fbTable;
-            if (doubled) {
-                fb32[destOffset] = fb32[destOffset + 1024] = fbTable[tblOff];
-                fb32[destOffset + 1] = fb32[destOffset + 1025] = fbTable[tblOff + 1];
-                fb32[destOffset + 2] = fb32[destOffset + 1026] = fbTable[tblOff + 2];
-                fb32[destOffset + 3] = fb32[destOffset + 1027] = fbTable[tblOff + 3];
-                fb32[destOffset + 4] = fb32[destOffset + 1028] = fbTable[tblOff + 4];
-                fb32[destOffset + 5] = fb32[destOffset + 1029] = fbTable[tblOff + 5];
-                fb32[destOffset + 6] = fb32[destOffset + 1030] = fbTable[tblOff + 6];
-                fb32[destOffset + 7] = fb32[destOffset + 1031] = fbTable[tblOff + 7];
+            var ulaPal = this.ulaPal;
+            var table4bpp = this.table4bpp;
+            var i = 0;
+            if (doubledY) {
+                for (i = 0; i < numPixels; ++i) {
+                    fb32[destOffset + i] = fb32[destOffset + i + 1024] = ulaPal[table4bpp[offset + i]];
+                }
             } else {
-                fb32[destOffset] = fbTable[tblOff];
-                fb32[destOffset + 1] = fbTable[tblOff + 1];
-                fb32[destOffset + 2] = fbTable[tblOff + 2];
-                fb32[destOffset + 3] = fbTable[tblOff + 3];
-                fb32[destOffset + 4] = fbTable[tblOff + 4];
-                fb32[destOffset + 5] = fbTable[tblOff + 5];
-                fb32[destOffset + 6] = fbTable[tblOff + 6];
-                fb32[destOffset + 7] = fbTable[tblOff + 7];
-            }
-        };
-
-        this.blitFb = function (dat, destOffset, numPixels, doubled) {
-            var tblOff = dat << 4;
-            this.blitFb8(tblOff, destOffset, doubled);
-            if (numPixels === 16) {
-                this.blitFb8(tblOff + 8, destOffset + 8, doubled);
+                for (i = 0; i < numPixels; ++i) {
+                    fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
+                }
             }
         };
 
@@ -397,8 +366,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         ////////////////////
         // Main drawing routine
         this.polltime = function (clocks) {
-            if (this.fbTableDirty) this.updateFbTable();
-
             while (clocks--) {
                 this.clocks++;
                 this.oddClock = !this.oddClock;
@@ -544,7 +511,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     ulaCol ^= 7;
                 if (this.video.ulaPal[index] !== this.video.collook[ulaCol]) {
                     this.video.ulaPal[index] = this.video.collook[ulaCol];
-                    this.video.fbTableDirty = true;
                 }
             } else {
                 if ((this.video.ulactrl ^ val) & 1) {
@@ -555,7 +521,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         if (!(flashEnabled && (this.video.actualPal[i] & 8))) index ^= 7;
                         if (this.video.ulaPal[i] !== this.video.collook[index]) {
                             this.video.ulaPal[i] = this.video.collook[index];
-                            this.video.fbTableDirty = true;
                         }
                     }
                 }
@@ -565,7 +530,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 var newMode = (val >>> 2) & 3;
                 if (newMode !== this.video.ulaMode) {
                     this.video.ulaMode = newMode;
-                    this.video.fbTableDirty = true;
                 }
                 this.video.teletextMode = !!(val & 2);
             }
