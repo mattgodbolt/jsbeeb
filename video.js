@@ -1,4 +1,4 @@
-define(['./teletext', './utils'], function (Teletext, utils) {
+define(['./teletext', './utils', './blitter'], function (Teletext, utils, blitter) {
     "use strict";
     const VDISPENABLE = 1 << 0,
         HDISPENABLE = 1 << 1,
@@ -43,7 +43,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.ulaMode = 0;
         this.teletextMode = false;
         this.displayEnableSkew = 0;
-        this.ulaPal = utils.makeFast32(new Uint32Array(16));
         this.actualPal = new Uint8Array(16);
         this.drawHalfScanline = false;
         this.oddFrame = false;
@@ -53,6 +52,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.cursorPos = 0;
         this.interlacedSyncAndVideo = false;
         this.doubledScanlines = true;
+        // Construct the blitter using scratch space taken from the end of the buffer.
+        this.blitter = blitter.create(this.fb32.buffer.byteLength - blitter.scratchSpaceRequired, this.fb32.buffer);
+        this.ulaPal = this.blitter.ulaPal;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -131,34 +133,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             copyFb(this.fb32, debugPrevScreen);
         };
 
-        function table4bppOffset(ulamode, byte) {
-            return (ulamode << 12) | (byte << 4);
-        }
-
-        this.table4bpp = function () {
-            var t = new Uint8Array(4 * 256 * 16);
-            var i, b, temp, left;
-            for (b = 0; b < 256; ++b) {
-                temp = b;
-                for (i = 0; i < 16; ++i) {
-                    left = 0;
-                    if (temp & 2) left |= 1;
-                    if (temp & 8) left |= 2;
-                    if (temp & 32) left |= 4;
-                    if (temp & 128) left |= 8;
-                    t[table4bppOffset(3, b) + i] = left;
-                    temp <<= 1;
-                    temp |= 1;
-                }
-                for (i = 0; i < 16; ++i) {
-                    t[table4bppOffset(2, b) + i] = t[table4bppOffset(3, b) + (i >>> 1)];
-                    t[table4bppOffset(1, b) + i] = t[table4bppOffset(3, b) + (i >>> 2)];
-                    t[table4bppOffset(0, b) + i] = t[table4bppOffset(3, b) + (i >>> 3)];
-                }
-            }
-            return t;
-        }();
-
         this.renderBlank = function (offset) {
             this.clearFb(offset, this.pixelsPerChar);
             if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
@@ -174,30 +148,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.blitFb = function (dat, destOffset, numPixels, doubledY) {
-            destOffset |= 0;
-            numPixels |= 0;
-            var offset = table4bppOffset(this.ulaMode, dat);
-            var fb32 = this.fb32;
-            var ulaPal = this.ulaPal;
-            var table4bpp = this.table4bpp;
-            var i = 0;
-            if (doubledY) {
-                for (i = 0; i < numPixels; ++i) {
-                    fb32[destOffset + i] = fb32[destOffset + i + 1024] = ulaPal[table4bpp[offset + i]];
-                }
-            } else {
-                for (i = 0; i < numPixels; ++i) {
-                    fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
-                }
-            }
+            this.blitter.blitFb(this.ulaMode, dat, destOffset, numPixels, doubledY);
         };
 
         this.clearFb = function (destOffset, numPixels) {
-            var black = 0xFF000000;
-            var fb32 = this.fb32;
-            while (numPixels--) {
-                fb32[destOffset++] = black;
-            }
+            this.blitter.clearFb(destOffset, numPixels);
         };
 
         this.handleCursor = function (offset) {
@@ -509,9 +464,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 var ulaCol = val & 7;
                 if (!((val & 8) && (this.video.ulactrl & 1)))
                     ulaCol ^= 7;
-                if (this.video.ulaPal[index] !== this.video.collook[ulaCol]) {
-                    this.video.ulaPal[index] = this.video.collook[ulaCol];
-                }
+                this.video.ulaPal[index] = this.video.collook[ulaCol];
             } else {
                 if ((this.video.ulactrl ^ val) & 1) {
                     // Flash colour has changed.
@@ -519,9 +472,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     for (var i = 0; i < 16; ++i) {
                         index = this.video.actualPal[i] & 7;
                         if (!(flashEnabled && (this.video.actualPal[i] & 8))) index ^= 7;
-                        if (this.video.ulaPal[i] !== this.video.collook[index]) {
-                            this.video.ulaPal[i] = this.video.collook[index];
-                        }
+                        this.video.ulaPal[i] = this.video.collook[index];
                     }
                 }
                 this.video.ulactrl = val;

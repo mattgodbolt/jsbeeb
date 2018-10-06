@@ -22,7 +22,7 @@ dormann-test: npm
 	$(NODE) tests/test-dormann.js
 
 lint: npm
-	$(NODE) ./node_modules/.bin/jshint $(shell find -name '*.js' -not -path './node_modules/*' -not -path './out/*' -not -path './lib/*' -not -path './tests/*')
+	$(NODE) ./node_modules/.bin/jshint $(shell find -name '*.js' -not -path './node_modules/*' -not -path './out/*' -not -path './lib/*' -not -path './tests/*' -not -path './.git/*')
 
 short-tests: unit-tests timing-tests dormann-test
 long-tests: test-suite 
