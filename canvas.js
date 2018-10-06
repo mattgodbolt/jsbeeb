@@ -1,4 +1,4 @@
-define(['webgl-debug'], function (webglDebug) {
+define(['webgl-debug', './blitter'], function (webglDebug, blitter) {
     "use strict";
 
     function Canvas(canvas) {
@@ -10,7 +10,9 @@ define(['webgl-debug'], function (webglDebug) {
         this.backBuffer.width = 1024;
         this.backBuffer.height = 625;
         this.backCtx = this.backBuffer.getContext("2d");
-        this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
+        // We need to allocate a bit more for scratch space for the blitter; add a few lines...
+        var extraLinesNeeded = Math.ceil(blitter.scratchSpaceRequired / this.backBuffer.width)|0;
+        this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height + extraLinesNeeded);
         this.canvasWidth = canvas.width;
         this.canvasHeight = canvas.height;
 
@@ -70,7 +72,7 @@ define(['webgl-debug'], function (webglDebug) {
         var width = 1024;
         var height = 1024;
 
-        this.fb8 = new Uint8Array(width * height * 4);
+        this.fb8 = new Uint8Array(width * height * 4 + blitter.scratchSpaceRequired);
         this.fb32 = new Uint32Array(this.fb8.buffer);
         this.texture = checkedGl.createTexture();
         checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.texture);
