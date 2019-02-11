@@ -7,11 +7,16 @@ body {
 }
 
 #cub-monitor {
-    width: 896px;
-    height: 648px;
     position: relative;
     margin-left: auto;
     margin-right: auto;
+    width: 896px;
+    height: 648px;
+}
+
+#cub-monitor.fullscreen {
+    width: 100%;
+    height: 100%;
 }
 
 #cub-monitor-pic {
@@ -42,10 +47,15 @@ body {
     z-index: -1;
     top: 8px;
     left: 0px;
-    width: 896px;
-    height: 600px;
     display: block;
     background-color: black;
+    width: 896px;
+    height: 600px;
+}
+
+#screen.fullscreen {
+    width: 100%;
+    height: 100%;
 }
 
 #debug {

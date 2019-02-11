@@ -1238,6 +1238,45 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             ddNoise.mute();
         }
 
+        (function () {
+            var isFullscreen = false;
+            var screenOrigHeight = $screen.height();
+            var screenOrigWidth = $screen.width();
+            var screenOrigLeft = $screen.css("left");
+            var navbarHeight = $("#header-bar").height();
+            window.onresize = function () {
+                if (!isFullscreen) {
+                    return;
+                }
+                var height = window.innerHeight - navbarHeight;
+                $screen.height(height);
+                var aspectRatio = screenOrigWidth / screenOrigHeight;
+                var width = Math.min(height * aspectRatio, window.innerWidth);
+                height = width / aspectRatio;
+                $screen.height(height);
+                $screen.width(width);
+                var x = (window.innerWidth - width) / 2;
+                $screen.css("left", x + "px");
+            };
+
+            function toggleFullscreen() {
+                isFullscreen = !isFullscreen;
+                $("#cub-monitor").toggleClass("fullscreen", isFullscreen);
+                $("#cub-monitor-pic").toggle(!isFullscreen);
+                $(".sidebar .bottom").toggle(!isFullscreen);
+                $screen.toggleClass("fullscreen", isFullscreen);
+                if (isFullscreen) {
+                    window.onresize();
+                } else {
+                    $screen.width(screenOrigWidth);
+                    $screen.height(screenOrigHeight);
+                    $screen.css("left", screenOrigLeft);
+                }
+            }
+
+            $("#fs").click(toggleFullscreen);
+        })();
+
         // Handy shortcuts. bench/profile stuff is delayed so that they can be
         // safely run from the JS console in firefox.
         window.benchmarkCpu = _.debounce(benchmarkCpu, 1);
@@ -1260,5 +1299,4 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
     }
-)
-;
+);
