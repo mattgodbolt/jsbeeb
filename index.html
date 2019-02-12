@@ -46,8 +46,7 @@
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a class="navbar-brand" href="http://bbc.godbolt.org/" target="_top">jsbeeb - a Javascript BBC micro
-                emulator</a>
+            <a class="navbar-brand" href="http://bbc.godbolt.org/" target="_top">jsbeeb</a>
         </div>
         <div class="collapse navbar-collapse">
             <ul class="nav navbar-nav">
@@ -92,32 +91,16 @@
                     </ul>
                 </li>
                 <li class="dropdown embed-hide">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Share<b class="caret"></b></a>
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">More<b class="caret"></b></a>
                     <ul class="dropdown-menu">
-                        <li class="social"><a href="https://twitter.com/share" class="twitter-share-button"
-                                              data-via="mattgodbolt">Tweet</a>
-                            <script>!function (d, s, id) {
-                                var js, fjs = d.getElementsByTagName(s)[0];
-                                if (!d.getElementById(id)) {
-                                    js = d.createElement(s);
-                                    js.id = id;
-                                    js.src = "//platform.twitter.com/widgets.js";
-                                    fjs.parentNode.insertBefore(js, fjs);
-                                }
-                            }(document, "script", "twitter-wjs");</script>
-                        </li>
+                        <li><a href="#fs" id="fs">Fullscreen</a></li>
+                        <li><a href="#help" data-toggle="modal" data-target="#help">Help</a></li>
+                        <li><a href="mailto:matt@godbolt.org">Contact the Author</a></li>
+                        <li><a href="http://xania.org/MattGodbolt" rel="author" target="_blank">
+                            About the Author</a></li>
+                        <li><a href="#about" data-toggle="modal" data-target="#info" id="about">About jsbeeb</a></li>
                     </ul>
                 </li>
-                <li class="dropdown embed-hide">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Contact<b class="caret"></b></a>
-                    <ul class="dropdown-menu">
-                        <li><a href="http://xania.org/MattGodbolt" rel="author">About Matt</a></li>
-                        <li><a href="mailto:matt@godbolt.org">Contact Matt</a></li>
-                    </ul>
-                </li>
-                <li><a href="#fs" id="fs">Fullscreen</a></li>
-                <li><a href="#help" data-toggle="modal" data-target="#help">Help</a></li>
-                <li><a href="#about" data-toggle="modal" data-target="#info" id="about">About</a></li>
             </ul>
         </div>
         <!--/.nav-collapse -->
@@ -273,11 +256,11 @@
                 <div>By <a href="http://xania.org/">Matt Godbolt</a>. Based on Tom Walker's <a
                         href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to him for open sourcing his
                     code. Big thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by
-                    default is the amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian
-                        Bell</a> for making it available).
+                    default is the amazing Elite (thanks to
+                    <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it available).
                 </div>
                 <div>Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome
-                    or Firefox. Still very much work in progress: keep coming back for bugfixes and more features!
+                    or Firefox.
                 </div>
                 <div>Cycle-accurate emulation greatly helped by the fantastic <a href="http://www.visual6502.org/">Visual
                     6502</a> Project. Consider donating to them if you enjoy this stuff as much as I do!
