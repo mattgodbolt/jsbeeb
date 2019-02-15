@@ -50,24 +50,9 @@
         </div>
         <div class="collapse navbar-collapse">
             <ul class="nav navbar-nav">
-                <li class="dropdown btn-group">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown"><span id="bbc-model">BBC B</span><b
-                            class="caret"></b></a>
-                    <ul class="dropdown-menu" role="menu" id="model-menu">
-                        <li><a href="#" data-target="B">BBC B</a></li>
-                        <li><a href="#" data-target="Master">BBC Master 128</a></li>
-                        <li><a href="#" data-target="MasterTurbo">BBC Master Turbo</a></li>
-                        <li><a href="#" data-target="hard-reset">Hard reset</a></li>
-                        <li><a href="#" data-target="soft-reset">Soft reset</a></li>
-                    </ul>
-                </li>
-                <li class="dropdown btn-group">
-                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Keyboard<b class="caret"></b></a>
-                    <ul class="dropdown-menu" role="menu" id="keyboard-menu">
-                        <li><a href="#" data-target="physical">Physical: '*' is next to Enter/Return</a></li>
-                        <li><a href="#" data-target="natural">Natural: '*' is shift-8</a></li>
-                        <li><a href="#" data-target="gaming">Gaming: handy for games like Zalaga</a></li>
-                    </ul>
+                <li>
+                    <a href="#configuration" data-toggle="modal" data-target="#configuration">
+                        Config (<span class="bbc-model">BBC B</span>)</a>
                 </li>
                 <li class="dropdown embed-hide">
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown">Discs<b class="caret"></b></a>
@@ -88,6 +73,13 @@
                         <li><a data-id="rewind">Rewind cassette</a></li>
                         <li><a href="#discs" data-toggle="modal" data-target="#tapes">From local file</a>
                         </li>
+                    </ul>
+                </li>
+                <li class="dropdown embed-hide">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">Reset<b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="#reset" id="soft-reset">Soft reset</a></li>
+                        <li><a href="#reset" id="hard-reset">Hard reset</a></li>
                     </ul>
                 </li>
                 <li class="dropdown embed-hide">
@@ -516,6 +508,49 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-default ays-no" data-dismiss="modal">No</button>
                 <button type="button" class="btn ays-yes">Yes</button>
+            </div>
+        </div>
+        <!-- /.modal-content -->
+    </div>
+    <!-- /.modal-dialog -->
+</div>
+<!-- /.modal -->
+
+<div class="modal fade" id="configuration">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4 class="modal-title">Emulation Configuration</h4>
+
+                <div>
+                    <div class="btn-group">
+                        <h5>Model</h5>
+                        <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown">
+                            <span class="bbc-model"></span> <span class="caret"></span>
+                        </button>
+                        <ul class="dropdown-menu model-menu" role="menu">
+                            <li><a href="#" data-target="B">BBC B</a></li>
+                            <li><a href="#" data-target="Master">BBC Master 128</a></li>
+                            <li><a href="#" data-target="MasterTurbo">BBC Master Turbo</a></li>
+                        </ul>
+                    </div>
+                    <div class="btn-group">
+                        <h5>Keyboard layout</h5>
+                        <button type="button" class="btn btn-default dropdown-toggle" data-toggle="dropdown">
+                            <span class="keyboard-layout">Physical</span> <span class="caret"></span>
+                        </button>
+                        <ul class="dropdown-menu keyboard-menu" role="menu">
+                            <li><a href="#" data-target="physical">Physical: '*' is next to Enter/Return</a></li>
+                            <li><a href="#" data-target="natural">Natural: '*' is shift-8</a></li>
+                            <li><a href="#" data-target="gaming">Gaming: handy for games like Zalaga</a></li>
+                        </ul>
+                    </div>
+
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
             </div>
         </div>
         <!-- /.modal-content -->

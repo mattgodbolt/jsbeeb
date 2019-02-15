@@ -1,8 +1,8 @@
 require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'cmos', 'sth', 'gamepads',
         'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
-        'canvas', 'promise', 'bootstrap', 'jquery-visibility'],
+        'canvas', 'config', 'promise', 'bootstrap', 'jquery-visibility'],
     function ($, _, utils, Video, SoundChip, DdNoise, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepad, disc,
-              starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib) {
+              starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib, Config) {
         "use strict";
 
         var processor;
@@ -16,6 +16,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var discSth;
         var tapeSth;
         var running;
+        var model;
         var gamepad = new Gamepad();
 
         var availableImages;
@@ -114,13 +115,27 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         if (parsedQuery.frameSkip)
             frameSkip = parseInt(parsedQuery.frameSkip);
 
-        function guessModelFromUrl() {
-            if (window.location.hostname.indexOf("bbc") === 0) return "B";
-            if (window.location.hostname.indexOf("master") === 0) return "Master";
-            return "B";
-        }
-
-        var model = models.findModel(parsedQuery.model || guessModelFromUrl());
+        var config = new Config(
+            function (changed) {
+                parsedQuery = _.extend(parsedQuery, changed);
+                updateUrl();
+                if (changed.model) {
+                    areYouSure("Changing model requires a restart of the emulator. Restart now?",
+                        "Yes, restart now",
+                        "No, thanks",
+                        function () {
+                            window.location.reload();
+                        });
+                }
+                if (changed.keyLayout) {
+                    window.localStorage.keyLayout = changed.keyLayout;
+                    emulationConfig.keyLayout = changed.keyLayout;
+                    processor.updateKeyLayout();
+                }
+            });
+        config.setModel(parsedQuery.model || guessModelFromUrl());
+        config.setKeyLayout(keyLayout);
+        model = config.model;
 
         function sbBind(div, url, onload) {
             if (!url) return;
@@ -955,32 +970,19 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 });
         });
 
-        $('#model-menu a').on("click", function (e) {
-            parsedQuery.model = $(e.target).attr("data-target");
-
-            console.log(parsedQuery.model);
-
-            if (parsedQuery.model === "soft-reset") {
-                processor.reset(false);
-            } else if (parsedQuery.model === "hard-reset") {
-                processor.reset(true);
-            } else {
-                updateUrl();
-                areYouSure("Changing model requires a restart of the emulator. Restart now?", "Yes, restart now", "No, thanks", function () {
-                    window.location.reload();
-                });
-            }
+        $('#hard-reset').click(function () {
+            processor.reset(true);
         });
-        $("#bbc-model").text(model.name);
 
-        $('#keyboard-menu a').on("click", function (e) {
-            var type = $(e.target).attr("data-target");
-            window.localStorage.keyLayout = type;
-            parsedQuery.keyLayout = type;
-            updateUrl();
-            emulationConfig.keyLayout = type;
-            processor.updateKeyLayout();
+        $('#soft-reset').click(function () {
+            processor.reset(false);
         });
+
+        function guessModelFromUrl() {
+            if (window.location.hostname.indexOf("bbc") === 0) return "B";
+            if (window.location.hostname.indexOf("master") === 0) return "Master";
+            return "B";
+        }
 
         $('#tape-menu a').on("click", function (e) {
             var type = $(e.target).attr("data-id");
@@ -1171,6 +1173,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
             this.display();
         }
+
         var virtualSpeedUpdater = new VirtualSpeedUpdater();
 
         function draw(now) {
