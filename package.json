@@ -18,7 +18,8 @@
     "nodeunit": "0.9.x",
     "npm": "^6.8.0",
     "requirejs": "^2.3.6",
-    "cryptiles": ">=4.1.2"
+    "cryptiles": ">=4.1.2",
+    "hoek": ">=4.2.1"
   },
   "license": "GPL-3.0-or-later"
 }
