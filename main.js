@@ -715,7 +715,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 });
             }
             if (schema === "gd") {
-                var splat = discImage.match(/([^/]+)\/?(.*)/);
+                var splat = discImage.match(/([^\/]+)\/?(.*)/);
                 var title = "(unknown)";
                 if (splat) {
                     discImage = splat[1];
