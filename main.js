@@ -726,7 +726,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 		var arr = Array.prototype.map.call(atob(discImage), (x)=>x.charCodeAt(0));
                 var unzipped = utils.unzipDiscImage(arr);
                 var discData = unzipped.data;
-                var discImage = unzipped.name;
+                discImage = unzipped.name;
                 return Promise.resolve(disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData));
 	    }
             if (schema === "http" || schema === "https") {
