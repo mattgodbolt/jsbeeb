@@ -29,7 +29,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 discImage = availableImages[0].file;
             }
         }
-        var queryString = document.location.search;
+        var queryString = document.location.search.substring(1)+"&"+window.location.hash.substring(1);
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
@@ -41,7 +41,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var cpuMultiplier = 1;
 
         if (queryString) {
-            queryString = queryString.substring(1);
             if (queryString[queryString.length - 1] === '/')  // workaround for shonky python web server
                 queryString = queryString.substring(0, queryString.length - 1);
             queryString.split("&").forEach(function (keyval) {
@@ -723,6 +722,13 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 }
                 return gdLoad({title: title, id: discImage});
             }
+            if (schema === "data") {
+		var arr = Array.prototype.map.call(atob(discImage), (x)=>x.charCodeAt(0));
+                var unzipped = utils.unzipDiscImage(arr);
+                var discData = unzipped.data;
+                var discImage = unzipped.name;
+                return Promise.resolve(disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData));
+	    }
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + discImage).then(function (discData) {
                     if (/\.zip/i.test(discImage)) {
@@ -749,6 +755,11 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     processor.acia.setTape(tapes.loadTapeFromData(tapeImage, image));
                 });
             }
+            if (schema === "data") {
+		var arr = Array.prototype.map.call(atob(tapeImage), (x)=>x.charCodeAt(0));
+                var unzipped = utils.unzipDiscImage(arr);
+                return Promise.resolve(processor.acia.setTape(tapes.loadTapeFromData(unzipped.name, unzipped.data)));
+	    }
 
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + tapeImage).then(function (tapeData) {
