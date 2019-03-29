@@ -1255,12 +1255,14 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         (function () {
             const $cubMonitor = $("#cub-monitor");
             var isFullscreen = false;
-            var screenOrigHeight = $screen.height();
-            var screenOrigWidth = $screen.width();
+            var cubOrigHeight = $cubMonitor.height();
+            var cubToScreenHeightRatio = $screen.height() / cubOrigHeight;
+            var cubOrigWidth = $cubMonitor.width();
+            var cubToScreenWidthRatio = $screen.width() / cubOrigWidth;
             var navbarHeight = $("#header-bar").height();
-            const desiredAspectRatio = screenOrigWidth / screenOrigHeight;
-            const minWidth = screenOrigWidth / 4;
-            const minHeight = screenOrigHeight / 4;
+            const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
+            const minWidth = cubOrigWidth / 4;
+            const minHeight = cubOrigHeight / 4;
             const borderReservedSize = 100;
             const bottomReservedSize = 100;
 
@@ -1273,9 +1275,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 } else {
                     width = height * desiredAspectRatio;
                 }
+                console.log(width / height, desiredAspectRatio);
                 $('#cub-monitor').height(height).width(width);
                 $('#cub-monitor-pic').height(height).width(width);
-                $screen.height(height).width(width);
+                $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
             }
 
             function toggleFullscreen() {
