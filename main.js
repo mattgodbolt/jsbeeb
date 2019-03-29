@@ -29,7 +29,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 discImage = availableImages[0].file;
             }
         }
-        var queryString = document.location.search.substring(1)+"&"+window.location.hash.substring(1);
+        var queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
@@ -723,12 +723,12 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 return gdLoad({title: title, id: discImage});
             }
             if (schema === "data") {
-		var arr = Array.prototype.map.call(atob(discImage), (x)=>x.charCodeAt(0));
+                var arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
                 var unzipped = utils.unzipDiscImage(arr);
                 var discData = unzipped.data;
                 discImage = unzipped.name;
                 return Promise.resolve(disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData));
-	    }
+            }
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + discImage).then(function (discData) {
                     if (/\.zip/i.test(discImage)) {
@@ -756,10 +756,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 });
             }
             if (schema === "data") {
-		var arr = Array.prototype.map.call(atob(tapeImage), (x)=>x.charCodeAt(0));
+                var arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
                 var unzipped = utils.unzipDiscImage(arr);
                 return Promise.resolve(processor.acia.setTape(tapes.loadTapeFromData(unzipped.name, unzipped.data)));
-	    }
+            }
 
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + tapeImage).then(function (tapeData) {
@@ -1253,42 +1253,43 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         (function () {
+            const $cubMonitor = $("#cub-monitor");
             var isFullscreen = false;
             var screenOrigHeight = $screen.height();
             var screenOrigWidth = $screen.width();
-            var screenOrigLeft = $screen.css("left");
             var navbarHeight = $("#header-bar").height();
-            window.onresize = function () {
-                if (!isFullscreen) {
-                    return;
+            const desiredAspectRatio = screenOrigWidth / screenOrigHeight;
+            const minWidth = screenOrigWidth / 4;
+            const minHeight = screenOrigHeight / 4;
+            const borderReservedSize = 100;
+            const bottomReservedSize = 100;
+
+            function resizeTv() {
+                var width = Math.max(minWidth, window.innerWidth - (isFullscreen ? 0 : borderReservedSize * 2));
+                var height = Math.max(minHeight, window.innerHeight - navbarHeight) -
+                    (isFullscreen ? 0 : bottomReservedSize);
+                if (width / height <= desiredAspectRatio) {
+                    height = width / desiredAspectRatio;
+                } else {
+                    width = height * desiredAspectRatio;
                 }
-                var height = window.innerHeight - navbarHeight;
-                $screen.height(height);
-                var aspectRatio = screenOrigWidth / screenOrigHeight;
-                var width = Math.min(height * aspectRatio, window.innerWidth);
-                height = width / aspectRatio;
-                $screen.height(height);
-                $screen.width(width);
-                var x = (window.innerWidth - width) / 2;
-                $screen.css("left", x + "px");
-            };
+                $('#cub-monitor').height(height).width(width);
+                $('#cub-monitor-pic').height(height).width(width);
+                $screen.height(height).width(width);
+            }
 
             function toggleFullscreen() {
                 isFullscreen = !isFullscreen;
-                $("#cub-monitor").toggleClass("fullscreen", isFullscreen);
+                $cubMonitor.toggleClass("fullscreen", isFullscreen);
                 $("#cub-monitor-pic").toggle(!isFullscreen);
                 $(".sidebar .bottom").toggle(!isFullscreen);
                 $screen.toggleClass("fullscreen", isFullscreen);
-                if (isFullscreen) {
-                    window.onresize();
-                } else {
-                    $screen.width(screenOrigWidth);
-                    $screen.height(screenOrigHeight);
-                    $screen.css("left", screenOrigLeft);
-                }
+                resizeTv();
             }
 
+            window.onresize = resizeTv;
             $("#fs").click(toggleFullscreen);
+            resizeTv();
         })();
 
         // Handy shortcuts. bench/profile stuff is delayed so that they can be
