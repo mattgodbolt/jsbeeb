@@ -16,18 +16,18 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
             {test: "Test timings", func: testTimings},
             {
                 test: "Alien8 protection", func: function () {
-                return testKevinEdwards("ALIEN8");
-            }
+                    return testKevinEdwards("ALIEN8");
+                }
             },
             {
                 test: "Nightshade protection", func: function () {
-                return testKevinEdwards("NIGHTSH");
-            }
+                    return testKevinEdwards("NIGHTSH");
+                }
             },
             {
                 test: "Lunar Jetman protection", func: function () {
-                return testKevinEdwards("JETMAN");
-            }
+                    return testKevinEdwards("JETMAN");
+                }
             }
         ];
 

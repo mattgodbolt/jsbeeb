@@ -12,6 +12,7 @@ requirejs.config({
 
 requirejs(['tests/test'], function (test) {
     "use strict";
+
     function log() {
         console.log.apply(console, arguments);
     }
