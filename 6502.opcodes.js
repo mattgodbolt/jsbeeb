@@ -1227,6 +1227,8 @@ define(['./utils'], function (utils) {
         function invalidOpcode(cpu, opcode) {
             if (is65c12) {
                 // All undefined opcodes are NOPs on 65c12 (of varying lengths)
+                // http://6502.org/tutorials/65c02opcodes.html has a list.
+                // The default case is to treat them as one-cycle NOPs. Anything more than this is picked up below.
                 switch (opcode) {
                     case 0x02:
                     case 0x22:
@@ -1236,15 +1238,30 @@ define(['./utils'], function (utils) {
                     case 0xc2:
                     case 0xe2:
                     case 0x44:
+                        // two bytes, three cycles (in total)
+                        cpu.getb();
+                        cpu.polltime(1);
+                        break;
+
                     case 0x54:
                     case 0xd4:
                     case 0xf4:
+                        // two bytes, four cycles (in total)
                         cpu.getb();
+                        cpu.polltime(2);
                         break;
+
                     case 0x5c:
+                        // three bytes, eight cycles (in total)
+                        cpu.getw();
+                        cpu.polltime(5);
+                        break;
+
                     case 0xdc:
                     case 0xfc:
+                        // three bytes, four cycles (in total)
                         cpu.getw();
+                        cpu.polltime(1);
                         break;
                 }
                 return;
