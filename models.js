@@ -1,5 +1,6 @@
 define(['./fdc'], function (fdc) {
     "use strict";
+
     function Model(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
         this.name = name;
         this.synonyms = synonyms;

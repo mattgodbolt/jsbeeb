@@ -81,6 +81,7 @@ requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', '
             });
             cpu.sysvia.disableKeyboard();
             cpu.sysvia.keyToggleRaw(utils.BBC.SHIFT);
+
             function exec(c) {
                 //var thing = 2000000;
                 var thing = 1;
@@ -90,6 +91,7 @@ requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', '
                 }
                 return cpu.execute(c);
             }
+
             var first = 1564809;
             console.log(first);
             exec(first);

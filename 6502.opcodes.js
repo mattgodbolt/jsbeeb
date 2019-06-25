@@ -59,7 +59,7 @@ define(['./utils'], function (utils) {
                 cycle = self.cycle;
             }
             exact = exact || false;
-            if (typeof(op) === "string") op = [op];
+            if (typeof op === "string") op = [op];
             if (self.ops[cycle]) {
                 self.ops[cycle].op = combiner(self.ops[cycle].op, op);
                 if (exact) self.ops[cycle].exact = true;

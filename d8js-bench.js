@@ -24,9 +24,11 @@ requirejs.config({
         'underscore': 'lib/underscore-min'
     }
 });
+
 function setTimeout(fn, delay) {
     fn();
 }
+
 ///////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////

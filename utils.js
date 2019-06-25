@@ -321,7 +321,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             if ((!s && s !== 0) || !colRow) {
                 console.log("error binding key", s, colRow);
             }
-            if (typeof(s) === "string") {
+            if (typeof s === "string") {
                 s = s.charCodeAt(0);
             }
 
@@ -698,7 +698,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             request.overrideMimeType('text/plain; charset=x-user-defined');
             request.onload = function () {
                 if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));
-                if (typeof(request.response) !== "string") {
+                if (typeof request.response !== "string") {
                     resolve(request.response);
                 } else {
                     resolve(makeBinaryData(request.response));
@@ -713,11 +713,11 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     function loadDataNode(url) {
         return new Promise(function (resolve, reject) {
-            if (typeof(readbuffer) !== "undefined") {
+            if (typeof readbuffer !== "undefined") {
                 // d8 shell
                 var buffer = readbuffer(url); // jshint ignore:line
                 resolve(new Uint8Array(buffer));
-            } else if (typeof(read) !== "undefined") {
+            } else if (typeof read !== "undefined") {
                 // SpiderMonkey shell
                 var bytes = read(url, "binary"); // jshint ignore:line
                 resolve(bytes);

@@ -1,5 +1,6 @@
 (function () {
     "use strict";
+
     function getBasePath() {
         if (typeof window === "undefined") return "/";
         var path = window.location.pathname;

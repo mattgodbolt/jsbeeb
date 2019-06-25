@@ -28,7 +28,7 @@ define(['./utils'], function (utils) {
 
     function discFor(fdc, isDsd, stringData, onChange) {
         var data;
-        if (typeof(stringData) !== "string") {
+        if (typeof stringData !== "string") {
             data = stringData;
         } else {
             var len = stringData.length;

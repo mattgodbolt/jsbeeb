@@ -120,7 +120,7 @@ define(['jquery', 'underscore', './utils'], function ($, _, utils) {
                 'addr', 'addrLine', 'lineStartAddr', 'nextLineStartAddr'];
             $.each(others, function (_, elem) {
                 var value = makeRow(stateNode, elem);
-                if (typeof(video[elem]) === "boolean") {
+                if (typeof video[elem] === "boolean") {
                     updates.push(function () {
                         updateElem(value, video[elem] ? "true" : "false");
                     });

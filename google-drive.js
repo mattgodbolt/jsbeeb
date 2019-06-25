@@ -127,7 +127,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
                     xhr.onload = function () {
                         if (xhr.status !== 200) {
                             reject(new Error("Unable to load " + file.title + ", http code " + xhr.status));
-                        } else if (typeof(xhr.response) !== "string") {
+                        } else if (typeof xhr.response !== "string") {
                             resolve(xhr.response);
                         } else {
                             resolve(utils.makeBinaryData(xhr.response));

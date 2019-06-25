@@ -36,6 +36,7 @@ define(['webgl-debug'], function (webglDebug) {
         });
 
         checkedGl.depthMask(false);
+
         function compileShader(type, src) {
             var shader = checkedGl.createShader(type);
             checkedGl.shaderSource(shader, src.join("\n"));
