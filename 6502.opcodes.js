@@ -875,7 +875,7 @@ define(['./utils'], function (utils) {
         0xC8: "INY",
         0xC9: "CMP imm",
         0xCA: "DEX",
-        0xCB: "WAI",
+        //0xCB: "WAI", // was "WAI" but testing by @tom-seddon indicate this isn't a 65c12 thing
         0xCC: "CPY abs",
         0xCD: "CMP abs",
         0xCE: "DEC abs",
@@ -1237,30 +1237,40 @@ define(['./utils'], function (utils) {
                     case 0x82:
                     case 0xc2:
                     case 0xe2:
-                    case 0x44:
-                        // two bytes, three cycles (in total)
+                        // two bytes, two cycles
                         cpu.getb();
-                        cpu.polltime(1);
+                        cpu.polltime(2);
+                        break;
+
+                    case 0x44:
+                        // two bytes, three cycles
+                        cpu.getb();
+                        cpu.polltime(3);
                         break;
 
                     case 0x54:
                     case 0xd4:
                     case 0xf4:
-                        // two bytes, four cycles (in total)
+                        // two bytes, four cycles
                         cpu.getb();
-                        cpu.polltime(2);
+                        cpu.polltime(4);
                         break;
 
                     case 0x5c:
-                        // three bytes, eight cycles (in total)
+                        // three bytes, eight cycles
                         cpu.getw();
-                        cpu.polltime(5);
+                        cpu.polltime(8);
                         break;
 
                     case 0xdc:
                     case 0xfc:
-                        // three bytes, four cycles (in total)
+                        // three bytes, four cycles
                         cpu.getw();
+                        cpu.polltime(4);
+                        break;
+
+                    default:
+                        // one byte one cycle
                         cpu.polltime(1);
                         break;
                 }
