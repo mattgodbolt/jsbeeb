@@ -458,8 +458,18 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         }
 
         Crtc.prototype.read = function (addr) {
-            if (addr & 1) return this.video.regs[this.curReg];
-            return this.curReg;
+            if (!(addr & 1))
+                return 0;
+            switch (this.curReg) {
+                case 12:
+                case 13:
+                case 14:
+                case 15:
+                case 16:
+                case 17:
+                    return this.video.regs[this.curReg];
+            }
+            return 0;
         };
         Crtc.prototype.write = function (addr, val) {
             if (addr & 1) {
@@ -496,9 +506,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.video = video;
         }
 
-        Ula.prototype.read = function () {
-            return 0xff;
-        };
         Ula.prototype.write = function (addr, val) {
             addr |= 0;
             val |= 0;
