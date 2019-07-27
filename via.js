@@ -35,6 +35,7 @@ define(['./utils'], function (utils) {
             porta: 0, portb: 0,
             ca1: 0, ca2: 0,
             justhit: 0,
+            t1_pb7: 0,
 
             reset: function (hard) {
                 // http://archive.6502.org/datasheets/mos_6522_preliminary_nov_1977.pdf
@@ -45,6 +46,7 @@ define(['./utils'], function (utils) {
                 self.t1c = self.t1l = self.t2c = self.t2l = 0x1fffe;
                 self.t1hit = self.t2hit = true;
                 self.acr = self.pcr = 0;
+                self.t1_pb7 = 1;
             },
 
             polltime: function (cycles) {
@@ -58,8 +60,7 @@ define(['./utils'], function (utils) {
                         if (newT1c === -3) {
                             self.justhit |= 1;
                         }
-                        // b-em comment is "Output to PB7"
-                        self.orb ^= (self.acr & 0x80);
+                        self.t1_pb7 = !self.t1_pb7;
                     }
                     if (!(this.acr & 0x40)) self.t1hit = true;
                 }
@@ -180,13 +181,13 @@ define(['./utils'], function (utils) {
                         break;
 
                     case T1CH:
-                        if ((self.acr & 0xc0) === 0x80) self.orb &= ~0x80; // One-shot timer
                         self.t1l &= 0x1fe;
                         self.t1l |= (val << 9);
                         self.t1c = self.t1l + 1;
                         self.t1hit = false;
                         self.ifr &= ~TIMER1INT;
                         self.updateIFR();
+                        self.t1_pb7 = 0;
                         break;
 
                     case T2CL:
@@ -243,10 +244,14 @@ define(['./utils'], function (utils) {
 
                         temp = self.orb & self.ddrb;
                         if (self.acr & 2)
-                            return temp | (self.irb & ~self.ddrb);
+                            temp |= (self.irb & ~self.ddrb);
                         else
-                            return temp | (self.readPortB() & ~self.ddrb);
-                        break;
+                            temp |= (self.readPortB() & ~self.ddrb);
+                        if (self.acr & 0x80) {
+                            temp &= 0x7f;
+                            temp |= (self.t1_pb7 << 7);
+                        }
+                        return temp;
 
                     case DDRA:
                         return self.ddra;
