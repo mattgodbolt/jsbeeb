@@ -67,12 +67,6 @@ define(['./utils'], function (utils) {
         function toneChannel(channel, out, offset, length) {
             var i;
             var reg = register[channel], vol = volume[channel];
-            if (reg === 1) {
-                for (i = 0; i < length; ++i) {
-                    out[i + offset] += vol;
-                }
-                return;
-            }
             if (reg === 0) reg = 1024;
             for (i = 0; i < length; ++i) {
                 counter[channel] -= sampleDecrement;
@@ -80,7 +74,7 @@ define(['./utils'], function (utils) {
                     counter[channel] += reg;
                     outputBit[channel] = !outputBit[channel];
                 }
-                out[i + offset] += outputBit[channel] ? vol : -vol;
+                out[i + offset] += (outputBit[channel] * vol);
             }
         }
 
@@ -126,7 +120,7 @@ define(['./utils'], function (utils) {
                     outputBit[channel] = !outputBit[channel];
                     if (outputBit[channel]) shiftLfsr();
                 }
-                out[i + offset] += (lfsr & 1) ? vol : -vol;
+                out[i + offset] += ((lfsr & 1) * vol);
             }
         }
 
