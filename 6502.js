@@ -858,7 +858,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                         }
                     }
                     for (i = 0; i < this.romOffset; ++i)
-                        this.ramRomOs[i] = 0xff;
+                        this.ramRomOs[i] = 0x00;
                     this.videoDisplayPage = 0;
                     this.scheduler = new scheduler.Scheduler();
                     this.soundChip.setScheduler(this.scheduler);
