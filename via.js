@@ -486,12 +486,6 @@ define(['./utils'], function (utils) {
             if (!(self.IC32 & 8) && !self.keys[self.keycol][keyrow]) {
                 self.sdbval &= 0x7f;
             }
-            if (!isMaster && !(self.IC32 & 4)) {
-                self.sdbval = 0xff; // unsure; taken from beebem
-            }
-            if (!isMaster && !(self.IC32 & 2)) {
-                self.sdbval = 0x00;  // no speech
-            }
         };
 
         self.writeIC32 = function (val) { // addressable latch
