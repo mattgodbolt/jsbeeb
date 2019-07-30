@@ -239,10 +239,10 @@ define(['./utils'], function (utils) {
         this.slowDataBus = 0;
         this.updateSlowDataBus = function (slowDataBus, active) {
             this.slowDataBus = slowDataBus;
-            if (active && !this.active) {
+            this.active = active;
+            if (active) {
                 activeTask.reschedule(minCyclesWELow);
             }
-            this.active = active;
         };
         this.reset = function (hard) {
             if (!hard) return;
