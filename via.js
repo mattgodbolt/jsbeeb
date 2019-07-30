@@ -486,6 +486,7 @@ define(['./utils'], function (utils) {
             if (!(self.IC32 & 8) && !self.keys[self.keycol][keyrow]) {
                 self.sdbval &= 0x7f;
             }
+            soundChip.updateSlowDataBus(self.sdbval, !(self.IC32 & 1));
         };
 
         self.writeIC32 = function (val) { // addressable latch
@@ -495,7 +496,6 @@ define(['./utils'], function (utils) {
                 self.IC32 &= ~(1 << (val & 7));
 
             self.updateSdb();
-            soundChip.updateSlowDataBus(self.sdbval, !(self.IC32 & 1));
 
             self.capsLockLight = !(self.IC32 & 0x40);
             self.shiftLockLight = !(self.IC32 & 0x80);
