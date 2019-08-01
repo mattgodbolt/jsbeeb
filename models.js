@@ -15,10 +15,10 @@ define(['./fdc'], function (fdc) {
 
     // TODO: semi-bplus-style to get swram for exile hardcoded here
     var beebSwram = [
-        true, true, false, false,
+        true, true, true, true,      // Dunjunz variants. Exile (not picky).
+        true, true, true, true,      // Crazee Rider.
         false, false, false, false,
-        false, false, false, false,
-        true, true, false, false];
+        false, false, false, false];
     var masterSwram = [
         false, false, false, false,
         true, true, true, true,
