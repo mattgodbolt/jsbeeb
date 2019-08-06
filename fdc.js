@@ -573,9 +573,9 @@ define(['./utils'], function (utils) {
                     break;
 
                 case 0x1b: // Read ID
-                    if (!self.phase) {
+                    if (self.phase == 1) {
                         self.curTrack[self.curDrive] = self.params[0];
-                        self.phase = 1;
+                        self.phase = 2;
                         self.drives[self.curDrive].address(self.params[0], density(), 0);
                         return;
                     }
