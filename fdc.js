@@ -91,7 +91,7 @@ define(['./utils'], function (utils) {
         this.sectorOffset = 0;
         this.formatSector = 0;
         this.rsector = 0;
-        this.track = -1;
+        this.track = 0;
         this.side = -1;
         this.notFoundTask = fdc.scheduler.newTask(function () {
             this.fdc.notFound();
@@ -218,7 +218,6 @@ define(['./utils'], function (utils) {
         self.status = 0;
         self.result = 0;
         self.data = 0;
-        self.driveSel = 0;
         self.curDrive = 0;
         self.drvout = 0;
         self.curTrack = [0, 0];
@@ -237,10 +236,12 @@ define(['./utils'], function (utils) {
         self.motorSpinDownTask = [
             scheduler.newTask(function () {
                 self.motorOn[0] = false;
+                self.drvout &= ~0x40;
                 noise.spinDown(); // TODO multiple discs!
             }),
             scheduler.newTask(function () {
                 self.motorOn[1] = false;
+                self.drvout &= ~0x80;
                 noise.spinDown(); // TODO multiple discs!
             })
         ];
@@ -248,11 +249,6 @@ define(['./utils'], function (utils) {
         self.verify = false;
         self.scheduler = scheduler;
         self.drives = [emptySsd(this), emptySsd(this)];
-        self.pendingReady = false;
-        self.ready = true;
-        self.readyTask = scheduler.newTask(function () {
-            self.pendingReady = true;
-        });
 
         self.NMI = function () {
             cpu.NMI(self.status & 8);
@@ -319,8 +315,7 @@ define(['./utils'], function (utils) {
             return self.data;
         };
         self.discFinishRead = function () {
-            self.callbackTask.cancel();
-            self.callbackTask.schedule(200);
+            self.callbackTask.reschedule(200);
         };
 
         var paramMap = {
@@ -338,8 +333,11 @@ define(['./utils'], function (utils) {
             if (self.status & 0x80) return;
             self.command = val & 0x3f;
             if (self.command === 0x17) self.command = 0x13;
-            self.driveSel = val >>> 6;
             self.curDrive = (val & 0x80) ? 1 : 0;
+            if (self.command < 0x2c) {
+                self.drvout &= ~(0x80 | 0x40);
+                self.drvout |= (val & (0x80 | 0x40));
+            }
             self.paramNum = 0;
             self.paramReq = numParams(self.command);
             self.status = 0x80;
@@ -347,38 +345,36 @@ define(['./utils'], function (utils) {
                 if (self.command === 0x2c) {
                     // read drive status
                     self.status = 0x10;
-                    self.result = 0x88 | (self.curTrack[self.curDrive] ? 0 : 2);
-                    if (self.ready) {
-                        if (self.driveSel & 1) self.result |= 0x04;
-                        if (self.driveSel & 2) self.result |= 0x40;
-                    } else if (self.pendingReady) self.ready = true; // Ready for next time
+                    self.result = 0x80;
+                    self.result |= (self.realTrack[self.curDrive] ? 0 : 2);
+                    self.result |= (self.drives[self.curDrive].writeProt ? 0x08 : 0);
+                    if (self.drvout & 0x40) self.result |= 0x04;
+                    if (self.drvout & 0x80) self.result |= 0x40;
                 } else {
                     self.result = 0x18;
                     self.status = 0x18;
                     self.NMI();
-                    self.callbackTask.cancel();
                 }
             }
         }
 
-        function writeSpecial(reg, a, b) {
+        function writeSpecial(reg, val) {
             self.status = 0;
             switch (reg) {
                 case 0x17:
                     break; // apparently "mode register"
                 case 0x12:
-                    self.curTrack[0] = b;
+                    self.curTrack[0] = val;
                     break;
                 case 0x1a:
-                    self.curTrack[1] = b;
+                    self.curTrack[1] = val;
                     break;
                 case 0x23:
-                    self.drvout = a;
+                    self.drvout = val;
                     break;
                 default:
                     self.result = self.status = 0x18;
                     self.NMI();
-                    self.callbackTask.cancel();
                     break;
             }
         }
@@ -401,40 +397,45 @@ define(['./utils'], function (utils) {
                 default:
                     self.result = self.status = 0x18;
                     self.NMI();
-                    self.callbackTask.cancel();
                     break;
             }
         }
 
         function spinup() {
-            // TODO: not sure where this should go, or for how long. This is a workaround for EliteA
-            self.ready = false;
-            self.pendingReady = false;
-            self.readyTask.cancel();
+            var time = 200;
+
             if (!self.motorOn[self.curDrive]) {
-                self.readyTask.schedule((0.5 * cpu.peripheralCyclesPerSecond) | 0); // Apparently takes a half second to spin up
-            } else {
-                self.readyTask.schedule(1000);  // little bit of time for each command (so, really, spinup is a bad place to put this)
+                // Half a second.
+                time = (0.5 * cpu.peripheralCyclesPerSecond) | 0;
+                self.motorOn[self.curDrive] = true;
+                noise.spinUp();
             }
-            self.motorOn[self.curDrive] = true;
+
+            self.callbackTask.reschedule(time);
             self.motorSpinDownTask[self.curDrive].cancel();
-            noise.spinUp();
+            self.phase = 0;
         }
 
         function setspindown() {
             if (self.motorOn[self.curDrive]) {
-                self.motorSpinDownTask[self.curDrive].reschedule(40000 * 128);
+                self.motorSpinDownTask[self.curDrive].reschedule(cpu.peripheralCyclesPerSecond * 2);
             }
         }
 
         function seek(track) {
-            spinup();
-            self.realTrack[self.curDrive] += track - self.curTrack[self.curDrive];
-            var diff = self.drives[self.curDrive].seek(self.realTrack[self.curDrive]);
+            var realTrack = self.realTrack[self.curDrive];
+            realTrack += (track - self.curTrack[self.curDrive]);
+            if (realTrack < 0)
+                realTrack = 0;
+            if (realTrack > 79) {
+                realTrack = 79;
+            }
+            self.realTrack[self.curDrive] = realTrack;
+            var diff = self.drives[self.curDrive].seek(realTrack);
             // Let disc noises overlap by ~10%
             var seekLen = (noise.seek(diff) * 0.9 * cpu.peripheralCyclesPerSecond) | 0;
-            self.callbackTask.cancel();
-            self.callbackTask.schedule(Math.max(200, seekLen));
+            self.callbackTask.reschedule(Math.max(200, seekLen));
+            self.phase = 1;
         }
 
         var debugByte = 0;
@@ -442,10 +443,8 @@ define(['./utils'], function (utils) {
         function prepareSectorIO(track, sector, numSectors) {
             if (numSectors !== undefined) self.sectorsLeft = numSectors & 31;
             if (sector !== undefined) self.curSector = sector;
-            spinup();
-            self.phase = 0;
-            seek(track);
             debugByte = 0;
+            spinup(); // State: spinup -> seek.
         }
 
         function parameter(val) {
@@ -456,7 +455,7 @@ define(['./utils'], function (utils) {
                     self.status = 0;
                     break;
                 case 0x29: // Seek
-                    seek(self.params[0]);
+                    spinup(); // State: spinup -> seek.
                     break;
                 case 0x1f: // Verify
                 case 0x13: // Read
@@ -470,7 +469,7 @@ define(['./utils'], function (utils) {
                     prepareSectorIO(self.params[0]);
                     break;
                 case 0x3a: // Special register write
-                    writeSpecial(self.params[0], self.params[1], self.params[2]);
+                    writeSpecial(self.params[0], self.params[1]);
                     break;
                 case 0x3d: // Special register read
                     readSpecial(self.params[0]);
@@ -479,7 +478,6 @@ define(['./utils'], function (utils) {
                     self.result = 0x18;
                     self.status = 0x18;
                     self.NMI();
-                    self.callbackTask.cancel();
                     break;
             }
         }
@@ -528,16 +526,22 @@ define(['./utils'], function (utils) {
         }
 
         function callback() {
+            if (self.phase == 0) {
+                // Spinup complete.
+                seek(self.params[0]);
+                return;
+            }
+
             switch (self.command) {
                 case 0x29: // Seek
                     self.curTrack[self.curDrive] = self.params[0];
-                    update(0x18);
+                    done();
                     break;
 
                 case 0x0b: // Write
-                    if (!self.phase) {
+                    if (self.phase == 1) {
                         self.curTrack[self.curDrive] = self.params[0];
-                        self.phase = 1;
+                        self.phase = 2;
                         self.drives[self.curDrive].write(self.curSector, self.params[0], density(), 0);
                         update(0x8c);
                         return;
@@ -554,9 +558,9 @@ define(['./utils'], function (utils) {
 
                 case 0x13: // Read
                 case 0x1f: // Verify
-                    if (!self.phase) {
+                    if (self.phase == 1) {
                         self.curTrack[self.curDrive] = self.params[0];
-                        self.phase = 1;
+                        self.phase = 2;
                         self.drives[self.curDrive].read(self.curSector, self.params[0], density(), 0);
                         return;
                     }
@@ -570,17 +574,17 @@ define(['./utils'], function (utils) {
 
                 case 0x23: // Format
                     switch (self.phase) {
-                        case 0:
+                        case 1:
                             self.curTrack[self.curDrive] = self.params[0];
                             self.drives[self.curDrive].write(self.curSector, self.params[0], density(), 0);
                             update(0x8c);
-                            self.phase = 1;
-                            break;
-                        case 1:
-                            self.drives[self.curDrive].format(self.params[0], density(), 0);
                             self.phase = 2;
                             break;
                         case 2:
+                            self.drives[self.curDrive].format(self.params[0], density(), 0);
+                            self.phase = 3;
+                            break;
+                        case 3:
                             done();
                             break;
                     }
