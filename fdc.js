@@ -526,7 +526,7 @@ define(['./utils'], function (utils) {
         }
 
         function callback() {
-            if (self.phase == 0) {
+            if (self.phase === 0) {
                 // Spinup complete.
                 seek(self.params[0]);
                 return;
@@ -539,7 +539,7 @@ define(['./utils'], function (utils) {
                     break;
 
                 case 0x0b: // Write
-                    if (self.phase == 1) {
+                    if (self.phase === 1) {
                         self.curTrack[self.curDrive] = self.params[0];
                         self.phase = 2;
                         self.drives[self.curDrive].write(self.curSector, self.params[0], density(), 0);
@@ -558,7 +558,7 @@ define(['./utils'], function (utils) {
 
                 case 0x13: // Read
                 case 0x1f: // Verify
-                    if (self.phase == 1) {
+                    if (self.phase === 1) {
                         self.curTrack[self.curDrive] = self.params[0];
                         self.phase = 2;
                         self.drives[self.curDrive].read(self.curSector, self.params[0], density(), 0);
@@ -573,7 +573,7 @@ define(['./utils'], function (utils) {
                     break;
 
                 case 0x1b: // Read ID
-                    if (self.phase == 1) {
+                    if (self.phase === 1) {
                         self.curTrack[self.curDrive] = self.params[0];
                         self.phase = 2;
                         self.drives[self.curDrive].address(self.params[0], density(), 0);
