@@ -572,6 +572,20 @@ define(['./utils'], function (utils) {
                     self.drives[self.curDrive].read(self.curSector, self.params[0], density(), 0);
                     break;
 
+                case 0x1b: // Read ID
+                    if (!self.phase) {
+                        self.curTrack[self.curDrive] = self.params[0];
+                        self.phase = 1;
+                        self.drives[self.curDrive].address(self.params[0], density(), 0);
+                        return;
+                    }
+                    if (--self.sectorsLeft === 0) {
+                        done();
+                        return;
+                    }
+                    self.drives[self.curDrive].address(self.params[0], density(), 0);
+                    break;
+
                 case 0x23: // Format
                     switch (self.phase) {
                         case 1:
