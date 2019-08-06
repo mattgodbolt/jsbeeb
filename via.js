@@ -151,6 +151,7 @@ define(['./utils'], function (utils) {
 
                     case ACR:
                         self.acr = val;
+                        if ((self.justhit & 1) && !(val & 0x40)) self.t1hit = true;
                         break;
 
                     case PCR:
@@ -174,7 +175,7 @@ define(['./utils'], function (utils) {
                     case T1LH:
                         self.t1l &= 0x1fe;
                         self.t1l |= (val << 9);
-                        if (self.acr & 0x40) {
+                        if (!(self.justhit & 1)) {
                             self.ifr &= ~TIMER1INT;
                             self.updateIFR();
                         }
@@ -185,8 +186,10 @@ define(['./utils'], function (utils) {
                         self.t1l |= (val << 9);
                         self.t1c = self.t1l + 1;
                         self.t1hit = false;
-                        self.ifr &= ~TIMER1INT;
-                        self.updateIFR();
+                        if (!(self.justhit & 1)) {
+                            self.ifr &= ~TIMER1INT;
+                            self.updateIFR();
+                        }
                         self.t1_pb7 = 0;
                         break;
 
@@ -199,8 +202,11 @@ define(['./utils'], function (utils) {
                         self.t2l &= 0x1fe;
                         self.t2l |= (val << 9);
                         self.t2c = self.t2l + 1;
-                        self.ifr &= ~TIMER2INT;
-                        self.updateIFR();
+                        if (self.acr & 0x20) self.t2c -= 2;
+                        if (!(self.justhit & 2)) {
+                            self.ifr &= ~TIMER2INT;
+                            self.updateIFR();
+                        }
                         self.t2hit = false;
                         break;
 
@@ -214,6 +220,8 @@ define(['./utils'], function (utils) {
 
                     case IFR:
                         self.ifr &= ~(val & 0x7f);
+                        if (self.justhit & 1) self.ifr |= TIMER1INT;
+                        if (self.justhit & 2) self.ifr |= TIMER2INT;
                         self.updateIFR();
                         break;
                 }
