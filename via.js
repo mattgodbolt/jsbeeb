@@ -33,7 +33,8 @@ define(['./utils'], function (utils) {
             acr: 0, pcr: 0, ifr: 0, ier: 0,
             t1hit: false, t2hit: false,
             porta: 0, portb: 0,
-            ca1: 0, ca2: 0,
+            ca1: false, ca2: false,
+            cb1: false, cb2: false,
             justhit: 0,
             t1_pb7: 0,
 
@@ -132,10 +133,10 @@ define(['./utils'], function (utils) {
 
                         mode = (self.pcr & 0xe0) >>> 4;
                         if (mode === 8) { // Handshake mode
-                            self.setcb2(0);
+                            self.setcb2(false);
                         } else if (mode === 0x0a) { // Pulse mode
-                            self.setcb2(0);
-                            self.setcb2(1);
+                            self.setcb2(false);
+                            self.setcb2(true);
                         }
                         break;
 
@@ -158,8 +159,8 @@ define(['./utils'], function (utils) {
                         self.pcr = val;
                         if ((val & 0xe) === 0xc) self.setca2(false);
                         else if (val & 0x08) self.setca2(true);
-                        if ((val & 0xe0) === 0xc0) self.setcb2(0);
-                        else if (val & 0x80) self.setcb2(1);
+                        if ((val & 0xe0) === 0xc0) self.setcb2(false);
+                        else if (val & 0x80) self.setcb2(true);
                         break;
 
                     case SR:
@@ -305,8 +306,7 @@ define(['./utils'], function (utils) {
                 }
             },
 
-            setca1: function (val) {
-                var level = !!val;
+            setca1: function (level) {
                 if (level === self.ca1) return;
                 var pcrSet = !!(self.pcr & 1);
                 if (pcrSet === level) {
@@ -314,26 +314,24 @@ define(['./utils'], function (utils) {
                     self.ifr |= INT_CA1;
                     self.updateIFR();
                     if ((self.pcr & 0xc) === 0x8) { // handshaking
-                        self.setca2(1);
+                        self.setca2(true);
                     }
                 }
                 self.ca1 = level;
             },
 
-            setca2: function (val) {
-                var level = !!val;
+            setca2: function (level) {
                 if (level === self.ca2) return;
+                self.ca2 = level;
                 if (self.pcr & 8) return; // output
                 var pcrSet = !!(self.pcr & 4);
                 if (pcrSet === level) {
                     self.ifr |= INT_CA2;
                     self.updateIFR();
                 }
-                self.ca2 = level;
             },
 
-            setcb1: function (val) {
-                var level = !!val;
+            setcb1: function (level) {
                 if (level === self.cb1) return;
                 var pcrSet = !!(self.pcr & 0x10);
                 if (pcrSet === level) {
@@ -341,22 +339,21 @@ define(['./utils'], function (utils) {
                     self.ifr |= INT_CB1;
                     self.updateIFR();
                     if ((self.pcr & 0xc0) === 0x80) { // handshaking
-                        self.setcb2(1);
+                        self.setcb2(true);
                     }
                 }
                 self.cb1 = level;
             },
 
-            setcb2: function (val) {
-                var level = !!val;
+            setcb2: function (level) {
                 if (level === self.cb2) return;
+                self.cb2 = level;
                 if (self.pcr & 0x80) return; // output
                 var pcrSet = !!(self.pcr & 0x40);
                 if (pcrSet === level) {
                     self.ifr |= INT_CB2;
                     self.updateIFR();
                 }
-                self.cb2 = level;
             }
         };
         return self;
