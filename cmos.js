@@ -17,6 +17,7 @@ define([], function () {
         var oldStrobe = false;
         var data = 0;
         var enabled = false;
+        var addressStrobe = false;
         var cmosAddr = 0;
 
         function save() {
@@ -27,7 +28,7 @@ define([], function () {
 
         function cmosRead(IC32) {
             // b-em comment is: To drive bus, CMOS must be enabled, D must be high, RW must be high.
-            if (enabled && (IC32 & 0x04) && readWrite) return data & 0xff;
+            if (enabled && !addressStrobe && (IC32 & 0x04) && readWrite) return data & 0xff;
             return 0xff;
         }
 
@@ -35,7 +36,7 @@ define([], function () {
             readWrite = !!(IC32 & 2);
             var strobe = !!(IC32 & 4) ^ oldStrobe;
             oldStrobe = !!(IC32 & 4);
-            if (strobe && enabled) {
+            if (strobe && enabled && !addressStrobe) {
                 if (!readWrite && cmosAddr > 0xb && !(IC32 & 4)) {
                     // Write triggered on low to high D
                     store[cmosAddr] = sdbval;
@@ -49,7 +50,8 @@ define([], function () {
         }
 
         function cmosWriteAddr(val, sdbval) {
-            if (val & 0x80) cmosAddr = sdbval & 0x3f;
+            addressStrobe = !!(val & 0x80);
+            if (addressStrobe) cmosAddr = sdbval & 0x3f;
             enabled = !!(val & 0x40);
         }
 
