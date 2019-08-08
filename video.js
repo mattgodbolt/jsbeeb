@@ -53,7 +53,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.cursorPos = 0;
         this.interlacedSyncAndVideo = false;
         this.doubledScanlines = true;
-        this.prevcb2 = false;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -65,6 +64,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.reset = function (cpu, via, hard) {
             this.cpu = cpu;
             this.sysvia = via;
+            if (via) via.cb2changecallback = this.cb2changed.bind(this);
         };
 
         this.paint = function () {
@@ -364,20 +364,21 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.renderY = (this.bitmapY << 1) | ((this.oddFrame && (this.interlacedSyncAndVideo || !this.doubledScanlines)) ? 1 : 0);
         };
 
-        ////////////////////
-        // Main drawing routine
-        this.polltime = function (clocks) {
+        this.cb2changed = function (level, output) {
             // Even with no light pen physically attached, the system VIA can
             // configure CB2 as an output and make the CRTC think it sees a
             // real light pen pulse.
             // Triggers on the low -> high CB2 edge.
             // Needed by Pharaoh's Curse to start.
-            if (!this.prevcb2 && this.sysvia.cb2) {
+            if (level && output) {
                 this.regs[16] = (this.addr >> 8) & 0x3f;
                 this.regs[17] = this.addr & 0xff;
             }
-            this.prevcb2 = this.sysvia.cb2;
+        }
 
+        ////////////////////
+        // Main drawing routine
+        this.polltime = function (clocks) {
             while (clocks--) {
                 this.clocks++;
                 this.oddClock = !this.oddClock;
