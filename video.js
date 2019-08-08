@@ -374,7 +374,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 this.regs[16] = (this.addr >> 8) & 0x3f;
                 this.regs[17] = this.addr & 0xff;
             }
-        }
+        };
 
         ////////////////////
         // Main drawing routine
