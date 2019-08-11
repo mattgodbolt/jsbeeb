@@ -27,7 +27,11 @@ define([], function () {
         }
 
         function cmosRead(IC32) {
-            // b-em comment is: To drive bus, CMOS must be enabled, D must be high, RW must be high.
+            // To drive the bus we need:
+            // - CMOS enabled.
+            // - Address Strobe low.
+            // - Data Strobe high.
+            // - Read/write high (read).
             if (enabled && !addressStrobe && (IC32 & 0x04) && readWrite) return data & 0xff;
             return 0xff;
         }
