@@ -398,7 +398,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
 
                     // Initiate HSync
-                    if (this.horizCounter === this.regs[2]) {
+                    if (this.horizCounter === this.regs[2] && !this.inHSync) {
                         this.inHSync = true;
                         this.hpulseCounter = 0;
                     }
