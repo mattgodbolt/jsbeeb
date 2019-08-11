@@ -1200,12 +1200,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 last = 0;
                 return;
             }
-            var speedy;
-            if (fastAsPossible || (fastTape && processor.acia.motorOn)) {
-                speedy = true;
+            var speedy = fastAsPossible || (fastTape && processor.acia.motorOn);
+            if (speedy) {
                 window.setTimeout(draw, 0);
             } else {
-                speedy = false;
                 window.requestAnimationFrame(draw);
             }
 
