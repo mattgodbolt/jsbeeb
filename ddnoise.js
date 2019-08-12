@@ -125,7 +125,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     FakeDdNoise.prototype.seek = function () {
         return 0;
     };
-    FakeDdNoise.prototype.initialize = function () {
+    FakeDdNoise.prototype.initialise = function () {
         return Promise.resolve();
     };
 

@@ -315,7 +315,7 @@ define(['./utils'], function (utils) {
             return self.data;
         };
         self.discFinishRead = function () {
-            self.callbackTask.reschedule(200);
+            self.callbackTask.reschedule(DiscTimeSlice);
         };
 
         var paramMap = {
@@ -402,7 +402,7 @@ define(['./utils'], function (utils) {
         }
 
         function spinup() {
-            var time = 200;
+            var time = DiscTimeSlice;
 
             if (!self.motorOn[self.curDrive]) {
                 // Half a second.
@@ -434,7 +434,7 @@ define(['./utils'], function (utils) {
             var diff = self.drives[self.curDrive].seek(realTrack);
             // Let disc noises overlap by ~10%
             var seekLen = (noise.seek(diff) * 0.9 * cpu.peripheralCyclesPerSecond) | 0;
-            self.callbackTask.reschedule(Math.max(200, seekLen));
+            self.callbackTask.reschedule(Math.max(DiscTimeSlice, seekLen));
             self.phase = 1;
         }
 
@@ -780,7 +780,7 @@ define(['./utils'], function (utils) {
     WD1770.prototype.seek = function (addr) {
         var diff = this.curDisc().seek(addr);
         var seekTime = (this.noise.seek(diff) * this.cpu.peripheralCyclesPerSecond) | 0;
-        this.callbackTask.reschedule(Math.max(200, seekTime));
+        this.callbackTask.reschedule(Math.max(DiscTimeSlice, seekTime));
     };
 
     WD1770.prototype.handleCommand = function (command) {
@@ -871,7 +871,7 @@ define(['./utils'], function (utils) {
     };
 
     WD1770.prototype.discFinishRead = function () {
-        this.callbackTask.reschedule(200);
+        this.callbackTask.reschedule(DiscTimeSlice);
     };
 
     WD1770.prototype.notFound = function () {
