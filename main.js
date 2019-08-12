@@ -39,6 +39,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var keyCodes = utils.keyCodes;
         var emuKeyHandlers = {};
         var cpuMultiplier = 1;
+        var fastAsPossible = false;
+        var fastTape = false;
 
         if (queryString) {
             if (queryString[queryString.length - 1] === '/')  // workaround for shonky python web server
@@ -105,6 +107,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                         case "embed":
                             $(".embed-hide").hide();
                             $("#about").append(" jsbeeb");
+                            break;
+                        case "fasttape":
+                            fastTape = true;
                             break;
                     }
                 }
@@ -325,6 +330,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
                 utils.noteEvent('keyboard', 'press', 'home');
                 stop(true);
+            } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
+                utils.noteEvent('keyboard', 'press', 'insert');
+                fastAsPossible = !fastAsPossible;
             } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
                 utils.noteEvent('keyboard', 'press', 'break');
                 processor.setReset(true);
@@ -1192,13 +1200,24 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 last = 0;
                 return;
             }
-            requestAnimationFrame(draw);
+            var speedy = fastAsPossible || (fastTape && processor.acia.motorOn);
+            if (speedy) {
+                window.setTimeout(draw, 0);
+            } else {
+                window.requestAnimationFrame(draw);
+            }
+
             gamepad.update(processor.sysvia);
             syncLights();
             if (last !== 0) {
-                var sinceLast = now - last;
-                var cycles = (sinceLast * clocksPerSecond / 1000) | 0;
-                cycles = Math.min(cycles, MaxCyclesPerFrame);
+                var cycles;
+                if (!speedy) {
+                    var sinceLast = now - last;
+                    cycles = (sinceLast * clocksPerSecond / 1000) | 0;
+                    cycles = Math.min(cycles, MaxCyclesPerFrame);
+                } else {
+                    cycles = clocksPerSecond / 50;
+                }
                 try {
                     var begin = performance.now();
                     if (!processor.execute(cycles)) {
