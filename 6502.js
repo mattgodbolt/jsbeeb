@@ -107,9 +107,26 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 var newPc = (cpu.pc + offset) & 0xffff;
                 var pageCrossed = !!((cpu.pc & 0xff00) ^ (newPc & 0xff00));
                 cpu.pc = newPc;
-                cpu.polltime(pageCrossed ? 3 : 2);
-                cpu.checkInt();
-                cpu.polltime(1);
+                if (!model.nmos) {
+                    cpu.polltime(2 + pageCrossed);
+                    cpu.checkInt();
+                    cpu.polltime(1);
+                } else if (!pageCrossed) {
+                    cpu.polltime(1);
+                    cpu.checkInt();
+                    cpu.polltime(2);
+                } else {
+                    // 6502 polls twice during a taken branch with page
+                    // crossing and either is sufficient to trigger IRQ.
+                    // See https://wiki.nesdev.com/w/index.php/CPU_interrupts
+                    cpu.polltime(1);
+                    cpu.checkInt();
+                    var sawInt = cpu.takeInt;
+                    cpu.polltime(2);
+                    cpu.checkInt();
+                    cpu.takeInt |= sawInt;
+                    cpu.polltime(1);
+                }
             };
 
             function adcNonBCD(addend) {
