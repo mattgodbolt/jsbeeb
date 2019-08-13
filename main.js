@@ -7,8 +7,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         var processor;
         var video;
-        var soundChip;
-        var ddNoise;
+        var soundChip = null;
+        var ddNoise = null;
         var dbgr;
         var frames = 0;
         var frameSkip = 0;
@@ -41,6 +41,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var cpuMultiplier = 1;
         var fastAsPossible = false;
         var fastTape = false;
+        var noSeek = false;
 
         if (queryString) {
             if (queryString[queryString.length - 1] === '/')  // workaround for shonky python web server
@@ -110,6 +111,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                             break;
                         case "fasttape":
                             fastTape = true;
+                            break;
+                        case "noseek":
+                            noSeek = true;
                             break;
                     }
                 }
@@ -197,11 +201,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 soundChip.render(chan, 0, chan.length);
             };
             soundChip.jsAudioNode.connect(audioContext.destination);
-            ddNoise = new DdNoise.DdNoise(audioContext);
-        } else {
-            soundChip = new SoundChip.FakeSoundChip();
-            ddNoise = new DdNoise.FakeDdNoise();
+            if (!noSeek) ddNoise = new DdNoise.DdNoise(audioContext);
         }
+        if (!soundChip) soundChip = new SoundChip.FakeSoundChip();
+        if (!ddNoise) ddNoise = new DdNoise.FakeDdNoise();
 
         var lastShiftLocation = 1;
         var lastCtrlLocation = 1;
