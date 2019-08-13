@@ -337,6 +337,8 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                         this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                         this.p.i = true;
                         this.polltime(7);
+                        if (!model.nmos)
+                            this.p.d = false;
                     }
                     if (this.nmi) {
                         this.push(this.pc >>> 8);
@@ -959,6 +961,8 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
                 this.p.i = true;
                 this.polltime(7);
+                if (!model.nmos)
+                    this.p.d = false;
             };
 
             this.handleNmi = function () {
