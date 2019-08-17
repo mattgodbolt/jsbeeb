@@ -154,7 +154,6 @@ define(['./utils'], function (utils) {
         this.setScheduler = function (scheduler_) {
             scheduler = scheduler_;
             lastRunEpoch = scheduler.epoch;
-            // TODO: need to retest with Repton2
             activeTask = scheduler.newTask(function () {
                 if (this.active) {
                     poke(this.slowDataBus);
