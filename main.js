@@ -201,13 +201,13 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         });
 
         function checkAudioSuspended() {
-            if (audioContext.state == "suspended") $audioWarningNode.fadeIn();
+            if (audioContext.state === "suspended") $audioWarningNode.fadeIn();
         }
 
         if (audioContext) {
             audioContext.onstatechange = function () {
-                if (audioContext.state == "running") $audioWarningNode.fadeOut();
-            }
+                if (audioContext.state === "running") $audioWarningNode.fadeOut();
+            };
             soundChip = new SoundChip.SoundChip(audioContext.sampleRate);
             // NB must be assigned to some kind of object else it seems to get GC'd by
             // Safari...

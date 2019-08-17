@@ -55,7 +55,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     DdNoise.prototype.oneShot = function (sound) {
         var duration = sound.duration;
         var context = this.context;
-        if (context.state != "running") return duration;
+        if (context.state !== "running") return duration;
         var source = context.createBufferSource();
         source.buffer = sound;
         source.connect(this.gain);
@@ -66,7 +66,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     DdNoise.prototype.play = function (sound, loop) {
         var self = this;
         var context = self.context;
-        if (context.state != "running") return null;
+        if (context.state !== "running") return null;
         return new Promise(function (resolve, reject) {
             var source = context.createBufferSource();
             source.loop = !!loop;
