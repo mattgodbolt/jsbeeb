@@ -118,6 +118,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                         cpu.polltime(3);
                     } else {
                         cpu.polltime(2);
+                        // TODO: check 65c12 BRK interrupt poll timing.
                         cpu.checkInt();
                         cpu.polltime(1);
                     }
