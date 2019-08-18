@@ -60,6 +60,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
 
             cpu.checkInt = function () {
                 cpu.takeInt = !!(cpu.interrupt && !cpu.p.i);
+                cpu.takeInt |= cpu.nmi;
             };
 
             cpu.setzn = function (v) {
@@ -83,16 +84,44 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 cpu.nmi = !!nmi;
             };
 
-            cpu.brk = function () {
-                var nextByte = cpu.pc + 1;
-                cpu.push(nextByte >>> 8);
-                cpu.push(nextByte & 0xff);
-                cpu.push(cpu.p.asByte());
-                cpu.pc = cpu.readmem(0xfffe) | (cpu.readmem(0xffff) << 8);
+            cpu.brk = function (isIrq) {
+                // Behavior here generally discovered via Visual 6502 analysis.
+                // 6502 has a quirky BRK; it was sanitized in 65c12.
+                // See also https://wiki.nesdev.com/w/index.php/CPU_interrupts
+                var pushAddr = cpu.pc;
+                if (!isIrq) pushAddr = (pushAddr + 1) & 0xffff;
+                cpu.readmem(pushAddr);
+
+                cpu.push(pushAddr >>> 8);
+                cpu.push(pushAddr & 0xff);
+                var pushFlags = cpu.p.asByte();
+                if (isIrq) pushFlags &= ~0x10;
+                cpu.push(pushFlags);
+
+                // NMI status is determined part way through the BRK / IRQ
+                // sequence, and yes, on 6502, an NMI can redirect the vector
+                // for a half-way done BRK instruction.
+                cpu.polltime(4);
+                var vector = 0xfffe;
+                if ((model.nmos || isIrq) && this.nmi) {
+                    vector = 0xfffa;
+                    cpu.nmi = false;
+                }
+                cpu.takeInt = false;
+                cpu.pc = cpu.readmem(vector) | (cpu.readmem(vector + 1) << 8);
                 cpu.p.i = true;
-                if (!model.nmos) {
+                if (model.nmos) {
+                    cpu.polltime(3);
+                } else {
                     cpu.p.d = false;
-                    cpu.takeInt = false;
+                    if (isIrq) {
+                        cpu.polltime(3);
+                    } else {
+                        cpu.polltime(2);
+                        // TODO: check 65c12 BRK interrupt poll timing.
+                        cpu.checkInt();
+                        cpu.polltime(1);
+                    }
                 }
             };
 
@@ -346,28 +375,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     var opcode = this.readmem(this.pc);
                     this.incpc();
                     this.runner.run(opcode);
-                    if (this.takeInt) {
-                        this.takeInt = false;
-                        this.push(this.pc >>> 8);
-                        this.push(this.pc & 0xff);
-                        this.push(this.p.asByte() & ~0x10);
-                        this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
-                        this.p.i = true;
-                        this.polltime(7);
-                        if (!model.nmos)
-                            this.p.d = false;
-                    }
-                    if (this.nmi) {
-                        this.push(this.pc >>> 8);
-                        this.push(this.pc & 0xff);
-                        this.push(this.p.asByte() & ~0x10);
-                        this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
-                        this.p.i = true;
-                        this.polltime(7);
-                        this.nmi = false;
-                        if (!model.nmos)
-                            this.p.d = false;
-                    }
+                    if (this.takeInt) this.brk(true);
                 }
             };
 
@@ -970,29 +978,6 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 this.polltime = this.polltimeSlow;
             }
 
-            this.handleIrq = function () {
-                this.takeInt = false;
-                this.push(this.pc >>> 8);
-                this.push(this.pc & 0xff);
-                this.push(this.p.asByte() & ~0x10);
-                this.pc = this.readmem(0xfffe) | (this.readmem(0xffff) << 8);
-                this.p.i = true;
-                this.polltime(7);
-                if (!model.nmos)
-                    this.p.d = false;
-            };
-
-            this.handleNmi = function () {
-                this.push(this.pc >>> 8);
-                this.push(this.pc & 0xff);
-                this.push(this.p.asByte() & ~0x10);
-                this.pc = this.readmem(0xfffa) | (this.readmem(0xfffb) << 8);
-                this.p.i = true;
-                this.polltime(7);
-                this.nmi = false;
-                if (!model.nmos)
-                    this.p.d = false;
-            };
             this.execute = function (numCyclesToRun) {
                 this.halted = false;
                 this.targetCycles += numCyclesToRun;
@@ -1034,9 +1019,8 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                         this.oldXArray[this.oldPcIndex] = this.x;
                         this.oldYArray[this.oldPcIndex] = this.y;
                     }
+                    if (this.takeInt) this.brk(true);
                     if (!this.resetLine) this.reset(false);
-                    if (this.takeInt) this.handleIrq();
-                    if (this.nmi) this.handleNmi();
                 }
                 return true;
             };
@@ -1046,9 +1030,8 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     var opcode = this.readmem(this.pc);
                     this.incpc();
                     this.runner.run(opcode);
+                    if (this.takeInt) this.brk(true);
                     if (!this.resetLine) this.reset(false);
-                    if (this.takeInt) this.handleIrq();
-                    if (this.nmi) this.handleNmi();
                 }
                 return true;
             };

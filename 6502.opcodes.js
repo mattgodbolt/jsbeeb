@@ -194,7 +194,7 @@ define(['./utils'], function (utils) {
             case "NOP":
                 return {op: "", read: arg !== undefined};
             case "BRK":
-                return {op: "cpu.brk();", extra: 6};
+                return {op: "cpu.brk(false);"};
             case "CLC":
                 return {op: "cpu.p.c = false;"};
             case "SEC":
@@ -477,8 +477,6 @@ define(['./utils'], function (utils) {
                     ],
                     read: true, write: true
                 };
-            case "WAI":
-                return {op: "cpu.brk();", extra: 1};
         }
         return null;
     }
