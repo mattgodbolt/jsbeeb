@@ -64,11 +64,10 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     };
 
     DdNoise.prototype.play = function (sound, loop) {
+        if (this.context.state !== "running") return Promise.reject();
         var self = this;
-        var context = self.context;
-        if (context.state !== "running") return null;
         return new Promise(function (resolve, reject) {
-            var source = context.createBufferSource();
+            var source = self.context.createBufferSource();
             source.loop = !!loop;
             source.buffer = sound;
             source.connect(self.gain);
@@ -88,14 +87,12 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
         if (this.state === SPINNING || this.state === SPIN_UP) return;
         this.state = SPIN_UP;
         var self = this;
-        var promise = self.play(self.sounds.motorOn);
-        if (promise === null) return;
-        promise.then(function () {
+        this.play(this.sounds.motorOn).then(function () {
             self.play(self.sounds.motor, true).then(function (source) {
                 self.motor = source;
                 self.state = SPINNING;
             });
-        });
+        }, function () {});
     };
 
     DdNoise.prototype.spinDown = function () {
