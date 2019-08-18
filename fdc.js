@@ -61,9 +61,13 @@ define(['./utils'], function (utils) {
         var data;
         var i;
         var dataString = localStorage[discName];
+        var isDsd = false;
+        if (name.endsWith(".dsd")) isDsd = true;
         if (!dataString) {
             console.log("Creating browser-local disc " + name);
-            data = new Uint8Array(100 * 1024);
+            var numBytes = 256 * 10 * 80;
+            if (isDsd) numBytes *= 2;
+            data = new Uint8Array(numBytes);
             for (i = 0; i < Math.min(12, name.length); ++i)
                 data[i] = name.charCodeAt(i) & 0xff;
         } else {
@@ -72,10 +76,14 @@ define(['./utils'], function (utils) {
             data = new Uint8Array(len);
             for (i = 0; i < len; ++i) data[i] = dataString.charCodeAt(i) & 0xff;
         }
-        return new BaseDisc(fdc, false, data, function () {
+        return new BaseDisc(fdc, isDsd, data, function () {
             var str = "";
             for (var i = 0; i < data.length; ++i) str += String.fromCharCode(data[i]);
-            localStorage[discName] = str;
+            try {
+                window.localStorage.setItem(discName, str);
+            } catch (e) {
+                window.alert("Writing to localStorage failed: " + e);
+            }
         });
     }
 
