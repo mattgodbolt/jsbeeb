@@ -186,11 +186,28 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         if (parsedQuery.fakeVideo !== undefined)
             video = new Video.FakeVideo();
 
+        // Recent browsers, particularly Safari and Chrome, require a user
+        // interaction in order to enable sound playback.
+        function userInteraction() {
+            if (audioContext) audioContext.resume();
+        }
+
         var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext() // jshint ignore:line
             : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext() // jshint ignore:line
                 : null;
+        var $audioWarningNode = $('#audio-warning');
+        $audioWarningNode.on('mousedown', function () {
+            userInteraction();
+        });
+
+        function checkAudioSuspended() {
+            if (audioContext.state === "suspended") $audioWarningNode.fadeIn();
+        }
 
         if (audioContext) {
+            audioContext.onstatechange = function () {
+                if (audioContext.state === "running") $audioWarningNode.fadeOut();
+            };
             soundChip = new SoundChip.SoundChip(audioContext.sampleRate);
             // NB must be assigned to some kind of object else it seems to get GC'd by
             // Safari...
@@ -202,6 +219,12 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             };
             soundChip.jsAudioNode.connect(audioContext.destination);
             if (!noSeek) ddNoise = new DdNoise.DdNoise(audioContext);
+
+            $audioWarningNode.toggle(false);
+            // Firefox will report that audio is suspended even when it will
+            // start playing without user interaction, so we need to delay a
+            // little to get a reliable indication.
+            window.setTimeout(checkAudioSuspended, 1000);
         }
         if (!soundChip) soundChip = new SoundChip.FakeSoundChip();
         if (!ddNoise) ddNoise = new DdNoise.FakeDdNoise();
@@ -211,6 +234,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var lastAltLocation = 1;
 
         dbgr = new Debugger(video);
+
+        $('.initially-hidden').removeClass('initially-hidden');
 
         function keyCode(evt) {
             var ret = evt.which || evt.charCode || evt.keyCode;
@@ -322,6 +347,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         };
 
         function keyDown(evt) {
+            userInteraction();
             if (!running) return;
             var code = keyCode(evt);
             if (evt.altKey) {
@@ -365,6 +391,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         var $cub = $('#cub-monitor');
         $cub.on('mousemove mousedown mouseup', function (evt) {
+            userInteraction();
             var cubOffset = $cub.offset();
             var screenOffset = $screen.offset();
             var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
