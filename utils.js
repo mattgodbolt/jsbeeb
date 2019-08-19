@@ -955,10 +955,28 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         return { isDsd: isDsd, byteSize: byteSize };
     };
 
+    exports.setDiscName = function(data, name) {
+        for (var i = 0; i < 8; ++i)
+            data[i] = name.charCodeAt(i) & 0xff;
+    };
+
     exports.uint8ArrayToString = function(array) {
         var str = "";
         for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
         return str;
+    };
+
+    exports.stringToUint8Array = function(str) {
+        var len = str.length;
+        var array = new Uint8Array(len);
+        for (var i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
+        return array;
+    };
+
+    exports.resizeUint8Array = function(array, byteSize) {
+        var newArray = new Uint8Array(byteSize);
+        newArray.set(array.subarray(0, byteSize));
+        return newArray;
     };
 
     function Fifo(capacity) {

@@ -108,8 +108,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
             console.log("Google Drive: creating disc image: '" + name + "'");
             var byteSize = utils.discImageSize(name).byteSize;
             var data = new Uint8Array(byteSize);
-            for (var i = 0; i < Math.max(12, name.length); ++i)
-                data[i] = name.charCodeAt(i) & 0xff;
+            utils.setDiscName(data, name);
             return saveFile(name, data)
                 .then(function (response) {
                     var meta = response.result;
@@ -151,7 +150,10 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
             var nameDetails = utils.discImageSize(name);
             var isDsd = nameDetails.isDsd;
             var byteSize = nameDetails.byteSize;
-            if (data.length !== byteSize) {
+            if (data.length === 100 * 1024) {
+                // Old images were stored too small so convert them.
+                data = utils.resizeUint8Array(data, byteSize);
+            } else if (data.length !== byteSize) {
                 throw new Error("Google Drive: Invalid disc data for '" + name + "': found " + data.length + " byte image)");
             }
             if (meta.editable) {

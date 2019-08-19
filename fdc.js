@@ -31,9 +31,7 @@ define(['./utils'], function (utils) {
         if (typeof stringData !== "string") {
             data = stringData;
         } else {
-            var len = stringData.length;
-            data = new Uint8Array(len);
-            for (var i = 0; i < len; ++i) data[i] = stringData.charCodeAt(i) & 0xff;
+            data = utils.stringToUint8Array(stringData);
         }
         var prevData = new Uint8Array(data);
 
@@ -63,17 +61,16 @@ define(['./utils'], function (utils) {
         var dataString = localStorage[discName];
         var nameDetails = utils.discImageSize(name);
         var isDsd = nameDetails.isDsd;
+        var byteSize = nameDetails.byteSize;
         if (!dataString) {
             console.log("Creating browser-local disc " + name);
-            var numBytes = nameDetails.byteSize;
-            data = new Uint8Array(numBytes);
-            for (i = 0; i < Math.min(12, name.length); ++i)
-                data[i] = name.charCodeAt(i) & 0xff;
+            data = new Uint8Array(byteSize);
+            utils.setDiscName(data, name);
         } else {
             console.log("Loading browser-local disc " + name);
-            var len = dataString.length;
-            data = new Uint8Array(len);
-            for (i = 0; i < len; ++i) data[i] = dataString.charCodeAt(i) & 0xff;
+            data = utils.stringToUint8Array(dataString);
+            if (data.length === 100 * 1024)
+                data = utils.resizeUint8Array(data, byteSize);
         }
         return new BaseDisc(fdc, isDsd, data, function () {
             var str = utils.uint8ArrayToString(data);
