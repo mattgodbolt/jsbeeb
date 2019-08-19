@@ -959,7 +959,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         var str = "";
         for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
         return str;
-    }
+    };
 
     function Fifo(capacity) {
         this.buffer = new Uint8Array(capacity);

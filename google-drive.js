@@ -151,7 +151,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
             var nameDetails = utils.discImageSize(name);
             var isDsd = nameDetails.isDsd;
             var byteSize = nameDetails.byteSize;
-            if (data.length != byteSize) {
+            if (data.length !== byteSize) {
                 throw new Error("Google Drive: Invalid disc data for '" + name + "': found " + data.length + " byte image)");
             }
             if (meta.editable) {
