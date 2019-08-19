@@ -75,7 +75,8 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
                 'mimeType': MIME_TYPE
             };
 
-            var base64Data = btoa(String.fromCharCode.apply(null, data));
+            var str = utils.uint8ArrayToString(data);
+            var base64Data = btoa(str);
             var multipartRequestBody =
                 delimiter +
                 'Content-Type: application/json\r\n\r\n' +
@@ -104,8 +105,9 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
         }
 
         self.create = function (fdc, name) {
-            console.log("Creating disc image");
-            var data = new Uint8Array(100 * 1024);
+            console.log("Google Drive: creating disc image: '" + name + "'");
+            var byteSize = utils.discImageSize(name).byteSize;
+            var data = new Uint8Array(byteSize);
             for (var i = 0; i < Math.max(12, name.length); ++i)
                 data[i] = name.charCodeAt(i) & 0xff;
             return saveFile(name, data)
@@ -126,7 +128,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
 
                     xhr.onload = function () {
                         if (xhr.status !== 200) {
-                            reject(new Error("Unable to load " + file.title + ", http code " + xhr.status));
+                            reject(new Error("Unable to load '" + file.title + "', http code " + xhr.status));
                         } else if (typeof xhr.response !== "string") {
                             resolve(xhr.response);
                         } else {
@@ -145,9 +147,12 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
 
         function makeDisc(fdc, data, meta) {
             var flusher = null;
-            if (data.length < 100 * 1024) {
-                throw new Error("Invalid disc data: expected at least 100KB image (found " + data.length + " byte image)");
-                //data = new Uint8Array(100*1024);
+            var name = meta.title;
+            var nameDetails = utils.discImageSize(name);
+            var isDsd = nameDetails.isDsd;
+            var byteSize = nameDetails.byteSize;
+            if (data.length != byteSize) {
+                throw new Error("Google Drive: Invalid disc data for '" + name + "': found " + data.length + " byte image)");
             }
             if (meta.editable) {
                 console.log("Making editable disc");
@@ -159,7 +164,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
             } else {
                 console.log("Making read-only disc");
             }
-            return new BaseSsd(fdc, false, data, flusher);
+            return new BaseSsd(fdc, isDsd, data, flusher);
         }
 
         self.load = function (fdc, fileId) {

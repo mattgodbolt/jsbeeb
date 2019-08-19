@@ -460,6 +460,12 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         };
         processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
 
+        function setDisc1Image(name) {
+            delete parsedQuery.disc;
+            parsedQuery.disc1 = name;
+            updateUrl();
+        }
+
         function sthClearList() {
             $("#sth-list li:not('.template')").remove();
         }
@@ -472,14 +478,13 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         function discSthClick(item) {
             utils.noteEvent('sth', 'click', item);
-            parsedQuery.disc = "sth:" + item;
-            updateUrl();
+            setDisc1Image("sth:" + item);
             var needsAutoboot = parsedQuery.autoboot !== undefined;
             if (needsAutoboot) {
                 processor.reset(true);
             }
             popupLoading("Loading " + item);
-            loadDiscImage(parsedQuery.disc).then(function (disc) {
+            loadDiscImage(parsedQuery.disc1).then(function (disc) {
                 processor.fdc.loadDisc(0, disc);
             }).then(
                 function () {
@@ -903,15 +908,12 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         });
 
         function gdLoad(cat) {
-            utils.noteEvent('google-drive', 'click', cat.title);
             // TODO: have a onclose flush event, handle errors
             /*
              $(window).bind("beforeunload", function() {
              return confirm("Do you really want to close?");
              });
              */
-            parsedQuery.disc = "gd:" + cat.id + "/" + cat.title;
-            updateUrl();
             popupLoading("Loading '" + cat.title + "' from Google Drive");
             return googleDrive.initialise()
                 .then(function (available) {
@@ -976,6 +978,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     var row = template.clone().removeClass("template").appendTo(dbList);
                     row.find(".name").text(cat.title);
                     $(row).on("click", function () {
+                        utils.noteEvent('google-drive', 'click', cat.title);
+                        setDisc1Image("gd:" + cat.id + "/" + cat.title);
                         gdLoad(cat).then(function (ssd) {
                             processor.fdc.loadDisc(0, ssd);
                         });
@@ -992,9 +996,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             elem.find(".description").text(image.desc);
             $(elem).on("click", function () {
                 utils.noteEvent('images', 'click', image.file);
-                parsedQuery.disc = image.file;
-                updateUrl();
-                loadDiscImage(parsedQuery.disc).then(function (disc) {
+                setDisc1Image(image.file);
+                loadDiscImage(parsedQuery.disc1).then(function (disc) {
                     processor.fdc.loadDisc(0, disc);
                 });
                 $('#discs').modal("hide");
@@ -1010,9 +1013,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             popupLoading("Creating '" + text + "' on Google Drive");
             googleDrive.create(processor.fdc, text)
                 .then(function (result) {
-                    parsedQuery.disc = "gd:" + result.fileId + "/" + text;
+                    setDisc1Image("gd:" + result.fileId + "/" + text);
                     processor.fdc.loadDisc(0, result.disc);
-                    updateUrl();
                     loadingFinished();
                 }, function (error) {
                     loadingFinished(error);

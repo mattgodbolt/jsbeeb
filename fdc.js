@@ -61,12 +61,11 @@ define(['./utils'], function (utils) {
         var data;
         var i;
         var dataString = localStorage[discName];
-        var isDsd = false;
-        if (name.endsWith(".dsd")) isDsd = true;
+        var nameDetails = utils.discImageSize(name);
+        var isDsd = nameDetails.isDsd;
         if (!dataString) {
             console.log("Creating browser-local disc " + name);
-            var numBytes = 256 * 10 * 80;
-            if (isDsd) numBytes *= 2;
+            var numBytes = nameDetails.byteSize;
             data = new Uint8Array(numBytes);
             for (i = 0; i < Math.min(12, name.length); ++i)
                 data[i] = name.charCodeAt(i) & 0xff;
@@ -77,8 +76,7 @@ define(['./utils'], function (utils) {
             for (i = 0; i < len; ++i) data[i] = dataString.charCodeAt(i) & 0xff;
         }
         return new BaseDisc(fdc, isDsd, data, function () {
-            var str = "";
-            for (var i = 0; i < data.length; ++i) str += String.fromCharCode(data[i]);
+            var str = utils.uint8ArrayToString(data);
             try {
                 window.localStorage.setItem(discName, str);
             } catch (e) {
