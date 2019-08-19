@@ -381,7 +381,6 @@ define(['./utils'], function (utils) {
                 return {op: "REG = 0;", write: true};
 
             // Undocumented opcodes.
-            // Many of the timings here are plain wrong.
             // first 3 used by Zalaga, http://stardot.org.uk/forums/viewtopic.php?f=2&t=3584&p=30514
 
             case "SAX": // stores (A AND X)
@@ -1025,7 +1024,10 @@ define(['./utils'], function (utils) {
                     ig.zpReadOp("zpAddr", "lo");
                     ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
                     ig.append("var addr = lo | (hi << 8);");
-                    if (op.read) ig.readOp("addr", "REG");
+                    if (op.read) {
+                        ig.readOp("addr", "REG");
+                        if (op.write) ig.spuriousOp("addr", "REG");
+                    }
                     ig.append(op.op);
                     if (op.write) ig.writeOp("addr", "REG");
                     return ig.render();
@@ -1039,8 +1041,6 @@ define(['./utils'], function (utils) {
                     ig.append("var addr = lo | (hi << 8);");
                     ig.append("var addrWithCarry = (addr + cpu.y) & 0xffff;");
                     ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
-                    // Strictly speaking this code below is overkill; it handles RMW when no such documented
-                    // instruction exists.
                     if (op.read && !op.write) {
                         ig = ig.split("addrWithCarry !== addrNonCarry");
                         ig.ifTrue.readOp("addrNonCarry");
