@@ -400,6 +400,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 processor.touchScreen.onMouse(x, y, evt.buttons);
             evt.preventDefault();
         });
+        $cub.on('paste', function (evt) {
+            window.alert(evt.clipboardData.getData('Text'));
+        });
 
         $(window).blur(function () {
             if (processor.sysvia) processor.sysvia.clearKeys();
