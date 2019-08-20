@@ -74,7 +74,7 @@ define(['./utils'],
                     result = this.ph3[0];
                     if (this.ph3pos > 0) {
                         this.ph3[0] = this.ph3[1];
-                        this.pstat[2] |= 0x40;
+                        this.pstat[2] |= 0xc0;
                         if (!--this.ph3pos) this.hstat[2] &= ~0x80;
                     }
                     break;
@@ -216,7 +216,7 @@ define(['./utils'],
                         this.ph3[0] = b;
                         this.ph3pos = 1;
                         this.hstat[2] |= 0x80;
-                        this.pstat[2] &= ~0x40;
+                        this.pstat[2] &= ~0xc0;
                     }
                     break;
                 case 7:
