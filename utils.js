@@ -939,6 +939,46 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         return {data: uncompressed.data, name: loadedFile};
     };
 
+    exports.discImageSize = function(name) {
+        // SSD, aka. single-sided disc, is:
+        // - 1 side :)
+        // - 80 tracks.
+        // - 10 sectors per track.
+        // - 256 bytes per sector.
+        var isDsd = false;
+        var byteSize = 80 * 10 * 256;
+        // DSD, aka. double-sided disc is twice the size.
+        if (name.toLowerCase().endsWith(".dsd")) {
+            byteSize *= 2;
+            isDsd = true;
+        }
+        return { isDsd: isDsd, byteSize: byteSize };
+    };
+
+    exports.setDiscName = function(data, name) {
+        for (var i = 0; i < 8; ++i)
+            data[i] = name.charCodeAt(i) & 0xff;
+    };
+
+    exports.uint8ArrayToString = function(array) {
+        var str = "";
+        for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
+        return str;
+    };
+
+    exports.stringToUint8Array = function(str) {
+        var len = str.length;
+        var array = new Uint8Array(len);
+        for (var i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
+        return array;
+    };
+
+    exports.resizeUint8Array = function(array, byteSize) {
+        var newArray = new Uint8Array(byteSize);
+        newArray.set(array.subarray(0, byteSize));
+        return newArray;
+    };
+
     function Fifo(capacity) {
         this.buffer = new Uint8Array(capacity);
         this.size = 0;
