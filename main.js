@@ -827,6 +827,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             reader.onload = function (e) {
                 processor.fdc.loadDisc(0, disc.discFor(processor.fdc, /\.dsd$/i.test(file.name), e.target.result));
                 delete parsedQuery.disc;
+                delete parsedQuery.disc1;
                 updateUrl();
                 $('#discs').modal("hide");
             };
