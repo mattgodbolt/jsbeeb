@@ -131,7 +131,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
                         } else if (typeof xhr.response !== "string") {
                             resolve(xhr.response);
                         } else {
-                            resolve(utils.makeBinaryData(xhr.response));
+                            resolve(utils.stringToUint8Array(xhr.response));
                         }
                     };
                     xhr.onerror = function () {
