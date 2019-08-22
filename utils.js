@@ -676,20 +676,28 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         console.log('event noted:', category, type, label);
     };
 
-    function makeBinaryData(dataIn) {
-        if (dataIn instanceof Uint8Array) return dataIn;
-        var len = dataIn.length;
-        var result = new Uint8Array(len);
-        for (var i = 0; i < len; ++i) result[i] = dataIn.charCodeAt(i) & 0xff;
-        return result;
-    }
-
-    exports.makeBinaryData = makeBinaryData;
-
     var baseUrl = "";
     exports.setBaseUrl = function (url) {
         baseUrl = url;
     };
+
+    function uint8ArrayToString(array) {
+        var str = "";
+        for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
+        return str;
+    };
+
+    exports.uint8ArrayToString = uint8ArrayToString;
+
+    function stringToUint8Array(str) {
+        if (str instanceof Uint8Array) return str;
+        var len = str.length;
+        var array = new Uint8Array(len);
+        for (var i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
+        return array;
+    };
+
+    exports.stringToUint8Array = stringToUint8Array;
 
     function loadDataHttp(url) {
         return new Promise(function (resolve, reject) {
@@ -701,7 +709,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
                 if (typeof request.response !== "string") {
                     resolve(request.response);
                 } else {
-                    resolve(makeBinaryData(request.response));
+                    resolve(stringToUint8Array(request.response));
                 }
             };
             request.onerror = function () {
@@ -816,7 +824,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         var self = this;
         self.name = name_;
         self.pos = 0;
-        self.data = makeBinaryData(data_);
+        self.data = stringToUint8Array(data_);
         if (!dontUnzip_ && self.data && self.data.length > 4 && self.data[0] === 0x1f && self.data[1] === 0x8b) {
             console.log("Ungzipping " + name_);
             self.data = ungzip(self.data);
@@ -958,19 +966,6 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     exports.setDiscName = function(data, name) {
         for (var i = 0; i < 8; ++i)
             data[i] = name.charCodeAt(i) & 0xff;
-    };
-
-    exports.uint8ArrayToString = function(array) {
-        var str = "";
-        for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
-        return str;
-    };
-
-    exports.stringToUint8Array = function(str) {
-        var len = str.length;
-        var array = new Uint8Array(len);
-        for (var i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
-        return array;
     };
 
     exports.resizeUint8Array = function(array, byteSize) {
