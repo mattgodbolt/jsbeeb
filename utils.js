@@ -128,6 +128,44 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     };
 
+    exports.stringToBBCKeys = function(str) {
+        var BBC = exports.BBC;
+        var array = new Array();
+        var i;
+        for (i = 0; i < str.length; ++i) {
+            var c = str.charCodeAt(i);
+            var charStr = str.charAt(i);
+            var bbcKey = null;
+            var needsShift = false;
+            if (c >= 65 && c <= 90) {
+                // A-Z
+                bbcKey = BBC[charStr];
+            } else {
+                switch (charStr) {
+                case '*':
+                    bbcKey = BBC.COLON_STAR; needsShift = true;
+                    break;
+                case '/':
+                    bbcKey = BBC.SLASH;
+                    break;
+                case '.':
+                    bbcKey = BBC.PERIOD;
+                    break;
+                case '"':
+                    bbcKey = BBC.K2; needsShift = true;
+                    break;
+                case '\n':
+                    bbcKey = BBC.RETURN;
+                    break;
+                }
+            }
+            if (needsShift) array.push(BBC.SHIFT);
+            if (bbcKey) array.push(bbcKey);
+            if (needsShift) array.push(BBC.SHIFT);
+        }
+        return array;
+    };
+
     /**
      * Useful references:
      * http://www.cambiaresearch.com/articles/15/javascript-char-codes-key-codes
