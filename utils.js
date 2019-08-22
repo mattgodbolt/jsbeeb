@@ -685,7 +685,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         var str = "";
         for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
         return str;
-    };
+    }
 
     exports.uint8ArrayToString = uint8ArrayToString;
 
@@ -695,7 +695,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         var array = new Uint8Array(len);
         for (var i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
         return array;
-    };
+    }
 
     exports.stringToUint8Array = stringToUint8Array;
 
