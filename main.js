@@ -324,6 +324,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         function keyPress(evt) {
+            if (document.activeElement.id === 'paste-text') return;
             if (running || !dbgr.enabled()) return;
             var code = keyCode(evt);
             if (code === 103 /* lower case g */) {
@@ -348,6 +349,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         function keyDown(evt) {
             userInteraction();
+            if (document.activeElement.id === 'paste-text') return;
             if (!running) return;
             var code = keyCode(evt);
             if (evt.altKey) {
@@ -373,6 +375,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         function keyUp(evt) {
+            if (document.activeElement.id === 'paste-text') return;
             // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
             var code = keyCode(evt);
             processor.sysvia.keyUp(code);
@@ -389,25 +392,29 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             evt.preventDefault();
         }
 
+        var $pastetext = $('#paste-text');
+        $pastetext.on('paste', function (event) {
+            var text = event.originalEvent.clipboardData.getData('text/plain');
+            sendRawKeyboardToBBC(utils.stringToBBCKeys(text));
+        });
+
         var $cub = $('#cub-monitor');
         $cub.on('mousemove mousedown mouseup', function (evt) {
             userInteraction();
+            $pastetext.blur();
             var cubOffset = $cub.offset();
             var screenOffset = $screen.offset();
             var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
             var y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
             if (processor.touchScreen)
                 processor.touchScreen.onMouse(x, y, evt.buttons);
+            evt.preventDefault();
         });
-
-        document.onpaste = function (event) {
-            var text = event.clipboardData.getData('text/plain');
-            sendRawKeyboardToBBC(utils.stringToBBCKeys(text));
-        };
 
         $(window).blur(function () {
             if (processor.sysvia) processor.sysvia.clearKeys();
         });
+
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;

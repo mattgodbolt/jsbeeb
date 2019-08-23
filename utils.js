@@ -137,31 +137,107 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             var charStr = str.charAt(i);
             var bbcKey = null;
             var needsShift = false;
+            var needsCapsLock = false;
             if (c >= 65 && c <= 90) {
                 // A-Z
                 bbcKey = BBC[charStr];
+            } else if (c >= 97 && c <= 122) {
+                // a-z
+                charStr = String.fromCharCode(c - 32);
+                bbcKey = BBC[charStr];
+                needsCapsLock = true;
+            } else if (c >= 48 && c <= 57) {
+                // 0-9
+                bbcKey = BBC["K" + charStr];
+            } else if (c >= 33 && c <= 41) {
+                // ! to )
+                charStr = String.fromCharCode(c + 16);
+                bbcKey = BBC["K" + charStr];
+                needsShift = true;
             } else {
                 switch (charStr) {
+                case '\n':
+                    bbcKey = BBC.RETURN;
+                    break;
+                case '\t':
+                    bbcKey = BBC.TAB;
+                    break;
+                case ' ':
+                    bbcKey = BBC.SPACE;
+                    break;
+                case '-':
+                    bbcKey = BBC.MINUS;
+                    break;
+                case '=':
+                    bbcKey = BBC.MINUS; needsShift = true;
+                    break;
+                case '^':
+                    bbcKey = BBC.HAT_TILDE;
+                    break;
+                case '~':
+                    bbcKey = BBC.HAT_TILDE; needsShift = true;
+                    break;
+                case '\\':
+                    bbcKey = BBC.PIPE_BACKSLASH;
+                    break;
+                case '|':
+                    bbcKey = BBC.PIPE_BACKSLASH; needsShift = true;
+                    break;
+                case '@':
+                    bbcKey = BBC.AT;
+                    break;
+                case '[':
+                    bbcKey = BBC.LEFT_SQUARE_BRACKET;
+                    break;
+                case '{':
+                    bbcKey = BBC.LEFT_SQUARE_BRACKET; needsShift = true;
+                    break;
+                case '_':
+                    bbcKey = BBC.UNDERSCORE_POUND;
+                    break;
+                case ';':
+                    bbcKey = BBC.SEMICOLON_PLUS;
+                    break;
+                case '+':
+                    bbcKey = BBC.SEMICOLON_PLUS; needsShift = true;
+                    break;
+                case ':':
+                    bbcKey = BBC.COLON_STAR;
+                    break;
                 case '*':
                     bbcKey = BBC.COLON_STAR; needsShift = true;
                     break;
-                case '/':
-                    bbcKey = BBC.SLASH;
+                case ']':
+                    bbcKey = BBC.RIGHT_SQUARE_BRACKET;
+                    break;
+                case '}':
+                    bbcKey = BBC.RIGHT_SQUARE_BRACKET; needsShift = true;
+                    break;
+                case ',':
+                    bbcKey = BBC.COMMA;
+                    break;
+                case '<':
+                    bbcKey = BBC.COMMA; needsShift = true;
                     break;
                 case '.':
                     bbcKey = BBC.PERIOD;
                     break;
-                case '"':
-                    bbcKey = BBC.K2; needsShift = true;
+                case '>':
+                    bbcKey = BBC.PERIOD; needsShift = true;
                     break;
-                case '\n':
-                    bbcKey = BBC.RETURN;
+                case '/':
+                    bbcKey = BBC.SLASH;
+                    break;
+                case '?':
+                    bbcKey = BBC.SLASH; needsShift = true;
                     break;
                 }
             }
             if (needsShift) array.push(BBC.SHIFT);
+            if (needsCapsLock) array.push(BBC.CAPSLOCK);
             if (bbcKey) array.push(bbcKey);
             if (needsShift) array.push(BBC.SHIFT);
+            if (needsCapsLock) array.push(BBC.CAPSLOCK);
         }
         return array;
     };
