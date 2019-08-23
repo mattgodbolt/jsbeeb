@@ -242,10 +242,12 @@ define(['./utils'], function (utils) {
                         // Reading ORA reads pin levels regardless of DDRA.
                         // Of the various 6522 datasheets, this one is clear:
                         // http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
-                        if (self.acr & 1)
+                        if (self.acr & 1) {
                             return self.ira;
-                        else
+                        } else {
+                            self.recalculatePortAPins();
                             return self.portapins;
+                        }
                         break;
 
                     case ORB:
@@ -254,6 +256,7 @@ define(['./utils'], function (utils) {
                             self.ifr &= ~INT_CB2;
                         self.updateIFR();
 
+                        self.recalculatePortBPins();
                         temp = self.orb & self.ddrb;
                         if (self.acr & 2)
                             temp |= (self.irb & ~self.ddrb);
