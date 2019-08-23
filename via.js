@@ -384,8 +384,6 @@ define(['./utils'], function (utils) {
         var self = via(cpu, 0x01);
 
         self.IC32 = 0;
-        self.keycol = 0;
-        self.keyrow = 0;
         self.capsLockLight = false;
         self.shiftLockLight = false;
         self.keys = [];
@@ -409,7 +407,7 @@ define(['./utils'], function (utils) {
                     self.keys[i][j] = false;
                 }
             }
-            self.updateKeyboardCA2();
+            self.updateKeys();
         }
 
         self.clearKeys = clearKeys;
@@ -437,7 +435,7 @@ define(['./utils'], function (utils) {
             }
 
             self.keys[colrow[0]][colrow[1]] = val;
-            self.updateKeyboardCA2();
+            self.updateKeys();
         };
         self.keyDown = function (key, shiftDown) {
             self.set(key, 1, shiftDown);
@@ -451,15 +449,15 @@ define(['./utils'], function (utils) {
 
         self.keyDownRaw = function (colrow) {
             self.keys[colrow[0]][colrow[1]] = 1;
-            self.updateKeyboardCA2();
+            self.updateKeys();
         };
         self.keyUpRaw = function (colrow) {
             self.keys[colrow[0]][colrow[1]] = 0;
-            self.updateKeyboardCA2();
+            self.updateKeys();
         };
         self.keyToggleRaw = function (colrow) {
             self.keys[colrow[0]][colrow[1]] = 1 - self.keys[colrow[0]][colrow[1]];
-            self.updateKeyboardCA2();
+            self.updateKeys();
         };
         self.hasAnyKeyDown = function () {
             // 10 for BBC, 13 for Master 128
@@ -475,7 +473,7 @@ define(['./utils'], function (utils) {
             return false;
         };
 
-        self.updateKeyboardCA2 = function () {
+        self.updateKeys = function () {
             // 10 for BBC, 13 for Master 128
             var numCols = 13;
             var i, j;
@@ -489,9 +487,22 @@ define(['./utils'], function (utils) {
                     }
                 }
             } else {
-                if (self.keycol < numCols) {
+                // Keyboard sets bit 7 to 0 or 1, and testing shows it always
+                // "wins" vs. CMOS.
+                // At 0 also wins against an output pin.
+
+                var portapins = self.portapins;
+                var keyrow = (portapins >>> 4) & 7;
+                var keycol = portapins & 0xf;
+                if (!self.keys[keycol][keyrow]) {
+                    self.portapins &= 0x7f;
+                } else if (!(self.ddra & 0x80)) {
+                    self.portapins |= 0x80;
+                }
+
+                if (keycol < numCols) {
                     for (j = 1; j < 8; ++j) {
-                        if (self.keys[self.keycol][j]) {
+                        if (self.keys[keycol][j]) {
                             self.setca2(true);
                             return;
                         }
@@ -502,12 +513,8 @@ define(['./utils'], function (utils) {
         };
 
         self.portAUpdated = function () {
-            var portapins = self.portapins;
-            self.keyrow = (portapins >>> 4) & 7;
-            self.keycol = portapins & 0xf;
-            self.updateKeyboardCA2();
-            soundChip.updateSlowDataBus(portapins, !(self.IC32 & 1));
-            if (isMaster) cmos.write(self.IC32, portapins);
+            self.updateKeys();
+            soundChip.updateSlowDataBus(self.portapins, !(self.IC32 & 1));
         };
 
         self.portBUpdated = function () {
@@ -522,28 +529,21 @@ define(['./utils'], function (utils) {
 
             video.setScreenAdd(((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0));
 
+            if (isMaster) cmos.writeControl(portbpins, self.portapins, self.IC32);
+
             // Updating IC32 may have enabled peripherals attached to port A.
             self.recalculatePortAPins();
-            if (isMaster) cmos.writeAddr(portbpins, self.portapins);
         };
 
         self.drivePortA = function () {
             // For experiments where we tested these behaviors, see:
             // https://stardot.org.uk/forums/viewtopic.php?f=4&t=17597
+            // If either keyboard or CMOS pulls a given pin low, it "wins"
+            // vs. via output.
             var busval = 0xff;
             if (isMaster) busval &= cmos.read(self.IC32);
             self.portapins &= busval;
-            // Keyboard sets bit 7 to 0 or 1, and testing shows it always
-            // "wins" vs. CMOS.
-            self.keyrow = (self.portapins >>> 4) & 7;
-            self.keycol = self.portapins & 0xf;
-            if (!(self.IC32 & 8)) {
-                busval &= 0x7f;
-                if (self.keys[self.keycol][self.keyrow]) busval |= 0x80;
-            }
-            // If either keyboard or CMOS pulls a given pin low, it "wins"
-            // vs. via output.
-            self.portapins &= busval;
+            self.updateKeys();
         };
 
         self.drivePortB = function () {
