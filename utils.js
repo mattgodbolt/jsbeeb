@@ -130,7 +130,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     exports.stringToBBCKeys = function(str) {
         var BBC = exports.BBC;
-        var array = new Array();
+        var array = [];
         var i;
         for (i = 0; i < str.length; ++i) {
             var c = str.charCodeAt(i);
