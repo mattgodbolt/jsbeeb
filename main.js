@@ -401,7 +401,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var $cub = $('#cub-monitor');
         $cub.on('mousemove mousedown mouseup', function (evt) {
             userInteraction();
-            $pastetext.blur();
+            if (document.activeElement !== document.body)
+                document.activeElement.blur();
             var cubOffset = $cub.offset();
             var screenOffset = $screen.offset();
             var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
