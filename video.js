@@ -76,6 +76,27 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             );
         };
 
+        this.clearPaintBuffer = function() {
+            var fb32 = this.fb32;
+            if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
+                var line = this.oddFrame ? 1 : 0;
+                while (line < 625) {
+                    var start = line * 1024;
+                    fb32.fill(0xFF000000, start, start + 1024);
+                    line += 2;
+                }
+            } else {
+                fb32.fill(0xFF000000);
+            }
+        };
+
+        this.paintAndClear = function() {
+            this.paint();
+            this.clearPaintBuffer();
+            this.bitmapY = 0;
+            this.updateRenderY();
+        };
+
         function copyFb(dest, src) {
             for (var i = 0; i < 1024 * 768; ++i) {
                 dest[i] = src[i];
@@ -159,20 +180,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
             return t;
         }();
-
-        this.renderBlank = function (offset) {
-            this.clearFb(offset, this.pixelsPerChar);
-            if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
-                this.clearFb(offset + 1024, this.pixelsPerChar);
-            }
-        };
-
-        this.renderHalfBlank = function (offset) {
-            this.clearFb(offset, this.pixelsPerChar >>> 1);
-            if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
-                this.clearFb(offset + 1024, this.pixelsPerChar >>> 1);
-            }
-        };
 
         this.blitFb = function (dat, destOffset, numPixels, doubledY) {
             destOffset |= 0;
@@ -294,11 +301,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                             this.oddFrame = !this.oddFrame;
                             if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
-                            if (this.clocks > 2) { // TODO: wat?
-                                this.paint();
-                            }
-                            this.bitmapY = 0;
-                            this.updateRenderY();
+                            this.paintAndClear();
                             this.sysvia.setVBlankInt(true);
                             this.teletext.vsync();
                             this.clocks = 0;
@@ -350,8 +353,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // If no VSync occurs this frame, go back to the top and force a repaint
                 if (this.bitmapY >= 384) {
                     // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
-                    this.bitmapY = 0;
-                    this.paint();
+                    this.paintAndClear();
                 }
                 this.updateRenderY();
             } else if (this.hpulseCounter === (this.regs[3] & 0x0F)) {
@@ -426,8 +428,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         var offset = this.renderY * 1024 + this.bitmapX;
                         if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                             this.renderChar(offset, dat);
-                        } else {
-                            this.renderBlank(offset);
                         }
 
                         if (this.cursorDrawIndex) this.handleCursor(offset);
@@ -559,10 +559,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.reset(null);
 
-        for (var y = 0; y < 625; ++y)
-            for (var x = 0; x < 1024; ++x)
-                this.fb32[y * 1024 + x] = 0;
-        this.paint(0, 0, 1024, 625);
+        this.clearPaintBuffer();
+        this.paint();
     }
 
     function FakeVideo() {
