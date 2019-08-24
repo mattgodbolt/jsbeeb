@@ -13,11 +13,10 @@ define([], function () {
             ];
             save();
         }
-        var readWrite = false;
-        var oldStrobe = false;
-        var data = 0;
         var enabled = false;
-        var addressStrobe = false;
+        var isRead = false;
+        var addressSelect = false;
+        var dataSelect = false;
         var cmosAddr = 0;
 
         function save() {
@@ -27,40 +26,32 @@ define([], function () {
         }
 
         function cmosRead(IC32) {
+            if (!enabled) return 0xff;
             // To drive the bus we need:
             // - CMOS enabled.
-            // - Address Strobe low.
-            // - Data Strobe high.
-            // - Read/write high (read).
-            if (enabled && !addressStrobe && (IC32 & 0x04) && readWrite) return data & 0xff;
+            // - Address Select low.
+            // - Data Select high.
+            // - Read high.
+            if (!addressSelect && dataSelect && isRead) return store[cmosAddr] & 0xff;
             return 0xff;
         }
 
-        function cmosWrite(IC32, sdbval) {
-            readWrite = !!(IC32 & 2);
-            var strobe = !!(IC32 & 4) ^ oldStrobe;
-            oldStrobe = !!(IC32 & 4);
-            if (strobe && enabled && !addressStrobe) {
-                if (!readWrite && cmosAddr > 0xb && !(IC32 & 4)) {
-                    // Write triggered on low to high D
-                    store[cmosAddr] = sdbval;
-                    save();
-                }
-                if (readWrite && (IC32 & 4)) {
-                    // Read data output while D is high
-                    data = store[cmosAddr] & 0xff;
-                }
+        function cmosWriteControl(portbpins, portapins, IC32) {
+            enabled = !!(portbpins & 0x40);
+            if (!enabled) return;
+            var oldDataSelect = dataSelect;
+            var oldAddressSelect = addressSelect;
+            isRead = !!(IC32 & 2);
+            dataSelect = !!(IC32 & 4);
+            addressSelect = !!(portbpins & 0x80);
+            if (oldAddressSelect && !addressSelect) cmosAddr = portapins & 0x3f;
+            if (oldDataSelect && !dataSelect && !addressSelect && !isRead && cmosAddr > 0xb) {
+                store[cmosAddr] = portapins;
+                save();
             }
         }
 
-        function cmosWriteAddr(val, sdbval) {
-            addressStrobe = !!(val & 0x80);
-            if (addressStrobe) cmosAddr = sdbval & 0x3f;
-            enabled = !!(val & 0x40);
-        }
-
         this.read = cmosRead;
-        this.write = cmosWrite;
-        this.writeAddr = cmosWriteAddr;
+        this.writeControl = cmosWriteControl;
     };
 });
