@@ -54,7 +54,7 @@ requirejs(['video', 'fake6502', 'fdc', 'models'],
         cpu.initialise().then(function () {
             return disc.load("discs/" + discName + ".ssd");
         }).then(function (data) {
-            cpu.fdc.loadDisc(0, disc.discFor(cpu.fdc, false, data));
+            cpu.fdc.loadDisc(0, disc.discFor(cpu.fdc, '', data));
             cpu.sysvia.keyDown(16);
             cpu.execute(10 * 1000 * 1000);
             cpu.sysvia.keyUp(16);

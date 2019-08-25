@@ -392,10 +392,27 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             evt.preventDefault();
         }
 
+        function loadHTMLFile(file) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
+                delete parsedQuery.disc;
+                delete parsedQuery.disc1;
+                updateUrl();
+                $('#discs').modal("hide");
+            };
+            reader.readAsBinaryString(file);
+        }
+
         var $pastetext = $('#paste-text');
         $pastetext.on('paste', function (event) {
             var text = event.originalEvent.clipboardData.getData('text/plain');
             sendRawKeyboardToBBC(utils.stringToBBCKeys(text));
+        });
+        $pastetext.on('drop', function (event) {
+            utils.noteEvent('local', 'drop');
+            var file = event.originalEvent.dataTransfer.files[0];
+            loadHTMLFile(file);
         });
 
         var $cub = $('#cub-monitor');
@@ -419,6 +436,15 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
+
+        function eventCanceler(event) {
+            event.preventDefault();
+        }
+
+        // To lower chance of data loss, only accept drop events in the drop
+        // zone in the menu bar.
+        document.ondragover = eventCanceler;
+        document.ondrop = eventCanceler;
 
         window.onbeforeunload = function () {
             if (running && processor.sysvia.hasAnyKeyDown()) {
@@ -723,7 +749,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             // * Dialog box (ugh) saying "is this ok?"
             if (schema === "|" || schema === "sth") {
                 return discSth.fetch(discImage).then(function (discData) {
-                    return disc.discFor(processor.fdc, false, discData);
+                    return disc.discFor(processor.fdc, discImage, discData);
                 });
             }
             if (schema === "gd") {
@@ -740,7 +766,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 var unzipped = utils.unzipDiscImage(arr);
                 var discData = unzipped.data;
                 discImage = unzipped.name;
-                return Promise.resolve(disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData));
+                return Promise.resolve(disc.discFor(processor.fdc, discImage, discData));
             }
             if (schema === "http" || schema === "https") {
                 return utils.loadData(schema + "://" + discImage).then(function (discData) {
@@ -749,12 +775,12 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                         discData = unzipped.data;
                         discImage = unzipped.name;
                     }
-                    return disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
+                    return disc.discFor(processor.fdc, discImage, discData);
                 });
             }
 
             return disc.load("discs/" + discImage).then(function (discData) {
-                return disc.discFor(processor.fdc, /\.dsd$/i.test(discImage), discData);
+                return disc.discFor(processor.fdc, discImage, discData);
             });
         }
 
@@ -791,17 +817,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         $('#disc_load').change(function (evt) {
-            var file = evt.target.files[0];
-            var reader = new FileReader();
             utils.noteEvent('local', 'click'); // NB no filename here
-            reader.onload = function (e) {
-                processor.fdc.loadDisc(0, disc.discFor(processor.fdc, /\.dsd$/i.test(file.name), e.target.result));
-                delete parsedQuery.disc;
-                delete parsedQuery.disc1;
-                updateUrl();
-                $('#discs').modal("hide");
-            };
-            reader.readAsBinaryString(file);
+            var file = evt.target.files[0];
+            loadHTMLFile(file);
         });
 
         $('#tape_load').change(function (evt) {

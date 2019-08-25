@@ -26,7 +26,7 @@ define(['./utils'], function (utils) {
         return result;
     }
 
-    function discFor(fdc, isDsd, stringData, onChange) {
+    function discFor(fdc, name, stringData, onChange) {
         var data;
         if (typeof stringData !== "string") {
             data = stringData;
@@ -46,7 +46,7 @@ define(['./utils'], function (utils) {
             return res;
         }
 
-        return new BaseDisc(fdc, isDsd, data, function () {
+        return new BaseDisc(fdc, name, data, function () {
             if (!changed()) return;
             if (onChange) {
                 onChange(data);
@@ -59,20 +59,17 @@ define(['./utils'], function (utils) {
         var data;
         var i;
         var dataString = localStorage[discName];
-        var nameDetails = utils.discImageSize(name);
-        var isDsd = nameDetails.isDsd;
-        var byteSize = nameDetails.byteSize;
         if (!dataString) {
             console.log("Creating browser-local disc " + name);
+            var nameDetails = utils.discImageSize(name);
+            var byteSize = nameDetails.byteSize;
             data = new Uint8Array(byteSize);
             utils.setDiscName(data, name);
         } else {
             console.log("Loading browser-local disc " + name);
             data = utils.stringToUint8Array(dataString);
-            if (data.length === 100 * 1024)
-                data = utils.resizeUint8Array(data, byteSize);
         }
-        return new BaseDisc(fdc, isDsd, data, function () {
+        return new BaseDisc(fdc, name, data, function () {
             var str = utils.uint8ArrayToString(data);
             try {
                 window.localStorage.setItem(discName, str);
@@ -82,8 +79,19 @@ define(['./utils'], function (utils) {
         });
     }
 
-    function BaseDisc(fdc, isDsd, data, flusher) {
+    function BaseDisc(fdc, name, data, flusher) {
         if (data === null || data === undefined) throw new Error("Bad disc data");
+        var nameDetails = utils.discImageSize(name);
+        var isDsd = nameDetails.isDsd;
+        var byteSize = nameDetails.byteSize;
+        if (data.length > byteSize && !isDsd) {
+            // For safety, if SSD is too big, assume it's a mis-named DSD.
+            nameDetails = utils.discImageSize('.dsd');
+            isDsd = true;
+            byteSize = nameDetails.byteSize;
+        }
+        data = utils.resizeUint8Array(data, byteSize);
+
         this.fdc = fdc;
         this.isDsd = isDsd;
         this.flusher = flusher;
