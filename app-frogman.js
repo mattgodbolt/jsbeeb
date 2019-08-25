@@ -56,7 +56,7 @@ requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', '
         cpu.initialise().then(function () {
             return disc.load("discs/" + discName + ".ssd");
         }).then(function (data) {
-            cpu.fdc.loadDisc(0, disc.discFor(cpu.fdc, false, data));
+            cpu.fdc.loadDisc(0, disc.discFor(cpu.fdc, '', data));
             var trace = false;
             cpu.debugInstruction.add(function (addr) {
                 //if (addr === 0x11ae) {

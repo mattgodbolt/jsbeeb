@@ -147,15 +147,6 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
         function makeDisc(fdc, data, meta) {
             var flusher = null;
             var name = meta.title;
-            var nameDetails = utils.discImageSize(name);
-            var isDsd = nameDetails.isDsd;
-            var byteSize = nameDetails.byteSize;
-            if (data.length === 100 * 1024) {
-                // Old images were stored too small so convert them.
-                data = utils.resizeUint8Array(data, byteSize);
-            } else if (data.length !== byteSize) {
-                throw new Error("Google Drive: Invalid disc data for '" + name + "': found " + data.length + " byte image)");
-            }
             if (meta.editable) {
                 console.log("Making editable disc");
                 flusher = _.debounce(function () {
@@ -166,7 +157,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
             } else {
                 console.log("Making read-only disc");
             }
-            return new BaseSsd(fdc, isDsd, data, flusher);
+            return new BaseSsd(fdc, name, data, flusher);
         }
 
         self.load = function (fdc, fileId) {
