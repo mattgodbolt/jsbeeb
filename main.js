@@ -324,6 +324,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         function keyPress(evt) {
+            if (document.activeElement.id === 'paste-text') return;
             if (running || !dbgr.enabled()) return;
             var code = keyCode(evt);
             if (code === 103 /* lower case g */) {
@@ -348,6 +349,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         function keyDown(evt) {
             userInteraction();
+            if (document.activeElement.id === 'paste-text') return;
             if (!running) return;
             var code = keyCode(evt);
             if (evt.altKey) {
@@ -373,6 +375,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         function keyUp(evt) {
+            if (document.activeElement.id === 'paste-text') return;
             // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
             var code = keyCode(evt);
             processor.sysvia.keyUp(code);
@@ -389,9 +392,17 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             evt.preventDefault();
         }
 
+        var $pastetext = $('#paste-text');
+        $pastetext.on('paste', function (event) {
+            var text = event.originalEvent.clipboardData.getData('text/plain');
+            sendRawKeyboardToBBC(utils.stringToBBCKeys(text));
+        });
+
         var $cub = $('#cub-monitor');
         $cub.on('mousemove mousedown mouseup', function (evt) {
             userInteraction();
+            if (document.activeElement !== document.body)
+                document.activeElement.blur();
             var cubOffset = $cub.offset();
             var screenOffset = $screen.offset();
             var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
@@ -404,6 +415,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         $(window).blur(function () {
             if (processor.sysvia) processor.sysvia.clearKeys();
         });
+
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
@@ -583,8 +595,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             setSthFilter($('#sth-filter').val());
         });
 
-        function sendRawKeyboardToBBC() {
-            var keysToSend = Array.prototype.slice.call(arguments, 0);
+        function sendRawKeyboardToBBC(keysToSend) {
             var lastChar;
             var nextKeyMillis = 0;
             processor.sysvia.disableKeyboard();
@@ -637,11 +648,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             console.log("Autobooting disc");
             utils.noteEvent('init', 'autoboot', image);
 
-            sendRawKeyboardToBBC(0,
-                // Shift on power-on -> run !Boot from the disc
-                BBC.SHIFT,
-                1000 // pause in ms
-            );
+            // Shift-break simulation, hold SHIFT for 1000ms.
+            sendRawKeyboardToBBC([BBC.SHIFT, 1000]);
         }
 
         function autoChainTape() {
@@ -650,26 +658,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             console.log("Auto Chaining Tape");
             utils.noteEvent('init', 'autochain');
 
-            sendRawKeyboardToBBC(1000,
-                // *TAPE
-                // CH.""
-                BBC.SHIFT,
-                BBC.COLON_STAR,
-                BBC.SHIFT,
-                BBC.T,
-                BBC.A,
-                BBC.P,
-                BBC.E,
-                BBC.RETURN,
-                BBC.C,
-                BBC.H,
-                BBC.PERIOD,
-                BBC.SHIFT,
-                BBC.K2,
-                BBC.K2,
-                BBC.SHIFT,
-                BBC.RETURN
-            );
+            var bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
+            sendRawKeyboardToBBC([1000].concat(bbcKeys));
         }
 
         function autoRunTape() {
@@ -678,23 +668,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             console.log("Auto Running Tape");
             utils.noteEvent('init', 'autorun');
 
-            sendRawKeyboardToBBC(1000,
-                // *TAPE
-                // */
-                BBC.SHIFT,
-                BBC.COLON_STAR,
-                BBC.SHIFT,
-                BBC.T,
-                BBC.A,
-                BBC.P,
-                BBC.E,
-                BBC.RETURN,
-                BBC.SHIFT,
-                BBC.COLON_STAR,
-                BBC.SHIFT,
-                BBC.SLASH,
-                BBC.RETURN
-            );
+            var bbcKeys = utils.stringToBBCKeys('*TAPE\n*/\n');
+            sendRawKeyboardToBBC([1000].concat(bbcKeys));
         }
 
         function autoRunBasic() {
@@ -703,13 +678,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             console.log("Auto Running basic");
             utils.noteEvent('init', 'autorunbasic');
 
-            sendRawKeyboardToBBC(1000,
-                // RUN
-                BBC.R,
-                BBC.U,
-                BBC.N,
-                BBC.RETURN
-            );
+            var bbcKeys = utils.stringToBBCKeys('RUN\n');
+            sendRawKeyboardToBBC([1000].concat(bbcKeys));
         }
 
         function updateUrl() {
