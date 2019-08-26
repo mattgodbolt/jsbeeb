@@ -409,6 +409,11 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             var text = event.originalEvent.clipboardData.getData('text/plain');
             sendRawKeyboardToBBC(utils.stringToBBCKeys(text));
         });
+        $pastetext.on('dragover', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.originalEvent.dataTransfer.dropEffect = "copy";
+        });
         $pastetext.on('drop', function (event) {
             utils.noteEvent('local', 'drop');
             var file = event.originalEvent.dataTransfer.files[0];
@@ -437,14 +442,15 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
 
-        function eventCanceler(event) {
-            event.preventDefault();
-        }
-
         // To lower chance of data loss, only accept drop events in the drop
         // zone in the menu bar.
-        document.ondragover = eventCanceler;
-        document.ondrop = eventCanceler;
+        document.ondragover = function(event) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "none";
+        };
+        document.ondrop = function(event) {
+            event.preventDefault();
+        };
 
         window.onbeforeunload = function () {
             if (running && processor.sysvia.hasAnyKeyDown()) {
