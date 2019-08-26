@@ -438,6 +438,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (processor.sysvia) processor.sysvia.clearKeys();
         });
 
+        $('#fs').click(function () {
+            $screen[0].requestFullscreen();
+        });
+
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
@@ -1300,7 +1304,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         (function () {
             const $cubMonitor = $("#cub-monitor");
-            var isFullscreen = false;
             var cubOrigHeight = $cubMonitor.height();
             var cubToScreenHeightRatio = $screen.height() / cubOrigHeight;
             var cubOrigWidth = $cubMonitor.width();
@@ -1313,9 +1316,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             const bottomReservedSize = 100;
 
             function resizeTv() {
-                var width = Math.max(minWidth, window.innerWidth - (isFullscreen ? 0 : borderReservedSize * 2));
-                var height = Math.max(minHeight, window.innerHeight - navbarHeight) -
-                    (isFullscreen ? 0 : bottomReservedSize);
+                var width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
+                var height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
                 if (width / height <= desiredAspectRatio) {
                     height = width / desiredAspectRatio;
                 } else {
@@ -1327,17 +1329,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
             }
 
-            function toggleFullscreen() {
-                isFullscreen = !isFullscreen;
-                $cubMonitor.toggleClass("fullscreen", isFullscreen);
-                $("#cub-monitor-pic").toggle(!isFullscreen);
-                $(".sidebar .bottom").toggle(!isFullscreen);
-                $screen.toggleClass("fullscreen", isFullscreen);
-                resizeTv();
-            }
-
             window.onresize = resizeTv;
-            $("#fs").click(toggleFullscreen);
             resizeTv();
         })();
 
