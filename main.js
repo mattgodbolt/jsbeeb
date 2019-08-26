@@ -433,6 +433,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (processor.sysvia) processor.sysvia.clearKeys();
         });
 
+        $('#fs').click(function () {
+            $screen[0].requestFullscreen();
+        });
+
         document.onkeydown = keyDown;
         document.onkeypress = keyPress;
         document.onkeyup = keyUp;
@@ -1291,49 +1295,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             soundChip.mute();
             ddNoise.mute();
         }
-
-        (function () {
-            const $cubMonitor = $("#cub-monitor");
-            var isFullscreen = false;
-            var cubOrigHeight = $cubMonitor.height();
-            var cubToScreenHeightRatio = $screen.height() / cubOrigHeight;
-            var cubOrigWidth = $cubMonitor.width();
-            var cubToScreenWidthRatio = $screen.width() / cubOrigWidth;
-            var navbarHeight = $("#header-bar").height();
-            const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
-            const minWidth = cubOrigWidth / 4;
-            const minHeight = cubOrigHeight / 4;
-            const borderReservedSize = 100;
-            const bottomReservedSize = 100;
-
-            function resizeTv() {
-                var width = Math.max(minWidth, window.innerWidth - (isFullscreen ? 0 : borderReservedSize * 2));
-                var height = Math.max(minHeight, window.innerHeight - navbarHeight) -
-                    (isFullscreen ? 0 : bottomReservedSize);
-                if (width / height <= desiredAspectRatio) {
-                    height = width / desiredAspectRatio;
-                } else {
-                    width = height * desiredAspectRatio;
-                }
-                console.log(width / height, desiredAspectRatio);
-                $('#cub-monitor').height(height).width(width);
-                $('#cub-monitor-pic').height(height).width(width);
-                $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
-            }
-
-            function toggleFullscreen() {
-                isFullscreen = !isFullscreen;
-                $cubMonitor.toggleClass("fullscreen", isFullscreen);
-                $("#cub-monitor-pic").toggle(!isFullscreen);
-                $(".sidebar .bottom").toggle(!isFullscreen);
-                $screen.toggleClass("fullscreen", isFullscreen);
-                resizeTv();
-            }
-
-            window.onresize = resizeTv;
-            $("#fs").click(toggleFullscreen);
-            resizeTv();
-        })();
 
         // Handy shortcuts. bench/profile stuff is delayed so that they can be
         // safely run from the JS console in firefox.
