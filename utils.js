@@ -675,7 +675,12 @@ define(['jsunzip', 'promise'], function (jsunzip) {
             map(keyCodes.DOWN, BBC.DOWN); // arrow down
             map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
             map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
+
+            // None of this last group in great locations.
+            // But better to have them mapped at least somewhere.
             map(keyCodes.BACK_QUOTE, BBC.AT);
+            map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
+            map(keyCodes.PAGEUP, BBC.UNDERSCORE_POUND);
         }
 
         // Master
