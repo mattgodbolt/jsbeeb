@@ -196,7 +196,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
                 0x0000, 0x00, 0x00,
             ];
             return fdc.load("discs/TestTimings.ssd").then(function (data) {
-                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, false, data));
+                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
                 return runUntilInput();
             }).then(function () {
                 return type('CHAIN "TEST"');
@@ -216,7 +216,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
 
         function testRmw() {
             return fdc.load("discs/RmwX.ssd").then(function (data) {
-                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, false, data));
+                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
                 return runUntilInput();
             }).then(function () {
                 return type("*TIMINGS");
@@ -242,7 +242,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
             var output = "";
             var hook;
             return fdc.load("discs/bcdtest.ssd").then(function (data) {
-                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, false, data));
+                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
                 return runUntilInput();
             }).then(function () {
                 return type("*BCDTEST");
@@ -265,7 +265,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
 
         function testKevinEdwards(name) { // Well, at least his protection system...
             return fdc.load("discs/Protection.ssd").then(function (data) {
-                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, false, data));
+                processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
                 return runUntilInput();
             }).then(function () {
                 return type('CHAIN "B.' + name + '"');
