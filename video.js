@@ -48,7 +48,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.drawHalfScanline = false;
         this.oddFrame = false;
         this.teletext = new Teletext();
-        this.cursorOn = this.cursorOff = this.cursorOnThisFrame = false;
+        this.cursorOn = this.cursorOnThisFrame = false;
         this.cursorDrawIndex = 0;
         this.cursorPos = 0;
         this.interlacedSyncAndVideo = false;
@@ -200,14 +200,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
         };
 
-        this.clearFb = function (destOffset, numPixels) {
-            var black = 0xFF000000;
-            var fb32 = this.fb32;
-            while (numPixels--) {
-                fb32[destOffset++] = black;
-            }
-        };
-
         this.handleCursor = function (offset) {
             if (this.cursorOnThisFrame && (this.ulactrl & this.cursorTable[this.cursorDrawIndex])) {
                 var i;
@@ -260,10 +252,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.endOfLine = function () {
 
             var cursorEnd = this.interlacedSyncAndVideo ? (this.regs[11] >>> 1) : this.regs[11];
-            if (this.scanlineCounter === cursorEnd) {
-                this.cursorOn = false;
-                this.cursorOff = true;
-            }
+            if (this.scanlineCounter === cursorEnd) this.cursorOn = false;
 
             // Handle VSync
             if (this.inVSync) {
@@ -314,7 +303,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 this.lineStartAddr = this.nextLineStartAddr;
                 this.addrLine = (this.interlacedSyncAndVideo && this.oddFrame) ? 1 : 0;
                 this.dispEnabled |= SCANLINEDISPENABLE;
-                this.cursorOn = this.cursorOff = false;
+                this.cursorOn = false;
 
                 // Handle vertical displayed
                 if (this.vertCounter === this.regs[6]) {
@@ -333,7 +322,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.teletext.endline();
 
             var cursorStartLine = this.regs[10] & 31;
-            if (!this.cursorOff && (this.scanlineCounter === cursorStartLine || (this.interlacedSyncAndVideo && this.scanlineCounter === (cursorStartLine >>> 1)))) {
+            if ((this.scanlineCounter === cursorStartLine) || (this.interlacedSyncAndVideo && this.scanlineCounter === (cursorStartLine >>> 1))) {
                 this.cursorOn = true;
             }
         };
@@ -406,31 +395,33 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         this.hpulseCounter = 0;
                     }
 
-                    // Handle cursor
-                    if (this.horizCounter < this.regs[1] && this.cursorOn && !((this.addr ^ this.cursorPos) & 0x3fff)) {
-                        this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
-                    }
-
-                    // Read data from address pointer if both horizontal and vertical display enabled
-                    var dat = 0;
-                    if ((this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE)) {
-
-                        dat = this.readVideoMem();
-                        if (this.teletextMode) {
-                            this.teletext.fetchData(dat);
-                        }
-
-                        this.addr++;
-                    }
-
-                    // Render data or border depending on display enable state
-                    if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.renderY < 625) {
+                    var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
+                    if (insideBorder || this.cursorDrawIndex) {
                         var offset = this.renderY * 1024 + this.bitmapX;
-                        if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
-                            this.renderChar(offset, dat);
+
+                        // Read data from address pointer if both horizontal and vertical display enabled.
+                        var dat = 0;
+                        if (insideBorder) {
+                            dat = this.readVideoMem();
+                            if (this.teletextMode) {
+                                this.teletext.fetchData(dat);
+                            }
+
+                            // Check cursor start.
+                            if (this.addr === this.cursorPos && this.cursorOn && this.horizCounter < this.regs[1]) {
+                                this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
+                            }
+
+                            this.addr = (this.addr + 1) & 0x3fff;
                         }
 
-                        if (this.cursorDrawIndex) this.handleCursor(offset);
+                        // Render data depending on display enable state.
+                        if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.renderY < 625) {
+                            if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
+                                this.renderChar(offset, dat);
+                            }
+                            if (this.cursorDrawIndex) this.handleCursor(offset);
+                        }
                     }
 
                     // Handle horizontal total
@@ -505,7 +496,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         break;
                     case 14:
                     case 15:
-                        this.video.cursorPos = this.video.regs[15] | (this.video.regs[14] << 8);
+                        this.video.cursorPos = (this.video.regs[15] | (this.video.regs[14] << 8)) & 0x3fff;
                         break;
                 }
             } else
