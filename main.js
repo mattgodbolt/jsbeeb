@@ -438,8 +438,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (processor.sysvia) processor.sysvia.clearKeys();
         });
 
-        $('#fs').click(function () {
+        $('#fs').click(function (event) {
             $screen[0].requestFullscreen();
+            event.preventDefault();
         });
 
         document.onkeydown = keyDown;
@@ -1020,12 +1021,14 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 });
         });
 
-        $('#hard-reset').click(function () {
+        $('#hard-reset').click(function (event) {
             processor.reset(true);
+            event.preventDefault();
         });
 
-        $('#soft-reset').click(function () {
+        $('#soft-reset').click(function (event) {
             processor.reset(false);
+            event.preventDefault();
         });
 
         function guessModelFromUrl() {
