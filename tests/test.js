@@ -41,7 +41,10 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
                 return p.then(function () {
                     return runTest(test.test, test.func, test.model);
                 });
-            }, Promise.resolve()).catch(function (err) {
+            }, Promise.resolve()).then(function () {
+                    return anyFailures;
+                }
+            ).catch(function (err) {
                 anyFailures = true;
                 log(err);
             });
