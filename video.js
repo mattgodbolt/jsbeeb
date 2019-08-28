@@ -131,7 +131,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             var red = lerp1(r1, r2, alpha);
             var green = lerp1(g1, g2, alpha);
             var blue = lerp1(b1, b2, alpha);
-            return 0xff000000 | (red << 16) | (green << 8) | blue;
+            return (red << 16) | (green << 8) | blue;
         }
 
         this.debugPaint = function () {
