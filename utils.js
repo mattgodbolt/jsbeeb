@@ -132,12 +132,14 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         var BBC = exports.BBC;
         var array = [];
         var i;
+        var shiftState = false;
+        var capsLockState = true;
         for (i = 0; i < str.length; ++i) {
             var c = str.charCodeAt(i);
             var charStr = str.charAt(i);
             var bbcKey = null;
             var needsShift = false;
-            var needsCapsLock = false;
+            var needsCapsLock = true;
             if (c >= 65 && c <= 90) {
                 // A-Z
                 bbcKey = BBC[charStr];
@@ -145,7 +147,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
                 // a-z
                 charStr = String.fromCharCode(c - 32);
                 bbcKey = BBC[charStr];
-                needsCapsLock = true;
+                needsCapsLock = false;
             } else if (c >= 48 && c <= 57) {
                 // 0-9
                 bbcKey = BBC["K" + charStr];
@@ -233,12 +235,22 @@ define(['jsunzip', 'promise'], function (jsunzip) {
                     break;
                 }
             }
-            if (needsShift) array.push(BBC.SHIFT);
-            if (needsCapsLock) array.push(BBC.CAPSLOCK);
-            if (bbcKey) array.push(bbcKey);
-            if (needsShift) array.push(BBC.SHIFT);
-            if (needsCapsLock) array.push(BBC.CAPSLOCK);
+
+            if (!bbcKey) continue;
+
+            if ((needsShift && !shiftState) || (!needsShift && shiftState)) {
+                array.push(BBC.SHIFT);
+                shiftState = !shiftState;
+            }
+            if ((needsCapsLock && !capsLockState) || (!needsCapsLock && capsLockState)) {
+                array.push(BBC.CAPSLOCK);
+                capsLockState = !capsLockState;
+            }
+            array.push(bbcKey);
         }
+
+        if (shiftState) array.push(BBC.SHIFT);
+        if (!capsLockState) array.push(BBC.CAPSLOCK);
         return array;
     };
 
