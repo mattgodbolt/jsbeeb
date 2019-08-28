@@ -1234,9 +1234,21 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 last = 0;
                 return;
             }
-            var speedy = fastAsPossible || (fastTape && processor.acia.motorOn);
-            if (speedy) {
-                window.setTimeout(draw, 0);
+            // If we got here via setTimeout, we don't get passed the time.
+            if (now === undefined) {
+                now = window.performance.now();
+            }
+
+            var motorOn = processor.acia.motorOn;
+            var speedy = fastAsPossible || (fastTape && motorOn);
+            var useTimeout = speedy || motorOn;
+            var timeout = speedy ? 0 : (1000.0 / 50);
+
+            // We use setTimeout instead of requestAnimationFrame in two cases:
+            // a) We're trying to run as fast as possible.
+            // b) Tape is playing, normal speed but backgrounded tab should run.
+            if (useTimeout) {
+                window.setTimeout(draw, timeout);
             } else {
                 window.requestAnimationFrame(draw);
             }
@@ -1255,12 +1267,11 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 }
                 cycles |= 0;
                 try {
-                    var begin = performance.now();
                     if (!processor.execute(cycles)) {
                         stop(true);
                     }
                     var end = performance.now();
-                    virtualSpeedUpdater.update(cycles, end - begin);
+                    virtualSpeedUpdater.update(cycles, end - now);
                 } catch (e) {
                     running = false;
                     utils.noteEvent('exception', 'thrown', e.stack);
@@ -1272,7 +1283,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         function run() {
-            requestAnimationFrame(draw);
+            window.requestAnimationFrame(draw);
         }
 
         var wasPreviouslyRunning = false;
