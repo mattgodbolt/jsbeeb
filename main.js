@@ -1246,12 +1246,14 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (last !== 0) {
                 var cycles;
                 if (!speedy) {
+                    // Now and last are DOMHighResTimeStamp, just a double.
                     var sinceLast = now - last;
-                    cycles = (sinceLast * clocksPerSecond / 1000) | 0;
+                    cycles = sinceLast * clocksPerSecond / 1000;
                     cycles = Math.min(cycles, MaxCyclesPerFrame);
                 } else {
                     cycles = clocksPerSecond / 50;
                 }
+                cycles |= 0;
                 try {
                     var begin = performance.now();
                     if (!processor.execute(cycles)) {
