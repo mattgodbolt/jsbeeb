@@ -14,11 +14,6 @@ body {
     height: 648px;
 }
 
-#cub-monitor.fullscreen {
-    width: 100%;
-    height: 100%;
-}
-
 #cub-monitor-pic {
     position: absolute;
 }
@@ -48,14 +43,8 @@ body {
     top: 8px;
     left: 0px;
     display: block;
-    background-color: black;
     width: 896px;
     height: 600px;
-}
-
-#screen.fullscreen {
-    width: 100%;
-    height: 100%;
 }
 
 #debug {

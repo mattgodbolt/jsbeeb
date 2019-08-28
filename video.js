@@ -82,11 +82,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 var line = this.oddFrame ? 1 : 0;
                 while (line < 625) {
                     var start = line * 1024;
-                    fb32.fill(0xFF000000, start, start + 1024);
+                    fb32.fill(0, start, start + 1024);
                     line += 2;
                 }
             } else {
-                fb32.fill(0xFF000000);
+                fb32.fill(0);
             }
         };
 
@@ -131,7 +131,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             var red = lerp1(r1, r2, alpha);
             var green = lerp1(g1, g2, alpha);
             var blue = lerp1(b1, b2, alpha);
-            return 0xff000000 | (red << 16) | (green << 8) | blue;
+            return (red << 16) | (green << 8) | blue;
         }
 
         this.debugPaint = function () {
