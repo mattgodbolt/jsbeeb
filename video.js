@@ -397,8 +397,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                     var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
                     if (insideBorder || this.cursorDrawIndex) {
-                        var offset = this.renderY * 1024 + this.bitmapX;
-
                         // Read data from address pointer if both horizontal and vertical display enabled.
                         var dat = 0;
                         if (insideBorder) {
@@ -417,6 +415,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                         // Render data depending on display enable state.
                         if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.renderY < 625) {
+                            var offset = this.renderY * 1024 + this.bitmapX;
+
                             if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                                 this.renderChar(offset, dat);
                             }
