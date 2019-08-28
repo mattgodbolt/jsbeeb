@@ -407,7 +407,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var $pastetext = $('#paste-text');
         $pastetext.on('paste', function (event) {
             var text = event.originalEvent.clipboardData.getData('text/plain');
-            sendRawKeyboardToBBC(utils.stringToBBCKeys(text));
+            sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
         });
         $pastetext.on('dragover', function (event) {
             event.preventDefault();
@@ -632,10 +632,20 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             setSthFilter($('#sth-filter').val());
         });
 
-        function sendRawKeyboardToBBC(keysToSend) {
+        function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
             var lastChar;
             var nextKeyMillis = 0;
             processor.sysvia.disableKeyboard();
+
+            if (checkCapsAndShiftLocks) {
+                var toggleKey = null;
+                if (!processor.sysvia.capsLockLight) toggleKey = BBC.CAPSLOCK;
+                else if (processor.sysvia.shiftLockLight) toggleKey = BBC.SHIFTLOCK;
+                if (toggleKey) {
+                    keysToSend.unshift(toggleKey);
+                    keysToSend.push(toggleKey);
+                }
+            }
 
             var sendCharHook = processor.debugInstruction.add(function nextCharHook() {
                 var millis = processor.cycleSeconds * 1000 + processor.currentCycles / (clocksPerSecond / 1000);
@@ -686,7 +696,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             utils.noteEvent('init', 'autoboot', image);
 
             // Shift-break simulation, hold SHIFT for 1000ms.
-            sendRawKeyboardToBBC([BBC.SHIFT, 1000]);
+            sendRawKeyboardToBBC([BBC.SHIFT, 1000], false);
         }
 
         function autoChainTape() {
@@ -696,7 +706,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             utils.noteEvent('init', 'autochain');
 
             var bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
-            sendRawKeyboardToBBC([1000].concat(bbcKeys));
+            sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
         }
 
         function autoRunTape() {
@@ -706,7 +716,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             utils.noteEvent('init', 'autorun');
 
             var bbcKeys = utils.stringToBBCKeys('*TAPE\n*/\n');
-            sendRawKeyboardToBBC([1000].concat(bbcKeys));
+            sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
         }
 
         function autoRunBasic() {
@@ -716,7 +726,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             utils.noteEvent('init', 'autorunbasic');
 
             var bbcKeys = utils.stringToBBCKeys('RUN\n');
-            sendRawKeyboardToBBC([1000].concat(bbcKeys));
+            sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
         }
 
         function updateUrl() {
