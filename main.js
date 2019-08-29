@@ -42,6 +42,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var fastAsPossible = false;
         var fastTape = false;
         var noSeek = false;
+        var audioFilterFreq = 7000;
+        var audioFilterQ = 5;
 
         if (queryString) {
             if (queryString[queryString.length - 1] === '/')  // workaround for shonky python web server
@@ -114,6 +116,12 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                             break;
                         case "noseek":
                             noSeek = true;
+                            break;
+                        case "audiofilterfreq":
+                            audioFilterFreq = Number(val);
+                            break;
+                        case "audiofilterq":
+                            audioFilterQ = Number(val);
                             break;
                     }
                 }
@@ -217,7 +225,18 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 var chan = outBuffer.getChannelData(0);
                 soundChip.render(chan, 0, chan.length);
             };
-            soundChip.jsAudioNode.connect(audioContext.destination);
+
+            if (audioFilterFreq !== 0) {
+                soundChip.filterNode = audioContext.createBiquadFilter();
+                soundChip.filterNode.type = "lowpass";
+                soundChip.filterNode.frequency.value = audioFilterFreq;
+                soundChip.filterNode.Q.value = audioFilterQ;
+                soundChip.jsAudioNode.connect(soundChip.filterNode);
+                soundChip.filterNode.connect(audioContext.destination);
+            } else {
+                soundChip.jsAudioNode.connect(audioContext.destination);
+            }
+
             if (!noSeek) ddNoise = new DdNoise.DdNoise(audioContext);
 
             $audioWarningNode.toggle(false);
