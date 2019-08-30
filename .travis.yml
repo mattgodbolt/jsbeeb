@@ -7,15 +7,16 @@ node_js:
     - "8"
 env:
     global:
-      # include $HOME/.local/bin for `aws`
-      - PATH=$HOME/.local/bin:$PATH
-    - TEST_SUITE=short-tests
-    - TEST_SUITE=long-tests
-    - TEST_SUITE=lint
-script:
-    make -j2 ${TEST_SUITE}
+        # include $HOME/.local/bin for `aws`
+        - PATH=$HOME/.local/bin:$PATH
+    matrix:
+        - TEST_SUITE=short-tests
+        - TEST_SUITE=long-tests
+        - TEST_SUITE=lint
+    script:
+        make -j2 ${TEST_SUITE}
 
-jobs:
-    include:
-        - stage: deploy
-          env: TEST_SUITE=upload
+    jobs:
+        include:
+            - stage: deploy
+              env: TEST_SUITE=upload
