@@ -2,10 +2,13 @@ sudo: false
 install: true
 language: node_js
 install:
-    - pip install awscli
+    - pip install --user awscli
 node_js: 
     - "8"
 env:
+    global:
+      # include $HOME/.local/bin for `aws`
+      - PATH=$HOME/.local/bin:$PATH
     - TEST_SUITE=short-tests
     - TEST_SUITE=long-tests
     - TEST_SUITE=lint
