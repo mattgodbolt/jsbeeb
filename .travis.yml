@@ -1,6 +1,8 @@
 sudo: false
 install: true
 language: node_js
+install:
+    - pip install awscli
 node_js: 
     - "8"
 env:
