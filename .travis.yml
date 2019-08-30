@@ -13,4 +13,4 @@ script:
 jobs:
     include:
         - stage: deploy
-          env: TEST_SUITE=dist
+          env: TEST_SUITE=upload
