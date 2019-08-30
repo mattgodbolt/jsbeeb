@@ -1235,10 +1235,13 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             this.cycles = 0;
             this.time = 0;
             this.v = $('.virtualMHz');
+            this.header = $('#virtual-mhz-header');
+            this.speedy = false;
 
-            this.update = function (cycles, time) {
+            this.update = function (cycles, time, speedy) {
                 this.cycles += cycles;
                 this.time += time;
+                this.speedy = speedy;
             };
 
             this.display = function () {
@@ -1249,6 +1252,11 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     if (this.cycles >= 10 * 2 * 1000 * 1000) {
                         this.cycles = this.time = 0;
                     }
+                    var colour = "white";
+                    if (this.speedy) {
+                        colour = "red";
+                    }
+                    this.header.css("color", colour);
                 }
                 setTimeout(this.display.bind(this), 3333);
             };
@@ -1300,7 +1308,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                         stop(true);
                     }
                     var end = performance.now();
-                    virtualSpeedUpdater.update(cycles, end - now);
+                    virtualSpeedUpdater.update(cycles, end - now, speedy);
                 } catch (e) {
                     running = false;
                     utils.noteEvent('exception', 'thrown', e.stack);
