@@ -495,17 +495,33 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 // as the video circuitry will already be looking at 0x3000 or so above
                 // the offset.
                 this.videoDisplayPage = (b & 1) ? 0x8000 : 0x0000;
-                // The RAM the processor sees for writes when executing OS instructions
-                // is controlled by the "E" bit.
-                this.memStatOffsetByIFetchBank[0xc] = this.memStatOffsetByIFetchBank[0xd] = (b & 2) ? 256 : 0;
+
+                var bitE = !!(b & 2);
+                var bitX = !!(b & 4);
+                var bitY = !!(b & 8);
                 var i;
                 // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE.
-                var lowRamOffset = (b & 4) ? 0x8000 : 0;
-                for (i = 48; i < 128; ++i) this.memLook[i] = lowRamOffset;
+                // This loop rewires which paged RAM 0x3000 - 0x7fff hits.
+                for (i = 48; i < 128; ++i) {
+                    // For "normal" access, it's simple: shadow or not.
+                    this.memLook[i] = bitX ? 0x8000 : 0;
+                    // For special Master opcode access at 0xc000 - 0xdfff,
+                    // it's more involved.
+                    if (bitY) {
+                       // If 0xc000 is mapped as RAM, the Master opcode access
+                       // is disabled; follow what normal access does.
+                       this.memLook[i + 256] = this.memLook[i];
+                    } else {
+                       // Master opcode access enabled; bit E determines whether
+                       // it hits shadow RAM or normal RAM. This is independent
+                       // of bit X.
+                       this.memLook[i + 256] = bitE ? 0x8000 : 0;
+                    }
+                }
                 // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
                 // at 0x9000, so (0x9000 - 0xc000) = -0x3000 is needed as an offset.
-                var hazelRAM = (b & 8) ? 1 : 2;
-                var hazelOff = (b & 8) ? -0x3000 : this.osOffset - 0xc000;
+                var hazelRAM = bitY ? 1 : 2;
+                var hazelOff = bitY ? -0x3000 : this.osOffset - 0xc000;
                 for (i = 192; i < 224; ++i) {
                     this.memLook[i] = this.memLook[i + 256] = hazelOff;
                     this.memStat[i] = this.memStat[i + 256] = hazelRAM;
@@ -608,6 +624,9 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     case 0xfe24:
                     case 0xfe28:
                         if (model.isMaster) return this.fdc.read(addr);
+                        break;
+                    case 0xfe30:
+                        if (model.isMaster) return this.romsel & 0x8f;
                         break;
                     case 0xfe34:
                         if (model.isMaster) return this.acccon;
@@ -868,11 +887,17 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 var i;
                 if (hard) {
                     for (i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
+                    if (model.isMaster) {
+                        // On the Master, opcodes exeucting from 0xc000 - 0xdfff
+                        // can have optionally have their memory accesses
+                        // redirected to shadow RAM.
+                        this.memStatOffsetByIFetchBank[0xc] = 256;
+                        this.memStatOffsetByIFetchBank[0xd] = 256;
+                    }
                     if (!model.isTest) {
                         for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
                         for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
                         for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-                        for (i = 48; i < 128; ++i) this.memLook[256 + i] = 32768;
                         for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
                         for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
