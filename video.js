@@ -331,11 +331,12 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.handleHSync = function () {
             this.hpulseCounter = (this.hpulseCounter + 1) & 0x0F;
             if (this.hpulseCounter === (this.hpulseWidth >>> 1)) {
-                this.bitmapX = 0;
+                // Start at -8 because the +8 is added before the pixel render.
+                this.bitmapX = -8;
 
                 // Half-clock horizontal movement
                 if (this.hpulseWidth & 1) {
-                    this.bitmapX = -4;
+                    this.bitmapX -= 4;
                 }
 
                 this.bitmapY++;
@@ -373,78 +374,79 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             while (clocks--) {
                 this.clocks++;
                 this.oddClock = !this.oddClock;
-                if (!this.halfClock || this.oddClock) {
+                // Advance CRT beam.
+                this.bitmapX += 8;
 
-                    // Handle HSync
-                    if (this.inHSync) this.handleHSync();
+                if (this.halfClock && !this.oddClock) {
+                    continue;
+                }
 
-                    // Handle delayed display enable due to skew
-                    var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
-                    if (this.horizCounter === displayEnablePos) this.dispEnabled |= SKEWDISPENABLE;
+                // Handle HSync
+                if (this.inHSync) this.handleHSync();
 
-                    // Latch next line screen address in case we are in the last line of a character row
-                    if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
+                // Handle delayed display enable due to skew
+                var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
+                if (this.horizCounter === displayEnablePos) this.dispEnabled |= SKEWDISPENABLE;
 
-                    // Handle end of horizontal displayed, accounting for display enable skew
-                    if (this.horizCounter === this.regs[1] + displayEnablePos)
-                        this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
+                // Latch next line screen address in case we are in the last line of a character row
+                if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
 
-                    // Initiate HSync
-                    if (this.horizCounter === this.regs[2] && !this.inHSync) {
-                        this.inHSync = true;
-                        this.hpulseCounter = 0;
-                    }
+                // Handle end of horizontal displayed, accounting for display enable skew
+                if (this.horizCounter === this.regs[1] + displayEnablePos)
+                    this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
 
-                    var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
-                    if (insideBorder || this.cursorDrawIndex) {
-                        // Read data from address pointer if both horizontal and vertical display enabled.
-                        var dat = 0;
-                        if (insideBorder) {
-                            dat = this.readVideoMem();
-                            if (this.teletextMode) {
-                                this.teletext.fetchData(dat);
-                            }
+                // Initiate HSync
+                if (this.horizCounter === this.regs[2] && !this.inHSync) {
+                    this.inHSync = true;
+                    this.hpulseCounter = 0;
+                }
 
-                            // Check cursor start.
-                            if (this.addr === this.cursorPos && this.cursorOn && this.horizCounter < this.regs[1]) {
-                                this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
-                            }
-
-                            this.addr = (this.addr + 1) & 0x3fff;
+                var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
+                if (insideBorder || this.cursorDrawIndex) {
+                    // Read data from address pointer if both horizontal and vertical display enabled.
+                    var dat = 0;
+                    if (insideBorder) {
+                        dat = this.readVideoMem();
+                        if (this.teletextMode) {
+                            this.teletext.fetchData(dat);
                         }
 
-                        // Render data depending on display enable state.
-                        if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.renderY < 625) {
-                            var offset = this.renderY * 1024 + this.bitmapX;
-
-                            if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
-                                this.renderChar(offset, dat);
-                            }
-                            if (this.cursorDrawIndex) this.handleCursor(offset);
+                        // Check cursor start.
+                        if (this.addr === this.cursorPos && this.cursorOn && this.horizCounter < this.regs[1]) {
+                            this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
                         }
+
+                        this.addr = (this.addr + 1) & 0x3fff;
                     }
 
-                    // Handle horizontal total
-                    if (this.drawHalfScanline && this.horizCounter === (this.regs[0] >>> 1)) {
-                        // In interlace mode, the odd field is displaced from the even field by rasterizing
-                        // half a scanline directly after the VBlank in odd fields and forcing HBlank
-                        // immediately (since the vertical speed of the raster beam is constant). This is
-                        // then adjusted for even fields by rasterizing a further half a scanline before their
-                        // VBlank.
-                        this.horizCounter = 0;
-                        this.drawHalfScanline = false;
-                    } else if (this.horizCounter === this.regs[0]) {
-                        // We've hit the end of a line (reg 0 is horiz sync char count)
-                        this.endOfLine();
-                        this.horizCounter = 0;
-                        this.dispEnabled |= HDISPENABLE;
-                    } else {
-                        this.horizCounter = (this.horizCounter + 1) & 0xff;
+                    // Render data depending on display enable state.
+                    if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.renderY < 625) {
+                        var offset = this.renderY * 1024 + this.bitmapX;
+
+                        if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
+                            this.renderChar(offset, dat);
+                        }
+                        if (this.cursorDrawIndex) this.handleCursor(offset);
                     }
                 }
 
-                this.bitmapX += 8;
-
+                // Handle horizontal total
+                if (this.drawHalfScanline && this.horizCounter === (this.regs[0] >>> 1)) {
+                    // In interlace mode, the odd field is displaced from the even field by rasterizing
+                    // half a scanline directly after the VBlank in odd fields and forcing HBlank
+                    // immediately (since the vertical speed of the raster beam is constant). This is
+                    // then adjusted for even fields by rasterizing a further half a scanline before their
+                    // VBlank.
+                    this.horizCounter = 0;
+                    this.drawHalfScanline = false;
+                } else if (this.horizCounter === this.regs[0]) {
+                    // We've hit the end of a line (reg 0 is horiz sync char count)
+                    this.endOfLine();
+                    this.horizCounter = 0;
+                    this.dispEnabled |= HDISPENABLE;
+                } else {
+                    this.horizCounter = (this.horizCounter + 1) & 0xff;
+                }
             } // matches while
         };
         ////////////////////
