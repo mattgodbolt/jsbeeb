@@ -397,7 +397,6 @@ define(['./utils'], function (utils) {
         self.setVBlankInt = self.setca1;
 
         self.setKeyLayout = function (map) {
-            console.log("Using " + map + " key layout");
             self.keycodeToRowCol = utils.getKeyMap(map);
         };
         self.setKeyLayout(initialLayout);

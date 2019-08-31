@@ -13,7 +13,7 @@ test-suite: npm
 	$(NODE) tests/test-suite.js
 
 unit-tests: npm
-	$(NODE) tests/test-node-unit.js
+	$(NODE) ./node_modules/.bin/mocha tests/unit
 
 timing-tests: npm
 	$(NODE) tests/test-node.js
