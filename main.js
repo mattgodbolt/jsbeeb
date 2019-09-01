@@ -1277,8 +1277,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             }
 
             var motorOn = processor.acia.motorOn;
+            var discOn = processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
             var speedy = fastAsPossible || (fastTape && motorOn);
-            var useTimeout = speedy || motorOn;
+            var useTimeout = speedy || motorOn || discOn;
             var timeout = speedy ? 0 : (1000.0 / 50);
 
             // We use setTimeout instead of requestAnimationFrame in two cases:
