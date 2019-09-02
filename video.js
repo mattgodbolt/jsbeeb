@@ -33,7 +33,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.vertCounter = 0;
         this.scanlineCounter = 0;
         this.addr = 0;
-        this.addrLine = 0;
         this.lineStartAddr = 0;
         this.nextLineStartAddr = 0;
         this.ulactrl = 0;
@@ -224,7 +223,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // Mode 7 chunky addressing mode if MA13 set; address offset by scanline is ignored
                 return this.cpu.videoRead(0x7c00 | (this.addr & 0x3ff));
             } else {
-                var addr = (this.addrLine & 0x07) | (this.addr << 3);
+                var addr = (this.scanlineCounter & 0x07) | (this.addr << 3);
                 // Perform screen address wrap around if MA12 set
                 if (this.addr & 0x1000) addr += this.screenAdd;
                 return this.cpu.videoRead(addr & 0x7fff);
@@ -233,7 +232,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.renderChar = function (offset, dat) {
             if (this.teletextMode) {
-                this.teletext.render(this.fb32, offset, this.addrLine);
+                this.teletext.render(this.fb32, offset, this.scanlineCounter + (this.oddFrame ? 1 : 0));
             } else {
                 this.blitFb(dat, offset, this.pixelsPerChar, this.doubledScanlines && !this.interlacedSyncAndVideo);
             }
@@ -283,7 +282,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.scanlineCounter = 0;
             this.teletext.verticalCharEnd();
             this.lineStartAddr = this.nextLineStartAddr;
-            this.addrLine = (this.interlacedSyncAndVideo && this.oddFrame) ? 1 : 0;
             this.dispEnabled |= SCANLINEDISPENABLE;
             this.cursorOn = false;
 
@@ -294,8 +292,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.endOfScanline = function () {
-            var cursorEnd = this.interlacedSyncAndVideo ? (this.regs[11] >>> 1) : this.regs[11];
-            if (this.scanlineCounter === cursorEnd) this.cursorOn = false;
+            if (this.scanlineCounter === this.regs[11]) this.cursorOn = false;
 
             // Handle VSync
             if (this.inVSync) {
@@ -307,25 +304,26 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
             }
 
-            var numScanlines = this.inVertAdjust ? (this.regs[5] - 1) : (this.interlacedSyncAndVideo ? (this.regs[9] >>> 1) : this.regs[9]);
+            var numScanlines = this.inVertAdjust ? (this.regs[5] - 1) : this.regs[9];
             if (this.scanlineCounter === numScanlines) {
                 this.endOfCharacterLine();
             } else {
-                // Move to the next scanline
-                this.scanlineCounter = (this.scanlineCounter + 1) & 0x1F;
+                // Move to the next scanline.
+                if (this.interlacedSyncAndVideo && !this.inVertAdjust) {
+                    this.scanlineCounter = (this.scanlineCounter + 2) & 0x1e;
+                } else {
+                    this.scanlineCounter = (this.scanlineCounter + 1) & 0x1f;
+                }
                 if (this.scanlineCounter === 8 && !this.teletextMode) {
                     this.dispEnabled &= ~SCANLINEDISPENABLE;
                 }
-                this.addrLine += (this.interlacedSyncAndVideo ? 2 : 1);
             }
 
             this.addr = this.lineStartAddr;
             this.teletext.endline();
 
-            var cursorStartLine = this.regs[10] & 31;
-            if ((this.scanlineCounter === cursorStartLine) || (this.interlacedSyncAndVideo && this.scanlineCounter === (cursorStartLine >>> 1))) {
-                this.cursorOn = true;
-            }
+            var cursorStartLine = this.regs[10] & 0x1f;
+            if (this.scanlineCounter === cursorStartLine) this.cursorOn = true;
         };
 
         this.handleHSync = function () {
