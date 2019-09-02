@@ -19,7 +19,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.bitmapX = 0;
         this.bitmapY = 0;
         this.renderY = 0;
-        this.clocks = 0;
         this.oddClock = false;
         this.frameCount = 0;
         this.inHSync = false;
@@ -277,7 +276,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         this.paintAndClear();
                         this.sysvia.setVBlankInt(true);
                         this.teletext.vsync();
-                        this.clocks = 0;
                     }
                 }
             }
@@ -374,7 +372,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         // Main drawing routine
         this.polltime = function (clocks) {
             while (clocks--) {
-                this.clocks++;
                 this.oddClock = !this.oddClock;
                 // Advance CRT beam.
                 this.bitmapX += 8;
