@@ -233,7 +233,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.renderChar = function (offset, dat) {
             if (this.teletextMode) {
-                this.teletext.render(this.fb32, offset, (this.scanlineCounter << 1) | (this.oddFrame ? 1 : 0));
+                this.teletext.render(this.fb32, offset, this.addrLine);
             } else {
                 this.blitFb(dat, offset, this.pixelsPerChar, this.doubledScanlines && !this.interlacedSyncAndVideo);
             }
