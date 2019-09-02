@@ -241,6 +241,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.endOfFrame = function () {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
+            this.lineStartAddr = this.nextLineStartAddr;
+            this.addr = this.nextLineStartAddr;
             this.dispEnabled |= VDISPENABLE;
             this.frameCount++;
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
@@ -248,35 +250,19 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.endOfCharacterLine = function () {
-            // New screen row
-            if (this.inVertAdjust) {
-                // Finished vertical adjust
-                this.endOfFrame();
-                this.inVertAdjust = false;
-            } else {
-                // Handle vertical total
-                if (this.vertCounter === this.regs[4]) {
-                    if (this.regs[5] === 0) {
-                        this.endOfFrame();
-                    } else {
-                        this.inVertAdjust = true;
-                    }
-                } else {
-                    // Still updating screen
-                    this.vertCounter = (this.vertCounter + 1) & 0x7F;
+            // Still updating screen
+            this.vertCounter = (this.vertCounter + 1) & 0x7f;
 
-                    // Initiate vsync
-                    if (this.vertCounter === this.regs[7]) {
-                        this.inVSync = true;
-                        this.vpulseCounter = 0;
+            // Initiate vsync
+            if (this.vertCounter === this.regs[7]) {
+                this.inVSync = true;
+                this.vpulseCounter = 0;
 
-                        this.oddFrame = !this.oddFrame;
-                        if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
-                        this.paintAndClear();
-                        this.sysvia.setVBlankInt(true);
-                        this.teletext.vsync();
-                    }
-                }
+                this.oddFrame = !this.oddFrame;
+                if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
+                this.paintAndClear();
+                this.sysvia.setVBlankInt(true);
+                this.teletext.vsync();
             }
 
             this.scanlineCounter = 0;
@@ -304,9 +290,13 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
             }
 
-            var numScanlines = this.inVertAdjust ? (this.regs[5] - 1) : this.regs[9];
+            var numScanlines = this.inVertAdjust ? this.regs[5] : this.regs[9];
             if (this.scanlineCounter === numScanlines) {
                 this.endOfCharacterLine();
+                if (this.inVertAdjust) {
+                    this.endOfFrame();
+                    this.inVertAdjust = false;
+                }
             } else {
                 // Move to the next scanline.
                 if (this.interlacedSyncAndVideo && !this.inVertAdjust) {
@@ -380,6 +370,12 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                 // Handle HSync
                 if (this.inHSync) this.handleHSync();
+
+                // Handle latching of vertical adjust pending.
+                if (this.vertCounter === this.regs[4] && this.scanlineCounter === this.regs[9]) {
+                    this.inVertAdjust = true;
+                    this.scanlineCounter = 0;
+                }
 
                 // Handle delayed display enable due to skew
                 var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
