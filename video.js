@@ -23,6 +23,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.frameCount = 0;
         this.inHSync = false;
         this.inVSync = false;
+        this.vertAdjustPending = false;
         this.inVertAdjust = false;
         this.hpulseWidth = 0;
         this.vpulseWidth = 0;
@@ -241,19 +242,31 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.endOfFrame = function () {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
-            this.lineStartAddr = this.nextLineStartAddr;
-            this.addr = this.nextLineStartAddr;
             this.dispEnabled |= VDISPENABLE;
             this.frameCount++;
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
             this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         };
 
-        this.endOfCharacterLine = function () {
+        this.endOfCharacterLine = function (lastScanline) {
             this.vertCounter = (this.vertCounter + 1) & 0x7f;
 
+            this.scanlineCounter = 0;
+            this.teletext.verticalCharEnd();
+            this.dispEnabled |= SCANLINEDISPENABLE;
+            this.cursorOn = false;
+
+            if (lastScanline && this.inVertAdjust) {
+                this.endOfFrame();
+                this.inVertAdjust = false;
+            }
+
+            this.lineStartAddr = this.nextLineStartAddr;
+
             // Initiate vsync.
-            if (this.vertCounter === this.regs[7]) {
+            // The check against zero is to prevent excessive painting attempts
+            // when the CRTC boots up with zero-initialized registers.
+            if (this.vertCounter === this.regs[7] && this.vertCounter !== 0) {
                 this.inVSync = true;
                 this.vpulseCounter = 0;
 
@@ -262,17 +275,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 this.paintAndClear();
                 this.sysvia.setVBlankInt(true);
                 this.teletext.vsync();
-            }
-
-            this.scanlineCounter = 0;
-            this.teletext.verticalCharEnd();
-            this.lineStartAddr = this.nextLineStartAddr;
-            this.dispEnabled |= SCANLINEDISPENABLE;
-            this.cursorOn = false;
-
-            // Handle vertical displayed.
-            if (this.vertCounter === this.regs[6]) {
-                this.dispEnabled &= ~VDISPENABLE;
             }
         };
 
@@ -289,17 +291,18 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
             }
 
-            var numScanlines = this.inVertAdjust ? this.regs[5] : this.regs[9];
-            var lastScanline = (this.scanlineCounter === numScanlines);
-            var startOfVertAdjust = (this.inVertAdjust && this.scanlineCounter === 0);
-            if (lastScanline || startOfVertAdjust) {
-                this.endOfCharacterLine();
+            if (this.vertAdjustPending) {
+                this.scanlineCounter = 0;
+                this.inVertAdjust = true;
             }
 
-            if (lastScanline && this.inVertAdjust) {
-                this.endOfFrame();
-                this.inVertAdjust = false;
+            var numScanlines = this.inVertAdjust ? this.regs[5] : this.regs[9];
+            var lastScanline = (this.scanlineCounter === numScanlines);
+            if (lastScanline || this.vertAdjustPending) {
+                this.endOfCharacterLine(lastScanline);
             }
+
+            this.vertAdjustPending = false;
 
             // Move to the next scanline.
             if (this.inVertAdjust || !lastScanline) {
@@ -381,10 +384,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // from 0 to 6 on the last scanline of the frame does not
                 // prevent a new frame from starting.
                 // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
-                if (this.vertCounter === this.regs[4] && this.scanlineCounter === this.regs[9]) {
-                    this.inVertAdjust = true;
-                    this.scanlineCounter = 0;
-                }
+                if (this.vertCounter === this.regs[4] && this.scanlineCounter === this.regs[9]) this.vertAdjustPending = true;
 
                 // Handle delayed display enable due to skew
                 var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
@@ -393,9 +393,17 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // Latch next line screen address in case we are in the last line of a character row
                 if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
 
-                // Handle end of horizontal displayed, accounting for display enable skew
+                // Handle end of horizontal displayed, accounting for display enable skew.
                 if (this.horizCounter === this.regs[1] + displayEnablePos)
                     this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
+
+                // Handle end of vertical displayed.
+                // The 6845 in the BBC will notice this equality on any clock
+                // tick, not just at the end of a character row.
+                // Required by Wave Runner.
+                if (this.vertCounter === this.regs[6]) {
+                    this.dispEnabled &= ~VDISPENABLE;
+                }
 
                 // Initiate HSync
                 if (this.horizCounter === this.regs[2] && !this.inHSync) {
