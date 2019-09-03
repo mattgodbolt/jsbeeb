@@ -291,14 +291,19 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
 
             var numScanlines = this.inVertAdjust ? this.regs[5] : this.regs[9];
-            if (this.scanlineCounter === numScanlines) {
+            var lastScanline = (this.scanlineCounter === numScanlines);
+            var startOfVertAdjust = (this.inVertAdjust && this.scanlineCounter === 0);
+            if (lastScanline || startOfVertAdjust) {
                 this.endOfCharacterLine();
-                if (this.inVertAdjust) {
-                    this.endOfFrame();
-                    this.inVertAdjust = false;
-                }
-            } else {
-                // Move to the next scanline.
+            }
+
+            if (lastScanline && this.inVertAdjust) {
+                this.endOfFrame();
+                this.inVertAdjust = false;
+            }
+
+            // Move to the next scanline.
+            if (this.inVertAdjust || !lastScanline) {
                 if (this.interlacedSyncAndVideo && !this.inVertAdjust) {
                     this.scanlineCounter = (this.scanlineCounter + 2) & 0x1e;
                 } else {
