@@ -250,10 +250,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.endOfCharacterLine = function () {
-            // Still updating screen
             this.vertCounter = (this.vertCounter + 1) & 0x7f;
 
-            // Initiate vsync
+            // Initiate vsync.
             if (this.vertCounter === this.regs[7]) {
                 this.inVSync = true;
                 this.vpulseCounter = 0;
@@ -271,7 +270,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.dispEnabled |= SCANLINEDISPENABLE;
             this.cursorOn = false;
 
-            // Handle vertical displayed
+            // Handle vertical displayed.
             if (this.vertCounter === this.regs[6]) {
                 this.dispEnabled &= ~VDISPENABLE;
             }
@@ -377,6 +376,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 if (this.inHSync) this.handleHSync();
 
                 // Handle latching of vertical adjust pending.
+                // The Hitachi 6845 appears to latch some form of "last scanline
+                // of the frame" state. As shown by Twisted Brain, changing R9
+                // from 0 to 6 on the last scanline of the frame does not
+                // prevent a new frame from starting.
+                // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
                 if (this.vertCounter === this.regs[4] && this.scanlineCounter === this.regs[9]) {
                     this.inVertAdjust = true;
                     this.scanlineCounter = 0;
