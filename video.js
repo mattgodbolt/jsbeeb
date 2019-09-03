@@ -264,7 +264,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.lineStartAddr = this.nextLineStartAddr;
 
             // Initiate vsync.
-            if (this.vertCounter === this.regs[7] && this.vertCounter != 0) {
+            // The check against zero is to prevent excessive painting attempts
+            // when the CRTC boots up with zero-initialized registers.
+            if (this.vertCounter === this.regs[7] && this.vertCounter !== 0) {
                 this.inVSync = true;
                 this.vpulseCounter = 0;
 
