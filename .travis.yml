@@ -19,4 +19,5 @@ script:
 jobs:
     include:
         - stage: deploy
+          if: branch = master
           env: TEST_SUITE=upload
