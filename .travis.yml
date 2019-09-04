@@ -19,5 +19,5 @@ script:
 jobs:
     include:
         - stage: deploy
-          if: branch = master
+          if: branch = master and type != pull_request
           env: TEST_SUITE=upload
