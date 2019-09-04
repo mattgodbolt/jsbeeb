@@ -5,7 +5,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         SKEWDISPENABLE = 1 << 2,
         SCANLINEDISPENABLE = 1 << 3,
         USERDISPENABLE = 1 << 4,
-        EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE;
+        FRAMESKIPENABLE = 1 << 5,
+        EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
     function Video(fb32_param, paint_ext_param) {
         this.fb32 = utils.makeFast32(fb32_param);
@@ -29,7 +30,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.vpulseWidth = 0;
         this.hpulseCounter = 0;
         this.vpulseCounter = 0;
-        this.dispEnabled = 0;
+        this.dispEnabled = FRAMESKIPENABLE;
         this.horizCounter = 0;
         this.vertCounter = 0;
         this.scanlineCounter = 0;
@@ -52,6 +53,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.cursorPos = 0;
         this.interlacedSyncAndVideo = false;
         this.doubledScanlines = true;
+        this.frameSkipCount = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -90,8 +92,17 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.paintAndClear = function() {
-            this.paint();
-            this.clearPaintBuffer();
+            if (this.dispEnabled & FRAMESKIPENABLE) {
+                this.paint();
+                this.clearPaintBuffer();
+            }
+            this.dispEnabled &= ~FRAMESKIPENABLE;
+            var enable = FRAMESKIPENABLE;
+            if (this.frameSkipCount > 1) {
+                if (this.frameCount % this.frameSkipCount) enable = 0;
+            }
+            this.dispEnabled |= enable;
+
             this.bitmapY = 0;
             this.updateRenderY();
         };
@@ -411,8 +422,10 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     this.hpulseCounter = 0;
                 }
 
+                // TODO: this will be cleaner if we rework skew to have fetch
+                // indepedent from render.
                 var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
-                if (insideBorder || this.cursorDrawIndex) {
+                if ((insideBorder || this.cursorDrawIndex) && (this.dispEnabled & FRAMESKIPENABLE)) {
                     // Read data from address pointer if both horizontal and vertical display enabled.
                     var dat = 0;
                     if (insideBorder) {

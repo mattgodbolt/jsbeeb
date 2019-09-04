@@ -1281,6 +1281,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             var useTimeout = speedy || motorOn;
             var timeout = speedy ? 0 : (1000.0 / 50);
 
+            var frameSkipCount = speedy ? 10 : 0;
+            video.frameSkipCount = frameSkipCount;
+
             // We use setTimeout instead of requestAnimationFrame in two cases:
             // a) We're trying to run as fast as possible.
             // b) Tape is playing, normal speed but backgrounded tab should run.
