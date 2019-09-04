@@ -21,7 +21,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.bitmapY = 0;
         this.renderY = 0;
         this.oddClock = false;
-        this.frameCount = 0;
+        this.frameCountCrtc = 0;
+        this.frameCountVsync = 0;
         this.inHSync = false;
         this.inVSync = false;
         this.vertAdjustPending = false;
@@ -92,6 +93,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.paintAndClear = function() {
+            this.frameCountVsync++;
             if (this.dispEnabled & FRAMESKIPENABLE) {
                 this.paint();
                 this.clearPaintBuffer();
@@ -99,7 +101,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.dispEnabled &= ~FRAMESKIPENABLE;
             var enable = FRAMESKIPENABLE;
             if (this.frameSkipCount > 1) {
-                if (this.frameCount % this.frameSkipCount) enable = 0;
+                if (this.frameCountVsync % this.frameSkipCount) enable = 0;
             }
             this.dispEnabled |= enable;
 
@@ -254,9 +256,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
             this.dispEnabled |= VDISPENABLE;
-            this.frameCount++;
+            this.frameCountCrtc++;
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
-            this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
+            this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCountCrtc & this.cursorFlashMask[cursorFlash]);
         };
 
         this.endOfCharacterLine = function (lastScanline) {
