@@ -403,8 +403,10 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // Latch next line screen address in case we are in the last line of a character row
                 if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
 
-                // Handle end of horizontal displayed, accounting for display enable skew.
-                if (this.horizCounter === this.regs[1] + displayEnablePos)
+                // Handle end of horizontal displayed.
+                // Make sure to account for display enable skew.
+                // Also, the last scanline character never displays.
+                if ((this.horizCounter === this.regs[1] + displayEnablePos) || (this.horizCounter === this.regs[0] + displayEnablePos))
                     this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
 
                 // Handle end of vertical displayed.
