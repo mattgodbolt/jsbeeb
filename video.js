@@ -7,7 +7,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         USERDISPENABLE = 1 << 4,
         EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE;
 
-    function Video(fb32_param, paint_ext_param) {
+    function Video(isMaster, fb32_param, paint_ext_param) {
+        this.isMaster = isMaster;
         this.fb32 = utils.makeFast32(fb32_param);
         this.collook = utils.makeFast32(new Uint32Array([
             0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff,
@@ -221,8 +222,17 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.readVideoMem = function () {
             if (this.addr & 0x2000) {
-                // Mode 7 chunky addressing mode if MA13 set; address offset by scanline is ignored
-                return this.cpu.videoRead(0x7c00 | (this.addr & 0x3ff));
+                // Mode 7 chunky addressing mode if MA13 set.
+                // Address offset by scanline is ignored.
+                // On model B only, there's a quirk for reading 0x3c00.
+                // See: http://www.retrosoftware.co.uk/forum/viewtopic.php?f=73&t=1011
+                var memAddr = this.addr & 0x3ff;
+                if ((this.addr & 0x800) || this.isMaster) {
+                    memAddr |= 0x7c00;
+                } else {
+                    memAddr |= 0x3c00;
+                }
+                return this.cpu.videoRead(memAddr);
             } else {
                 var addr = (this.scanlineCounter & 0x07) | (this.addr << 3);
                 // Perform screen address wrap around if MA12 set
