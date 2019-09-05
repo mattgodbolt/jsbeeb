@@ -35,7 +35,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
             log = log_;
             beginTest = beginTest_;
             endTest = endTest_;
-            video = new Video.Video(frameBuffer, paint);
+            video = new Video.Video(false, frameBuffer, paint);
 
             return tests.reduce(function (p, test) {
                 return p.then(function () {
