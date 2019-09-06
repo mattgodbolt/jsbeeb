@@ -425,7 +425,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
 
                 // TODO: this will be cleaner if we rework skew to have fetch
-                // indepedent from render.
+                // independent from render.
                 var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
                 if ((insideBorder || this.cursorDrawIndex) && (this.dispEnabled & FRAMESKIPENABLE)) {
                     // Read data from address pointer if both horizontal and vertical display enabled.
