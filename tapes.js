@@ -4,7 +4,7 @@ define(['utils'], function (utils) {
     function UefTape(stream) {
         var self = this;
 
-        var dummyData, state, curByte, numDataBits, parity;
+        var dummyData, state, count, curByte, numDataBits, parity;
         var numParityBits, numStopBits, carrierBefore, carrierAfter;
 
 
@@ -12,6 +12,7 @@ define(['utils'], function (utils) {
 
             dummyData = [false, false, true, false, true, false, true, false, true, true];
             state = -1;
+            count = 0;
             curByte = 0;
             numDataBits = 8;
             parity = 'N';
@@ -160,11 +161,17 @@ define(['utils'], function (utils) {
                 case 0x0115:
                     console.log("Ignoring polarity change");
                     break;
-                case 0x0110:
-                    var count = curChunk.stream.readInt16();
+                case 0x0110: // Carrier tone.
                     acia.setDCD(true);
-                    acia.tone(2 * baseFrequency);
-                    return cycles(count);
+                    if (state === -1) {
+                        state = 0;
+                        count = curChunk.stream.readInt16();
+                        acia.tone(2 * baseFrequency);
+                    } else {
+                        count--;
+                        if (count <= 0) state = -1;
+                    }
+                    return cycles(1);
                 case 0x0113:
                     baseFrequency = curChunk.stream.readFloat32();
                     console.log("Frequency change ", baseFrequency);
