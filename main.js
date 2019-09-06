@@ -1281,6 +1281,14 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             var useTimeout = speedy || motorOn;
             var timeout = speedy ? 0 : (1000.0 / 50);
 
+            // In speedy mode, we still run all the state machines accurately
+            // but we paint less often because painting is the most expensive
+            // part of jsbeeb at this time.
+            // We need need to paint per odd number of frames so that interlace
+            // modes, i.e. MODE 7, still look ok.
+            var frameSkipCount = speedy ? 9 : 0;
+            video.frameSkipCount = frameSkipCount;
+
             // We use setTimeout instead of requestAnimationFrame in two cases:
             // a) We're trying to run as fast as possible.
             // b) Tape is playing, normal speed but backgrounded tab should run.

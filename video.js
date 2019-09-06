@@ -5,7 +5,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         SKEWDISPENABLE = 1 << 2,
         SCANLINEDISPENABLE = 1 << 3,
         USERDISPENABLE = 1 << 4,
-        EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE;
+        FRAMESKIPENABLE = 1 << 5,
+        EVERYTHINGENABLED = VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
     function Video(isMaster, fb32_param, paint_ext_param) {
         this.isMaster = isMaster;
@@ -21,7 +22,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.bitmapY = 0;
         this.renderY = 0;
         this.oddClock = false;
-        this.frameCount = 0;
+        this.frameCountCrtc = 0;
+        this.frameCountVsync = 0;
         this.inHSync = false;
         this.inVSync = false;
         this.vertAdjustPending = false;
@@ -30,7 +32,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.vpulseWidth = 0;
         this.hpulseCounter = 0;
         this.vpulseCounter = 0;
-        this.dispEnabled = 0;
+        this.dispEnabled = FRAMESKIPENABLE;
         this.horizCounter = 0;
         this.vertCounter = 0;
         this.scanlineCounter = 0;
@@ -53,6 +55,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.cursorPos = 0;
         this.interlacedSyncAndVideo = false;
         this.doubledScanlines = true;
+        this.frameSkipCount = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -91,8 +94,18 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.paintAndClear = function() {
-            this.paint();
-            this.clearPaintBuffer();
+            this.frameCountVsync++;
+            if (this.dispEnabled & FRAMESKIPENABLE) {
+                this.paint();
+                this.clearPaintBuffer();
+            }
+            this.dispEnabled &= ~FRAMESKIPENABLE;
+            var enable = FRAMESKIPENABLE;
+            if (this.frameSkipCount > 1) {
+                if (this.frameCountVsync % this.frameSkipCount) enable = 0;
+            }
+            this.dispEnabled |= enable;
+
             this.bitmapY = 0;
             this.updateRenderY();
         };
@@ -253,9 +266,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
             this.dispEnabled |= VDISPENABLE;
-            this.frameCount++;
+            this.frameCountCrtc++;
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
-            this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
+            this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCountCrtc & this.cursorFlashMask[cursorFlash]);
         };
 
         this.endOfCharacterLine = function (lastScanline) {
@@ -423,8 +436,10 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     this.hpulseCounter = 0;
                 }
 
+                // TODO: this will be cleaner if we rework skew to have fetch
+                // independent from render.
                 var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
-                if (insideBorder || this.cursorDrawIndex) {
+                if ((insideBorder || this.cursorDrawIndex) && (this.dispEnabled & FRAMESKIPENABLE)) {
                     // Read data from address pointer if both horizontal and vertical display enabled.
                     var dat = 0;
                     if (insideBorder) {
