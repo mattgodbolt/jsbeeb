@@ -49,7 +49,7 @@ define(['./utils'], function (utils) {
         return new BaseDisc(fdc, name, data, function () {
             if (!changed()) return;
             if (onChange) {
-                onChange(data);
+                onChange(this.data);
             }
         });
     }
@@ -69,10 +69,10 @@ define(['./utils'], function (utils) {
             console.log("Loading browser-local disc " + name);
             data = utils.stringToUint8Array(dataString);
         }
-        return new BaseDisc(fdc, name, data, function () {
-            var str = utils.uint8ArrayToString(data);
+        return new BaseDisc(fdc, discName, data, function () {
+            var str = utils.uint8ArrayToString(this.data);
             try {
-                window.localStorage.setItem(discName, str);
+                window.localStorage.setItem(this.name, str);
             } catch (e) {
                 window.alert("Writing to localStorage failed: " + e);
             }
@@ -93,6 +93,7 @@ define(['./utils'], function (utils) {
         data = utils.resizeUint8Array(data, byteSize);
 
         this.fdc = fdc;
+        this.name = name;
         this.isDsd = isDsd;
         this.flusher = flusher;
         this.data = data;
