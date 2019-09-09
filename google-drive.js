@@ -150,7 +150,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
             if (meta.editable) {
                 console.log("Making editable disc");
                 flusher = _.debounce(function () {
-                    saveFile(meta.title, data, meta.id).then(function () {
+                    saveFile(this.name, this.data, meta.id).then(function () {
                         console.log("Saved ok");
                     });
                 }, 200);
