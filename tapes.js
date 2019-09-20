@@ -135,24 +135,27 @@ define(['utils'], function (utils) {
                     }
                     return cycles(1);
                 case 0x0111: // Carrier tone with dummy data
-                    acia.setTapeCarrier(true);
                     if (state === -1) {
+                        state = 0;
                         carrierBefore = curChunk.stream.readInt16();
                         carrierAfter = curChunk.stream.readInt16();
                         console.log("Carrier with", carrierBefore, carrierAfter);
-                        state = 0;
+                    }
+                    acia.setTapeCarrier(true);
+                    if (state === 0) {
                         acia.tone(2 * baseFrequency);
-                        return cycles(carrierBefore);
-                    } else if (state < 10) {
-                        acia.tone(dummyData[state] ? baseFrequency : (2 * baseFrequency));
+                        carrierBefore--;
+                        if (carrierBefore <= 0) state = 1;
+                    } else if (state < 11) {
+                        acia.tone(dummyData[(state - 1)] ? baseFrequency : (2 * baseFrequency));
+                        if (state === 10) {
+                            acia.receive(0xaa);
+                        }
                         state++;
-                    } else if (state === 10) {
-                        acia.receive(0xaa);
-                        acia.tone(2 * baseFrequency);
-                        state++;
-                        return cycles(carrierAfter);
                     } else {
-                        state = -1;
+                        acia.tone(2 * baseFrequency);
+                        carrierAfter--;
+                        if (carrierAfter <= 0) state = -1;
                     }
                     return cycles(1);
                 case 0x0114:
@@ -162,15 +165,14 @@ define(['utils'], function (utils) {
                     console.log("Ignoring polarity change");
                     break;
                 case 0x0110: // Carrier tone.
-                    acia.setTapeCarrier(true);
                     if (state === -1) {
                         state = 0;
                         count = curChunk.stream.readInt16();
-                        acia.tone(2 * baseFrequency);
-                    } else {
-                        count--;
-                        if (count <= 0) state = -1;
                     }
+                    acia.setTapeCarrier(true);
+                    acia.tone(2 * baseFrequency);
+                    count--;
+                    if (count <= 0) state = -1;
                     return cycles(1);
                 case 0x0113:
                     baseFrequency = curChunk.stream.readFloat32();
