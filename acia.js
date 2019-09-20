@@ -90,7 +90,7 @@ define([], function () {
             self.runRs423Task.ensureScheduled(self.rs423Selected, self.serialReceiveCyclesPerByte);
         };
 
-        self.setDCD = function (level) {
+        self.setTapeCarrier = function (level) {
             if (level) {
                 if (self.sr & 0x04) return;
                 self.sr |= 0x84;
