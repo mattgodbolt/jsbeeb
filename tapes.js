@@ -141,18 +141,20 @@ define(['utils'], function (utils) {
                         carrierAfter = curChunk.stream.readInt16();
                         console.log("Carrier with", carrierBefore, carrierAfter);
                     }
-                    acia.setTapeCarrier(true);
                     if (state === 0) {
+                        acia.setTapeCarrier(true);
                         acia.tone(2 * baseFrequency);
                         carrierBefore--;
                         if (carrierBefore <= 0) state = 1;
                     } else if (state < 11) {
+                        acia.setTapeCarrier(false);
                         acia.tone(dummyData[(state - 1)] ? baseFrequency : (2 * baseFrequency));
                         if (state === 10) {
                             acia.receive(0xaa);
                         }
                         state++;
                     } else {
+                        acia.setTapeCarrier(true);
                         acia.tone(2 * baseFrequency);
                         carrierAfter--;
                         if (carrierAfter <= 0) state = -1;

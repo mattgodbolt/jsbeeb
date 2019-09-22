@@ -6,7 +6,7 @@ define([], function () {
     // http://www.classiccmp.org/dunfield/r/6850.pdf
     return function Acia(cpu, toneGen, scheduler, rs423Handler) {
         var self = this;
-        self.sr = 0x02;
+        self.sr = 0x00;
         self.cr = 0x00;
         self.dr = 0x00;
         self.rs423Handler = rs423Handler;
@@ -16,6 +16,7 @@ define([], function () {
         // would need to be updated based on the "other end" of the link, and
         // we would need to generate IRQs appropriately when TDRE goes high.
         self.clearToSend = false;
+        self.tapeCarrierCount = 0;
 
         function updateIrq() {
             if (self.sr & self.cr & 0x80) {
@@ -91,6 +92,33 @@ define([], function () {
         };
 
         self.setTapeCarrier = function (level) {
+            if (!level) {
+                self.tapeCarrierCount = 0;
+                self.setTapeDCD(false);
+            } else {
+                self.tapeCarrierCount++;
+                // The tape hardware doesn't raise DCD until the carrier tone
+                // has persisted for a while. The BBC service manual opines,
+                // "The DCD flag in the 6850 should change 0.1 to 0.4 seconds
+                // after a continuous tone appears".
+                // Star Drifter doesn't load without this.
+                // This is 0.107s.
+                // TODO: testing on real hardware, DCD is blipped, it lowers
+                // about 210us after is raises, even though the carrier tone
+                // may be continuing.
+                if (self.tapeCarrierCount === 128) {
+                    self.setTapeDCD(true);
+                }
+            }
+        };
+
+        self.setTapeDCD = function (level) {
+            // TODO: this doesn't match the datasheet:
+            // "It remains high after the DCD input is returned low until
+            // cleared by first reading the Status Register and then the
+            // Data Register".
+            // Initial testing on real hardware confirmed that DR really needs
+            // to be read before a low level is visible in SR.
             if (level) {
                 if (self.sr & 0x04) return;
                 self.sr |= 0x84;
@@ -104,6 +132,9 @@ define([], function () {
             byte |= 0;
             if (self.sr & 0x01) {
                 // Overrun.
+                // TODO: this doesn't match the datasheet:
+                // "The Overrun does not occur in the Status Register until the
+                // valid character prior to Overrun has been read."
                 console.log("Serial overrun");
                 self.sr |= 0xa0;
             } else {
