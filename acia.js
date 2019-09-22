@@ -110,7 +110,7 @@ define([], function () {
                     self.setTapeDCD(true);
                 }
             }
-        }
+        };
 
         self.setTapeDCD = function (level) {
             // TODO: this doesn't match the datasheet:
