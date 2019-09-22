@@ -16,7 +16,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff]));
         this.screenAddrAdd = new Uint16Array([0x4000, 0x3000, 0x6000, 0x5800]);
         this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
-        this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x10, 0x20]);
+        this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x08, 0x10]);
         this.regs = new Uint8Array(32);
         this.bitmapX = 0;
         this.bitmapY = 0;
