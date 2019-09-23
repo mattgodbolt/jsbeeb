@@ -50,7 +50,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.drawHalfScanline = false;
         this.oddFrame = false;
         this.teletext = new Teletext();
-        this.cursorOn = this.cursorOnThisFrame = false;
+        this.cursorOn = false;
+        this.cursorOff = false;
+        this.cursorOnThisFrame = false;
         this.cursorDrawIndex = 0;
         this.cursorPos = 0;
         this.interlacedSyncAndVideo = false;
@@ -278,6 +280,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.teletext.verticalCharEnd();
             this.dispEnabled |= SCANLINEDISPENABLE;
             this.cursorOn = false;
+            this.cursorOff = false;
 
             if (lastScanline && this.inVertAdjust) {
                 this.endOfFrame();
@@ -302,7 +305,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.endOfScanline = function () {
-            if (this.scanlineCounter === this.regs[11]) this.cursorOn = false;
+            if (this.scanlineCounter === this.regs[11]) this.cursorOff = true;
 
             // Handle VSync
             if (this.inVSync) {
@@ -449,7 +452,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         }
 
                         // Check cursor start.
-                        if (this.addr === this.cursorPos && this.cursorOn && this.horizCounter < this.regs[1]) {
+                        if (this.addr === this.cursorPos && this.cursorOn && !this.cursorOff && this.horizCounter < this.regs[1]) {
                             this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
                         }
 
