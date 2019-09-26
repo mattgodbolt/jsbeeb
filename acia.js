@@ -12,10 +12,6 @@ define([], function () {
         self.rs423Handler = rs423Handler;
         self.rs423Selected = false;
         self.motorOn = false;
-        // TODO: set clearToSend accordingly; at the moment it stays low.
-        // would need to be updated based on the "other end" of the link, and
-        // we would need to generate IRQs appropriately when TDRE goes high.
-        self.clearToSend = false;
         self.tapeCarrierCount = 0;
 
         function updateIrq() {
@@ -54,8 +50,12 @@ define([], function () {
                 return self.dr;
             } else {
                 var result = (self.sr & 0x7f) | (self.sr & self.cr & 0x80);
-                if (!self.clearToSend) result &= ~0x02; // Mask off TDRE if not CTS
-                result = result | 0x02 | 0x08;
+                // MC6850: "A low CTS indicates that there is a Clear-to-Send
+                // from the modem. In the high state, the Transmit Data Register
+                // Empty bit is inhibited".
+                if (result & 0x08) {
+                    result &= ~0x02;
+                }
                 return result;
             }
         };
@@ -84,9 +84,16 @@ define([], function () {
         self.selectRs423 = function (selected) {
             self.rs423Selected = !!selected;
             if (self.rs423Selected) {
+                // RS423 selected.
                 self.sr &= ~0x04; // Clear DCD
+                // CTS is always high, meaning not Clear To Send. This is
+                // because we don't yet emulate anything on the "other end",
+                // so there is nothing to pull CTS low.
+                self.sr |= 0x08;
             } else {
-                self.sr &= ~0x08; // Clear CTS
+                // Cassette selected.
+                // CTS is always low, meaning actually Clear To Send.
+                self.sr &= ~0x08;
             }
             self.runRs423Task.ensureScheduled(self.rs423Selected, self.serialReceiveCyclesPerByte);
         };
