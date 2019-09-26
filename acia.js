@@ -39,11 +39,12 @@ define([], function () {
         };
 
         self.setMotor = function (on) {
-            if (on && !self.motorOn)
+            if (on && !self.motorOn) {
                 runTape();
-            else {
+            } else if (!on && self.motorOn) {
                 toneGen.mute();
                 self.runTapeTask.cancel();
+                self.setTapeCarrier(false);
             }
             self.motorOn = on;
         };
