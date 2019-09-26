@@ -102,11 +102,11 @@ define([], function () {
                 // "The DCD flag in the 6850 should change 0.1 to 0.4 seconds
                 // after a continuous tone appears".
                 // Star Drifter doesn't load without this.
-                // This is 0.107s.
+                // We use 0.174s, measured on an issue 3 model B.
                 // TODO: testing on real hardware, DCD is blipped, it lowers
                 // about 210us after is raises, even though the carrier tone
                 // may be continuing.
-                if (self.tapeCarrierCount === 128) {
+                if (self.tapeCarrierCount === 209) {
                     self.setTapeDCD(true);
                 }
             }
