@@ -14,6 +14,7 @@ define([], function () {
         self.motorOn = false;
         self.tapeCarrierCount = 0;
         self.tapeDcdLineLevel = false;
+        self.hadDcdHigh = false;
 
         function updateIrq() {
             if (self.sr & self.cr & 0x80) {
@@ -28,6 +29,7 @@ define([], function () {
             self.sr &= (0x08 | 0x04);
             // Reset clears the transmit register so raise the empty bit.
             self.sr |= 0x02;
+            self.hadDcdHigh = false;
             updateIrq();
         };
 
@@ -52,6 +54,7 @@ define([], function () {
         self.read = function (addr) {
             if (addr & 1) {
                 self.sr &= ~0xa1;
+                self.hadDcdHigh = false;
                 updateIrq();
                 return self.dr;
             } else {
@@ -62,6 +65,16 @@ define([], function () {
                 if (result & 0x08) {
                     result &= ~0x02;
                 }
+
+                // MC6850: "It remains high after the DCD input is returned low
+                // until cleared by first reading the Status Register and then
+                // the Data Register".
+                // Testing on a real machine shows that only the Data Register
+                // read matters, and clears the "saw DCD high" condition.
+                if (self.hadDcdHigh) {
+                    result |= 0x04;
+                }
+
                 return result;
             }
         };
@@ -114,15 +127,10 @@ define([], function () {
                 level = self.tapeDcdLineLevel;
             }
 
-            // TODO: this doesn't match the datasheet:
-            // "It remains high after the DCD input is returned low until
-            // cleared by first reading the Status Register and then the
-            // Data Register".
-            // Initial testing on real hardware confirmed that DR really needs
-            // to be read before a low level is visible in SR.
             if (level && !(self.sr & 0x04)) {
                 // DCD interrupts on low -> high level change.
                 self.sr |= 0x84;
+                self.hadDcdHigh = true;
             } else if (!level && (self.sr & 0x04)) {
                 self.sr &= ~0x04;
             }
@@ -141,11 +149,13 @@ define([], function () {
                 // after a continuous tone appears".
                 // Star Drifter doesn't load without this.
                 // We use 0.174s, measured on an issue 3 model B.
-                // TODO: testing on real hardware, DCD is blipped, it lowers
-                // about 210us after is raises, even though the carrier tone
+                // Testing on real hardware, DCD is blipped, it lowers about
+                // 210us after it raises, even though the carrier tone
                 // may be continuing.
                 if (self.tapeCarrierCount === 209) {
                     self.tapeDcdLineLevel = true;
+                } else {
+                    self.tapeDcdLineLevel = false;
                 }
             }
             self.dcdLineUpdated();
