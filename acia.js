@@ -13,6 +13,7 @@ define([], function () {
         self.rs423Selected = false;
         self.motorOn = false;
         self.tapeCarrierCount = 0;
+        self.tapeDcdLineLevel = false;
 
         function updateIrq() {
             if (self.sr & self.cr & 0x80) {
@@ -23,9 +24,13 @@ define([], function () {
         }
 
         self.reset = function () {
-            self.sr = (self.sr & 0x08) | 0x06;
+            // CTS and DTD are based on external inputs so leave them alone.
+            self.sr &= (0x08 | 0x04);
+            // Reset clears the transmit register so raise the empty bit.
+            self.sr |= 0x02;
             updateIrq();
         };
+
         self.reset();
 
         self.tone = function (freq) {
@@ -85,7 +90,6 @@ define([], function () {
             self.rs423Selected = !!selected;
             if (self.rs423Selected) {
                 // RS423 selected.
-                self.sr &= ~0x04; // Clear DCD
                 // CTS is always high, meaning not Clear To Send. This is
                 // because we don't yet emulate anything on the "other end",
                 // so there is nothing to pull CTS low.
@@ -95,13 +99,39 @@ define([], function () {
                 // CTS is always low, meaning actually Clear To Send.
                 self.sr &= ~0x08;
             }
+            self.dcdLineUpdated();
             self.runRs423Task.ensureScheduled(self.rs423Selected, self.serialReceiveCyclesPerByte);
+        };
+
+        self.dcdLineUpdated = function () {
+            var level;
+            if (self.rs423Selected) {
+                // AUG: "It will always be low when the RS423 interface is
+                // selected".
+                level = false;
+            } else {
+                level = self.tapeDcdLineLevel;
+            }
+
+            // TODO: this doesn't match the datasheet:
+            // "It remains high after the DCD input is returned low until
+            // cleared by first reading the Status Register and then the
+            // Data Register".
+            // Initial testing on real hardware confirmed that DR really needs
+            // to be read before a low level is visible in SR.
+            if (level && !(self.sr & 0x04)) {
+                // DCD interrupts on low -> high level change.
+                self.sr |= 0x84;
+            } else if (!level && (self.sr & 0x04)) {
+                self.sr &= ~0x04;
+            }
+            updateIrq();
         };
 
         self.setTapeCarrier = function (level) {
             if (!level) {
                 self.tapeCarrierCount = 0;
-                self.setTapeDCD(false);
+                self.tapeDcdLineLevel = false;
             } else {
                 self.tapeCarrierCount++;
                 // The tape hardware doesn't raise DCD until the carrier tone
@@ -114,25 +144,10 @@ define([], function () {
                 // about 210us after is raises, even though the carrier tone
                 // may be continuing.
                 if (self.tapeCarrierCount === 209) {
-                    self.setTapeDCD(true);
+                    self.tapeDcdLineLevel = true;
                 }
             }
-        };
-
-        self.setTapeDCD = function (level) {
-            // TODO: this doesn't match the datasheet:
-            // "It remains high after the DCD input is returned low until
-            // cleared by first reading the Status Register and then the
-            // Data Register".
-            // Initial testing on real hardware confirmed that DR really needs
-            // to be read before a low level is visible in SR.
-            if (level) {
-                if (self.sr & 0x04) return;
-                self.sr |= 0x84;
-            } else {
-                self.sr &= ~0x04;
-            }
-            updateIrq();
+            self.dcdLineUpdated();
         };
 
         self.receive = function (byte) {
