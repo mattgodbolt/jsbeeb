@@ -25,6 +25,9 @@ define([], function () {
         }
 
         self.reset = function () {
+            // TODO: testing on a real beeb seems to suggest that reset also
+            // clears CR bits (i.e. things stop working until CR is rewritten
+            // with sane value). This disagrees with the datasheet.
             // CTS and DTD are based on external inputs so leave them alone.
             self.sr &= (0x08 | 0x04);
             // Reset clears the transmit register so raise the empty bit.
