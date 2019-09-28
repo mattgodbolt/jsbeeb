@@ -337,8 +337,15 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 } else {
                     this.scanlineCounter = (this.scanlineCounter + 1) & 0x1f;
                 }
-                if (this.scanlineCounter === 8 && !this.teletextMode) {
-                    this.dispEnabled &= ~SCANLINEDISPENABLE;
+                if (!this.teletextMode) {
+                    // Scanlines 8-15 are off but they display again at 16,
+                    // mirroring 0-7, and it repeats.
+                    var off = (this.scanlineCounter >>> 3) & 1;
+                    if (off) {
+                        this.dispEnabled &= ~SCANLINEDISPENABLE;
+                    } else {
+                        this.dispEnabled |= SCANLINEDISPENABLE;
+                    }
                 }
             }
 
