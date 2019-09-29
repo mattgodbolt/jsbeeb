@@ -292,13 +292,17 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             // Initiate vsync.
             // The check against zero is to prevent excessive painting attempts
             // when the CRTC boots up with zero-initialized registers.
-            if (this.vertCounter === this.regs[7] && this.vertCounter !== 0) {
+            if (this.vertCounter === this.regs[7]) {
                 this.inVSync = true;
                 this.vpulseCounter = 0;
 
                 this.oddFrame = !this.oddFrame;
                 if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
-                this.paintAndClear();
+                // Avoid intense painting if registers have boot-up or otherwise
+                // small values.
+                if (this.regs[0] && this.regs[4]) {
+                    this.paintAndClear();
+                }
                 this.sysvia.setVBlankInt(true);
                 this.teletext.vsync();
             }
