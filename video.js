@@ -455,9 +455,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
                 if ((insideBorder || this.cursorDrawIndex) && (this.dispEnabled & FRAMESKIPENABLE)) {
                     // Read data from address pointer if both horizontal and vertical display enabled.
-                    var dat = 0;
+                    var dat = this.readVideoMem();
                     if (insideBorder) {
-                        dat = this.readVideoMem();
                         if (this.teletextMode) {
                             this.teletext.fetchData(dat);
                         }
@@ -467,7 +466,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                             this.cursorDrawIndex = 3 - ((this.regs[8] >>> 6) & 3);
                         }
 
-                        this.addr = (this.addr + 1) & 0x3fff;
                     }
 
                     // Render data depending on display enable state.
@@ -480,6 +478,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         if (this.cursorDrawIndex) this.handleCursor(offset);
                     }
                 }
+
+                // CRTC MA always increments, inside display border or not.
+                this.addr = (this.addr + 1) & 0x3fff;
 
                 // Handle horizontal total
                 if (this.drawHalfScanline && this.horizCounter === (this.regs[0] >>> 1)) {
