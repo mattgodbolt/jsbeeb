@@ -26,6 +26,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.frameCountVsync = 0;
         this.inHSync = false;
         this.inVSync = false;
+        this.hadVSyncThisRow = false;
         this.vertAdjustPending = false;
         this.inVertAdjust = false;
         this.hpulseWidth = 0;
@@ -277,6 +278,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.vertCounter = (this.vertCounter + 1) & 0x7f;
 
             this.scanlineCounter = 0;
+            this.hadVSyncThisRow = false;
             this.teletext.verticalCharEnd();
             this.dispEnabled |= SCANLINEDISPENABLE;
             this.cursorOn = false;
@@ -288,30 +290,12 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
 
             this.lineStartAddr = this.nextLineStartAddr;
-
-            // Initiate vsync.
-            // The check against zero is to prevent excessive painting attempts
-            // when the CRTC boots up with zero-initialized registers.
-            if (this.vertCounter === this.regs[7]) {
-                this.inVSync = true;
-                this.vpulseCounter = 0;
-
-                this.oddFrame = !this.oddFrame;
-                if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
-                // Avoid intense painting if registers have boot-up or otherwise
-                // small values.
-                if (this.regs[0] && this.regs[4]) {
-                    this.paintAndClear();
-                }
-                this.sysvia.setVBlankInt(true);
-                this.teletext.vsync();
-            }
         };
 
         this.endOfScanline = function () {
             if (this.scanlineCounter === this.regs[11]) this.cursorOff = true;
 
-            // Handle VSync
+            // Handle VSync.
             if (this.inVSync) {
                 this.vpulseCounter = (this.vpulseCounter + 1) & 0x0F;
                 if (this.vpulseCounter === this.vpulseWidth) {
@@ -444,10 +428,33 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     this.dispEnabled &= ~VDISPENABLE;
                 }
 
-                // Initiate HSync
+                // Initiate HSync.
                 if (this.horizCounter === this.regs[2] && !this.inHSync) {
                     this.inHSync = true;
                     this.hpulseCounter = 0;
+                }
+
+                // Initiate VSync.
+                // A vsync will initiate at any character and scanline position,
+                // provided there isn't one in progress and provided there
+                // wasn't already one in this character row.
+                // This is an interesting finding, on a real model B.
+                if (this.vertCounter === this.regs[7] &&
+                    !this.inVSync &&
+                    !this.hadVSyncThisRow) {
+                    this.inVSync = true;
+                    this.hadVSyncThisRow = true;
+                    this.vpulseCounter = 0;
+
+                    this.oddFrame = !this.oddFrame;
+                    if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
+                    // Avoid intense painting if registers have boot-up or
+                    // otherwise small values.
+                    if (this.regs[0] && this.regs[4]) {
+                        this.paintAndClear();
+                    }
+                    this.sysvia.setVBlankInt(true);
+                    this.teletext.vsync();
                 }
 
                 // TODO: this will be cleaner if we rework skew to have fetch
