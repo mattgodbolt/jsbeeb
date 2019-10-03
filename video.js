@@ -295,15 +295,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.endOfScanline = function () {
             if (this.scanlineCounter === this.regs[11]) this.cursorOff = true;
 
-            // Handle VSync.
-            if (this.inVSync) {
-                this.vpulseCounter = (this.vpulseCounter + 1) & 0x0F;
-                if (this.vpulseCounter === this.vpulseWidth) {
-                    this.inVSync = false;
-                    if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
-                    this.sysvia.setVBlankInt(false);
-                }
-            }
+            this.vpulseCounter = (this.vpulseCounter + 1) & 0x0F;
 
             if (this.vertAdjustPending) {
                 this.scanlineCounter = 0;
@@ -396,6 +388,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     continue;
                 }
 
+                // This emulates the Hitachi 6845SP CRTC.
+                // Other variants have different quirks.
+
                 // Handle HSync
                 if (this.inHSync) this.handleHSync();
 
@@ -434,27 +429,44 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     this.hpulseCounter = 0;
                 }
 
-                // Initiate VSync.
+                // Handle VSync.
+                var vSyncEnding = false;
+                var vSyncStarting = false;
+                if (this.inVSync && this.vpulseCounter === this.vpulseWidth) {
+                    vSyncEnding = true;
+                    this.inVSync = false;
+                }
+                if (this.vertCounter === this.regs[7] &&
+                    !this.inVSync &&
+                    !this.hadVSyncThisRow) {
+                    vSyncStarting = true;
+                    this.inVSync = true;
+                }
+
                 // A vsync will initiate at any character and scanline position,
                 // provided there isn't one in progress and provided there
                 // wasn't already one in this character row.
                 // This is an interesting finding, on a real model B.
-                if (this.vertCounter === this.regs[7] &&
-                    !this.inVSync &&
-                    !this.hadVSyncThisRow) {
-                    this.inVSync = true;
+                // One further emulated quirk is that in the corner case of a
+                // vsync ending and starting at the same time, the vsync
+                // pulse continues uninterrupted. The vsync pulse counter will
+                // continue counting up and wrap at 16.
+                if (vSyncStarting && !vSyncEnding) {
                     this.hadVSyncThisRow = true;
                     this.vpulseCounter = 0;
-
                     this.oddFrame = !this.oddFrame;
-                    if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
+
                     // Avoid intense painting if registers have boot-up or
                     // otherwise small values.
                     if (this.regs[0] && this.regs[4]) {
                         this.paintAndClear();
                     }
-                    this.sysvia.setVBlankInt(true);
                     this.teletext.vsync();
+                }
+
+                if (vSyncStarting || vSyncEnding) {
+                    if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
+                    this.sysvia.setVBlankInt(this.inVSync);
                 }
 
                 // TODO: this will be cleaner if we rework skew to have fetch
