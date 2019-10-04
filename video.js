@@ -22,8 +22,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.bitmapY = 0;
         this.renderY = 0;
         this.oddClock = false;
-        this.frameCountCrtc = 0;
-        this.frameCountVsync = 0;
+        this.frameCount = 0;
         this.inHSync = false;
         this.inVSync = false;
         this.hadVSyncThisRow = false;
@@ -49,7 +48,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.ulaPal = utils.makeFast32(new Uint32Array(16));
         this.actualPal = new Uint8Array(16);
         this.drawHalfScanline = false;
-        this.oddFrame = false;
         this.teletext = new Teletext();
         this.cursorOn = false;
         this.cursorOff = false;
@@ -85,7 +83,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.clearPaintBuffer = function() {
             var fb32 = this.fb32;
             if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
-                var line = this.oddFrame ? 1 : 0;
+                var line = (this.frameCount & 1);
                 while (line < 625) {
                     var start = line * 1024;
                     fb32.fill(0, start, start + 1024);
@@ -97,7 +95,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.paintAndClear = function() {
-            this.frameCountVsync++;
             if (this.dispEnabled & FRAMESKIPENABLE) {
                 this.paint();
                 this.clearPaintBuffer();
@@ -105,7 +102,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.dispEnabled &= ~FRAMESKIPENABLE;
             var enable = FRAMESKIPENABLE;
             if (this.frameSkipCount > 1) {
-                if (this.frameCountVsync % this.frameSkipCount) enable = 0;
+                if (this.frameCount % this.frameSkipCount) enable = 0;
             }
             this.dispEnabled |= enable;
 
@@ -124,7 +121,10 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.debugOffset = function (x, y) {
             if (x < 0 || x >= 1024) return -1;
             if (y < 0 || y >= 768) return -1;
-            var renderY = (y << 1) | ((this.oddFrame && (this.interlacedSyncAndVideo || !this.doubledScanlines)) ? 1 : 0);
+            var renderY = (y << 1);
+            if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
+                this.renderY += (this.frameCount & 1);
+            }
             return renderY * 1024 + x;
         };
 
@@ -259,7 +259,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.renderChar = function (offset, dat) {
             if (this.teletextMode) {
-                this.teletext.render(this.fb32, offset, this.scanlineCounter + (this.oddFrame ? 1 : 0));
+                this.teletext.render(this.fb32, offset, this.scanlineCounter + (this.frameCount & 1));
             } else {
                 this.blitFb(dat, offset, this.pixelsPerChar, this.doubledScanlines && !this.interlacedSyncAndVideo);
             }
@@ -269,9 +269,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
             this.dispEnabled |= VDISPENABLE;
-            this.frameCountCrtc++;
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
-            this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCountCrtc & this.cursorFlashMask[cursorFlash]);
+            this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         };
 
         this.endOfCharacterLine = function (lastScanline) {
@@ -360,8 +359,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.updateRenderY = function () {
-            // this.renderY = (this.bitmapY << 1) | ((this.oddFrame && !!(this.regs[8] & 1)) ? 1 : 0);    // emulate 'shaky' interlace
-            this.renderY = (this.bitmapY << 1) | ((this.oddFrame && (this.interlacedSyncAndVideo || !this.doubledScanlines)) ? 1 : 0);
+            // this.renderY = (this.bitmapY << 1) | (((this.frameCount & 1) && !!(this.regs[8] & 1)) ? 1 : 0);    // emulate 'shaky' interlace
+            this.renderY = (this.bitmapY << 1);
+            if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
+                this.renderY += (this.frameCount & 1);
+            }
         };
 
         this.cb2changed = function (level, output) {
@@ -419,8 +421,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // The 6845 in the BBC will notice this equality on any clock
                 // tick, not just at the end of a character row.
                 // Required by Wave Runner.
-                if (this.vertCounter === this.regs[6]) {
+                if (this.vertCounter === this.regs[6] && (this.dispEnabled & VDISPENABLE)) {
                     this.dispEnabled &= ~VDISPENABLE;
+                    // Perhaps surprisingly, this happens here. Both cursor
+                    // blink and interlace cease if R6 > R4.
+                    this.frameCount++;
                 }
 
                 // Initiate HSync.
@@ -454,7 +459,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 if (vSyncStarting && !vSyncEnding) {
                     this.hadVSyncThisRow = true;
                     this.vpulseCounter = 0;
-                    this.oddFrame = !this.oddFrame;
 
                     // Avoid intense painting if registers have boot-up or
                     // otherwise small values.
@@ -465,7 +469,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
 
                 if (vSyncStarting || vSyncEnding) {
-                    if (this.oddFrame) this.drawHalfScanline = !!(this.regs[8] & 1);
+                    // TODO: interlace handling is not correct.
+                    if (!(this.frameCount & 1)) this.drawHalfScanline = !!(this.regs[8] & 1);
                     this.sysvia.setVBlankInt(this.inVSync);
                 }
 
@@ -558,7 +563,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         break;
                     case 8:
                         this.video.interlacedSyncAndVideo = (val & 3) === 3;
-                        this.video.updateRenderY();
                         var skew = (val & 0x30) >>> 4;
                         if (skew < 3) {
                             this.video.displayEnableSkew = skew;
