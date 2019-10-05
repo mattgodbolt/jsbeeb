@@ -268,12 +268,13 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.endOfFrame = function () {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
+            this.lineStartAddr = this.nextLineStartAddr;
             this.dispEnabled |= VDISPENABLE;
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
             this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         };
 
-        this.endOfCharacterLine = function (lastScanline) {
+        this.endOfCharacterLine = function () {
             this.vertCounter = (this.vertCounter + 1) & 0x7f;
 
             this.scanlineCounter = 0;
@@ -282,13 +283,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.dispEnabled |= SCANLINEDISPENABLE;
             this.cursorOn = false;
             this.cursorOff = false;
-
-            if (lastScanline && this.inVertAdjust) {
-                this.endOfFrame();
-                this.inVertAdjust = false;
-            }
-
-            this.lineStartAddr = this.nextLineStartAddr;
         };
 
         this.endOfScanline = function () {
@@ -296,36 +290,47 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
             this.vpulseCounter = (this.vpulseCounter + 1) & 0x0F;
 
+            var r9Hit = (this.scanlineCounter === this.regs[9]);
+
+            // Increment scanline.
+            if (this.interlacedSyncAndVideo && !this.inVertAdjust) {
+                this.scanlineCounter = (this.scanlineCounter + 2) & 0x1e;
+            } else {
+                this.scanlineCounter = (this.scanlineCounter + 1) & 0x1f;
+            }
+            if (!this.teletextMode) {
+                // Scanlines 8-15 are off but they display again at 16,
+                // mirroring 0-7, and it repeats.
+                var off = (this.scanlineCounter >>> 3) & 1;
+                if (off) {
+                    this.dispEnabled &= ~SCANLINEDISPENABLE;
+                } else {
+                    this.dispEnabled |= SCANLINEDISPENABLE;
+                }
+            }
+
+            if (r9Hit) {
+                // An R9 hit always loads a new character row address, even if
+                // we're in vertical adjust!
+                // Note than an R9 hit inside vertical adjust does not further
+                // increment the vertical counter, but entry into vertical
+                // adjust does.
+                this.lineStartAddr = this.nextLineStartAddr;
+            }
+
+            if (this.vertAdjustPending || (!this.inVertAdjust && r9Hit)) {
+                this.endOfCharacterLine();
+            }
+
             if (this.vertAdjustPending) {
-                this.scanlineCounter = 0;
+                this.vertAdjustPending = false;
                 this.inVertAdjust = true;
             }
 
-            var numScanlines = this.inVertAdjust ? this.regs[5] : this.regs[9];
-            var lastScanline = (this.scanlineCounter === numScanlines);
-            if (lastScanline || this.vertAdjustPending) {
-                this.endOfCharacterLine(lastScanline);
-            }
-
-            this.vertAdjustPending = false;
-
-            // Move to the next scanline.
-            if (this.inVertAdjust || !lastScanline) {
-                if (this.interlacedSyncAndVideo && !this.inVertAdjust) {
-                    this.scanlineCounter = (this.scanlineCounter + 2) & 0x1e;
-                } else {
-                    this.scanlineCounter = (this.scanlineCounter + 1) & 0x1f;
-                }
-                if (!this.teletextMode) {
-                    // Scanlines 8-15 are off but they display again at 16,
-                    // mirroring 0-7, and it repeats.
-                    var off = (this.scanlineCounter >>> 3) & 1;
-                    if (off) {
-                        this.dispEnabled &= ~SCANLINEDISPENABLE;
-                    } else {
-                        this.dispEnabled |= SCANLINEDISPENABLE;
-                    }
-                }
+            if (this.inVertAdjust && this.scanlineCounter === this.regs[5]) {
+                this.inVertAdjust = false;
+                this.endOfCharacterLine();
+                this.endOfFrame();
             }
 
             this.addr = this.lineStartAddr;
