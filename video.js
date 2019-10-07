@@ -333,6 +333,17 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 this.endOfFrame();
             }
 
+            // The Hitachi 6845 appears to latch some form of "last scanline
+            // of the frame" state. As shown by Twisted Brain, changing R9
+            // from 0 to 6 on the last scanline of the frame does not
+            // prevent a new frame from starting. Testing indicates that the
+            // latch is set here at scanline rollover into the last scanline.
+            // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
+            if (this.vertCounter === this.regs[4] &&
+                this.scanlineCounter === this.regs[9]) {
+                this.vertAdjustPending = true;
+            }
+
             this.addr = this.lineStartAddr;
             this.teletext.endline();
 
@@ -400,14 +411,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                 // Handle HSync
                 if (this.inHSync) this.handleHSync();
-
-                // Handle latching of vertical adjust pending.
-                // The Hitachi 6845 appears to latch some form of "last scanline
-                // of the frame" state. As shown by Twisted Brain, changing R9
-                // from 0 to 6 on the last scanline of the frame does not
-                // prevent a new frame from starting.
-                // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
-                if (this.vertCounter === this.regs[4] && this.scanlineCounter === this.regs[9]) this.vertAdjustPending = true;
 
                 // Handle delayed display enable due to skew
                 var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
