@@ -20,7 +20,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.regs = new Uint8Array(32);
         this.bitmapX = 0;
         this.bitmapY = 0;
-        this.renderY = 0;
         this.oddClock = false;
         this.frameCount = 0;
         this.inHSync = false;
@@ -47,7 +46,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.displayEnableSkew = 0;
         this.ulaPal = utils.makeFast32(new Uint32Array(16));
         this.actualPal = new Uint8Array(16);
-        this.drawHalfScanline = false;
         this.teletext = new Teletext();
         this.cursorOn = false;
         this.cursorOff = false;
@@ -107,7 +105,10 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.dispEnabled |= enable;
 
             this.bitmapY = 0;
-            this.updateRenderY();
+            // Interlace even frame fires vsync midway through a scanline.
+            if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
+                this.bitmapY = -1;
+            }
         };
 
         function copyFb(dest, src) {
@@ -257,14 +258,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
         };
 
-        this.renderChar = function (offset, dat) {
-            if (this.teletextMode) {
-                this.teletext.render(this.fb32, offset, this.scanlineCounter + (this.frameCount & 1));
-            } else {
-                this.blitFb(dat, offset, this.pixelsPerChar, this.doubledScanlines && !this.interlacedSyncAndVideo);
-            }
-        };
-
         this.endOfFrame = function () {
             this.vertCounter = 0;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
@@ -327,10 +320,20 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 this.inVertAdjust = true;
             }
 
-            if (this.inVertAdjust && this.scanlineCounter === this.regs[5]) {
-                this.inVertAdjust = false;
-                this.endOfCharacterLine();
-                this.endOfFrame();
+            if (this.inVertAdjust) {
+                var scanlineCompare = this.scanlineCounter;
+                // The "dummy raster" inserted at the end of frame for even
+                // interlace frames behaves exactly like it's an extra scanline
+                // at the end of vertical adjust, including C4=R4+1.
+                if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
+                    scanlineCompare--;
+                }
+                
+                if (scanlineCompare === this.regs[5]) {
+                    this.inVertAdjust = false;
+                    this.endOfCharacterLine();
+                    this.endOfFrame();
+                }
             }
 
             // The Hitachi 6845 appears to latch some form of "last scanline
@@ -362,23 +365,17 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     this.bitmapX -= 4;
                 }
 
-                this.bitmapY++;
+                // The CRT vertical beam speed is constant, so this is actually
+                // an approximation that works if hsyncs are spaced evenly.
+                this.bitmapY += 2;
+
                 // If no VSync occurs this frame, go back to the top and force a repaint
-                if (this.bitmapY >= 384) {
+                if (this.bitmapY >= 768) {
                     // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
                     this.paintAndClear();
                 }
-                this.updateRenderY();
             } else if (this.hpulseCounter === (this.regs[3] & 0x0F)) {
                 this.inHSync = false;
-            }
-        };
-
-        this.updateRenderY = function () {
-            // this.renderY = (this.bitmapY << 1) | (((this.frameCount & 1) && !!(this.regs[8] & 1)) ? 1 : 0);    // emulate 'shaky' interlace
-            this.renderY = (this.bitmapY << 1);
-            if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
-                this.renderY += (this.frameCount & 1);
             }
         };
 
@@ -443,15 +440,29 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
 
                 // Handle VSync.
+                // Half-line interlace timing is shown nicely in figure 13 here:
+                // http://bitsavers.trailing-edge.com/components/motorola/_dataSheets/6845.pdf
+                // Essentially, on even frames, vsync raise / lower triggers at
+                // the mid-scanline, and then a dummy scanline is also added
+                // at the end of vertical adjust.
+                // Without interlace, frames are 312 scanlines. With interlace,
+                // both odd and even frames are 312.5 scanlines.
+                var isInterlace = !!(this.regs[8] & 1);
+                var halfR0Hit = (this.horizCounter === this.regs[0] >>> 1);
+                var evenFrame = !!(this.frameCount & 1);
+                var isVsyncPoint = (!isInterlace || !evenFrame || halfR0Hit);
                 var vSyncEnding = false;
                 var vSyncStarting = false;
-                if (this.inVSync && this.vpulseCounter === this.vpulseWidth) {
+                if (this.inVSync &&
+                    this.vpulseCounter === this.vpulseWidth &&
+                    isVsyncPoint) {
                     vSyncEnding = true;
                     this.inVSync = false;
                 }
                 if (this.vertCounter === this.regs[7] &&
                     !this.inVSync &&
-                    !this.hadVSyncThisRow) {
+                    !this.hadVSyncThisRow &&
+                    isVsyncPoint) {
                     vSyncStarting = true;
                     this.inVSync = true;
                 }
@@ -477,8 +488,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
 
                 if (vSyncStarting || vSyncEnding) {
-                    // TODO: interlace handling is not correct.
-                    if (!(this.frameCount & 1)) this.drawHalfScanline = !!(this.regs[8] & 1);
                     this.sysvia.setVBlankInt(this.inVSync);
                 }
 
@@ -501,30 +510,35 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     }
 
                     // Render data depending on display enable state.
-                    if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.renderY < 625) {
-                        var offset = this.renderY * 1024 + this.bitmapX;
+                    if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
+                        var doubledLines = false;
+                        var offset = this.bitmapY;
+                        if (this.doubledScanlines &&
+                            !this.interlacedSyncAndVideo) {
+                            doubledLines = true;
+                            offset &= ~1;
+                        }
+
+                        offset = (offset * 1024) + this.bitmapX;
 
                         if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
-                            this.renderChar(offset, dat);
+                            if (this.teletextMode) {
+                                this.teletext.render(this.fb32, offset, this.scanlineCounter + (this.frameCount & 1));
+                            } else {
+                                this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
+                            }
                         }
-                        if (this.cursorDrawIndex) this.handleCursor(offset);
+                        if (this.cursorDrawIndex) {
+                            this.handleCursor(offset, doubledLines);
+                        }
                     }
                 }
 
                 // CRTC MA always increments, inside display border or not.
                 this.addr = (this.addr + 1) & 0x3fff;
 
-                // Handle horizontal total
-                if (this.drawHalfScanline && this.horizCounter === (this.regs[0] >>> 1)) {
-                    // In interlace mode, the odd field is displaced from the even field by rasterizing
-                    // half a scanline directly after the VBlank in odd fields and forcing HBlank
-                    // immediately (since the vertical speed of the raster beam is constant). This is
-                    // then adjusted for even fields by rasterizing a further half a scanline before their
-                    // VBlank.
-                    this.horizCounter = 0;
-                    this.drawHalfScanline = false;
-                } else if (this.horizCounter === this.regs[0]) {
-                    // We've hit the end of a scanline (reg 0 is horiz total)
+                // Handle horizontal total.
+                if (this.horizCounter === this.regs[0]) {
                     this.endOfScanline();
                     this.horizCounter = 0;
                     this.dispEnabled |= HDISPENABLE;
