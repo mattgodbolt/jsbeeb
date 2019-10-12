@@ -320,6 +320,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 this.inVertAdjust = true;
             }
 
+            var endOfFrame = false;
+
             if (this.inVertAdjust) {
                 var scanlineCompare = this.scanlineCounter;
                 // The "dummy raster" inserted at the end of frame for even
@@ -332,8 +334,26 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 if (scanlineCompare === this.regs[5]) {
                     this.inVertAdjust = false;
                     this.endOfCharacterLine();
-                    this.endOfFrame();
+                    endOfFrame = true;
                 }
+            }
+
+            // Handle end of vertical displayed.
+            // The 6845 in the BBC will notice this equality on any scanline
+            // end, not just at the end of a character row.
+            // Note that a new frame takes precedence: even if R6=0, the new
+            // frame will start with display enabled and render a single
+            // scanline.
+            // Required by Wave Runner.
+            if (this.vertCounter === this.regs[6] && (this.dispEnabled & VDISPENABLE)) {
+                this.dispEnabled &= ~VDISPENABLE;
+                // Perhaps surprisingly, this happens here. Both cursor blink
+                // and interlace cease if R6 > R4.
+                this.frameCount++;
+            }
+
+            if (endOfFrame) {
+                this.endOfFrame();
             }
 
             // The Hitachi 6845 appears to latch some form of "last scanline
@@ -421,17 +441,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // Also, the last scanline character never displays.
                 if ((this.horizCounter === this.regs[1] + displayEnablePos) || (this.horizCounter === this.regs[0] + displayEnablePos))
                     this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
-
-                // Handle end of vertical displayed.
-                // The 6845 in the BBC will notice this equality on any clock
-                // tick, not just at the end of a character row.
-                // Required by Wave Runner.
-                if (this.vertCounter === this.regs[6] && (this.dispEnabled & VDISPENABLE)) {
-                    this.dispEnabled &= ~VDISPENABLE;
-                    // Perhaps surprisingly, this happens here. Both cursor
-                    // blink and interlace cease if R6 > R4.
-                    this.frameCount++;
-                }
 
                 // Initiate HSync.
                 if (this.horizCounter === this.regs[2] && !this.inHSync) {
