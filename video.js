@@ -335,7 +335,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // to include an extra scanline at the end of the frame.
                 // Investigation continues.
                 if ((!!(this.regs[8] & 1) && !!(this.frameCount & 1)) ||
-                    (this.regs[0] == 1)) {
+                    (this.regs[0] === 1)) {
                     scanlineCompare--;
                 }
                 
