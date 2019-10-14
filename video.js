@@ -323,11 +323,19 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             var endOfFrame = false;
 
             if (this.inVertAdjust) {
+                // TODO: the comment below isn't quite right. If there's both
+                // vertical adjust and a dummy raster, it's possible to tell
+                // the difference because the last line of vertical adjust can
+                // be identified.
                 var scanlineCompare = this.scanlineCounter;
                 // The "dummy raster" inserted at the end of frame for even
                 // interlace frames behaves exactly like it's an extra scanline
                 // at the end of vertical adjust, including C4=R4+1.
-                if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
+                // There's also a particularly strange quirk whereby R0=1 seems
+                // to include an extra scanline at the end of the frame.
+                // Investigation continues.
+                if ((!!(this.regs[8] & 1) && !!(this.frameCount & 1)) ||
+                    (this.regs[0] == 1)) {
                     scanlineCompare--;
                 }
                 
