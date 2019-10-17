@@ -42,6 +42,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var fastAsPossible = false;
         var fastTape = false;
         var noSeek = false;
+        var pauseEmu = false;
+        var stepEmuWhenPaused = false;
         var audioFilterFreq = 7000;
         var audioFilterQ = 5;
 
@@ -344,12 +346,23 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         function keyPress(evt) {
             if (document.activeElement.id === 'paste-text') return;
-            if (running || !dbgr.enabled()) return;
+            if (running || (!dbgr.enabled() && !pauseEmu)) return;
             var code = keyCode(evt);
-            if (code === 103 /* lower case g */) {
+            if (dbgr.enabled() && code === 103 /* lower case g */) {
                 dbgr.hide();
                 go();
                 return;
+            }
+            if (pauseEmu) {
+                if (code === 103 /* lower case g */) {
+                    pauseEmu = false;
+                    go();
+                    return;
+                } else if (code === 110 /* lower case n */) {
+                    stepEmuWhenPaused = true;
+                    go();
+                    return;
+                }
             }
             var handled = dbgr.keyPress(keyCode(evt));
             if (handled) evt.preventDefault();
@@ -383,6 +396,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
                 utils.noteEvent('keyboard', 'press', 'insert');
                 fastAsPossible = !fastAsPossible;
+            } else if (code === utils.keyCodes.END && evt.ctrlKey) {
+                utils.noteEvent('keyboard', 'press', 'end');
+                pauseEmu = true;
+                stop(false);
             } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
                 utils.noteEvent('keyboard', 'press', 'break');
                 processor.setReset(true);
@@ -1322,6 +1339,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     utils.noteEvent('exception', 'thrown', e.stack);
                     dbgr.debug(processor.pc);
                     throw e;
+                }
+                if (stepEmuWhenPaused) {
+                    stop(false);
+                    stepEmuWhenPaused = false;
                 }
             }
             last = now;
