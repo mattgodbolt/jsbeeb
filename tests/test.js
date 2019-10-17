@@ -1,5 +1,5 @@
-define(['video', 'fake6502', 'fdc', 'utils', 'models'],
-    function (Video, Fake6502, fdc, utils, models) {
+define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise', 'underscore'],
+    function (Video, Fake6502, fdc, utils, models, tokeniser, _) {
         var processor;
         var video;
         var MaxCyclesPerIter = 100 * 1000;
@@ -9,6 +9,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
         var log, beginTest, endTest;
 
         var tests = [
+            {test: "Test NOPs", func: testNops, model: 'Master'},
             {test: "Test RMX.x (65C12)", func: testRmw, model: 'Master'},
             {test: "Test RMW,x (6502)", func: testRmw},
             {test: "Test BCD (65C12)", func: testBCD, model: 'Master'},
@@ -70,7 +71,8 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
             });
         }
 
-        function runUntilInput() {
+        function runUntilInput(secs) {
+            if (!secs) secs = 120;
             log("Running until keyboard input requested");
             var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
             var hit = false;
@@ -80,7 +82,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
                     return true;
                 }
             });
-            return runFor(250 * 1000 * 1000).then(function () {
+            return runFor(secs * 2 * 1000 * 1000).then(function () {
                 hook.remove();
                 if (!hit) log("Failed to hit breakpoint");
                 return runFor(10 * 1000);
@@ -214,6 +216,155 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
             });
         }
 
+        function Capturer(cpu, onElement) {
+            var attributes = {
+                x: 0,
+                y: 0,
+                text: '',
+                foreground: 7,
+                background: 0,
+                mode: 7
+            };
+            var currentText = '';
+            var params = [];
+            var nextN = 0;
+            var vduProc = null;
+
+            function flush() {
+                if (currentText.length) {
+                    attributes.text = currentText;
+                    onElement(attributes);
+                    attributes.x += currentText.length; // Approximately...anyway
+                }
+                currentText = '';
+            }
+
+            function onChar(c) {
+                if (nextN) {
+                    params.push(c);
+                    if (--nextN === 0) {
+                        if (vduProc) vduProc(params);
+                        params = [];
+                        vduProc = null;
+                    }
+                    return;
+                }
+                switch (c) {
+                    case 1: // Next char to printer
+                        nextN = 1;
+                        break;
+                    case 10:
+                        attributes.y++;
+                        break;
+                    case 12: // CLS
+                        attributes.x = 0;
+                        attributes.y = 0;
+                        break;
+                    case 13:
+                        attributes.x = 0;
+                        break;
+                    case 17: // Text colour
+                        nextN = 1;
+                        vduProc = function (params) {
+                            if (params[0] & 0x80)
+                                attributes.background = params[0] & 0xf;
+                            else
+                                attributes.foreground = params[0] & 0xf;
+                        };
+                        break;
+                    case 18: // GCOL
+                        nextN = 2;
+                        break;
+                    case 19: // logical colour
+                        nextN = 5;
+                        break;
+                    case 22: // mode
+                        nextN = 1;
+                        vduProc = function (params) {
+                            attributes.mode = params[0];
+                            attributes.x = 0;
+                            attributes.y = 0;
+                        };
+                        break;
+                    case 25: // plot
+                        nextN = 5;
+                        break;
+                    case 28: // text window
+                        nextN = 4;
+                        break;
+                    case 29: // origin
+                        nextN = 4;
+                        break;
+                    case 31: // text location
+                        nextN = 2;
+                        vduProc = function (params) {
+                            attributes.x = params[0];
+                            attributes.y = params[1];
+                        };
+                }
+                if (c >= 32 && c < 0x7f) {
+                    currentText += String.fromCharCode(c);
+                } else
+                    flush();
+                return false;
+            }
+
+            processor.debugInstruction.add(function (addr) {
+                var wrchv = processor.readmem(0x20e) | (processor.readmem(0x20f) << 8);
+                if (addr === wrchv) onChar(processor.a);
+                return false;
+            });
+
+            return this;
+        }
+
+        function testNops() {
+            var capturer;
+            var numCaptures = 0;
+            return Promise.all([utils.loadData('tests/unit/nops.bas'), tokeniser.create(), runUntilInput()])
+                .then(function (results) {
+                    var data = utils.uint8ArrayToString(results[0]);
+                    var tokeniser = results[1];
+                    return tokeniser.tokenise(data);
+                })
+                .then(function (tokenised) {
+                    // TODO: dedupe from main.js
+                    var page = processor.readmem(0x18) << 8;
+                    for (var i = 0; i < tokenised.length; ++i) {
+                        processor.writemem(page + i, tokenised.charCodeAt(i));
+                    }
+                    // Set VARTOP (0x12/3) and TOP(0x02/3)
+                    var end = page + tokenised.length;
+                    var endLow = end & 0xff;
+                    var endHigh = (end >>> 8) & 0xff;
+                    processor.writemem(0x02, endLow);
+                    processor.writemem(0x03, endHigh);
+                    processor.writemem(0x12, endLow);
+                    processor.writemem(0x13, endHigh);
+                    capturer = new Capturer(processor, function (elem) {
+                        if (elem.background === 1) {
+                            log("ERROR: " + JSON.stringify(elem));
+                            failures++;
+                        } else {
+                            log("Emulation> " + elem.text);
+                        }
+                        numCaptures++;
+                    });
+                    return type("RUN");
+                })
+                .then(function () {
+                    return runUntilInput(5 * 60);
+                })
+                .then(function () {
+                    if (numCaptures !== 97) {
+                        log("Missing output (" + numCaptures + ")");
+                        failures++;
+                    } else {
+                        log("Pass!");
+                    }
+                });
+        }
+
         function testRmw() {
             return fdc.load("discs/RmwX.ssd").then(function (data) {
                 processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
@@ -223,7 +374,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
             }).then(runUntilInput).then(function () {
                 var result = "";
                 for (var i = 0x100; i < 0x110; i += 4) {
-                    if (i != 0x100) result += " "
+                    if (i !== 0x100) result += " ";
                     for (var j = 3; j >= 0; --j) {
                         result += utils.hexbyte(processor.readmem(i + j));
                     }
@@ -231,7 +382,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models'],
                 var expected = processor.model.isMaster ?
                     "f4ff0a16 eaeadee9 f2fe0a16 c3ced9e5" :
                     "f2fe0a16 eaeadae6 f2fe0a16 c1cdd9e5";
-                if (result != expected) {
+                if (result !== expected) {
                     log("failed! got:\n" + result + " expected:\n" + expected);
                     failures++;
                 }
