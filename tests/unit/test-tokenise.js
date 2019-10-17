@@ -38,4 +38,7 @@ describe('Tokeniser', function () {
     it('copes with token names inside strings', function (done) {
         check(done, "PRINT \"IF \"\"IF\"\" IF\"", "\r\x00\x0a\x14\xf1 \"IF \"\"IF\"\" IF\"\r\xff");
     });
+    it('handles REM', function (done) {
+        check(done, "10REM I am a monkey", "\r\x00\x0a\x13\xf4 I am a monkey\r\xff");
+    });
 });
