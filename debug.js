@@ -115,8 +115,8 @@ define(['jquery', 'underscore', './utils'], function ($, _, utils) {
             var stateNode = node.find('.crtc_state');
             var others = [
                 'bitmapX', 'bitmapY', 'dispEnabled',
-                'horizCounter', 'inHSync', 'scanlineCounter', 'vertCounter', 'inVSync', 'inVertAdjust',
-                'addr', 'addrLine', 'lineStartAddr', 'nextLineStartAddr'];
+                'horizCounter', 'inHSync', 'scanlineCounter', 'vertCounter', 'inVSync', 'vertAdjustPending', 'inVertAdjust',
+                'addr', 'lineStartAddr', 'nextLineStartAddr'];
             $.each(others, function (_, elem) {
                 var value = makeRow(stateNode, elem);
                 if (typeof video[elem] === "boolean") {

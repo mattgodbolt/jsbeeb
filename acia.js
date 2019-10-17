@@ -6,16 +6,15 @@ define([], function () {
     // http://www.classiccmp.org/dunfield/r/6850.pdf
     return function Acia(cpu, toneGen, scheduler, rs423Handler) {
         var self = this;
-        self.sr = 0x02;
+        self.sr = 0x00;
         self.cr = 0x00;
         self.dr = 0x00;
         self.rs423Handler = rs423Handler;
         self.rs423Selected = false;
         self.motorOn = false;
-        // TODO: set clearToSend accordingly; at the moment it stays low.
-        // would need to be updated based on the "other end" of the link, and
-        // we would need to generate IRQs appropriately when TDRE goes high.
-        self.clearToSend = false;
+        self.tapeCarrierCount = 0;
+        self.tapeDcdLineLevel = false;
+        self.hadDcdHigh = false;
 
         function updateIrq() {
             if (self.sr & self.cr & 0x80) {
@@ -26,9 +25,17 @@ define([], function () {
         }
 
         self.reset = function () {
-            self.sr = (self.sr & 0x08) | 0x06;
+            // TODO: testing on a real beeb seems to suggest that reset also
+            // clears CR bits (i.e. things stop working until CR is rewritten
+            // with sane value). This disagrees with the datasheet.
+            // CTS and DTD are based on external inputs so leave them alone.
+            self.sr &= (0x08 | 0x04);
+            // Reset clears the transmit register so raise the empty bit.
+            self.sr |= 0x02;
+            self.hadDcdHigh = false;
             updateIrq();
         };
+
         self.reset();
 
         self.tone = function (freq) {
@@ -37,11 +44,12 @@ define([], function () {
         };
 
         self.setMotor = function (on) {
-            if (on && !self.motorOn)
+            if (on && !self.motorOn) {
                 runTape();
-            else {
+            } else if (!on && self.motorOn) {
                 toneGen.mute();
                 self.runTapeTask.cancel();
+                self.setTapeCarrier(false);
             }
             self.motorOn = on;
         };
@@ -49,12 +57,27 @@ define([], function () {
         self.read = function (addr) {
             if (addr & 1) {
                 self.sr &= ~0xa1;
+                self.hadDcdHigh = false;
                 updateIrq();
                 return self.dr;
             } else {
                 var result = (self.sr & 0x7f) | (self.sr & self.cr & 0x80);
-                if (!self.clearToSend) result &= ~0x02; // Mask off TDRE if not CTS
-                result = result | 0x02 | 0x08;
+                // MC6850: "A low CTS indicates that there is a Clear-to-Send
+                // from the modem. In the high state, the Transmit Data Register
+                // Empty bit is inhibited".
+                if (result & 0x08) {
+                    result &= ~0x02;
+                }
+
+                // MC6850: "It remains high after the DCD input is returned low
+                // until cleared by first reading the Status Register and then
+                // the Data Register".
+                // Testing on a real machine shows that only the Data Register
+                // read matters, and clears the "saw DCD high" condition.
+                if (self.hadDcdHigh) {
+                    result |= 0x04;
+                }
+
                 return result;
             }
         };
@@ -83,27 +106,71 @@ define([], function () {
         self.selectRs423 = function (selected) {
             self.rs423Selected = !!selected;
             if (self.rs423Selected) {
-                self.sr &= ~0x04; // Clear DCD
+                // RS423 selected.
+                // CTS is always high, meaning not Clear To Send. This is
+                // because we don't yet emulate anything on the "other end",
+                // so there is nothing to pull CTS low.
+                self.sr |= 0x08;
             } else {
-                self.sr &= ~0x08; // Clear CTS
+                // Cassette selected.
+                // CTS is always low, meaning actually Clear To Send.
+                self.sr &= ~0x08;
             }
+            self.dcdLineUpdated();
             self.runRs423Task.ensureScheduled(self.rs423Selected, self.serialReceiveCyclesPerByte);
         };
 
-        self.setDCD = function (level) {
-            if (level) {
-                if (self.sr & 0x04) return;
-                self.sr |= 0x84;
+        self.dcdLineUpdated = function () {
+            var level;
+            if (self.rs423Selected) {
+                // AUG: "It will always be low when the RS423 interface is
+                // selected".
+                level = false;
             } else {
+                level = self.tapeDcdLineLevel;
+            }
+
+            if (level && !(self.sr & 0x04)) {
+                // DCD interrupts on low -> high level change.
+                self.sr |= 0x84;
+                self.hadDcdHigh = true;
+            } else if (!level && (self.sr & 0x04)) {
                 self.sr &= ~0x04;
             }
             updateIrq();
+        };
+
+        self.setTapeCarrier = function (level) {
+            if (!level) {
+                self.tapeCarrierCount = 0;
+                self.tapeDcdLineLevel = false;
+            } else {
+                self.tapeCarrierCount++;
+                // The tape hardware doesn't raise DCD until the carrier tone
+                // has persisted for a while. The BBC service manual opines,
+                // "The DCD flag in the 6850 should change 0.1 to 0.4 seconds
+                // after a continuous tone appears".
+                // Star Drifter doesn't load without this.
+                // We use 0.174s, measured on an issue 3 model B.
+                // Testing on real hardware, DCD is blipped, it lowers about
+                // 210us after it raises, even though the carrier tone
+                // may be continuing.
+                if (self.tapeCarrierCount === 209) {
+                    self.tapeDcdLineLevel = true;
+                } else {
+                    self.tapeDcdLineLevel = false;
+                }
+            }
+            self.dcdLineUpdated();
         };
 
         self.receive = function (byte) {
             byte |= 0;
             if (self.sr & 0x01) {
                 // Overrun.
+                // TODO: this doesn't match the datasheet:
+                // "The Overrun does not occur in the Status Register until the
+                // valid character prior to Overrun has been read."
                 console.log("Serial overrun");
                 self.sr |= 0xa0;
             } else {

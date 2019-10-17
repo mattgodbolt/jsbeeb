@@ -4,7 +4,7 @@ define(['utils'], function (utils) {
     function UefTape(stream) {
         var self = this;
 
-        var dummyData, state, curByte, numDataBits, parity;
+        var dummyData, state, count, curByte, numDataBits, parity;
         var numParityBits, numStopBits, carrierBefore, carrierAfter;
 
 
@@ -12,6 +12,7 @@ define(['utils'], function (utils) {
 
             dummyData = [false, false, true, false, true, false, true, false, true, true];
             state = -1;
+            count = 0;
             curByte = 0;
             numDataBits = 8;
             parity = 'N';
@@ -68,14 +69,13 @@ define(['utils'], function (utils) {
                 curChunk = readChunk();
             }
 
-            acia.setDCD(false);
-
             var gap;
             switch (curChunk.id) {
                 case 0x0000:
                     console.log("Origin: " + curChunk.stream.readNulString());
                     break;
                 case 0x0100:
+                    acia.setTapeCarrier(false);
                     if (state === -1) {
                         state = 0;
                         curByte = curChunk.stream.readByte();
@@ -100,6 +100,7 @@ define(['utils'], function (utils) {
                     }
                     return cycles(1);
                 case 0x0104: // Defined data
+                    acia.setTapeCarrier(false);
                     if (state === -1) {
                         numDataBits = curChunk.stream.readByte();
                         parity = curChunk.stream.readByte();
@@ -134,24 +135,29 @@ define(['utils'], function (utils) {
                     }
                     return cycles(1);
                 case 0x0111: // Carrier tone with dummy data
-                    acia.setDCD(true);
                     if (state === -1) {
+                        state = 0;
                         carrierBefore = curChunk.stream.readInt16();
                         carrierAfter = curChunk.stream.readInt16();
                         console.log("Carrier with", carrierBefore, carrierAfter);
-                        state = 0;
+                    }
+                    if (state === 0) {
+                        acia.setTapeCarrier(true);
                         acia.tone(2 * baseFrequency);
-                        return cycles(carrierBefore);
-                    } else if (state < 10) {
-                        acia.tone(dummyData[state] ? baseFrequency : (2 * baseFrequency));
+                        carrierBefore--;
+                        if (carrierBefore <= 0) state = 1;
+                    } else if (state < 11) {
+                        acia.setTapeCarrier(false);
+                        acia.tone(dummyData[(state - 1)] ? baseFrequency : (2 * baseFrequency));
+                        if (state === 10) {
+                            acia.receive(0xaa);
+                        }
                         state++;
-                    } else if (state === 10) {
-                        acia.receive(0xaa);
-                        acia.tone(2 * baseFrequency);
-                        state++;
-                        return cycles(carrierAfter);
                     } else {
-                        state = -1;
+                        acia.setTapeCarrier(true);
+                        acia.tone(2 * baseFrequency);
+                        carrierAfter--;
+                        if (carrierAfter <= 0) state = -1;
                     }
                     return cycles(1);
                 case 0x0114:
@@ -160,21 +166,28 @@ define(['utils'], function (utils) {
                 case 0x0115:
                     console.log("Ignoring polarity change");
                     break;
-                case 0x0110:
-                    var count = curChunk.stream.readInt16();
-                    acia.setDCD(true);
+                case 0x0110: // Carrier tone.
+                    if (state === -1) {
+                        state = 0;
+                        count = curChunk.stream.readInt16();
+                    }
+                    acia.setTapeCarrier(true);
                     acia.tone(2 * baseFrequency);
-                    return cycles(count);
+                    count--;
+                    if (count <= 0) state = -1;
+                    return cycles(1);
                 case 0x0113:
                     baseFrequency = curChunk.stream.readFloat32();
                     console.log("Frequency change ", baseFrequency);
                     break;
                 case 0x0112:
+                    acia.setTapeCarrier(false);
                     gap = 1 / (2 * curChunk.stream.readInt16() * baseFrequency);
                     console.log("Tape gap of " + gap + "s");
                     acia.tone(0);
                     return secsToClocks(gap);
                 case 0x0116:
+                    acia.setTapeCarrier(false);
                     gap = curChunk.stream.readFloat32();
                     console.log("Tape gap of " + gap + "s");
                     acia.tone(0);
@@ -219,10 +232,10 @@ define(['utils'], function (utils) {
             if (byte === 0xff) {
                 byte = stream.readByte();
                 if (byte === 0) {
-                    acia.setDCD(false);
+                    acia.setTapeCarrier(false);
                     return 0;
                 } else if (byte === 0x04) {
-                    acia.setDCD(true);
+                    acia.setTapeCarrier(true);
                     // Simulate 5 seconds of carrier.
                     return 5 * 2 * 1000 * 1000;
                 } else if (byte !== 0xff) {

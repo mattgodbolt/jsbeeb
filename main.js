@@ -42,6 +42,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var fastAsPossible = false;
         var fastTape = false;
         var noSeek = false;
+        var pauseEmu = false;
+        var stepEmuWhenPaused = false;
         var audioFilterFreq = 7000;
         var audioFilterQ = 5;
 
@@ -185,7 +187,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
         var $screen = $('#screen');
         var canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
-        video = new Video.Video(canvas.fb32, function paint(minx, miny, maxx, maxy) {
+        video = new Video.Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;
             frames = 0;
@@ -344,12 +346,23 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         function keyPress(evt) {
             if (document.activeElement.id === 'paste-text') return;
-            if (running || !dbgr.enabled()) return;
+            if (running || (!dbgr.enabled() && !pauseEmu)) return;
             var code = keyCode(evt);
-            if (code === 103 /* lower case g */) {
+            if (dbgr.enabled() && code === 103 /* lower case g */) {
                 dbgr.hide();
                 go();
                 return;
+            }
+            if (pauseEmu) {
+                if (code === 103 /* lower case g */) {
+                    pauseEmu = false;
+                    go();
+                    return;
+                } else if (code === 110 /* lower case n */) {
+                    stepEmuWhenPaused = true;
+                    go();
+                    return;
+                }
             }
             var handled = dbgr.keyPress(keyCode(evt));
             if (handled) evt.preventDefault();
@@ -383,6 +396,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
                 utils.noteEvent('keyboard', 'press', 'insert');
                 fastAsPossible = !fastAsPossible;
+            } else if (code === utils.keyCodes.END && evt.ctrlKey) {
+                utils.noteEvent('keyboard', 'press', 'end');
+                pauseEmu = true;
+                stop(false);
             } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
                 utils.noteEvent('keyboard', 'press', 'break');
                 processor.setReset(true);
@@ -1282,6 +1299,14 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             var useTimeout = speedy || motorOn || discOn;
             var timeout = speedy ? 0 : (1000.0 / 50);
 
+            // In speedy mode, we still run all the state machines accurately
+            // but we paint less often because painting is the most expensive
+            // part of jsbeeb at this time.
+            // We need need to paint per odd number of frames so that interlace
+            // modes, i.e. MODE 7, still look ok.
+            var frameSkipCount = speedy ? 9 : 0;
+            video.frameSkipCount = frameSkipCount;
+
             // We use setTimeout instead of requestAnimationFrame in two cases:
             // a) We're trying to run as fast as possible.
             // b) Tape is playing, normal speed but backgrounded tab should run.
@@ -1315,6 +1340,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     utils.noteEvent('exception', 'thrown', e.stack);
                     dbgr.debug(processor.pc);
                     throw e;
+                }
+                if (stepEmuWhenPaused) {
+                    stop(false);
+                    stepEmuWhenPaused = false;
                 }
             }
             last = now;

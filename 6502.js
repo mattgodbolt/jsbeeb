@@ -763,13 +763,14 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     case 0xfe20:
                         return this.ula.write(addr, b);
                     case 0xfe24:
+                    case 0xfe28:
                         if (model.isMaster) {
                             return this.fdc.write(addr, b);
                         }
                         return this.ula.write(addr, b);
-                    case 0xfe28:
-                        if (model.isMaster) {
-                            return this.fdc.write(addr, b);
+                    case 0xfe2c:
+                        if (!model.isMaster) {
+                            return this.ula.write(addr, b);
                         }
                         break;
                     case 0xfe30:
@@ -777,6 +778,12 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     case 0xfe34:
                         if (model.isMaster) {
                             return this.writeAcccon(b);
+                        }
+                        return this.romSelect(b);
+                    case 0xfe38:
+                    case 0xfe3c:
+                        if (!model.isMaster) {
+                            return this.romSelect(b);
                         }
                         break;
                     case 0xfe40:

@@ -25,9 +25,8 @@ define(['utils', 'models', 'fake6502', 'promise'],
                         break;
                     }
                 }
-                var endOffset = cpu.readmem(0x37) | (cpu.readmem(0x38) << 8);
                 var result = "";
-                for (i = offset; i < endOffset; ++i) {
+                for (i = offset; cpu.readmem(i) !== 0x0d; ++i) {
                     result += String.fromCharCode(cpu.readmem(i));
                 }
                 if (safety === 0) {
