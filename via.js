@@ -35,6 +35,7 @@ define(['./utils'], function (utils) {
             portapins: 0, portbpins: 0,
             ca1: false, ca2: false,
             cb1: false, cb2: false,
+            ca2changecallback: null,
             cb2changecallback: null,
             justhit: 0,
             t1_pb7: 0,
@@ -345,7 +346,9 @@ define(['./utils'], function (utils) {
             setca2: function (level) {
                 if (level === self.ca2) return;
                 self.ca2 = level;
-                if (self.pcr & 8) return; // output
+                var output = !!(self.pcr & 0x08);
+                if (self.ca2changecallback) self.ca2changecallback(level, output);
+                if (output) return;
                 var pcrSet = !!(self.pcr & 4);
                 if (pcrSet === level) {
                     self.ifr |= INT_CA2;
