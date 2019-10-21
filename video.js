@@ -27,6 +27,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.hadVSyncThisRow = false;
         this.vertAdjustPending = false;
         this.inVertAdjust = false;
+        this.dummyRasterPending = false;
+        this.inDummyRaster = false;
         this.hpulseWidth = 0;
         this.vpulseWidth = 0;
         this.hpulseCounter = 0;
@@ -279,11 +281,29 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         };
 
         this.endOfScanline = function () {
+            // End of scanline is the most complicated and quirky area of the
+            // 6845. A lot of different states and outcomes are possible.
+            // From the start of the frame, we traverse various states
+            // linearly, with most optional:
+            // - Normal rendering.
+            // - Last scanline of normal rendering (vertical adjust pending).
+            // - Vertical adjust.
+            // - Last scanline of vertical adjust (dummy raster pending).
+            // - Dummy raster. (This is for interlace timing.)
             if (this.scanlineCounter === this.regs[11]) this.cursorOff = true;
 
             this.vpulseCounter = (this.vpulseCounter + 1) & 0x0F;
 
+            // Pre-counter increment compares and logic.
             var r9Hit = (this.scanlineCounter === this.regs[9]);
+            if (r9Hit) {
+                // An R9 hit always loads a new character row address, even if
+                // we're in vertical adjust!
+                // Note that an R9 hit inside vertical adjust does not further
+                // increment the vertical counter, but entry into vertical
+                // adjust does.
+                this.lineStartAddr = this.nextLineStartAddr;
+            }
 
             // Increment scanline.
             if (this.interlacedSyncAndVideo && !this.inVertAdjust) {
@@ -302,66 +322,67 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 }
             }
 
-            if (r9Hit) {
-                // An R9 hit always loads a new character row address, even if
-                // we're in vertical adjust!
-                // Note than an R9 hit inside vertical adjust does not further
-                // increment the vertical counter, but entry into vertical
-                // adjust does.
-                this.lineStartAddr = this.nextLineStartAddr;
-            }
-
+            // Reset scanline if necessary.
             if (this.vertAdjustPending || (!this.inVertAdjust && r9Hit)) {
                 this.endOfCharacterLine();
             }
 
-            if (this.vertAdjustPending) {
-                this.vertAdjustPending = false;
-                this.inVertAdjust = true;
-            }
+            var r5Hit = (this.scanlineCounter === this.regs[5]);
 
             var endOfFrame = false;
 
-            if (this.inVertAdjust) {
-                // TODO: the comment below isn't quite right. If there's both
-                // vertical adjust and a dummy raster, it's possible to tell
-                // the difference because the last line of vertical adjust can
-                // be identified.
-                var scanlineCompare = this.scanlineCounter;
-                // The "dummy raster" inserted at the end of frame for even
-                // interlace frames behaves exactly like it's an extra scanline
-                // at the end of vertical adjust, including C4=R4+1.
-                // There's also a particularly strange quirk whereby R0=1 seems
-                // to include an extra scanline at the end of the frame.
-                // Investigation continues.
-                if ((!!(this.regs[8] & 1) && !!(this.frameCount & 1)) ||
-                    (this.regs[0] === 1)) {
-                    scanlineCompare--;
-                }
-                
-                if (scanlineCompare === this.regs[5]) {
-                    this.inVertAdjust = false;
-                    this.endOfCharacterLine();
-                    endOfFrame = true;
+            if (this.vertAdjustPending) {
+                this.vertAdjustPending = false;
+                if (r5Hit) {
+                    // No vertical adjust.
+                    this.dummyRasterPending = true;
+                } else {
+                    this.inVertAdjust = true;
                 }
             }
 
+            if (this.dummyRasterPending) {
+                this.dummyRasterPending = false;
+                this.inVertAdjust = false;
+                // The "dummy raster" is inserted at the very end of frame,
+                // after vertical adjust, for even interlace frames.
+                // Like vertical adjust, C4=R4+1.
+                // There's also a particularly strange quirk whereby R0=1 seems
+                // to include an extra scanline at the end of the frame,
+                // which is possibly the dummy raster.
+                if ((!!(this.regs[8] & 1) && !!(this.frameCount & 1)) ||
+                    (this.regs[0] === 1)) {
+                    this.inDummyRaster = true;
+                } else {
+                    endOfFrame = true;
+                }
+            } else if (this.inDummyRaster) {
+                this.inDummyRaster = false;
+                endOfFrame = true;
+            }
+
+            if (endOfFrame) {
+                this.endOfCharacterLine();
+                this.endOfFrame();
+            }
+
+            // Post-counter increment increment compares and logic.
+            var r4Hit = (this.vertCounter === this.regs[4]);
+            var r6Hit = (this.vertCounter === this.regs[6]);
+            r9Hit = (this.scanlineCounter === this.regs[9]);
+
             // Handle end of vertical displayed.
-            // The 6845 in the BBC will notice this equality on any scanline
+            // The Hitachi 6845 will notice this equality on any scanline
             // end, not just at the end of a character row.
             // Note that a new frame takes precedence: even if R6=0, the new
             // frame will start with display enabled and render a single
             // scanline.
             // Required by Wave Runner.
-            if (this.vertCounter === this.regs[6] && (this.dispEnabled & VDISPENABLE)) {
+            if (r6Hit && !endOfFrame && (this.dispEnabled & VDISPENABLE)) {
                 this.dispEnabled &= ~VDISPENABLE;
                 // Perhaps surprisingly, this happens here. Both cursor blink
                 // and interlace cease if R6 > R4.
                 this.frameCount++;
-            }
-
-            if (endOfFrame) {
-                this.endOfFrame();
             }
 
             // The Hitachi 6845 appears to latch some form of "last scanline
@@ -370,9 +391,15 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             // prevent a new frame from starting. Testing indicates that the
             // latch is set here at scanline rollover into the last scanline.
             // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
-            if (this.vertCounter === this.regs[4] &&
-                this.scanlineCounter === this.regs[9]) {
+            if (r4Hit && r9Hit) {
                 this.vertAdjustPending = true;
+            }
+
+            // The Hitachi 6845 also latches "last vertical adjust line" state.
+            // NOTE: this +1 here is ugly and may be useful to think about.
+            if (this.inVertAdjust &&
+                ((this.scanlineCounter + 1) === this.regs[5])) {
+                this.dummyRasterPending = true;
             }
 
             this.addr = this.lineStartAddr;

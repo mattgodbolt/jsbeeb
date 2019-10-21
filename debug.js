@@ -115,7 +115,8 @@ define(['jquery', 'underscore', './utils'], function ($, _, utils) {
             var stateNode = node.find('.crtc_state');
             var others = [
                 'bitmapX', 'bitmapY', 'dispEnabled',
-                'horizCounter', 'inHSync', 'scanlineCounter', 'vertCounter', 'inVSync', 'vertAdjustPending', 'inVertAdjust',
+                'horizCounter', 'inHSync', 'scanlineCounter', 'vertCounter', 'inVSync',
+                'vertAdjustPending', 'inVertAdjust', 'dummyRasterPending', 'inDummyRaster',
                 'addr', 'lineStartAddr', 'nextLineStartAddr'];
             $.each(others, function (_, elem) {
                 var value = makeRow(stateNode, elem);
