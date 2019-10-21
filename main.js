@@ -404,6 +404,12 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 utils.noteEvent('keyboard', 'press', 'break');
                 processor.setReset(true);
                 evt.preventDefault();
+            } else if (code === utils.keyCodes.B && evt.ctrlKey) {
+                // Ctrl-B turns on the printer, so we open a printer output
+                // window in addition to passing the keypress along to the beeb.
+                processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
+                evt.preventDefault();
+                checkPrinterWindow();
             } else {
                 processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
                 evt.preventDefault();
@@ -537,12 +543,39 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             };
         }
 
+        var printerWindow = null;
+        var printerTextArea = null;
+
+        function checkPrinterWindow() {
+            if (printerWindow && !printerWindow.closed) return;
+
+            printerWindow = window.open('', '_blank', 'height=300,width=400');
+            printerWindow.document.write('<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>');
+            printerTextArea = printerWindow.document.getElementById('text');
+
+            processor.uservia.setca1(true);
+        }
+        var printerPort = {
+            outputStrobe: function (level, output) {
+                if (!printerTextArea) return;
+                if (!output || level) return;
+
+                var uservia = processor.uservia;
+                // Ack the character by pulsing CA1 low.
+                uservia.setca1(false);
+                uservia.setca1(true);
+                var newChar = String.fromCharCode(uservia.ora);
+                printerTextArea.value += newChar;
+            }
+        };
+
         var emulationConfig = {
             keyLayout: keyLayout,
             cpuMultiplier: cpuMultiplier,
             videoCyclesBatch: parsedQuery.videoCyclesBatch,
             extraRoms: extraRoms,
-            userPort: userPort
+            userPort: userPort,
+            printerPort: printerPort,
         };
         processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
 
