@@ -414,7 +414,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (document.activeElement.id === 'paste-text') return;
             // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
             var code = keyCode(evt);
-            processor.sysvia.keyUp(code);
+            if (processor && processor.sysvia)
+                processor.sysvia.keyUp(code);
             if (!running) return;
             if (evt.altKey) {
                 var handler = emuKeyHandlers[code];
