@@ -88,6 +88,11 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
         this.state = SPIN_UP;
         var self = this;
         this.play(this.sounds.motorOn).then(function () {
+            // Handle race: we may have had spinDown() called on us before the
+            // spinUp() initial sound finished playing.
+            if (self.state === IDLE) {
+                return;
+            }
             self.play(self.sounds.motor, true).then(function (source) {
                 self.motor = source;
                 self.state = SPINNING;
