@@ -296,17 +296,14 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     switch (ret) {
                         case keyCodes.SHIFT:
                             lastShiftLocation = 1;
-                            //console.log("left shift");
                             return keyCodes.SHIFT_LEFT;
 
                         case keyCodes.ALT:
                             lastAltLocation = 1;
-                            //console.log("left alt");
                             return keyCodes.ALT_LEFT;
 
                         case keyCodes.CTRL:
                             lastCtrlLocation = 1;
-                            //console.log("left ctrl");
                             return keyCodes.CTRL_LEFT;
                     }
                     break;
@@ -314,28 +311,23 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     switch (ret) {
                         case keyCodes.SHIFT:
                             lastShiftLocation = 2;
-                            //console.log("right shift");
                             return keyCodes.SHIFT_RIGHT;
 
                         case keyCodes.ALT:
                             lastAltLocation = 2;
-                            //console.log("right alt");
                             return keyCodes.ALT_RIGHT;
 
                         case keyCodes.CTRL:
                             lastCtrlLocation = 2;
-                            //console.log("right ctrl");
                             return keyCodes.CTRL_RIGHT;
                     }
                     break;
                 case 3: // numpad
                     switch (ret) {
                         case keyCodes.ENTER:
-                            console.log("numpad enter");
                             return utils.keyCodes.NUMPADENTER;
 
                         case keyCodes.DELETE:
-                            console.log("numpad dot");
                             return utils.keyCodes.NUMPAD_DECIMAL_POINT;
                     }
                     break;
@@ -492,11 +484,11 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
         // To lower chance of data loss, only accept drop events in the drop
         // zone in the menu bar.
-        document.ondragover = function(event) {
+        document.ondragover = function (event) {
             event.preventDefault();
             event.dataTransfer.dropEffect = "none";
         };
-        document.ondrop = function(event) {
+        document.ondrop = function (event) {
             event.preventDefault();
         };
 
@@ -555,6 +547,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
 
             processor.uservia.setca1(true);
         }
+
         var printerPort = {
             outputStrobe: function (level, output) {
                 if (!printerTextArea) return;
@@ -656,7 +649,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     if (all.length) _.delay(doSome, Delay, remaining);
                 }
 
-                console.log("Found", cat.length, "STH entries");
                 doSome(cat);
             };
         }
@@ -1439,7 +1431,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 } else {
                     width = height * desiredAspectRatio;
                 }
-                console.log(width / height, desiredAspectRatio);
                 $('#cub-monitor').height(height).width(width);
                 $('#cub-monitor-pic').height(height).width(width);
                 $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
