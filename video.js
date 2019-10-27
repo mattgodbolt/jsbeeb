@@ -25,9 +25,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.inHSync = false;
         this.inVSync = false;
         this.hadVSyncThisRow = false;
-        this.vertAdjustPending = false;
+        this.checkVertAdjust = false;
+        this.endOfMainLatched = false;
+        this.endOfVertAdjustLatched = false;
+        this.endOfFrameLatched = false;
         this.inVertAdjust = false;
-        this.dummyRasterPending = false;
         this.inDummyRaster = false;
         this.hpulseWidth = 0;
         this.vpulseWidth = 0;
@@ -37,6 +39,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.horizCounter = 0;
         this.vertCounter = 0;
         this.scanlineCounter = 0;
+        this.vertAdjustCounter = 0;
         this.addr = 0;
         this.lineStartAddr = 0;
         this.nextLineStartAddr = 0;
@@ -306,7 +309,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
 
             // Increment scanline.
-            if (this.interlacedSyncAndVideo && !this.inVertAdjust) {
+            if (this.interlacedSyncAndVideo) {
                 this.scanlineCounter = (this.scanlineCounter + 2) & 0x1e;
             } else {
                 this.scanlineCounter = (this.scanlineCounter + 1) & 0x1f;
@@ -323,53 +326,48 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
 
             // Reset scanline if necessary.
-            if (this.vertAdjustPending || (!this.inVertAdjust && r9Hit)) {
+            if (!this.inVertAdjust && r9Hit) {
                 this.endOfCharacterLine();
             }
 
-            var r5Hit = (this.scanlineCounter === this.regs[5]);
+            if (this.endOfMainLatched && !this.endOfVertAdjustLatched) {
+                this.inVertAdjust = true;
+            }
 
             var endOfFrame = false;
 
-            if (this.vertAdjustPending) {
-                this.vertAdjustPending = false;
-                if (r5Hit) {
-                    // No vertical adjust.
-                    this.dummyRasterPending = true;
-                } else {
-                    this.inVertAdjust = true;
-                }
-            }
-
-            if (this.dummyRasterPending) {
-                this.dummyRasterPending = false;
-                this.inVertAdjust = false;
-                // The "dummy raster" is inserted at the very end of frame,
-                // after vertical adjust, for even interlace frames.
-                // Like vertical adjust, C4=R4+1.
-                // There's also a particularly strange quirk whereby R0=1 seems
-                // to include an extra scanline at the end of the frame,
-                // which is possibly the dummy raster.
-                if ((!!(this.regs[8] & 1) && !!(this.frameCount & 1)) ||
-                    (this.regs[0] === 1)) {
-                    this.inDummyRaster = true;
-                } else {
-                    endOfFrame = true;
-                }
-            } else if (this.inDummyRaster) {
-                this.inDummyRaster = false;
+            if (this.endOfFrameLatched) {
                 endOfFrame = true;
             }
 
+            if (this.endOfVertAdjustLatched) {
+                this.inVertAdjust = false;
+                // The "dummy raster" is inserted at the very end of frame,
+                // after vertical adjust, for even interlace frames.
+                // Testing indicates it is checked right here, a clock before
+                // it is entered or not.
+                // Like vertical adjust, C4=R4+1.
+                if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
+                    this.inDummyRaster = true;
+                    this.endOfFrameLatched = true;
+                } else {
+                    endOfFrame = true;
+                }
+            }
+
             if (endOfFrame) {
+                this.endOfMainLatched = false;
+                this.endOfVertAdjustLatched = false;
+                this.endOfFrameLatched = false;
+                this.inDummyRaster = false;
+
                 this.endOfCharacterLine();
                 this.endOfFrame();
             }
 
             // Post-counter increment increment compares and logic.
-            var r4Hit = (this.vertCounter === this.regs[4]);
+            // TODO: does not belong here, comment below is incorrect.
             var r6Hit = (this.vertCounter === this.regs[6]);
-            r9Hit = (this.scanlineCounter === this.regs[9]);
 
             // Handle end of vertical displayed.
             // The Hitachi 6845 will notice this equality on any scanline
@@ -383,23 +381,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // Perhaps surprisingly, this happens here. Both cursor blink
                 // and interlace cease if R6 > R4.
                 this.frameCount++;
-            }
-
-            // The Hitachi 6845 appears to latch some form of "last scanline
-            // of the frame" state. As shown by Twisted Brain, changing R9
-            // from 0 to 6 on the last scanline of the frame does not
-            // prevent a new frame from starting. Testing indicates that the
-            // latch is set here at scanline rollover into the last scanline.
-            // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
-            if (r4Hit && r9Hit) {
-                this.vertAdjustPending = true;
-            }
-
-            // The Hitachi 6845 also latches "last vertical adjust line" state.
-            // NOTE: this +1 here is ugly and may be useful to think about.
-            if (this.inVertAdjust &&
-                ((this.scanlineCounter + 1) === this.regs[5])) {
-                this.dummyRasterPending = true;
             }
 
             this.addr = this.lineStartAddr;
@@ -580,6 +561,38 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                 // CRTC MA always increments, inside display border or not.
                 this.addr = (this.addr + 1) & 0x3fff;
+
+                // The Hitachi 6845 decides to end (or never enter) vertical
+                // adjust here, one clock after checking whether to enter
+                // vertical adjust.
+                // In a normal frame, this is C0=2.
+                if (this.checkVertAdjust) {
+                    this.checkVertAdjust = false;
+                    if (this.endOfMainLatched) {
+                        if (this.vertAdjustCounter === this.regs[5]) {
+                            this.endOfVertAdjustLatched = true;
+                        }
+                        this.vertAdjustCounter++;
+                        this.vertAdjustCounter &= 0x1f;
+                    }
+                }
+
+                // The Hitachi 6845 appears to latch some form of "last scanline
+                // of the frame" state. As shown by Twisted Brain, changing R9
+                // from 0 to 6 on the last scanline of the frame does not
+                // prevent a new frame from starting.
+                // Testing indicates that the latch is set here at exactly C0=1.
+                // See also: http://www.cpcwiki.eu/forum/programming/crtc-detailed-operation/msg177585/
+                if (this.horizCounter === 1) {
+                    if (this.vertCounter === this.regs[4] &&
+                        this.scanlineCounter === this.regs[9]) {
+                        this.endOfMainLatched = true;
+                        this.vertAdjustCounter = 0;
+                    }
+                    // The very next cycle (be it on this same scanline or the
+                    // next) is used for checking the vertical adjust counter.
+                    this.checkVertAdjust = true;
+                }
 
                 // Handle horizontal total.
                 if (this.horizCounter === this.regs[0]) {
