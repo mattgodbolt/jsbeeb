@@ -22,6 +22,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.bitmapY = 0;
         this.oddClock = false;
         this.frameCount = 0;
+        this.firstScanline = true;
         this.inHSync = false;
         this.inVSync = false;
         this.hadVSyncThisRow = false;
@@ -265,6 +266,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.endOfFrame = function () {
             this.vertCounter = 0;
+            this.firstScanline = true;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
             this.lineStartAddr = this.nextLineStartAddr;
             this.dispEnabled |= VDISPENABLE;
@@ -293,6 +295,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             // - Vertical adjust.
             // - Last scanline of vertical adjust (dummy raster pending).
             // - Dummy raster. (This is for interlace timing.)
+            this.firstScanline = false;
+
             if (this.scanlineCounter === this.regs[11]) this.cursorOff = true;
 
             this.vpulseCounter = (this.vpulseCounter + 1) & 0x0F;
@@ -363,24 +367,6 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                 this.endOfCharacterLine();
                 this.endOfFrame();
-            }
-
-            // Post-counter increment increment compares and logic.
-            // TODO: does not belong here, comment below is incorrect.
-            var r6Hit = (this.vertCounter === this.regs[6]);
-
-            // Handle end of vertical displayed.
-            // The Hitachi 6845 will notice this equality on any scanline
-            // end, not just at the end of a character row.
-            // Note that a new frame takes precedence: even if R6=0, the new
-            // frame will start with display enabled and render a single
-            // scanline.
-            // Required by Wave Runner.
-            if (r6Hit && !endOfFrame && (this.dispEnabled & VDISPENABLE)) {
-                this.dispEnabled &= ~VDISPENABLE;
-                // Perhaps surprisingly, this happens here. Both cursor blink
-                // and interlace cease if R6 > R4.
-                this.frameCount++;
             }
 
             this.addr = this.lineStartAddr;
@@ -602,6 +588,25 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 } else {
                     this.horizCounter = (this.horizCounter + 1) & 0xff;
                 }
+
+                // Handle end of vertical displayed.
+                // The Hitachi 6845 will notice this equality at any character,
+                // including in the middle of a scanline.
+                // An exception is the very first scanline of a frame, where
+                // vertical display is always on.
+                // We do this after the render and various counter increments
+                // because there seems to be a 1 character delay between setting
+                // R6=C4 and display actually stopping.
+                var r6Hit = (this.vertCounter === this.regs[6]);
+                if (r6Hit &&
+                    !this.firstScanline &&
+                    (this.dispEnabled & VDISPENABLE)) {
+                    this.dispEnabled &= ~VDISPENABLE;
+                    // Perhaps surprisingly, this happens here. Both cursor
+                    // blink and interlace cease if R6 > R4.
+                    this.frameCount++;
+                }
+
             } // matches while
         };
         ////////////////////
