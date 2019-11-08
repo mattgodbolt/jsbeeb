@@ -269,7 +269,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.firstScanline = true;
             this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3FFF;
             this.lineStartAddr = this.nextLineStartAddr;
-            this.dispEnabled |= VDISPENABLE;
+            this.dispEnableSet(VDISPENABLE);
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
             this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         };
@@ -279,8 +279,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
             this.scanlineCounter = 0;
             this.hadVSyncThisRow = false;
-            this.teletext.verticalCharEnd();
-            this.dispEnabled |= SCANLINEDISPENABLE;
+            this.dispEnableSet(SCANLINEDISPENABLE);
             this.cursorOn = false;
             this.cursorOff = false;
         };
@@ -323,9 +322,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // mirroring 0-7, and it repeats.
                 var off = (this.scanlineCounter >>> 3) & 1;
                 if (off) {
-                    this.dispEnabled &= ~SCANLINEDISPENABLE;
+                    this.dispEnableClear(SCANLINEDISPENABLE);
                 } else {
-                    this.dispEnabled |= SCANLINEDISPENABLE;
+                    this.dispEnableSet(SCANLINEDISPENABLE);
                 }
             }
 
@@ -370,10 +369,19 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
 
             this.addr = this.lineStartAddr;
-            this.teletext.endline();
 
             var cursorStartLine = this.regs[10] & 0x1f;
             if (this.scanlineCounter === cursorStartLine) this.cursorOn = true;
+
+            // The teletext SAA5050 chip has its CRS pin connected to RA0, so
+            // we need to update it.
+            // The external RA0 value is modified in "interlace sync and video"
+            // mode to be odd for odd interlace frames.
+            var externalScanline = this.scanlineCounter;
+            if (this.interlacedSyncAndVideo && (this.frameCount & 1)) {
+                externalScanline++;
+            }
+            this.teletext.setRA0(!!(externalScanline & 1));
         };
 
         this.handleHSync = function () {
@@ -413,6 +421,24 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             }
         };
 
+        this.dispEnableChanged = function() {
+            // The DISPTMG output pin is wired to the SAA5050 teletext chip,
+	    // for scanline tracking, so keep it apprised.
+            var mask = (HDISPENABLE | VDISPENABLE | USERDISPENABLE);
+            var disptmg = ((this.dispEnabled & mask) === mask);
+            this.teletext.setDISPTMG(disptmg);
+        };
+
+        this.dispEnableSet = function (flag) {
+            this.dispEnabled |= flag;
+            this.dispEnableChanged();
+        };
+
+        this.dispEnableClear = function (flag) {
+            this.dispEnabled &= ~flag;
+            this.dispEnableChanged();
+        };
+
         ////////////////////
         // Main drawing routine
         this.polltime = function (clocks) {
@@ -433,7 +459,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                 // Handle delayed display enable due to skew
                 var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
-                if (this.horizCounter === displayEnablePos) this.dispEnabled |= SKEWDISPENABLE;
+                if (this.horizCounter === displayEnablePos) {
+                    this.dispEnableSet(SKEWDISPENABLE);
+                }
 
                 // Latch next line screen address in case we are in the last line of a character row
                 if (this.horizCounter === this.regs[1]) this.nextLineStartAddr = this.addr;
@@ -441,8 +469,10 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // Handle end of horizontal displayed.
                 // Make sure to account for display enable skew.
                 // Also, the last scanline character never displays.
-                if ((this.horizCounter === this.regs[1] + displayEnablePos) || (this.horizCounter === this.regs[0] + displayEnablePos))
-                    this.dispEnabled &= ~(HDISPENABLE | SKEWDISPENABLE);
+                if ((this.horizCounter === this.regs[1] + displayEnablePos) ||
+                    (this.horizCounter === this.regs[0] + displayEnablePos)) {
+                    this.dispEnableClear(HDISPENABLE | SKEWDISPENABLE);
+                }
 
                 // Initiate HSync.
                 if (this.horizCounter === this.regs[2] && !this.inHSync) {
@@ -495,11 +525,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     if (this.regs[0] && this.regs[4]) {
                         this.paintAndClear();
                     }
-                    this.teletext.vsync();
                 }
 
                 if (vSyncStarting || vSyncEnding) {
                     this.sysvia.setVBlankInt(this.inVSync);
+                    this.teletext.setDEW(this.inVSync);
                 }
 
                 // TODO: this will be cleaner if we rework skew to have fetch
@@ -534,7 +564,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
                         if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                             if (this.teletextMode) {
-                                this.teletext.render(this.fb32, offset, this.scanlineCounter + (this.frameCount & 1));
+                                this.teletext.render(this.fb32, offset);
+                                if (doubledLines) {
+                                    this.teletext.render(this.fb32,
+                                                         (offset + 1024));
+                                }
                             } else {
                                 this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
                             }
@@ -584,7 +618,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 if (this.horizCounter === this.regs[0]) {
                     this.endOfScanline();
                     this.horizCounter = 0;
-                    this.dispEnabled |= HDISPENABLE;
+                    this.dispEnableSet(HDISPENABLE);
                 } else {
                     this.horizCounter = (this.horizCounter + 1) & 0xff;
                 }
@@ -601,7 +635,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 if (r6Hit &&
                     !this.firstScanline &&
                     (this.dispEnabled & VDISPENABLE)) {
-                    this.dispEnabled &= ~VDISPENABLE;
+                    this.dispEnableClear(VDISPENABLE);
                     // Perhaps surprisingly, this happens here. Both cursor
                     // blink and interlace cease if R6 > R4.
                     this.frameCount++;
@@ -650,9 +684,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         var skew = (val & 0x30) >>> 4;
                         if (skew < 3) {
                             this.video.displayEnableSkew = skew;
-                            this.video.dispEnabled |= USERDISPENABLE;
+                            this.video.dispEnableSet(USERDISPENABLE);
                         } else {
-                            this.video.dispEnabled &= ~USERDISPENABLE;
+                            this.video.dispEnableClear(USERDISPENABLE);
                         }
                         break;
                     case 14:

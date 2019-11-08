@@ -14,6 +14,10 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
         this.heldChar = false;
         this.holdChar = 0;
         this.dataQueue = [0, 0, 0, 0];
+        this.scanlineCounter = 0;
+        this.levelDEW = false;
+        this.levelDISPTMG = false;
+        this.levelRA0 = false;
 
         this.normalGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
         this.graphicsGlyphs = utils.makeFast32(new Uint32Array(96 * 20));
@@ -209,9 +213,78 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
         this.dataQueue.push(data & 0x7F);
     };
 
-    Teletext.prototype.render = function (buf, offset, scanline) {
+
+    Teletext.prototype.setDEW = function (level) {
+        // The SAA5050 input pin "DEW" is connected to the 6845 output pin
+        // "VSYNC" and it is used to track frames.
+        var oldlevel = this.levelDEW;
+        this.levelDEW = level;
+
+        // Trigger on low -> high -- unknown what the hardware does.
+        if (oldlevel || !level) {
+            return;
+        }
+
+        this.scanlineCounter = 0;
+
+        if (++this.flashTime === 48) this.flashTime = 0;
+        this.flashOn = this.flashTime < 16;
+    };
+
+    Teletext.prototype.setDISPTMG = function (level) {
+        // The SAA5050 input pin "LOSE" is connected to the 6845 output pin
+        // "DISPTMG" and it is used to track scanlines.
+        var oldlevel = this.levelDISPTMG;
+        this.levelDISPTMG = level;
+
+        // Trigger on high -> low. This is probably what the hardware does as
+        // we need to increment scanline at the end of the scanline, not the
+        // beginning.
+        if (!oldlevel || level) {
+            return;
+        }
+
+        this.col = 7;
+        this.bg = 0;
+        this.holdChar = false;
+        this.heldChar = 0x20;
+        this.nextGlyphs = this.heldGlyphs = this.normalGlyphs;
+        this.flash = false;
+        this.sep = false;
+        this.gfx = false;
+        this.dbl = false;
+
+        this.scanlineCounter++;
+        // Check for end of character row.
+        if (this.scanlineCounter === 10) {
+            this.scanlineCounter = 0;
+
+            if (this.secondHalfOfDouble) {
+                this.secondHalfOfDouble = false;
+            } else {
+                this.secondHalfOfDouble = this.wasDbl;
+            }
+        }
+
+        this.wasDbl = false;
+    };
+
+    Teletext.prototype.setRA0 = function (level) {
+        // The SAA5050 input pin "CRS" is connected to the 6845 output pin
+        // "RA0", via a signal inverter, and it is used to select between a
+        // normal scanline and a calculated smoothing scanline.
+        this.levelRA0 = level;
+    };
+
+    Teletext.prototype.render = function (buf, offset) {
         var i;
         var data = this.dataQueue[0];
+
+        var scanline = (this.scanlineCounter << 1);
+        if (this.levelRA0) {
+            scanline++;
+        }
+
         this.oldDbl = this.dbl;
 
         this.prevCol = this.col;
@@ -252,31 +325,6 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
             this.holdChar = false;
             this.heldChar = 32;
         }
-    };
-
-    Teletext.prototype.verticalCharEnd = function () {
-        if (this.secondHalfOfDouble)
-            this.secondHalfOfDouble = false;
-        else
-            this.secondHalfOfDouble = this.wasDbl;
-    };
-
-    Teletext.prototype.vsync = function () {
-        if (++this.flashTime === 48) this.flashTime = 0;
-        this.flashOn = this.flashTime < 16;
-    };
-
-    Teletext.prototype.endline = function () {
-        this.col = 7;
-        this.bg = 0;
-        this.holdChar = false;
-        this.heldChar = 0x20;
-        this.nextGlyphs = this.heldGlyphs = this.normalGlyphs;
-        this.flash = false;
-        this.sep = false;
-        this.gfx = false;
-
-        this.dbl = this.wasDbl = false;
     };
 
     return Teletext;
