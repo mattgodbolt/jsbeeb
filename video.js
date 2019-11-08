@@ -22,6 +22,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.bitmapY = 0;
         this.oddClock = false;
         this.frameCount = 0;
+        this.frameIsEven = true;
+        this.lastFrameWasEven = false;
         this.firstScanline = true;
         this.inHSync = false;
         this.inVSync = false;
@@ -272,6 +274,8 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.dispEnableSet(VDISPENABLE);
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
             this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
+            this.lastFrameWasEven = this.frameIsEven;
+            this.frameIsEven = !(this.frameCount & 1);
         };
 
         this.endOfCharacterLine = function () {
@@ -490,6 +494,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // both odd and even frames are 312.5 scanlines.
                 var isInterlace = !!(this.regs[8] & 1);
                 var halfR0Hit = (this.horizCounter === this.regs[0] >>> 1);
+                // NOTE: untested whether "even frame" is latched at the start
+                // of the CRTC frame, or whether frameCount is checked.
+                // We check frameCount, and for even frames, frameCount will
+                // be odd here because it typically got incremented at R6 and
+                // R7 is typically later.
                 var evenFrame = !!(this.frameCount & 1);
                 var isVsyncPoint = (!isInterlace || !evenFrame || halfR0Hit);
                 var vSyncEnding = false;
@@ -554,8 +563,13 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
                         var doubledLines = false;
                         var offset = this.bitmapY;
-                        if (this.doubledScanlines &&
-                            !this.interlacedSyncAndVideo) {
+                        // There's a painting subtlety here: if we're in an
+                        // interlace mode but R6>R4 then we'll get stuck
+                        // painting just an odd or even frame, so we double up
+                        // scanlines to avoid a ghost half frame.
+                        if ((this.doubledScanlines &&
+                            !this.interlacedSyncAndVideo) ||
+                            (this.frameIsEven === this.lastFrameWasEven)) {
                             doubledLines = true;
                             offset &= ~1;
                         }

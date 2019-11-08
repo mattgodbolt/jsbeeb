@@ -220,8 +220,10 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
         var oldlevel = this.levelDEW;
         this.levelDEW = level;
 
-        // Trigger on low -> high -- unknown what the hardware does.
-        if (oldlevel || !level) {
+        // Trigger on high -> low. This appears to be what the hardware does.
+        // It needs to be this way for the scanline counter to stay in sync
+        // if you set R6>R4.
+        if (!oldlevel || level) {
             return;
         }
 
