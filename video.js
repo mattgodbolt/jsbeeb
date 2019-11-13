@@ -22,8 +22,9 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.bitmapY = 0;
         this.oddClock = false;
         this.frameCount = 0;
-        this.frameIsEven = true;
-        this.lastFrameWasEven = false;
+        this.doEvenFrameLogic = false;
+        this.isEvenRender = true;
+        this.lastRenderWasEven = false;
         this.firstScanline = true;
         this.inHSync = false;
         this.inVSync = false;
@@ -274,8 +275,11 @@ define(['./teletext', './utils'], function (Teletext, utils) {
             this.dispEnableSet(VDISPENABLE);
             var cursorFlash = (this.regs[10] & 0x60) >>> 5;
             this.cursorOnThisFrame = (cursorFlash === 0) || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
-            this.lastFrameWasEven = this.frameIsEven;
-            this.frameIsEven = !(this.frameCount & 1);
+            this.lastRenderWasEven = this.isEvenRender;
+            this.isEvenRender = !(this.frameCount & 1);
+            if (!this.inVSync) {
+                this.doEvenFrameLogic = false;
+            }
         };
 
         this.endOfCharacterLine = function () {
@@ -351,10 +355,10 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 this.inVertAdjust = false;
                 // The "dummy raster" is inserted at the very end of frame,
                 // after vertical adjust, for even interlace frames.
-                // Testing indicates it is checked right here, a clock before
+                // Testing indicates interlace is checked here, a clock before
                 // it is entered or not.
                 // Like vertical adjust, C4=R4+1.
-                if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
+                if (!!(this.regs[8] & 1) && this.doEvenFrameLogic) {
                     this.inDummyRaster = true;
                     this.endOfFrameLatched = true;
                 } else {
@@ -493,14 +497,13 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                 // Without interlace, frames are 312 scanlines. With interlace,
                 // both odd and even frames are 312.5 scanlines.
                 var isInterlace = !!(this.regs[8] & 1);
-                var halfR0Hit = (this.horizCounter === this.regs[0] >>> 1);
-                // NOTE: untested whether "even frame" is latched at the start
-                // of the CRTC frame, or whether frameCount is checked.
-                // We check frameCount, and for even frames, frameCount will
-                // be odd here because it typically got incremented at R6 and
-                // R7 is typically later.
-                var evenFrame = !!(this.frameCount & 1);
-                var isVsyncPoint = (!isInterlace || !evenFrame || halfR0Hit);
+                // TODO: is this off-by-one? b2 uses regs[0]+1.
+                // TODO: does this only hit at the half-scanline or is it a
+                // half-scanline counter that starts when an R7 hit is noticed?
+                var halfR0Hit = (this.horizCounter === (this.regs[0] >>> 1));
+                var isVsyncPoint = (!isInterlace ||
+                                    !this.doEvenFrameLogic ||
+                                    halfR0Hit);
                 var vSyncEnding = false;
                 var vSyncStarting = false;
                 if (this.inVSync &&
@@ -569,7 +572,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                         // scanlines to avoid a ghost half frame.
                         if ((this.doubledScanlines &&
                             !this.interlacedSyncAndVideo) ||
-                            (this.frameIsEven === this.lastFrameWasEven)) {
+                            (this.isEvenRender === this.lastRenderWasEven)) {
                             doubledLines = true;
                             offset &= ~1;
                         }
@@ -653,6 +656,14 @@ define(['./teletext', './utils'], function (Teletext, utils) {
                     // Perhaps surprisingly, this happens here. Both cursor
                     // blink and interlace cease if R6 > R4.
                     this.frameCount++;
+                }
+
+                // Interlace quirk: an even frame appears to need to see
+                // either of an R6 hit or R7 hit in order to activate the
+                // dummy raster.
+                var r7Hit = (this.vertCounter === this.regs[7]);
+                if (r6Hit || r7Hit) {
+                    this.doEvenFrameLogic = !!(this.frameCount & 1);
                 }
 
             } // matches while
