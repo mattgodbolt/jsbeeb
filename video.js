@@ -131,11 +131,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
         this.debugOffset = function (x, y) {
             if (x < 0 || x >= 1024) return -1;
             if (y < 0 || y >= 768) return -1;
-            var renderY = (y << 1);
-            if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
-                this.renderY += (this.frameCount & 1);
-            }
-            return renderY * 1024 + x;
+            return (y * 1024) + x;
         };
 
         function lerp1(a, b, alpha) {
