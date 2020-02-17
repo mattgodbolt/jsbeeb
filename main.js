@@ -1158,14 +1158,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 }));
                 if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
-                if (parsedQuery.loadBasic) {
-                    var needsRun = needsAutoboot === "run";
-                    needsAutoboot = "";
-                    imageLoads.push(utils.loadData(parsedQuery.loadBasic).then(function (data) {
-                        var prog = String.fromCharCode.apply(null, data);
-                        return tokeniser.create().then(function (t) {
-                            return t.tokenise(prog);
-                        });
+                function insertBasic(getBasicPromise,needsRun){
+                    imageLoads.push(getBasicPromise.then(function (prog) {
+                        return tokeniser.create().then(function (t) { return t.tokenise(prog); });
                     }).then(function (tokenised) {
                         var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
                         var hook = processor.debugInstruction.add(function (addr) {
@@ -1188,6 +1183,22 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                             }
                         });
                     }));
+                }
+
+                if (parsedQuery.loadBasic) {
+                    var needsRun = needsAutoboot === "run";
+                    needsAutoboot = "";
+                    insertBasic(new Promise(function(resolve,reject){
+                        utils.loadData(parsedQuery.loadBasic).then(function (data) {
+                            resolve(String.fromCharCode.apply(null, data));
+                        });
+                    }),needsRun);
+                }
+
+                if (parsedQuery.embedBasic) {
+                    insertBasic(new Promise(function(resolve,reject){
+                        resolve(parsedQuery.embedBasic);
+                    }),true);
                 }
 
                 return Promise.all(imageLoads);
