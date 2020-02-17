@@ -38,6 +38,7 @@ URL parameters
 * `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
 * `patch=P` - applies a memory patch `P`. See below.
 * `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
+* `embedBasic=X` - loads 'X' (a URI-encoded string) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
 * `autorun` - types `*TAPE` then `*/` to run from tape. In conjunction with `loadBasic` it types `RUN`.
 * `autochain` - types `*TAPE` then `CH.""` to run from tape.a
 * `embed` - Adjust the navigation entries to make the page clearer within a 921x733 iframe in a third-party site.
