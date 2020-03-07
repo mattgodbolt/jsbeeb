@@ -847,7 +847,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 var ramRomOs = this.ramRomOs;
                 return utils.loadData(name).then(function (data) {
                     if (/\.zip/i.test(name)) {
-                        data = utils.unzipRomImage(data).data
+                        data = utils.unzipRomImage(data).data;
                     }
 
                     var len = data.length;
