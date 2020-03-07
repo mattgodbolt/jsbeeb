@@ -846,6 +846,10 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 console.log("Loading ROM from " + name);
                 var ramRomOs = this.ramRomOs;
                 return utils.loadData(name).then(function (data) {
+                    if (/\.zip/i.test(name)) {
+                        data = utils.unzipRomImage(data).data
+                    }
+
                     var len = data.length;
                     if (len !== 16384 && len !== 8192) {
                         throw new Error("Broken rom file");

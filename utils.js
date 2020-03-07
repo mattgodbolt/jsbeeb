@@ -1041,19 +1041,24 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         return new Int32Array(u32.buffer);
     };
 
-    exports.unzipDiscImage = function unzipDiscImage(data) {
+    var knownDiscExtensions = {
+        'uef': true,
+        'ssd': true,
+        'dsd': true
+    };
+
+    var knownRomExtensions = {
+        'rom': true
+    };
+
+    function unzipImage(data, knownExtensions) {
         var unzip = new jsunzip.JSUnzip();
         console.log("Attempting to unzip");
         var result = unzip.open(data);
         if (!result.status) {
-            throw new Error("Error unzipping ", result.error);
+            throw new Error("Error unzipping " + result.error);
         }
         var uncompressed = null;
-        var knownExtensions = {
-            'uef': true,
-            'ssd': true,
-            'dsd': true
-        };
         var loadedFile;
         for (var f in unzip.files) {
             var match = f.match(/.*\.([a-z]+)/i);
@@ -1076,8 +1081,14 @@ define(['jsunzip', 'promise'], function (jsunzip) {
         }
         console.log("Unzipped '" + loadedFile + "'");
         return {data: uncompressed.data, name: loadedFile};
-    };
+    }
 
+    exports.unzipDiscImage = function unzipDiscImage(data) {
+        return unzipImage(data, knownDiscExtensions);
+    };
+    exports.unzipRomImage = function unzipDiscImage(data) {
+        return unzipImage(data, knownRomExtensions);
+    };
     exports.discImageSize = function(name) {
         // SSD, aka. single-sided disc, is:
         // - 1 side :)
