@@ -279,6 +279,9 @@ define(['./utils'], function (utils) {
                     self.NMI();
                     return self.result;
                 case 4: // data
+                case 5:
+                case 6:
+                case 7:
                     self.status &= ~0x0c;
                     self.NMI();
                     return self.data;
@@ -516,6 +519,9 @@ define(['./utils'], function (utils) {
                     reset(val);
                     break;
                 case 4:
+                case 5:
+                case 6:
+                case 7:
                     data(val);
                     break;
             }
