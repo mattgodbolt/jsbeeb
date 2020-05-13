@@ -228,6 +228,7 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
         }
 
         this.scanlineCounter = 0;
+        this.secondHalfOfDouble = false;
 
         if (++this.flashTime === 48) this.flashTime = 0;
         this.flashOn = this.flashTime < 16;
