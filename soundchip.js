@@ -200,30 +200,35 @@ define(['./utils'], function (utils) {
             position += rounded;
         }
 
-        var latchedChannel = 0;
+        var latchedRegister = 0;
 
         function poke(value) {
             catchUp();
-            var latchData = !!(value & 0x80);
-            if (latchData)
-                latchedChannel = (value >>> 5) & 3;
-            if ((value & 0x90) === 0x90) {
+
+            var command;
+            var channel;
+            if (value & 0x80) {
+                latchedRegister = (value & 0x70);
+                command = (value & 0xF0);
+            } else {
+                command = latchedRegister;
+            }
+            channel = ((command >> 5) & 0x03);
+
+            if (command & 0x10) {
                 // Volume setting
                 var newVolume = value & 0x0f;
-                volume[latchedChannel] = volumeTable[newVolume];
+                volume[channel] = volumeTable[newVolume];
+            } else if (channel === 3) {
+                // For noise channel we always update the bottom bits.
+                register[channel] = value & 0x0f;
+                noisePoked();
+            } else if (command & 0x80) {
+                // Low period bits.
+                register[channel] = (register[channel] & ~0x0f) | (value & 0x0f);
             } else {
-                // Data of some sort.
-                if (latchedChannel === 3) {
-                    // For noise channel we always update the bottom bits of the register.
-                    register[latchedChannel] = value & 0x0f;
-                    noisePoked();
-                } else if (latchData) {
-                    // Low 4 bits
-                    register[latchedChannel] = (register[latchedChannel] & ~0x0f) | (value & 0x0f);
-                } else {
-                    // High bits
-                    register[latchedChannel] = (register[latchedChannel] & 0x0f) | ((value & 0x3f) << 4);
-                }
+                // High period bits.
+                register[channel] = (register[channel] & 0x0f) | ((value & 0x3f) << 4);
             }
         }
 
