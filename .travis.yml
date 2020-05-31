@@ -29,7 +29,7 @@ jobs:
     - stage: deploy
       name: Electron Windows & Mac
       os: osx
-      osx_image: xcode10.1
+      osx_image: xcode11.4
       script:
         - npm install
         - npm run dist -- --mac --win
