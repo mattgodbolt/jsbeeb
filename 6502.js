@@ -1093,6 +1093,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                             for (var i = 0; i < self.handlers.length; ++i) {
                                 var handler = self.handlers[i];
                                 if (handler.apply(handler, arguments)) {
+                                    self.cpu.stop();
                                     return true;
                                 }
                             }
@@ -1111,6 +1112,10 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     if (this.handlers.length === 0) {
                         this.cpu[this.functionName] = null;
                     }
+                };
+                this.clear = function () {
+                    this.handlers = [];
+                    this.cpu[this.functionName] = null;
                 };
             }
 
