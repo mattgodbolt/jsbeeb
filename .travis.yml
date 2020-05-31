@@ -12,7 +12,7 @@ env:
 jobs:
   include:
     - stage: test
-      matrix:
+      env:
         - TEST_SUITE=short-tests
         - TEST_SUITE=long-tests
         - TEST_SUITE=lint
