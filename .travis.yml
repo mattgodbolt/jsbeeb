@@ -24,6 +24,7 @@ jobs:
     - name: Lint
       script: make -j2 lint
     - stage: deploy
+      name: Website
       if: branch = master and type != pull_request
       env: TEST_SUITE=upload
     - stage: deploy
