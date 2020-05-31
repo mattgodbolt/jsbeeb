@@ -25,9 +25,11 @@ jobs:
       os: osx
       osx_image: xcode10.1
       script:
+        - npm install
         - npm run dist -- --mac --win
     - stage: Linux
       os: linux
       dist: trusty
       script:
+        - npm install
         - npm run dist
