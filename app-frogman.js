@@ -61,7 +61,7 @@ requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', '
             cpu.debugInstruction.add(function (addr) {
                 //if (addr === 0x11ae) {
                 if (addr === 0x2949) {
-                    cpu.dumpTime();
+                    cpu.dumpTrace();
                     trace = true;
                     //return true;
                 } else if (trace && addr >= 0x29fd) {

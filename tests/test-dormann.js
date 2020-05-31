@@ -38,7 +38,6 @@ requirejs(['fake6502', 'utils', 'underscore'],
                 utils.loadData(base + ".lst"),
                 utils.loadData(base + ".bin")])
                 .then(function (results) {
-                    processor.tracing = true;
                     var expectedPc = parseSuccess(results[0].toString());
                     var data = results[1];
                     for (var i = 0; i < data.length; ++i)

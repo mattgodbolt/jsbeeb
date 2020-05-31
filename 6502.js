@@ -38,7 +38,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             cpu.pc = 0;
             cpu.opcodes = model.nmos ? opcodesAll.cpu6502(cpu) : opcodesAll.cpu65c12(cpu);
             cpu.disassembler = new cpu.opcodes.Disassemble(cpu);
-            cpu.tracing = false;
+            cpu.forceTracing = false;
 
             cpu.incpc = function () {
                 cpu.pc = (cpu.pc + 1) & 0xffff;
@@ -457,7 +457,6 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             this.videoCyclesBatch = config.videoCyclesBatch | 0;
             this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
             this.getPrevPc = function (index) {
-                if (!this.tracing) throw new Error("Tracing not enabled");
                 return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
             };
             this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
@@ -1034,7 +1033,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                 }
                 // Any tracing or debugging means we need to run the potentially slower version: the debug read or
                 // debug write might change tracing or other debugging while we're running.
-                if (this.tracing || this._debugInstruction || this._debugRead || this._debugWrite) {
+                if (this.forceTracing || this._debugInstruction || this._debugRead || this._debugWrite) {
                     return this.executeInternal();
                 } else {
                     return this.executeInternalFast();
@@ -1043,10 +1042,8 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             this.executeInternal = function () {
                 var first = true;
                 while (!this.halted && this.currentCycles < this.targetCycles) {
-                    if (this.tracing) {
-                        this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
-                        this.oldPcArray[this.oldPcIndex] = this.pc;
-                    }
+                    this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
+                    this.oldPcArray[this.oldPcIndex] = this.pc;
                     this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
                     var opcode = this.readmem(this.pc);
                     if (this._debugInstruction && !first && this._debugInstruction(this.pc, opcode)) {
@@ -1055,15 +1052,13 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     first = false;
                     this.incpc();
                     this.runner.run(opcode);
-                    if (this.tracing) {
-                        this.oldAArray[this.oldPcIndex] = this.a;
-                        this.oldXArray[this.oldPcIndex] = this.x;
-                        this.oldYArray[this.oldPcIndex] = this.y;
-                    }
+                    this.oldAArray[this.oldPcIndex] = this.a;
+                    this.oldXArray[this.oldPcIndex] = this.x;
+                    this.oldYArray[this.oldPcIndex] = this.y;
                     if (this.takeInt) this.brk(true);
                     if (!this.resetLine) this.reset(false);
                 }
-                return true;
+                return !this.halted;
             };
             this.executeInternalFast = function () {
                 while (!this.halted && this.currentCycles < this.targetCycles) {
@@ -1074,7 +1069,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     if (this.takeInt) this.brk(true);
                     if (!this.resetLine) this.reset(false);
                 }
-                return true;
+                return !this.halted;
             };
 
             this.stop = function () {
@@ -1123,7 +1118,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             this.debugRead = new DebugHook(this, '_debugRead');
             this.debugWrite = new DebugHook(this, '_debugWrite');
 
-            this.dumpTime = function (maxToShow, func) {
+            this.dumpTrace = function (maxToShow, func) {
                 if (!maxToShow) maxToShow = 256;
                 if (maxToShow > 256) maxToShow = 256;
                 var disassembler = this.disassembler;
