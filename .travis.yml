@@ -3,12 +3,18 @@ language: node_js
 install:
   - pip install --user awscli
 node_js:
-  - "12"
+  - '12'
 env:
   global:
-    # include $HOME/.local/bin for `aws`
     - PATH=$HOME/.local/bin:$PATH
-
+    # GH_TOKEN=<secret> maps to ecb...ca5
+    - secure: iSv2VWrSWlGERo6jl6V2SLwfWPxx/Y54jTyXBOQLz/nhuzHYFmzvCxNQ9uZkbPC+cQwopcWsxAM+rgWsOJtGiKay2hIJ9qBHknHcSlKaRwiA+2fr8ljTe52kHW3HY6IDj1PyCX7JDG7xFIhYP+URDF3eO9W5XxowIP5d2VP6GGI=
+cache:
+  directories:
+    - node_modules
+    - "$HOME/.cache/electron"
+    - "$HOME/.cache/electron-builder"
+    - "$HOME/.npm/_prebuilds"
 jobs:
   include:
     - name: Short tests
@@ -27,6 +33,8 @@ jobs:
       script:
         - npm install
         - npm run dist -- --mac --win
+      before_cache:
+        - rm -rf $HOME/.cache/electron-builder/wine
     - stage: deploy
       name: Linux
       os: linux
