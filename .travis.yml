@@ -11,23 +11,24 @@ env:
 
 jobs:
   include:
-    - stage: test
-      env:
-        - TEST_SUITE=short-tests
-        - TEST_SUITE=long-tests
-        - TEST_SUITE=lint
-      script:
-        - make -j2 ${TEST_SUITE}
+    - name: Short tests
+      script: make -j2 short-tests
+    - name: Long tests
+      script: make -j2 long-tests
+    - name: Lint
+      script: make -j2 lint
     - stage: deploy
       if: branch = master and type != pull_request
       env: TEST_SUITE=upload
-    - stage: Electron Windows & Mac
+    - stage: deploy
+      name: Electron Windows & Mac
       os: osx
       osx_image: xcode10.1
       script:
         - npm install
         - npm run dist -- --mac --win
-    - stage: Linux
+    - stage: deploy
+      name: Linux
       os: linux
       dist: trusty
       script:
