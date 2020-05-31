@@ -8,15 +8,16 @@ env:
   global:
     # include $HOME/.local/bin for `aws`
     - PATH=$HOME/.local/bin:$PATH
-  matrix:
-    - TEST_SUITE=short-tests
-    - TEST_SUITE=long-tests
-    - TEST_SUITE=lint
-script:
-  make -j2 ${TEST_SUITE}
 
 jobs:
   include:
+    - stage: test
+      matrix:
+        - TEST_SUITE=short-tests
+        - TEST_SUITE=long-tests
+        - TEST_SUITE=lint
+      script:
+        - make -j2 ${TEST_SUITE}
     - stage: deploy
       if: branch = master and type != pull_request
       env: TEST_SUITE=upload
