@@ -7,16 +7,36 @@
   "name": "jsbeeb",
   "description": "Emulate a BBC Micro",
   "repository": "git@github.com:mattgodbolt/jsbeeb.git",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "engines": {
     "node": "8"
   },
   "main": "./app.js",
   "devDependencies": {
+    "electron": "^9.0.0",
+    "electron-builder": "^22.7.0",
     "jshint": "^2.10.2",
     "mocha": "^6.2.0",
     "node-png": "0.4.x",
     "requirejs": "^2.3.6"
   },
-  "license": "GPL-3.0-or-later"
+  "license": "GPL-3.0-or-later",
+  "build": {
+    "appId": "org.godbolt.bbc",
+    "directories": {
+      "output": "out/dist"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Game"
+    },
+    "files": [
+      "!tests"
+    ]
+  },
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  }
 }

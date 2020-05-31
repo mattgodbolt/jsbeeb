@@ -1,23 +1,32 @@
 sudo: false
-install: true
 language: node_js
 install:
-    - pip install --user awscli
-node_js: 
-    - "8"
+  - pip install --user awscli
+node_js:
+  - "12"
 env:
-    global:
-        # include $HOME/.local/bin for `aws`
-        - PATH=$HOME/.local/bin:$PATH
-    matrix:
-        - TEST_SUITE=short-tests
-        - TEST_SUITE=long-tests
-        - TEST_SUITE=lint
+  global:
+    # include $HOME/.local/bin for `aws`
+    - PATH=$HOME/.local/bin:$PATH
+  matrix:
+    - TEST_SUITE=short-tests
+    - TEST_SUITE=long-tests
+    - TEST_SUITE=lint
 script:
-    make -j2 ${TEST_SUITE}
+  make -j2 ${TEST_SUITE}
 
 jobs:
-    include:
-        - stage: deploy
-          if: branch = master and type != pull_request
-          env: TEST_SUITE=upload
+  include:
+    - stage: deploy
+      if: branch = master and type != pull_request
+      env: TEST_SUITE=upload
+    - stage: Electron Windows & Mac
+      os: osx
+      osx_image: xcode10.1
+      script:
+        - npm run dist -- --mac --win
+    - stage: Linux
+      os: linux
+      dist: trusty
+      script:
+        - npm run dist
