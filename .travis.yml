@@ -33,7 +33,7 @@ jobs:
       osx_image: xcode11.4
       script:
         - npm install
-        - npm run dist -- --mac --win
+        - npm run release -- --mac --win
       before_cache:
         - rm -rf $HOME/.cache/electron-builder/wine
     - stage: deploy
@@ -42,4 +42,4 @@ jobs:
       dist: trusty
       script:
         - npm install
-        - npm run dist
+        - npm run release
