@@ -18,8 +18,8 @@
   "devDependencies": {
     "electron": "^9.0.0",
     "electron-builder": "^22.7.0",
-    "jshint": "^2.10.2",
-    "mocha": "^6.2.0",
+    "jshint": "^2.11.1",
+    "mocha": "^7.2.0",
     "node-png": "0.4.x",
     "requirejs": "^2.3.6"
   },
