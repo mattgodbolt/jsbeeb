@@ -1,8 +1,8 @@
 require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'cmos', 'sth', 'gamepads',
         'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
-        'canvas', 'config', 'promise', 'bootstrap', 'jquery-visibility'],
+        'canvas', 'config', 'app/electron', 'promise', 'bootstrap', 'jquery-visibility'],
     function ($, _, utils, Video, SoundChip, DdNoise, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepad, disc,
-              starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib, Config) {
+              starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib, Config, electron) {
         "use strict";
 
         var processor;
@@ -1475,14 +1475,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
 
-        // Electron nonsense
-        if (typeof window.nodeRequire !== 'undefined') {
-            const electron = nodeRequire('electron');
-            electron.ipcRenderer.on('load', async (event, message) => {
-                const {drive, path} = message;
-                const image = await loadDiscImage(path);
-                processor.fdc.loadDisc(drive, image);
-            });
-        }
+        // Hooks for electron.
+        electron({loadDiscImage, processor});
     }
 );
