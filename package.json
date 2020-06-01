@@ -13,7 +13,7 @@
   },
   "main": "./app.js",
   "devDependencies": {
-    "jshint": "^2.10.2",
+    "jshint": "^2.11.1",
     "mocha": "^7.2.0",
     "node-png": "0.4.x",
     "requirejs": "^2.3.6"
