@@ -35,7 +35,11 @@
     },
     "files": [
       "!tests"
-    ]
+    ],
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
+    }
   },
   "scripts": {
     "start": "electron .",
