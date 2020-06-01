@@ -11,7 +11,10 @@
   "engines": {
     "node": "8"
   },
-  "main": "./app.js",
+  "main": "./app/app.js",
+  "dependencies": {
+    "argparse": "^1.0.10"
+  },
   "devDependencies": {
     "electron": "^9.0.0",
     "electron-builder": "^22.7.0",

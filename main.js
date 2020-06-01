@@ -851,7 +851,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 discImage = unzipped.name;
                 return Promise.resolve(disc.discFor(processor.fdc, discImage, discData));
             }
-            if (schema === "http" || schema === "https") {
+            if (schema === "http" || schema === "https" || schema === "file") {
                 return utils.loadData(schema + "://" + discImage).then(function (discData) {
                     if (/\.zip/i.test(discImage)) {
                         var unzipped = utils.unzipDiscImage(discData);
@@ -1158,9 +1158,11 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 }));
                 if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
-                function insertBasic(getBasicPromise,needsRun){
+                function insertBasic(getBasicPromise, needsRun) {
                     imageLoads.push(getBasicPromise.then(function (prog) {
-                        return tokeniser.create().then(function (t) { return t.tokenise(prog); });
+                        return tokeniser.create().then(function (t) {
+                            return t.tokenise(prog);
+                        });
                     }).then(function (tokenised) {
                         var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
                         var hook = processor.debugInstruction.add(function (addr) {
@@ -1188,17 +1190,17 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 if (parsedQuery.loadBasic) {
                     var needsRun = needsAutoboot === "run";
                     needsAutoboot = "";
-                    insertBasic(new Promise(function(resolve,reject){
+                    insertBasic(new Promise(function (resolve, reject) {
                         utils.loadData(parsedQuery.loadBasic).then(function (data) {
                             resolve(String.fromCharCode.apply(null, data));
                         });
-                    }),needsRun);
+                    }), needsRun);
                 }
 
                 if (parsedQuery.embedBasic) {
-                    insertBasic(new Promise(function(resolve,reject){
+                    insertBasic(new Promise(function (resolve, reject) {
                         resolve(parsedQuery.embedBasic);
-                    }),true);
+                    }), true);
                 }
 
                 return Promise.all(imageLoads);
