@@ -1474,5 +1474,15 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 return processor.readmem(x) & 0x7f;
             }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
+
+        // Electron nonsense
+        if (typeof window.nodeRequire !== 'undefined') {
+            const electron = nodeRequire('electron');
+            electron.ipcRenderer.on('load', async (event, message) => {
+                const {drive, path} = message;
+                const image = await loadDiscImage(path);
+                processor.fdc.loadDisc(drive, image);
+            });
+        }
     }
 );

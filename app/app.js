@@ -1,5 +1,5 @@
 "use strict";
-const {app, Menu, BrowserWindow} = require('electron');
+const {app, dialog, Menu, BrowserWindow} = require('electron');
 const fs = require('fs');
 const path = require('path');
 const {ArgumentParser} = require('argparse');
@@ -63,6 +63,21 @@ app.whenReady().then(createWindow)
         app.exit(1);
     });
 
+function makeLoader(drive) {
+    return async (_, browserWindow) => {
+        const result = await dialog.showOpenDialog(browserWindow, {
+            title: "Load a disc image",
+            filters: [
+                {name: 'Disc images', extensions: ['ssd', 'dsd']},
+                {name: 'ZIPped disc images', extensions: ['zip']},
+            ],
+            properties: ['openFile']
+        });
+        if (!result.canceled) {
+            browserWindow.webContents.send('load', {drive, path: getFileParam(result.filePaths[0])});
+        }
+    };
+}
 
 const template = [
     // { role: 'appMenu' }
@@ -84,6 +99,14 @@ const template = [
     {
         label: 'File',
         submenu: [
+            {
+                label: 'Load disc 0',
+                click: makeLoader(0)
+            },
+            {
+                label: 'Load disc 1',
+                click: makeLoader(1)
+            },
             isMac ? {role: 'close'} : {role: 'quit'}
         ]
     },
