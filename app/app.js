@@ -1,8 +1,10 @@
 "use strict";
-const {app, BrowserWindow} = require('electron');
+const {app, Menu, BrowserWindow} = require('electron');
 const fs = require('fs');
 const path = require('path');
 const {ArgumentParser} = require('argparse');
+
+const isMac = process.platform === 'darwin';
 
 function getArguments() {
     // Heinous hack to get "built" versions working
@@ -53,10 +55,71 @@ async function createWindow() {
 
 app.on('window-all-closed', function () {
     if (process.platform !== 'darwin') app.quit();
-})
+});
 
 app.whenReady().then(createWindow)
     .catch(e => {
         console.error("Unhandled exception", e);
         app.exit(1);
     });
+
+
+const template = [
+    // { role: 'appMenu' }
+    ...(isMac ? [{
+        label: app.name,
+        submenu: [
+            {role: 'about'},
+            {type: 'separator'},
+            {role: 'services'},
+            {type: 'separator'},
+            {role: 'hide'},
+            {role: 'hideothers'},
+            {role: 'unhide'},
+            {type: 'separator'},
+            {role: 'quit'}
+        ]
+    }] : []),
+    // { role: 'fileMenu' }
+    {
+        label: 'File',
+        submenu: [
+            isMac ? {role: 'close'} : {role: 'quit'}
+        ]
+    },
+    // { role: 'editMenu' }
+    {
+        label: 'Edit',
+        submenu: [{role: 'paste'}]
+    },
+    // { role: 'viewMenu' }
+    {
+        label: 'View',
+        submenu: [
+            {role: 'reload'},
+            {role: 'forcereload'},
+            {role: 'toggledevtools'},
+            {type: 'separator'},
+            {role: 'resetzoom'},
+            {role: 'zoomin'},
+            {role: 'zoomout'},
+            {type: 'separator'},
+            {role: 'togglefullscreen'}
+        ]
+    },
+    {
+        role: 'help',
+        submenu: [
+            {
+                label: 'Learn More',
+                click: async () => {
+                    const {shell} = require('electron');
+                    await shell.openExternal('https://github.com/mattgodbolt/jsbeeb/');
+                }
+            }
+        ]
+    }
+];
+
+const menu = Menu.buildFromTemplate(template);
+Menu.setApplicationMenu(menu);
