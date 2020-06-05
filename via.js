@@ -433,11 +433,7 @@ define(['./utils'], function (utils) {
             }
 
             var colrow = self.keycodeToRowCol[!!shiftDown][key];
-            if (!colrow) {
-                console.log("Unknown keycode: " + key);
-                console.log("Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode");
-                return;
-            }
+            if (!colrow) return;
 
             self.keys[colrow[0]][colrow[1]] = val;
             self.updateKeys();
