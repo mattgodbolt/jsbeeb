@@ -26,7 +26,7 @@ jobs:
     - stage: deploy
       name: Website
       if: branch = master and type != pull_request
-      env: TEST_SUITE=upload
+      script: make -j2 upload
     - stage: deploy
       name: Electron Windows & Mac
       os: osx
