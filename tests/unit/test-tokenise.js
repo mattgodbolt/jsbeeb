@@ -1,16 +1,18 @@
 const {requirejs} = require('./r');
+const {describe, it} = require('mocha');
 const assert = require('assert');
-var tokeniser = requirejs('basic-tokenise').create();
+const tokeniser = requirejs('basic-tokenise').create();
 
 describe('Tokeniser', function () {
+    "use strict";
+
     function check(done, text, expected) {
-        "use strict";
         tokeniser.then(function (t) {
-            assert.equal(t.tokenise(text), expected);
+            assert.strictEqual(t.tokenise(text), expected);
             done();
         }).catch(function (e) {
             console.log("Failed:", e);
-            assert.equal(e, "");
+            assert.strictEqual(e, "");
             done();
         });
     }

@@ -9,6 +9,7 @@
         return path;
     }
 
+    /* globals requirejs */
     requirejs.config({
         baseUrl: getBasePath(),
         paths: {

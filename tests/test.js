@@ -1,5 +1,6 @@
 define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise', 'underscore'],
     function (Video, Fake6502, fdc, utils, models, tokeniser, _) {
+        "use strict";
         var processor;
         var video;
         var MaxCyclesPerIter = 100 * 1000;
@@ -143,7 +144,6 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise', 'unders
 
             return text.split("").reduce(function (p, char) {
                 return p.then(function () {
-                    "use strict";
                     return typeChar(char);
                 });
             }, Promise.resolve()).then(function () {

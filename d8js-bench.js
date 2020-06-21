@@ -32,6 +32,7 @@ function setTimeout(fn, delay) {
 ///////////////////////////////////////////////////
 
 ///////////////////////////////////////////////////
+/* globals requirejs */
 requirejs(['fake6502', 'fdc', 'models'],
     function (Fake6502, disc, models) {
         function benchmarkCpu(cpu, numCycles) {

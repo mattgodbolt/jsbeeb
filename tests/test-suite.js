@@ -1,4 +1,4 @@
-var requirejs = require('requirejs');
+const requirejs = require('requirejs');
 
 requirejs.config({
     baseUrl: ".",
@@ -14,8 +14,8 @@ requirejs(['fake6502', 'utils', 'promise'],
     function (Fake6502, utils) {
         "use strict";
 
-        var processor = Fake6502.fake6502();
-        var irqRoutine = [
+        const processor = Fake6502.fake6502();
+        const irqRoutine = [
             0x48,
             0x8A,
             0x48,
@@ -30,15 +30,14 @@ requirejs(['fake6502', 'utils', 'promise'],
         ];
 
         function setup(filename) {
-            var i;
-            for (i = 0x0000; i < 0xffff; ++i)
+            for (let i = 0x0000; i < 0xffff; ++i)
                 processor.writemem(i, 0x00);
             return utils.loadData("tests/suite/bin/" + filename).then(function (data) {
-                var addr = data[0] + (data[1] << 8);
+                const addr = data[0] + (data[1] << 8);
                 console.log(">> Loading test '" + filename + "' at " + utils.hexword(addr));
-                for (i = 2; i < data.length; ++i)
+                for (let i = 2; i < data.length; ++i)
                     processor.writemem(addr + i - 2, data[i]);
-                for (i = 0; i < irqRoutine.length; ++i)
+                for (let i = 0; i < irqRoutine.length; ++i)
                     processor.writemem(0xff48 + i, irqRoutine[i]);
 
                 processor.writemem(0x0002, 0x00);
@@ -67,7 +66,7 @@ requirejs(['fake6502', 'utils', 'promise'],
             });
         }
 
-        var curLine = "";
+        let curLine = "";
 
         function petToAscii(char) {
             if (char === 14) return ''; // text mode
@@ -86,7 +85,7 @@ requirejs(['fake6502', 'utils', 'promise'],
         processor.debugInstruction.add(function (addr) {
             switch (addr) {
                 case 0xffd2:
-                    if (processor.a == 13) {
+                    if (processor.a === 13) {
                         console.log(curLine);
                         curLine = "";
                     } else {
@@ -95,10 +94,10 @@ requirejs(['fake6502', 'utils', 'promise'],
                     processor.writemem(0x030c, 0x00);
                     break;
                 case 0xe16f:
-                    var filenameAddr = processor.readmem(0xbb) | (processor.readmem(0xbc) << 8);
-                    var filenameLen = processor.readmem(0xb7);
-                    var filename = "";
-                    for (var i = 0; i < filenameLen; ++i)
+                    const filenameAddr = processor.readmem(0xbb) | (processor.readmem(0xbc) << 8);
+                    const filenameLen = processor.readmem(0xb7);
+                    let filename = "";
+                    for (let i = 0; i < filenameLen; ++i)
                         filename += petToAscii(processor.readmem(filenameAddr + i));
                     if (filename === "trap17") {
                         console.log("All tests complete");

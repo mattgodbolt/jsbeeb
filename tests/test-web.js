@@ -46,7 +46,6 @@ require(['jquery', 'tests/test'], function ($, test) {
             var canvasWidth = canvas.width;
             var canvasHeight = canvas.height;
             paint = function (minx, miny, maxx, maxy) {
-                frames++;
                 var width = maxx - minx;
                 var height = maxy - miny;
                 backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);

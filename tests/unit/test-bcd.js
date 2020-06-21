@@ -1,19 +1,21 @@
-var requirejs = require('./r').requirejs;
-var assert = require('assert');
+const requirejs = require('./r').requirejs;
+const assert = require('assert');
+const {describe, it} = require('mocha');
 
-var Fake6502 = requirejs('fake6502');
-var cpu = Fake6502.fake65C12();
+const Fake6502 = requirejs('fake6502');
+const cpu = Fake6502.fake65C12();
 
 describe('BCD tests', function () {
+    "use strict";
     it('handles 65c12sbc1', function () {
         return cpu.initialise().then(function () {
             cpu.p.reset();
             cpu.p.d = true;
             cpu.a = 0x90;
             cpu.sbc(0x0b);
-            assert.equal(cpu.p.v, false, "Expected V clear");
-            assert.equal(cpu.p.c, true, "Expected C set");
-            assert.equal(cpu.a, 126);
+            assert.strictEqual(cpu.p.v, false, "Expected V clear");
+            assert.strictEqual(cpu.p.c, true, "Expected C set");
+            assert.strictEqual(cpu.a, 126);
         });
     });
 
@@ -23,9 +25,9 @@ describe('BCD tests', function () {
             cpu.p.d = true;
             cpu.a = 0x80;
             cpu.sbc(0x01);
-            assert.equal(cpu.p.v, true, "Expected V set");
-            assert.equal(cpu.p.c, true, "Expected C set");
-            assert.equal(cpu.a, 120);
+            assert.strictEqual(cpu.p.v, true, "Expected V set");
+            assert.strictEqual(cpu.p.c, true, "Expected C set");
+            assert.strictEqual(cpu.a, 120);
         });
     });
 });
