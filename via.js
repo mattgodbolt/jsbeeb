@@ -588,7 +588,7 @@ define(['./utils'], function (utils) {
                     
             return {"button1": button1, "button2": button2};
             
-        }
+        };
 
         self.reset();
         return self;
@@ -600,7 +600,7 @@ define(['./utils'], function (utils) {
         // nothing connected to user VIA
         self.getJoysticks = function() {
             return {button1: false, button2: false};
-        }
+        };
 
         self.portAUpdated = function () {
             // Printer port.
