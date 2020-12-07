@@ -569,7 +569,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             extraRoms: extraRoms,
             userPort: userPort,
             printerPort: printerPort,
-            getGamepads: navigator.getGamepads
+            getGamepads: function () {
+                return navigator.getGamepads();
+            }
         };
 
         processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
