@@ -32,46 +32,46 @@ define([], function () {
         this.sysvia.setcb1(true);
     };
 
-    Adc.prototype.onComplete = function () {
-      var val = 0x8000;
-		//val = Math.floor(Math.random() * 10000);
-		
-		var pads = navigator.getGamepads && navigator.getGamepads();
-		if (pads && pads[0]) {
-    		var pad = pads[0];
-    		var pad2 = pads[1];
-			
-			var rawValue;
-			
-			var stick = Math.floor(this.status & 0x03);
-			
-			switch (stick) {
-				default:
-				case 0:				
-				    rawValue = pad.axes[0];
-				break;
-				case 1:
-				    rawValue = pad.axes[1];
-				break;
-				case 2:
+    Adc.prototype.onComplete = function() {
+        var val = 0x8000;
+
+        var pads = navigator && navigator.getGamepads && navigator.getGamepads();
+        if (pads && pads[0]) {
+            var pad = pads[0];
+            var pad2 = pads[1];
+
+            var rawValue;
+
+            var stick = Math.floor(this.status & 0x03);
+
+            switch (stick) {
+                default:
+                case 0:
+                    rawValue = pad.axes[0];
+                    break;
+                case 1:
+                    rawValue = pad.axes[1];
+                    break;
+                case 2:
                     if (pad2) {
                         rawValue = pad2.axes[0];
                     } else {
                         rawValue = pad.axes[2];
                     }
-				case 3:
+                    break;
+                case 3:
                     if (pad2) {
                         rawValue = pad2.axes[1];
                     } else {
                         rawValue = pad.axes[3];
                     }
-				break;				
-			}
+                    break;
+            }
 
             // scale from [1,-1] to [0,0xffff]
-			var val = Math.floor((1-rawValue)/2 * 0xffff);
+            var val = Math.floor((1 - rawValue) / 2 * 0xffff);
 
-		}
+        }
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;
         this.high = (val >>> 8) & 0xff;
