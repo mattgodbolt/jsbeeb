@@ -509,14 +509,14 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     // For special Master opcode access at 0xc000 - 0xdfff,
                     // it's more involved.
                     if (bitY) {
-                       // If 0xc000 is mapped as RAM, the Master opcode access
-                       // is disabled; follow what normal access does.
-                       this.memLook[i + 256] = this.memLook[i];
+                        // If 0xc000 is mapped as RAM, the Master opcode access
+                        // is disabled; follow what normal access does.
+                        this.memLook[i + 256] = this.memLook[i];
                     } else {
-                       // Master opcode access enabled; bit E determines whether
-                       // it hits shadow RAM or normal RAM. This is independent
-                       // of bit X.
-                       this.memLook[i + 256] = bitE ? 0x8000 : 0;
+                        // Master opcode access enabled; bit E determines whether
+                        // it hits shadow RAM or normal RAM. This is independent
+                        // of bit X.
+                        this.memLook[i + 256] = bitE ? 0x8000 : 0;
                     }
                 }
                 // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
@@ -936,7 +936,8 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     this.videoDisplayPage = 0;
                     this.scheduler = new scheduler.Scheduler();
                     this.soundChip.setScheduler(this.scheduler);
-                    this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout);
+                    this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout,
+                        config.getGamepads);
                     this.uservia = via.UserVia(this, model.isMaster, config.userPort);
                     if (config.printerPort)
                         this.uservia.ca2changecallback = config.printerPort.outputStrobe;

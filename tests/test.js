@@ -9,6 +9,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise', 'unders
         var anyFailures = false;
         var log, beginTest, endTest;
 
+        // TODO, should really use a consistent test harness for this...
         var tests = [
             {test: "Test NOPs", func: testNops, model: 'Master'},
             {test: "Test RMX.x (65C12)", func: testRmw, model: 'Master'},

@@ -32,15 +32,15 @@ define([], function () {
         this.sysvia.setcb1(true);
     };
 
-    Adc.prototype.onComplete = function() {
+    Adc.prototype.onComplete = function () {
         var val = 0x8000;
 
-        var pads = navigator && navigator.getGamepads && navigator.getGamepads();
+        var pads = this.sysvia.getGamepads();
         if (pads && pads[0]) {
             var pad = pads[0];
             var pad2 = pads[1];
 
-            var rawValue;
+            var rawValue = 0;
 
             var stick = Math.floor(this.status & 0x03);
 
@@ -70,7 +70,6 @@ define([], function () {
 
             // scale from [1,-1] to [0,0xffff]
             val = Math.floor((1 - rawValue) / 2 * 0xffff);
-
         }
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;
