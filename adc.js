@@ -69,7 +69,7 @@ define([], function () {
             }
 
             // scale from [1,-1] to [0,0xffff]
-            var val = Math.floor((1 - rawValue) / 2 * 0xffff);
+            val = Math.floor((1 - rawValue) / 2 * 0xffff);
 
         }
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
