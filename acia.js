@@ -174,7 +174,8 @@ define([], function () {
                 console.log("Serial overrun");
                 self.sr |= 0xa0;
             } else {
-                self.dr = byte;
+                // If bit 7 contains parity, mask it off.
+                self.dr = byte & ((self.cr & 0x10) ? 0xff : 0x7f);
                 self.sr |= 0x81;
             }
             updateIrq();
