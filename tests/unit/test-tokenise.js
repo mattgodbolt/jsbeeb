@@ -17,6 +17,18 @@ describe('Tokeniser', function () {
         });
     }
 
+    function checkThrows(done, text, expectedError) {
+        tokeniser.then(function (t) {
+            t.tokenise(text);
+            console.log("Failed to give exeception with message:", expectedError);
+            assert.strictEqual(false, true);
+            done();
+        }).catch(function (e) {
+            assert.strictEqual(e.message, expectedError);
+            done();
+        });
+    }
+
     it('handles a simple program', function (done) {
         check(done, "10 PRINT \"hello\"\n20 GOTO 10\n",
             "\r\x00\x0a\x0e \xf1 \"hello\"\r\x00\x14\x0b \xe5 \x8d\x54\x4a\x40\r\xff");
@@ -42,5 +54,11 @@ describe('Tokeniser', function () {
     });
     it('handles REM', function (done) {
         check(done, "10REM I am a monkey", "\r\x00\x0a\x13\xf4 I am a monkey\r\xff");
+    });
+    it('handles extra long input', function (done) {
+        check(done, "10" + "ENVELOPE".repeat(251), "\r\x00\x0a\xff" + "\xe2".repeat(251) + "\r\xff");
+    });
+    it('gives error for overlong input', function (done) {
+        checkThrows(done, "10" + "ENVELOPE".repeat(252), 'Line 10 tokenised length 252 > 251 bytes');
     });
 });
