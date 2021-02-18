@@ -53,7 +53,9 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
-      - name: Deploy electron app
-        run: |
-          npm install
-          npm run release
+      - name: Build and deploy electron app
+        uses: samuelmeuli/action-electron-builder@v1
+        with:
+          github_token: ${{ secrets.github_token }}
+          # If the commit is tagged with a version (e.g. "v1.0.0"), release the app after building
+          release: ${{ startsWith(github.ref, 'refs/tags/v') }}
