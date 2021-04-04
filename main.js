@@ -33,6 +33,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var secondDiscImage = null;
         var parsedQuery = {};
         var needsAutoboot = false;
+        var autoType = "";
         var keyLayout = window.localStorage.keyLayout || "physical";
 
         var BBC = utils.BBC;
@@ -95,6 +96,10 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                             break;
                         case "autorun":
                             needsAutoboot = "run";
+                            break;
+                        case "autotype":
+                            needsAutoboot = "type";
+                            autoType = val;
                             break;
                         case "keyLayout":
                             keyLayout = (val + "").toLowerCase();
@@ -765,9 +770,15 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             sendRawKeyboardToBBC([BBC.SHIFT, 1000], false);
         }
 
-        function autoChainTape() {
-            var BBC = utils.BBC;
+        function autoBootType(keys) {
+            console.log("Auto typing '" + keys + "'");
+            utils.noteEvent('init', 'autochain');
 
+            var bbcKeys = utils.stringToBBCKeys(keys);
+            sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
+        }
+
+        function autoChainTape() {
             console.log("Auto Chaining Tape");
             utils.noteEvent('init', 'autochain');
 
@@ -776,8 +787,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         function autoRunTape() {
-            var BBC = utils.BBC;
-
             console.log("Auto Running Tape");
             utils.noteEvent('init', 'autorun');
 
@@ -786,8 +795,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
 
         function autoRunBasic() {
-            var BBC = utils.BBC;
-
             console.log("Auto Running basic");
             utils.noteEvent('init', 'autorunbasic');
 
@@ -1215,6 +1222,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 case "boot":
                     $("#sth .autoboot").prop('checked', true);
                     autoboot(discImage);
+                    break;
+                case "type":
+                    autoBootType(autoType);
                     break;
                 case "chain":
                     autoChainTape();

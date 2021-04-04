@@ -39,7 +39,8 @@ URL parameters
 * `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
 * `embedBasic=X` - loads 'X' (a URI-encoded string) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
 * `autorun` - types `*TAPE` then `*/` to run from tape. In conjunction with `loadBasic` it types `RUN`.
-* `autochain` - types `*TAPE` then `CH.""` to run from tape.a
+* `autochain` - types `*TAPE` then `CH.""` to run from tape.
+* `autotype` - types whatever you put after. e.g. `&autotype=PRINT"Matt is cool"%0a` (return is URI escaped to `%0a`)  
 * `embed` - Adjust the navigation entries to make the page clearer within a 921x733 iframe in a third-party site.
 * `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
 * `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into problems on smaller screens; bottom taller than 100 or so similarly.
