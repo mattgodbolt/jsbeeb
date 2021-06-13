@@ -97,7 +97,7 @@
             </ul>
             <div style="float:left; padding-top:12px; padding-left:32px;">
                 <input id="paste-text" type="text" maxlength="0" placeholder="Paste text or drop files here..."
-                       style="width:200px;"></input>
+                       style="width:200px;">
             </div>
         </div>
         <!--/.nav-collapse -->
@@ -111,11 +111,12 @@
 <div>
     <div id="outer">
         <div id="cub-monitor">
-            <img id="cub-monitor-pic" width="896" height="648" src="images/cub-monitor.png">
-            <div class="sidebar left"><img></div>
+            <img id="cub-monitor-pic" width="896" height="648" src="images/cub-monitor.png"
+                 alt="A fake CUB computer monitor">
+            <div class="sidebar left"><img src="" alt=""></div>
             <canvas id="screen" width="896" height="600"></canvas>
-            <div class="sidebar right"><img></div>
-            <div class="sidebar bottom"><img></div>
+            <div class="sidebar right"><img src="" alt=""></div>
+            <div class="sidebar bottom"><img src="" alt=""></div>
         </div>
     </div>
     <div id="leds">
@@ -183,8 +184,9 @@
             <form class="form-inline" role="form" id="goto-mem-addr-form">
                 <div class="form-group">
                     <label accesskey="m" class="control-label"><span class="accesskey">M</span>em
-                        addr:</label>
-                    <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
+                        addr:
+                        <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
+                    </label>
                 </div>
             </form>
             <div id="memory">
@@ -197,8 +199,9 @@
         <div class="debug-container">
             <form class="form-inline" role="form" id="goto-dis-addr-form">
                 <div class="form-group">
-                    <label accesskey="a" class="control-label"><span class="accesskey">A</span>ddr:</label>
-                    <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
+                    <label accesskey="a" class="control-label"><span class="accesskey">A</span>ddr:
+                        <input type="text" class="form-control input-sm goto-addr" placeholder="$0000">
+                    </label>
                 </div>
             </form>
             <div id="disassembly">
