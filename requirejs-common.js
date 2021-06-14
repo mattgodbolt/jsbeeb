@@ -17,6 +17,7 @@
             'jquery': 'lib/jquery.min',
             'jquery-visibility': 'lib/jquery-visibility',
             'bootstrap': 'lib/bootstrap.min',
+            '@popperjs/core': 'lib/popper.min',
             'gapi': 'lib/gapi',
             'jsunzip': 'lib/jsunzip',
             'promise': 'lib/promise-6.0.0',

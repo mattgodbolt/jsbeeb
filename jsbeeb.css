@@ -1,5 +1,22 @@
 body {
-    padding-top: 50px;
+    background-color: #000 !important;
+}
+
+.modal {
+    color: #ddd;
+}
+
+.modal-content {
+    border-color: rgba(255, 255, 255, 0.2);
+    background-color: #212529;
+}
+
+.modal-header {
+    border-bottom-color: #666666;
+}
+
+.modal-footer {
+    border-top-color: #666666;
 }
 
 #outer {
@@ -268,7 +285,7 @@ div.modal-body > div:not(:first-child) {
 
 .label {
     color: white;
-    font-family: arial, tahoma;
+    font-family: arial, tahoma, sans-serif;
     font-weight: bold;
 }
 
