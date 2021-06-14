@@ -512,25 +512,23 @@
 </div>
 <!-- /.modal -->
 
-<div class="modal fade" id="are-you-sure">
+<div class="modal fade" id="are-you-sure" tabindex="-1" aria-labelledby="aysModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title">Are you sure?</h4>
-
+                <h5 class="modal-title" id="aysModalLabel">Are You Sure?</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="body">
                 <div class="context"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary ays-no" data-dismiss="modal">No</button>
-                <button type="button" class="btn ays-yes">Yes</button>
+                <button type="button" class="btn btn-secondary ays-no" data-bs-dismiss="modal">No</button>
+                <button type="button" class="btn btn-primary ays-yes">Yes</button>
             </div>
         </div>
-        <!-- /.modal-content -->
     </div>
-    <!-- /.modal-dialog -->
 </div>
-<!-- /.modal -->
 
 <div class="modal fade" id="configuration" tabindex="-1" aria-labelledby="configurationModalLabel" aria-hidden="true">
     <div class="modal-dialog">
