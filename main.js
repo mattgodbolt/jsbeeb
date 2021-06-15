@@ -817,7 +817,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             var dialog = $('#error-dialog');
             dialog.find(".context").text(context);
             dialog.find(".error").text(error);
-            dialog.modal();
+            dialog.modal("show");
         }
 
         function splitImage(image) {
@@ -1488,6 +1488,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 return processor.readmem(x) & 0x7f;
             }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
+
+        window.showError = showError;
 
         // Hooks for electron.
         electron({loadDiscImage, processor});

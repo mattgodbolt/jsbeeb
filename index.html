@@ -254,41 +254,42 @@
     </div>
 </div>
 
-<div class="modal fade" id="info">
-    <div class="modal-dialog">
+<div class="modal fade" id="info" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title">About jsbeeb</h4>
+                <h5 class="modal-title" id="infoModalLabel">About jsbeeb</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div>By <a href="http://xania.org/">Matt Godbolt</a>. Based on Sarah Walker's <a
-                        href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to her for open sourcing her
+                <div>
+                    By <a href="https://xania.org/">Matt Godbolt</a>. Based on Sarah Walker's
+                    <a href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to her for open sourcing her
                     code. Big thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by
                     default is the amazing Elite (thanks to
                     <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it available).
                 </div>
-                <div>Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome
+                <div>
+                    Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome
                     or Firefox.
                 </div>
-                <div>Cycle-accurate emulation greatly helped by the fantastic <a href="http://www.visual6502.org/">Visual
+                <div>
+                    Cycle-accurate emulation greatly helped by the fantastic <a href="http://www.visual6502.org/">Visual
                     6502</a> Project. Consider donating to them if you enjoy this stuff as much as I do!
                 </div>
-                <div>If you're looking for more information on the BBC or to find like-minded people to chat about
+                <div>I
+                    f you're looking for more information on the BBC or to find like-minded people to chat about
                     the hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot
                         forums</a>.
                 </div>
             </div>
-            <!-- model-body -->
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
-        <!-- /.modal-content -->
     </div>
-    <!-- /.modal-dialog -->
 </div>
-<!-- /.modal -->
 
 <div class="modal fade" id="help" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -409,18 +410,20 @@
     </div>
 </div>
 
-<div class="modal fade" id="google-drive">
+<div class="modal fade" id="google-drive" tabindex="-1" aria-labelledby="google-driveModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title">Load or create disc from your <a href="https://drive.google.com/">Google
-                    Drive</a>
-                    account</h4>
-
-                <div class="loading">Loading...</div>
+                <h5 class="modal-title" id="google-driveModalLabel">
+                    Load or create disc from your
+                    <a href="https://drive.google.com/">Google Drive</a>
+                    account
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div class="loading">Loading...</div>
                 <div>
                     <ul class="list">
                         <li class="template"><a href="#"><span class="name"></span></a></li>
@@ -434,14 +437,11 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn" data-dismiss="modal">Close</button>
+                <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
-        <!-- /.modal-content -->
     </div>
-    <!-- /.modal-dialog -->
 </div>
-<!-- /.modal -->
 
 <!-- cannot make this one fade in else our attempts to close the modal while it's still opening fail -->
 <div class="modal" id="loading-dialog" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
@@ -499,25 +499,22 @@
     </div>
 </div>
 
-<div class="modal fade" id="error-dialog">
+<div class="modal fade" id="error-dialog" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title">An error occurred - sorry!</h4>
-
+                <h5 class="modal-title" id="errorModalLabel">An error occurred - sorry!</h5>
+            </div>
+            <div class="modal-body">
                 <div>While <span class="context"></span>:</div>
                 <div class="error"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
-        <!-- /.modal-content -->
     </div>
-    <!-- /.modal-dialog -->
 </div>
-<!-- /.modal -->
 
 <div class="modal fade" id="are-you-sure" tabindex="-1" aria-labelledby="aysModalLabel" aria-hidden="true">
     <div class="modal-dialog">
