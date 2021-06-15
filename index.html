@@ -290,68 +290,70 @@
 </div>
 <!-- /.modal -->
 
-<div class="modal fade" id="help">
+<div class="modal fade" id="help" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title">Help</h4>
+                <h5 class="modal-title" id="helpModalLabel">Help</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div>This is an emulator for the <a href="http://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>
+                <div>
+                    This is an emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>
                     Model B, a popular home computer in the UK in the 1980s.
                 </div>
-                <div>The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC,
+                <div>
+                    The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC,
                     one would press <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The keyboard
                     of the BBC is slightly different from a modern PC, notably in the placement of the symbol
                     characters. Also, the current keyboard layout is optimized for a US keyboard; I am working on
                     improving this situation.
                 </div>
-                <h5>Handy key mappings</h5>
-                <table class="keymap">
-                    <tr>
-                        <th>BBC</th>
-                        <th>PC</th>
-                        <th>OSX</th>
-                    </tr>
-                    <tr>
-                        <td><span class="function key">F0</span></td>
-                        <td><span class="key">F10</span></td>
-                        <td><span class="key">F10</span></td>
-                    </tr>
-                    <tr>
-                        <td><span class="key">BREAK</span></td>
-                        <td><span class="key">F12</span></td>
-                        <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
-                    </tr>
-                    <tr>
-                        <td><span class="key">COPY</span></td>
-                        <td><span class="key">End</span></td>
-                        <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="dbl key">*<br>:</div>
-                        </td>
-                        <td>TODO</td>
-                        <td>TODO</td>
-                    </tr>
-                    <tr>
-                        <td>Debug</td>
-                        <td><span class="key">Ctrl-Home</span></td>
-                        <td>TODO</td>
-                    </tr>
-                </table>
+                <div>
+                    <h5>Handy key mappings</h5>
+                    <table class="keymap">
+                        <tr>
+                            <th>BBC</th>
+                            <th>PC</th>
+                            <th>OSX</th>
+                        </tr>
+                        <tr>
+                            <td><span class="function key">F0</span></td>
+                            <td><span class="key">F10</span></td>
+                            <td><span class="key">F10</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">BREAK</span></td>
+                            <td><span class="key">F12</span></td>
+                            <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
+                        </tr>
+                        <tr>
+                            <td><span class="key">COPY</span></td>
+                            <td><span class="key">End</span></td>
+                            <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="dbl key">*<br>:</div>
+                            </td>
+                            <td>TODO</td>
+                            <td>TODO</td>
+                        </tr>
+                        <tr>
+                            <td>Debug</td>
+                            <td><span class="key">Ctrl-Home</span></td>
+                            <td>TODO</td>
+                        </tr>
+                    </table>
+                </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
-        <!-- /.modal-content -->
     </div>
-    <!-- /.modal-dialog -->
 </div>
-<!-- /.modal -->
 
 <div class="modal fade" id="discs" tabindex="-1" aria-labelledby="discModalLabel" aria-hidden="true">
     <div class="modal-dialog">
