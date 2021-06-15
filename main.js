@@ -1489,8 +1489,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
 
-        window.showError = showError;
-
         // Hooks for electron.
         electron({loadDiscImage, processor});
     }
