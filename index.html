@@ -186,12 +186,14 @@
     </div>
     <div id="debug" class="initially-hidden">
         <div class="debug-container">
-            <form class="form-inline" role="form" id="goto-mem-addr-form">
-                <div class="form-group">
-                    <label accesskey="m" class="form-control-label"><span class="accesskey">M</span>em
-                        addr:
-                        <input type="text" class="form-control form-control-sm goto-addr" placeholder="$0000">
-                    </label>
+            <form id="goto-mem-addr-form" role="form">
+                <div class="input-group input-group-sm">
+                    <span accesskey="m" class="input-group-text" id="mem_addr_text">
+                        <span class="accesskey">M</span>em addr:
+                    </span>
+                    <input type="text" class="form-control form-control-sm goto-addr" placeholder="$0000"
+                           aria-label="Memory address"
+                           aria-describedby="mem_addr_text">
                 </div>
             </form>
             <div id="memory">
@@ -202,11 +204,12 @@
             </div>
         </div>
         <div class="debug-container">
-            <form class="form-inline" role="form" id="goto-dis-addr-form">
-                <div class="form-group">
-                    <label accesskey="a" class="form-control-label"><span class="accesskey">A</span>ddr:
-                        <input type="text" class="form-control form-control-sm goto-addr" placeholder="$0000">
-                    </label>
+            <form role="form" id="goto-dis-addr-form">
+                <div class="input-group input-group-sm">
+                    <span accesskey="a" class="input-group-text" id="dis_addr_text"><span class="accesskey">A</span>ddr:</span>
+                    <input type="text" class="form-control form-control-sm goto-addr" placeholder="$0000"
+                           aria-label="Disassembly address"
+                           aria-describedby="dis_addr_text">
                 </div>
             </form>
             <div id="disassembly">
