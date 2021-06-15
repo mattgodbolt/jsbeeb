@@ -55,11 +55,10 @@
                     <a href="#" class="nav-link dropdown-toggle" id="navbarDiscs" role="button"
                        data-bs-toggle="dropdown" aria-expanded="false">Discs</a>
                     <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
-                        <li><a href="#sth" class="dropdown-item sth" data-id="discs" data-toggle="modal"
-                               data-target="#sth">From STH
-                            archive</a></li>
-                        <li><a href="#discs" class="dropdown-item" data-toggle="modal" data-target="#discs">From
-                            examples or local</a></li>
+                        <li><a href="#sth" class="dropdown-item sth" data-id="discs" data-bs-toggle="modal"
+                               data-bs-target="#sth">From STH archive</a></li>
+                        <li><a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
+                            From examples or local</a></li>
                         <li class="if-drive-available">
                             <a href="#google-drive" class="dropdown-item" id="open-drive-link">From Google Drive</a>
                         </li>
@@ -69,11 +68,11 @@
                     <a href="#" class="nav-link dropdown-toggle" id="navbarCassettes" role="button"
                        data-bs-toggle="dropdown" aria-expanded="false">Cassettes</a>
                     <ul class="dropdown-menu dropdown-menu-dark" id="tape-menu" aria-labelledby="navbarCassettes">
-                        <li><a href="#sth" class="dropdown-item sth" data-toggle="modal" data-id="tapes"
-                               data-target="#sth">From STH
-                            archive</a></li>
+                        <li><a href="#sth" class="dropdown-item sth" data-bs-toggle="modal" data-id="tapes"
+                               data-bs-target="#sth">From STH archive</a></li>
                         <li><a data-id="rewind" class="dropdown-item">Rewind cassette</a></li>
-                        <li><a href="#discs" class="dropdown-item" data-toggle="modal" data-target="#tapes">From local
+                        <li><a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#tapes">From
+                            local
                             file</a>
                         </li>
                     </ul>
@@ -91,12 +90,14 @@
                        aria-expanded="false">More</a>
                     <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
                         <li><a href="#" id="fs" class="dropdown-item">Fullscreen</a></li>
-                        <li><a href="#help" class="dropdown-item" data-toggle="modal" data-target="#help">Help</a></li>
+                        <li><a href="#help" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#help">Help</a>
+                        </li>
                         <li><a href="mailto:matt@godbolt.org" class="dropdown-item">Contact the Author</a></li>
                         <li><a href="http://xania.org/MattGodbolt" class="dropdown-item" rel="author" target="_blank">
                             About the Author</a></li>
-                        <li><a href="#about" class="dropdown-item" data-toggle="modal" data-target="#info" id="about">About
-                            jsbeeb</a></li>
+                        <li><a href="#about" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#info"
+                               id="about">
+                            About jsbeeb</a></li>
                     </ul>
                 </li>
             </ul>
@@ -441,12 +442,18 @@
 </div>
 <!-- /.modal -->
 
-<div class="modal fade" id="loading-dialog">
+<!-- cannot make this one fade in else our attempts to close the modal while it's still opening fail -->
+<div class="modal" id="loading-dialog" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-body">
-                <h4 class="modal-title loading"></h4>
-
+                <div class="modal-header">
+                    <h5 class="modal-title loading" id="loadingModalLabel"></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                            aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body">
                 <div style="display:none" id="google-drive-auth">
                     Google Drive requires you to authorize jsbeeb to access your files by logging in.<br>
                     Please click Authorize to open a Google Drive pop-up to authenticate and give permission to jsbeeb.
@@ -456,41 +463,40 @@
                 </div>
             </div>
         </div>
-        <!-- /.modal-content -->
     </div>
-    <!-- /.modal-dialog -->
 </div>
-<!-- /.modal -->
 
-<div class="modal fade" id="sth">
+<div class="modal fade" id="sth" tabindex="-1" aria-labelledby="sthModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-                <h4 class="modal-title">Load from <a href="http://www.stairwaytohell.com/">Stairway to Hell</a>
-                    archive</h4>
-
-                <div class="loading">Loading catalog from STH archive...</div>
-                <div class="filter">
-                    <input type="text" placeholder="Filter..." autofocus id="sth-filter">
-                </div>
+                <h5 class="modal-title" id="sthModalLabel">
+                    Load from
+                    <a href="http://www.stairwaytohell.com/">Stairway to Hell</a>
+                    archive
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div style="margin-bottom: 1rem">
+                    <div class="loading">Loading catalog from STH archive...</div>
+                    <div class="filter">
+                        <label>Filter <input type="text" autofocus id="sth-filter"></label>
+                    </div>
+                </div>
                 <ul id="sth-list">
                     <li class="template"><a href="#"><span class="name"></span></a></li>
                 </ul>
             </div>
             <div class="modal-footer">
-                <label class="float-xs-left checkbox-inline"><input type="checkbox" class="autoboot"
-                                                                    value="">Autoboot</label>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <label class="float-xs-left checkbox-inline">
+                    <input type="checkbox" class="autoboot" value="">Autoboot</label>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
-        <!-- /.modal-content -->
     </div>
-    <!-- /.modal-dialog -->
 </div>
-<!-- /.modal -->
 
 <div class="modal fade" id="error-dialog">
     <div class="modal-dialog">
@@ -517,9 +523,10 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="aysModalLabel">Are You Sure?</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
             </div>
-            <div class="body">
+            <div class="modal-body">
                 <div class="context"></div>
             </div>
             <div class="modal-footer">
@@ -535,7 +542,8 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="configurationModalLabel">Emulation Configuration</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="row g-2 align-items-center">
@@ -547,7 +555,8 @@
                                 id="bbc-model-dropdown">
                             <span class="bbc-model"></span>
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-dark model-menu" role="menu" aria-labelledby="bbc-model-dropdown">
+                        <ul class="dropdown-menu dropdown-menu-dark model-menu" role="menu"
+                            aria-labelledby="bbc-model-dropdown">
                             <li><a href="#" class="dropdown-item" data-target="B">BBC B</a></li>
                             <li><a href="#" class="dropdown-item" data-target="Master">BBC Master 128</a></li>
                             <li><a href="#" class="dropdown-item" data-target="MasterTurbo">BBC Master Turbo</a></li>
@@ -563,7 +572,8 @@
                                 id="keyboardDropdown">
                             <span class="keyboard-layout">Physical</span>
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-dark keyboard-menu" role="menu" aria-labelledby="keyboardDropdown">
+                        <ul class="dropdown-menu dropdown-menu-dark keyboard-menu" role="menu"
+                            aria-labelledby="keyboardDropdown">
                             <li><a href="#" class="dropdown-item" data-target="physical">Physical: '*' is next to
                                 Enter/Return</a></li>
                             <li><a href="#" class="dropdown-item" data-target="natural">Natural: '*' is shift-8</a></li>
