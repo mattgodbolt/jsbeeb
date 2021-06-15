@@ -817,7 +817,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             var dialog = $('#error-dialog');
             dialog.find(".context").text(context);
             dialog.find(".error").text(error);
-            dialog.modal();
+            dialog.modal("show");
         }
 
         function splitImage(image) {

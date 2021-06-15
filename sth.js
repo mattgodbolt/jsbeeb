@@ -1,5 +1,5 @@
 // Accesses STH archive.
-define(['utils', 'jquery', 'jsunzip'], function (utils, $, jsunzip) {
+define(['utils', 'jquery'], function (utils, $) {
     "use strict";
     return function StairwayToHell(onStart, onCat, onError, tape) {
         var self = this;
