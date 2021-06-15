@@ -16,9 +16,9 @@
     "argparse": "^1.0.10"
   },
   "devDependencies": {
-    "electron": "^9.4.4",
-    "electron-builder": "^22.11.7",
-    "jshint": "^2.13.0",
+    "electron": "^9.4.0",
+    "electron-builder": "^22.7.0",
+    "jshint": "^2.11.1",
     "mocha": "^7.2.0",
     "node-png": "0.4.x",
     "requirejs": "ejdaly/r.js#b2e1afae32614ecbfa343d90fcfe28d4f13a7427"
