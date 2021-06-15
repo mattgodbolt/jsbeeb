@@ -46,7 +46,7 @@
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
-            <ul class="navbar-nav nav me-auto mb-2 mb-lg-0">
+            <ul class="navbar-nav nav mb-2 mb-lg-0">
                 <li class="nav-item">
                     <a href="#configuration" class="nav-link" data-bs-toggle="modal" data-bs-target="#configuration">
                         Config (<span class="bbc-model">BBC B</span>)</a>
@@ -71,9 +71,10 @@
                         <li><a href="#sth" class="dropdown-item sth" data-bs-toggle="modal" data-id="tapes"
                                data-bs-target="#sth">From STH archive</a></li>
                         <li><a data-id="rewind" class="dropdown-item">Rewind cassette</a></li>
-                        <li><a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#tapes">From
-                            local
-                            file</a>
+                        <li>
+                            <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#tapes">
+                                From local file
+                            </a>
                         </li>
                     </ul>
                 </li>
@@ -101,6 +102,10 @@
                     </ul>
                 </li>
             </ul>
+            <span class="navbar-text m-auto">
+                Edit BBC BASIC interactively with Owlet at
+                <a href="https://bbcmic.ro/" target="_blank">bbcmic.ro</a>!
+            </span>
             <form class="d-flex">
                 <input id="paste-text" class="form-control me-2" type="text" maxlength="0"
                        placeholder="Paste text or drop files here..." aria-label="Search">
