@@ -21,7 +21,7 @@
     "jshint": "^2.13.0",
     "mocha": "^7.2.0",
     "node-png": "0.4.x",
-    "requirejs": "^2.3.6"
+    "requirejs": "ejdaly/r.js#b2e1afae32614ecbfa343d90fcfe28d4f13a7427"
   },
   "license": "GPL-3.0-or-later",
   "build": {
