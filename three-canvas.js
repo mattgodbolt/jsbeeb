@@ -261,9 +261,9 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                     const screen = this.scene.getObjectByName("SCREEN_SurfPatch.002");
                     screen.material = this.screenMaterial;
 
-                    this.casetteLed = this.setupLed(this.scene.getObjectByName("LED_INLAY_Cube.019"));
-                    this.capsLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.001_Cube.085"));
-                    this.shiftLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.002_Cube.086"));
+                    this.casetteLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.001_Cube.085"));
+                    this.capsLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.002_Cube.086"));
+                    this.shiftLed = this.setupLed(this.scene.getObjectByName("LED_INLAY_Cube.019"));
                 });
             });
         }
