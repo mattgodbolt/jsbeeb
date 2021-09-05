@@ -1341,6 +1341,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         function draw(now) {
             if (!running) {
                 last = 0;
+                if (canvas.frame())
+                    window.requestAnimationFrame(draw);
                 return;
             }
             // If we got here via setTimeout, we don't get passed the time.

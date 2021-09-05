@@ -145,6 +145,26 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
         return rowCol[0] * 16 + rowCol[1];
     }
 
+    class FrameBuffer {
+        constructor(width, height) {
+            this.fb8 = new Uint8Array(width * height * 4);
+            this.fb32 = new Uint32Array(this.fb8.buffer);
+
+            this.dataTexture = new THREE.DataTexture(
+                this.fb8,
+                width,
+                height,
+                THREE.RGBAFormat,
+                THREE.UnsignedByteType,
+                THREE.CubeRefractionMapping
+            );
+            this.dataTexture.needsUpdate = true;
+            this.dataTexture.flipY = true;
+            this.dataTexture.repeat.set(0.42, 0.42);
+            this.dataTexture.offset.set(0.3, 0.5);
+        }
+    }
+
     class ThreeCanvas {
         constructor(canvas) {
             const attrs = {
@@ -156,10 +176,8 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.renderer = new THREE.WebGLRenderer(attrs);
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.scene = new THREE.Scene();
-            const height = 1024;
-            const width = 1024;
-            this.fb8 = new Uint8Array(width * height * 4);
-            this.fb32 = new Uint32Array(this.fb8.buffer);
+            this.buffer = new FrameBuffer(1024, 1024);
+            this.fb32 = new Uint32Array(1024 * 1024);
             this.cpu = null;
 
             // Set the background color
@@ -181,22 +199,10 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.scene.add(dirLight);
             this.scene.add(dirLight.target);
 
-            this.dataTexture = new THREE.DataTexture(
-                this.fb8,
-                width,
-                height,
-                THREE.RGBAFormat,
-                THREE.UnsignedByteType,
-                THREE.CubeRefractionMapping
-            );
-            this.dataTexture.needsUpdate = true;
-            this.dataTexture.flipY = true;
-            this.dataTexture.repeat.set(0.42, 0.42);
-            this.dataTexture.offset.set(0.3, 0.5);
-
             this.keys = {};
             this.leftShiftKey = null;
             this.rightShiftKey = null;
+            this.screenMaterial = null;
 
             this.load();
 
@@ -210,7 +216,6 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             mtlLoader.load('./virtual-beeb/models/beeb.mtl', (mtl) => {
                 mtl.preload();
                 const objLoader = new THREE.OBJLoader();
-                //  mtl.materials.Material.side = THREE.DoubleSide;
                 objLoader.setMaterials(mtl);
                 objLoader.load('./virtual-beeb/models/beeb.obj', (root) => {
                     root.scale.set(50, 50, 50);
@@ -233,13 +238,13 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                         // console.log(child.name);
                     });
 
-                    const screen = this.scene.getObjectByName("SCREEN_SurfPatch.002");
-                    screen.material = new THREE.MeshBasicMaterial(
+                    this.screenMaterial = new THREE.MeshBasicMaterial(
                         {
                             transparent: false,
-                            map: this.dataTexture
+                            map: this.buffer.dataTexture
                         });
-
+                    const screen = this.scene.getObjectByName("SCREEN_SurfPatch.002");
+                    screen.material = this.screenMaterial;
                 });
             });
         }
@@ -252,9 +257,8 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
         }
 
         frame() {
-            // TODO once we can keep the complete dataTexture separate (we get flicker with this...)
-            // this.controls.update();
-            // this.renderer.render(this.scene, this.camera);
+            this.controls.update();
+            this.renderer.render(this.scene, this.camera);
 
             // Update the key animations.
             const sysvia = this.cpu.sysvia;
@@ -267,6 +271,8 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
             this.updateKey(this.leftShiftKey, sysvia.leftShiftDown);
             this.updateKey(this.rightShiftKey, sysvia.rightShiftDown);
+
+            return true;
         }
 
         setProcessor(cpu) {
@@ -281,10 +287,13 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
         }
 
         paint(minx, miny, maxx, maxy) {
-            this.dataTexture.needsUpdate = true;
-            // TODO double buffer texture here? Then frame() draws it
-            this.controls.update();
-            this.renderer.render(this.scene, this.camera);
+            if (!this.screenMaterial) return;
+            this.screenMaterial.map.needsUpdate = true;
+            // Ideally we'd update everything to write to one of two double buffers, but there's too many places in the
+            // code that cache the fb32 for now. So just copy it.
+            // TODO: fix
+            // TODO: subset at least based on miny, maxy?
+            this.buffer.fb32.set(this.fb32);
         }
     }
 
