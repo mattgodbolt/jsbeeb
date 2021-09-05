@@ -1399,6 +1399,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                     stepEmuWhenPaused = false;
                 }
             }
+            canvas.frame();
             last = now;
         }
 
@@ -1452,6 +1453,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             const bottomReservedSize = 100;
 
             function resizeTv() {
+                if (canvas.handleResize(window.innerWidth, window.innerHeight - navbarHeight)) return;
                 var width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
                 var height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
                 if (width / height <= desiredAspectRatio) {

@@ -24,6 +24,12 @@ define(['webgl-debug', 'three-canvas'], function (webglDebug, ThreeCanvas) {
         this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvasWidth, this.canvasHeight);
     };
 
+    Canvas.prototype.frame = function () {
+    };
+    Canvas.prototype.handleResize = function () {
+        return false;
+    };
+
     function GlCanvas(canvas) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
         // rendering, which is much worse than simply using a 2D canvas for
@@ -113,6 +119,11 @@ define(['webgl-debug', 'three-canvas'], function (webglDebug, ThreeCanvas) {
 
         var uvFloatArray = new Float32Array(8);
         var lastMinX, lastMinY, lastMaxX, lastMaxY;
+        this.frame = function () {
+        };
+        this.handleResize = function () {
+            return false;
+        }
         this.paint = function (minx, miny, maxx, maxy) {
             var gl = this.gl;
             // We can't specify a stride for the source, so have to use the full width.
