@@ -95,9 +95,9 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                 case 50:
                     return BBC.U;
                 case 51:
-                    return BBC.O;
-                case 52:
                     return BBC.I;
+                case 52:
+                    return BBC.O;
                 case 53:
                     return BBC.P;
                 case 54:
