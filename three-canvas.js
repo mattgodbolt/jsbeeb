@@ -203,12 +203,27 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.leftShiftKey = null;
             this.rightShiftKey = null;
             this.screenMaterial = null;
+            this.casetteLed = null;
+            this.capsLed = null;
+            this.shiftLed = null;
 
             this.load();
 
             $(this.renderer.domElement).remove().appendTo($('#outer'));
             $('#cub-monitor').hide();
             console.log("Three Canvas set up");
+        }
+
+        setupLed(obj) {
+            // Replace the material with our own.
+            const material = obj.material[1].clone(); // Hacky but works for now, TODO look into alternatives
+            obj.material[1] = material;
+            return material;
+        }
+
+        updateLed(led, on) {
+            if (!led) return;
+            led.emissive.set(on ? 0xff0000 : 0);
         }
 
         load() {
@@ -235,7 +250,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                             }
                         }
                         //  List out all the object names from the import - very useful!
-                        // console.log(child.name);
+                        console.log(child.name);
                     });
 
                     this.screenMaterial = new THREE.MeshBasicMaterial(
@@ -245,6 +260,10 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                         });
                     const screen = this.scene.getObjectByName("SCREEN_SurfPatch.002");
                     screen.material = this.screenMaterial;
+
+                    this.casetteLed = this.setupLed(this.scene.getObjectByName("LED_INLAY_Cube.019"));
+                    this.capsLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.001_Cube.085"));
+                    this.shiftLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.002_Cube.086"));
                 });
             });
         }
@@ -271,6 +290,10 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
             this.updateKey(this.leftShiftKey, sysvia.leftShiftDown);
             this.updateKey(this.rightShiftKey, sysvia.rightShiftDown);
+
+            this.updateLed(this.casetteLed, this.cpu.acia.motorOn);
+            this.updateLed(this.capsLed, this.cpu.sysvia.capsLockLight);
+            this.updateLed(this.shiftLed, this.cpu.sysvia.shiftLockLight);
 
             return true;
         }
