@@ -2,3 +2,7 @@ Bootstrap & JQuery from the regular places.
 jsunzip from https://github.com/operasoftware/jsunzip
 jquery-visibility is from https://github.com/mathiasbynens/jquery-visibility
 promises is from https://www.promisejs.org/polyfills/promise-6.0.0.js
+three is from https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js
+three example loaders are from https://unpkg.com/three@0.126.0/examples/js/loaders/
+three orbit controls are from https://threejs.org/examples/js/controls/OrbitControls.js
+    and then tweaked to work with requirejs

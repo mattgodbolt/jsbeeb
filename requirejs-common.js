@@ -22,10 +22,17 @@
             'jsunzip': 'lib/jsunzip',
             'promise': 'lib/promise-6.0.0',
             'underscore': 'lib/underscore-min',
-            'webgl-debug': 'lib/webgl-debug'
+            'webgl-debug': 'lib/webgl-debug',
+            'three': 'three-wrapper',
+            'three-mtl-loader': 'lib/MTLLoader',
+            'three-obj-loader': 'lib/OBJLoader',
+            'three-orbit': 'lib/OrbitControls'
         },
         shim: {
             'underscore': {exports: '_'},
+            'three-mtl-loader': ['three'],
+            'three-obj-loader': ['three'],
+            'three-orbit': ['three'],
             'bootstrap': ['jquery'],
             'jquery-visibility': ['jquery']
         }

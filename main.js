@@ -191,7 +191,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             tryGl = parsedQuery.glEnabled === "true";
         }
         var $screen = $('#screen');
-        var canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
+        const useThree = true;
+        var canvas = tryGl ? canvasLib.bestCanvas($screen[0], useThree) : new canvasLib.Canvas($screen[0]);
         video = new Video.Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
             frames++;
             if (frames < frameSkip) return;

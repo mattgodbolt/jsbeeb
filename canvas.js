@@ -1,4 +1,4 @@
-define(['webgl-debug'], function (webglDebug) {
+define(['webgl-debug', 'three-canvas'], function (webglDebug, ThreeCanvas) {
     "use strict";
 
     function Canvas(canvas) {
@@ -28,12 +28,14 @@ define(['webgl-debug'], function (webglDebug) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
         // rendering, which is much worse than simply using a 2D canvas for
         // rendering.
-        var glAttrs = { alpha: false,
-                        antialias: false,
-                        depth: false,
-                        preserveDrawingBuffer: false,
-                        stencil: false,
-                        failIfMajorPerformanceCaveat: true };
+        var glAttrs = {
+            alpha: false,
+            antialias: false,
+            depth: false,
+            preserveDrawingBuffer: false,
+            stencil: false,
+            failIfMajorPerformanceCaveat: true
+        };
         var gl = canvas.getContext('webgl', glAttrs) || canvas.getContext('experimental-webgl', glAttrs);
         this.gl = gl;
         if (!gl) {
@@ -146,7 +148,14 @@ define(['webgl-debug'], function (webglDebug) {
     return {
         Canvas: Canvas,
         GlCanvas: GlCanvas,
-        bestCanvas: function (canvas) {
+        bestCanvas: function (canvas, tryThree) {
+            if (tryThree) {
+                try {
+                    return new ThreeCanvas(canvas);
+                } catch (e) {
+                    console.log("Unable to use Three: " + e);
+                }
+            }
             try {
                 return new GlCanvas(canvas);
             } catch (e) {
