@@ -410,6 +410,9 @@ define(['./utils'], function (utils) {
         self.IC32 = 0;
         self.capsLockLight = false;
         self.shiftLockLight = false;
+        // Purely for UI tracking purposes.
+        self.leftShiftDown = false;
+        self.rightShiftDown = false;
         self.keys = [];
         for (var i = 0; i < 16; ++i) {
             self.keys[i] = new Uint8Array(16);
@@ -430,6 +433,8 @@ define(['./utils'], function (utils) {
                     self.keys[i][j] = false;
                 }
             }
+            self.leftShiftDown = false;
+            self.rightShiftDown = false;
             self.updateKeys();
         }
 
@@ -449,6 +454,11 @@ define(['./utils'], function (utils) {
             if (!self.keyboardEnabled) {
                 return;
             }
+
+            if (key === utils.keyCodes.SHIFT_LEFT)
+                self.leftShiftDown = val;
+            if (key === utils.keyCodes.SHIFT_RIGHT)
+                self.rightShiftDown = val;
 
             var colrow = self.keycodeToRowCol[!!shiftDown][key];
             if (!colrow) return;

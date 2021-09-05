@@ -581,6 +581,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         };
 
         processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
+        canvas.setProcessor(processor);
 
         function setDisc1Image(name) {
             delete parsedQuery.disc;

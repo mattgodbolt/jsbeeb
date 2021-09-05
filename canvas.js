@@ -29,6 +29,8 @@ define(['webgl-debug', 'three-canvas'], function (webglDebug, ThreeCanvas) {
     Canvas.prototype.handleResize = function () {
         return false;
     };
+    Canvas.prototype.setProcessors = function () {
+    };
 
     function GlCanvas(canvas) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
@@ -121,9 +123,11 @@ define(['webgl-debug', 'three-canvas'], function (webglDebug, ThreeCanvas) {
         var lastMinX, lastMinY, lastMaxX, lastMaxY;
         this.frame = function () {
         };
+        this.setProcessor = function () {
+        };
         this.handleResize = function () {
             return false;
-        }
+        };
         this.paint = function (minx, miny, maxx, maxy) {
             var gl = this.gl;
             // We can't specify a stride for the source, so have to use the full width.
