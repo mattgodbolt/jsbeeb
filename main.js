@@ -1481,6 +1481,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         window.soundChip = soundChip;
         window.processor = processor;
         window.video = video;
+        window.canvas = canvas;
         window.hd = function (start, end) {
             console.log(utils.hd(function (x) {
                 return processor.readmem(x);
