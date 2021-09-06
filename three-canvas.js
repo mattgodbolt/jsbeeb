@@ -16,6 +16,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
         return light;
     }
 
+    const BreakIndex = 27;
     const LeftShiftIndex = 60;
     const RightShiftIndex = 71;
 
@@ -27,8 +28,6 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             if (keyIndex >= 28 && keyIndex < 38)
                 return BBC[`K${(keyIndex - 28) % 10}`];
             switch (keyIndex) {
-                case 27:
-                    break; // BREAK
                 case 10:
                     return BBC.SHIFTLOCK;
                 case 11:
@@ -202,6 +201,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.keys = {};
             this.leftShiftKey = null;
             this.rightShiftKey = null;
+            this.breakKey = null;
             this.screenMaterial = null;
             this.casetteLed = null;
             this.capsLed = null;
@@ -241,16 +241,23 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                         const match = child.name.match(name);
                         if (match) {
                             const keyIndex = parseInt(match[1]);
-                            if (keyIndex === LeftShiftIndex) {
-                                this.leftShiftKey = child;
-                            } else if (keyIndex === RightShiftIndex) {
-                                this.rightShiftKey = child;
-                            } else {
-                                this.keys[remapKey(keyIndex)] = child;
+                            switch (keyIndex) {
+                                case LeftShiftIndex:
+                                    this.leftShiftKey = child;
+                                    break;
+                                case RightShiftIndex:
+                                    this.rightShiftKey = child;
+                                    break;
+                                case BreakIndex:
+                                    this.breakKey = child;
+                                    break;
+                                default:
+                                    this.keys[remapKey(keyIndex)] = child;
+                                    break;
                             }
                         }
                         //  List out all the object names from the import - very useful!
-                        console.log(child.name);
+                        // console.log(child.name);
                     });
 
                     this.screenMaterial = new THREE.MeshBasicMaterial(
@@ -290,6 +297,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
             this.updateKey(this.leftShiftKey, sysvia.leftShiftDown);
             this.updateKey(this.rightShiftKey, sysvia.rightShiftDown);
+            this.updateKey(this.breakKey, !this.cpu.resetLine);
 
             this.updateLed(this.casetteLed, this.cpu.acia.motorOn);
             this.updateLed(this.capsLed, this.cpu.sysvia.capsLockLight);
