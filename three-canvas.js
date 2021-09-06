@@ -196,17 +196,6 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.scene.add(dirLight);
             this.scene.add(dirLight.target);
 
-            {
-                const loader = new THREE.TextureLoader();
-                const texture = loader.load(
-                    './virtual-beeb/textures/equirectangular-bg.jpg',
-                    () => {
-                        this.rt = new THREE.WebGLCubeRenderTarget(texture.image.height);
-                        this.rt.fromEquirectangularTexture(this.renderer, texture);
-                        this.scene.background = this.rt.texture;
-                    });
-            }
-
             this.keys = {};
             this.leftShiftKey = null;
             this.rightShiftKey = null;
@@ -235,81 +224,112 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             led.emissive.set(on ? 0xff0000 : 0);
         }
 
-        load() {
-            const mtlLoader = new THREE.MTLLoader();
-            mtlLoader.load('./virtual-beeb/models/beeb.mtl', (mtl) => {
-                mtl.preload();
-                const objLoader = new THREE.OBJLoader();
-                objLoader.setMaterials(mtl);
-                objLoader.load('./virtual-beeb/models/beeb.obj', (root) => {
-                    root.scale.set(50, 50, 50);
-                    this.scene.add(root);
-
-                    const name = /JOINED_KEYBOARD(\.([0-9]{3}))?_Cube\..*/;
-                    this.scene.traverse(child => {
-                        const match = child.name.match(name);
-                        if (match) {
-                            const keyIndex = match[1] ? parseInt(match[2]) : 0;
-                            switch (keyIndex) {
-                                case LeftShiftIndex:
-                                    this.leftShiftKey = child;
-                                    break;
-                                case RightShiftIndex:
-                                    this.rightShiftKey = child;
-                                    break;
-                                case BreakIndex:
-                                    this.breakKey = child;
-                                    break;
-                                default:
-                                    this.keys[remapKey(keyIndex)] = child;
-                                    break;
-                            }
-                        }
-                        //  List out all the object names from the import - very useful!
-                        // console.log(child.name);
-                    });
-
-                    // Initial CRT glass
-                    this.glassMaterial = new THREE.MeshPhysicalMaterial({
-                        metalness: 0.9,
-                        roughness: 0.05,
-                        envMapIntensity: 0.8,
-                        clearcoat: 1,
-                        transparent: true,
-                        opacity: 0.5,
-                        reflectivity: 0.3,
-                        refractionRatio: 11,
-                        ior: 0.9,
-                        side: THREE.FrontSide,
-                        envMap: this.rt.texture
-                    });
-
-                    const glass = this.scene.getObjectByName("SCREEN_SurfPatch.002");
-                    glass.material = this.glassMaterial;
-
-                    // Spacebar material
-                    const spaceBar = this.scene.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
-                    spaceBar.material = new THREE.MeshPhongMaterial({
-                        color: 0x000000,
-                        shininess: 10,
-                        specular: 0x111111
-                    });
-
-                    // Attempt at phosphor screen on the interior of the CRT
-                    this.screenMaterial = new THREE.MeshBasicMaterial(
-                        {
-                            transparent: false,
-                            map: this.buffer.dataTexture,
-                            emissive: true
-                        });
-                    const screen = this.scene.getObjectByName("SCREEN_PLANE_Plane.003");
-                    screen.material = this.screenMaterial;
-
-                    this.casetteLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.001_Cube.085"));
-                    this.capsLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.002_Cube.086"));
-                    this.shiftLed = this.setupLed(this.scene.getObjectByName("LED_INLAY_Cube.019"));
-                });
+        promisifyLoad(loader, asset) {
+            return new Promise((resolve, reject) => {
+                loader.load(asset, resolve, undefined, reject);
             });
+        }
+
+        loadBackgroundTexture() {
+            return this.promisifyLoad(new THREE.TextureLoader(), './virtual-beeb/textures/equirectangular-bg.jpg');
+        }
+
+        loadMaterials() {
+            return this.promisifyLoad(new THREE.MTLLoader(), './virtual-beeb/models/beeb.mtl');
+        }
+
+        loadModel(materials) {
+            const objLoader = new THREE.OBJLoader();
+            objLoader.setMaterials(materials);
+            return this.promisifyLoad(objLoader, './virtual-beeb/models/beeb.obj');
+        }
+
+        prepareModel(renderTarget, beeb) {
+            beeb.scale.set(50, 50, 50);
+            const name = /JOINED_KEYBOARD(\.([0-9]{3}))?_Cube\..*/;
+            beeb.traverse(child => {
+                const match = child.name.match(name);
+                if (match) {
+                    const keyIndex = match[1] ? parseInt(match[2]) : 0;
+                    switch (keyIndex) {
+                        case LeftShiftIndex:
+                            this.leftShiftKey = child;
+                            break;
+                        case RightShiftIndex:
+                            this.rightShiftKey = child;
+                            break;
+                        case BreakIndex:
+                            this.breakKey = child;
+                            break;
+                        default:
+                            this.keys[remapKey(keyIndex)] = child;
+                            break;
+                    }
+                }
+                //  List out all the object names from the import - very useful!
+                // console.log(child.name);
+            });
+
+            // Initial CRT glass
+            const glassMaterial = new THREE.MeshPhysicalMaterial({
+                metalness: 0.9,
+                roughness: 0.05,
+                envMapIntensity: 0.8,
+                clearcoat: 1,
+                transparent: true,
+                opacity: 0.5,
+                reflectivity: 0.3,
+                refractionRatio: 11,
+                ior: 0.9,
+                side: THREE.FrontSide,
+                envMap: renderTarget.texture
+            });
+
+            const glass = beeb.getObjectByName("SCREEN_SurfPatch.002");
+            glass.material = glassMaterial;
+
+            // Spacebar material
+            const spaceBar = beeb.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
+            spaceBar.material = new THREE.MeshPhongMaterial({
+                color: 0x000000,
+                shininess: 10,
+                specular: 0x111111
+            });
+
+            // Attempt at phosphor screen on the interior of the CRT
+            this.screenMaterial = new THREE.MeshBasicMaterial(
+                {
+                    transparent: false,
+                    map: this.buffer.dataTexture,
+                    emissive: true
+                });
+            const screen = beeb.getObjectByName("SCREEN_PLANE_Plane.003");
+            screen.material = this.screenMaterial;
+
+            this.casetteLed = this.setupLed(beeb.getObjectByName("LED_INLAY.001_Cube.085"));
+            this.capsLed = this.setupLed(beeb.getObjectByName("LED_INLAY.002_Cube.086"));
+            this.shiftLed = this.setupLed(beeb.getObjectByName("LED_INLAY_Cube.019"));
+            return beeb;
+        }
+
+        load() {
+            let renderTarget;
+
+            this.loadBackgroundTexture()
+                .then((texture) => {
+                    renderTarget = new THREE.WebGLCubeRenderTarget(texture.image.height);
+                    renderTarget.fromEquirectangularTexture(this.renderer, texture);
+                    this.scene.background = renderTarget.texture;
+                })
+                .then(() => this.loadMaterials())
+                .then(materials => {
+                    materials.preload();
+                    return this.loadModel(materials);
+                })
+                .then(beeb => {
+                    this.prepareModel(renderTarget, beeb);
+                    this.scene.add(beeb);
+                });
         }
 
         updateKey(key, pressed) {
