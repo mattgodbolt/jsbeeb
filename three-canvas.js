@@ -197,15 +197,15 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.scene.add(dirLight.target);
 
             {
-               const loader = new THREE.TextureLoader();
-               const texture = loader.load(
-                 './virtual-beeb/textures/equirectangular-bg.jpg',
-                 () => {
-                   this.rt = new THREE.WebGLCubeRenderTarget(texture.image.height);
-                   this.rt.fromEquirectangularTexture(this.renderer, texture);
-                   this.scene.background = this.rt.texture;
-                 });
-             }
+                const loader = new THREE.TextureLoader();
+                const texture = loader.load(
+                    './virtual-beeb/textures/equirectangular-bg.jpg',
+                    () => {
+                        this.rt = new THREE.WebGLCubeRenderTarget(texture.image.height);
+                        this.rt.fromEquirectangularTexture(this.renderer, texture);
+                        this.scene.background = this.rt.texture;
+                    });
+            }
 
             this.keys = {};
             this.leftShiftKey = null;
@@ -271,18 +271,18 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
                     // Initial CRT glass
                     this.glassMaterial = new THREE.MeshPhysicalMaterial({
-                                          metalness: .9,
-                                          roughness: .05,
-                                          envMapIntensity: 0.8,
-                                          clearcoat: 1,
-                                          transparent: true,
-                                          opacity: 0.5,
-                                          reflectivity: 0.3,
-                                          refractionRatio:11,
-                                          ior: 0.9,
-                                          side: THREE.FrontSide,
-                                          envMap: this.rt.texture
-                                        })
+                        metalness: 0.9,
+                        roughness: 0.05,
+                        envMapIntensity: 0.8,
+                        clearcoat: 1,
+                        transparent: true,
+                        opacity: 0.5,
+                        reflectivity: 0.3,
+                        refractionRatio: 11,
+                        ior: 0.9,
+                        side: THREE.FrontSide,
+                        envMap: this.rt.texture
+                    });
 
                     const glass = this.scene.getObjectByName("SCREEN_SurfPatch.002");
                     glass.material = this.glassMaterial;
@@ -290,10 +290,10 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                     // Spacebar material
                     const spaceBar = this.scene.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
                     spaceBar.material = new THREE.MeshPhongMaterial({
-                                                color: 0x000000,
-                                                shininess: 10,
-                                                specular: 0x111111
-                                            })
+                        color: 0x000000,
+                        shininess: 10,
+                        specular: 0x111111
+                    });
 
                     // Attempt at phosphor screen on the interior of the CRT
                     this.screenMaterial = new THREE.MeshBasicMaterial(
