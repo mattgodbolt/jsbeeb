@@ -7,6 +7,6 @@
     "ga": false,
     "define": false
   },
-  "esversion": 6,
+  "esversion": 8,
   "eqeqeq": true
 }

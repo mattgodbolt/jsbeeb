@@ -205,7 +205,9 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.capsLed = null;
             this.shiftLed = null;
 
-            this.load();
+            // Kick off the asynchronous load.
+            this.load().then(() => {
+            });
 
             $(this.renderer.domElement).remove().appendTo($('#outer'));
             $('#cub-monitor').hide();
@@ -224,21 +226,21 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             led.emissive.set(on ? 0xff0000 : 0);
         }
 
-        promisifyLoad(loader, asset) {
+        async promisifyLoad(loader, asset) {
             return new Promise((resolve, reject) => {
                 loader.load(asset, resolve, undefined, reject);
             });
         }
 
-        loadBackgroundTexture() {
+        async loadBackgroundTexture() {
             return this.promisifyLoad(new THREE.TextureLoader(), './virtual-beeb/textures/equirectangular-bg.jpg');
         }
 
-        loadMaterials() {
+        async loadMaterials() {
             return this.promisifyLoad(new THREE.MTLLoader(), './virtual-beeb/models/beeb.mtl');
         }
 
-        loadModel(materials) {
+        async loadModel(materials) {
             const objLoader = new THREE.OBJLoader();
             objLoader.setMaterials(materials);
             return this.promisifyLoad(objLoader, './virtual-beeb/models/beeb.obj');
@@ -312,24 +314,16 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             return beeb;
         }
 
-        load() {
-            let renderTarget;
-
-            this.loadBackgroundTexture()
-                .then((texture) => {
-                    renderTarget = new THREE.WebGLCubeRenderTarget(texture.image.height);
-                    renderTarget.fromEquirectangularTexture(this.renderer, texture);
-                    this.scene.background = renderTarget.texture;
-                })
-                .then(() => this.loadMaterials())
-                .then(materials => {
-                    materials.preload();
-                    return this.loadModel(materials);
-                })
-                .then(beeb => {
-                    this.prepareModel(renderTarget, beeb);
-                    this.scene.add(beeb);
-                });
+        async load() {
+            const texture = await this.loadBackgroundTexture();
+            const bgTarget = new THREE.WebGLCubeRenderTarget(texture.image.height);
+            bgTarget.fromEquirectangularTexture(this.renderer, texture);
+            this.scene.background = bgTarget.texture;
+            const materials = await this.loadMaterials();
+            materials.preload();
+            const beeb = await this.loadModel(materials);
+            this.prepareModel(bgTarget, beeb);
+            this.scene.add(beeb);
         }
 
         updateKey(key, pressed) {
