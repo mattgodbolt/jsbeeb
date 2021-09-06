@@ -157,8 +157,8 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             );
             this.dataTexture.needsUpdate = true;
             this.dataTexture.flipY = true;
-            this.dataTexture.repeat.set(0.42, 0.42);
-            this.dataTexture.offset.set(0.3, 0.5);
+            this.dataTexture.repeat.set(0.75, 0.75);
+            this.dataTexture.offset.set(0.15, 0.3);
         }
     }
 
@@ -195,6 +195,17 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             const dirLight = directionalLight();
             this.scene.add(dirLight);
             this.scene.add(dirLight.target);
+
+            {
+               const loader = new THREE.TextureLoader();
+               const texture = loader.load(
+                 './virtual-beeb/textures/equirectangular-bg.jpg',
+                 () => {
+                   this.rt = new THREE.WebGLCubeRenderTarget(texture.image.height);
+                   this.rt.fromEquirectangularTexture(this.renderer, texture);
+                   this.scene.background = this.rt.texture;
+                 });
+             }
 
             this.keys = {};
             this.leftShiftKey = null;
@@ -258,12 +269,40 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                         // console.log(child.name);
                     });
 
+                    // Initial CRT glass
+                    this.glassMaterial = new THREE.MeshPhysicalMaterial({
+                                          metalness: .9,
+                                          roughness: .05,
+                                          envMapIntensity: 0.8,
+                                          clearcoat: 1,
+                                          transparent: true,
+                                          opacity: 0.5,
+                                          reflectivity: 0.3,
+                                          refractionRatio:11,
+                                          ior: 0.9,
+                                          side: THREE.FrontSide,
+                                          envMap: this.rt.texture
+                                        })
+
+                    const glass = this.scene.getObjectByName("SCREEN_SurfPatch.002");
+                    glass.material = this.glassMaterial;
+
+                    // Spacebar material
+                    const spaceBar = this.scene.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
+                    spaceBar.material = new THREE.MeshPhongMaterial({
+                                                color: 0x000000,
+                                                shininess: 10,
+                                                specular: 0x111111
+                                            })
+
+                    // Attempt at phosphor screen on the interior of the CRT
                     this.screenMaterial = new THREE.MeshBasicMaterial(
                         {
                             transparent: false,
-                            map: this.buffer.dataTexture
+                            map: this.buffer.dataTexture,
+                            emissive: true
                         });
-                    const screen = this.scene.getObjectByName("SCREEN_SurfPatch.002");
+                    const screen = this.scene.getObjectByName("SCREEN_PLANE_Plane.003");
                     screen.material = this.screenMaterial;
 
                     this.casetteLed = this.setupLed(this.scene.getObjectByName("LED_INLAY.001_Cube.085"));
