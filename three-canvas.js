@@ -25,7 +25,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             const BBC = utils.BBC;
             if (keyIndex < 10)
                 return BBC[`F${keyIndex}`];
-            if (keyIndex >= 28 && keyIndex < 38)
+            if (keyIndex >= 29 && keyIndex <= 38)
                 return BBC[`K${(keyIndex - 28) % 10}`];
             switch (keyIndex) {
                 case 10:
@@ -66,8 +66,6 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                 case 26:
                     return BBC.SPACE;
 
-                case 38:
-                    return BBC.W;
                 case 39:
                     return BBC.MINUS;
                 case 40:
@@ -134,9 +132,9 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                 case 70:
                     return BBC.SLASH;
                 case 72:
-                    return BBC.DELETE; // seems attached to right shift in the model currently
+                    return BBC.DELETE;
                 case 73:
-                    return BBC.COPY; // seems attached to right shift in the model currently
+                    return BBC.COPY;
             }
             return null;
         })(keyIndex);
@@ -236,11 +234,11 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                     root.scale.set(50, 50, 50);
                     this.scene.add(root);
 
-                    const name = /JOINED_KEYBOARD\.([0-9]{3})_Cube\..*/;
+                    const name = /JOINED_KEYBOARD(\.([0-9]{3}))?_Cube\..*/;
                     this.scene.traverse(child => {
                         const match = child.name.match(name);
                         if (match) {
-                            const keyIndex = parseInt(match[1]);
+                            const keyIndex = match[1] ? parseInt(match[2]) : 0;
                             switch (keyIndex) {
                                 case LeftShiftIndex:
                                     this.leftShiftKey = child;
