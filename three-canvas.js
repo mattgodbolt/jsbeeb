@@ -4,7 +4,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
     function skyLight() {
         const skyColor = 0xB1E1FF;  // light blue
         const groundColor = 0xB97A20;  // brownish orange
-        const intensity = 0.8;
+        const intensity = 0.4;
         return new THREE.HemisphereLight(skyColor, groundColor, intensity);
     }
 
@@ -159,6 +159,8 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.dataTexture.flipY = true;
             this.dataTexture.repeat.set(0.75, 0.75);
             this.dataTexture.offset.set(0.15, 0.3);
+            this.dataTexture.magFilter = THREE.LinearFilter;
+            this.dataTexture.minFilter = THREE.LinearFilter;            
         }
     }
 
@@ -171,6 +173,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             };
 
             this.renderer = new THREE.WebGLRenderer(attrs);
+            this.renderer.toneMapping = THREE.ACESFilmicToneMapping;            
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.scene = new THREE.Scene();
             this.buffer = new FrameBuffer(1024, 1024);
@@ -205,6 +208,21 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.capsLed = null;
             this.shiftLed = null;
 
+            {
+               const loader = new THREE.TextureLoader();
+               const texture = loader.load('./virtual-beeb/textures/mask.png');
+
+               texture.magFilter = THREE.LinearFilter;
+               texture.minFilter = THREE.LinearMipmapLinearFilter;
+
+               texture.wrapS = THREE.RepeatWrapping;
+               texture.wrapT = THREE.RepeatWrapping;
+
+               texture.encoding = THREE.sRGBEncoding;
+
+               this.maskTexture = texture;
+            }
+
             // Kick off the asynchronous load.
             this.load().then(() => {
             });
@@ -224,6 +242,105 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
         updateLed(led, on) {
             if (!led) return;
             led.emissive.set(on ? 0xff0000 : 0);
+        }
+
+        makeScreenMaterial(envMap) {
+            const screenMaterial = new THREE.MeshPhysicalMaterial({
+                    transparent: false,
+                    color: 0x102018,
+                    emissiveMap: this.buffer.dataTexture,
+                    roughness: 0.0,
+                    emissive: 0xffffff,
+                    envMap: envMap,
+                });
+
+            const newUniforms = {
+                maskTexture: { type: "t", value: this.maskTexture }
+            };
+
+            // we use onBeforeCompile() to modify one of the standard threejs shaders
+            screenMaterial.onBeforeCompile = function ( shader ) {
+
+                shader.uniforms.maskTexture = newUniforms.maskTexture;
+
+                shader.fragmentShader =
+                [
+                    `uniform sampler2D maskTexture;`,
+                    ``,
+                ].join( '\n' ) 
+                    + shader.fragmentShader;
+
+                // we are replacing:
+                // https://github.com/mrdoob/three.js/blob/dev/src/renderers/shaders/ShaderChunk/emissivemap_fragment.glsl.js
+
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    '#include <emissivemap_fragment>',
+                    [
+                        `vec4 emissiveColor = vec4(0);`,
+                         
+                         // place overall position of screen on glass
+                         `vec2 uv = vUv;`,
+                         `uv -= vec2( 0.02, 0.27 ); // hardcoded for glass uvs on current model`,
+                         `uv.y *= 1.22f; // hardcoded for glass uvs on current model`,
+
+                        // select active region of jsbeeb canvas texture
+                         `vec2 screenUV = uv;`,
+                         `screenUV += vec2(0.225, 0.73); // hardcoded zoom for screen content - was in texture offset`,
+                         `screenUV *= vec2(0.7, 0.55);// hardcoded zoom for screen content - was in texture repeat`,
+
+                         // small blur of source texture
+                         `float total = 0.0;`,
+                         `emissiveColor.rgb += texture2D( emissiveMap, screenUV ).rgb; total += 1.0;`,
+                         // horizontal 
+                         `emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0012, 0) ).rgb * 0.1;  total += 0.1;`,
+                         `emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2(-0.0012, 0) ).rgb * 0.1;  total += 0.1;`,
+                         // vertical
+                         //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, 0.0005) ).rgb * 0.05; total += 0.05;`,
+                         //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, -0.0005) ).rgb * 0.05;  total += 0.05;`,
+                         `emissiveColor.rgb = emissiveColor.rgb / total;`,
+
+                         `emissiveColor.rgb += emissiveMapTexelToLinear( emissiveColor ).rgb;`,
+
+                         // ambient emissive with mask
+                         `emissiveColor += vec4(0.03f);`,
+
+                         // apply mask texture
+                         `vec4 maskSample = texture2D(maskTexture, uv * vec2(7,8) * 16.0);`,
+                         `maskSample = maskSample * 3.0f;`,
+                         `emissiveColor.rgb *= maskSample.rgb;`,
+
+                         // ambient emissive without mask
+                         `emissiveColor += vec4(0.02f);`,
+
+                        // dark border around edge of glass
+                         `if ( uv.x < 0.0 || uv.y < 0.0 || uv.x >= 1.0 || uv.y >= 1.0 )`,
+                         `{`,
+                         `    emissiveColor.rgb = vec3(0);`,
+                         `    diffuseColor.rgb *= 0.5;`,
+                         `}`,
+
+                         `totalEmissiveRadiance *= emissiveColor.rgb;`,
+                         ``,
+                    ].join( '\n' )
+                );
+
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    `#include <aomap_fragment>`,
+                    [
+                        `#include <aomap_fragment>`,
+                         // Fade emissive based on transmittance from fresnel (as it is behind the glass)
+                         // we need to do this at this point (later than emissive) in the shader so we have access to the other material variables
+                         `totalEmissiveRadiance *= 1.0f - BRDF_Specular_GGX_Environment( geometry.viewDir, geometry.normal, vec3( DEFAULT_SPECULAR_COEFFICIENT ), material.specularRoughness);`,
+                         ``,
+                    ].join( '\n' )
+                );                        
+                
+                //console.log("--- Shader Begin ---");
+                //console.log(shader.fragmentShader);
+                //console.log("--- Shader End ---");                        
+            }     
+
+            return screenMaterial;      
         }
 
         async promisifyLoad(loader, asset) {
@@ -272,41 +389,26 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                 // console.log(child.name);
             });
 
-            // Initial CRT glass
-            const glassMaterial = new THREE.MeshPhysicalMaterial({
-                metalness: 0.9,
-                roughness: 0.05,
-                envMapIntensity: 0.8,
-                clearcoat: 1,
-                transparent: true,
-                opacity: 0.5,
-                reflectivity: 0.3,
-                refractionRatio: 11,
-                ior: 0.9,
-                side: THREE.FrontSide,
-                envMap: renderTarget.texture
-            });
+            this.screenMaterial = this.makeScreenMaterial(renderTarget.texture);
 
             const glass = beeb.getObjectByName("SCREEN_SurfPatch.002");
-            glass.material = glassMaterial;
+            glass.material = this.screenMaterial;
 
             // Spacebar material
             const spaceBar = beeb.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
-            spaceBar.material = new THREE.MeshPhongMaterial({
-                color: 0x000000,
-                shininess: 10,
-                specular: 0x111111
-            });
+            spaceBar.material = new THREE.MeshPhysicalMaterial({
+                                        color: 0x000000,
+                                        roughness: 0.05
+                                    })
 
-            // Attempt at phosphor screen on the interior of the CRT
-            this.screenMaterial = new THREE.MeshBasicMaterial(
-                {
-                    transparent: false,
-                    map: this.buffer.dataTexture,
-                    emissive: true
-                });
+            // Set the screen plane to black
             const screen = beeb.getObjectByName("SCREEN_PLANE_Plane.003");
-            screen.material = this.screenMaterial;
+
+            screen.material = new THREE.MeshPhysicalMaterial({
+                                        color: 0x000000,
+                                        shininess: 10,
+                                        specular: 0x111111
+                                    })
 
             this.casetteLed = this.setupLed(beeb.getObjectByName("LED_INLAY.001_Cube.085"));
             this.capsLed = this.setupLed(beeb.getObjectByName("LED_INLAY.002_Cube.086"));
@@ -319,6 +421,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             const bgTarget = new THREE.WebGLCubeRenderTarget(texture.image.height);
             bgTarget.fromEquirectangularTexture(this.renderer, texture);
             this.scene.background = bgTarget.texture;
+            //this.scene.background.encoding = THREE.sRGBEncoding;
             const materials = await this.loadMaterials();
             materials.preload();
             const beeb = await this.loadModel(materials);
@@ -370,7 +473,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
         paint(minx, miny, maxx, maxy) {
             if (!this.screenMaterial) return;
-            this.screenMaterial.map.needsUpdate = true;
+            this.screenMaterial.emissiveMap.needsUpdate = true;
             // Ideally we'd update everything to write to one of two double buffers, but there's too many places in the
             // code that cache the fb32 for now. So just copy it.
             // TODO: fix
