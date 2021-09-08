@@ -208,21 +208,6 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.capsLed = null;
             this.shiftLed = null;
 
-            {
-               const loader = new THREE.TextureLoader();
-               const texture = loader.load('./virtual-beeb/textures/mask.png');
-
-               texture.magFilter = THREE.LinearFilter;
-               texture.minFilter = THREE.LinearMipmapLinearFilter;
-
-               texture.wrapS = THREE.RepeatWrapping;
-               texture.wrapT = THREE.RepeatWrapping;
-
-               texture.encoding = THREE.sRGBEncoding;
-
-               this.maskTexture = texture;
-            }
-
             // Kick off the asynchronous load.
             this.load().then(() => {
             });
@@ -353,6 +338,10 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             return this.promisifyLoad(new THREE.TextureLoader(), './virtual-beeb/textures/equirectangular-bg.jpg');
         }
 
+        async loadMaskTexture() {
+            return this.promisifyLoad(new THREE.TextureLoader(), './virtual-beeb/textures/mask.png');
+        }
+
         async loadMaterials() {
             return this.promisifyLoad(new THREE.MTLLoader(), './virtual-beeb/models/beeb.mtl');
         }
@@ -422,6 +411,19 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             bgTarget.fromEquirectangularTexture(this.renderer, texture);
             this.scene.background = bgTarget.texture;
             //this.scene.background.encoding = THREE.sRGBEncoding;
+            {
+               const maskTexture = await this.loadMaskTexture();
+
+               maskTexture.magFilter = THREE.LinearFilter;
+               maskTexture.minFilter = THREE.LinearMipmapLinearFilter;
+
+               maskTexture.wrapS = THREE.RepeatWrapping;
+               maskTexture.wrapT = THREE.RepeatWrapping;
+
+               maskTexture.encoding = THREE.sRGBEncoding;
+
+               this.maskTexture = maskTexture;
+            }
             const materials = await this.loadMaterials();
             materials.preload();
             const beeb = await this.loadModel(materials);
