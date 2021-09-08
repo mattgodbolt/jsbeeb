@@ -301,11 +301,12 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                          `emissiveColor += vec4(0.02f);`,
 
                         // dark border around edge of glass
-                         `if ( uv.x < 0.0 || uv.y < 0.0 || uv.x >= 1.0 || uv.y >= 1.0 )`,
-                         `{`,
-                         `    emissiveColor.rgb = vec3(0);`,
-                         `    diffuseColor.rgb *= 0.5;`,
-                         `}`,
+                         `float r=0.08;`,
+                         'float feather=20.0;',
+                         `vec2 cuv = clamp(uv, vec2(r), vec2(1.0-r));`,
+                         `float borderFactor = clamp( (length(cuv - uv)/r-1.0) * feather, 0.0, 1.0 );`,                        
+                         `emissiveColor.rgb = mix(emissiveColor.rgb, vec3(0), borderFactor);`,
+                         `diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.5, borderFactor);`,
 
                          `totalEmissiveRadiance *= emissiveColor.rgb;`,
                          ``,
