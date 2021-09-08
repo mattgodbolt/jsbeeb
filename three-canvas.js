@@ -178,7 +178,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             };
 
             this.renderer = new THREE.WebGLRenderer(attrs);
-            this.renderer.toneMapping = THREE.ACESFilmicToneMapping;            
+            this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.scene = new THREE.Scene();
             this.buffer = new FrameBuffer(1024, 1024);
@@ -236,29 +236,28 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
         makeScreenMaterial(envMap) {
             const screenMaterial = new THREE.MeshPhysicalMaterial({
-                    transparent: false,
-                    color: 0x102018,
-                    emissiveMap: this.buffer.dataTexture,
-                    roughness: 0.0,
-                    emissive: 0xffffff,
-                    envMap: envMap,
-                });
+                transparent: false,
+                color: 0x102018,
+                emissiveMap: this.buffer.dataTexture,
+                roughness: 0.0,
+                emissive: 0xffffff,
+                envMap: envMap,
+            });
 
             const newUniforms = {
-                maskTexture: { type: "t", value: this.maskTexture }
+                maskTexture: {type: "t", value: this.maskTexture}
             };
 
             // we use onBeforeCompile() to modify one of the standard threejs shaders
-            screenMaterial.onBeforeCompile = function ( shader ) {
+            screenMaterial.onBeforeCompile = function (shader) {
 
                 shader.uniforms.maskTexture = newUniforms.maskTexture;
 
                 shader.fragmentShader =
-                [
-                    `uniform sampler2D maskTexture;`,
-                    ``,
-                ].join( '\n' ) 
-                    + shader.fragmentShader;
+                    [
+                        `uniform sampler2D maskTexture;`,
+                        ``,
+                    ].join('\n') + shader.fragmentShader;
 
                 // we are replacing:
                 // https://github.com/mrdoob/three.js/blob/dev/src/renderers/shaders/ShaderChunk/emissivemap_fragment.glsl.js
@@ -267,69 +266,69 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                     '#include <emissivemap_fragment>',
                     [
                         `vec4 emissiveColor = vec4(0);`,
-                         
-                         // place overall position of screen on glass
-                         `vec2 uv = vUv;`,
-                         `uv -= vec2( 0.02, 0.27 ); // hardcoded for glass uvs on current model`,
-                         `uv.y *= 1.22f; // hardcoded for glass uvs on current model`,
+
+                        // place overall position of screen on glass
+                        `vec2 uv = vUv;`,
+                        `uv -= vec2( 0.02, 0.27 ); // hardcoded for glass uvs on current model`,
+                        `uv.y *= 1.22f; // hardcoded for glass uvs on current model`,
 
                         // select active region of jsbeeb canvas texture
-                         `vec2 screenUV = uv;`,
-                         `screenUV += vec2(0.225, 0.73); // hardcoded zoom for screen content - was in texture offset`,
-                         `screenUV *= vec2(0.7, 0.55);// hardcoded zoom for screen content - was in texture repeat`,
+                        `vec2 screenUV = uv;`,
+                        `screenUV += vec2(0.225, 0.73); // hardcoded zoom for screen content - was in texture offset`,
+                        `screenUV *= vec2(0.7, 0.55);// hardcoded zoom for screen content - was in texture repeat`,
 
-                         // small blur of source texture
-                         `float total = 0.0;`,
-                         `emissiveColor.rgb += texture2D( emissiveMap, screenUV ).rgb; total += 1.0;`,
-                         // horizontal 
-                         `emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0012, 0) ).rgb * 0.1;  total += 0.1;`,
-                         `emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2(-0.0012, 0) ).rgb * 0.1;  total += 0.1;`,
-                         // vertical
-                         //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, 0.0005) ).rgb * 0.05; total += 0.05;`,
-                         //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, -0.0005) ).rgb * 0.05;  total += 0.05;`,
-                         `emissiveColor.rgb = emissiveColor.rgb / total;`,
+                        // small blur of source texture
+                        `float total = 0.0;`,
+                        `emissiveColor.rgb += texture2D( emissiveMap, screenUV ).rgb; total += 1.0;`,
+                        // horizontal
+                        `emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0012, 0) ).rgb * 0.1;  total += 0.1;`,
+                        `emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2(-0.0012, 0) ).rgb * 0.1;  total += 0.1;`,
+                        // vertical
+                        //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, 0.0005) ).rgb * 0.05; total += 0.05;`,
+                        //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, -0.0005) ).rgb * 0.05;  total += 0.05;`,
+                        `emissiveColor.rgb = emissiveColor.rgb / total;`,
 
-                         // ambient emissive with mask
-                         `emissiveColor += vec4(0.03f);`,
+                        // ambient emissive with mask
+                        `emissiveColor += vec4(0.03f);`,
 
-                         // apply mask texture
-                         `vec4 maskSample = texture2D(maskTexture, uv * vec2(7,8) * 16.0);`,
-                         `maskSample = maskSample * 3.0f;`,
-                         `emissiveColor.rgb *= maskSample.rgb;`,
+                        // apply mask texture
+                        `vec4 maskSample = texture2D(maskTexture, uv * vec2(7,8) * 16.0);`,
+                        `maskSample = maskSample * 3.0f;`,
+                        `emissiveColor.rgb *= maskSample.rgb;`,
 
-                         // ambient emissive without mask
-                         `emissiveColor += vec4(0.02f);`,
+                        // ambient emissive without mask
+                        `emissiveColor += vec4(0.02f);`,
 
                         // dark border around edge of glass
-                         `float r=0.08;`,
-                         'float feather=20.0;',
-                         `vec2 cuv = clamp(uv, vec2(r), vec2(1.0-r));`,
-                         `float borderFactor = clamp( (length(cuv - uv)/r-1.0) * feather, 0.0, 1.0 );`,                        
-                         `emissiveColor.rgb = mix(emissiveColor.rgb, vec3(0), borderFactor);`,
-                         `diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.5, borderFactor);`,
+                        `float r=0.08;`,
+                        'float feather=20.0;',
+                        `vec2 cuv = clamp(uv, vec2(r), vec2(1.0-r));`,
+                        `float borderFactor = clamp( (length(cuv - uv)/r-1.0) * feather, 0.0, 1.0 );`,
+                        `emissiveColor.rgb = mix(emissiveColor.rgb, vec3(0), borderFactor);`,
+                        `diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.5, borderFactor);`,
 
-                         `totalEmissiveRadiance *= emissiveColor.rgb;`,
-                         ``,
-                    ].join( '\n' )
+                        `totalEmissiveRadiance *= emissiveColor.rgb;`,
+                        ``,
+                    ].join('\n')
                 );
 
                 shader.fragmentShader = shader.fragmentShader.replace(
                     `#include <aomap_fragment>`,
                     [
                         `#include <aomap_fragment>`,
-                         // Fade emissive based on transmittance from fresnel (as it is behind the glass)
-                         // we need to do this at this point (later than emissive) in the shader so we have access to the other material variables
-                         `totalEmissiveRadiance *= 1.0f - BRDF_Specular_GGX_Environment( geometry.viewDir, geometry.normal, vec3( DEFAULT_SPECULAR_COEFFICIENT ), material.specularRoughness);`,
-                         ``,
-                    ].join( '\n' )
-                );                        
-                
+                        // Fade emissive based on transmittance from fresnel (as it is behind the glass)
+                        // we need to do this at this point (later than emissive) in the shader so we have access to the other material variables
+                        `totalEmissiveRadiance *= 1.0f - BRDF_Specular_GGX_Environment( geometry.viewDir, geometry.normal, vec3( DEFAULT_SPECULAR_COEFFICIENT ), material.specularRoughness);`,
+                        ``,
+                    ].join('\n')
+                );
+
                 //console.log("--- Shader Begin ---");
                 //console.log(shader.fragmentShader);
                 //console.log("--- Shader End ---");                        
-            }     
+            };
 
-            return screenMaterial;      
+            return screenMaterial;
         }
 
         async promisifyLoad(loader, asset) {
@@ -390,18 +389,18 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             // Spacebar material
             const spaceBar = beeb.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
             spaceBar.material = new THREE.MeshPhysicalMaterial({
-                                        color: 0x000000,
-                                        roughness: 0.05
-                                    })
+                color: 0x000000,
+                roughness: 0.05
+            });
 
             // Set the screen plane to black
             const screen = beeb.getObjectByName("SCREEN_PLANE_Plane.003");
 
             screen.material = new THREE.MeshPhysicalMaterial({
-                                        color: 0x000000,
-                                        shininess: 10,
-                                        specular: 0x111111
-                                    })
+                color: 0x000000,
+                shininess: 10,
+                specular: 0x111111
+            });
 
             this.casetteLed = this.setupLed(beeb.getObjectByName("LED_INLAY.001_Cube.085"));
             this.capsLed = this.setupLed(beeb.getObjectByName("LED_INLAY.002_Cube.086"));
@@ -410,23 +409,23 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
         }
 
         async load() {
-            const texture = await this.loadBackgroundTexture();
-            const bgTarget = new THREE.WebGLCubeRenderTarget(texture.image.height);
-            bgTarget.fromEquirectangularTexture(this.renderer, texture);
+            const bgTexture = await this.loadBackgroundTexture();
+            const bgTarget = new THREE.WebGLCubeRenderTarget(bgTexture.image.height);
+            bgTarget.fromEquirectangularTexture(this.renderer, bgTexture);
             this.scene.background = bgTarget.texture;
             //this.scene.background.encoding = THREE.sRGBEncoding;
             {
-               const maskTexture = await this.loadMaskTexture();
+                const maskTexture = await this.loadMaskTexture();
 
-               maskTexture.magFilter = THREE.LinearFilter;
-               maskTexture.minFilter = THREE.LinearMipmapLinearFilter;
+                maskTexture.magFilter = THREE.LinearFilter;
+                maskTexture.minFilter = THREE.LinearMipmapLinearFilter;
 
-               maskTexture.wrapS = THREE.RepeatWrapping;
-               maskTexture.wrapT = THREE.RepeatWrapping;
+                maskTexture.wrapS = THREE.RepeatWrapping;
+                maskTexture.wrapT = THREE.RepeatWrapping;
 
-               maskTexture.encoding = THREE.sRGBEncoding;
+                maskTexture.encoding = THREE.sRGBEncoding;
 
-               this.maskTexture = maskTexture;
+                this.maskTexture = maskTexture;
             }
             const materials = await this.loadMaterials();
             materials.preload();
