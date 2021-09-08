@@ -147,20 +147,25 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.fb8 = new Uint8Array(width * height * 4);
             this.fb32 = new Uint32Array(this.fb8.buffer);
 
+            const anisotropy = 8.0;
             this.dataTexture = new THREE.DataTexture(
                 this.fb8,
                 width,
                 height,
                 THREE.RGBAFormat,
                 THREE.UnsignedByteType,
-                THREE.CubeRefractionMapping
+                THREE.UVMapping,
+                THREE.ClampToEdgeWrapping,
+                THREE.ClampToEdgeWrapping,
+                THREE.LinearFilter,
+                THREE.LinearFilter,
+                anisotropy,
+                THREE.sRGBEncoding
             );
             this.dataTexture.needsUpdate = true;
             this.dataTexture.flipY = true;
             this.dataTexture.repeat.set(0.75, 0.75);
             this.dataTexture.offset.set(0.15, 0.3);
-            this.dataTexture.magFilter = THREE.LinearFilter;
-            this.dataTexture.minFilter = THREE.LinearFilter;            
         }
     }
 
@@ -283,8 +288,6 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                          //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, 0.0005) ).rgb * 0.05; total += 0.05;`,
                          //`emissiveColor.rgb += texture2D( emissiveMap, screenUV + vec2( 0.0, -0.0005) ).rgb * 0.05;  total += 0.05;`,
                          `emissiveColor.rgb = emissiveColor.rgb / total;`,
-
-                         `emissiveColor.rgb += emissiveMapTexelToLinear( emissiveColor ).rgb;`,
 
                          // ambient emissive with mask
                          `emissiveColor += vec4(0.03f);`,
