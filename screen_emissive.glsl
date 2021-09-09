@@ -28,6 +28,17 @@
 	// ambient emissive with mask
 	emissiveColor += vec4(0.03f);
 
+
+	float scanlineIntensity = 0.4;
+	float scanlineT = uv.y * 1024.0 * 3.14159;
+	float scanelineDelta = length( vec2(dFdx(scanlineT), dFdy(scanlineT)) );
+	// Integral of sin( scanlineT +- scanelineDelta * 0.5 ) / scanelineDelta
+	float scanlineA = -cos( scanlineT - scanelineDelta * 0.5);
+	float scanlineB = -cos( scanlineT + scanelineDelta * 0.5);
+	float scanlineVal = (scanlineB - scanlineA) / scanelineDelta;
+	emissiveColor.rgb = emissiveColor.rgb * ((scanlineVal * 0.5 + 0.5) * scanlineIntensity + (1.0 - scanlineIntensity));
+
+
 	// apply mask texture
 	vec4 maskSample = texture2D(maskTexture, uv * vec2(7,8) * 16.0);
 	maskSample = maskSample * 3.0f;
