@@ -247,7 +247,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
             const newUniforms = {
                 maskTexture: {type: "t", value: this.maskTexture}
-            };            
+            };
 
             const screenPrologFragment = this.screenPrologFragment;
             const screenEmissiveFragment = this.screenEmissiveFragment;
@@ -261,7 +261,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
 
                 shader.fragmentShader = shader.fragmentShader.replace(
                     `#include <common>`,
-                    screenPrologFragment + '\n#include <common>' );
+                    screenPrologFragment + '\n#include <common>');
 
                 shader.fragmentShader = shader.fragmentShader.replace(
                     `#include <emissivemap_fragment>`,
@@ -300,7 +300,8 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
         }
 
         async loadShaderSource(fileName) {
-            return fetch(fileName).then(response => response.text()).then((shaderSource) => { return shaderSource; });
+            const response = await fetch(fileName);
+            return response.text();
         }
 
         async loadModel(materials) {
