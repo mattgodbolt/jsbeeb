@@ -178,6 +178,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             };
 
             this.renderer = new THREE.WebGLRenderer(attrs);
+
             this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
             this.renderer.setSize(window.innerWidth, window.innerHeight);
             this.scene = new THREE.Scene();
@@ -256,6 +257,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             screenMaterial.onBeforeCompile = function (shader) {
 
                 shader.uniforms.maskTexture = newUniforms.maskTexture;
+                shader.uniforms.time = { value: 0 };
 
                 shader.fragmentShader = shader.fragmentShader.replace(
                     `#include <common>`,
@@ -272,6 +274,8 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
                 //console.log("--- Shader Begin ---");
                 //console.log(shader.fragmentShader);
                 //console.log("--- Shader End ---");                        
+
+                screenMaterial.shaderUniforms = shader.uniforms;
             };
 
             return screenMaterial;
@@ -416,6 +420,9 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.updateLed(this.casetteLed, this.cpu.acia.motorOn);
             this.updateLed(this.capsLed, this.cpu.sysvia.capsLockLight);
             this.updateLed(this.shiftLed, this.cpu.sysvia.shiftLockLight);
+
+            // https://github.com/mrdoob/three.js/issues/11475
+            this.screenMaterial.shaderUniforms.time.value = performance.now() / 1000;
 
             return true;
         }
