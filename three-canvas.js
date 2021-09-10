@@ -215,8 +215,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.shiftLed = null;
 
             // Kick off the asynchronous load.
-            this.load().then(() => {
-            });
+            this.load().then(() => console.log("Three models loaded"));
 
             $(this.renderer.domElement).remove().appendTo($('#outer'));
             $('#cub-monitor').hide();
@@ -257,7 +256,7 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             screenMaterial.onBeforeCompile = function (shader) {
 
                 shader.uniforms.maskTexture = newUniforms.maskTexture;
-                shader.uniforms.time = { value: 0 };
+                shader.uniforms.time = {value: 0};
 
                 shader.fragmentShader = shader.fragmentShader.replace(
                     `#include <common>`,
@@ -385,9 +384,9 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             const materials = await this.loadMaterials();
             materials.preload();
 
-            this.screenPrologFragment = await this.loadShaderSource('./screen_prolog.glsl');
-            this.screenEmissiveFragment = await this.loadShaderSource('./screen_emissive.glsl');
-            this.screenEpilogFragment = await this.loadShaderSource('./screen_epilog.glsl');
+            this.screenPrologFragment = await this.loadShaderSource('scene/screen_prolog.glsl');
+            this.screenEmissiveFragment = await this.loadShaderSource('scene/screen_emissive.glsl');
+            this.screenEpilogFragment = await this.loadShaderSource('scene/screen_epilog.glsl');
 
             const beeb = await this.loadModel(materials);
             this.prepareModel(bgTarget, beeb);
