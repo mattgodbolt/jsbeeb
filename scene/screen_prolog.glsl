@@ -27,10 +27,10 @@ float InterferenceSmoothNoise1D( float x )
 
 float InterferenceNoise( vec2 uv )
 {
-	float displayVerticalLines = 1024.0;//483.0;
-    float scanLine = floor(uv.y * displayVerticalLines); 
+    float displayVerticalLines = 1024.0;//483.0;
+    float scanLine = floor(uv.y * displayVerticalLines);
     float scanPos = scanLine + uv.x;
-	float timeSeed = fract( time * 123.78 );
-    
+    float timeSeed = fract( time * 123.78 );
+
     return InterferenceSmoothNoise1D( scanPos * 234.5 + timeSeed * 12345.6 );
 }
