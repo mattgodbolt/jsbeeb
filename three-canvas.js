@@ -421,8 +421,10 @@ define(['three', 'jquery', 'utils', 'three-mtl-loader', 'three-obj-loader', 'thr
             this.updateLed(this.capsLed, this.cpu.sysvia.capsLockLight);
             this.updateLed(this.shiftLed, this.cpu.sysvia.shiftLockLight);
 
-            // https://github.com/mrdoob/three.js/issues/11475
-            this.screenMaterial.shaderUniforms.time.value = performance.now() / 1000;
+            if (this.screenMaterial.shaderUniforms) {
+                // https://github.com/mrdoob/three.js/issues/11475
+                this.screenMaterial.shaderUniforms.time.value = performance.now() / 1000;
+            }
 
             return true;
         }
