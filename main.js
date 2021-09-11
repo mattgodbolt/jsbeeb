@@ -212,7 +212,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext() // jshint ignore:line
                 : null;
         var $audioWarningNode = $('#audio-warning');
-        $audioWarningNode.on('mousedown', function () {
+        $(document).on('mousedown', function () {
             userInteraction();
         });
 
