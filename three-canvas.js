@@ -45,44 +45,47 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
 
     class ThreeCanvas {
         constructor(canvas) {
-            const attrs = {
+            this.renderer = new THREE.WebGLRenderer({
                 alpha: false,
                 antialias: true,
-                canvas: canvas
-            };
+                canvas: canvas,
+                failIfMajorPerformanceCaveat: true
+            });
 
-            this.renderer = new THREE.WebGLRenderer(attrs);
+            try {
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.scene = new THREE.Scene();
+                this.buffer = new FrameBuffer(1024, 1024);
+                this.fb32 = new Uint32Array(1024 * 1024);
+                this.cpu = null;
+                this.beeb = null;
 
-            this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            this.renderer.setSize(window.innerWidth, window.innerHeight);
-            this.scene = new THREE.Scene();
-            this.buffer = new FrameBuffer(1024, 1024);
-            this.fb32 = new Uint32Array(1024 * 1024);
-            this.cpu = null;
-            this.beeb = null;
+                // Set the background color
+                this.scene.background = new THREE.Color('#222222');
 
-            // Set the background color
-            this.scene.background = new THREE.Color('#222222');
+                // Create a camera
+                const fov = 35;
+                const aspectRatio = 640 / 512;
+                const near = 1;
+                const far = 1000;
+                this.camera = new THREE.PerspectiveCamera(fov, aspectRatio, near, far);
+                this.camera.position.set(0, 20, 36.5);
 
-            // Create a camera
-            const fov = 35;
-            const aspectRatio = 640 / 512;
-            const near = 1;
-            const far = 1000;
-            this.camera = new THREE.PerspectiveCamera(fov, aspectRatio, near, far);
-            this.camera.position.set(0, 20, 36.5);
+                this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.target.set(0, 7, -2.36);
 
-            this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-            this.controls.target.set(0, 7, -2.36);
+                this.scene.add(skyLight());
+                const dirLight = directionalLight();
+                this.scene.add(dirLight);
+                this.scene.add(dirLight.target);
 
-            this.scene.add(skyLight());
-            const dirLight = directionalLight();
-            this.scene.add(dirLight);
-            this.scene.add(dirLight.target);
-
-            // Kick off the asynchronous load.
-            this.load().then(() => console.log("Three models loaded"));
-
+                // Kick off the asynchronous load.
+                this.load().then(() => console.log("Three models loaded"));
+            } catch (e) {
+                this.renderer.dispose();
+                throw e;
+            }
             $(this.renderer.domElement).remove().appendTo($('#outer'));
             $('#cub-monitor').hide();
             console.log("Three Canvas set up");

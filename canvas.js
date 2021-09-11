@@ -164,17 +164,27 @@ define(['webgl-debug', 'three-canvas'], function (webglDebug, ThreeCanvas) {
         Canvas: Canvas,
         GlCanvas: GlCanvas,
         bestCanvas: function (canvas, tryThree) {
+            // Take a copy of the canvas before it gets mutated...
+            const freshCanvas = canvas.cloneNode(false);
             if (tryThree) {
                 try {
                     return new ThreeCanvas(canvas);
                 } catch (e) {
                     console.log("Unable to use Three: " + e);
+                    // If three failed, replace the potentially monkeyed-with canvas with a clone of the original.
+                    const newCanvas = freshCanvas.cloneNode(false);
+                    canvas.parentNode.replaceChild(newCanvas, canvas);
+                    canvas = newCanvas;
                 }
             }
             try {
                 return new GlCanvas(canvas);
             } catch (e) {
                 console.log("Unable to use OpenGL: " + e);
+                // If GL failed, replace the potentially monkeyed-with canvas with a clone of the original.
+                const newCanvas = freshCanvas.cloneNode(false);
+                canvas.parentNode.replaceChild(newCanvas, canvas);
+                canvas = newCanvas;
             }
             return new Canvas(canvas);
         }
