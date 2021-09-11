@@ -1154,5 +1154,12 @@ define(['jsunzip', 'promise'], function (jsunzip) {
 
     exports.Fifo = Fifo;
 
+    async function promisifyLoad(loader, asset) {
+        return new Promise((resolve, reject) => {
+            loader.load(asset, resolve, undefined, reject);
+        });
+    }
+    exports.promisifyLoad = promisifyLoad;
+
     return exports;
 });
