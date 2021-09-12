@@ -25,6 +25,7 @@
             'webgl-debug': 'lib/webgl-debug',
             'three': 'three-wrapper',
             'three-mtl-loader': 'lib/MTLLoader',
+            'three-gltf-loader': 'lib/GLTFLoader',
             'three-obj-loader': 'lib/OBJLoader',
             'three-orbit': 'lib/OrbitControls'
         },
@@ -32,6 +33,7 @@
             'underscore': {exports: '_'},
             'three-mtl-loader': ['three'],
             'three-obj-loader': ['three'],
+            'three-gltf-loader': ['three'],
             'three-orbit': ['three'],
             'bootstrap': ['jquery'],
             'jquery-visibility': ['jquery']

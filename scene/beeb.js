@@ -1,4 +1,4 @@
-define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbit'], function (THREE, utils) {
+define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orbit'], function (THREE, utils) {
     "use strict";
 
     function remapKey(keyIndex) {
@@ -124,9 +124,11 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
     }
 
     async function loadModel(materials) {
-        const objLoader = new THREE.OBJLoader();
-        objLoader.setMaterials(materials);
-        return utils.promisifyLoad(objLoader, './virtual-beeb/models/beeb.obj');
+        const objLoader = new THREE.GLTFLoader();
+        // objLoader.setMaterials(materials);
+        const model = await utils.promisifyLoad(objLoader, './virtual-beeb/models/beeb.glb');
+
+        return model.scene;
     }
 
     async function loadMaskTexture() {
@@ -144,6 +146,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
     }
 
     async function loadMaterials() {
+        return null;
         const materials = await utils.promisifyLoad(new THREE.MTLLoader(), './virtual-beeb/models/beeb.mtl');
         materials.preload();
         return materials;
@@ -183,7 +186,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
                     loadShaderSource('scene/screen_epilog.glsl')
                 ]);
             this.screenMaterial = this.makeScreenMaterial(maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment);
-            this.model = this.prepareModel(await loadModel(materials));
+            this.model = this.prepareScene(await loadModel(materials));
         }
 
         setupLed(obj) {
@@ -201,7 +204,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
         updateKey(key, pressed) {
             if (!key) return;
             const springiness = 0.8;
-            const target = pressed ? -0.005 : 0;
+            const target = pressed ? 0.0475 : 0.051218289881944656;
             key.position.y += (target - key.position.y) * springiness;
         }
 
@@ -275,10 +278,32 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
             return screenMaterial;
         }
 
-        prepareModel(beeb) {
-            beeb.scale.set(50, 50, 50);
-            const name = /JOINED_KEYBOARD(\.([0-9]{3}))?_Cube\..*/;
-            beeb.traverse(child => {
+        prepareScene(scene) {
+            scene.traverse(child => console.log(child.name));
+            scene.scale.set(50, 50, 50);
+            this.prepareBeeb(scene);
+            this.prepareMonitor(scene.getObjectByName("Monitor"));
+            return scene;
+        }
+
+        prepareMonitor(monitor) {
+            const frame = monitor.getObjectByName("SCREENFRAME");
+            const glass = frame.getObjectByName("SCREEN");
+            glass.material = this.screenMaterial;
+
+            // Set the screen plane to black
+            const screen = frame.getObjectByName("Plane");
+            screen.material = new THREE.MeshPhysicalMaterial({
+                color: 0x000000,
+                shininess: 10,
+                specular: 0x111111
+            });
+        }
+
+        prepareBeeb(beebModel) {
+            const keyboard = beebModel.getObjectByName("Keyboard_INLAY");
+            const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
+            keyboard.traverse(child => {
                 const match = child.name.match(name);
                 if (match) {
                     const keyIndex = match[1] ? parseInt(match[2]) : 0;
@@ -297,33 +322,17 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
                             break;
                     }
                 }
-                //  List out all the object names from the import - very useful!
-                // console.log(child.name);
             });
-
-            const glass = beeb.getObjectByName("SCREEN_SurfPatch.002");
-            glass.material = this.screenMaterial;
-
             // Spacebar material
-            const spaceBar = beeb.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
+            const spaceBar = keyboard.getObjectByName("JOINED_KEYBOARD026");
             spaceBar.material = new THREE.MeshPhysicalMaterial({
                 color: 0x000000,
                 roughness: 0.05
             });
 
-            // Set the screen plane to black
-            const screen = beeb.getObjectByName("SCREEN_PLANE_Plane.003");
-
-            screen.material = new THREE.MeshPhysicalMaterial({
-                color: 0x000000,
-                shininess: 10,
-                specular: 0x111111
-            });
-
-            this.casetteLed = this.setupLed(beeb.getObjectByName("LED_INLAY.001_Cube.085"));
-            this.capsLed = this.setupLed(beeb.getObjectByName("LED_INLAY.002_Cube.086"));
-            this.shiftLed = this.setupLed(beeb.getObjectByName("LED_INLAY_Cube.019"));
-            return beeb;
+            // this.casetteLed = this.setupLed(keyboard.getObjectByName("LED_INLAY.001_Cube.085"));
+            // this.capsLed = this.setupLed(keyboard.getObjectByName("LED_INLAY.002_Cube.086"));
+            // this.shiftLed = this.setupLed(keyboard.getObjectByName("LED_INLAY_Cube.019"));
         }
     }
 
