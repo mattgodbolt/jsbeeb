@@ -234,7 +234,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
         }
 
         makeScreenMaterial(maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment) {
-            const screenMaterial = new THREE.MeshPhysicalMaterial({
+            const screenMaterial = new THREE.MeshStandardMaterial({
                 transparent: false,
                 color: 0x102018,
                 emissiveMap: this.screenTexture,
@@ -306,7 +306,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
 
             // Spacebar material
             const spaceBar = beeb.getObjectByName("JOINED_KEYBOARD.026_Cube.039");
-            spaceBar.material = new THREE.MeshPhysicalMaterial({
+            spaceBar.material = new THREE.MeshStandardMaterial({
                 color: 0x000000,
                 roughness: 0.05
             });
@@ -314,7 +314,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-obj-loader', 'three-orbi
             // Set the screen plane to black
             const screen = beeb.getObjectByName("SCREEN_PLANE_Plane.003");
 
-            screen.material = new THREE.MeshPhysicalMaterial({
+            screen.material = new THREE.MeshStandardMaterial({
                 color: 0x000000,
                 shininess: 10,
                 specular: 0x111111
