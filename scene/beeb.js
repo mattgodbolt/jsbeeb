@@ -123,11 +123,9 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         return rowCol[0] * 16 + rowCol[1];
     }
 
-    async function loadModel(materials) {
+    async function loadModel() {
         const objLoader = new THREE.GLTFLoader();
-        // objLoader.setMaterials(materials);
         const model = await utils.promisifyLoad(objLoader, './virtual-beeb/models/beeb.glb');
-
         return model.scene;
     }
 
@@ -143,13 +141,6 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         maskTexture.encoding = THREE.sRGBEncoding;
 
         return maskTexture;
-    }
-
-    async function loadMaterials() {
-        return null;
-        const materials = await utils.promisifyLoad(new THREE.MTLLoader(), './virtual-beeb/models/beeb.mtl');
-        materials.preload();
-        return materials;
     }
 
     async function loadShaderSource(fileName) {
@@ -177,16 +168,16 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         }
 
         async load() {
-            const [materials, maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment] = await Promise.all(
+            const [maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment, model] = await Promise.all(
                 [
-                    loadMaterials(),
                     loadMaskTexture(),
                     loadShaderSource('scene/screen_prolog.glsl'),
                     loadShaderSource('scene/screen_emissive.glsl'),
-                    loadShaderSource('scene/screen_epilog.glsl')
+                    loadShaderSource('scene/screen_epilog.glsl'),
+                    loadModel()
                 ]);
             this.screenMaterial = this.makeScreenMaterial(maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment);
-            this.model = this.prepareScene(await loadModel(materials));
+            this.model = this.prepareScene(model);
         }
 
         setupLed(obj) {

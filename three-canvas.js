@@ -37,7 +37,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 THREE.sRGBEncoding
             );
             this.dataTexture.needsUpdate = true;
-            this.dataTexture.flipY = true;
+            this.dataTexture.flipY = false;
             this.dataTexture.repeat.set(0.75, 0.75);
             this.dataTexture.offset.set(0.15, 0.3);
         }

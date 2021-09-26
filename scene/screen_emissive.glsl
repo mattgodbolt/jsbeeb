@@ -22,7 +22,7 @@
 
     // select active region of jsbeeb canvas texture
     vec2 screenUV = uv;
-    screenUV += vec2(0.225, 0.73); // hardcoded zoom for screen content - was in texture offset
+    screenUV += vec2(0.225, 0.09); // hardcoded zoom for screen content - was in texture offset
     screenUV *= vec2(0.7, 0.55); // hardcoded zoom for screen content - was in texture repeat
 
     vec3 noise;
