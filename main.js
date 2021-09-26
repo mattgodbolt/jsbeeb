@@ -576,7 +576,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             userPort: userPort,
             printerPort: printerPort,
             getGamepads: function () {
-                return navigator.getGamepads();
+                // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
+                return navigator.getGamepads ? navigator.getGamepads() : [];
             }
         };
 
