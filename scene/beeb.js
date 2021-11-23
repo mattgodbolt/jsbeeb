@@ -292,7 +292,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         }
 
         prepareBeeb(beebModel) {
-            const keyboard = beebModel.getObjectByName("Keyboard_INLAY");
+            const keyboard = beebModel;
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
             keyboard.traverse(child => {
                 const match = child.name.match(name);
