@@ -56,7 +56,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 this.renderer.toneMappingExposure = 0.1;//THREE.ACESFilmicToneMapping;
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
                 this.renderer.setPixelRatio(window.devicePixelRatio);
-                this.renderer.outputEncoding = 3001; // sRGBEncoding
+                this.renderer.outputEncoding = THREE.sRGBEncoding;
                 this.scene = new THREE.Scene();
                 this.buffer = new FrameBuffer(1024, 1024);
                 this.fb32 = new Uint32Array(1024 * 1024);
@@ -106,7 +106,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
         }
 
         updateTextureEncoding() {
-            const encoding = 3001;// sRGB texture
+            const encoding = THREE.sRGBEncoding;
 
             this.traverseMaterials(this.scene, (material) => {
                 if (material.map) material.map.encoding = encoding;
@@ -152,7 +152,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
             return true;
         }
 
-        paint(minx, miny, maxx, maxy) {
+        paint(/*minx, miny, maxx, maxy*/) {
             // Ideally we'd update everything to write to one of two double buffers, but there's too many places in the
             // code that cache the fb32 for now. So just copy it.
             // TODO: fix
