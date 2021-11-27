@@ -2,14 +2,14 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
   "use strict";
 
   function skyLight() {
-    const skyColor = 0xffffff;
+    const skyColor = 0xeeeeff;
     const intensity = 0.3;
     return new THREE.AmbientLight(skyColor, intensity);
   }
 
   function directionalLight() {
     const color = 0xFFFFFF;
-    const intensity = 1;
+    const intensity = 2;
     const light = new THREE.DirectionalLight(color, intensity);
     light.position.set(0.5, 0.5, 1);
     return light;
@@ -125,7 +125,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
       const bgTexture = await this.loadBackgroundTexture();
       const bgTarget = new THREE.WebGLCubeRenderTarget(bgTexture.image.height);
       bgTarget.fromEquirectangularTexture(this.renderer, bgTexture);
-      //this.scene.background = bgTarget.texture;
+      this.scene.background = bgTarget.texture;
       this.beeb = await loadBeeb(bgTarget.texture, this.buffer.dataTexture);
       this.scene.add(this.beeb.model);
       updateTextureEncoding();

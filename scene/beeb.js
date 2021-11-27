@@ -239,7 +239,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         makeScreenMaterial(maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment) {
             const screenMaterial = new THREE.MeshPhysicalMaterial({
                 transparent: false,
-                color: 0x102018,
+                color: 0x101410,
                 emissiveMap: this.screenTexture,
                 roughness: 0.0,
                 emissive: 0xffffff,
