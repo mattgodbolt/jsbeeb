@@ -123,9 +123,11 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         return rowCol[0] * 16 + rowCol[1];
     }
 
-    async function loadModel() {
+    async function loadModel(materials) {
         const objLoader = new THREE.GLTFLoader();
+        // objLoader.setMaterials(materials);
         const model = await utils.promisifyLoad(objLoader, './virtual-beeb/models/beeb.glb');
+
         return model.scene;
     }
 
@@ -141,6 +143,13 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         maskTexture.encoding = THREE.sRGBEncoding;
 
         return maskTexture;
+    }
+
+    async function loadMaterials() {
+        return null;
+        const materials = await utils.promisifyLoad(new THREE.MTLLoader(), './virtual-beeb/models/beeb.mtl');
+        materials.preload();
+        return materials;
     }
 
     async function loadShaderSource(fileName) {
@@ -168,16 +177,16 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         }
 
         async load() {
-            const [maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment, model] = await Promise.all(
+            const [materials, maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment] = await Promise.all(
                 [
+                    loadMaterials(),
                     loadMaskTexture(),
                     loadShaderSource('scene/screen_prolog.glsl'),
                     loadShaderSource('scene/screen_emissive.glsl'),
-                    loadShaderSource('scene/screen_epilog.glsl'),
-                    loadModel()
+                    loadShaderSource('scene/screen_epilog.glsl')
                 ]);
             this.screenMaterial = this.makeScreenMaterial(maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment);
-            this.model = this.prepareScene(model);
+            this.model = this.prepareScene(await loadModel(materials));
         }
 
         setupLed(obj) {
@@ -314,12 +323,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
                     }
                 }
             });
-            // Spacebar material
-            const spaceBar = keyboard.getObjectByName("JOINED_KEYBOARD026");
-            spaceBar.material = new THREE.MeshPhysicalMaterial({
-                color: 0x000000,
-                roughness: 0.05
-            });
+
 
             // this.casetteLed = this.setupLed(keyboard.getObjectByName("LED_INLAY.001_Cube.085"));
             // this.capsLed = this.setupLed(keyboard.getObjectByName("LED_INLAY.002_Cube.086"));
