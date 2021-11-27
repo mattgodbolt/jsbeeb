@@ -204,7 +204,8 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         updateKey(key, pressed) {
             if (!key) return;
             const springiness = 0.8;
-            const target = pressed ? 0.0475 : 0.051218289881944656;
+            const originalY = key.originalPosition.y;
+            const target = pressed ? originalY - 0.005 : originalY;
             key.position.y += (target - key.position.y) * springiness;
         }
 
@@ -305,6 +306,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
             keyboard.traverse(child => {
                 const match = child.name.match(name);
+                child.originalPosition = child.position.clone();
                 if (match) {
                     const keyIndex = match[1] ? parseInt(match[2]) : 0;
                     switch (keyIndex) {
