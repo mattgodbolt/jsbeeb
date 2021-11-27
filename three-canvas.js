@@ -9,9 +9,9 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
 
   function directionalLight() {
     const color = 0xFFFFFF;
-    const intensity = 2;
+    const intensity = 1;
     const light = new THREE.DirectionalLight(color, intensity);
-    light.position.set(0.5, 1, 1);
+    light.position.set(0.5, 0.5, 1);
     return light;
   }
 
@@ -53,7 +53,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
       });
 
       try {
-        this.renderer.toneMappingExposure =1//THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure =0.1//THREE.ACESFilmicToneMapping;
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio( window.devicePixelRatio );
         this.renderer.outputEncoding = 3001 // sRGBEncoding
@@ -125,7 +125,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
       const bgTexture = await this.loadBackgroundTexture();
       const bgTarget = new THREE.WebGLCubeRenderTarget(bgTexture.image.height);
       bgTarget.fromEquirectangularTexture(this.renderer, bgTexture);
-      this.scene.background = bgTarget.texture;
+      //this.scene.background = bgTarget.texture;
       this.beeb = await loadBeeb(bgTarget.texture, this.buffer.dataTexture);
       this.scene.add(this.beeb.model);
       updateTextureEncoding();
