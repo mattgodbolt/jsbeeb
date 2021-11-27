@@ -3,13 +3,13 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
 
   function skyLight() {
     const skyColor = 0xeeeeff;
-    const intensity = 0.3;
+    const intensity = 0.5;
     return new THREE.AmbientLight(skyColor, intensity);
   }
 
   function directionalLight() {
     const color = 0xFFFFFF;
-    const intensity = 2;
+    const intensity = 1;
     const light = new THREE.DirectionalLight(color, intensity);
     light.position.set(0.5, 0.5, 1);
     return light;
@@ -37,8 +37,8 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
       );
       this.dataTexture.needsUpdate = true;
       this.dataTexture.flipY = true;
-      this.dataTexture.repeat.set(0.75, 0.75);
-      this.dataTexture.offset.set(0.15, 0.3);
+      this.dataTexture.repeat.set(1.1,1.15);
+      this.dataTexture.offset.set(-0.03, 0.13);
     }
   }
 
