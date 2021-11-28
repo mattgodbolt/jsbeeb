@@ -3,7 +3,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
 
     function skyLight() {
         const skyColor = 0xeeeeff;
-        const intensity = 0.5;
+        const intensity = 0.1;
         return new THREE.AmbientLight(skyColor, intensity);
     }
 
@@ -53,7 +53,8 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
             });
 
             try {
-                this.renderer.toneMappingExposure = 0.1;//THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 0.3;
+                this.renderer.toneMapping = THREE.ReinhardToneMapping;
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
                 this.renderer.setPixelRatio(window.devicePixelRatio);
                 this.renderer.outputEncoding = THREE.sRGBEncoding;
@@ -62,7 +63,6 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 this.fb32 = new Uint32Array(1024 * 1024);
                 this.cpu = null;
                 this.beeb = null;
-                //this.renderer.outputEncoding = sRGBEncoding
 
                 // Set the background color
                 this.scene.background = new THREE.Color('#222222');
@@ -123,6 +123,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
             const bgTexture = await this.loadBackgroundTexture();
             const bgTarget = new THREE.WebGLCubeRenderTarget(bgTexture.image.height);
             bgTarget.fromEquirectangularTexture(this.renderer, bgTexture);
+            bgTarget.texture.encoding = THREE.sRGBEncoding;
             this.scene.background = bgTarget.texture;
             this.beeb = await loadBeeb(bgTarget.texture, this.buffer.dataTexture);
             this.scene.add(this.beeb.model);
