@@ -52,9 +52,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 if (pickedObject.onDown) {
                     this.downObj = pickedObject;
                     pickedObject.onDown();
-                    this.orbitControls.enableRotate = false;
-                    this.orbitControls.enableZoom = false;
-                    this.orbitControls.enablePan = false;
+                    this.orbitControls.enabled = false;
                     event.preventDefault();
                 }
             }
@@ -65,9 +63,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                     this.downObj.onUp();
                 }
                 this.downObj = null;
-                this.orbitControls.enableRotate = true;
-                this.orbitControls.enableZoom = true;
-                this.orbitControls.enablePan = true;
+                this.orbitControls.enabled = true;
             }
         }
     }
@@ -191,7 +187,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
         }
 
         frame() {
-            // this.controls.update();
+            this.controls.update();
 
             if (this.beeb) {
                 this.beeb.update(performance.now());
