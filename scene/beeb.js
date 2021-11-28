@@ -1,124 +1,125 @@
 define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orbit'], function (THREE, utils) {
     "use strict";
 
+    function keyIndexToBeebIndex(BBC, keyIndex) {
+        if (keyIndex < 10)
+            return BBC[`F${keyIndex}`];
+        if (keyIndex >= 29 && keyIndex <= 38)
+            return BBC[`K${(keyIndex - 28) % 10}`];
+        switch (keyIndex) {
+            case 10:
+                return BBC.SHIFTLOCK;
+            case 11:
+                return BBC.TAB;
+            case 12:
+                return BBC.CAPSLOCK;
+            case 28:
+                return BBC.ESCAPE;
+
+            case 13:
+                return BBC.CTRL;
+            case 14:
+                return BBC.A;
+            case 15:
+                return BBC.S;
+            case 16:
+                return BBC.D;
+            case 17:
+                return BBC.F;
+            case 18:
+                return BBC.G;
+            case 19:
+                return BBC.H;
+            case 20:
+                return BBC.J;
+            case 21:
+                return BBC.K;
+            case 22:
+                return BBC.L;
+            case 23:
+                return BBC.SEMICOLON_PLUS;
+            case 24:
+                return BBC.COLON_STAR;
+            case 25:
+                return BBC.RIGHT_SQUARE_BRACKET;
+            case 26:
+                return BBC.SPACE;
+
+            case 39:
+                return BBC.MINUS;
+            case 40:
+                return BBC.HAT_TILDE;
+            case 41:
+                return BBC.PIPE_BACKSLASH;
+            case 42:
+                return BBC.LEFT;
+            case 43:
+                return BBC.RIGHT;
+
+            case 44:
+                return BBC.Q;
+            case 45:
+                return BBC.W;
+            case 46:
+                return BBC.E;
+            case 47:
+                return BBC.R;
+            case 48:
+                return BBC.T;
+            case 49:
+                return BBC.Y;
+            case 50:
+                return BBC.U;
+            case 51:
+                return BBC.I;
+            case 52:
+                return BBC.O;
+            case 53:
+                return BBC.P;
+            case 54:
+                return BBC.AT;
+            case 55:
+                return BBC.LEFT_SQUARE_BRACKET;
+            case 56:
+                return BBC.UNDERSCORE_POUND;
+            case 57:
+                return BBC.UP;
+            case 58:
+                return BBC.DOWN;
+
+            case 59:
+                return BBC.RETURN;
+
+            case 61:
+                return BBC.Z;
+            case 62:
+                return BBC.X;
+            case 63:
+                return BBC.C;
+            case 64:
+                return BBC.V;
+            case 65:
+                return BBC.B;
+            case 66:
+                return BBC.N;
+            case 67:
+                return BBC.M;
+            case 68:
+                return BBC.COMMA;
+            case 69:
+                return BBC.PERIOD;
+            case 70:
+                return BBC.SLASH;
+            case 72:
+                return BBC.DELETE;
+            case 73:
+                return BBC.COPY;
+        }
+        return null;
+    }
+
     function remapKey(keyIndex) {
-        const rowCol = ((keyIndex) => {
-            const BBC = utils.BBC;
-            if (keyIndex < 10)
-                return BBC[`F${keyIndex}`];
-            if (keyIndex >= 29 && keyIndex <= 38)
-                return BBC[`K${(keyIndex - 28) % 10}`];
-            switch (keyIndex) {
-                case 10:
-                    return BBC.SHIFTLOCK;
-                case 11:
-                    return BBC.TAB;
-                case 12:
-                    return BBC.CAPSLOCK;
-                case 28:
-                    return BBC.ESCAPE;
-
-                case 13:
-                    return BBC.CTRL;
-                case 14:
-                    return BBC.A;
-                case 15:
-                    return BBC.S;
-                case 16:
-                    return BBC.D;
-                case 17:
-                    return BBC.F;
-                case 18:
-                    return BBC.G;
-                case 19:
-                    return BBC.H;
-                case 20:
-                    return BBC.J;
-                case 21:
-                    return BBC.K;
-                case 22:
-                    return BBC.L;
-                case 23:
-                    return BBC.SEMICOLON_PLUS;
-                case 24:
-                    return BBC.COLON_STAR;
-                case 25:
-                    return BBC.RIGHT_SQUARE_BRACKET;
-                case 26:
-                    return BBC.SPACE;
-
-                case 39:
-                    return BBC.MINUS;
-                case 40:
-                    return BBC.HAT_TILDE;
-                case 41:
-                    return BBC.PIPE_BACKSLASH;
-                case 42:
-                    return BBC.LEFT;
-                case 43:
-                    return BBC.RIGHT;
-
-                case 44:
-                    return BBC.Q;
-                case 45:
-                    return BBC.W;
-                case 46:
-                    return BBC.E;
-                case 47:
-                    return BBC.R;
-                case 48:
-                    return BBC.T;
-                case 49:
-                    return BBC.Y;
-                case 50:
-                    return BBC.U;
-                case 51:
-                    return BBC.I;
-                case 52:
-                    return BBC.O;
-                case 53:
-                    return BBC.P;
-                case 54:
-                    return BBC.AT;
-                case 55:
-                    return BBC.LEFT_SQUARE_BRACKET;
-                case 56:
-                    return BBC.UNDERSCORE_POUND;
-                case 57:
-                    return BBC.UP;
-                case 58:
-                    return BBC.DOWN;
-
-                case 59:
-                    return BBC.RETURN;
-
-                case 61:
-                    return BBC.Z;
-                case 62:
-                    return BBC.X;
-                case 63:
-                    return BBC.C;
-                case 64:
-                    return BBC.V;
-                case 65:
-                    return BBC.B;
-                case 66:
-                    return BBC.N;
-                case 67:
-                    return BBC.M;
-                case 68:
-                    return BBC.COMMA;
-                case 69:
-                    return BBC.PERIOD;
-                case 70:
-                    return BBC.SLASH;
-                case 72:
-                    return BBC.DELETE;
-                case 73:
-                    return BBC.COPY;
-            }
-            return null;
-        })(keyIndex);
+        const rowCol = keyIndexToBeebIndex(utils.BBC, keyIndex);
         if (rowCol === null) return -1;
         return rowCol[0] * 16 + rowCol[1];
     }
@@ -157,6 +158,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             this.envMap = envMap;
             this.screenTexture = screenTexture;
             this.model = null;
+            this.cpu = null;
             this.keys = {};
             this.leftShiftKey = null;
             this.rightShiftKey = null;
@@ -204,9 +206,13 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             this.screenMaterial.emissiveMap.needsUpdate = true;
         }
 
-        update(cpu, time) {
+        setProcessor(cpu) {
+            this.cpu = cpu;
+        }
+
+        update(time) {
             // Update the key animations.
-            const sysvia = cpu.sysvia;
+            const sysvia = this.cpu.sysvia;
             for (let i = 0; i < sysvia.keys.length; ++i) {
                 const row = sysvia.keys[i];
                 for (let j = 0; j < row.length; ++j) {
@@ -216,11 +222,11 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
 
             this.updateKey(this.leftShiftKey, sysvia.leftShiftDown);
             this.updateKey(this.rightShiftKey, sysvia.rightShiftDown);
-            this.updateKey(this.breakKey, !cpu.resetLine);
+            this.updateKey(this.breakKey, !this.cpu.resetLine);
 
-            this.updateLed(this.casetteLed, cpu.acia.motorOn);
-            this.updateLed(this.capsLed, cpu.sysvia.capsLockLight);
-            this.updateLed(this.shiftLed, cpu.sysvia.shiftLockLight);
+            this.updateLed(this.casetteLed, this.cpu.acia.motorOn);
+            this.updateLed(this.capsLed, this.cpu.sysvia.capsLockLight);
+            this.updateLed(this.shiftLed, this.cpu.sysvia.shiftLockLight);
 
             if (this.screenMaterial.shaderUniforms) {
                 // https://github.com/mrdoob/three.js/issues/11475
@@ -271,7 +277,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         }
 
         prepareScene(scene) {
-            scene.traverse(child => console.log(child.name));
+            // scene.traverse(child => console.log(child.name));
             scene.scale.set(50, 50, 50);
             this.prepareBeeb(scene);
             this.prepareMonitor(scene.getObjectByName("Monitor"));
@@ -292,28 +298,55 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             });
         }
 
+        setupKey(key, keyIndex) {
+            key.originalPosition = key.position.clone();
+
+            let keyCode = keyIndexToBeebIndex(utils.keyCodes, keyIndex);
+            switch (keyIndex) {
+                case LeftShiftIndex:
+                    this.leftShiftKey = key;
+                    keyCode = utils.keyCodes.SHIFT_LEFT;
+                    break;
+                case RightShiftIndex:
+                    this.rightShiftKey = key;
+                    keyCode = utils.keyCodes.SHIFT_RIGHT;
+                    break;
+                case BreakIndex:
+                    this.breakKey = key;
+                    break;
+                default:
+                    this.keys[remapKey(keyIndex)] = key;
+                    break;
+            }
+            if (keyIndex !== BreakIndex) {
+                key.onDown = () => {
+                    if (!this.cpu) return;
+                    this.cpu.sysvia.keyDown(keyCode);
+                };
+                key.onUp = () => {
+                    if (!this.cpu) return;
+                    this.cpu.sysvia.keyUp(keyCode);
+                };
+            } else {
+                key.onDown = () => {
+                    if (!this.cpu) return;
+                    this.cpu.setReset(true);
+                };
+                key.onUp = () => {
+                    if (!this.cpu) return;
+                    this.cpu.setReset(false);
+                };
+            }
+        }
+
         prepareBeeb(beebModel) {
             const keyboard = beebModel;
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
             keyboard.traverse(child => {
                 const match = child.name.match(name);
-                child.originalPosition = child.position.clone();
                 if (match) {
                     const keyIndex = match[1] ? parseInt(match[2]) : 0;
-                    switch (keyIndex) {
-                        case LeftShiftIndex:
-                            this.leftShiftKey = child;
-                            break;
-                        case RightShiftIndex:
-                            this.rightShiftKey = child;
-                            break;
-                        case BreakIndex:
-                            this.breakKey = child;
-                            break;
-                        default:
-                            this.keys[remapKey(keyIndex)] = child;
-                            break;
-                    }
+                    this.setupKey(child, keyIndex);
                 }
             });
 

@@ -15,6 +15,63 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
         return light;
     }
 
+    class ClickControls {
+        constructor(domElement, scene, camera, orbitControls) {
+            this.domElement = domElement;
+            this.domElement.addEventListener("click", event => event.preventDefault(), false);
+            this.domElement.addEventListener("dblclick", event => event.preventDefault(), false);
+            this.domElement.addEventListener("pointerdown", event => this.onDown(event), false);
+            this.domElement.addEventListener("pointerup", event => this.onUp(event), false);
+            this.downObj = null;
+            this.scene = scene;
+            this.camera = camera;
+            this.raycaster = new THREE.Raycaster();
+            this.orbitControls = orbitControls;
+        }
+
+        getCanvasRelativePosition(event) {
+            const rect = this.domElement.getBoundingClientRect();
+            return {
+                x: (event.clientX - rect.left) * this.domElement.width  / rect.width,
+                y: (event.clientY - rect.top ) * this.domElement.height / rect.height,
+            };
+        }
+
+        onDown(event) {
+            const pos = this.getCanvasRelativePosition(event);
+            const normalizedPosition = {
+                x:(pos.x / this.domElement.width ) *  2 - 1,
+                y:(pos.y / this.domElement.height) * -2 + 1
+            };
+            this.raycaster.setFromCamera(normalizedPosition, this.camera);
+            // get the list of objects the ray intersected
+            const intersectedObjects = this.raycaster.intersectObjects(this.scene.children, true);
+            if (intersectedObjects.length) {
+                // pick the first object. It's the closest one
+                const pickedObject = intersectedObjects[0].object;
+                if (pickedObject.onDown) {
+                    this.downObj = pickedObject;
+                    pickedObject.onDown();
+                    this.orbitControls.enableRotate = false;
+                    this.orbitControls.enableZoom = false;
+                    this.orbitControls.enablePan = false;
+                    event.preventDefault();
+                }
+            }
+        }
+        onUp() {
+            if (this.downObj) {
+                if (this.downObj.onUp) {
+                    this.downObj.onUp();
+                }
+                this.downObj = null;
+                this.orbitControls.enableRotate = true;
+                this.orbitControls.enableZoom = true;
+                this.orbitControls.enablePan = true;
+            }
+        }
+    }
+
     class FrameBuffer {
         constructor(width, height) {
             this.fb8 = new Uint8Array(width * height * 4);
@@ -49,7 +106,6 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 antialias: true,
                 canvas: canvas,
                 failIfMajorPerformanceCaveat: true
-
             });
 
             try {
@@ -80,6 +136,8 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
 
                 this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
                 this.controls.target.set(0, 7, -2.36);
+
+                this.clickControls = new ClickControls(canvas, this.scene, this.camera, this.controls);
 
                 this.scene.add(skyLight());
                 const dirLight = directionalLight();
@@ -126,15 +184,17 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
             bgTarget.texture.encoding = THREE.sRGBEncoding;
             this.scene.background = bgTarget.texture;
             this.beeb = await loadBeeb(bgTarget.texture, this.buffer.dataTexture);
+            if (this.cpu)
+                this.beeb.setProcessor(this.cpu);
             this.scene.add(this.beeb.model);
             this.updateTextureEncoding();
         }
 
         frame() {
-            this.controls.update();
+            // this.controls.update();
 
             if (this.beeb) {
-                this.beeb.update(this.cpu, performance.now());
+                this.beeb.update(performance.now());
             }
 
             this.renderer.render(this.scene, this.camera);
@@ -144,6 +204,8 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
 
         setProcessor(cpu) {
             this.cpu = cpu;
+            if (this.beeb)
+                this.beeb.setProcessor(cpu);
         }
 
         handleResize(width, height) {
