@@ -231,7 +231,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         makeScreenMaterial(maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment) {
             const screenMaterial = new THREE.MeshPhysicalMaterial({
                 transparent: false,
-                color: 0x101410,
+                color: 0x040504,
                 emissiveMap: this.screenTexture,
                 roughness: 0.0,
                 emissive: 0xffffff,
@@ -286,7 +286,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             // Set the screen plane to black
             const screen = frame.getObjectByName("Plane");
             screen.material = new THREE.MeshPhysicalMaterial({
-                color: 0x000000,
+                color: 0x030201,
                 shininess: 10,
                 specular: 0x111111
             });
