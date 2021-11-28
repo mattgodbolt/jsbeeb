@@ -195,10 +195,11 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         }
 
         updateKey(key, pressed) {
+            const KeyTravelMm = 3;
             if (!key) return;
-            const springiness = 0.8;
+            const springiness = pressed? 0.9 : 0.5;
             const originalY = key.originalPosition.y;
-            const target = pressed ? originalY - 0.005 : originalY;
+            const target = pressed ? originalY - (KeyTravelMm / 1000.0) : originalY;
             key.position.y += (target - key.position.y) * springiness;
         }
 
