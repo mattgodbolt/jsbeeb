@@ -301,41 +301,53 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         setupKey(key, keyIndex) {
             key.originalPosition = key.position.clone();
 
-            let keyCode = keyIndexToBeebIndex(utils.keyCodes, keyIndex);
             switch (keyIndex) {
                 case LeftShiftIndex:
                     this.leftShiftKey = key;
-                    keyCode = utils.keyCodes.SHIFT_LEFT;
+                    key.onDown = () => {
+                        if (!this.cpu) return;
+                        this.cpu.sysvia.keyDown(utils.keyCodes.SHIFT_LEFT);
+                    };
+                    key.onUp = () => {
+                        if (!this.cpu) return;
+                        this.cpu.sysvia.keyUp(utils.keyCodes.SHIFT_LEFT);
+                    };
                     break;
                 case RightShiftIndex:
                     this.rightShiftKey = key;
-                    keyCode = utils.keyCodes.SHIFT_RIGHT;
+                    key.onDown = () => {
+                        if (!this.cpu) return;
+                        this.cpu.sysvia.keyDown(utils.keyCodes.SHIFT_RIGHT);
+                    };
+                    key.onUp = () => {
+                        if (!this.cpu) return;
+                        this.cpu.sysvia.keyUp(utils.keyCodes.SHIFT_RIGHT);
+                    };
                     break;
                 case BreakIndex:
                     this.breakKey = key;
+                    key.onDown = () => {
+                        if (!this.cpu) return;
+                        this.cpu.setReset(true);
+                    };
+                    key.onUp = () => {
+                        if (!this.cpu) return;
+                        this.cpu.setReset(false);
+                    };
                     break;
                 default:
-                    this.keys[remapKey(keyIndex)] = key;
+                    const keyCode = remapKey(keyIndex);
+                    this.keys[keyCode] = key;
+                    const rawIndex = [keyCode >>> 4, keyCode % 16];
+                    key.onDown = () => {
+                        if (!this.cpu) return;
+                        this.cpu.sysvia.keyDownRaw(rawIndex);
+                    };
+                    key.onUp = () => {
+                        if (!this.cpu) return;
+                        this.cpu.sysvia.keyUpRaw(rawIndex);
+                    };
                     break;
-            }
-            if (keyIndex !== BreakIndex) {
-                key.onDown = () => {
-                    if (!this.cpu) return;
-                    this.cpu.sysvia.keyDown(keyCode);
-                };
-                key.onUp = () => {
-                    if (!this.cpu) return;
-                    this.cpu.sysvia.keyUp(keyCode);
-                };
-            } else {
-                key.onDown = () => {
-                    if (!this.cpu) return;
-                    this.cpu.setReset(true);
-                };
-                key.onUp = () => {
-                    if (!this.cpu) return;
-                    this.cpu.setReset(false);
-                };
             }
         }
 
