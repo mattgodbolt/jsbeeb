@@ -2,13 +2,15 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
     "use strict";
 
     function skyLight() {
-        const skyColor = 0xeeeeff;
         const intensity = 0.1;
-        return new THREE.AmbientLight(skyColor, intensity);
+        const skyColor = 0xffffbb; 
+        const groundColor = 0x080820;
+        const light = new THREE.HemisphereLight( skyColor, groundColor, intensity );
+        return light;
     }
 
     function directionalLight() {
-        const color = 0xFFFFFF;
+        const color = 0xfff0e0;
         const intensity = 1;
         const light = new THREE.DirectionalLight(color, intensity);
         light.position.set(0.5, 0.5, 1);
