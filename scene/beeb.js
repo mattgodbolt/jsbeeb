@@ -289,12 +289,13 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             const glass = frame.getObjectByName("SCREEN");
             glass.material = this.screenMaterial;
 
-            // Set the screen plane to black
+            // we don't really need to override this in code any more
+            // It was used when the glass was transparent
+            // we are now using it to set a slightly different colour and adjust the roughness on the material
             const screen = frame.getObjectByName("Plane");
             screen.material = new THREE.MeshPhysicalMaterial({
                 color: 0x030201,
-                shininess: 10,
-                specular: 0x111111
+                roughness: 0.5
             });
         }
 
