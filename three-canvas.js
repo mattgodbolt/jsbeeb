@@ -12,6 +12,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
         const intensity = 1;
         const light = new THREE.DirectionalLight(color, intensity);
         light.position.set(0.5, 0.5, 1);
+        light.castShadow = true;
         return light;
     }
 
@@ -110,6 +111,9 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
                 this.renderer.setPixelRatio(window.devicePixelRatio);
                 this.renderer.outputEncoding = THREE.sRGBEncoding;
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.VSMShadowMap;
+ 
                 this.scene = new THREE.Scene();
                 this.buffer = new FrameBuffer(1024, 1024);
                 this.fb32 = new Uint32Array(1024 * 1024);
@@ -140,6 +144,26 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 this.scene.add(dirLight);
                 this.scene.add(dirLight.target);
 
+                //Set up shadow properties for the light
+                dirLight.shadow.mapSize.width = 512; 
+                dirLight.shadow.mapSize.height = 512;
+                dirLight.shadow.camera.near = -30; 
+                dirLight.shadow.camera.far = 30;
+                dirLight.shadow.camera.left = -30;
+                dirLight.shadow.camera.right = 30;
+                dirLight.shadow.camera.top = -30;
+                dirLight.shadow.camera.bottom = 30;
+
+                dirLight.shadow.radius = 2.0; // blur shadow
+
+                // Other shadow map types might require tweaking these
+                //dirLight.shadow.bias = -.01;
+                //dirLight.shadow.normalBias = 1.0;
+
+                // uncomment to debug shadow bounds
+                //const helper = new THREE.CameraHelper( dirLight.shadow.camera );
+                //this.scene.add( helper );
+
                 // Kick off the asynchronous load.
                 this.load().then(() => console.log("Three models loaded"));
             } catch (e) {
@@ -151,9 +175,20 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
             console.log("Three Canvas set up");
         }
 
+        setupSceneShadows(object) {
+            object.traverse((node) => {
+                if (!node.isMesh) return;
+                node.castShadow = true;
+                node.receiveShadow = true;
+            });
+
+        }
+
         traverseMaterials(object, callback) {
             object.traverse((node) => {
                 if (!node.isMesh) return;
+                node.castShadow = true;
+                node.receiveShadow = true;
                 const materials = Array.isArray(node.material) ? node.material : [node.material];
                 materials.forEach(callback);
             });
@@ -167,6 +202,8 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
                 if (material.emissiveMap) material.emissiveMap.encoding = encoding;
                 if (material.map || material.emissiveMap) material.needsUpdate = true;
             });
+
+            this.setupSceneShadows(this.scene);
         }
 
         async loadBackgroundTexture() {
