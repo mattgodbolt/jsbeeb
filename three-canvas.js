@@ -53,7 +53,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
             });
 
             try {
-                this.renderer.toneMappingExposure = 0.3;
+                this.renderer.toneMappingExposure = 0.5;
                 this.renderer.toneMapping = THREE.ReinhardToneMapping;
                 this.renderer.setSize(window.innerWidth, window.innerHeight);
                 this.renderer.setPixelRatio(window.devicePixelRatio);
