@@ -4,8 +4,8 @@
 
     float screenEmissiveBrightness = 3.0;
 
-    float ambientEmissive = 0.02f;
-    float maskedAmbientEmissive = 0.03f;
+    float ambientEmissive = 0.02;
+    float maskedAmbientEmissive = 0.03;
 
     float scanlineIntensity = 0.4;
 
@@ -18,7 +18,7 @@
     // place overall position of screen on glass
     vec2 uv = vUv;
     uv -= vec2( 0.02, 0.27 ); // hardcoded for glass uvs on current model
-    uv.y *= 1.22f; // hardcoded for glass uvs on current model
+    uv.y *= 1.22; // hardcoded for glass uvs on current model
 
     // select active region of jsbeeb canvas texture
     vec2 screenUV = uv;
