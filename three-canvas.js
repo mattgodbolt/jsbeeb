@@ -1,4 +1,4 @@
-define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj-loader', 'three-orbit'], function (THREE, $, utils, loadBeeb) {
+define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loader', 'three-obj-loader', 'three-orbit'], function (THREE, $, utils, loadBeeb, _) {
     "use strict";
 
     function skyLight() {
@@ -18,53 +18,73 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'three-mtl-loader', 'three-obj
     class ClickControls {
         constructor(domElement, scene, camera, orbitControls) {
             this.domElement = domElement;
-            this.domElement.addEventListener("click", event => event.preventDefault(), false);
-            this.domElement.addEventListener("dblclick", event => event.preventDefault(), false);
             this.domElement.addEventListener("pointerdown", event => this.onDown(event), false);
             this.domElement.addEventListener("pointerup", event => this.onUp(event), false);
+            this.domElement.addEventListener("mousemove", event => this.onMove(event), false);
             this.downObj = null;
+            this.isTracking = false;
             this.scene = scene;
             this.camera = camera;
             this.raycaster = new THREE.Raycaster();
             this.orbitControls = orbitControls;
+            this._setDown = _.throttle(this._setDown, 45);
         }
 
         getCanvasRelativePosition(event) {
             const rect = this.domElement.getBoundingClientRect();
             return {
-                x: (event.clientX - rect.left) * this.domElement.width  / rect.width,
-                y: (event.clientY - rect.top ) * this.domElement.height / rect.height,
+                x: (event.clientX - rect.left) * this.domElement.width / rect.width,
+                y: (event.clientY - rect.top) * this.domElement.height / rect.height,
             };
         }
 
-        onDown(event) {
+        getObjectForEvent(event) {
             const pos = this.getCanvasRelativePosition(event);
             const normalizedPosition = {
-                x:(pos.x / this.domElement.width ) *  2 - 1,
-                y:(pos.y / this.domElement.height) * -2 + 1
+                x: (pos.x / this.domElement.width) * 2 - 1,
+                y: (pos.y / this.domElement.height) * -2 + 1
             };
             this.raycaster.setFromCamera(normalizedPosition, this.camera);
             // get the list of objects the ray intersected
             const intersectedObjects = this.raycaster.intersectObjects(this.scene.children, true);
             if (intersectedObjects.length) {
                 // pick the first object. It's the closest one
-                const pickedObject = intersectedObjects[0].object;
-                if (pickedObject.onDown) {
-                    this.downObj = pickedObject;
-                    pickedObject.onDown();
-                    this.orbitControls.enabled = false;
-                    event.preventDefault();
-                }
+                return intersectedObjects[0].object;
             }
+            return null;
         }
-        onUp() {
+
+        _setDown(obj) {
+            if (obj === this.downObj)
+                return;
             if (this.downObj) {
-                if (this.downObj.onUp) {
+                if (this.downObj.onUp)
                     this.downObj.onUp();
-                }
                 this.downObj = null;
-                this.orbitControls.enabled = true;
             }
+            this.downObj = obj;
+            if (this.downObj && this.downObj.onDown)
+                this.downObj.onDown();
+        }
+
+        onMove(event) {
+            if (this.isTracking)
+                this._setDown(this.getObjectForEvent(event));
+        }
+
+        onDown(event) {
+            const eventObj = this.getObjectForEvent(event);
+            this._setDown(eventObj);
+            // Track movements only if we clicked on something in the viewport.
+            this.isTracking = eventObj !== null;
+            if (this.isTracking)
+                this.orbitControls.enabled = false;
+        }
+
+        onUp() {
+            this.isTracking = false;
+            this.orbitControls.enabled = true;
+            this._setDown(null);
         }
     }
 
