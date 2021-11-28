@@ -184,8 +184,9 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
 
         setupLed(obj) {
             // Replace the material with our own.
-            const material = obj.material[1].clone(); // Hacky but works for now, TODO look into alternatives
-            obj.material[1] = material;
+            const led = obj.children[1];
+            const material = led.material.clone(); // Hacky but works for now, TODO look into alternatives
+            led.material = material;
             return material;
         }
 
@@ -357,6 +358,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             const keyboard = beebModel;
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
             keyboard.traverse(child => {
+                console.log(child.name);
                 const match = child.name.match(name);
                 if (match) {
                     const keyIndex = match[1] ? parseInt(match[2]) : 0;
@@ -365,9 +367,9 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             });
 
 
-            // this.casetteLed = this.setupLed(keyboard.getObjectByName("LED_INLAY.001_Cube.085"));
-            // this.capsLed = this.setupLed(keyboard.getObjectByName("LED_INLAY.002_Cube.086"));
-            // this.shiftLed = this.setupLed(keyboard.getObjectByName("LED_INLAY_Cube.019"));
+            this.casetteLed = this.setupLed(keyboard.getObjectByName("LED_CASSETTE"));
+            this.capsLed = this.setupLed(keyboard.getObjectByName("LED_CAPS_LOCK"));
+            this.shiftLed = this.setupLed(keyboard.getObjectByName("LED_SHIFT_LOCK"));
         }
     }
 
