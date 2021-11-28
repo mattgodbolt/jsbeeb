@@ -1,7 +1,7 @@
-require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debug', '6502', 'cmos', 'sth', 'gamepads',
+require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'keynoise', 'debug', '6502', 'cmos', 'sth', 'gamepads',
         'fdc', 'discs/cat', 'tapes', 'google-drive', 'models', 'basic-tokenise',
         'canvas', 'config', 'app/electron', 'promise', 'bootstrap', 'jquery-visibility'],
-    function ($, _, utils, Video, SoundChip, DdNoise, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepad, disc,
+    function ($, _, utils, Video, SoundChip, DdNoise, KeyNoise, Debugger, Cpu6502, Cmos, StairwayToHell, Gamepad, disc,
               starCat, tapes, GoogleDriveLoader, models, tokeniser, canvasLib, Config, electron) {
         "use strict";
 
@@ -9,6 +9,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         var video;
         var soundChip = null;
         var ddNoise = null;
+        var keyNoise = null;
         var dbgr;
         var frames = 0;
         var frameSkip = 0;
@@ -246,6 +247,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             }
 
             if (!noSeek) ddNoise = new DdNoise.DdNoise(audioContext);
+            keyNoise = new KeyNoise.KeyNoise(audioContext);
 
             $audioWarningNode.toggle(false);
             // Firefox will report that audio is suspended even when it will
@@ -255,6 +257,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         }
         if (!soundChip) soundChip = new SoundChip.FakeSoundChip();
         if (!ddNoise) ddNoise = new DdNoise.FakeDdNoise();
+        if (!keyNoise) keyNoise = new DdNoise.FakeKeyNoise();
 
         var lastShiftLocation = 1;
         var lastCtrlLocation = 1;
@@ -581,7 +584,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             }
         };
 
-        processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
+        processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, keyNoise, cmos, emulationConfig);
         canvas.setProcessor(processor);
 
         function setDisc1Image(name) {
@@ -1160,7 +1163,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             cassette.update(processor.acia.motorOn);
         };
 
-        var startPromise = Promise.all([ddNoise.initialise(), processor.initialise()])
+        var startPromise = Promise.all([ddNoise.initialise(), keyNoise.initialise(), processor.initialise()])
             .then(function () {
                 // Ideally would start the loads first. But their completion needs the FDC from the processor
                 var imageLoads = [];
@@ -1431,6 +1434,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         function go() {
             soundChip.unmute();
             ddNoise.unmute();
+            keyNoise.unmute();
             running = true;
             run();
         }
@@ -1441,6 +1445,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (debug) dbgr.debug(processor.pc);
             soundChip.mute();
             ddNoise.mute();
+            keyNoise.mute();
         }
 
         (function () {

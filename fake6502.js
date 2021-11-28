@@ -1,6 +1,6 @@
 // Fakes out a 6502
-define(['6502', 'video', 'soundchip', 'models', 'ddnoise', 'cmos'],
-    function (Cpu6502, Video, SoundChip, models, DdNoise, Cmos) {
+define(['6502', 'video', 'soundchip', 'models', 'ddnoise', 'keynoise', 'cmos'],
+    function (Cpu6502, Video, SoundChip, models, DdNoise, KeyNoise, Cmos) {
         "use strict";
         var fakeVideo = new Video.FakeVideo();
         var soundChip = new SoundChip.FakeSoundChip();
@@ -13,7 +13,7 @@ define(['6502', 'video', 'soundchip', 'models', 'ddnoise', 'cmos'],
             opts = opts || {};
             var video = opts.video || fakeVideo;
             model = model || models.TEST_6502;
-            return new Cpu6502(model, dbgr, video, soundChip, new DdNoise.FakeDdNoise(), new Cmos());
+            return new Cpu6502(model, dbgr, video, soundChip, new DdNoise.FakeDdNoise(), new KeyNoise.FakeKeyNoise(), new Cmos());
         }
 
         return {

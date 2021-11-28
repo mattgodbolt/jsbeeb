@@ -404,7 +404,7 @@ define(['./utils'], function (utils) {
         return self;
     }
 
-    function sysvia(cpu, video, soundChip, cmos, isMaster, initialLayout, getGamepads) {
+    function sysvia(cpu, video, soundChip, cmos, isMaster, initialLayout, getGamepads, keyNoise) {
         var self = via(cpu, 0x01);
 
         self.IC32 = 0;
@@ -413,6 +413,7 @@ define(['./utils'], function (utils) {
         // Purely for UI tracking purposes.
         self.leftShiftDown = false;
         self.rightShiftDown = false;
+        self.keyNoise = keyNoise;
         self.keys = [];
         for (var i = 0; i < 16; ++i) {
             self.keys[i] = new Uint8Array(16);
@@ -450,6 +451,18 @@ define(['./utils'], function (utils) {
             clearKeys();
         };
 
+        self._set = function(colrow, val) {
+            var oldVal = self.keys[colrow[0]][colrow[1]];
+            self.keys[colrow[0]][colrow[1]] = val;
+            self.updateKeys();
+            if (oldVal !== val) {
+                if (val)
+                    self.keyNoise.keyDown(colrow);
+                else
+                    self.keyNoise.keyUp(colrow);
+            }
+        };
+
         self.set = function (key, val, shiftDown) {
             if (!self.keyboardEnabled) {
                 return;
@@ -463,8 +476,7 @@ define(['./utils'], function (utils) {
             var colrow = self.keycodeToRowCol[!!shiftDown][key];
             if (!colrow) return;
 
-            self.keys[colrow[0]][colrow[1]] = val;
-            self.updateKeys();
+            self._set(colrow, val);
         };
         self.keyDown = function (key, shiftDown) {
             self.set(key, 1, shiftDown);
@@ -477,15 +489,15 @@ define(['./utils'], function (utils) {
         };
 
         self.keyDownRaw = function (colrow) {
-            self.keys[colrow[0]][colrow[1]] = 1;
+            self._set(colrow, 1);
             self.updateKeys();
         };
         self.keyUpRaw = function (colrow) {
-            self.keys[colrow[0]][colrow[1]] = 0;
+            self._set(colrow, 0);
             self.updateKeys();
         };
         self.keyToggleRaw = function (colrow) {
-            self.keys[colrow[0]][colrow[1]] = 1 - self.keys[colrow[0]][colrow[1]];
+            self._set(colrow, 1 - self.keys[colrow[0]][colrow[1]]);
             self.updateKeys();
         };
         self.hasAnyKeyDown = function () {

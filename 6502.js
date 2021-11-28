@@ -428,7 +428,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             return config;
         }
 
-        return function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config) {
+        return function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, keyNoise_, cmos, config) {
             config = fixUpConfig(config);
 
             base6502(this, model);
@@ -436,6 +436,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
             this.video = video_;
             this.soundChip = soundChip_;
             this.ddNoise = ddNoise_;
+            this.keyNoise = keyNoise_;
             this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
             this.memStatOffset = 0;
             this.memStat = new Uint8Array(512);
@@ -937,7 +938,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
                     this.scheduler = new scheduler.Scheduler();
                     this.soundChip.setScheduler(this.scheduler);
                     this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout,
-                        config.getGamepads);
+                        config.getGamepads, this.keyNoise);
                     this.uservia = via.UserVia(this, model.isMaster, config.userPort);
                     if (config.printerPort)
                         this.uservia.ca2changecallback = config.printerPort.outputStrobe;
