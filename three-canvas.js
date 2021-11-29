@@ -50,7 +50,8 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             this.raycaster.setFromCamera(normalizedPosition, this.camera);
             // get the list of objects the ray intersected
             const intersectedObjects = this.raycaster.intersectObjects(this.scene.children, true);
-            if (intersectedObjects.length) {
+                // TODO factor in the 'step height' of keyboard rows
+            if (intersectedObjects.length && intersectedObjects[0].point.y > 2.6) {
                 // pick the first object. It's the closest one
                 return intersectedObjects[0].object;
             }
@@ -194,6 +195,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             }
             $(this.renderer.domElement).remove().appendTo($('#outer'));
             $('#cub-monitor').hide();
+            $('#leds').hide();
             console.log("Three Canvas set up");
         }
 
