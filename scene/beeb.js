@@ -356,6 +356,18 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         }
 
         prepareBeeb(beebModel) {
+          let perspexBlock =  beebModel.getObjectByName("Keyboard_CLEAR_PLASTIC_BLOCK")
+          perspexBlock.material = new THREE.MeshPhysicalMaterial({
+            roughness: 0,
+            transmission: 0.9,
+            transparent: true,
+            thickness:1,
+            envMap: this.envMap,
+            opacity: 0.4,
+            metalness:1,
+            color: 0xeeeeee
+          })
+
             const keyboard = beebModel;
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
             keyboard.traverse(child => {
