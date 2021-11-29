@@ -55,6 +55,11 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
 
             if (!intersectedObjects.length) return null;
 
+            // Its the same key as before, or we are pressing the top
+            if (intersectedObjects[0].point.y > 2.6 || intersectedObjects[0].object === this.downObj) {
+                return intersectedObjects[0].object;
+            }
+
             // We're only intersecting with one key
             if (intersectedObjects.length===1) return intersectedObjects[0].object;
 
@@ -63,10 +68,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 return intersectedObjects[1].object;
             }
 
-            // Its the same key as before, or we are pressing the top
-            if (intersectedObjects[0].point.y > 2.6 || intersectedObjects[0].object === this.downObj) {
-                return intersectedObjects[0].object;
-            }
+
 
             return null
         }
