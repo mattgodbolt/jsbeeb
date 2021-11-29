@@ -19,7 +19,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
     }
 
     class ClickControls {
-        constructor(domElement, scene, camera, orbitControls) {
+        constructor(domElement, scene, camera, orbitControls, keyboardGroup) {
             this.domElement = domElement;
             this.domElement.addEventListener("pointerdown", event => this.onDown(event), false);
             this.domElement.addEventListener("pointerup", event => this.onUp(event), false);
@@ -31,6 +31,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             this.raycaster = new THREE.Raycaster();
             this.orbitControls = orbitControls;
             this._setDown = _.throttle(this._setDown, 45);
+            this.keyboardGroup = keyboardGroup
         }
 
         getCanvasRelativePosition(event) {
@@ -49,13 +50,20 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             };
             this.raycaster.setFromCamera(normalizedPosition, this.camera);
             // get the list of objects the ray intersected
-            const intersectedObjects = this.raycaster.intersectObjects(this.scene.children, true);
+            const intersectedObjects = this.raycaster.intersectObjects(this.keyboardGroup.children, true);
                 // TODO factor in the 'step height' of keyboard rows
-            if (intersectedObjects.length && intersectedObjects[0].point.y > 2.6) {
-                // pick the first object. It's the closest one
-                return intersectedObjects[0].object;
+
+            if (!intersectedObjects.length) return null;
+
+            if (intersectedObjects.length===1) return intersectedObjects[0].object;
+
+            if (intersectedObjects[1] === this.downObj) {
+                return intersectedObjects[1].object;
             }
-            return null;
+
+              return intersectedObjects[0].object;
+
+
         }
 
         _setDown(obj) {
@@ -142,6 +150,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 this.fb32 = new Uint32Array(1024 * 1024);
                 this.cpu = null;
                 this.beeb = null;
+                this.canvas = canvas;
 
                 // Set the background color
                 this.scene.background = new THREE.Color('#222222');
@@ -159,8 +168,6 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
 
                 this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
                 this.controls.target.set(0, 7, -2.36);
-
-                this.clickControls = new ClickControls(canvas, this.scene, this.camera, this.controls);
 
                 this.scene.add(skyLight());
                 const dirLight = directionalLight();
@@ -245,6 +252,10 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 this.beeb.setProcessor(this.cpu);
             this.scene.add(this.beeb.model);
             this.updateTextureEncoding();
+            this.keyboardGroup = this.scene.getObjectByName("KeyboardGroup");
+
+            this.clickControls = new ClickControls(this.canvas, this.scene, this.camera, this.controls,this.keyboardGroup);
+
         }
 
         frame() {

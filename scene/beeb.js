@@ -356,6 +356,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
 
         prepareBeeb(beebModel) {
             const keyboard = beebModel;
+            this.keyboardGroup = beebModel.getObjectByName("KeyboardGroup");
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
             keyboard.traverse(child => {
                 console.log(child.name);
