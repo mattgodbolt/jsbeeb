@@ -243,6 +243,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
                 emissiveMap: this.screenTexture,
                 roughness: 0.0,
                 emissive: 0xffffff,
+                reflectivity: 0.02,
                 envMap: this.envMap,
             });
 
