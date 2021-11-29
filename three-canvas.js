@@ -3,7 +3,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
 
     function skyLight() {
         const intensity = 0.1;
-        const skyColor = 0xffffbb; 
+        const skyColor = 0xffffbb;
         const groundColor = 0x080820;
         const light = new THREE.HemisphereLight( skyColor, groundColor, intensity );
         return light;
@@ -13,7 +13,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
         const color = 0xfff0e0;
         const intensity = 1;
         const light = new THREE.DirectionalLight(color, intensity);
-        light.position.set(0.5, 0.5, 1);
+        light.position.set(-0.5, 1, 1);
         light.castShadow = true;
         return light;
     }
@@ -135,7 +135,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 this.renderer.outputEncoding = THREE.sRGBEncoding;
                 this.renderer.shadowMap.enabled = true;
                 this.renderer.shadowMap.type = THREE.VSMShadowMap;
- 
+
                 this.scene = new THREE.Scene();
                 this.buffer = new FrameBuffer(1024, 1024);
                 this.fb32 = new Uint32Array(1024 * 1024);
@@ -149,7 +149,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 this.renderer.setClearColor(0x000000, 0.0);
 
                 // Create a camera
-                const fov = 60;
+                const fov = 35;
                 const aspectRatio = 640 / 512;
                 const near = 0.01;
                 const far = 1000;
@@ -167,9 +167,9 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 this.scene.add(dirLight.target);
 
                 //Set up shadow properties for the light
-                dirLight.shadow.mapSize.width = 512; 
+                dirLight.shadow.mapSize.width = 512;
                 dirLight.shadow.mapSize.height = 512;
-                dirLight.shadow.camera.near = -30; 
+                dirLight.shadow.camera.near = -30;
                 dirLight.shadow.camera.far = 30;
                 dirLight.shadow.camera.left = -30;
                 dirLight.shadow.camera.right = 30;
