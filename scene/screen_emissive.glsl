@@ -2,7 +2,7 @@
     // Screen shader emissive section (inserted part way through main() - replaces the threejs emissivemap_fragment)
     // https://github.com/mrdoob/three.js/blob/dev/src/renderers/shaders/ShaderChunk/emissivemap_fragment.glsl.js
 
-    float screenEmissiveBrightness = 3.0;
+    float screenEmissiveBrightness = 4.0;
 
     float ambientEmissive = 0.02;
     float maskedAmbientEmissive = 0.03;
