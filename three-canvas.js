@@ -5,8 +5,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
         const intensity = 0.1;
         const skyColor = 0xffffbb;
         const groundColor = 0x080820;
-        const light = new THREE.HemisphereLight( skyColor, groundColor, intensity );
-        return light;
+        return new THREE.HemisphereLight(skyColor, groundColor, intensity);
     }
 
     function directionalLight() {
@@ -31,7 +30,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             this.raycaster = new THREE.Raycaster();
             this.orbitControls = orbitControls;
             this._setDown = _.throttle(this._setDown, 45);
-            this.keyboardGroup = keyboardGroup
+            this.keyboardGroup = keyboardGroup;
         }
 
         getCanvasRelativePosition(event) {
@@ -51,7 +50,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             this.raycaster.setFromCamera(normalizedPosition, this.camera);
             // get the list of objects the ray intersected
             const intersectedObjects = this.raycaster.intersectObjects(this.keyboardGroup.children, true);
-                // TODO factor in the 'step height' of keyboard rows
+            // TODO factor in the 'step height' of keyboard rows
 
             if (!intersectedObjects.length) return null;
 
@@ -61,16 +60,14 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             }
 
             // We're only intersecting with one key
-            if (intersectedObjects.length===1) return intersectedObjects[0].object;
+            if (intersectedObjects.length === 1) return intersectedObjects[0].object;
 
             // The second key is one we're already pressing
             if (intersectedObjects[1].object === this.downObj) {
                 return intersectedObjects[1].object;
             }
 
-
-
-            return null
+            return null;
         }
 
         _setDown(obj) {
@@ -261,8 +258,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
             this.updateTextureEncoding();
             this.keyboardGroup = this.scene.getObjectByName("KeyboardGroup");
 
-            this.clickControls = new ClickControls(this.canvas, this.scene, this.camera, this.controls,this.keyboardGroup);
-
+            this.clickControls = new ClickControls(this.canvas, this.scene, this.camera, this.controls, this.keyboardGroup);
         }
 
         frame() {
