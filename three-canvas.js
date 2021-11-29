@@ -55,15 +55,20 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
 
             if (!intersectedObjects.length) return null;
 
+            // We're only intersecting with one key
             if (intersectedObjects.length===1) return intersectedObjects[0].object;
 
-            if (intersectedObjects[1] === this.downObj) {
+            // The second key is one we're already pressing
+            if (intersectedObjects[1].object === this.downObj) {
                 return intersectedObjects[1].object;
             }
 
-              return intersectedObjects[0].object;
+            // Its the same key as before, or we are pressing the top
+            if (intersectedObjects[0].point.y > 2.6 || intersectedObjects[0].object === this.downObj) {
+                return intersectedObjects[0].object;
+            }
 
-
+            return null
         }
 
         _setDown(obj) {
