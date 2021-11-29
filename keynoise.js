@@ -29,11 +29,19 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
 
         async initialise() {
             // TODO: make a list of samples here
-            this.genericKeyUps = await this.loadSounds(['sounds/keys/keyUp1.wav']);
-            this.genericKeyDowns = await this.loadSounds(['sounds/keys/keyDown1.wav']);
+            function samples(number, name){
+              let a = []
+              for (let i = 1; i <= number; i++) {a.push(i)}
+              return a.map(k => 'sounds/keys/'+name+k+'.wav')
+            }
+
+            this.genericKeyUps = await this.loadSounds(samples(4,'keyUp'));
+            this.genericKeyDowns = await this.loadSounds(samples(4,'keyDown'));
             // TODO: actually use different samples for special keys
-            this.specialKeyUps[utils.BBC.SPACE] = await this.loadSounds(['sounds/keys/keyUp1.wav']);
-            this.specialKeyDowns[utils.BBC.SPACE] = await this.loadSounds(['sounds/keys/keyDown1.wav']);
+            this.specialKeyUps[utils.BBC.SPACE] = await this.loadSounds(samples(4,'spaceUp'));
+            this.specialKeyDowns[utils.BBC.SPACE] = await this.loadSounds(samples(4,'spaceDown'));
+            this.specialKeyUps[utils.BBC.RETURN] = await this.loadSounds(samples(3,'returnUp'));
+            this.specialKeyDowns[utils.BBC.RETURN] = await this.loadSounds(samples(3,'returnDown'));
         }
 
         _oneShot(sound) {
