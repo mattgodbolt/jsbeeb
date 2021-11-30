@@ -61,7 +61,7 @@ jobs:
 
   update-web:
     needs: build-and-test
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
