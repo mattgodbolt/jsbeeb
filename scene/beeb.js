@@ -359,12 +359,12 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
           let perspexBlock =  beebModel.getObjectByName("Keyboard_CLEAR_PLASTIC_BLOCK")
           perspexBlock.material = new THREE.MeshPhysicalMaterial({
             roughness: 0,
-            transmission: 0.9,
+            transmission: 0.8,
             transparent: true,
-            thickness:1,
+            thickness:0,
             envMap: this.envMap,
-            opacity: 0.4,
-            metalness:1,
+            opacity: 1, // 1 as we don't want the material to fade out, we can adjust how much the diffuse light affects things with transmission.
+            metalness:0,
             color: 0xeeeeee
           })
 
