@@ -1,6 +1,3 @@
 [submodule "tests/6502_65C02_functional_tests"]
 	path = tests/6502_65C02_functional_tests
     url = https://github.com/mattgodbolt/6502_65C02_functional_tests.git
-[submodule "virtual-beeb"]
-	path = virtual-beeb
-	url = git@github.com:8bitkick/virtual-beeb.git
