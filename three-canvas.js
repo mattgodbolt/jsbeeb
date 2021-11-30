@@ -1,4 +1,4 @@
-define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loader', 'three-obj-loader', 'three-orbit'], function (THREE, $, utils, loadBeeb, _) {
+define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], function (THREE, $, utils, loadBeeb, _) {
     "use strict";
 
     function skyLight() {

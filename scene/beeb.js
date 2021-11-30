@@ -1,4 +1,4 @@
-define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orbit'], function (THREE, utils) {
+define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
     "use strict";
 
     function keyIndexToBeebIndex(BBC, keyIndex) {

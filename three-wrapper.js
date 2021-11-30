@@ -1,4 +1,4 @@
-define('three', ['lib/three.min'], function (THREE) {
+define('three-wrapper', ['three'], function (THREE) {
     "use strict";
     window.THREE = THREE;
     return THREE;

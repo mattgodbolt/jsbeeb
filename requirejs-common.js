@@ -23,20 +23,23 @@
             'promise': 'lib/promise-6.0.0',
             'underscore': 'lib/underscore-min',
             'webgl-debug': 'lib/webgl-debug',
-            'three': 'three-wrapper',
-            'three-mtl-loader': 'lib/MTLLoader',
+            'three': 'lib/three.min',
             'three-gltf-loader': 'lib/GLTFLoader',
-            'three-obj-loader': 'lib/OBJLoader',
             'three-orbit': 'lib/OrbitControls'
         },
         shim: {
             'underscore': {exports: '_'},
-            'three-mtl-loader': ['three'],
-            'three-obj-loader': ['three'],
-            'three-gltf-loader': ['three'],
-            'three-orbit': ['three'],
             'bootstrap': ['jquery'],
             'jquery-visibility': ['jquery']
+        },
+        map: {
+            '*': {
+                three: 'three-wrapper'
+            },
+            'three-wrapper': {
+                three: 'three'
+            }
         }
+
     });
 })();

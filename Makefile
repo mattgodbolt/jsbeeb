@@ -34,7 +34,7 @@ dist: npm
 	@rm -rf out/build out/dist
 	@mkdir -p out/dist
 	@mkdir -p out/build
-	cp -r *.js *.css *.html *.txt *.ico discs tapes basic images lib roms sounds out/build
+	cp -r *.js *.css *.html *.txt *.ico discs tapes basic images lib roms sounds virtual-beeb scene out/build
 	mkdir out/build/app && cp app/electron.js out/build/app
 	for BASEFILE in main requirejs-common; do \
 		perl -pi -e "s/require\(\['$${BASEFILE}'\]/require(['$${BASEFILE}-$(HASH)']/" out/build/index.html; \

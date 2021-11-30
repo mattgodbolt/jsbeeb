@@ -4,7 +4,7 @@
     dir: "DEPLOY_DIR",
     generateSourceMaps: true,
     modules: [{name: "main-HASH"}],
-    optimize: "uglify2",
+    optimize: "none",
     optimizeCss: "standard.keepLines",
     preserveLicenseComments: false,
     removeCombined: true,
