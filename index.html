@@ -4,11 +4,11 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="author" content="Matt Godbolt">
-    <meta name="description" content="A Javascript BBC Micro emulator">
+    <meta name="author" content="Matt Godbolt, Paul Malin and Dominic Pajak">
+    <meta name="description" content="Interactive 3D simulation on the BBC Micro">
     <meta http-equiv="Content-Security-Policy"
           content="script-src 'self' 'unsafe-inline' 'unsafe-eval' *.google-analytics.com *.google.com;"/>
-    <title>jsbeeb - Javascript BBC Micro emulator</title>
+    <title>VirtualBeeb - BBC Micro 3D simulation</title>
     <link rel="stylesheet" href="lib/bootstrap.min.css" type="text/css">
     <link rel="stylesheet" href="jsbeeb.css" type="text/css">
     <link rel="shortcut icon" href="/favicon.ico">
@@ -38,53 +38,36 @@
 
 <body>
 
-<nav id="header-bar" class="navbar navbar-dark bg-dark navbar-expand-lg not-electron" role="navigation">
+<nav id="header-bar" class="navbar navbar-expand-lg not-electron" role="navigation">
     <div class="container-fluid">
-        <a class="navbar-brand" href="https://bbc.godbolt.org/" target="_top">jsbeeb</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
                 aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
             <ul class="navbar-nav nav mb-2 mb-lg-0">
+
+              <li class="nav-item dropdown embed-hide">
+                  <a href="#" class="nav-link dropdown-toggle" id="navbarDiscs" role="button"
+                     data-bs-toggle="dropdown" aria-expanded="false">Load Games</a>
+                  <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
+                      <li><a href="#sth" class="dropdown-item sth" data-id="discs" data-bs-toggle="modal"
+                             data-bs-target="#sth">From STH archive</a></li>
+                      <li><a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
+                          From examples or local</a></li>
+                  </ul>
+              </li>
+
+
+
+
+              <li class="nav-item embed-hide">
+                  <a href="#" id="fs" class="nav-link">Fullscreen</a>
+              </li>
+
                 <li class="nav-item">
                     <a href="#configuration" class="nav-link" data-bs-toggle="modal" data-bs-target="#configuration">
-                        Config (<span class="bbc-model">BBC B</span>)</a>
-                </li>
-                <li class="nav-item dropdown embed-hide">
-                    <a href="#" class="nav-link dropdown-toggle" id="navbarDiscs" role="button"
-                       data-bs-toggle="dropdown" aria-expanded="false">Discs</a>
-                    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
-                        <li><a href="#sth" class="dropdown-item sth" data-id="discs" data-bs-toggle="modal"
-                               data-bs-target="#sth">From STH archive</a></li>
-                        <li><a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
-                            From examples or local</a></li>
-                        <li class="if-drive-available">
-                            <a href="#google-drive" class="dropdown-item" id="open-drive-link">From Google Drive</a>
-                        </li>
-                    </ul>
-                </li>
-                <li class="nav-item dropdown embed-hide">
-                    <a href="#" class="nav-link dropdown-toggle" id="navbarCassettes" role="button"
-                       data-bs-toggle="dropdown" aria-expanded="false">Cassettes</a>
-                    <ul class="dropdown-menu dropdown-menu-dark" id="tape-menu" aria-labelledby="navbarCassettes">
-                        <li><a href="#sth" class="dropdown-item sth" data-bs-toggle="modal" data-id="tapes"
-                               data-bs-target="#sth">From STH archive</a></li>
-                        <li><a data-id="rewind" class="dropdown-item">Rewind cassette</a></li>
-                        <li>
-                            <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#tapes">
-                                From local file
-                            </a>
-                        </li>
-                    </ul>
-                </li>
-                <li class="nav-item dropdown embed-hide">
-                    <a href="#" class="nav-link dropdown-toggle" id="navbarReset" role="button"
-                       data-bs-toggle="dropdown" aria-expanded="false">Reset</a>
-                    <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarReset">
-                        <li><a href="#" id="soft-reset" class="dropdown-item">Soft reset</a></li>
-                        <li><a href="#" id="hard-reset" class="dropdown-item">Hard reset</a></li>
-                    </ul>
+                    Keys</a>
                 </li>
                 <li class="nav-item dropdown embed-hide">
                     <a href="#" class="nav-link dropdown-toggle" id="navbarMore" role="button" data-bs-toggle="dropdown"
@@ -102,14 +85,6 @@
                     </ul>
                 </li>
             </ul>
-            <span class="navbar-text m-auto">
-                Edit BBC BASIC interactively with Owlet at
-                <a href="https://bbcmic.ro/" target="_blank">bbcmic.ro</a>!
-            </span>
-            <form class="d-flex">
-                <input id="paste-text" class="form-control me-2" type="text" maxlength="0"
-                       placeholder="Paste text or drop files here..." aria-label="Search">
-            </form>
         </div>
     </div>
 </nav>
@@ -121,8 +96,6 @@
 <div>
     <div id="outer">
         <div id="cub-monitor">
-            <img id="cub-monitor-pic" width="896" height="648" src="images/cub-monitor.png"
-                 alt="A fake CUB computer monitor">
             <div class="sidebar left"><img src="" alt=""></div>
             <canvas id="screen" width="896" height="600"></canvas>
             <div class="sidebar right"><img src="" alt=""></div>
@@ -165,102 +138,7 @@
             </tbody>
         </table>
     </div>
-    <div id="crtc_debug" class="initially-hidden">
-        <div class="crtc_state">
-            <h6 class="dbg">6845 state</h6>
-            <table>
-                <tbody>
-                <tr class="template">
-                    <th><span class="register"></span>:</th>
-                    <td class="value"></td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="crtc_regs">
-            <h6 class="dbg">6845 regs</h6>
-            <table>
-                <tbody>
-                <tr class="template">
-                    <th><span class="register"></span>:</th>
-                    <td class="value"></td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-    <div id="debug" class="initially-hidden">
-        <div class="debug-container">
-            <form id="goto-mem-addr-form" role="form">
-                <div class="input-group input-group-sm">
-                    <span accesskey="m" class="input-group-text" id="mem_addr_text">
-                        <span class="accesskey">M</span>em addr:
-                    </span>
-                    <input type="text" class="form-control form-control-sm goto-addr" placeholder="$0000"
-                           aria-label="Memory address"
-                           aria-describedby="mem_addr_text">
-                </div>
-            </form>
-            <div id="memory">
-                <div class="template"><span class="dis_addr">0000</span><span
-                        class="mem_bytes"><span>11</span> <span>22</span> <span>33</span> <span>44</span> <span>55</span> <span>66</span> <span>77</span> <span>88</span></span><span
-                        class="mem_asc"><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span></span>
-                </div>
-            </div>
-        </div>
-        <div class="debug-container">
-            <form role="form" id="goto-dis-addr-form">
-                <div class="input-group input-group-sm">
-                    <span accesskey="a" class="input-group-text" id="dis_addr_text"><span class="accesskey">A</span>ddr:</span>
-                    <input type="text" class="form-control form-control-sm goto-addr" placeholder="$0000"
-                           aria-label="Disassembly address"
-                           aria-describedby="dis_addr_text">
-                </div>
-            </form>
-            <div id="disassembly">
-                <div class="template dis_elem"><span class="bp_gutter"></span><span class="dis_addr">0000</span><span
-                        class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span><span
-                        class="disassembly">LDA (&amp;70), X</span></div>
-            </div>
-        </div>
-        <div id="registers">
-            <div>
-                <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span><span
-                    class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span><span
-                    class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
-            </div>
-            <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
-            <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
-            <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
-            <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
-            <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
-        </div>
-    </div>
-    <div id="hardware_debug" class="initially-hidden">
-        <div class="via_regs" id="sysvia">
-            <h6 class="dbg">System VIA</h6>
-            <table>
-                <tbody>
-                <tr class="template">
-                    <th><span class="register"></span>:</th>
-                    <td class="value"></td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="via_regs" id="uservia">
-            <h6 class="dbg">User VIA</h6>
-            <table>
-                <tbody>
-                <tr class="template">
-                    <th><span class="register"></span>:</th>
-                    <td class="value"></td>
-                </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
+
 
 <div class="modal fade" id="info" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -319,43 +197,7 @@
                     characters. Also, the current keyboard layout is optimized for a US keyboard; I am working on
                     improving this situation.
                 </div>
-                <div>
-                    <h5>Handy key mappings</h5>
-                    <table class="keymap">
-                        <tr>
-                            <th>BBC</th>
-                            <th>PC</th>
-                            <th>OSX</th>
-                        </tr>
-                        <tr>
-                            <td><span class="function key">F0</span></td>
-                            <td><span class="key">F10</span></td>
-                            <td><span class="key">F10</span></td>
-                        </tr>
-                        <tr>
-                            <td><span class="key">BREAK</span></td>
-                            <td><span class="key">F12</span></td>
-                            <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
-                        </tr>
-                        <tr>
-                            <td><span class="key">COPY</span></td>
-                            <td><span class="key">End</span></td>
-                            <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
-                        </tr>
-                        <tr>
-                            <td>
-                                <div class="dbl key">*<br>:</div>
-                            </td>
-                            <td>TODO</td>
-                            <td>TODO</td>
-                        </tr>
-                        <tr>
-                            <td>Debug</td>
-                            <td><span class="key">Ctrl-Home</span></td>
-                            <td>TODO</td>
-                        </tr>
-                    </table>
-                </div>
+
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -395,85 +237,8 @@
     </div>
 </div>
 
-<div class="modal fade" id="tapes" tabindex="-1" aria-labelledby="tapeModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="tapeModalLabel">Load cassette image</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                To load a custom cassette image, get a UEF file and load it below.
-                <div class="tape">
-                    <label>Load local UEF file:
-                        <input type="file" id="tape_load" accept=".uef,application/binary">
-                    </label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
 
-<div class="modal fade" id="google-drive" tabindex="-1" aria-labelledby="google-driveModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="google-driveModalLabel">
-                    Load or create disc from your
-                    <a href="https://drive.google.com/">Google Drive</a>
-                    account
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="loading">Loading...</div>
-                <div>
-                    <ul class="list">
-                        <li class="template"><a href="#"><span class="name"></span></a></li>
-                    </ul>
-                    <div>
-                        <form class=" well" role="form" action="#">
-                            <input type="text" placeholder="Create disc..." autofocus class="disc-name">
-                            <button type="submit" class="btn btn-secondary create-button">Create</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- cannot make this one fade in else our attempts to close the modal while it's still opening fail -->
-<div class="modal" id="loading-dialog" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-body">
-                <div class="modal-header">
-                    <h5 class="modal-title loading" id="loadingModalLabel"></h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                            aria-label="Close"></button>
-                </div>
-            </div>
-            <div class="modal-body">
-                <div style="display:none" id="google-drive-auth">
-                    Google Drive requires you to authorize jsbeeb to access your files by logging in.<br>
-                    Please click Authorize to open a Google Drive pop-up to authenticate and give permission to jsbeeb.
-                    <form class=" well" role="form" action="#">
-                        <button type="submit" class="btn btn-secondary create-button">Authorize</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <div class="modal fade" id="sth" tabindex="-1" aria-labelledby="sthModalLabel" aria-hidden="true">
     <div class="modal-dialog">
@@ -547,31 +312,13 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="configurationModalLabel">Emulation Configuration</h5>
+                <h5 class="modal-title" id="configurationModalLabel">Keyboard layout</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
                         aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="row g-2 align-items-center">
                     <div class="col-auto">
-                        <label for="bbc-model-dropdown" class="col-form-label">Model</label>
-                    </div>
-                    <div class="col-auto dropdown">
-                        <button type="button" class="btn btn-secondary dropdown-toggle" data-bs-toggle="dropdown"
-                                id="bbc-model-dropdown">
-                            <span class="bbc-model"></span>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-dark model-menu" role="menu"
-                            aria-labelledby="bbc-model-dropdown">
-                            <li><a href="#" class="dropdown-item" data-target="B">BBC B</a></li>
-                            <li><a href="#" class="dropdown-item" data-target="Master">BBC Master 128</a></li>
-                            <li><a href="#" class="dropdown-item" data-target="MasterTurbo">BBC Master Turbo</a></li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="row g-2 align-items-center">
-                    <div class="col-auto">
-                        <label for="keyboardDropdown" class="col-form-label">Keyboard layout</label>
                     </div>
                     <div class="col-auto dropdown">
                         <button type="button" class="btn btn-secondary dropdown-toggle" data-bs-toggle="dropdown"
@@ -586,6 +333,32 @@
                             <li><a href="#" class="dropdown-item" data-target="gaming">Gaming: handy for games like
                                 Zalaga</a></li>
                         </ul>
+                    </div>
+                    <div>
+                      <br></br>
+                        <h5>Handy key mappings</h5>
+                        <table class="keymap">
+                            <tr>
+                                <th>BBC</th>
+                                <th>PC</th>
+                                <th>OSX</th>
+                            </tr>
+                            <tr>
+                                <td><span class="function key">F0</span></td>
+                                <td><span class="key">F10</span></td>
+                                <td><span class="key">F10</span></td>
+                            </tr>
+                            <tr>
+                                <td><span class="key">BREAK</span></td>
+                                <td><span class="key">F12</span></td>
+                                <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
+                            </tr>
+                            <tr>
+                                <td><span class="key">COPY</span></td>
+                                <td><span class="key">End</span></td>
+                                <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
+                            </tr>
+                        </table>
                     </div>
                 </div>
             </div>

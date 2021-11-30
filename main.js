@@ -218,7 +218,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'keyn
         });
 
         function checkAudioSuspended() {
-            if (audioContext.state === "suspended") $audioWarningNode.fadeIn();
+        //    if (audioContext.state === "suspended") $audioWarningNode.fadeIn();
         }
 
         if (audioContext) {

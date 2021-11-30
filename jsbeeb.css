@@ -1,5 +1,7 @@
 body {
     background-color: #000 !important;
+    margin-top: 0px;
+    font-weight:200;
 }
 
 .modal {
@@ -20,7 +22,10 @@ body {
 }
 
 #outer {
-    display: block;
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  z-index: -1;
 }
 
 #cub-monitor {
@@ -341,4 +346,26 @@ div.modal-body > div:not(:first-child) {
 #error-dialog div.error {
     background-color: #440000;
     margin-top: 5px;
+}
+
+.navbar{
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  z-index: 1;
+  color:#bbbbbb;
+  background-color: #00000088;
+  width: 100%;
+  height: 32px;
+}
+
+#paste-text {
+    height: 32px;
+}
+
+a, a:hover, a:active ,a:visited, .nav-item, .navbar-dark, .navbar-nav, .nav-link{
+    color: #bbbbbb;
+    text-decoration: none;
+    transition: none;
+      opacity: 1;
 }
