@@ -151,6 +151,7 @@ span.accesskey {
     bottom: 0;
     left: 0;
     position: fixed;
+    display:none;
 }
 
 /* hide the LED headers when the LEDs would likely cover the screen */
