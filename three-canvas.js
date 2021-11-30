@@ -165,7 +165,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 // Create a camera
                 const fov = 35;
                 const aspectRatio = 640 / 512;
-                const near = 0.01;
+                const near = 0.1;
                 const far = 1000;
                 this.camera = new THREE.PerspectiveCamera(fov, aspectRatio, near, far);
                 this.camera.position.set(0, 20, 36.5);
