@@ -27,11 +27,12 @@ jobs:
         run: make -j$(nproc) short-tests
       - name: Lint
         run: make -j$(nproc) lint
-      - name: Long tests
-        run: make -j$(nproc) long-tests
+      # - name: Long tests
+      #   run: make -j$(nproc) long-tests
 
   electron-win-mac:
     needs: build-and-test
+    if: github.ref == 'refs/heads/master'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
