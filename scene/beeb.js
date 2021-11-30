@@ -198,7 +198,7 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         updateKey(key, pressed) {
             const KeyTravelMm = 3;
             if (!key) return;
-            const springiness = pressed? 0.9 : 0.5;
+            const springiness = pressed ? 0.9 : 0.5;
             const originalY = key.originalPosition.y;
             const target = pressed ? originalY - (KeyTravelMm / 1000.0) : originalY;
             key.position.y += (target - key.position.y) * springiness;
@@ -248,14 +248,14 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
             });
 
             const newUniforms = {
-                maskTexture: {type: "t", value: maskTexture}
+                maskTexture: { type: "t", value: maskTexture }
             };
 
             // we use onBeforeCompile() to modify one of the standard threejs shaders
             screenMaterial.onBeforeCompile = shader => {
 
                 shader.uniforms.maskTexture = newUniforms.maskTexture;
-                shader.uniforms.time = {value: 0};
+                shader.uniforms.time = { value: 0 };
 
                 shader.fragmentShader = shader.fragmentShader.replace(
                     `#include <common>`,
@@ -356,17 +356,17 @@ define(['three', '../utils', 'three-mtl-loader', 'three-gltf-loader', 'three-orb
         }
 
         prepareBeeb(beebModel) {
-          let perspexBlock =  beebModel.getObjectByName("Keyboard_CLEAR_PLASTIC_BLOCK")
-          perspexBlock.material = new THREE.MeshPhysicalMaterial({
-            roughness: 0,
-            transmission: 0.8,
-            transparent: true,
-            thickness:0,
-            envMap: this.envMap,
-            opacity: 1, // 1 as we don't want the material to fade out, we can adjust how much the diffuse light affects things with transmission.
-            metalness:0,
-            color: 0xeeeeee
-          })
+            let perspexBlock = beebModel.getObjectByName("Keyboard_CLEAR_PLASTIC_BLOCK");
+            perspexBlock.material = new THREE.MeshPhysicalMaterial({
+                roughness: 0,
+                transmission: 0.8,
+                transparent: true,
+                thickness: 0,
+                envMap: this.envMap,
+                opacity: 1, // 1 as we don't want the material to fade out, we can adjust how much the diffuse light affects things with transmission.
+                metalness: 0,
+                color: 0xeeeeee
+            });
 
             const keyboard = beebModel;
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
