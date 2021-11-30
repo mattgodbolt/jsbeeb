@@ -95,6 +95,7 @@ jobs:
     needs: build-and-test
     if: github.ref == 'refs/heads/new_canvas_glb'
     runs-on: ubuntu-20.04
+    environment: bbcmic.ro
     steps:
       - uses: actions/checkout@v2
       - name: Use Node.js 12.x
@@ -119,6 +120,6 @@ jobs:
           args: --acl public-read --cache-control max-age=30 --metadata-directive REPLACE
         env:
           AWS_S3_BUCKET: virtual.bbcmic.ro
-          AWS_ACCESS_KEY_ID: ${{ secrets.OWLET_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.OWLET_AWS_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           SOURCE_DIR: 'out/dist'
