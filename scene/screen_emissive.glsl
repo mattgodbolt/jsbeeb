@@ -2,16 +2,16 @@
     // Screen shader emissive section (inserted part way through main() - replaces the threejs emissivemap_fragment)
     // https://github.com/mrdoob/three.js/blob/dev/src/renderers/shaders/ShaderChunk/emissivemap_fragment.glsl.js
 
-    float screenEmissiveBrightness = 4.0;
+    float screenEmissiveBrightness = 6.0;
 
-    float ambientEmissive = 0.02;
-    float maskedAmbientEmissive = 0.03;
+    float ambientEmissive = 0.01;
+    float maskedAmbientEmissive = 0.01;
 
     float scanlineIntensity = 0.4;
 
     float blurOffset = 1.25 / 1024.0;
     float timingInterference = 0.1 / 1024.0;
-    float interferenceIntensity = 0.03;
+    float interferenceIntensity = 0.002;
 
     vec4 emissiveColor = vec4(0);
 
@@ -43,7 +43,9 @@
 
     emissiveColor.rgb = emissiveColor.rgb / total;
 
-    emissiveColor.rgb = mix(emissiveColor.rgb, noise, interferenceIntensity);
+    emissiveColor.rgb += (noise * 2.0 - 1.0) * interferenceIntensity;
+
+    emissiveColor.rgb = max( vec3(0), emissiveColor.rgb );
 
     // ambient emissive with mask
     emissiveColor += vec4(maskedAmbientEmissive);
