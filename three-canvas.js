@@ -159,7 +159,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-mtl-loade
                 // Set the background color
                 this.scene.background = new THREE.Color('#222222');
 
-                this.renderer.autoClear = false;
+                this.renderer.autoClear = true;
                 this.renderer.setClearColor(0x000000, 0.0);
 
                 // Create a camera
