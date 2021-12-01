@@ -22,7 +22,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
             this.domElement = domElement;
             this.domElement.addEventListener("pointerdown", event => this.onDown(event), false);
             this.domElement.addEventListener("pointerup", event => this.onUp(event), false);
-            this.domElement.addEventListener("mousemove", event => this.onMove(event), false);
+            this.domElement.addEventListener("pointermove", event => this.onMove(event), false);
             this.downObj = null;
             this.isTracking = false;
             this.scene = scene;
