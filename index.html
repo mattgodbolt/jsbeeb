@@ -6,8 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="author" content="Matt Godbolt, Paul Malin and Dominic Pajak">
     <meta name="description" content="Interactive 3D simulation of the BBC Micro">
-    <meta http-equiv="Content-Security-Policy"
-          content="script-src 'self' 'unsafe-inline' 'unsafe-eval' *.google-analytics.com *.google.com;"/>
     <title>VirtualBeeb - BBC Micro 3D simulation</title>
     <link rel="stylesheet" href="lib/bootstrap.min.css" type="text/css">
     <link rel="stylesheet" href="jsbeeb.css" type="text/css">
@@ -38,17 +36,21 @@
     <style>
     #loading-spinner {
       position: absolute;
-      height: 160px;
-      width: 160px;
-      top: 50%;
-      left: 50%;
-      margin-left: -50px;
-      margin-top: -50px;
+      top: 30%;
+      left: 0;
+      right: 0;
+      bottom: 0;
       text-align: center;
-      color: #eeeeee;
+      color: white;
     }
 
     #spinner{
+      display: inline-block;
+      vertical-align: middle;
+      position: relative;
+      overflow: hidden;
+      margin:32px;
+
       height: 160px;
       width: 160px;
       animation: spin 2s linear infinite;
@@ -203,31 +205,27 @@
                 <div>
                     <p><span style="font-weight:400">Virtual</span>beeb - beta 0.0.1 December 2021</p>
                     <p>
-                    A fully interactive 3D model of the BBC Micro (1981). Choose from hundreds of games including the classic Elite and experience the sights and sounds
+                    An interactive 3D model of the BBC Micro (1981). Choose from 100s of games and experience the sights and sounds
                     of the original hardware. Retrocomputing for the metaverse!
                     </p>
 
-                    <p>Created to celebrate the BBC Micro's 40th anniversary, Virtualbeeb is free open source software built on the
-                        <a href="https://bbc.godbolt.org/">jsbeeb</a> emulator with the work of
+                    <p>Created for the BBC Micro's 40th, Virtualbeeb is FOSS built on the
+                        <a href="https://bbc.godbolt.org/">jsbeeb</a> emulator by
                         <a href="http://www.twitter.com/mattgodbolt">Matt Godbolt</a>,
                         <a href="http://www.twitter.com/P_Malin">Paul Malin</a>,
                         <a href="http://www.twitter.com/Antmerker">Anthony Mercer</a>,
-                        and <a href="http://www.twitter.com/dominicpajak">Dominic Pajak</a>.</p>
-                </div>
-                <div>
-                    Learn more about how the BBC Micro lives on at the links below:
+                        and <a href="http://www.twitter.com/dominicpajak">Dominic Pajak</a>. Find out more about the BBC Micro:</p>
                 </div>
                 <div>
 
                     <ul>
-                      <li><a href="http://www.twitter.com/bbcmicrobot">BBC Micro Bot - Creative retro coding</a>
-                      <li><a href="https://bitshifters.github.io/">Bishifters Collective - Acorn demo scene</a></li>
-                      <li><a href="https://www.bbcmicrobot.com/learn/index.html">BBC BASIC tutorial</a></li>
+                      <li><a href="http://www.twitter.com/bbcmicrobot">BBC Micro Bot - Creative retro coding community</a>
+                      <li><a href="https://bitshifters.github.io/">Bitshifters Collective - Acorn demo scene</a></li>
                       <li><a href="http://www.bbcmicro.co.uk">Complete BBC Micro Games Archive</a></li>
                     </ul>
                 </div>
                 <div>
-                  <i>Mighty oaks from little acorns grow</i>
+                  <a href="https://twitter.com/BBCMicroBot?ref_src=twsrc%5Etfw" class="twitter-follow-button" data-show-count="false">Follow @BBCMicroBot</a><script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
                 </div>
             </div>
             <div class="modal-footer">
