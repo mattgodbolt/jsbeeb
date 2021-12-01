@@ -13,7 +13,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
         const intensity = 1;
         const light = new THREE.DirectionalLight(color, intensity);
         light.position.set(-0.5, 1, 1);
-        light.castShadow = true;
+        light.castShadow = false;
         return light;
     }
 
