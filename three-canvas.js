@@ -168,12 +168,12 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                 const near = 0.1;
                 const far = 1000;
                 this.camera = new THREE.PerspectiveCamera(fov, aspectRatio, near, far);
-                this.camera.position.set(0, 20, 100.5);
+                this.camera.position.set(0, 35, 50);
 
                 console.log(window.innerWidth)
 
                 this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-                this.controls.target.set(0, 7, -2.36);
+                this.controls.target.set(1, 7, 0);
 
                 this.scene.add(skyLight());
                 const dirLight = directionalLight();
