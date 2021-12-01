@@ -364,6 +364,11 @@ div.modal-body > div:not(:first-child) {
     height: 32px;
 }
 
+// this is a white icon with 50% opacity
+.navbar-toggler {
+  color: white;
+}
+
 a, a:hover, a:active ,a:visited, .nav-item, .navbar-dark, .navbar-nav, .nav-link{
     color: #bbbbbb;
     text-decoration: none;

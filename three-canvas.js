@@ -259,6 +259,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
             this.keyboardGroup = this.scene.getObjectByName("KeyboardGroup");
 
             this.clickControls = new ClickControls(this.canvas, this.scene, this.camera, this.controls, this.keyboardGroup);
+            $('#loading-spinner').hide();
         }
 
         frame() {

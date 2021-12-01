@@ -33,12 +33,40 @@
 
         ga('create', 'UA-55180-8', 'godbolt.org');
         ga('send', 'pageview');
+
     </script>
+    <style>
+    #loading-spinner {
+      position: absolute;
+      height: 160px;
+      width: 160px;
+      top: 50%;
+      left: 50%;
+      margin-left: -50px;
+      margin-top: -50px;
+      text-align: center;
+      color: #eeeeee;
+    }
+
+    #spinner{
+      height: 160px;
+      width: 160px;
+      animation: spin 2s linear infinite;
+      border: 10px solid #eeeeee;
+      border-top: 10px solid #00000000;
+      border-radius: 50%;
+      z-index: 2;
+    }
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
 </head>
-
 <body>
-
-<nav id="header-bar" class="navbar navbar-expand-lg not-electron" role="navigation">
+<div id="loading-spinner"><div id="spinner"></div><br>Loading VirtualBeeb</div>
+<nav id="header-bar" class="navbar navbar-expand-lg not-electron navbar-expand" role="navigation">
     <div class="container-fluid">
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent"
                 aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,18 +76,47 @@
             <ul class="navbar-nav nav mb-2 mb-lg-0">
 
               <li class="nav-item dropdown embed-hide">
-                  <a href="#" class="nav-link dropdown-toggle" id="navbarDiscs" role="button"
-                     data-bs-toggle="dropdown" aria-expanded="false">Load Games</a>
-                  <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
-                    <li><a href="/?&disc1=elite.ssd&autoboot" class="dropdown-item" data-bs-target="/#?&disc1=elite.ssd&autoboot"
-                          >Elite</a></li>
-                          <li><a href="/?&disc1=sth%3ASuperior%2FRepton.zip&autoboot" class="dropdown-item" data-bs-target="?&disc1=sth%3ASuperior%2FRepton.zip&autoboot"
-                                >Repton</a></li>
-                      <li><a href="#sth" class="dropdown-item sth" data-id="discs" data-bs-toggle="modal"
-                             data-bs-target="#sth">BBC Micro Games Archive</a></li>
-                      <li><a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
-                          From examples or local</a></li>
-                  </ul>
+                <a href="#" class="nav-link dropdown-toggle" id="navbarDiscs" role="button"
+                data-bs-toggle="dropdown" aria-expanded="false">Load Games</a>
+                <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
+
+                  <li>
+                    <a href="/?&disc1=sth%3ACheats%2FCHT_ChuckieEgg-Chukee.zip&autoboot#" class="dropdown-item" data-bs-target="/?&disc1=sth%3ACheats%2FCHT_ChuckieEgg-Chukee.zip&autoboot#">
+                      Chuckie Egg
+                    </a>
+                  </li>
+
+                  <li>
+                    <a href="/?&disc1=elite.ssd&autoboot" class="dropdown-item" data-bs-target="/?&disc1=elite.ssd&autoboot">
+                      Elite
+                    </a>
+                  </li>
+
+                  <li>
+                    <a href="/?&disc1=sth%3AAardvark%2FFrak.zip&autoboot#" class="dropdown-item" data-bs-target="/?&disc1=sth%3AAardvark%2FFrak.zip&autoboot">
+                      Frak
+                    </a>
+                  </li>
+
+                  <li>
+                    <a href="/?&disc1=sth%3ASuperior%2FRepton.zip&autoboot" class="dropdown-item" data-bs-target="?&disc1=sth%3ASuperior%2FRepton.zip&autoboot">
+                      Repton
+                    </a>
+                  </li>
+
+                  <li>
+                    <a href="/?&disc1=bs-badappl.dsd&autoboot" class="dropdown-item" data-bs-target="/?&disc1=bs-badappl.dsd&autoboot">
+                      Teletext Bad Apple
+                    </a>
+                  </li>
+
+                  <li>
+                    <a href="#sth" class="dropdown-item sth" data-id="discs" data-bs-toggle="modal"data-bs-target="#sth">Search Games Archive</a>
+                  </li>
+                  <li>
+                    <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">From examples or local</a>
+                  </li>
+                </ul>
               </li>
 
 
@@ -155,7 +212,7 @@
                         <a href="http://www.twitter.com/mattgodbolt">Matt Godbolt</a>,
                         <a href="http://www.twitter.com/P_Malin">Paul Malin</a>,
                         <a href="http://www.twitter.com/Antmerker">Anthony Mercer</a>,
-                        and <a href="http://www.twitter.com/dominicpajak">Dominic Pajak</a></p>.
+                        and <a href="http://www.twitter.com/dominicpajak">Dominic Pajak</a>.</p>
                 </div>
                 <div>
                     Learn more about how the BBC Micro lives on at the links below:
