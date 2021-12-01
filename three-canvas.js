@@ -170,7 +170,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                 this.camera = new THREE.PerspectiveCamera(fov, aspectRatio, near, far);
                 this.camera.position.set(0, 35, 50);
 
-                console.log(window.innerWidth)
+                console.log(window.innerWidth);
 
                 this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
                 this.controls.target.set(1, 7, 0);
