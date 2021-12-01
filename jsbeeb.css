@@ -26,6 +26,9 @@ body {
   left: 0px;
   top: 0px;
   z-index: -1;
+  -webkit-user-select: none; /* Safari */
+-ms-user-select: none; /* IE 10 and IE 11 */
+user-select: none; /* Standard syntax */
 }
 
 #cub-monitor {
@@ -154,7 +157,7 @@ span.accesskey {
     display:none;
 }
 
-@media screen and (orientation: portrait) {
+@media (orientation: portrait){
 #fs {
     display: none;
 }
