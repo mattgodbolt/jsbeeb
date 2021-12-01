@@ -371,7 +371,6 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
             const keyboard = beebModel;
             const name = /JOINED_KEYBOARD(\.?([0-9]{3}))?.*/;
             keyboard.traverse(child => {
-                console.log(child.name);
                 const match = child.name.match(name);
                 if (match) {
                     const keyIndex = match[1] ? parseInt(match[2]) : 0;

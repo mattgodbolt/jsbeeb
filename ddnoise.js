@@ -2,7 +2,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     "use strict";
 
     var IDLE = 0, SPIN_UP = 1, SPINNING = 2;
-    var VOLUME = 0.25;
+    var VOLUME = 0.15;
 
     function DdNoise(context) {
         this.context = context;

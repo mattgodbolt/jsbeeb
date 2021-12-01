@@ -1,7 +1,7 @@
 define(['./utils', 'underscore', 'promise'], function (utils, _) {
     "use strict";
 
-    const VOLUME = 0.15;
+    const VOLUME = 0.4;
 
     class KeyNoise {
         constructor(context) {
