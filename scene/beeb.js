@@ -361,7 +361,6 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
                 roughness: 0,
                 transmission: 0.8,
                 transparent: true,
-                thickness: 0,
                 envMap: this.envMap,
                 opacity: 1, // 1 as we don't want the material to fade out, we can adjust how much the diffuse light affects things with transmission.
                 metalness: 0,
