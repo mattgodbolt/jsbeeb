@@ -247,6 +247,7 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
                 emissive: 0xffffff,
                 reflectivity: 0.02,
                 envMap: this.envMap,
+                side: THREE.DoubleSide,
             });
 
             const newUniforms = {
@@ -300,7 +301,8 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
             const screen = frame.getObjectByName("Plane");
             screen.material = new THREE.MeshPhysicalMaterial({
                 color: 0x030201,
-                roughness: 0.5
+                roughness: 0.5,
+                side: THREE.DoubleSide,
             });
         }
 
