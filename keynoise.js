@@ -1,4 +1,4 @@
-define(['./utils', 'underscore', 'promise'], function (utils, _) {
+define(['jquery','./utils', 'underscore', 'promise'], function ($,utils, _) {
     "use strict";
 
     const VOLUME = 0.4;
