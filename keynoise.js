@@ -34,13 +34,13 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
                 return a.map(k => 'sounds/keys/' + name + k + '.wav');
             }
 
-            document.getElementById('loading-status').innerHTML="Key Clacks.";
+            document.getElementById('loading-status').innerHTML="Loading key clacks.";
             this.genericKeyUps = await this.loadSounds(samples(4, 'KeyUp'));
             this.genericKeyDowns = await this.loadSounds(samples(4, 'KeyDown'));
-            document.getElementById('loading-status').innerHTML="Key Clacks..";
+            document.getElementById('loading-status').innerHTML="Loading key clacks..";
             this.specialKeyUps[utils.BBC.SPACE] = await this.loadSounds(samples(4, 'SpaceUp'));
             this.specialKeyDowns[utils.BBC.SPACE] = await this.loadSounds(samples(4, 'SpaceDown'));
-            document.getElementById('loading-status').innerHTML="Key Clacks...";
+            document.getElementById('loading-status').innerHTML="Loading key clacks...";
             this.specialKeyUps[utils.BBC.RETURN] = await this.loadSounds(samples(3, 'ReturnUp'));
             this.specialKeyDowns[utils.BBC.RETURN] = await this.loadSounds(samples(3, 'ReturnDown'));
         }

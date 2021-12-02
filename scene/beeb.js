@@ -126,13 +126,13 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
 
     async function loadModel() {
         const objLoader = new THREE.GLTFLoader();
-        document.getElementById('loading-status').innerHTML="BBC Micro Model";
+        document.getElementById('loading-status').innerHTML="Loading BBC Micro model";
         const model = await utils.promisifyLoad(objLoader, './virtual-beeb/models/beeb.glb');
         return model.scene;
     }
 
     async function loadMaskTexture() {
-        document.getElementById('loading-status').innerHTML="CRT Texture Mask";
+        document.getElementById('loading-status').innerHTML="Loading CRT texture mask";
         const maskTexture = await utils.promisifyLoad(new THREE.TextureLoader(), './virtual-beeb/textures/mask.png');
         maskTexture.magFilter = THREE.LinearFilter;
         maskTexture.minFilter = THREE.LinearMipmapLinearFilter;
@@ -171,7 +171,7 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
         }
 
         async load() {
-          document.getElementById('loading-status').innerHTML="CRT Shader";
+          document.getElementById('loading-status').innerHTML="Loading CRT shader";
             const [maskTexture, screenPrologFragment, screenEmissiveFragment, screenEpilogFragment, model] = await Promise.all(
                 [
                     loadMaskTexture(),
