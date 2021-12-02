@@ -248,11 +248,13 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
         }
 
         async load() {
+            $('#loading-status').text("Background");
             const bgTexture = await this.loadBackgroundTexture();
             const bgTarget = new THREE.WebGLCubeRenderTarget(bgTexture.image.height);
             bgTarget.fromEquirectangularTexture(this.renderer, bgTexture);
             bgTarget.texture.encoding = THREE.sRGBEncoding;
             this.scene.background = bgTarget.texture;
+
             this.beeb = await loadBeeb(bgTarget.texture, this.buffer.dataTexture);
             if (this.cpu)
                 this.beeb.setProcessor(this.cpu);
@@ -261,8 +263,8 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
             this.keyboardGroup = this.scene.getObjectByName("KeyboardGroup");
 
             this.clickControls = new ClickControls(this.canvas, this.scene, this.camera, this.controls, this.keyboardGroup);
-            $('#loading-spinner').hide();
-        }
+            setTimeout( ()=> {$('#loading-spinner').hide()} , 250);
+            }
 
         frame() {
             this.controls.update();
