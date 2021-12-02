@@ -14,6 +14,23 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
         const light = new THREE.DirectionalLight(color, intensity);
         light.position.set(-0.5, 1, 1);
         light.castShadow = false;
+
+        //Set up shadow properties for the light
+        light.shadow.mapSize.width = 512;
+        light.shadow.mapSize.height = 512;
+        light.shadow.camera.near = -30;
+        light.shadow.camera.far = 30;
+        light.shadow.camera.left = -30;
+        light.shadow.camera.right = 30;
+        light.shadow.camera.top = -30;
+        light.shadow.camera.bottom = 30;
+
+        light.shadow.radius = 2.0; // blur shadow
+
+        // Other shadow map types might require tweaking these
+        //light.shadow.bias = -.01;
+        //light.shadow.normalBias = 1.0;
+
         return light;
     }
 
@@ -176,28 +193,12 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                 this.controls.target.set(1, 7, 0);
 
                 this.scene.add(skyLight());
-                const dirLight = directionalLight();
-                this.scene.add(dirLight);
-                this.scene.add(dirLight.target);
-
-                //Set up shadow properties for the light
-                dirLight.shadow.mapSize.width = 512;
-                dirLight.shadow.mapSize.height = 512;
-                dirLight.shadow.camera.near = -30;
-                dirLight.shadow.camera.far = 30;
-                dirLight.shadow.camera.left = -30;
-                dirLight.shadow.camera.right = 30;
-                dirLight.shadow.camera.top = -30;
-                dirLight.shadow.camera.bottom = 30;
-
-                dirLight.shadow.radius = 2.0; // blur shadow
-
-                // Other shadow map types might require tweaking these
-                //dirLight.shadow.bias = -.01;
-                //dirLight.shadow.normalBias = 1.0;
+                this.dirLight = directionalLight();
+                this.scene.add(this.dirLight);
+                this.scene.add(this.dirLight.target);
 
                 // uncomment to debug shadow bounds
-                //const helper = new THREE.CameraHelper( dirLight.shadow.camera );
+                //const helper = new THREE.CameraHelper( this.dirLight.shadow.camera );
                 //this.scene.add( helper );
 
                 // Kick off the asynchronous load.
