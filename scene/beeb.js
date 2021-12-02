@@ -1,4 +1,4 @@
-define(['jquery','three', '../utils', 'three-gltf-loader'], function ($,THREE, utils) {
+define(['../jquery','three', '../utils', 'three-gltf-loader'], function ($,THREE, utils) {
     "use strict";
 
     function keyIndexToBeebIndex(BBC, keyIndex) {
