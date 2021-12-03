@@ -1502,6 +1502,22 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'keyn
             }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
         };
 
+        $(".js-header-discs a").click(async event => {
+            event.preventDefault();
+            const image = event.target.dataset.image;
+            try {
+                const disc = await loadDiscImage(image);
+                loadingFinished();
+                processor.fdc.loadDisc(0, disc);
+
+                autoboot(image);
+                processor.reset();
+                window.history.replaceState(null, "", `?disc1=${image}&autoboot`);
+            } catch (e) {
+                loadingFinished(e);
+            }
+        });
+
         // Hooks for electron.
         electron({loadDiscImage, processor});
     }
