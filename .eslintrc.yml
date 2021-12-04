@@ -1,0 +1,15 @@
+env:
+  browser: true
+  amd: true
+  commonjs: true
+  es2021: true
+  node: true
+ignorePatterns:
+    - lib/*
+    - out/*
+extends:
+  - eslint:recommended
+parserOptions:
+  ecmaVersion: 2017
+rules:
+  indent: [0, 4]  # TODO enable

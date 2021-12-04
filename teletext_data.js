@@ -1,7 +1,6 @@
 "use strict";
 define({
 // Extremely heavily based on b-em.
-    /* jshint laxcomma:true */
     makeChars: function () {
         return new Uint8Array([
             // 0x20 ' '

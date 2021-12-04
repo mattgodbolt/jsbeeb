@@ -21,7 +21,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
             // Safari doesn't support the Promise stuff directly, so we create
             // our own Promise here.
             return utils.loadData(sound).then(function (data) {
-                return new Promise(function (resolve, reject) {
+                return new Promise(function (resolve) {
                     context.decodeAudioData(data.buffer, function (decodedData) {
                         resolve(decodedData);
                     });
@@ -66,7 +66,7 @@ define(['./utils', 'underscore', 'promise'], function (utils, _) {
     DdNoise.prototype.play = function (sound, loop) {
         if (this.context.state !== "running") return Promise.reject();
         var self = this;
-        return new Promise(function (resolve, reject) {
+        return new Promise(function (resolve) {
             var source = self.context.createBufferSource();
             source.loop = !!loop;
             source.buffer = sound;

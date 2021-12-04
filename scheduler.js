@@ -92,12 +92,12 @@ define([], function () {
         this.scheduler.schedule(this, delay);
     };
 
-    Task.prototype.cancel = function (delay) {
+    Task.prototype.cancel = function () {
         this.scheduler.cancel(this);
     };
 
     Task.prototype.ensureScheduled = function (state, delay) {
-        if (!!state) {
+        if (state) {
             if (!this.scheduled())
                 this.schedule(delay);
         } else {

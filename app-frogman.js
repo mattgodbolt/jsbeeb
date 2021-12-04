@@ -15,10 +15,8 @@ requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', '
     function (Video, Fake6502, SoundChip, disc, models, test, utils) {
         "use strict";
         var fb32 = new Uint32Array(1280 * 768);
-        var frame = 0;
         var screenshotRequest = null;
         var video = new Video.Video(false, fb32, function (minx, miny, maxx, maxy) {
-            frame++;
             if (screenshotRequest) {
                 var width = maxx - minx;
                 var height = maxy - miny;
@@ -38,17 +36,6 @@ requirejs(['video', 'fake6502', 'soundchip', 'fdc', 'models', 'tests/test.js', '
                 screenshotRequest = null;
             }
         });
-
-        function benchmarkCpu(cpu, numCycles) {
-            numCycles = numCycles || 10 * 1000 * 1000;
-            var startTime = Date.now();
-            cpu.execute(numCycles);
-            var endTime = Date.now();
-            var msTaken = endTime - startTime;
-            var virtualMhz = (numCycles / msTaken) / 1000;
-            console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
-            console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
-        }
 
         var discName = "frogman";
         var cpu = Fake6502.fake6502(models.findModel('B'), {video: video});

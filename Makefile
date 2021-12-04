@@ -1,12 +1,13 @@
 NPM_UP_TO_DATE:=.npm-up-to-date
 NODE=node
+NPM=npm
 
 all: test
 
 npm: $(NPM_UP_TO_DATE)
 
 $(NPM_UP_TO_DATE): package.json
-	npm install
+	$(NPM) install
 	touch $(NPM_UP_TO_DATE)
 
 test-suite: npm
@@ -22,11 +23,10 @@ dormann-test: npm
 	$(NODE) tests/test-dormann.js
 
 lint: npm
-	$(NODE) ./node_modules/.bin/jshint --version
-	$(NODE) ./node_modules/.bin/jshint $(shell find -name '*.js' -not -path './node_modules/*' -not -path './out/*' -not -path './lib/*' -not -path './.git/*')
+	$(NPM) run lint 
 
 short-tests: unit-tests timing-tests dormann-test
-long-tests: test-suite 
+long-tests: test-suite
 
 HASH := $(shell git rev-parse HEAD)
 

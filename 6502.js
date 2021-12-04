@@ -1,7 +1,6 @@
 define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', './adc', './scheduler', './touchscreen'],
     function (utils, opcodesAll, via, Acia, Serial, Tube, Adc, scheduler, TouchScreen) {
         "use strict";
-        var hexword = utils.hexword;
         var signExtend = utils.signExtend;
 
         function Flags() {
@@ -406,7 +405,7 @@ define(['./utils', './6502.opcodes', './via', './acia', './serial', './tube', '.
 
         function FakeUserPort() {
             return {
-                write: function (val) {
+                write: function () {
                 },
                 read: function () {
                     return 0xff;

@@ -93,7 +93,7 @@ requirejs(['fake6502', 'utils', 'promise'],
                     }
                     processor.writemem(0x030c, 0x00);
                     break;
-                case 0xe16f:
+                case 0xe16f: {
                     const filenameAddr = processor.readmem(0xbb) | (processor.readmem(0xbc) << 8);
                     const filenameLen = processor.readmem(0xb7);
                     let filename = "";
@@ -107,6 +107,7 @@ requirejs(['fake6502', 'utils', 'promise'],
                     setup(filename).then(anIter);
                     processor.pc--; // Account for the instruction fetch
                     return true; // Break out of the 'anIter' loop
+                }
                 case 0x8000:
                 case 0xa474: // Fail
                     if (curLine.length) console.log(curLine);

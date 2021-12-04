@@ -104,7 +104,7 @@ define(['jquery', 'underscore', './utils'], function ($, _, utils) {
             }
 
             for (var i = 0; i < 16; ++i) {
-                (function (i) { // jshint ignore:line
+                (function (i) {
                     var value = makeRow(regNode, "R" + i);
                     updates.push(function () {
                         updateElem(value, hexbyte(video.regs[i]));

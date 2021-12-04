@@ -44,7 +44,7 @@ requirejs(['fake6502', 'utils', 'underscore'],
                         processor.writemem(i, data[i]);
                     processor.pc = 0x400;
                     var log = false;
-                    processor.debugInstruction.add(function (addr, opcode) {
+                    processor.debugInstruction.add(function (addr) {
                         if (log) {
                             console.log(utils.hexword(addr) + " : " + utils.hexbyte(processor.a) + " : " + processor.disassembler.disassemble(processor.pc)[0]);
                         }
@@ -53,6 +53,7 @@ requirejs(['fake6502', 'utils', 'underscore'],
                     });
                     console.log("Running Dormann " + name + " tests...");
                     while (processor.execute(1000000)) {
+                        // do nothing
                     }
                     return processor.pc === expectedPc;
                 });

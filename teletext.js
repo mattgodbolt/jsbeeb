@@ -30,7 +30,7 @@ define(['./teletext_data', './utils'], function (ttData, utils) {
 
         this.init = function () {
             var charData = ttData.makeChars();
-            var i, x, x2, stat, offs1, offs2, j, k, y, o, p;
+            var i;
 
             // Build palette
             var gamma = 1.0 / 2.2;

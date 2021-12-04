@@ -802,6 +802,7 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     exports.noteEvent = function noteEvent(category, type, label) {
         if (!exports.runningInNode && window.location.origin === "https://bbc.godbolt.org") {
             // Only note events on the public site
+            /*global ga*/
             ga('send', 'event', category, type, label);
         }
         console.log('event noted:', category, type, label);
@@ -851,14 +852,16 @@ define(['jsunzip', 'promise'], function (jsunzip) {
     }
 
     function loadDataNode(url) {
-        return new Promise(function (resolve, reject) {
+        return new Promise(function (resolve) {
             if (typeof readbuffer !== "undefined") {
                 // d8 shell
-                var buffer = readbuffer(url); // jshint ignore:line
+                /*global readbuffer*/
+                var buffer = readbuffer(url);
                 resolve(new Uint8Array(buffer));
             } else if (typeof read !== "undefined") {
                 // SpiderMonkey shell
-                var bytes = read(url, "binary"); // jshint ignore:line
+                /*global read*/
+                var bytes = read(url, "binary");
                 resolve(bytes);
             } else {
                 // Node

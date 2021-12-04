@@ -1,4 +1,4 @@
-define(['utils'], function (utils) {
+define([], function () {
     "use strict";
     return function Serial(acia) {
         var self = this;

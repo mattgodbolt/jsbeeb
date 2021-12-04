@@ -57,7 +57,6 @@ define(['./utils'], function (utils) {
     function localDisc(fdc, name) {
         var discName = "disc_" + name;
         var data;
-        var i;
         var dataString = localStorage[discName];
         if (!dataString) {
             console.log("Creating browser-local disc " + name);
@@ -316,10 +315,8 @@ define(['./utils'], function (utils) {
             self.status = 0x8c;
             self.result = 0;
             self.NMI();
-            debugByte++;
         };
         self.readDiscData = function (last) {
-            debugByte++;
             if (!self.written) return 0x00;
             if (!last) {
                 self.status = 0x8c;
@@ -453,12 +450,9 @@ define(['./utils'], function (utils) {
             self.phase = 1;
         }
 
-        var debugByte = 0;
-
         function prepareSectorIO(track, sector, numSectors) {
             if (numSectors !== undefined) self.sectorsLeft = numSectors & 31;
             if (sector !== undefined) self.curSector = sector;
-            debugByte = 0;
             spinup(); // State: spinup -> seek.
         }
 
@@ -497,7 +491,7 @@ define(['./utils'], function (utils) {
             }
         }
 
-        function reset(val) {
+        function reset() {
         }
 
         function data(val) {
@@ -571,7 +565,6 @@ define(['./utils'], function (utils) {
                     self.curSector++;
                     self.drives[self.curDrive].write(self.curSector, self.params[0], density(), 0);
                     update(0x8c);
-                    self.debugByte = 0;
                     break;
 
                 case 0x13: // Read

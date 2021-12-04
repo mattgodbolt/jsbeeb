@@ -47,7 +47,7 @@ define(['jquery', 'utils', 'fdc', 'underscore', 'promise'], function ($, utils, 
         var close_delim = "\r\n--" + boundary + "--";
 
         function listFiles() {
-            return new Promise(function (resolve, reject) {
+            return new Promise(function (resolve) {
                 var retrievePageOfFiles = function (request, result) {
                     request.execute(function (resp) {
                         result = result.concat(resp.items);

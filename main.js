@@ -207,8 +207,9 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (audioContext) audioContext.resume();
         }
 
-        var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext() // jshint ignore:line
-            : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext() // jshint ignore:line
+        /*global webkitAudioContext*/
+        var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
+            : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
                 : null;
         var $audioWarningNode = $('#audio-warning');
         $audioWarningNode.on('mousedown', function () {
@@ -278,7 +279,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                             } else {
                                 return keyCodes.SHIFT_RIGHT;
                             }
-                            break;
 
                         case keyCodes.ALT:
                             if (lastAltLocation === 1) {
@@ -286,7 +286,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                             } else {
                                 return keyCodes.ALT_RIGHT;
                             }
-                            break;
 
                         case keyCodes.CTRL:
                             if (lastCtrlLocation === 1) {
@@ -294,7 +293,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                             } else {
                                 return keyCodes.CTRL_RIGHT;
                             }
-                            break;
                     }
                     break;
                 case 1:
@@ -365,13 +363,13 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
             if (handled) evt.preventDefault();
         }
 
-        emuKeyHandlers[utils.keyCodes.S] = function (down, code) {
+        emuKeyHandlers[utils.keyCodes.S] = function (down) {
             if (down) {
                 utils.noteEvent('keyboard', 'press', 'S');
                 stop(true);
             }
         };
-        emuKeyHandlers[utils.keyCodes.R] = function (down, code) {
+        emuKeyHandlers[utils.keyCodes.R] = function (down) {
             if (down)
                 window.location.reload();
         };
@@ -517,7 +515,8 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
         });
 
         var userPort = null;
-        if (true /* keyswitch */) {
+        const keyswitch = true;
+        if (keyswitch) {
             var switchState = 0xff;
 
             var switchKey = function (down, code) {
@@ -532,7 +531,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 emuKeyHandlers[idx] = switchKey;
             }
             userPort = {
-                write: function (val) {
+                write: function () {
                 },
                 read: function () {
                     return switchState;
@@ -739,7 +738,6 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 var ch = keysToSend[0];
                 var debounce = lastChar === ch;
                 lastChar = ch;
-                var clocksPerMilli = clocksPerSecond / 1000;
                 if (debounce) {
                     lastChar = undefined;
                     nextKeyMillis = millis + 30;
@@ -848,7 +846,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 });
             }
             if (schema === "gd") {
-                var splat = discImage.match(/([^\/]+)\/?(.*)/);
+                var splat = discImage.match(/([^/]+)\/?(.*)/);
                 var title = "(unknown)";
                 if (splat) {
                     discImage = splat[1];
@@ -1202,7 +1200,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 if (parsedQuery.loadBasic) {
                     var needsRun = needsAutoboot === "run";
                     needsAutoboot = "";
-                    insertBasic(new Promise(function (resolve, reject) {
+                    insertBasic(new Promise(function (resolve) {
                         utils.loadData(parsedQuery.loadBasic).then(function (data) {
                             resolve(String.fromCharCode.apply(null, data));
                         });
@@ -1210,7 +1208,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'debu
                 }
 
                 if (parsedQuery.embedBasic) {
-                    insertBasic(new Promise(function (resolve, reject) {
+                    insertBasic(new Promise(function (resolve) {
                         resolve(parsedQuery.embedBasic);
                     }), true);
                 }

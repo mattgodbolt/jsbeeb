@@ -72,7 +72,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.paint_ext = paint_ext_param;
 
-        this.reset = function (cpu, via, hard) {
+        this.reset = function (cpu, via) {
             this.cpu = cpu;
             this.sysvia = via;
             if (via) via.cb2changecallback = this.cb2changed.bind(this);
@@ -427,7 +427,7 @@ define(['./teletext', './utils'], function (Teletext, utils) {
 
         this.dispEnableChanged = function() {
             // The DISPTMG output pin is wired to the SAA5050 teletext chip,
-	    // for scanline tracking, so keep it apprised.
+            // for scanline tracking, so keep it apprised.
             var mask = (HDISPENABLE | VDISPENABLE | USERDISPENABLE);
             var disptmg = ((this.dispEnabled & mask) === mask);
             this.teletext.setDISPTMG(disptmg);

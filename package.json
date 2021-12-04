@@ -18,7 +18,11 @@
   "devDependencies": {
     "electron": "^11.5.0",
     "electron-builder": "~22.10.5",
-    "jshint": "^2.13.1",
+    "eslint": "^7.32.0",
+    "eslint-config-standard": "^16.0.3",
+    "eslint-plugin-import": "^2.25.3",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^5.2.0",
     "mocha": "^7.2.0",
     "node-png": "0.4.x",
     "requirejs": "^2.3.6"
@@ -43,6 +47,8 @@
   },
   "scripts": {
     "start": "electron .",
+    "lint": "eslint .",
+    "lint-fix": "eslint . --fix",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "release": "electron-builder"

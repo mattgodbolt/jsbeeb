@@ -40,7 +40,7 @@ define(['./utils'], function (utils) {
             justhit: 0,
             t1_pb7: 0,
 
-            reset: function (hard) {
+            reset: function () {
                 // http://archive.6502.org/datasheets/mos_6522_preliminary_nov_1977.pdf
                 // "Reset sets all registers to zero except t1 t2 and sr"
                 self.ora = self.orb = 0x00;
@@ -245,11 +245,9 @@ define(['./utils'], function (utils) {
                         // http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
                         if (self.acr & 1) {
                             return self.ira;
-                        } else {
-                            self.recalculatePortAPins();
-                            return self.portapins;
                         }
-                        break;
+                        self.recalculatePortAPins();
+                        return self.portapins;
 
                     case ORB:
                         self.ifr &= ~INT_CB1;

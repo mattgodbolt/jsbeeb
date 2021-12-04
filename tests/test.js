@@ -1,5 +1,5 @@
-define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise', 'underscore'],
-    function (Video, Fake6502, fdc, utils, models, tokeniser, _) {
+define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise'],
+    function (Video, Fake6502, fdc, utils, models, tokeniser) {
         "use strict";
         var processor;
         var video;
@@ -320,7 +320,6 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise', 'unders
         }
 
         function testNops() {
-            var capturer;
             var numCaptures = 0;
             return Promise.all([utils.loadData('tests/unit/nops.bas'), tokeniser.create(), runUntilInput()])
                 .then(function (results) {
@@ -342,7 +341,7 @@ define(['video', 'fake6502', 'fdc', 'utils', 'models', 'basic-tokenise', 'unders
                     processor.writemem(0x03, endHigh);
                     processor.writemem(0x12, endLow);
                     processor.writemem(0x13, endHigh);
-                    capturer = new Capturer(processor, function (elem) {
+                    new Capturer(processor, function (elem) {
                         if (elem.background === 1) {
                             log("ERROR: " + JSON.stringify(elem));
                             failures++;

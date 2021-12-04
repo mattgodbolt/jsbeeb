@@ -25,7 +25,7 @@ define([], function () {
             }
         }
 
-        function cmosRead(IC32) {
+        function cmosRead() {
             if (!enabled) return 0xff;
             // To drive the bus we need:
             // - CMOS enabled.

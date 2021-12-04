@@ -1116,41 +1116,14 @@ define(['./utils'], function (utils) {
             return indent + lines.join("\n" + indent);
         }
 
-        function generate6502B(min, max, tab) {
-            tab = tab || "";
-            if (min === max || min === max - 1) {
-                return getIndentedSource(tab, min);
-            }
-            var mid = (min + max) >>> 1;
-            return tab + "if (opcode < " + mid + ") {\n" + generate6502B(min, mid, tab + " ") + "\n" + tab + "} else {\n" + generate6502B(mid, max, tab + " ") + "\n" + tab + "}\n";
-        }
-
         // Empty to hold prototypical stuff.
         function Runner() {
-        }
-
-        function generate6502Binary() {
-            var text = "\"use strict\";\nopcode|=0;\nvar REG, cpu = this.cpu;\n";
-            text += generate6502B(0, 256);
-            return new Function("opcode", text); // jshint ignore:line
-        }
-
-        function generate6502Switch() {
-            var text = "\"use strict\";\nopcode|=0;\nvar REG, cpu = this.cpu;\n";
-            text += "switch (opcode) {\n";
-            for (var opcode = 0; opcode < 256; ++opcode) {
-                text += "case 0x" + utils.hexbyte(opcode) + ":\n";
-                text += getIndentedSource("  ", opcode);
-                text += "break;\n";
-            }
-            text += "}\n";
-            return new Function("opcode", text); // jshint ignore:line
         }
 
         function generate6502JumpTable() {
             var funcs = [];
             for (var opcode = 0; opcode < 256; ++opcode) {
-                funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode, true)); // jshint ignore:line
+                funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode, true));
             }
             return function exec(opcode) {
                 return funcs[opcode].call(this, this.cpu);
