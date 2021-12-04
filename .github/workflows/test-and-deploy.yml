@@ -23,15 +23,40 @@ jobs:
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
+      - name: npm install
+        run: npm install
+      - name: lint
+        run: npm run lint
       - name: Short tests
-        run: make -j$(nproc) short-tests
-      - name: Lint
-        run: make -j$(nproc) lint
-      - name: Long tests
-        run: make -j$(nproc) long-tests
+        run: npm test
+
+  long-test:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+      - name: Use Node.js 12.x
+        uses: actions/setup-node@v1
+        with:
+          node-version: 12.x
+      - name: Get npm cache directory
+        id: npm-cache
+        run: |
+          echo "::set-output name=dir::$(npm config get cache)"
+      - uses: actions/cache@v1
+        with:
+          path: ${{ steps.npm-cache.outputs.dir }}
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: npm install
+        run: npm install
+      - name: long tests
+        run: npx run-all-all test-long:*
 
   electron-win-mac:
-    needs: build-and-test
+    needs: [build-and-test, long-test]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -60,7 +85,7 @@ jobs:
           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
   update-web:
-    needs: build-and-test
+    needs: [build-and-test, long-test]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-20.04
     steps:

@@ -26,6 +26,7 @@
     "husky": "^7.0.4",
     "mocha": "^7.2.0",
     "node-png": "0.4.x",
+    "npm-run-all": "^4.1.5",
     "requirejs": "^2.3.6"
   },
   "license": "GPL-3.0-or-later",
@@ -53,6 +54,11 @@
     "lint-fix": "eslint . --fix",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "release": "electron-builder"
+    "release": "electron-builder",
+    "test-long:cpu": "node tests/test-suite.js",
+    "test:unit": "mocha tests/unit",
+    "test:timing": "node tests/test-node.js",
+    "test:dormann": "node tests/test-dormann.js",
+    "test": "npm-run-all -p test:*"
   }
 }
