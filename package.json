@@ -13,12 +13,12 @@
   },
   "main": "./app/app.js",
   "dependencies": {
-    "argparse": "^1.0.10"
+    "argparse": "^2.0.1"
   },
   "devDependencies": {
     "electron": "^11.5.0",
     "electron-builder": "~22.10.5",
-    "eslint": "^7.32.0",
+    "eslint": "^8.4.0",
     "eslint-config-standard": "^16.0.3",
     "eslint-plugin-import": "^2.25.3",
     "eslint-plugin-node": "^11.1.0",
