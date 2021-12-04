@@ -2,7 +2,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
     "use strict";
 
     function skyLight() {
-        const intensity = 0.11;
+        const intensity = 0.12;
         const skyColor = 0xffffbb;
         const groundColor = 0x080820;
         return new THREE.HemisphereLight(skyColor, groundColor, intensity);
@@ -10,10 +10,10 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
 
     function directionalLight() {
         const color = 0xfff0e0;
-        const intensity = 1.1;
+        const intensity = 1.2;
         const light = new THREE.DirectionalLight(color, intensity);
         light.position.set(-0.5, 1, 1);
-        light.castShadow = false;
+        light.castShadow = true;
 
         //Set up shadow properties for the light
         light.shadow.mapSize.width = 512;
@@ -192,10 +192,34 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                 this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
                 this.controls.target.set(1, 7, 0);
 
-                this.scene.add(skyLight());
+                this.skyLight = skyLight();
+                this.scene.add(this.skyLight);
                 this.dirLight = directionalLight();
                 this.scene.add(this.dirLight);
                 this.scene.add(this.dirLight.target);
+
+
+                $('#shadows-option').change(function() {
+                  if ($('#shadows-option').is(':checked')) {this.dirLight.castShadow = true;} else {
+                    {this.dirLight.castShadow = false;}
+                  }
+                }.bind(this));
+
+                $('#dark-option').change(async function() {
+                  if ($('#dark-option').is(':checked')) {
+                    let bg = await this.loadBackgroundTexture('./virtual-beeb/textures/equirectangular-bg.jpg');
+                    this.dirLight.intensity = 1;
+                    this.skyLight.intensity = 0.1;
+                    this.beeb.screenMaterial.envMap = bg.texture;
+
+                  } else {
+                    let bg = await this.loadBackgroundTexture('./virtual-beeb/textures/equirectangular-bg-light.jpg');
+                    this.dirLight.intensity = 1.2;
+                    this.skyLight.intensity = 0.12;
+                    this.beeb.screenMaterial.envMap = bg.texture;
+
+                  }
+                }.bind(this));
 
                 // uncomment to debug shadow bounds
                 //const helper = new THREE.CameraHelper( this.dirLight.shadow.camera );
@@ -244,17 +268,18 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
             this.setupSceneShadows(this.scene);
         }
 
-        async loadBackgroundTexture() {
-            return utils.promisifyLoad(new THREE.TextureLoader(), './virtual-beeb/textures/equirectangular-bg.jpg');
-        }
-
-        async load() {
-            $('#loading-status').text("Loading background");
-            const bgTexture = await this.loadBackgroundTexture();
+        async loadBackgroundTexture(filename) {
+            const bgTexture = await utils.promisifyLoad(new THREE.TextureLoader(), filename);
             const bgTarget = new THREE.WebGLCubeRenderTarget(bgTexture.image.height);
             bgTarget.fromEquirectangularTexture(this.renderer, bgTexture);
             bgTarget.texture.encoding = THREE.sRGBEncoding;
             this.scene.background = bgTarget.texture;
+            return bgTarget
+        }
+
+        async load() {
+            $('#loading-status').text("Loading background");
+            const bgTarget = await this.loadBackgroundTexture('./virtual-beeb/textures/equirectangular-bg-light.jpg');
 
             this.beeb = await loadBeeb(bgTarget.texture, this.buffer.dataTexture);
             if (this.cpu)
