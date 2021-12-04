@@ -23,6 +23,7 @@
     "eslint-plugin-import": "^2.25.3",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-promise": "^5.2.0",
+    "husky": "^7.0.4",
     "mocha": "^7.2.0",
     "node-png": "0.4.x",
     "requirejs": "^2.3.6"
@@ -47,6 +48,7 @@
   },
   "scripts": {
     "start": "electron .",
+    "prepare": "husky install",
     "lint": "eslint .",
     "lint-fix": "eslint . --fix",
     "pack": "electron-builder --dir",
