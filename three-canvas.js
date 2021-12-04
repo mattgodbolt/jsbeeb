@@ -214,7 +214,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
 
                   } else {
                     let bg = await this.loadBackgroundTexture('./virtual-beeb/textures/equirectangular-bg-light.jpg');
-                    this.dirLight.intensity = 1.2;
+                    this.dirLight.intensity = 1.5;
                     this.skyLight.intensity = 0.12;
                     this.beeb.screenMaterial.envMap = bg.texture;
 
@@ -274,7 +274,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
             bgTarget.fromEquirectangularTexture(this.renderer, bgTexture);
             bgTarget.texture.encoding = THREE.sRGBEncoding;
             this.scene.background = bgTarget.texture;
-            return bgTarget
+            return bgTarget;
         }
 
         async load() {
