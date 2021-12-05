@@ -221,6 +221,15 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                   }
                 }.bind(this));
 
+                $('#cub-option').click(function() {
+                  let screen = this.scene.getObjectByName("SCREENFRAME");
+
+                  console.log(screen.position.x,screen.position.y,screen.position.z);
+
+                  this.camera.position.set(screen.position.x,screen.position.y+17,screen.position.z+17);
+                  this.camera.lookAt(screen.position.x,screen.position.y+12,screen.position.z);
+                  this.controls.target.set(screen.position.x,screen.position.y+12,screen.position.z);
+                }.bind(this));
                 // uncomment to debug shadow bounds
                 //const helper = new THREE.CameraHelper( this.dirLight.shadow.camera );
                 //this.scene.add( helper );
