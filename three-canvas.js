@@ -230,6 +230,22 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                   this.camera.lookAt(screen.position.x,screen.position.y+12,screen.position.z);
                   this.controls.target.set(screen.position.x,screen.position.y+12,screen.position.z);
                 }.bind(this));
+
+                $('#unpredictable-option').click(async function() {
+                  let bg = await this.loadBackgroundTexture('./virtual-beeb/textures/equirectangular-bg-light.jpg');
+                  this.dirLight.castShadow = false;
+                  this.dirLight.intensity = 1.5;
+                  this.skyLight.intensity = 0.12;
+                  this.beeb.screenMaterial.envMap = bg.texture;
+                  this.scene.background = new THREE.Color('#eeeeee');
+                  this.beebs = [];
+                  for (let i = 0; i<100; i++){
+                    this.beebs[i] = this.beeb.model.clone();
+                    this.beebs[i].position.x = this.beebs[i].position.x + (50*-22+i*22);
+                    this.scene.add(this.beebs[i]);
+                  }
+                }.bind(this));
+
                 // uncomment to debug shadow bounds
                 //const helper = new THREE.CameraHelper( this.dirLight.shadow.camera );
                 //this.scene.add( helper );
