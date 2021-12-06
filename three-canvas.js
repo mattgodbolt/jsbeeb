@@ -242,7 +242,7 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                   for (let i = 0; i<100; i++){
                     this.beebs[i] = this.beeb.model.clone();
                     this.beebs[i].position.x = this.beebs[i].position.x + (50*-22+i*22);
-                    this.scene.add(this.beebs[i]);
+                    if (i!==50) this.scene.add(this.beebs[i]);
                   }
                 }.bind(this));
 
