@@ -12,6 +12,7 @@ import * as bootstrap from 'bootstrap';
 // - up the linting and const-let-ify the world!
 // - start extracting chunks and make jsbeeb more of a library
 // - electron?
+// - vertical scroll bars on index.html
 
 import 'bootswatch/dist/darkly/bootstrap.min.css';
 import './jsbeeb.css';
