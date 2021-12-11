@@ -39,10 +39,7 @@ function getPlugins() {
                     globOptions: {ignore: ["**/*.txt", "**/*README*"]},
                 },
                 {
-                    from: "discs/*.dsd",
-                },
-                {
-                    from: "discs/*.ssd",
+                    from: "discs/*.[ds]sd",
                 },
                 {
                     from: "tapes/*.uef",
