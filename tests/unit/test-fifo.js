@@ -1,8 +1,7 @@
-const {requirejs} = require('./r');
-const assert = require('assert');
-const {describe, it} = require("mocha");
+import {describe, it} from 'mocha';
+import assert from 'assert';
 
-const Fifo = requirejs('utils').Fifo;
+import {Fifo} from '../../utils.js'
 
 describe('FIFO tests', function () {
     "use strict";

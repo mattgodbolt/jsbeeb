@@ -9,15 +9,7 @@
     <meta http-equiv="Content-Security-Policy"
           content="script-src 'self' 'unsafe-inline' 'unsafe-eval' *.google-analytics.com *.google.com;"/>
     <title>jsbeeb - Javascript BBC Micro emulator</title>
-    <link rel="stylesheet" href="lib/bootstrap.min.css" type="text/css">
-    <link rel="stylesheet" href="jsbeeb.css" type="text/css">
     <link rel="shortcut icon" href="/favicon.ico">
-    <script type="text/javascript" src="lib/require.js"></script>
-    <script type="text/javascript">
-        require(['requirejs-common'], function () {
-            require(['main']);
-        });
-    </script>
     <script>
         (function (i, s, o, g, r, a, m) {
             i['GoogleAnalyticsObject'] = r;
@@ -123,10 +115,10 @@
         <div id="cub-monitor">
             <img id="cub-monitor-pic" width="896" height="648" src="images/cub-monitor.png"
                  alt="A fake CUB computer monitor">
-            <div class="sidebar left"><img src="" alt=""></div>
+            <div class="sidebar left"><img src="images/placeholder.png" alt=""></div>
             <canvas id="screen" width="896" height="600"></canvas>
-            <div class="sidebar right"><img src="" alt=""></div>
-            <div class="sidebar bottom"><img src="" alt=""></div>
+            <div class="sidebar right"><img src="images/placeholder.png" alt=""></div>
+            <div class="sidebar bottom"><img src="images/placeholder.png" alt=""></div>
         </div>
     </div>
     <div id="leds">

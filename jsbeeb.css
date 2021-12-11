@@ -1,24 +1,3 @@
-body {
-    background-color: #000 !important;
-}
-
-.modal {
-    color: #ddd;
-}
-
-.modal-content {
-    border-color: rgba(255, 255, 255, 0.2);
-    background-color: #212529;
-}
-
-.modal-header {
-    border-bottom-color: #666666;
-}
-
-.modal-footer {
-    border-top-color: #666666;
-}
-
 #outer {
     display: block;
 }

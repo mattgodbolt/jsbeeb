@@ -1,25 +1,27 @@
 // Fakes out a 6502
-define(['6502', 'video', 'soundchip', 'models', 'ddnoise', 'cmos'],
-    function (Cpu6502, Video, SoundChip, models, DdNoise, Cmos) {
-        "use strict";
-        var fakeVideo = new Video.FakeVideo();
-        var soundChip = new SoundChip.FakeSoundChip();
-        var dbgr = {
-            setCpu: function () {
-            }
-        };
+"use strict";
 
-        function fake6502(model, opts) {
-            opts = opts || {};
-            var video = opts.video || fakeVideo;
-            model = model || models.TEST_6502;
-            return new Cpu6502(model, dbgr, video, soundChip, new DdNoise.FakeDdNoise(), new Cmos());
-        }
+import {FakeVideo} from "./video.js";
+import {FakeSoundChip} from "./soundchip.js";
+import {TEST_6502, TEST_65C12} from "./models.js";
+import {FakeDdNoise} from "./ddnoise.js";
+import {Cpu6502} from "./6502.js";
+import {Cmos} from "./cmos.js";
 
-        return {
-            fake6502: fake6502,
-            fake65C12: function () {
-                return fake6502(models.TEST_65C12);
-            }
-        };
-    });
+var fakeVideo = new FakeVideo();
+var soundChip = new FakeSoundChip();
+var dbgr = {
+    setCpu: function () {
+    }
+};
+
+export function fake6502(model, opts) {
+    opts = opts || {};
+    var video = opts.video || fakeVideo;
+    model = model || TEST_6502;
+    return new Cpu6502(model, dbgr, video, soundChip, new FakeDdNoise(), new Cmos());
+}
+
+export function fake65C12() {
+    return fake6502(TEST_65C12);
+}

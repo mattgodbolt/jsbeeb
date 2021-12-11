@@ -1,9 +1,9 @@
-const requirejs = require('./r').requirejs;
-const assert = require('assert');
-const {describe, it} = require('mocha');
+import {describe, it} from 'mocha';
+import assert from 'assert';
 
-const Fake6502 = requirejs('fake6502');
-const cpu = Fake6502.fake65C12();
+import {fake65C12} from '../../fake6502.js';
+
+const cpu = fake65C12();
 
 describe('BCD tests', function () {
     "use strict";

@@ -1,7 +1,6 @@
-const {requirejs} = require('./r');
-const {describe, it} = require('mocha');
-const assert = require('assert');
-const Scheduler = requirejs('scheduler').Scheduler;
+import {describe, it} from 'mocha';
+import assert from 'assert';
+import {Scheduler} from "../../scheduler.js";
 
 describe('Scheduler tests', function () {
     "use strict";

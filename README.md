@@ -17,13 +17,9 @@ this case), press shift-F12 (which is shift-Break on the BBC).
 Getting set up to run locally
 -----------------------------
 
-Fire up a local webserver and load it up.  I use `python` for this as it has a built-in webserver. So:
+jsbeeb needs to be built with webpack. If you're developing locally you'll need a recent `node` and then run `npm install` to install needed packages.
 
-    $ cd jsbeeb
-    $ python -mSimpleHTTPServer
-    Serving HTTP on 0.0.0.0 port 8000 ...
-
-Then visit http://localhost:8000/ and off you go.
+You can then run `npm start` to get a local webserver which will autoreload on changes in the code - visit http://localhost:8080/ and off you go.
 
 URL parameters
 --------------

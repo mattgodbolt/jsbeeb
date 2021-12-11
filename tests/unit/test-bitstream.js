@@ -1,7 +1,7 @@
-const {requirejs} = require('./r');
-const {describe, it} = require('mocha');
-const assert = require('assert');
-const BitStream = requirejs('bitstream').BitStream;
+import {describe, it} from 'mocha';
+import assert from 'assert';
+
+import {BitStream} from '../../bitstream.js';
 
 describe('BitStream tests', function () {
     "use strict";

@@ -1,4 +1,2 @@
-Bootstrap & JQuery from the regular places.
 jsunzip from https://github.com/operasoftware/jsunzip
-jquery-visibility is from https://github.com/mathiasbynens/jquery-visibility
-promises is from https://www.promisejs.org/polyfills/promise-6.0.0.js
+webgl-debug is from Khronos

@@ -1,7 +1,7 @@
-const {requirejs} = require('./r');
-const {describe, it} = require('mocha');
-const assert = require('assert');
-const tokeniser = requirejs('basic-tokenise').create();
+import {describe, it} from 'mocha';
+import assert from 'assert';
+import * as Tokeniser from '../../basic-tokenise.js';
+const tokeniser = Tokeniser.create();
 
 describe('Tokeniser', function () {
     "use strict";

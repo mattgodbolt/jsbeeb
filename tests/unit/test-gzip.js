@@ -1,9 +1,12 @@
-const {requirejs} = require('./r');
-const assert = require('assert');
-const {describe, it} = require('mocha');
+import {describe, it} from 'mocha';
+import assert from 'assert';
+import * as fs from "fs";
+import * as utils from "../../utils.js";
 
-const utils = requirejs('utils');
-const fs = require('fs');
+import {dirname} from 'path';
+import {fileURLToPath} from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function testOneFile(file) {
     "use strict";

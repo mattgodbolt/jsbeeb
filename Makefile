@@ -19,17 +19,7 @@ HASH := $(shell git rev-parse HEAD)
 
 .PHONY: dist
 dist: npm
-	@rm -rf out/build out/dist
-	@mkdir -p out/dist
-	@mkdir -p out/build
-	cp -r *.js *.css *.html *.txt *.ico discs tapes basic images lib roms sounds out/build
-	mkdir out/build/app && cp app/electron.js out/build/app
-	for BASEFILE in main requirejs-common; do \
-		perl -pi -e "s/require\(\['$${BASEFILE}'\]/require(['$${BASEFILE}-$(HASH)']/" out/build/index.html; \
-		mv out/build/$${BASEFILE}.js out/build/$${BASEFILE}-$(HASH).js; \
-	done
-	m4 -DHASH=$(HASH) -DDEPLOY_DIR=$(shell pwd)/out/dist '-DCOMMON_SETTINGS=$(shell $(NODE) -e 'requirejs = {config: function(c) { c.baseUrl = "."; console.log(JSON.stringify(c)); }}; require("./requirejs-common.js");' | sed 's/^.\(.*\).$$/\1/')' build.js.template > out/build.js
-	cd out/build && $(shell pwd)/node_modules/requirejs/bin/r.js -o ../build.js
+	npm run build
 
 .PHONY: upload
 upload: dist
