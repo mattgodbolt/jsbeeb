@@ -190,12 +190,13 @@ config.setKeyLayout(keyLayout);
 model = config.model;
 
 function sbBind(div, url, onload) {
-    if (!url) return;
     var img = div.find("img");
+    img.hide();
+    if (!url) return;
     img.attr("src", url).bind("load", function () {
         onload(div, img);
         img.show();
-    }).hide();
+    });
 }
 
 sbBind($(".sidebar.left"), parsedQuery.sbLeft, function (div, img) {
