@@ -101,7 +101,7 @@ Please note it can take a while to run the whole test suite.
 Thanks
 ------
 
-jsbeeb was heavily based on Sarah Walker's C [B-Em emulator](http://b-em.bbcmicro.com/) -- thanks to her for her hard work and for open sourcing her code. 
+jsbeeb was heavily based on Sarah Walker's C [B-Em emulator](https://github.com/stardot/b-em) -- thanks to her for her hard work and for open sourcing her code. B-em is now being maintained by a group of enthusiasts - thanks to them too! 
 
 Huge thanks to Richard Talbot-Watkins for his advice and help along the way in fathoming out the instruction timings, interrupt fun,
 video code rewrite and for being such a good pal all these many years!
