@@ -12,7 +12,7 @@ function init(args) {
         processor.fdc.loadDisc(drive, image);
     });
 }
-initialise = init;
+
 if (typeof window.nodeRequire !== 'undefined') {
     initialise = init;
 }
