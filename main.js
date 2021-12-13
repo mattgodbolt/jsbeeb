@@ -1,18 +1,6 @@
-"use strict";
 import $ from 'jquery';
 import _ from 'underscore';
 import * as bootstrap from 'bootstrap';
-
-// TODO:
-// - webpack hash the **COMMON** ROMs etc for great good
-// - sounds too?
-// - never hash discs or tapes: filename is part of the API
-// - publish can use infinite cache time for hashed things
-// - main.js and main.css are giant!
-// - up the linting and const-let-ify the world!
-// - start extracting chunks and make jsbeeb more of a library
-// - electron?
-// - vertical scroll bars on index.html
 
 import 'bootswatch/dist/darkly/bootstrap.min.css';
 import './jsbeeb.css';

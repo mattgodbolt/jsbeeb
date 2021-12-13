@@ -2,30 +2,32 @@
 
 import {I8271, WD1770} from "./fdc.js";
 
-function Model(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
-    this.name = name;
-    this.synonyms = synonyms;
-    this.os = os;
-    this.nmos = nmos;
-    this.isMaster = isMaster;
-    this.Fdc = fdc;
-    this.swram = swram;
-    this.isTest = false;
-    this.tube = tube;
+class Model {
+    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
+        this.name = name;
+        this.synonyms = synonyms;
+        this.os = os;
+        this.nmos = nmos;
+        this.isMaster = isMaster;
+        this.Fdc = fdc;
+        this.swram = swram;
+        this.isTest = false;
+        this.tube = tube;
+    }
 }
 
 // TODO: semi-bplus-style to get swram for exile hardcoded here
-var beebSwram = [
+const beebSwram = [
     true, true, true, true,      // Dunjunz variants. Exile (not picky).
     true, true, true, true,      // Crazee Rider.
     false, false, false, false,
     false, false, false, false];
-var masterSwram = [
+const masterSwram = [
     false, false, false, false,
     true, true, true, true,
     false, false, false, false,
     false, false, false, false];
-var tube65c02 = new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false);
+const tube65c02 = new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false);
 export const allModels = [
     new Model("BBC B", ["B"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, I8271),
     new Model("BBC B (DFS 0.9)", ["B-DFS0.9"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, I8271),
@@ -39,11 +41,11 @@ export const allModels = [
 
 export function findModel(name) {
     name = name.toLowerCase();
-    for (var i = 0; i < allModels.length; ++i) {
-        var model = allModels[i];
+    for (let i = 0; i < allModels.length; ++i) {
+        const model = allModels[i];
         if (model.name.toLowerCase() === name)
             return model;
-        for (var j = 0; j < model.synonyms.length; ++j) {
+        for (let j = 0; j < model.synonyms.length; ++j) {
             if (model.synonyms[j].toLowerCase() === name)
                 return model;
         }
