@@ -341,7 +341,7 @@ emuKeyHandlers[utils.keyCodes.R] = function (down) {
 };
 
 function keyDown(evt) {
-    audioHandler.checkStatus();
+    audioHandler.tryResume();
     if (document.activeElement.id === 'paste-text') return;
     if (!running) return;
     var code = keyCode(evt);
@@ -428,7 +428,7 @@ $pastetext.on('drop', function (event) {
 
 var $cub = $('#cub-monitor');
 $cub.on('mousemove mousedown mouseup', function (evt) {
-    audioHandler.checkStatus();
+    audioHandler.tryResume();
     if (document.activeElement !== document.body)
         document.activeElement.blur();
     var cubOffset = $cub.offset();
