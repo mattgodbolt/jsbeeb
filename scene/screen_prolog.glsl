@@ -3,6 +3,10 @@
 uniform sampler2D maskTexture;
 uniform float time;
 
+uniform vec3 screenColR;
+uniform vec3 screenColG;
+uniform vec3 screenColB;
+
 float InterferenceHash(float p)
 {
     float hashScale = 0.1031;

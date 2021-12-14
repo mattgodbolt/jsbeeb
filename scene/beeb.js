@@ -235,6 +235,31 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
             if (this.screenMaterial.shaderUniforms) {
                 // https://github.com/mrdoob/three.js/issues/11475
                 this.screenMaterial.shaderUniforms.time.value = time / 1000;
+
+                const useMonochromeScreen = false;
+                if ( !useMonochromeScreen )
+                {
+                    // RGB Screen
+                    this.screenMaterial.shaderUniforms.screenColR.value = new THREE.Vector3( 1, 0, 0 );
+                    this.screenMaterial.shaderUniforms.screenColG.value = new THREE.Vector3( 0, 1, 0 );
+                    this.screenMaterial.shaderUniforms.screenColB.value = new THREE.Vector3( 0, 0, 1 );
+                }
+                else
+                {
+                    // Monochrome Screen
+
+                    // How much input R,G,B should affect resulting intensity by (using standard Rec.709 luminosity coefficients here)
+                    const luminanceCoeff = new THREE.Vector3( 0.2126, 0.7152, 0.0722 );
+
+                    // Final screen colour tint
+                    const screenCol = new THREE.Vector3( 0.1, 1.0, 0.3 ); // Green screen
+                    //const screenCol = new THREE.Vector3( 1.0, 0.2, 0.05 ); // Amber screen
+                    //const screenCol = new THREE.Vector3( 1.0, 1.0, 1.0 ); // Black and White screen
+
+                    this.screenMaterial.shaderUniforms.screenColR.value = new THREE.Vector3(screenCol.x * luminanceCoeff.x, screenCol.y * luminanceCoeff.x, screenCol.z * luminanceCoeff.x);
+                    this.screenMaterial.shaderUniforms.screenColG.value = new THREE.Vector3(screenCol.x * luminanceCoeff.y, screenCol.y * luminanceCoeff.y, screenCol.z * luminanceCoeff.y);
+                    this.screenMaterial.shaderUniforms.screenColB.value = new THREE.Vector3(screenCol.x * luminanceCoeff.z, screenCol.y * luminanceCoeff.z, screenCol.z * luminanceCoeff.z);
+                }
             }
         }
 
@@ -259,6 +284,9 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
 
                 shader.uniforms.maskTexture = newUniforms.maskTexture;
                 shader.uniforms.time = { value: 0 };
+                shader.uniforms.screenColR = {type: 'vec3', value: new THREE.Vector3(1,0,0)};
+                shader.uniforms.screenColG = {type: 'vec3', value: new THREE.Vector3(0,1,0)};
+                shader.uniforms.screenColB = {type: 'vec3', value: new THREE.Vector3(0,0,1)};
 
                 shader.fragmentShader = shader.fragmentShader.replace(
                     `#include <common>`,
