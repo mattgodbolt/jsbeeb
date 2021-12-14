@@ -7,8 +7,6 @@ import './jsbeeb.css';
 
 import * as utils from './utils.js';
 import {FakeVideo, Video} from './video.js';
-import {FakeSoundChip, SoundChip} from './soundchip.js';
-import {DdNoise, FakeDdNoise} from './ddnoise.js';
 import {Debugger} from './debug.js';
 import {Cpu6502} from './6502.js';
 import {Cmos} from './cmos.js';
@@ -22,11 +20,10 @@ import * as tokeniser from './basic-tokenise.js';
 import * as canvasLib from './canvas.js';
 import {Config} from './config.js';
 import {initialise as electron} from './app/electron.js';
+import {AudioHandler} from "./web/audio-handler.js";
 
 var processor;
 var video;
-var soundChip = null;
-var ddNoise = null;
 var dbgr;
 var frames = 0;
 var frameSkip = 0;
@@ -219,60 +216,11 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
 if (parsedQuery.fakeVideo !== undefined)
     video = new FakeVideo();
 
-// Recent browsers, particularly Safari and Chrome, require a user
-// interaction in order to enable sound playback.
-function userInteraction() {
-    if (audioContext) audioContext.resume();
-}
-
-/*global webkitAudioContext*/
-var audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
-    : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
-        : null;
-var $audioWarningNode = $('#audio-warning');
-$audioWarningNode.on('mousedown', function () {
-    userInteraction();
-});
-
-function checkAudioSuspended() {
-    if (audioContext.state === "suspended") $audioWarningNode.fadeIn();
-}
-
-if (audioContext) {
-    audioContext.onstatechange = function () {
-        if (audioContext.state === "running") $audioWarningNode.fadeOut();
-    };
-    soundChip = new SoundChip(audioContext.sampleRate);
-    // NB must be assigned to some kind of object else it seems to get GC'd by
-    // Safari...
-    soundChip.jsAudioNode = audioContext.createScriptProcessor(2048, 0, 1);
-    soundChip.jsAudioNode.onaudioprocess = function pumpAudio(event) {
-        var outBuffer = event.outputBuffer;
-        var chan = outBuffer.getChannelData(0);
-        soundChip.render(chan, 0, chan.length);
-    };
-
-    if (audioFilterFreq !== 0) {
-        soundChip.filterNode = audioContext.createBiquadFilter();
-        soundChip.filterNode.type = "lowpass";
-        soundChip.filterNode.frequency.value = audioFilterFreq;
-        soundChip.filterNode.Q.value = audioFilterQ;
-        soundChip.jsAudioNode.connect(soundChip.filterNode);
-        soundChip.filterNode.connect(audioContext.destination);
-    } else {
-        soundChip.jsAudioNode.connect(audioContext.destination);
-    }
-
-    if (!noSeek) ddNoise = new DdNoise(audioContext);
-
-    $audioWarningNode.toggle(false);
-    // Firefox will report that audio is suspended even when it will
-    // start playing without user interaction, so we need to delay a
-    // little to get a reliable indication.
-    window.setTimeout(checkAudioSuspended, 1000);
-}
-if (!soundChip) soundChip = new FakeSoundChip();
-if (!ddNoise) ddNoise = new FakeDdNoise();
+const audioHandler = new AudioHandler($("#audio-warning"), audioFilterFreq, audioFilterQ, noSeek);
+// Firefox will report that audio is suspended even when it will
+// start playing without user interaction, so we need to delay a
+// little to get a reliable indication.
+window.setTimeout(() => audioHandler.checkStatus(), 1000);
 
 var lastShiftLocation = 1;
 var lastCtrlLocation = 1;
@@ -393,7 +341,7 @@ emuKeyHandlers[utils.keyCodes.R] = function (down) {
 };
 
 function keyDown(evt) {
-    userInteraction();
+    audioHandler.checkStatus();
     if (document.activeElement.id === 'paste-text') return;
     if (!running) return;
     var code = keyCode(evt);
@@ -480,7 +428,7 @@ $pastetext.on('drop', function (event) {
 
 var $cub = $('#cub-monitor');
 $cub.on('mousemove mousedown mouseup', function (evt) {
-    userInteraction();
+    audioHandler.checkStatus();
     if (document.activeElement !== document.body)
         document.activeElement.blur();
     var cubOffset = $cub.offset();
@@ -599,7 +547,7 @@ var emulationConfig = {
     }
 };
 
-processor = new Cpu6502(model, dbgr, video, soundChip, ddNoise, cmos, emulationConfig);
+processor = new Cpu6502(model, dbgr, video, audioHandler.soundChip, audioHandler.ddNoise, cmos, emulationConfig);
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
@@ -1182,7 +1130,7 @@ syncLights = function () {
     cassette.update(processor.acia.motorOn);
 };
 
-var startPromise = Promise.all([ddNoise.initialise(), processor.initialise()])
+var startPromise = Promise.all([audioHandler.initialise(), processor.initialise()])
     .then(function () {
         // Ideally would start the loads first. But their completion needs the FDC from the processor
         var imageLoads = [];
@@ -1451,8 +1399,7 @@ function handleVisibilityChange() {
 document.addEventListener("visibilitychange", handleVisibilityChange, false);
 
 function go() {
-    soundChip.unmute();
-    ddNoise.unmute();
+    audioHandler.unmute();
     running = true;
     run();
 }
@@ -1461,8 +1408,7 @@ function stop(debug) {
     running = false;
     processor.stop();
     if (debug) dbgr.debug(processor.pc);
-    soundChip.mute();
-    ddNoise.mute();
+    audioHandler.mute();
 }
 
 (function () {
@@ -1503,7 +1449,7 @@ window.benchmarkVideo = _.debounce(benchmarkVideo, 1);
 window.profileVideo = _.debounce(profileVideo, 1);
 window.go = go;
 window.stop = stop;
-window.soundChip = soundChip;
+window.soundChip = audioHandler.soundChip;
 window.processor = processor;
 window.video = video;
 window.hd = function (start, end) {
