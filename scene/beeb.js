@@ -168,6 +168,7 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
             this.casetteLed = null;
             this.capsLed = null;
             this.shiftLed = null;
+            this.monitorType = 0;
         }
 
         async load() {
@@ -236,7 +237,7 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
                 // https://github.com/mrdoob/three.js/issues/11475
                 this.screenMaterial.shaderUniforms.time.value = time / 1000;
 
-                const useMonochromeScreen = false;
+                const useMonochromeScreen = (this.monitorType !== 0);
                 if ( !useMonochromeScreen )
                 {
                     // RGB Screen
@@ -254,8 +255,12 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
                     const luminanceCoeff = new THREE.Vector3( 0.2126, 0.7152, 0.0722 );
 
                     // Final screen colour tint
-                    const screenCol = new THREE.Vector3( 0.1, 1.0, 0.3 ); // Green screen
-                    //const screenCol = new THREE.Vector3( 1.0, 0.2, 0.05 ); // Amber screen
+                    var screenCol = new THREE.Vector3( 0.11, 1.1, 0.33 ); // Green screen
+
+                    if ( this.monitorType === 2 )
+                    {
+                        screenCol = new THREE.Vector3( 1.0, 0.2, 0.05 ); // Amber screen
+                    }
                     //const screenCol = new THREE.Vector3( 1.0, 1.0, 1.0 ); // Black and White screen
 
                     this.screenMaterial.shaderUniforms.screenColR.value = new THREE.Vector3(screenCol.x * luminanceCoeff.x, screenCol.y * luminanceCoeff.x, screenCol.z * luminanceCoeff.x);

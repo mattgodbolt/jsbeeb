@@ -198,7 +198,6 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                 this.scene.add(this.dirLight);
                 this.scene.add(this.dirLight.target);
 
-
                 $('#shadows-option').change(function() {
                   if ($('#shadows-option').is(':checked')) {this.dirLight.castShadow = true;} else {
                     {this.dirLight.castShadow = false;}
@@ -218,6 +217,14 @@ define(['three', 'jquery', 'utils', 'scene/beeb', 'underscore', 'three-orbit'], 
                     this.skyLight.intensity = 0.12;
                     this.beeb.screenMaterial.envMap = bg.texture;
 
+                  }
+                }.bind(this));
+
+                $('#green-screen-option').change(async function() {
+                  if ($('#green-screen-option').is(':checked')) {
+                    this.beeb.monitorType = 1;
+                  } else {
+                    this.beeb.monitorType = 0;
                   }
                 }.bind(this));
 
