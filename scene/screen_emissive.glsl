@@ -62,7 +62,7 @@
     // apply mask texture
     vec4 maskSample = texture2D(maskTexture, uv * vec2(7,8) * 16.0);
     maskSample = maskSample * screenEmissiveBrightness;
-    emissiveColor.rgb *= maskSample.rgb;
+    emissiveColor.rgb *= mix( vec3(1.0), maskSample.rgb, maskIntensity );
 
     // ambient emissive without mask
     emissiveColor += vec4(ambientEmissive);

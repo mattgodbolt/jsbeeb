@@ -243,6 +243,8 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
                     this.screenMaterial.shaderUniforms.screenColR.value = new THREE.Vector3( 1, 0, 0 );
                     this.screenMaterial.shaderUniforms.screenColG.value = new THREE.Vector3( 0, 1, 0 );
                     this.screenMaterial.shaderUniforms.screenColB.value = new THREE.Vector3( 0, 0, 1 );
+
+                    this.screenMaterial.shaderUniforms.maskIntensity.value = 1;
                 }
                 else
                 {
@@ -259,6 +261,8 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
                     this.screenMaterial.shaderUniforms.screenColR.value = new THREE.Vector3(screenCol.x * luminanceCoeff.x, screenCol.y * luminanceCoeff.x, screenCol.z * luminanceCoeff.x);
                     this.screenMaterial.shaderUniforms.screenColG.value = new THREE.Vector3(screenCol.x * luminanceCoeff.y, screenCol.y * luminanceCoeff.y, screenCol.z * luminanceCoeff.y);
                     this.screenMaterial.shaderUniforms.screenColB.value = new THREE.Vector3(screenCol.x * luminanceCoeff.z, screenCol.y * luminanceCoeff.z, screenCol.z * luminanceCoeff.z);
+
+                    this.screenMaterial.shaderUniforms.maskIntensity.value = 0;
                 }
             }
         }
@@ -284,6 +288,7 @@ define(['three', '../utils', 'three-gltf-loader'], function (THREE, utils) {
 
                 shader.uniforms.maskTexture = newUniforms.maskTexture;
                 shader.uniforms.time = { value: 0 };
+                shader.uniforms.maskIntensity = { value: 1 };
                 shader.uniforms.screenColR = {type: 'vec3', value: new THREE.Vector3(1,0,0)};
                 shader.uniforms.screenColG = {type: 'vec3', value: new THREE.Vector3(0,1,0)};
                 shader.uniforms.screenColB = {type: 'vec3', value: new THREE.Vector3(0,0,1)};

@@ -3,6 +3,8 @@
 uniform sampler2D maskTexture;
 uniform float time;
 
+uniform float maskIntensity;
+
 uniform vec3 screenColR;
 uniform vec3 screenColG;
 uniform vec3 screenColB;
