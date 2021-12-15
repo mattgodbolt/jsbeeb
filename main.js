@@ -1413,11 +1413,12 @@ function stop(debug) {
 
 (function () {
     const $cubMonitor = $("#cub-monitor");
-    var cubOrigHeight = $cubMonitor.height();
-    var cubToScreenHeightRatio = $screen.height() / cubOrigHeight;
-    var cubOrigWidth = $cubMonitor.width();
-    var cubToScreenWidthRatio = $screen.width() / cubOrigWidth;
-    var navbarHeight = $("#header-bar").height();
+    const $cubMonitorPic = $("#cub-monitor-pic");
+    const cubOrigHeight = $cubMonitorPic.attr('height');
+    const cubOrigWidth = $cubMonitorPic.attr('width');
+    const cubToScreenHeightRatio = $screen.attr('height') / cubOrigHeight;
+    const cubToScreenWidthRatio = $screen.attr('width') / cubOrigWidth;
+    const navbarHeight = $("#header-bar").height();
     const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
     const minWidth = cubOrigWidth / 4;
     const minHeight = cubOrigHeight / 4;
@@ -1425,15 +1426,15 @@ function stop(debug) {
     const bottomReservedSize = 100;
 
     function resizeTv() {
-        var width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
-        var height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
+        let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
+        let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
         if (width / height <= desiredAspectRatio) {
             height = width / desiredAspectRatio;
         } else {
             width = height * desiredAspectRatio;
         }
-        $('#cub-monitor').height(height).width(width);
-        $('#cub-monitor-pic').height(height).width(width);
+        $cubMonitor.height(height).width(width);
+        $cubMonitorPic.height(height).width(width);
         $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
     }
 
