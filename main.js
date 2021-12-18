@@ -7,7 +7,7 @@ import './jsbeeb.css';
 
 import * as utils from './utils.js';
 import {FakeVideo, Video} from './video.js';
-import {Debugger} from './debug.js';
+import {Debugger} from './web/debug.js';
 import {Cpu6502} from './6502.js';
 import {Cmos} from './cmos.js';
 import {StairwayToHell} from './sth.js';
