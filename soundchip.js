@@ -72,6 +72,8 @@ export function SoundChip(sampleRate) {
             counter[channel] -= sampleDecrement;
             if (counter[channel] < 0) {
                 counter[channel] += reg;
+                if (counter[channel] < 0)
+                    counter[channel] %= reg;
                 outputBit[channel] = !outputBit[channel];
             }
             out[i + offset] += (outputBit[channel] * vol);
@@ -117,11 +119,26 @@ export function SoundChip(sampleRate) {
             counter[channel] -= sampleDecrement;
             if (counter[channel] < 0) {
                 counter[channel] += add;
+                if (counter[channel] < 0)
+                    counter[channel] %= add;
                 outputBit[channel] = !outputBit[channel];
                 if (outputBit[channel]) shiftLfsr();
             }
             out[i + offset] += ((lfsr & 1) * vol);
         }
+    }
+
+    this.debugPokeAll = (c0, v0, c1, v1, c2, v2, c3, v3) => {
+        catchUp();
+        this.registers[0] = c0 & 0xffffff;
+        this.registers[1] = c1 & 0xffffff;
+        this.registers[2] = c2 & 0xffffff;
+        this.registers[3] = c3 & 0xffffff;
+        volume[0] = volumeTable[v0];
+        volume[1] = volumeTable[v1];
+        volume[2] = volumeTable[v2];
+        volume[3] = volumeTable[v3];
+        noisePoked();
     }
 
     var enabled = true;
