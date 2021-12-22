@@ -1343,6 +1343,7 @@ function draw(now) {
         window.requestAnimationFrame(draw);
     }
 
+    audioHandler.soundChip.flush();
     gamepad.update(processor.sysvia);
     syncLights();
     if (last !== 0) {

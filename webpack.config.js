@@ -58,7 +58,7 @@ function getPlugins() {
         new HtmlWebpackPlugin({
             title: "jsbeeb - Javascript BBC Micro emulator",
             template: "index.html"
-        })
+        }),
     ];
 }
 
@@ -74,6 +74,11 @@ export default {
     },
     devtool: "source-map",
     plugins: getPlugins(),
+    resolve: {
+        alias: {
+            "audio-worklet": path.resolve(__dirname, "web/audio-worklet.js")
+        }
+    },
     devServer: {
         hot: isDev,
         static: {
@@ -83,6 +88,11 @@ export default {
     },
     optimization: getOptimizationSettings(),
     module: {
+        parser: {
+            javascript: {
+                worker: ["SoundChipProcessor from audio-renderer", "..."]
+            }
+        },
         rules: [
             {
                 test: /\.less$/,

@@ -1,5 +1,6 @@
 import {FakeSoundChip, SoundChip} from "../soundchip.js";
 import {DdNoise, FakeDdNoise} from "../ddnoise.js";
+import {AudioWorklet} from "audio-worklet";
 
 export class AudioHandler {
     constructor(warningNode, audioFilterFreq, audioFilterQ, noSeek) {
@@ -9,14 +10,12 @@ export class AudioHandler {
         this.audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
             : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
                 : null;
+        this._jsAudioNode = null;
         if (this.audioContext) {
             this.audioContext.onstatechange = () => this.checkStatus();
-            // TODO: try and remove the dependency on this being created first? maybe? like, why should the soundchip
-            //  care what renderer we have? Perhaps we can pick a sample rate and then use playback speed of the
-            //  js audio node to match real time with the output.
-            this.soundChip = new SoundChip(this.audioContext.sampleRate);
+            this.soundChip = new SoundChip((buffer, time) => this._onBuffer(buffer, time));
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext);
-            this._setup(audioFilterFreq, audioFilterQ);
+            this._setup(audioFilterFreq, audioFilterQ).then();
         } else {
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
@@ -26,27 +25,31 @@ export class AudioHandler {
         this.warningNode.toggle(false);
     }
 
-    _setup(audioFilterFreq, audioFilterQ) {
-        // NB must be assigned to some kind of object else it seems to get GC'd by Safari...
-        // TODO consider using a newer API. AudioWorkletNode? Harder to do two-way conversations there. Maybe needs
-        //  a AudioBufferSourceNode and pingponging between buffers?
-        this._jsAudioNode = this.audioContext.createScriptProcessor(2048, 0, 1);
-        this._jsAudioNode.onaudioprocess = (event) => {
-            const outBuffer = event.outputBuffer;
-            const chan = outBuffer.getChannelData(0);
-            this.soundChip.render(chan, 0, chan.length);
-        };
-
+    async _setup(audioFilterFreq, audioFilterQ) {
+        new Worker(new URL('./audio-renderer.js', import.meta.url));
+        await this.audioContext.audioWorklet.addModule(
+            new AudioWorklet(
+                new URL("./audio-renderer.js", import.meta.url)
+            )
+        );
         if (audioFilterFreq !== 0) {
             this.soundChip.filterNode = this.audioContext.createBiquadFilter();
             this.soundChip.filterNode.type = "lowpass";
             this.soundChip.filterNode.frequency.value = audioFilterFreq;
             this.soundChip.filterNode.Q.value = audioFilterQ;
-            this._jsAudioNode.connect(this.soundChip.filterNode);
+            this._audioDestination = this.soundChip.filterNode;
             this.soundChip.filterNode.connect(this.audioContext.destination);
         } else {
-            this.soundChip._jsAudioNode.connect(this.audioContext.destination);
+            this._audioDestination = this.audioContext.destination;
         }
+
+        this._jsAudioNode = new AudioWorkletNode(this.audioContext, 'sound-chip-processor');
+        this._jsAudioNode.connect(this._audioDestination);
+    }
+
+    _onBuffer(buffer) {
+        if (this._jsAudioNode)
+            this._jsAudioNode.port.postMessage({time: Date.now(), buffer}, [buffer.buffer]);
     }
 
     // Recent browsers, particularly Safari and Chrome, require a user
