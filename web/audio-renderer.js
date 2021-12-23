@@ -1,10 +1,11 @@
 /*global sampleRate, currentTime*/
 // TODO downsampling is atrocious
 // TODO we still end up with 200ms of audio latency!
+// Imports don't work here as the importScripts magic that webpack does doesn't work.
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
         super(...args);
-
+        
         this.inputSampleRate = 4000000.0 / 8;
         this._lastSample = 0;
         this.queue = [];
@@ -19,6 +20,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             this.onBuffer(event.data.time, event.data.buffer);
         };
         this.nextStats = 0;
+
     }
 
     stats(sampleRatio) {
