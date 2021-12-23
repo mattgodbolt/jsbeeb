@@ -1,12 +1,21 @@
 import {FakeSoundChip, SoundChip} from "../soundchip.js";
 import {DdNoise, FakeDdNoise} from "../ddnoise.js";
 import {AudioWorklet} from "audio-worklet";
+import {SmoothieChart, TimeSeries} from "smoothie";
 
 export class AudioHandler {
-    constructor(warningNode, audioFilterFreq, audioFilterQ, noSeek) {
+    constructor(warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek) {
         this.warningNode = warningNode;
         this.warningNode.toggle(false);
-
+        this.chart = new SmoothieChart({
+            tooltip: true, labels: {precision: 0}, yRangeFunction: range => {
+                return {min: 0, max: range.max};
+            }
+        });
+        this.stats = {};
+        this._addStat("queueSize", {strokeStyle: 'rgb(51,126,108)'});
+        this._addStat("queueAge", {strokeStyle: 'rgb(162,119,22)'});
+        this.chart.streamTo(statsNode, 500);
         /*global webkitAudioContext*/
         this.audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
             : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
@@ -56,6 +65,20 @@ export class AudioHandler {
 
         this._jsAudioNode = new AudioWorkletNode(this.audioContext, 'sound-chip-processor');
         this._jsAudioNode.connect(this._audioDestination);
+        this._jsAudioNode.port.onmessage = (event) => {
+            const now = Date.now();
+            for (const stat of Object.keys(event.data)) {
+                if (this.stats[stat])
+                    this.stats[stat].append(now, event.data[stat]);
+            }
+        }
+    }
+
+    _addStat(stat, info) {
+        const timeSeries = new TimeSeries();
+        this.stats[stat] = timeSeries;
+        info.tooltipLabel = stat;
+        this.chart.addTimeSeries(timeSeries, info);
     }
 
     _onBuffer(buffer) {

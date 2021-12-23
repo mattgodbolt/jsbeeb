@@ -1,5 +1,4 @@
 /*global sampleRate, currentTime*/
-// TODO webpack is broken
 // TODO downsampling is atrocious
 // TODO we still end up with 200ms of audio latency!
 class SoundChipProcessor extends AudioWorkletProcessor {
@@ -23,12 +22,15 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
     stats() {
         if (currentTime < this.nextStats) return;
-        this.nextStats = currentTime + 5;
-        console.log("sample ratio", this.inputSampleRate / sampleRate);
-        console.log("dropped", this.dropped);
-        console.log("underrun", this.underruns);
-        console.log("queue size", this.queue.length);
-        console.log("queue age", this.queue.length ? Date.now() - this.queue[0].time : "none");
+        this.nextStats = currentTime + 0.25;
+        this.port.postMessage({
+            sampleRate: sampleRate,
+            inputSampleRate: this.inputSampleRate,
+            dropped: this.dropped,
+            underruns: this.underruns,
+            queueSize: this.queue.length,
+            queueAge: this.queue.length ? Date.now() - this.queue[0].time : 0
+        });
     }
 
     onBuffer(time, buffer) {
