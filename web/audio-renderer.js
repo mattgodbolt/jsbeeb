@@ -1,6 +1,7 @@
-// Imports don't work here as the importScripts magic that webpack does doesn't work.
-// Else I'd use https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js
 /*global sampleRate, currentTime*/
+// TODO downsampling is atrocious
+// TODO we still end up with 200ms of audio latency!
+// Imports don't work here as the importScripts magic that webpack does doesn't work.
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
         super(...args);
@@ -19,6 +20,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             this.onBuffer(event.data.time, event.data.buffer);
         };
         this.nextStats = 0;
+
     }
 
     stats(sampleRatio) {
@@ -86,18 +88,15 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         const sampleRatio = effectiveSampleRate / sampleRate;
 
         const channel = outputs[0][0];
-
-        const numInputSamples = Math.round(sampleRatio * channel.length);
-        const source = new Float32Array(numInputSamples);
-        for (let i = 0; i < numInputSamples; ++i)
-            source[i] = this.nextSample();
-
-        // Pretty awful bilinear filter here.
+        let pos = 0;
         for (let i = 0; i < channel.length; i++) {
-            const pos = (i + 0.5) * sampleRatio;
-            const loc = Math.floor(pos);
-            const alpha = pos - loc;
-            channel[i] = source[loc] * (1 - alpha) + source[loc + 1] * alpha;
+            const loc = ((i + 1) * sampleRatio) | 0;
+            const num = loc - pos;
+            pos += num;
+            let total = 0;
+            for (let j = 0; j < num; ++j)
+                total += this.nextSample();
+            channel[i] = total / num;
         }
         this.stats(sampleRatio);
         return true;
