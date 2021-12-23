@@ -15,7 +15,7 @@ export class AudioHandler {
         this.stats = {};
         this._addStat("queueSize", {strokeStyle: 'rgb(51,126,108)'});
         this._addStat("queueAge", {strokeStyle: 'rgb(162,119,22)'});
-        this.chart.streamTo(statsNode, 500);
+        this.chart.streamTo(statsNode, 100);
         /*global webkitAudioContext*/
         this.audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
             : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
