@@ -1,12 +1,17 @@
 // Imports don't work here as the importScripts magic that webpack does doesn't work.
 // Else I'd use https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js
 /*global sampleRate, currentTime*/
+
+const lowPassFilterFreq = sampleRate / 2;
+const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
+
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
         super(...args);
-        
+
         this.inputSampleRate = 4000000.0 / 8;
         this._lastSample = 0;
+        this._lastFilteredOutput = 0;
         this.queue = [];
         this._queueSizeBytes = 0;
         this.dropped = 0;
@@ -86,13 +91,17 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         const sampleRatio = effectiveSampleRate / sampleRate;
 
         const channel = outputs[0][0];
+        const dt = 1 / effectiveSampleRate;
+        const filterAlpha = dt / (RC + dt);
 
         const numInputSamples = Math.round(sampleRatio * channel.length);
         const source = new Float32Array(numInputSamples);
-        for (let i = 0; i < numInputSamples; ++i)
-            source[i] = this.nextSample();
-
-        // Pretty awful bilinear filter here.
+        let prevSample = this._lastFilteredOutput;
+        for (let i = 0; i < numInputSamples; ++i) {
+            prevSample += filterAlpha * (this.nextSample() - prevSample);
+            source[i] = prevSample;
+        }
+        this._lastFilteredOutput = prevSample;
         for (let i = 0; i < channel.length; i++) {
             const pos = (i + 0.5) * sampleRatio;
             const loc = Math.floor(pos);
