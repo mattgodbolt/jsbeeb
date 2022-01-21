@@ -257,7 +257,7 @@ require(['jquery', 'underscore', 'utils', 'video', 'soundchip', 'ddnoise', 'keyn
         }
         if (!soundChip) soundChip = new SoundChip.FakeSoundChip();
         if (!ddNoise) ddNoise = new DdNoise.FakeDdNoise();
-        if (!keyNoise) keyNoise = new DdNoise.FakeKeyNoise();
+        if (!keyNoise) keyNoise = new KeyNoise.FakeKeyNoise();
 
         var lastShiftLocation = 1;
         var lastCtrlLocation = 1;
