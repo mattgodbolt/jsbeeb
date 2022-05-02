@@ -113,7 +113,7 @@ export class Debugger {
         }
 
 
-        this.disass.find('.bp_gutter').click(this.bpClick);
+        this.disass.find('.bp_gutter').click(this.bpClick.bind(this));
 
         this.disass.bind('wheel', evt => {
             let deltaY = evt.originalEvent.deltaY;
