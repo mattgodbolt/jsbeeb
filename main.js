@@ -21,6 +21,7 @@ import * as canvasLib from './canvas.js';
 import {Config} from './config.js';
 import {initialise as electron} from './app/electron.js';
 import {AudioHandler} from "./web/audio-handler.js";
+import {allModels} from "./models.js";
 
 var processor;
 var video;
@@ -151,6 +152,11 @@ if (queryString) {
 
 if (parsedQuery.frameSkip)
     frameSkip = parseInt(parsedQuery.frameSkip);
+
+$('.model-menu').empty();
+allModels.forEach(m => {
+    $('.model-menu').append(`<li><a href="#" class="dropdown-item" data-target="${m.name}">${m.name}</a></li>`);
+});
 
 var config = new Config(
     function (changed) {
