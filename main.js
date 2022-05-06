@@ -161,12 +161,12 @@ allModels.forEach(m => {
 var config = new Config(
     function (changed) {
         parsedQuery = _.extend(parsedQuery, changed);
-        updateUrl();
         if (changed.model) {
             areYouSure("Changing model requires a restart of the emulator. Restart now?",
                 "Yes, restart now",
                 "No, thanks",
                 function () {
+                    updateUrl();
                     window.location.reload();
                 });
         }
