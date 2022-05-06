@@ -3,7 +3,7 @@
 import {I8271, WD1770} from "./fdc.js";
 
 class Model {
-    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
+    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube, hasTeletextAdaptor) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -13,6 +13,7 @@ class Model {
         this.swram = swram;
         this.isTest = false;
         this.tube = tube;
+        this.hasTeletextAdaptor = hasTeletextAdaptor;
     }
 }
 
@@ -30,6 +31,7 @@ const masterSwram = [
 const tube65c02 = new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false);
 export const allModels = [
     new Model("BBC B", ["B"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, I8271),
+    new Model("BBC B with Teletext", ["BTeletext"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ATS-3.0.ROM"], true, false, beebSwram, I8271, null, true),
     new Model("BBC B (DFS 0.9)", ["B-DFS0.9"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, I8271),
     new Model("BBC B (DFS 1.2)", ["B-DFS1.2"], ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"], true, false, beebSwram, I8271),
     new Model("BBC B (with 65c02 Tube)", ["B-Tube"], ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"], true, false, beebSwram, I8271, tube65c02),

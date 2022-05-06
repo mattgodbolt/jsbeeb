@@ -8,6 +8,7 @@ import {Tube} from './tube.js';
 import {Adc} from './adc.js';
 import {Scheduler} from './scheduler.js';
 import {TouchScreen} from './touchscreen.js';
+import {TeletextAdaptor} from './teletext_adaptor.js';
 
 var signExtend = utils.signExtend;
 
@@ -597,6 +598,9 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         }
         addr &= 0xffff;
         switch (addr & ~0x0003) {
+            case 0xfc10:
+                if(model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
+                break;
             case 0xfc20:
             case 0xfc24:
             case 0xfc28:
@@ -735,6 +739,9 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
     this.writeDevice = function (addr, b) {
         b |= 0;
         switch (addr & ~0x0003) {
+            case 0xfc10:
+                if(model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
+                break;
             case 0xfc20:
             case 0xfc24:
             case 0xfc28:
@@ -956,6 +963,11 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
             this.crtc = this.video.crtc;
             this.ula = this.video.ula;
             this.adconverter = new Adc(this.sysvia, this.scheduler);
+            if (model.hasTeletextAdaptor)   
+            {
+                this.teletextAdaptor = new TeletextAdaptor(this, this.scheduler);
+                this.teletextAdaptor.init();
+            }
             this.sysvia.reset(hard);
             this.uservia.reset(hard);
         }
@@ -972,6 +984,10 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.halted = false;
         this.video.reset(this, this.sysvia, hard);
         if (hard) this.soundChip.reset(hard);
+        if (model.hasTeletextAdaptor)
+        {
+            this.teletextAdaptor.reset();
+        }
     };
 
     this.updateKeyLayout = function () {

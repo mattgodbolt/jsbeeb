@@ -1,5 +1,19 @@
 [![jsbeeb tests](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml/badge.svg)](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml)
 
+
+A fork to port over teletext adaptor emulation
+----------------------------------------------
+
+This is a relatively straightforward port of the teletext adaptor emulation code from Beebem.
+It also includes the ATS ROM and the sample stream files taken in 2006.
+
+*TELETEXT will fire up teletext. From there shift F1-F4 will change channel from BBC1/2, ITV and C4.
+
+Enjoy!
+Jason.
+
+
+
 jsbeeb - Javascript BBC Micro emulator
 --------------------------------------
 
