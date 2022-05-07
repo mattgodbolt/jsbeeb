@@ -382,16 +382,7 @@ export const keyCodes = {
 
 
 function detectKeyboardLayout() {
-    if (runningInNode) {
-        return "UK";
-    }
-    if (localStorage.keyboardLayout) {
-        return localStorage.keyboardLayout === "US" ? "US" : "UK";
-    }
-    if (navigator.language) {
-        if (navigator.language.toLowerCase() === "en-gb") return "UK";
-        if (navigator.language.toLowerCase() === "en-us") return "US";
-    }
+  
     return "UK";  // Default guess of UK
 }
 
@@ -689,8 +680,9 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.RIGHT, BBC.RIGHT); // arrow right
         map(keyCodes.DOWN, BBC.DOWN); // arrow down
         map(keyCodes.APOSTROPHE, BBC.COLON_STAR);
+        map(keyCodes.HOME, BBC.K2, true);
         map(keyCodes.HASH, BBC.RIGHT_SQUARE_BRACKET);
-
+       
         // None of this last group in great locations.
         // But better to have them mapped at least somewhere.
         map(keyCodes.BACK_QUOTE, BBC.AT);

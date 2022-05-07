@@ -963,11 +963,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
             this.crtc = this.video.crtc;
             this.ula = this.video.ula;
             this.adconverter = new Adc(this.sysvia, this.scheduler);
-            if (model.hasTeletextAdaptor)   
-            {
-                this.teletextAdaptor = new TeletextAdaptor(this, this.scheduler);
-                this.teletextAdaptor.init();
-            }
+            if (model.hasTeletextAdaptor)  
+                this.teletextAdaptor = new TeletextAdaptor(this);
             this.sysvia.reset(hard);
             this.uservia.reset(hard);
         }
@@ -984,10 +981,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.halted = false;
         this.video.reset(this, this.sysvia, hard);
         if (hard) this.soundChip.reset(hard);
-        if (model.hasTeletextAdaptor)
-        {
-            this.teletextAdaptor.reset();
-        }
+        if (model.hasTeletextAdaptor) this.teletextAdaptor.reset(hard);
     };
 
     this.updateKeyLayout = function () {
@@ -1023,6 +1017,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
+        if (model.hasTeletextAdaptor) this.teletextAdaptor.polltime(cycles);
     };
 
     // Faster, but more limited version
@@ -1034,6 +1029,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
+        if (model.hasTeletextAdaptor) this.teletextAdaptor.polltime(cycles);
     };
 
     if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {

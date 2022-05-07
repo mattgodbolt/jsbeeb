@@ -6,10 +6,36 @@ const TELETEXT_IRQ = 5;
 const TELETEXT_FRAME_SIZE = 860;
 const TELETEXT_UPDATE_FREQ = 50000;
 
-export function TeletextAdaptor(cpu, scheduler) {
+/*
+
+Offset  Description                 Access  
++00     Status register             R/W
++01     Row register
++02     Data register
++03     Clear status register
+
+Status register:
+  Read
+   Bits     Function
+   0-3      Link settings
+   4        FSYN (Latches high on Field sync)
+   5        DEW (Data entry window)
+   6        DOR (Latches INT on end of DEW)
+   7        INT (latches high on end of DEW)
+  
+  Write
+   Bits     Function
+   0-1      Channel select
+   2        Teletext Enable
+   3        Enable Interrupts
+   4        Enable AFC (and mystery links A)
+   5        Mystery links B
+
+*/
+
+export function TeletextAdaptor(cpu) {
 	var self = this;
 	this.cpu = cpu;
-	this.scheduler = scheduler;
 	this.teletextStatus = 0x0f; /* low nibble comes from LK4-7 and mystery links which are left floating */
 	this.teletextInts = false;
 	this.teletextEnable = false;
@@ -18,24 +44,14 @@ export function TeletextAdaptor(cpu, scheduler) {
 	this.rowPtr = 0x00;
 	this.colPtr = 0x00;
 	this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
+	this.pollCount = 0;
 	
-	this.poll = function () {
-		if(self.cpu.resetLine)
+	this.reset = function(hard) {
+		if(hard)
 		{
-			self.update();
-			self.pollTask.reschedule(TELETEXT_UPDATE_FREQ);
+			console.log('Teletext adaptor: initialisation');
+			this.loadChannelStream(this.channel);
 		}
-	};
-	this.pollTask = this.scheduler.newTask(this.poll);
-	
-	this.init = function() {
-		console.log('Teletext adaptor: initialisation');
-		this.reset();
-		this.loadChannelStream(this.channel);
-	}
-
-	this.reset = function() {
-		this.pollTask.ensureScheduled(true, TELETEXT_UPDATE_FREQ);
 	};
 
 	this.loadChannelStream = function(channel) {
@@ -107,6 +123,25 @@ export function TeletextAdaptor(cpu, scheduler) {
 		}
 	}
 
+	// Attempt to emulate the TV broadcast
+	this.polltime = function(cycles) {
+		this.pollCount += cycles;
+		if(this.pollCount > TELETEXT_UPDATE_FREQ)
+		{
+			this.pollCount = 0;
+			// Don't flood the processor with teletext interrupts during a reset
+			if(this.cpu.resetLine)
+			{ 
+				this.update();
+			}
+			else
+			{
+				// Grace period before we start up again
+				this.pollCount = -TELETEXT_UPDATE_FREQ * 10;
+			}
+		}
+	}
+
 	this.update = function() {
 		if (this.currentFrame >= this.totalFrames)
 		{
@@ -120,6 +155,7 @@ export function TeletextAdaptor(cpu, scheduler) {
 
 		if(this.teletextEnable)
 		{
+			// Copy current stream position into the frame buffer
 			for(var i = 0; i < 16; ++i)
 			{
 				if(this.streamData[offset + (i * 43)] != 0)
