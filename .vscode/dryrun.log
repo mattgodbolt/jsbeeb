@@ -1,0 +1,7 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory `/Users/jason/Projects/jsbeeb/jsbeeb'
+npm install
+touch .npm-up-to-date
+npm test
+make: Leaving directory `/Users/jason/Projects/jsbeeb/jsbeeb'
+ 

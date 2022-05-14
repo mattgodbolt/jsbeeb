@@ -24,6 +24,17 @@ export class AudioHandler {
 
         this.warningNode.on('mousedown', () => this.tryResume());
         this.warningNode.toggle(false);
+
+        // Initialise Music 5000 audio context        
+        this.audioContextM5000 = typeof AudioContext !== 'undefined' ? new AudioContext({sampleRate: 46875})
+        : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext({sampleRate: 46875}) // At the time of writing this is not supported in Safari
+            : null;
+
+        if (this.audioContextM5000)
+        {
+            this.audioContextM5000.onstatechange = () => this.checkStatus();
+        }
+
     }
 
     _setup(audioFilterFreq, audioFilterQ) {
@@ -48,12 +59,13 @@ export class AudioHandler {
             this.soundChip._jsAudioNode.connect(this.audioContext.destination);
         }
     }
-
     // Recent browsers, particularly Safari and Chrome, require a user
     // interaction in order to enable sound playback.
     async tryResume() {
         if (this.audioContext)
             await this.audioContext.resume();
+        if (this.audioContextM5000)
+            await this.audioContextM5000.resume();
     }
 
     checkStatus() {
