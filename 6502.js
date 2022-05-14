@@ -9,6 +9,7 @@ import {Adc} from './adc.js';
 import {Scheduler} from './scheduler.js';
 import {TouchScreen} from './touchscreen.js';
 import {TeletextAdaptor} from './teletext_adaptor.js';
+import {Music5000} from './music5000.js';
 
 var signExtend = utils.signExtend;
 
@@ -468,12 +469,20 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
     };
     this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
+    this.JimPageSel = 0;
 
     // BBC Master memory map (within ramRomOs array):
     // 00000 - 08000 -> base 32KB RAM
     // 08000 - 09000 -> ANDY - 4KB
     // 09000 - 0b000 -> HAZEL - 8KB
     // 0b000 - 10000 -> LYNNE - 20KB
+
+    this.initialiseM5000 = function(worklet)
+    {
+        // We need to inject the audio worklet into the M5000 emulator,
+        // unfortunately this needs to go via Cpu6502 first 
+        this.music5000.initialise(worklet);
+    }
 
     this.romSelect = function (b) {
         var c;
@@ -597,7 +606,22 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
             return this.ramRomOs[this.osOffset + (addr & 0x3fff)];
         }
         addr &= 0xffff;
+            
+        if (model.hasMusic5000)
+        {
+            if (addr == 0xfcff) {
+                return this.JimPageSel;
+            }
+
+            if ((this.JimPageSel & 0xf0) == 0x30 &&
+                (addr & 0xff00) == 0xfd00)
+            {
+                return this.music5000.read(this.JimPageSel, addr);
+            }
+        }
+        
         switch (addr & ~0x0003) {
+
             case 0xfc10:
                 if(model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
@@ -738,6 +762,22 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
     };
     this.writeDevice = function (addr, b) {
         b |= 0;
+
+        if(model.hasMusic5000)
+        {
+            if (addr == 0xfcff) {
+                this.JimPageSel = b;
+                return;
+            }
+        
+            if (((this.JimPageSel & 0xf0) == 0x30 &&
+                (addr & 0xff00) == 0xfd00))
+            {
+                this.music5000.write(this.JimPageSel, addr, b);
+                return;
+            }
+        }
+
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if(model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
@@ -965,6 +1005,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
             this.adconverter = new Adc(this.sysvia, this.scheduler);
             if (model.hasTeletextAdaptor)  
                 this.teletextAdaptor = new TeletextAdaptor(this);
+            if (model.hasMusic5000)
+                this.music5000 = new Music5000();
             this.sysvia.reset(hard);
             this.uservia.reset(hard);
         }
@@ -979,9 +1021,11 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.p.i = true;
         this.nmi = false;
         this.halted = false;
+        this.JimPageSel = 0;
         this.video.reset(this, this.sysvia, hard);
         if (hard) this.soundChip.reset(hard);
         if (model.hasTeletextAdaptor) this.teletextAdaptor.reset(hard);
+        if (model.hasMusic5000) this.music5000.reset(hard);
     };
 
     this.updateKeyLayout = function () {
@@ -1018,6 +1062,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
         if (model.hasTeletextAdaptor) this.teletextAdaptor.polltime(cycles);
+        if (model.hasMusic5000) this.music5000.polltime(cycles);
     };
 
     // Faster, but more limited version
@@ -1030,6 +1075,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
         if (model.hasTeletextAdaptor) this.teletextAdaptor.polltime(cycles);
+        if (model.hasMusic5000) this.music5000.polltime(cycles);
     };
 
     if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {

@@ -2,6 +2,7 @@
 
 import * as utils from './utils.js';
 
+// Code ported from Beebem (C to .js) by Jason Robson
 const TELETEXT_IRQ = 5;
 const TELETEXT_FRAME_SIZE = 860;
 const TELETEXT_UPDATE_FREQ = 50000;
