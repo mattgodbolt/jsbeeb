@@ -1,6 +1,22 @@
 [![jsbeeb tests](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml/badge.svg)](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml)
 
 
+
+Music 5000 emulation
+--------------------
+
+I've ported over the Beebem code for the Music 5000. This version uses Audio Worklets so 
+unfortunately will only work in Chrome for the time being (not supported in Safari as of the time of writing).
+
+Once selecting the machine type, you will need to boot from the M5000 master disk (this is included)
+
+I am hosting this branch here:
+https://jsbeeb.azurewebsites.net
+
+Enjoy!
+Jason.
+
+
 A fork to port over teletext adaptor emulation
 ----------------------------------------------
 
