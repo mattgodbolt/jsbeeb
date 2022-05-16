@@ -1,35 +1,5 @@
 [![jsbeeb tests](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml/badge.svg)](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml)
 
-
-
-Music 5000 emulation
---------------------
-
-I've ported over the Beebem code for the Music 5000. This version uses Audio Worklets so 
-unfortunately will only work in Chrome for the time being (not supported in Safari as of the time of writing).
-
-Once selecting the machine type, you will need to boot from the M5000 master disk (this is included)
-
-I am hosting this branch here:
-https://jsbeeb.azurewebsites.net
-
-Enjoy!
-Jason.
-
-
-A fork to port over teletext adaptor emulation
-----------------------------------------------
-
-This is a relatively straightforward port of the teletext adaptor emulation code from Beebem.
-It also includes the ATS ROM and the sample stream files taken in 2006.
-
-*TELETEXT will fire up teletext. From there shift F1-F4 will change channel from BBC1/2, ITV and C4.
-
-Enjoy!
-Jason.
-
-
-
 jsbeeb - Javascript BBC Micro emulator
 --------------------------------------
 
