@@ -383,7 +383,7 @@ export const keyCodes = {
 
 function detectKeyboardLayout() {
     if (runningInNode) {
-        return "US";
+        return "UK";
     }
     if (localStorage.keyboardLayout) {
         return localStorage.keyboardLayout === "US" ? "US" : "UK";
@@ -392,7 +392,7 @@ function detectKeyboardLayout() {
         if (navigator.language.toLowerCase() === "en-gb") return "UK";
         if (navigator.language.toLowerCase() === "en-us") return "US";
     }
-    return "US";  // Default guess of UK
+    return "UK";  // Default guess of UK
 }
 
 var isUKlayout = detectKeyboardLayout() === "UK";
