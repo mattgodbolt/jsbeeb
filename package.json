@@ -21,6 +21,7 @@
     "css-minimizer-webpack-plugin": "^3.4.1",
     "eslist": "^1.0.0-beta.1",
     "jquery": "^3.6.0",
+    "smoothie": "^1.36.0",
     "underscore": "^1.13.2"
   },
   "devDependencies": {

@@ -1,3 +1,6 @@
+body {
+    overflow: hidden;
+}
 #outer {
     display: block;
 }
@@ -124,6 +127,12 @@ span.accesskey {
     font-size: 8pt;
     bottom: 0;
     left: 0;
+    position: fixed;
+}
+
+#audio-stats {
+    bottom: 0;
+    right: 0;
     position: fixed;
 }
 
@@ -320,4 +329,14 @@ div.modal-body > div:not(:first-child) {
 #error-dialog div.error {
     background-color: #440000;
     margin-top: 5px;
+}
+
+div.smoothie-chart-tooltip {
+    background: #444;
+    padding: 1em;
+    margin-top: 20px;
+    font-family: consolas, serif;
+    color: white;
+    font-size: 10px;
+    pointer-events: none;
 }
