@@ -832,6 +832,11 @@ function loadDiscImage(discImage) {
         }
         return gdLoad({title: title, id: discImage});
     }
+    if (schema === "b64data") {
+        var ssdData = atob(discImage);
+        discImage = 'disk.ssd';
+        return Promise.resolve(disc.discFor(processor.fdc, discImage, ssdData));
+    }
     if (schema === "data") {
         var arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
         var unzipped = utils.unzipDiscImage(arr);
