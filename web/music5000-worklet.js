@@ -38,8 +38,8 @@ registerProcessor('music5000',class extends AudioWorkletProcessor {
 
     for (let i=0; i<outputs[0][0].length; i++)
     {
+        outputs[0][0][i] = this.sampleBuffer[this.readPosition++];
         outputs[0][1][i] = this.sampleBuffer[this.readPosition++];
-        outputs[0][0][i] = this.sampleBuffer[this.readPosition++];    // Not sure why left/right seem inverted but this appears to work for me?
     }
 
     return true;

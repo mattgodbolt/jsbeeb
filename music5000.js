@@ -40,8 +40,8 @@ export function Music5000(onBuffer) {
 	this.chordBase = new Array(0, 8.25, 24.75, 57.75, 123.75, 255.75, 519.75, 1047.75 );
 	this.stepInc = new Array(0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0 );
 
-	this.stereoLeft = new Array(100,100,100,100,100,100,100,100,  0,  0,  0, 17, 33, 50, 67, 83 );
-	this.stereoRight = new Array(0,  0,  0,  0,  0,  0,  0,  0,100,100,100, 83, 67, 50, 33, 17 );
+	this.stereoLeft = new Array(10, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100, 83, 67, 50, 33, 17);
+	this.stereoRight = new Array(100, 100, 100, 100, 100, 100, 100, 100, 0, 0, 0, 17, 33, 50, 67, 83);
 
 	this.D2ATable = new Uint16Array(128);
 	
