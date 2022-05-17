@@ -1,5 +1,6 @@
 import {FakeSoundChip, SoundChip} from "../soundchip.js";
 import {DdNoise, FakeDdNoise} from "../ddnoise.js";
+import {Music5000, FakeMusic5000} from "../music5000.js";
 
 export class AudioHandler {
     constructor(warningNode, audioFilterFreq, audioFilterQ, noSeek) {
@@ -25,16 +26,25 @@ export class AudioHandler {
         this.warningNode.on('mousedown', () => this.tryResume());
         this.warningNode.toggle(false);
 
-        // Initialise Music 5000 audio context        
+        // Initialise Music 5000 audio context
         this.audioContextM5000 = typeof AudioContext !== 'undefined' ? new AudioContext({sampleRate: 46875})
-        : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext({sampleRate: 46875}) // At the time of writing this is not supported in Safari
+        : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext({sampleRate: 46875}) 
             : null;
 
-        if (this.audioContextM5000)
+        if (this.audioContextM5000 && this.audioContextM5000.audioWorklet) 
         {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
+            this.music5000 = new Music5000((buffer) => this._onBufferMusic5000(buffer));
+         
+            this.audioContextM5000.audioWorklet.addModule('./web/music5000-worklet.js').then(() => {
+                this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, 'music5000', {outputChannelCount : [2]});
+                this._music5000workletnode.connect(this.audioContextM5000.destination);
+            });
         }
-
+        else 
+        {
+            this.music5000 = new FakeMusic5000();
+        }
     }
 
     _setup(audioFilterFreq, audioFilterQ) {
@@ -66,6 +76,12 @@ export class AudioHandler {
             await this.audioContext.resume();
         if (this.audioContextM5000)
             await this.audioContextM5000.resume();
+    }
+
+    
+    _onBufferMusic5000(buffer) {
+        if (this._music5000workletnode)
+            this._music5000workletnode.port.postMessage(buffer);
     }
 
     checkStatus() {

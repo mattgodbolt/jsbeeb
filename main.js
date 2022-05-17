@@ -547,7 +547,7 @@ var emulationConfig = {
     }
 };
 
-processor = new Cpu6502(model, dbgr, video, audioHandler.soundChip, audioHandler.ddNoise, cmos, emulationConfig);
+processor = new Cpu6502(model, dbgr, video, audioHandler.soundChip, audioHandler.ddNoise, audioHandler.music5000, cmos, emulationConfig);
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
@@ -1133,18 +1133,6 @@ syncLights = function () {
 var startPromise = Promise.all([audioHandler.initialise(), processor.initialise()])
     .then(function () {
         
-        // Initalise Music 5000 audio context
-        if(processor.model.hasMusic5000)
-        {
-            audioHandler.audioContextM5000.audioWorklet.addModule('./music5000worklet.js').then(() => {
-                audioHandler.music5000workletnode = new AudioWorkletNode(audioHandler.audioContextM5000, 'music5000', {outputChannelCount : [2]});
-                audioHandler.music5000workletnode.connect(audioHandler.audioContextM5000.destination);
-            
-                // Inject the audio worklet into the m5000 emulator (not ideal)
-                processor.initialiseM5000(audioHandler.music5000workletnode);
-            });
-        }
-
         // Ideally would start the loads first. But their completion needs the FDC from the processor
         var imageLoads = [];
         if (discImage) imageLoads.push(loadDiscImage(discImage).then(function (disc) {

@@ -9,7 +9,6 @@ import {Adc} from './adc.js';
 import {Scheduler} from './scheduler.js';
 import {TouchScreen} from './touchscreen.js';
 import {TeletextAdaptor} from './teletext_adaptor.js';
-import {Music5000} from './music5000.js';
 
 var signExtend = utils.signExtend;
 
@@ -437,13 +436,14 @@ function fixUpConfig(config) {
     return config;
 }
 
-export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config) {
+export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, cmos, config) {
     config = fixUpConfig(config);
 
     base6502(this, model);
 
     this.video = video_;
     this.soundChip = soundChip_;
+    this.music5000 = music5000_;
     this.ddNoise = ddNoise_;
     this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
     this.memStatOffset = 0;
@@ -476,13 +476,6 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
     // 08000 - 09000 -> ANDY - 4KB
     // 09000 - 0b000 -> HAZEL - 8KB
     // 0b000 - 10000 -> LYNNE - 20KB
-
-    this.initialiseM5000 = function(worklet)
-    {
-        // We need to inject the audio worklet into the M5000 emulator,
-        // unfortunately this needs to go via Cpu6502 first 
-        this.music5000.initialise(worklet);
-    }
 
     this.romSelect = function (b) {
         var c;
@@ -1005,8 +998,6 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
             this.adconverter = new Adc(this.sysvia, this.scheduler);
             if (model.hasTeletextAdaptor)  
                 this.teletextAdaptor = new TeletextAdaptor(this);
-            if (model.hasMusic5000)
-                this.music5000 = new Music5000();
             this.sysvia.reset(hard);
             this.uservia.reset(hard);
         }

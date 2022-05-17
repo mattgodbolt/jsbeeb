@@ -25,7 +25,10 @@ const NOT_FREQ_DISABLE = 0xfe;
 const REG_SET_NORMAL = 0;
 const REG_SET_ALT = 1;
 
-export function Music5000() {
+
+export function Music5000(onBuffer) {
+	this._onBufferMusic5000 = onBuffer;
+
 	this.waveRam = new Uint8Array(RAM_SIZE);
 	this.phaseRam = new Uint32Array(NUM_CHANNELS);
 	this.cycleCount = 0;
@@ -44,12 +47,6 @@ export function Music5000() {
 	
 	this.sampleBuffer = new Float64Array(AUDIO_BUFFER_SIZE);
 	this.position = 0;
-
-	this.initialise = function(worklet)
-	{
-		// Inject the audio worklet to allow the processor to send samples back
-		this.audioWorkletNode = worklet;
-	}
 
 	this.reset = function(hard)
 	{
@@ -180,10 +177,7 @@ export function Music5000() {
 				
 				if(this.position == AUDIO_BUFFER_SIZE)
 				{
-					if(this.audioWorkletNode)
-					{
-						this.audioWorkletNode.port.postMessage(this.sampleBuffer);
-					}
+					this._onBufferMusic5000(this.sampleBuffer);
 					this.position = 0;
 				}
 				
@@ -195,4 +189,7 @@ export function Music5000() {
 
 		}
 	}
+}
+
+export function FakeMusic5000() {
 }
