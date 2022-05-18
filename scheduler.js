@@ -63,8 +63,8 @@ Scheduler.prototype.polltime = function (ticks) {
     while (this.scheduled && this.scheduled.expireEpoch <= targetEpoch) {
         var head = this.scheduled;
         this.epoch = head.expireEpoch;
-        head.cancel();  // cancel first
-        head.onExpire();  // expiry may reschedule
+        head.cancel(); // cancel first
+        head.onExpire(); // expiry may reschedule
     }
     this.epoch = targetEpoch;
 };
@@ -97,8 +97,7 @@ Task.prototype.cancel = function () {
 
 Task.prototype.ensureScheduled = function (state, delay) {
     if (state) {
-        if (!this.scheduled())
-            this.schedule(delay);
+        if (!this.scheduled()) this.schedule(delay);
     } else {
         this.cancel();
     }

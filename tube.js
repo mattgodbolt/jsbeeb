@@ -1,5 +1,5 @@
 "use strict";
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 export function Tube(hostCpu, parasiteCpu) {
     this.hostCpu = hostCpu;
@@ -24,13 +24,16 @@ export function Tube(hostCpu, parasiteCpu) {
 Tube.prototype.updateInterrupts = function () {
     // Host interrupt
     this.hostCpu.interrupt &= ~8;
-    if ((this.r1stat & 0x01) && (this.hstat[3] & 0x80)) this.hostCpu.interrupt |= 8;
+    if (this.r1stat & 0x01 && this.hstat[3] & 0x80) this.hostCpu.interrupt |= 8;
 
     // Parasite interrupts
-    this.parasiteCpu.interrupt = !!(((this.r1stat & 0x02) && (this.pstat[0] & 0x80)) || ((this.r1stat & 0x04) && (this.pstat[3] & 0x80)));
+    this.parasiteCpu.interrupt = !!(
+        (this.r1stat & 0x02 && this.pstat[0] & 0x80) ||
+        (this.r1stat & 0x04 && this.pstat[3] & 0x80)
+    );
 
-    var hp3Size = (this.r1stat & 0x10) ? 1 : 0;
-    this.parasiteCpu.nmi = !!((this.r1stat & 0x08) && ((this.hp3pos > hp3Size) || this.ph3pos === 0));
+    var hp3Size = this.r1stat & 0x10 ? 1 : 0;
+    this.parasiteCpu.nmi = !!(this.r1stat & 0x08 && (this.hp3pos > hp3Size || this.ph3pos === 0));
 };
 
 Tube.prototype.reset = function () {
@@ -113,8 +116,7 @@ Tube.prototype.hostWrite = function (addr, b) {
             break;
         case 5:
             if (this.r1stat & 0x10) {
-                if (this.hp3pos < 2)
-                    this.hp3[this.hp3pos++] = b;
+                if (this.hp3pos < 2) this.hp3[this.hp3pos++] = b;
                 if (this.hp3pos === 2) {
                     this.pstat[2] |= 0x80;
                     this.hstat[2] &= ~0x40;
@@ -194,8 +196,7 @@ Tube.prototype.parasiteWrite = function (addr, b) {
             if (this.ph1pos < 24) {
                 this.ph1[this.ph1pos++] = b;
                 this.hstat[0] |= 0x80;
-                if (this.ph1pos === 24)
-                    this.pstat[0] &= ~0x40;
+                if (this.ph1pos === 24) this.pstat[0] &= ~0x40;
             }
             break;
         case 3:
@@ -205,8 +206,7 @@ Tube.prototype.parasiteWrite = function (addr, b) {
             break;
         case 5:
             if (this.r1stat & 0x10) {
-                if (this.ph3pos < 2)
-                    this.ph3[this.ph3pos++] = b;
+                if (this.ph3pos < 2) this.ph3[this.ph3pos++] = b;
                 if (this.ph3pos === 2) {
                     this.hstat[2] |= 0x80;
                     this.pstat[2] &= ~0x40;

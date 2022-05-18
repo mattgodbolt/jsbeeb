@@ -86,7 +86,7 @@
 }
 
 h6.dbg {
-    text-align: center
+    text-align: center;
 }
 
 .via_regs {
@@ -138,9 +138,10 @@ span.accesskey {
     }
 }
 
-#leds td, th {
+#leds td,
+th {
     padding: 2px;
-    text-align: center
+    text-align: center;
 }
 
 #sth-list {
@@ -245,12 +246,14 @@ div.modal-body > div:not(:first-child) {
     color: #60f060;
 }
 
-.instr_mem_ref, .instr_instr_ref {
+.instr_mem_ref,
+.instr_instr_ref {
     cursor: pointer;
     color: #66f;
 }
 
-.instr_mem_ref:hover, .instr_instr_ref:hover {
+.instr_mem_ref:hover,
+.instr_instr_ref:hover {
     text-decoration: underline;
 }
 
@@ -279,7 +282,7 @@ div.modal-body > div:not(:first-child) {
 }
 
 .register {
-    color: #88ee88
+    color: #88ee88;
 }
 
 .current {

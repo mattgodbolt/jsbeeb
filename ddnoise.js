@@ -1,8 +1,10 @@
 "use strict";
-import * as utils from './utils.js';
-import _ from 'underscore';
+import * as utils from "./utils.js";
+import _ from "underscore";
 
-var IDLE = 0, SPIN_UP = 1, SPINNING = 2;
+var IDLE = 0,
+    SPIN_UP = 1,
+    SPINNING = 2;
 var VOLUME = 0.25;
 
 export function DdNoise(context) {
@@ -18,17 +20,19 @@ export function DdNoise(context) {
 }
 
 function loadSounds(context, sounds) {
-    return Promise.all(_.map(sounds, function (sound) {
-        // Safari doesn't support the Promise stuff directly, so we create
-        // our own Promise here.
-        return utils.loadData(sound).then(function (data) {
-            return new Promise(function (resolve) {
-                context.decodeAudioData(data.buffer, function (decodedData) {
-                    resolve(decodedData);
+    return Promise.all(
+        _.map(sounds, function (sound) {
+            // Safari doesn't support the Promise stuff directly, so we create
+            // our own Promise here.
+            return utils.loadData(sound).then(function (data) {
+                return new Promise(function (resolve) {
+                    context.decodeAudioData(data.buffer, function (decodedData) {
+                        resolve(decodedData);
+                    });
                 });
             });
-        });
-    })).then(function (loaded) {
+        })
+    ).then(function (loaded) {
         var keys = _.keys(sounds);
         var result = {};
         for (var i = 0; i < keys.length; ++i) {
@@ -41,13 +45,13 @@ function loadSounds(context, sounds) {
 DdNoise.prototype.initialise = function () {
     var self = this;
     return loadSounds(self.context, {
-        motorOn: 'sounds/disc525/motoron.wav',
-        motorOff: 'sounds/disc525/motoroff.wav',
-        motor: 'sounds/disc525/motor.wav',
-        step: 'sounds/disc525/step.wav',
-        seek: 'sounds/disc525/seek.wav',
-        seek2: 'sounds/disc525/seek2.wav',
-        seek3: 'sounds/disc525/seek3.wav'
+        motorOn: "sounds/disc525/motoron.wav",
+        motorOff: "sounds/disc525/motoroff.wav",
+        motor: "sounds/disc525/motor.wav",
+        step: "sounds/disc525/step.wav",
+        seek: "sounds/disc525/seek.wav",
+        seek2: "sounds/disc525/seek2.wav",
+        seek3: "sounds/disc525/seek3.wav",
     }).then(function (sounds) {
         self.sounds = sounds;
     });
@@ -88,18 +92,20 @@ DdNoise.prototype.spinUp = function () {
     if (this.state === SPINNING || this.state === SPIN_UP) return;
     this.state = SPIN_UP;
     var self = this;
-    this.play(this.sounds.motorOn).then(function () {
-        // Handle race: we may have had spinDown() called on us before the
-        // spinUp() initial sound finished playing.
-        if (self.state === IDLE) {
-            return;
-        }
-        self.play(self.sounds.motor, true).then(function (source) {
-            self.motor = source;
-            self.state = SPINNING;
-        });
-    }, function () {
-    });
+    this.play(this.sounds.motorOn).then(
+        function () {
+            // Handle race: we may have had spinDown() called on us before the
+            // spinUp() initial sound finished playing.
+            if (self.state === IDLE) {
+                return;
+            }
+            self.play(self.sounds.motor, true).then(function (source) {
+                self.motor = source;
+                self.state = SPINNING;
+            });
+        },
+        function () {}
+    );
 };
 
 DdNoise.prototype.spinDown = function () {
@@ -128,11 +134,13 @@ DdNoise.prototype.unmute = function () {
     this.gain.gain.value = VOLUME;
 };
 
-export function FakeDdNoise() {
-}
+export function FakeDdNoise() {}
 
-FakeDdNoise.prototype.spinUp = FakeDdNoise.prototype.spinDown =
-    FakeDdNoise.prototype.mute = FakeDdNoise.prototype.unmute = utils.noop;
+FakeDdNoise.prototype.spinUp =
+    FakeDdNoise.prototype.spinDown =
+    FakeDdNoise.prototype.mute =
+    FakeDdNoise.prototype.unmute =
+        utils.noop;
 FakeDdNoise.prototype.seek = function () {
     return 0;
 };

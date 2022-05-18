@@ -1,29 +1,29 @@
 "use strict";
-import $ from 'jquery';
-import _ from 'underscore';
-import {hexbyte, hexword, noop, parseAddr} from '../utils.js';
+import $ from "jquery";
+import _ from "underscore";
+import { hexbyte, hexword, noop, parseAddr } from "../utils.js";
 
 const numToShow = 16;
 
 function labelHtml(addr) {
-    return '<span class="addr">' + hexword(addr) + '</span>';
+    return '<span class="addr">' + hexword(addr) + "</span>";
 }
 
 class MemoryView {
     constructor(widget, peekMem) {
-        this._widget = widget
+        this._widget = widget;
         this._peekMem = peekMem;
         this._addr = 0;
         this._prevSnapshot = new Uint8Array(65536);
-        this._rows = []
+        this._rows = [];
 
-        const template = this._widget.find('.template');
+        const template = this._widget.find(".template");
         for (let i = 0; i < numToShow; i++) {
-            this._rows.push(template.clone().removeClass('template').appendTo(this._widget));
+            this._rows.push(template.clone().removeClass("template").appendTo(this._widget));
         }
         template.remove();
 
-        widget.bind('wheel', evt => {
+        widget.bind("wheel", (evt) => {
             const deltaY = evt.originalEvent.deltaY;
             if (deltaY === 0) return;
             const steps = (deltaY / 20) | 0;
@@ -34,14 +34,14 @@ class MemoryView {
 
     update(maybeNewAddr) {
         if (maybeNewAddr !== undefined) this._addr = maybeNewAddr;
-        let addr = this._addr - (8 * Math.floor(this._rows.length / 2));
+        let addr = this._addr - 8 * Math.floor(this._rows.length / 2);
         if (addr < 0) addr = 0;
         for (const row of this._rows) {
-            row.find('.dis_addr').html(labelHtml(addr));
-            row.toggleClass('highlight', addr === this._addr);
+            row.find(".dis_addr").html(labelHtml(addr));
+            row.toggleClass("highlight", addr === this._addr);
             const dump = this.dump(addr, addr + 8);
-            const bytes = row.find('.mem_bytes span');
-            const ascii = row.find('.mem_asc span');
+            const bytes = row.find(".mem_bytes span");
+            const ascii = row.find(".mem_asc span");
             for (let i = 0; i < 8; ++i) {
                 $(bytes[i]).text(dump.hex[i]).toggleClass("changed", dump.changed[i]);
                 $(ascii[i]).text(dump.asc[i]).toggleClass("changed", dump.changed[i]);
@@ -65,7 +65,7 @@ class MemoryView {
                 asc.push(".");
             }
         }
-        return {hex: hex, asc: asc, changed: changed};
+        return { hex: hex, asc: asc, changed: changed };
     }
 
     snapshot() {
@@ -84,10 +84,10 @@ export class Debugger {
         this.video = video;
         this.patchInstructions = {};
         this._enabled = false;
-        this.disass = $('#disassembly');
+        this.disass = $("#disassembly");
         this.disassemble = null;
-        this._memoryView = new MemoryView($('#memory'), address => this.cpu ? this.cpu.peekmem(address) : 0);
-        this.debugNode = $('#debug, #hardware_debug, #crtc_debug');
+        this._memoryView = new MemoryView($("#memory"), (address) => (this.cpu ? this.cpu.peekmem(address) : 0));
+        this.debugNode = $("#debug, #hardware_debug, #crtc_debug");
         this.disassPc = 0;
         this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = null;
@@ -95,7 +95,7 @@ export class Debugger {
 
         function setupGoto(form, func) {
             const addr = form.find(".goto-addr");
-            form.on('submit', e => {
+            form.on("submit", (e) => {
                 func(parseAddr(addr.val()));
                 addr.val("");
                 addr.blur();
@@ -103,19 +103,18 @@ export class Debugger {
             });
         }
 
-        setupGoto($("#goto-mem-addr-form"), address => this._memoryView.update(address));
+        setupGoto($("#goto-mem-addr-form"), (address) => this._memoryView.update(address));
         setupGoto($("#goto-dis-addr-form"), this.updateDisassembly.bind(this));
 
         this.enable(false);
 
         for (let i = 0; i < numToShow; i++) {
-            this.disass.find('.template').clone().removeClass('template').appendTo(this.disass);
+            this.disass.find(".template").clone().removeClass("template").appendTo(this.disass);
         }
 
+        this.disass.find(".bp_gutter").click(this.bpClick.bind(this));
 
-        this.disass.find('.bp_gutter').click(this.bpClick.bind(this));
-
-        this.disass.bind('wheel', evt => {
+        this.disass.bind("wheel", (evt) => {
             let deltaY = evt.originalEvent.deltaY;
             if (deltaY === 0) return;
             let addr = this.disassPc;
@@ -133,16 +132,16 @@ export class Debugger {
     setCpu(cpu) {
         this.cpu = cpu;
         this.disassemble = cpu.disassembler.disassemble;
-        this.sysvia = this.setupVia($('#sysvia'), cpu.sysvia);
-        this.uservia = this.setupVia($('#uservia'), cpu.uservia);
-        this.crtc = this.setupCrtc($('#crtc_debug'), cpu.video);
+        this.sysvia = this.setupVia($("#sysvia"), cpu.sysvia);
+        this.uservia = this.setupVia($("#uservia"), cpu.uservia);
+        this.crtc = this.setupCrtc($("#crtc_debug"), cpu.video);
     }
 
     setupCrtc(node, video) {
         if (!video) return noop;
         const updates = [];
 
-        const regNode = node.find('.crtc_regs');
+        const regNode = node.find(".crtc_regs");
 
         function makeRow(node, text) {
             const row = node.find(".template").clone().removeClass("template").appendTo(node);
@@ -157,12 +156,25 @@ export class Debugger {
             });
         }
 
-        const stateNode = node.find('.crtc_state');
+        const stateNode = node.find(".crtc_state");
         const others = [
-            'bitmapX', 'bitmapY', 'dispEnabled',
-            'horizCounter', 'inHSync', 'scanlineCounter', 'vertAdjustCounter', 'vertCounter',
-            'inVSync', 'endOfMainLatched', 'endOfVertAdjustLatched', 'inVertAdjust', 'inDummyRaster',
-            'addr', 'lineStartAddr', 'nextLineStartAddr'];
+            "bitmapX",
+            "bitmapY",
+            "dispEnabled",
+            "horizCounter",
+            "inHSync",
+            "scanlineCounter",
+            "vertAdjustCounter",
+            "vertCounter",
+            "inVSync",
+            "endOfMainLatched",
+            "endOfVertAdjustLatched",
+            "inVertAdjust",
+            "inDummyRaster",
+            "addr",
+            "lineStartAddr",
+            "nextLineStartAddr",
+        ];
         for (const elem of others) {
             const value = makeRow(stateNode, elem);
             if (typeof video[elem] === "boolean") {
@@ -179,13 +191,28 @@ export class Debugger {
         return update;
     }
 
-
     setupVia(node, via) {
         const updates = [];
         if (!via) return noop;
-        const regs = ["ora", "orb", "ira", "irb", "ddra", "ddrb",
-            "acr", "pcr", "ifr", "ier",
-            "t1c", "t1l", "t2c", "t2l", "portapins", "portbpins", "IC32"];
+        const regs = [
+            "ora",
+            "orb",
+            "ira",
+            "irb",
+            "ddra",
+            "ddrb",
+            "acr",
+            "pcr",
+            "ifr",
+            "ier",
+            "t1c",
+            "t1l",
+            "t2c",
+            "t2l",
+            "portapins",
+            "portbpins",
+            "IC32",
+        ];
         for (const elem of regs) {
             if (via[elem] === undefined) continue;
             const row = node.find(".template").clone().removeClass("template").appendTo(node);
@@ -194,8 +221,10 @@ export class Debugger {
             if (elem.match(/t[12][cl]/)) {
                 updates.push(() => {
                     const reg = via[elem];
-                    this.updateElem(value, hexbyte((reg >>> 16) & 0xff) +
-                        hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff));
+                    this.updateElem(
+                        value,
+                        hexbyte((reg >>> 16) & 0xff) + hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff)
+                    );
                 });
             } else {
                 updates.push(() => {
@@ -204,8 +233,7 @@ export class Debugger {
             }
         }
         const update = () => {
-            for (const update of updates)
-                update();
+            for (const update of updates) update();
         };
         update();
         return update;
@@ -249,11 +277,10 @@ export class Debugger {
 
     setPatch(patch) {
         _.each(patch.split(";"), (inst) => {
-            if (inst[0] === '@') {
+            if (inst[0] === "@") {
                 const at = parseInt(inst.substr(1, 4), 16);
                 inst = inst.substr(5);
-                if (!this.patchInstructions[at])
-                    this.patchInstructions[at] = [];
+                if (!this.patchInstructions[at]) this.patchInstructions[at] = [];
                 this.patchInstructions[at].push(inst);
             } else {
                 this.execPatch(inst);
@@ -304,18 +331,18 @@ export class Debugger {
         const updateDisElem = (elem, address) => {
             const result = this.disassemble(address);
             const dump = this._memoryView.dump(address, result[1]);
-            elem.find('.dis_addr').html(labelHtml(address));
-            elem.toggleClass('current', address === this.cpu.pc);
-            elem.toggleClass('highlight', address === this.disassPc);
-            elem.find('.instr_bytes').text(dump.hex.join(" "));
-            elem.find('.instr_asc').text(dump.asc.join(""));
-            const disNode = elem.find('.disassembly').html(result[0]);
-            disNode.find('.instr_mem_ref').click(this.memClick);
-            disNode.find('.instr_instr_ref').click(this.instrClick);
-            elem.find('.bp_gutter').toggleClass('active', !!this.breakpoints[address]);
-            elem.data({addr: address, ref: result[2]});
+            elem.find(".dis_addr").html(labelHtml(address));
+            elem.toggleClass("current", address === this.cpu.pc);
+            elem.toggleClass("highlight", address === this.disassPc);
+            elem.find(".instr_bytes").text(dump.hex.join(" "));
+            elem.find(".instr_asc").text(dump.asc.join(""));
+            const disNode = elem.find(".disassembly").html(result[0]);
+            disNode.find(".instr_mem_ref").click(this.memClick);
+            disNode.find(".instr_instr_ref").click(this.instrClick);
+            elem.find(".bp_gutter").toggleClass("active", !!this.breakpoints[address]);
+            elem.data({ addr: address, ref: result[2] });
             return result[1];
-        }
+        };
 
         for (let i = 0; i < numToShow / 2; ++i) {
             const elem = $(elems[i + numToShow / 2]);
@@ -339,7 +366,8 @@ export class Debugger {
         //   Repton 2 @ 2cbb
         //   MOS @ cfc8
         // also, just starting from the back of ROM and going up...
-        const commonInstructions = /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORR|AND|INC|DEC).*/;
+        const commonInstructions =
+            /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORR|AND|INC|DEC).*/;
         const uncommonInstrucions = /.*,\s*([XY]|X\))$/;
 
         address &= 0xffff;
@@ -367,7 +395,6 @@ export class Debugger {
         return bestAddr;
     }
 
-
     updatePrevMem() {
         this._memoryView.snapshot();
     }
@@ -390,7 +417,6 @@ export class Debugger {
         const curpc = this.cpu.pc;
         this.stepUntil(() => this.cpu.pc !== curpc);
     }
-
 
     isUnconditionalJump(addr) {
         const result = this.disassemble(addr);
@@ -429,13 +455,13 @@ export class Debugger {
     }
 
     instrClick(e) {
-        const info = $(e.target).closest('.dis_elem').data();
+        const info = $(e.target).closest(".dis_elem").data();
         this.disassStack.push(this.disassPc);
         this.updateDisassembly(info.ref);
     }
 
     memClick(e) {
-        const info = $(e.target).closest('.dis_elem').data();
+        const info = $(e.target).closest(".dis_elem").data();
         this._memoryView.update(info.ref);
     }
 
@@ -446,14 +472,14 @@ export class Debugger {
             this.breakpoints[address] = undefined;
         } else {
             console.log("Adding breakpoint to address " + hexword(address));
-            this.breakpoints[address] = this.cpu.debugInstruction.add(x => x === address);
+            this.breakpoints[address] = this.cpu.debugInstruction.add((x) => x === address);
         }
     }
 
     bpClick(e) {
-        const address = $(e.target).closest('.dis_elem').data().addr;
+        const address = $(e.target).closest(".dis_elem").data().addr;
         this.toggleBreakpoint(address);
-        $(e.target).toggleClass('active', !!this.breakpoints[address]);
+        $(e.target).toggleClass("active", !!this.breakpoints[address]);
     }
 
     keyPress(key) {
@@ -461,44 +487,43 @@ export class Debugger {
             return false;
         }
         switch (String.fromCharCode(key)) {
-            case 'b':
-                if (this.disassStack.length)
-                    this.updateDisassembly(this.disassStack.pop());
+            case "b":
+                if (this.disassStack.length) this.updateDisassembly(this.disassStack.pop());
                 break;
-            case 'k':
+            case "k":
                 this.updateDisassembly(this.prevInstruction(this.disassPc));
                 break;
-            case 'j':
+            case "j":
                 this.updateDisassembly(this.nextInstruction(this.disassPc));
                 break;
-            case 't':
+            case "t":
                 this.toggleBreakpoint(this.disassPc);
                 this.updateDisassembly(this.disassPc);
                 break;
-            case 'u':
+            case "u":
                 this._memoryView.step(8);
                 break;
-            case 'i':
+            case "i":
                 this._memoryView.step(-8);
                 break;
-            case 'U':
+            case "U":
                 this._memoryView.step(64);
                 break;
-            case 'I':
+            case "I":
                 this._memoryView.step(-64);
                 break;
-            case 'n':
+            case "n":
                 this.step();
                 break;
-            case 'N':
+            case "N":
                 this.updatePrevMem();
                 this.cpu.execute(1);
                 self.debug(this.cpu.pc);
                 break;
-            case 'm':
+            case "m":
                 this.stepOver();
                 break;
-            case 'o':
+            case "o":
                 this.stepOut();
                 break;
         }

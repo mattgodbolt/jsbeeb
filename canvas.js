@@ -1,10 +1,10 @@
 "use strict";
-import webglDebug from './lib/webgl-debug.js';
+import webglDebug from "./lib/webgl-debug.js";
 
 export function Canvas(canvas) {
-    this.ctx = canvas.getContext('2d');
+    this.ctx = canvas.getContext("2d");
     if (this.ctx === null) throw new Error("Unable to get a 2D context");
-    this.ctx.fillStyle = 'black';
+    this.ctx.fillStyle = "black";
     this.ctx.fillRect(0, 0, 1024, 625);
     this.backBuffer = window.document.createElement("canvas");
     this.backBuffer.width = 1024;
@@ -34,9 +34,9 @@ export function GlCanvas(canvas) {
         depth: false,
         preserveDrawingBuffer: false,
         stencil: false,
-        failIfMajorPerformanceCaveat: true
+        failIfMajorPerformanceCaveat: true,
     };
-    var gl = canvas.getContext('webgl', glAttrs) || canvas.getContext('experimental-webgl', glAttrs);
+    var gl = canvas.getContext("webgl", glAttrs) || canvas.getContext("experimental-webgl", glAttrs);
     this.gl = gl;
     if (!gl) {
         throw new Error("Unable to create a GL context");
@@ -61,7 +61,7 @@ export function GlCanvas(canvas) {
         "void main() {",
         "  uv = uvIn;",
         "  gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);",
-        "}"
+        "}",
     ]);
     var fragmentShader = compileShader(checkedGl.FRAGMENT_SHADER, [
         "precision mediump float;",
@@ -69,7 +69,7 @@ export function GlCanvas(canvas) {
         "varying vec2 uv;",
         "void main() {",
         "  gl_FragColor = texture2D(tex, uv).rgba;",
-        "}"
+        "}",
     ]);
 
     var program = checkedGl.createProgram();
@@ -90,19 +90,29 @@ export function GlCanvas(canvas) {
     checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
     checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
     checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
-    checkedGl.texImage2D(checkedGl.TEXTURE_2D, 0, checkedGl.RGBA, width, height, 0, checkedGl.RGBA, checkedGl.UNSIGNED_BYTE, this.fb8);
+    checkedGl.texImage2D(
+        checkedGl.TEXTURE_2D,
+        0,
+        checkedGl.RGBA,
+        width,
+        height,
+        0,
+        checkedGl.RGBA,
+        checkedGl.UNSIGNED_BYTE,
+        this.fb8
+    );
     checkedGl.bindTexture(checkedGl.TEXTURE_2D, null);
 
-    checkedGl.uniform1i(checkedGl.getUniformLocation(program, 'tex'), 0);
+    checkedGl.uniform1i(checkedGl.getUniformLocation(program, "tex"), 0);
 
-    var vertexPositionAttrLoc = checkedGl.getAttribLocation(program, 'pos');
+    var vertexPositionAttrLoc = checkedGl.getAttribLocation(program, "pos");
     checkedGl.enableVertexAttribArray(vertexPositionAttrLoc);
     var vertexPositionBuffer = checkedGl.createBuffer();
     checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, vertexPositionBuffer);
     checkedGl.bufferData(checkedGl.ARRAY_BUFFER, new Float32Array([0, 0, 0, 1, 1, 0, 1, 1]), checkedGl.STATIC_DRAW);
     checkedGl.vertexAttribPointer(vertexPositionAttrLoc, 2, checkedGl.FLOAT, false, 0, 0);
 
-    var uvAttrLoc = checkedGl.getAttribLocation(program, 'uvIn');
+    var uvAttrLoc = checkedGl.getAttribLocation(program, "uvIn");
     checkedGl.enableVertexAttribArray(uvAttrLoc);
     var uvBuffer = checkedGl.createBuffer();
     checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, uvBuffer);
@@ -116,7 +126,17 @@ export function GlCanvas(canvas) {
     this.paint = function (minx, miny, maxx, maxy) {
         var gl = this.gl;
         // We can't specify a stride for the source, so have to use the full width.
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, miny, width, maxy - miny, gl.RGBA, gl.UNSIGNED_BYTE, this.fb8.subarray(miny * width * 4, maxy * width * 4));
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            miny,
+            width,
+            maxy - miny,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            this.fb8.subarray(miny * width * 4, maxy * width * 4)
+        );
 
         if (lastMinX !== minx || lastMinY !== miny || lastMaxX !== maxx || lastMaxY !== maxy) {
             lastMinX = minx;

@@ -1,5 +1,5 @@
 "use strict";
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 const ORB = 0x0,
     ORA = 0x1,
@@ -26,16 +26,29 @@ const ORB = 0x0,
 
 function via(cpu, irq) {
     var self = {
-        ora: 0, orb: 0, ira: 0, irb: 0,
-        ddra: 0, ddrb: 0,
+        ora: 0,
+        orb: 0,
+        ira: 0,
+        irb: 0,
+        ddra: 0,
+        ddrb: 0,
         sr: 0,
-        t1l: 0, t2l: 0,
-        t1c: 0, t2c: 0,
-        acr: 0, pcr: 0, ifr: 0, ier: 0,
-        t1hit: false, t2hit: false,
-        portapins: 0, portbpins: 0,
-        ca1: false, ca2: false,
-        cb1: false, cb2: false,
+        t1l: 0,
+        t2l: 0,
+        t1c: 0,
+        t2c: 0,
+        acr: 0,
+        pcr: 0,
+        ifr: 0,
+        ier: 0,
+        t1hit: false,
+        t2hit: false,
+        portapins: 0,
+        portbpins: 0,
+        ca1: false,
+        ca2: false,
+        cb1: false,
+        cb2: false,
         ca2changecallback: null,
         cb2changecallback: null,
         justhit: 0,
@@ -110,10 +123,12 @@ function via(cpu, irq) {
                     }
                     self.updateIFR();
 
-                    mode = (self.pcr & 0x0e);
-                    if (mode === 8) { // Handshake mode
+                    mode = self.pcr & 0x0e;
+                    if (mode === 8) {
+                        // Handshake mode
                         self.setca2(false);
-                    } else if (mode === 0x0a) { // Pulse mode
+                    } else if (mode === 0x0a) {
+                        // Pulse mode
                         self.setca2(false);
                         self.setca2(true);
                     }
@@ -135,9 +150,11 @@ function via(cpu, irq) {
                     self.recalculatePortBPins();
 
                     mode = (self.pcr & 0xe0) >>> 4;
-                    if (mode === 8) { // Handshake mode
+                    if (mode === 8) {
+                        // Handshake mode
                         self.setcb2(false);
-                    } else if (mode === 0x0a) { // Pulse mode
+                    } else if (mode === 0x0a) {
+                        // Pulse mode
                         self.setcb2(false);
                         self.setcb2(true);
                     }
@@ -155,7 +172,7 @@ function via(cpu, irq) {
 
                 case ACR:
                     self.acr = val;
-                    if ((self.justhit & 1) && !(val & 0x40)) self.t1hit = true;
+                    if (self.justhit & 1 && !(val & 0x40)) self.t1hit = true;
                     break;
 
                 case PCR:
@@ -173,12 +190,12 @@ function via(cpu, irq) {
                 case T1LL:
                 case T1CL:
                     self.t1l &= 0x1fe00;
-                    self.t1l |= (val << 1);
+                    self.t1l |= val << 1;
                     break;
 
                 case T1LH:
                     self.t1l &= 0x1fe;
-                    self.t1l |= (val << 9);
+                    self.t1l |= val << 9;
                     if (!(self.justhit & 1)) {
                         self.ifr &= ~TIMER1INT;
                         self.updateIFR();
@@ -187,7 +204,7 @@ function via(cpu, irq) {
 
                 case T1CH:
                     self.t1l &= 0x1fe;
-                    self.t1l |= (val << 9);
+                    self.t1l |= val << 9;
                     self.t1c = self.t1l + 1;
                     self.t1hit = false;
                     if (!(self.justhit & 1)) {
@@ -199,12 +216,12 @@ function via(cpu, irq) {
 
                 case T2CL:
                     self.t2l &= 0x1fe00;
-                    self.t2l |= (val << 1);
+                    self.t2l |= val << 1;
                     break;
 
                 case T2CH:
                     self.t2l &= 0x1fe;
-                    self.t2l |= (val << 9);
+                    self.t2l |= val << 9;
                     self.t2c = self.t2l + 1;
                     if (self.acr & 0x20) self.t2c -= 2;
                     if (!(self.justhit & 2)) {
@@ -215,10 +232,8 @@ function via(cpu, irq) {
                     break;
 
                 case IER:
-                    if (val & 0x80)
-                        self.ier |= (val & 0x7f);
-                    else
-                        self.ier &= ~(val & 0x7f);
+                    if (val & 0x80) self.ier |= val & 0x7f;
+                    else self.ier &= ~(val & 0x7f);
                     self.updateIFR();
                     break;
 
@@ -236,8 +251,7 @@ function via(cpu, irq) {
             switch (addr & 0xf) {
                 case ORA:
                     self.ifr &= ~INT_CA1;
-                    if ((self.pcr & 0xa) !== 0x2)
-                        self.ifr &= ~INT_CA2;
+                    if ((self.pcr & 0xa) !== 0x2) self.ifr &= ~INT_CA2;
                     self.updateIFR();
                 /* falls through */
                 case ORAnh:
@@ -252,27 +266,24 @@ function via(cpu, irq) {
 
                 case ORB:
                     self.ifr &= ~INT_CB1;
-                    if ((self.pcr & 0xa0) !== 0x20)
-                        self.ifr &= ~INT_CB2;
+                    if ((self.pcr & 0xa0) !== 0x20) self.ifr &= ~INT_CB2;
                     self.updateIFR();
 
                     self.recalculatePortBPins();
                     temp = self.orb & self.ddrb;
-                    if (self.acr & 2)
-                        temp |= (self.irb & ~self.ddrb);
-                    else
-                        temp |= (self.portbpins & ~self.ddrb);
+                    if (self.acr & 2) temp |= self.irb & ~self.ddrb;
+                    else temp |= self.portbpins & ~self.ddrb;
                     // If PB7 is active, it is mixed in regardless of
                     // whether bit 7 is an input or output.
                     if (self.acr & 0x80) {
                         temp &= 0x7f;
-                        temp |= (self.t1_pb7 << 7);
+                        temp |= self.t1_pb7 << 7;
                     }
 
                     var buttons = this.getJoysticks();
 
                     // clear PB4 and PB5
-                    temp = temp & 0xCF; // 11001111
+                    temp = temp & 0xcf; // 11001111
 
                     // AUG p418
                     // PB4 and PB5 inputs
@@ -353,7 +364,8 @@ function via(cpu, irq) {
                 if (self.acr & 1) self.ira = self.portapins;
                 self.ifr |= INT_CA1;
                 self.updateIFR();
-                if ((self.pcr & 0xc) === 0x8) { // handshaking
+                if ((self.pcr & 0xc) === 0x8) {
+                    // handshaking
                     self.setca2(true);
                 }
             }
@@ -380,7 +392,8 @@ function via(cpu, irq) {
                 if (self.acr & 2) self.irb = self.portbpins;
                 self.ifr |= INT_CB1;
                 self.updateIFR();
-                if ((self.pcr & 0xc0) === 0x80) { // handshaking
+                if ((self.pcr & 0xc0) === 0x80) {
+                    // handshaking
                     self.setcb2(true);
                 }
             }
@@ -398,7 +411,7 @@ function via(cpu, irq) {
                 self.ifr |= INT_CB2;
                 self.updateIFR();
             }
-        }
+        },
     };
     return self;
 }
@@ -537,15 +550,13 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
 
     self.portBUpdated = function () {
         var portbpins = self.portbpins;
-        if (portbpins & 8)
-            self.IC32 |= (1 << (portbpins & 7));
-        else
-            self.IC32 &= ~(1 << (portbpins & 7));
+        if (portbpins & 8) self.IC32 |= 1 << (portbpins & 7);
+        else self.IC32 &= ~(1 << (portbpins & 7));
 
         self.capsLockLight = !(self.IC32 & 0x40);
         self.shiftLockLight = !(self.IC32 & 0x80);
 
-        video.setScreenAdd(((self.IC32 & 16) ? 2 : 0) | ((self.IC32 & 32) ? 1 : 0));
+        video.setScreenAdd((self.IC32 & 16 ? 2 : 0) | (self.IC32 & 32 ? 1 : 0));
 
         if (isMaster) cmos.writeControl(portbpins, self.portapins, self.IC32);
 
@@ -570,8 +581,7 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
     };
 
     self.getGamepads = function () {
-        if (getGamepads)
-            return getGamepads();
+        if (getGamepads) return getGamepads();
         return null;
     };
 
@@ -587,10 +597,10 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
             button1 = pad.buttons[10].pressed;
             // if two gamepads, use button from 2nd
             // otherwise use 2nd button from first
-            button2 = pad2 ? (pad2.buttons[10].pressed) : (pad.buttons[11].pressed);
+            button2 = pad2 ? pad2.buttons[10].pressed : pad.buttons[11].pressed;
         }
 
-        return {"button1": button1, "button2": button2};
+        return { button1: button1, button2: button2 };
     };
 
     self.reset();
@@ -602,7 +612,7 @@ export function UserVia(cpu, isMaster, userPortPeripheral) {
 
     // nothing connected to user VIA
     self.getJoysticks = function () {
-        return {button1: false, button2: false};
+        return { button1: false, button2: false };
     };
 
     self.portAUpdated = function () {

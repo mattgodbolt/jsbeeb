@@ -26,7 +26,7 @@ Adc.prototype.write = function (addr, val) {
     if ((addr & 3) !== 0) return;
     // 8 bit conversion takes 4ms whereas 10 bit conversions take 10ms, according to AUG
     this.task.cancel();
-    this.task.schedule((val & 0x08) ? 20000 : 8000);
+    this.task.schedule(val & 0x08 ? 20000 : 8000);
     this.status = (val & 0x0f) | 0x80;
     this.sysvia.setcb1(true);
 };
@@ -68,7 +68,7 @@ Adc.prototype.onComplete = function () {
         }
 
         // scale from [1,-1] to [0,0xffff]
-        val = Math.floor((1 - rawValue) / 2 * 0xffff);
+        val = Math.floor(((1 - rawValue) / 2) * 0xffff);
     }
     this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
     this.low = val & 0xff;

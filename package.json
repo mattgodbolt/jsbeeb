@@ -1,84 +1,89 @@
 {
-  "author": {
-    "name": "Matt Godbolt",
-    "email": "matt@godbolt.org",
-    "url": "https://xania.org"
-  },
-  "name": "jsbeeb",
-  "description": "Emulate a BBC Micro",
-  "repository": "git@github.com:mattgodbolt/jsbeeb.git",
-  "version": "0.0.7",
-  "engines": {
-    "node": "16"
-  },
-  "type": "module",
-  "main": "./app/app.js",
-  "dependencies": {
-    "@popperjs/core": "^2.11.5",
-    "argparse": "^2.0.1",
-    "bootstrap": "^5.1.3",
-    "bootswatch": "^5.1.3",
-    "css-minimizer-webpack-plugin": "^3.4.1",
-    "eslist": "^1.0.0-beta.1",
-    "jquery": "^3.6.0",
-    "underscore": "^1.13.2"
-  },
-  "devDependencies": {
-    "clean-webpack-plugin": "^4.0.0",
-    "copy-webpack-plugin": "^10.2.0",
-    "css-loader": "^6.7.1",
-    "electron": "^18.0.3",
-    "electron-builder": "^23.0.3",
-    "eslint": "^8.15.0",
-    "eslint-config-standard": "^17.0.0",
-    "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^6.0.0",
-    "glob": "^7.2.0",
-    "html-loader": "^3.1.0",
-    "html-webpack-plugin": "^5.5.0",
-    "husky": "^7.0.4",
-    "mini-css-extract-plugin": "^2.6.0",
-    "mocha": "^9.1.3",
-    "npm-run-all": "^4.1.5",
-    "prettier": "2.6.2",
-    "style-loader": "^3.3.1",
-    "terser-webpack-plugin": "^5.3.1",
-    "webpack": "^5.72.0",
-    "webpack-cli": "^4.9.2",
-    "webpack-dev-server": "^4.8.1"
-  },
-  "license": "GPL-3.0-or-later",
-  "build": {
-    "appId": "org.godbolt.bbc",
-    "directories": {
-      "output": "out/dist"
+    "author": {
+        "name": "Matt Godbolt",
+        "email": "matt@godbolt.org",
+        "url": "https://xania.org"
     },
-    "linux": {
-      "target": "AppImage",
-      "category": "Game"
+    "name": "jsbeeb",
+    "description": "Emulate a BBC Micro",
+    "repository": "git@github.com:mattgodbolt/jsbeeb.git",
+    "version": "0.0.7",
+    "engines": {
+        "node": "16"
     },
-    "files": [
-      "!tests"
-    ],
-    "publish": {
-      "provider": "github",
-      "releaseType": "release"
+    "type": "module",
+    "main": "./app/app.js",
+    "dependencies": {
+        "@popperjs/core": "^2.11.5",
+        "argparse": "^2.0.1",
+        "bootstrap": "^5.1.3",
+        "bootswatch": "^5.1.3",
+        "css-minimizer-webpack-plugin": "^3.4.1",
+        "eslist": "^1.0.0-beta.1",
+        "jquery": "^3.6.0",
+        "underscore": "^1.13.2"
+    },
+    "devDependencies": {
+        "clean-webpack-plugin": "^4.0.0",
+        "copy-webpack-plugin": "^10.2.0",
+        "css-loader": "^6.7.1",
+        "electron": "^18.0.3",
+        "electron-builder": "^23.0.3",
+        "eslint": "^8.15.0",
+        "eslint-config-standard": "^17.0.0",
+        "eslint-plugin-import": "^2.26.0",
+        "eslint-plugin-node": "^11.1.0",
+        "eslint-plugin-promise": "^6.0.0",
+        "glob": "^7.2.0",
+        "html-loader": "^3.1.0",
+        "html-webpack-plugin": "^5.5.0",
+        "husky": "^7.0.4",
+        "lint-staged": "^12.4.1",
+        "mini-css-extract-plugin": "^2.6.0",
+        "mocha": "^9.1.3",
+        "npm-run-all": "^4.1.5",
+        "prettier": "2.6.2",
+        "style-loader": "^3.3.1",
+        "terser-webpack-plugin": "^5.3.1",
+        "webpack": "^5.72.0",
+        "webpack-cli": "^4.9.2",
+        "webpack-dev-server": "^4.8.1"
+    },
+    "license": "GPL-3.0-or-later",
+    "build": {
+        "appId": "org.godbolt.bbc",
+        "directories": {
+            "output": "out/dist"
+        },
+        "linux": {
+            "target": "AppImage",
+            "category": "Game"
+        },
+        "files": [
+            "!tests"
+        ],
+        "publish": {
+            "provider": "github",
+            "releaseType": "release"
+        }
+    },
+    "scripts": {
+        "start": "webpack serve",
+        "build": "webpack --node-env production",
+        "prepare": "husky install",
+        "lint": "eslint .",
+        "lint-fix": "eslint . --fix",
+        "pack": "electron-builder --dir",
+        "dist": "electron-builder",
+        "release": "electron-builder",
+        "test-long:cpu": "node tests/test-suite.js",
+        "test:unit": "mocha tests/unit",
+        "test:timing": "node tests/test-node.js",
+        "test:dormann": "node tests/test-dormann.js",
+        "test": "npm-run-all -p test:*"
+    },
+    "lint-staged": {
+        "*.js": "eslint --cache --fix",
+        "*.{js,css,md}": "prettier --write"
     }
-  },
-  "scripts": {
-    "start": "webpack serve",
-    "build": "webpack --node-env production",
-    "prepare": "husky install",
-    "lint": "eslint .",
-    "lint-fix": "eslint . --fix",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "release": "electron-builder",
-    "test-long:cpu": "node tests/test-suite.js",
-    "test:unit": "mocha tests/unit",
-    "test:timing": "node tests/test-node.js",
-    "test:dormann": "node tests/test-dormann.js",
-    "test": "npm-run-all -p test:*"
-  }
 }

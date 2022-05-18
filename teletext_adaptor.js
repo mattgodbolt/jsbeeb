@@ -1,6 +1,6 @@
 "use strict";
 
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 // Code ported from Beebem (C to .js) by Jason Robson
 const TELETEXT_IRQ = 5;
@@ -49,40 +49,38 @@ export class TeletextAdaptor {
         this.streamData = null;
         this.pollCount = 0;
     }
-    
+
     reset(hard) {
-        if(hard)
-        {
-            console.log('Teletext adaptor: initialisation');
+        if (hard) {
+            console.log("Teletext adaptor: initialisation");
             this.loadChannelStream(this.channel);
         }
     }
 
     loadChannelStream(channel) {
-        console.log('Teletext adaptor: switching to channel ' + channel)
+        console.log("Teletext adaptor: switching to channel " + channel);
         var teletextRef = this;
-        utils.loadData('teletext/txt' + channel + '.dat').then(function (data) {
+        utils.loadData("teletext/txt" + channel + ".dat").then(function (data) {
             teletextRef.streamData = data;
             teletextRef.totalFrames = data.length / TELETEXT_FRAME_SIZE;
             teletextRef.currentFrame = 0;
-            })
+        });
     }
 
     read(addr) {
         var data = 0x00;
-    
-        switch (addr)
-        {
-            case 0x00:          // Status Register
+
+        switch (addr) {
+            case 0x00: // Status Register
                 data = this.teletextStatus;
                 break;
-            case 0x01:          // Row Register
+            case 0x01: // Row Register
                 break;
-            case 0x02:          // Data Register
+            case 0x02: // Data Register
                 data = this.frameBuffer[this.rowPtr][this.colPtr++];
                 break;
             case 0x03:
-                this.teletextStatus &= ~0xD0;       // Clear INT, DOR, and FSYN latches
+                this.teletextStatus &= ~0xd0; // Clear INT, DOR, and FSYN latches
                 this.cpu.interrupt &= ~(1 << TELETEXT_IRQ);
                 break;
         }
@@ -91,22 +89,17 @@ export class TeletextAdaptor {
     }
 
     write(addr, value) {
-        switch (addr)
-        {
+        switch (addr) {
             case 0x00:
                 // Status register
                 this.teletextInts = (value & 0x08) == 0x08;
-                if (this.teletextInts && (this.teletextStatus & 0x80))
-                {
-                    this.cpu.interrupt |= (1 << TELETEXT_IRQ); // Interrupt if INT and interrupts enabled
-                }
-                else
-                {
+                if (this.teletextInts && this.teletextStatus & 0x80) {
+                    this.cpu.interrupt |= 1 << TELETEXT_IRQ; // Interrupt if INT and interrupts enabled
+                } else {
                     this.cpu.interrupt &= ~(1 << TELETEXT_IRQ); // Clear interrupt
                 }
                 this.teletextEnable = (value & 0x04) == 0x04;
-                if ((value & 0x03) != this.channel && this.teletextEnable)
-                {
+                if ((value & 0x03) != this.channel && this.teletextEnable) {
                     this.channel = value & 0x03;
                     this.loadChannelStream(this.channel);
                 }
@@ -118,11 +111,11 @@ export class TeletextAdaptor {
                 break;
 
             case 0x02:
-                this.frameBuffer[this.rowPtr][this.colPtr++] = value & 0xFF;
+                this.frameBuffer[this.rowPtr][this.colPtr++] = value & 0xff;
                 break;
 
             case 0x03:
-                this.teletextStatus &= ~0xD0; // Clear INT, DOR, and FSYN latches
+                this.teletextStatus &= ~0xd0; // Clear INT, DOR, and FSYN latches
                 this.cpu.interrupt &= ~(1 << TELETEXT_IRQ); // Clear interrupt
                 break;
         }
@@ -131,16 +124,12 @@ export class TeletextAdaptor {
     // Attempt to emulate the TV broadcast
     polltime(cycles) {
         this.pollCount += cycles;
-        if(this.pollCount > TELETEXT_UPDATE_FREQ)
-        {
+        if (this.pollCount > TELETEXT_UPDATE_FREQ) {
             this.pollCount = 0;
             // Don't flood the processor with teletext interrupts during a reset
-            if(this.cpu.resetLine)
-            { 
+            if (this.cpu.resetLine) {
                 this.update();
-            }
-            else
-            {
+            } else {
                 // Grace period before we start up again
                 this.pollCount = -TELETEXT_UPDATE_FREQ * 10;
             }
@@ -148,45 +137,36 @@ export class TeletextAdaptor {
     }
 
     update() {
-        if (this.currentFrame >= this.totalFrames)
-        {
+        if (this.currentFrame >= this.totalFrames) {
             this.currentFrame = 0;
         }
 
-        var offset = (this.currentFrame * TELETEXT_FRAME_SIZE) + (3 * 43);
+        var offset = this.currentFrame * TELETEXT_FRAME_SIZE + 3 * 43;
 
-        this.teletextStatus &= 0x0F;
-        this.teletextStatus |= 0xD0;       // data ready so latch INT, DOR, and FSYN
+        this.teletextStatus &= 0x0f;
+        this.teletextStatus |= 0xd0; // data ready so latch INT, DOR, and FSYN
 
-        if(this.teletextEnable)
-        {
+        if (this.teletextEnable) {
             // Copy current stream position into the frame buffer
-            for(var i = 0; i < 16; ++i)
-            {
-                if(this.streamData[offset + (i * 43)] != 0)
-                {
+            for (var i = 0; i < 16; ++i) {
+                if (this.streamData[offset + i * 43] != 0) {
                     this.frameBuffer[i][0] = 0x67;
-                    for(var j = 1; j <= 42; j++)
-                    {
-                        this.frameBuffer[i][j] = this.streamData[offset + ((i * 43) + (j-1))];
+                    for (var j = 1; j <= 42; j++) {
+                        this.frameBuffer[i][j] = this.streamData[offset + (i * 43 + (j - 1))];
                     }
-                }
-                else
-                {
+                } else {
                     this.frameBuffer[i][0] = 0x00;
                 }
             }
         }
 
         this.currentFrame++;
-        
+
         this.rowPtr = 0x00;
         this.colPtr = 0x00;
 
-        if (this.teletextInts)
-        {
+        if (this.teletextInts) {
             this.cpu.interrupt |= 1 << TELETEXT_IRQ;
         }
     }
-
 }

@@ -1,15 +1,15 @@
-import {describe, it} from 'mocha';
-import assert from 'assert';
+import { describe, it } from "mocha";
+import assert from "assert";
 
-import {Fifo} from '../../utils.js'
+import { Fifo } from "../../utils.js";
 
-describe('FIFO tests', function () {
+describe("FIFO tests", function () {
     "use strict";
-    it('creates ok', function (done) {
+    it("creates ok", function (done) {
         new Fifo(16);
         done();
     });
-    it('works for simple cases', function (done) {
+    it("works for simple cases", function (done) {
         const f = new Fifo(16);
         assert.strictEqual(0, f.size);
         f.put(123);
@@ -19,7 +19,7 @@ describe('FIFO tests', function () {
         done();
     });
 
-    it('works when full', function (done) {
+    it("works when full", function (done) {
         const f = new Fifo(4);
         assert.strictEqual(0, f.size);
         f.put(123);

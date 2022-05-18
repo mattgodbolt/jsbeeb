@@ -1,16 +1,15 @@
-Wolfgang Lorenz's 6502 test suite
----------------------------------
+## Wolfgang Lorenz's 6502 test suite
 
-When Wolfgang Lorenz's excellent 6502 (well, actually there's some 6526 
-stuff in there as well) test suite was mentioned earlier on, I recalled 
-having re-packaged it a few years ago in a form more suitable for play 
+When Wolfgang Lorenz's excellent 6502 (well, actually there's some 6526
+stuff in there as well) test suite was mentioned earlier on, I recalled
+having re-packaged it a few years ago in a form more suitable for play
 on non-Commodore platforms (it was originally provided as a D64 image).
 
 In case anyone would find it useful I packed it up and put it online at
 http://jegt.net/~palm/testsuite-2.15.tar.gz
 
-Since it makes a few assumtions about the surrounding environment, I'd 
-also like to share a few notes on the "test bench" environment I hacked 
+Since it makes a few assumtions about the surrounding environment, I'd
+also like to share a few notes on the "test bench" environment I hacked
 up to be able to run it outside a C64:
 
 The testcase is started by loading " start" and starting the CPU.
@@ -51,29 +50,29 @@ Put trap instructions at `$FFD2`, `$E16F`, `$FFE4`, `$8000` and `$A474`, where t
 
 if `PC == $FFD2` (Print character):
 
-- Set `$030C = 0`
-- Print `PETSCII` character corresponding to value of `A`
-- Pop return address from stack
-- Set `PC` to return address
-- Re-start the CPU
+-   Set `$030C = 0`
+-   Print `PETSCII` character corresponding to value of `A`
+-   Pop return address from stack
+-   Set `PC` to return address
+-   Re-start the CPU
 
 if `PC == $E16F` (Load):
 
-- `$BB` is `PETSCII` filename address, low byte
-- `$BC` is `PETSCII` filename address, high byte
-- `$B7` is `PETSCII` filename length
-- Load the file
-- Pop return address from stack
-- Set `PC` to `$0816`
-- Re-start the CPU
+-   `$BB` is `PETSCII` filename address, low byte
+-   `$BC` is `PETSCII` filename address, high byte
+-   `$B7` is `PETSCII` filename length
+-   Load the file
+-   Pop return address from stack
+-   Set `PC` to `$0816`
+-   Re-start the CPU
 
 if `PC == $FFE4` (Scan keyboard):
 
-- Set `A` to 3
-- Pop return address from stack
-- Set `PC` to return address
-- Re-start the CPU
+-   Set `A` to 3
+-   Pop return address from stack
+-   Set `PC` to return address
+-   Re-start the CPU
 
 if `PC == $8000` or `PC == $A474`:
 
-- Exit
+-   Exit
