@@ -36,7 +36,7 @@ export class AudioHandler {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
             this.music5000 = new Music5000((buffer) => this._onBufferMusic5000(buffer));
          
-            this.audioContextM5000.audioWorklet.addModule('./web/music5000-worklet.js').then(() => {
+            this.audioContextM5000.audioWorklet.addModule('./music5000-worklet.js').then(() => {
                 this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, 'music5000', {outputChannelCount : [2]});
                 this._music5000workletnode.connect(this.audioContextM5000.destination);
             });

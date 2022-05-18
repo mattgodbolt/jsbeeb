@@ -32,8 +32,8 @@ const masterSwram = [
 const tube65c02 = new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false);
 export const allModels = [
     new Model("BBC B", ["B"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, I8271, null, false, false),
-    new Model("BBC B with Teletext", ["BTeletext"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ATS-3.0.ROM"], true, false, beebSwram, I8271, null, true),
-    new Model("BBC B with Music 5000", ["BMusic5000"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "AMPLE.ROM"], true, false, beebSwram, I8271, null, true, true),
+    new Model("BBC B with Teletext", ["BTeletext"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ats-3.0.rom"], true, false, beebSwram, I8271, null, true),
+    new Model("BBC B with Music 5000", ["BMusic5000"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ample.rom"], true, false, beebSwram, I8271, null, true, true),
     new Model("BBC B (DFS 0.9)", ["B-DFS0.9"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, I8271),
     new Model("BBC B (DFS 1.2)", ["B-DFS1.2"], ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"], true, false, beebSwram, I8271),
     new Model("BBC B (with 65c02 Tube)", ["B-Tube"], ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"], true, false, beebSwram, I8271, tube65c02),

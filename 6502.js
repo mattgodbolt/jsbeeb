@@ -602,12 +602,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             
         if (model.hasMusic5000)
         {
-            if (addr == 0xfcff) {
+            if (addr === 0xfcff) {
                 return this.JimPageSel;
             }
 
-            if ((this.JimPageSel & 0xf0) == 0x30 &&
-                (addr & 0xff00) == 0xfd00)
+            if ((this.JimPageSel & 0xf0) === 0x30 &&
+                (addr & 0xff00) === 0xfd00)
             {
                 return this.music5000.read(this.JimPageSel, addr);
             }
@@ -758,13 +758,13 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
 
         if(model.hasMusic5000)
         {
-            if (addr == 0xfcff) {
+            if (addr === 0xfcff) {
                 this.JimPageSel = b;
                 return;
             }
         
-            if (((this.JimPageSel & 0xf0) == 0x30 &&
-                (addr & 0xff00) == 0xfd00))
+            if (((this.JimPageSel & 0xf0) === 0x30 &&
+                (addr & 0xff00) === 0xfd00))
             {
                 this.music5000.write(this.JimPageSel, addr, b);
                 return;
@@ -1015,8 +1015,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         this.JimPageSel = 0;
         this.video.reset(this, this.sysvia, hard);
         if (hard) this.soundChip.reset(hard);
-        if (model.hasTeletextAdaptor) this.teletextAdaptor.reset(hard);
-        if (model.hasMusic5000) this.music5000.reset(hard);
+        if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
+        if (this.music5000) this.music5000.reset(hard);
     };
 
     this.updateKeyLayout = function () {
@@ -1052,8 +1052,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
-        if (model.hasTeletextAdaptor) this.teletextAdaptor.polltime(cycles);
-        if (model.hasMusic5000) this.music5000.polltime(cycles);
+        if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
+        if (this.music5000) this.music5000.polltime(cycles);
     };
 
     // Faster, but more limited version
@@ -1065,8 +1065,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
-        if (model.hasTeletextAdaptor) this.teletextAdaptor.polltime(cycles);
-        if (model.hasMusic5000) this.music5000.polltime(cycles);
+        if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
+        if (this.music5000) this.music5000.polltime(cycles);
     };
 
     if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {

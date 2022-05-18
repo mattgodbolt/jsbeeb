@@ -61,7 +61,7 @@ export function Music5000(onBuffer) {
 				var val = this.chordBase[chord];
 				for (var step = 0; step < 16; step++)
 				{
-					this.D2ATable[i] = parseInt(val * 4); // Multiply up to get an integer
+					this.D2ATable[i] = Math.floor(val * 4); // Multiply up to get an integer
 					val += this.stepInc[chord];
 					i++;
 				}
@@ -192,4 +192,8 @@ export function Music5000(onBuffer) {
 }
 
 export function FakeMusic5000() {
+	this.reset = function() {}
+	this.polltime = function() {}
+	this.read = function() { return 0; }
+	this.write = function() { return 0; }
 }
