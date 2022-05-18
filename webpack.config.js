@@ -46,6 +46,12 @@ function getPlugins() {
                 {
                     from: "sounds/**/*.wav",
                 },
+                {
+                    from: "teletext/*.dat",
+                },
+                {
+                    from: "music5000-worklet.js",
+                },
             ],
         }),
         new MiniCssExtractPlugin({

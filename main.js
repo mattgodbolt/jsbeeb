@@ -553,7 +553,7 @@ var emulationConfig = {
     }
 };
 
-processor = new Cpu6502(model, dbgr, video, audioHandler.soundChip, audioHandler.ddNoise, cmos, emulationConfig);
+processor = new Cpu6502(model, dbgr, video, audioHandler.soundChip, audioHandler.ddNoise, audioHandler.music5000, cmos, emulationConfig);
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
@@ -1143,6 +1143,7 @@ syncLights = function () {
 
 var startPromise = Promise.all([audioHandler.initialise(), processor.initialise()])
     .then(function () {
+        
         // Ideally would start the loads first. But their completion needs the FDC from the processor
         var imageLoads = [];
         if (discImage) imageLoads.push(loadDiscImage(discImage).then(function (disc) {

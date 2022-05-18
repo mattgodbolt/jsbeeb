@@ -8,6 +8,7 @@ import {Tube} from './tube.js';
 import {Adc} from './adc.js';
 import {Scheduler} from './scheduler.js';
 import {TouchScreen} from './touchscreen.js';
+import {TeletextAdaptor} from './teletext_adaptor.js';
 
 var signExtend = utils.signExtend;
 
@@ -435,13 +436,14 @@ function fixUpConfig(config) {
     return config;
 }
 
-export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config) {
+export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, cmos, config) {
     config = fixUpConfig(config);
 
     base6502(this, model);
 
     this.video = video_;
     this.soundChip = soundChip_;
+    this.music5000 = music5000_;
     this.ddNoise = ddNoise_;
     this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
     this.memStatOffset = 0;
@@ -467,6 +469,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         return this.oldPcArray[(this.oldPcIndex - index) & 0xff];
     };
     this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
+    this.JimPageSel = 0;
 
     // BBC Master memory map (within ramRomOs array):
     // 00000 - 08000 -> base 32KB RAM
@@ -596,7 +599,25 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
             return this.ramRomOs[this.osOffset + (addr & 0x3fff)];
         }
         addr &= 0xffff;
+            
+        if (model.hasMusic5000)
+        {
+            if (addr === 0xfcff) {
+                return this.JimPageSel;
+            }
+
+            if ((this.JimPageSel & 0xf0) === 0x30 &&
+                (addr & 0xff00) === 0xfd00)
+            {
+                return this.music5000.read(this.JimPageSel, addr);
+            }
+        }
+        
         switch (addr & ~0x0003) {
+
+            case 0xfc10:
+                if(model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
+                break;
             case 0xfc20:
             case 0xfc24:
             case 0xfc28:
@@ -734,7 +755,26 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
     };
     this.writeDevice = function (addr, b) {
         b |= 0;
+
+        if(model.hasMusic5000)
+        {
+            if (addr === 0xfcff) {
+                this.JimPageSel = b;
+                return;
+            }
+        
+            if (((this.JimPageSel & 0xf0) === 0x30 &&
+                (addr & 0xff00) === 0xfd00))
+            {
+                this.music5000.write(this.JimPageSel, addr, b);
+                return;
+            }
+        }
+
         switch (addr & ~0x0003) {
+            case 0xfc10:
+                if(model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
+                break;
             case 0xfc20:
             case 0xfc24:
             case 0xfc28:
@@ -956,6 +996,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
             this.crtc = this.video.crtc;
             this.ula = this.video.ula;
             this.adconverter = new Adc(this.sysvia, this.scheduler);
+            if (model.hasTeletextAdaptor)  
+                this.teletextAdaptor = new TeletextAdaptor(this);
             this.sysvia.reset(hard);
             this.uservia.reset(hard);
         }
@@ -970,8 +1012,11 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.p.i = true;
         this.nmi = false;
         this.halted = false;
+        this.JimPageSel = 0;
         this.video.reset(this, this.sysvia, hard);
         if (hard) this.soundChip.reset(hard);
+        if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
+        if (this.music5000) this.music5000.reset(hard);
     };
 
     this.updateKeyLayout = function () {
@@ -1007,6 +1052,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
+        if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
+        if (this.music5000) this.music5000.polltime(cycles);
     };
 
     // Faster, but more limited version
@@ -1018,6 +1065,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, cmos, config)
         this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
+        if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
+        if (this.music5000) this.music5000.polltime(cycles);
     };
 
     if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {
