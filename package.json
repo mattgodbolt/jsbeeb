@@ -71,6 +71,7 @@
         "start": "webpack serve",
         "build": "webpack --node-env production",
         "prepare": "husky install",
+        "ci-checks": "eslint . && prettier --check .",
         "lint": "eslint .",
         "lint-fix": "eslint . --fix",
         "pack": "electron-builder --dir",
