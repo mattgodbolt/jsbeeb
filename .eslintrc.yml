@@ -1,16 +1,16 @@
 env:
-    browser: true
-    amd: true
-    commonjs: true
-    es2021: true
-    node: true
+  browser: true
+  amd: true
+  commonjs: true
+  es2021: true
+  node: true
 ignorePatterns:
-    - lib/*
-    - out/*
+  - lib/*
+  - out/*
 extends:
-    - eslint:recommended
+  - eslint:recommended
 parserOptions:
-    ecmaVersion: 2020
-    sourceType: module
+  ecmaVersion: 2020
+  sourceType: module
 rules:
-    indent: [0, 4] # TODO enable
+  indent: [0, 4] # TODO enable
