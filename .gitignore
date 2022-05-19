@@ -6,3 +6,4 @@
 /out
 /v8.log*
 /perf.data
+.eslintcache

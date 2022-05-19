@@ -1,5 +1,5 @@
 "use strict";
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 function UefTape(stream) {
     var self = this;
@@ -7,15 +7,13 @@ function UefTape(stream) {
     var dummyData, state, count, curByte, numDataBits, parity;
     var numParityBits, numStopBits, carrierBefore, carrierAfter;
 
-
     self.rewind = function () {
-
         dummyData = [false, false, true, false, true, false, true, false, true, true];
         state = -1;
         count = 0;
         curByte = 0;
         numDataBits = 8;
-        parity = 'N';
+        parity = "N";
         numParityBits = 0;
         numStopBits = 1;
         carrierBefore = 0;
@@ -34,7 +32,7 @@ function UefTape(stream) {
         var length = stream.readInt32();
         return {
             id: chunkId,
-            stream: stream.substream(length)
+            stream: stream.substream(length),
         };
     }
 
@@ -48,7 +46,6 @@ function UefTape(stream) {
     function cycles(count) {
         return secsToClocks(count / baseFrequency);
     }
-
 
     function parityOf(curByte) {
         var parity = false;
@@ -85,7 +82,7 @@ function UefTape(stream) {
                         // Start bit
                         acia.tone(baseFrequency);
                     } else {
-                        acia.tone((curByte & (1 << (state - 1))) ? (2 * baseFrequency) : baseFrequency);
+                        acia.tone(curByte & (1 << (state - 1)) ? 2 * baseFrequency : baseFrequency);
                     }
                     state++;
                 } else {
@@ -105,7 +102,7 @@ function UefTape(stream) {
                     numDataBits = curChunk.stream.readByte();
                     parity = curChunk.stream.readByte();
                     numStopBits = curChunk.stream.readByte();
-                    numParityBits = parity !== 'N' ? 1 : 0;
+                    numParityBits = parity !== "N" ? 1 : 0;
                     console.log("Defined data with " + numDataBits + String.fromCharCode(parity) + numStopBits);
                     state = 0;
                 }
@@ -117,15 +114,15 @@ function UefTape(stream) {
                         acia.tone(baseFrequency); // Start bit
                         state++;
                     }
-                } else if (state < (1 + numDataBits)) {
-                    acia.tone((curByte & (1 << (state - 1))) ? (2 * baseFrequency) : baseFrequency);
+                } else if (state < 1 + numDataBits) {
+                    acia.tone(curByte & (1 << (state - 1)) ? 2 * baseFrequency : baseFrequency);
                     state++;
-                } else if (state < (1 + numDataBits + numParityBits)) {
+                } else if (state < 1 + numDataBits + numParityBits) {
                     var bit = parityOf(curByte);
-                    if (parity === 'N') bit = !bit;
-                    acia.tone(bit ? (2 * baseFrequency) : baseFrequency);
+                    if (parity === "N") bit = !bit;
+                    acia.tone(bit ? 2 * baseFrequency : baseFrequency);
                     state++;
-                } else if (state < (1 + numDataBits + numParityBits + numStopBits)) {
+                } else if (state < 1 + numDataBits + numParityBits + numStopBits) {
                     acia.tone(2 * baseFrequency); // Stop bits
                     state++;
                 } else {
@@ -148,7 +145,7 @@ function UefTape(stream) {
                     if (carrierBefore <= 0) state = 1;
                 } else if (state < 11) {
                     acia.setTapeCarrier(false);
-                    acia.tone(dummyData[(state - 1)] ? baseFrequency : (2 * baseFrequency));
+                    acia.tone(dummyData[state - 1] ? baseFrequency : 2 * baseFrequency);
                     if (state === 10) {
                         acia.receive(0xaa);
                     }
@@ -200,7 +197,6 @@ function UefTape(stream) {
         return cycles(1);
     };
 }
-
 
 function TapefileTape(stream) {
     var self = this;

@@ -1,27 +1,27 @@
-import $ from 'jquery';
-import _ from 'underscore';
-import * as bootstrap from 'bootstrap';
+import $ from "jquery";
+import _ from "underscore";
+import * as bootstrap from "bootstrap";
 
-import 'bootswatch/dist/darkly/bootstrap.min.css';
-import './jsbeeb.css';
+import "bootswatch/dist/darkly/bootstrap.min.css";
+import "./jsbeeb.css";
 
-import * as utils from './utils.js';
-import {FakeVideo, Video} from './video.js';
-import {Debugger} from './web/debug.js';
-import {Cpu6502} from './6502.js';
-import {Cmos} from './cmos.js';
-import {StairwayToHell} from './sth.js';
-import {GamePad} from './gamepads.js';
-import * as disc from './fdc.js';
-import {starCat} from './discs/cat.js';
-import {loadTape, loadTapeFromData} from './tapes.js';
-import {GoogleDriveLoader} from './google-drive.js';
-import * as tokeniser from './basic-tokenise.js';
-import * as canvasLib from './canvas.js';
-import {Config} from './config.js';
-import {initialise as electron} from './app/electron.js';
-import {AudioHandler} from "./web/audio-handler.js";
-import {allModels} from "./models.js";
+import * as utils from "./utils.js";
+import { FakeVideo, Video } from "./video.js";
+import { Debugger } from "./web/debug.js";
+import { Cpu6502 } from "./6502.js";
+import { Cmos } from "./cmos.js";
+import { StairwayToHell } from "./sth.js";
+import { GamePad } from "./gamepads.js";
+import * as disc from "./fdc.js";
+import { starCat } from "./discs/cat.js";
+import { loadTape, loadTapeFromData } from "./tapes.js";
+import { GoogleDriveLoader } from "./google-drive.js";
+import * as tokeniser from "./basic-tokenise.js";
+import * as canvasLib from "./canvas.js";
+import { Config } from "./config.js";
+import { initialise as electron } from "./app/electron.js";
+import { AudioHandler } from "./web/audio-handler.js";
+import { allModels } from "./models.js";
 
 var processor;
 var video;
@@ -37,7 +37,7 @@ var gamepad = new GamePad();
 var availableImages;
 var discImage;
 var extraRoms = [];
-if (typeof starCat === 'function') {
+if (typeof starCat === "function") {
     availableImages = starCat();
 
     if (availableImages && availableImages[0]) {
@@ -64,7 +64,8 @@ var audioFilterFreq = 7000;
 var audioFilterQ = 5;
 
 if (queryString) {
-    if (queryString[queryString.length - 1] === '/')  // workaround for shonky python web server
+    if (queryString[queryString.length - 1] === "/")
+        // workaround for shonky python web server
         queryString = queryString.substring(0, queryString.length - 1);
     queryString.split("&").forEach(function (keyval) {
         var keyAndVal = keyval.split("=");
@@ -82,7 +83,7 @@ if (queryString) {
                 var nativeKey = key.substring(4).toUpperCase(); // remove KEY.
                 if (keyCodes[nativeKey]) {
                     console.log("mapping " + nativeKey + " to " + bbcKey);
-                    utils.userKeymap.push({native: nativeKey, bbc: bbcKey});
+                    utils.userKeymap.push({ native: nativeKey, bbc: bbcKey });
                 } else {
                     console.log("unknown key: " + nativeKey);
                 }
@@ -150,32 +151,32 @@ if (queryString) {
     });
 }
 
-if (parsedQuery.frameSkip)
-    frameSkip = parseInt(parsedQuery.frameSkip);
+if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
 
-$('.model-menu').empty();
-allModels.forEach(m => {
-    $('.model-menu').append(`<li><a href="#" class="dropdown-item" data-target="${m.name}">${m.name}</a></li>`);
+$(".model-menu").empty();
+allModels.forEach((m) => {
+    $(".model-menu").append(`<li><a href="#" class="dropdown-item" data-target="${m.name}">${m.name}</a></li>`);
 });
 
-var config = new Config(
-    function (changed) {
-        parsedQuery = _.extend(parsedQuery, changed);
-        if (changed.model) {
-            areYouSure("Changing model requires a restart of the emulator. Restart now?",
-                "Yes, restart now",
-                "No, thanks",
-                function () {
-                    updateUrl();
-                    window.location.reload();
-                });
-        }
-        if (changed.keyLayout) {
-            window.localStorage.keyLayout = changed.keyLayout;
-            emulationConfig.keyLayout = changed.keyLayout;
-            processor.updateKeyLayout();
-        }
-    });
+var config = new Config(function (changed) {
+    parsedQuery = _.extend(parsedQuery, changed);
+    if (changed.model) {
+        areYouSure(
+            "Changing model requires a restart of the emulator. Restart now?",
+            "Yes, restart now",
+            "No, thanks",
+            function () {
+                updateUrl();
+                window.location.reload();
+            }
+        );
+    }
+    if (changed.keyLayout) {
+        window.localStorage.keyLayout = changed.keyLayout;
+        emulationConfig.keyLayout = changed.keyLayout;
+        processor.updateKeyLayout();
+    }
+});
 config.setModel(parsedQuery.model || guessModelFromUrl());
 config.setKeyLayout(keyLayout);
 model = config.model;
@@ -191,13 +192,13 @@ function sbBind(div, url, onload) {
 }
 
 sbBind($(".sidebar.left"), parsedQuery.sbLeft, function (div, img) {
-    div.css({left: -img.width() - 5});
+    div.css({ left: -img.width() - 5 });
 });
 sbBind($(".sidebar.right"), parsedQuery.sbRight, function (div, img) {
-    div.css({right: -img.width() - 5});
+    div.css({ right: -img.width() - 5 });
 });
 sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
-    div.css({bottom: -img.height()});
+    div.css({ bottom: -img.height() });
 });
 
 if (parsedQuery.cpuMultiplier) {
@@ -211,7 +212,7 @@ var tryGl = true;
 if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
-var $screen = $('#screen');
+var $screen = $("#screen");
 var canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
     frames++;
@@ -219,8 +220,7 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
     frames = 0;
     canvas.paint(minx, miny, maxx, maxy);
 });
-if (parsedQuery.fakeVideo !== undefined)
-    video = new FakeVideo();
+if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
 const audioHandler = new AudioHandler($("#audio-warning"), audioFilterFreq, audioFilterQ, noSeek);
 // Firefox will report that audio is suspended even when it will
@@ -234,7 +234,7 @@ var lastAltLocation = 1;
 
 dbgr = new Debugger(video);
 
-$('.initially-hidden').removeClass('initially-hidden');
+$(".initially-hidden").removeClass("initially-hidden");
 
 function keyCode(evt) {
     var ret = evt.which || evt.charCode || evt.keyCode;
@@ -312,7 +312,7 @@ function keyCode(evt) {
 }
 
 function keyPress(evt) {
-    if (document.activeElement.id === 'paste-text') return;
+    if (document.activeElement.id === "paste-text") return;
     if (running || (!dbgr.enabled() && !pauseEmu)) return;
     var code = keyCode(evt);
     if (dbgr.enabled() && code === 103 /* lower case g */) {
@@ -337,18 +337,17 @@ function keyPress(evt) {
 
 emuKeyHandlers[utils.keyCodes.S] = function (down) {
     if (down) {
-        utils.noteEvent('keyboard', 'press', 'S');
+        utils.noteEvent("keyboard", "press", "S");
         stop(true);
     }
 };
 emuKeyHandlers[utils.keyCodes.R] = function (down) {
-    if (down)
-        window.location.reload();
+    if (down) window.location.reload();
 };
 
 function keyDown(evt) {
     audioHandler.tryResume();
-    if (document.activeElement.id === 'paste-text') return;
+    if (document.activeElement.id === "paste-text") return;
     if (!running) return;
     var code = keyCode(evt);
     if (evt.altKey) {
@@ -358,17 +357,17 @@ function keyDown(evt) {
             evt.preventDefault();
         }
     } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
-        utils.noteEvent('keyboard', 'press', 'home');
+        utils.noteEvent("keyboard", "press", "home");
         stop(true);
     } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
-        utils.noteEvent('keyboard', 'press', 'insert');
+        utils.noteEvent("keyboard", "press", "insert");
         fastAsPossible = !fastAsPossible;
     } else if (code === utils.keyCodes.END && evt.ctrlKey) {
-        utils.noteEvent('keyboard', 'press', 'end');
+        utils.noteEvent("keyboard", "press", "end");
         pauseEmu = true;
         stop(false);
     } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-        utils.noteEvent('keyboard', 'press', 'break');
+        utils.noteEvent("keyboard", "press", "break");
         processor.setReset(true);
         evt.preventDefault();
     } else if (code === utils.keyCodes.B && evt.ctrlKey) {
@@ -384,11 +383,10 @@ function keyDown(evt) {
 }
 
 function keyUp(evt) {
-    if (document.activeElement.id === 'paste-text') return;
+    if (document.activeElement.id === "paste-text") return;
     // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
     var code = keyCode(evt);
-    if (processor && processor.sysvia)
-        processor.sysvia.keyUp(code);
+    if (processor && processor.sysvia) processor.sysvia.keyUp(code);
     if (!running) return;
     if (evt.altKey) {
         var handler = emuKeyHandlers[code];
@@ -416,33 +414,31 @@ function loadHTMLFile(file) {
     reader.readAsBinaryString(file);
 }
 
-var $pastetext = $('#paste-text');
-$pastetext.on('paste', function (event) {
-    var text = event.originalEvent.clipboardData.getData('text/plain');
+var $pastetext = $("#paste-text");
+$pastetext.on("paste", function (event) {
+    var text = event.originalEvent.clipboardData.getData("text/plain");
     sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
 });
-$pastetext.on('dragover', function (event) {
+$pastetext.on("dragover", function (event) {
     event.preventDefault();
     event.stopPropagation();
     event.originalEvent.dataTransfer.dropEffect = "copy";
 });
-$pastetext.on('drop', function (event) {
-    utils.noteEvent('local', 'drop');
+$pastetext.on("drop", function (event) {
+    utils.noteEvent("local", "drop");
     var file = event.originalEvent.dataTransfer.files[0];
     loadHTMLFile(file);
 });
 
-var $cub = $('#cub-monitor');
-$cub.on('mousemove mousedown mouseup', function (evt) {
+var $cub = $("#cub-monitor");
+$cub.on("mousemove mousedown mouseup", function (evt) {
     audioHandler.tryResume();
-    if (document.activeElement !== document.body)
-        document.activeElement.blur();
+    if (document.activeElement !== document.body) document.activeElement.blur();
     var cubOffset = $cub.offset();
     var screenOffset = $screen.offset();
     var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
     var y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
-    if (processor.touchScreen)
-        processor.touchScreen.onMouse(x, y, evt.buttons);
+    if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
     evt.preventDefault();
 });
 
@@ -450,7 +446,7 @@ $(window).blur(function () {
     if (processor.sysvia) processor.sysvia.clearKeys();
 });
 
-$('#fs').click(function (event) {
+$("#fs").click(function (event) {
     $screen[0].requestFullscreen();
     event.preventDefault();
 });
@@ -471,8 +467,10 @@ document.ondrop = function (event) {
 
 window.onbeforeunload = function () {
     if (running && processor.sysvia.hasAnyKeyDown()) {
-        return "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+        return (
+            "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
+            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window."
+        );
     }
 };
 
@@ -485,7 +483,7 @@ var cmos = new Cmos({
     },
     save: function (data) {
         window.localStorage.cmosRam = JSON.stringify(data);
-    }
+    },
 });
 
 var userPort = null;
@@ -495,21 +493,18 @@ if (keyswitch) {
 
     var switchKey = function (down, code) {
         var bit = 1 << (code - utils.keyCodes.K1);
-        if (down)
-            switchState &= (0xff ^ bit);
-        else
-            switchState |= bit;
+        if (down) switchState &= 0xff ^ bit;
+        else switchState |= bit;
     };
 
     for (var idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
         emuKeyHandlers[idx] = switchKey;
     }
     userPort = {
-        write: function () {
-        },
+        write: function () {},
         read: function () {
             return switchState;
-        }
+        },
     };
 }
 
@@ -519,9 +514,11 @@ var printerTextArea = null;
 function checkPrinterWindow() {
     if (printerWindow && !printerWindow.closed) return;
 
-    printerWindow = window.open('', '_blank', 'height=300,width=400');
-    printerWindow.document.write('<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>');
-    printerTextArea = printerWindow.document.getElementById('text');
+    printerWindow = window.open("", "_blank", "height=300,width=400");
+    printerWindow.document.write(
+        '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>'
+    );
+    printerTextArea = printerWindow.document.getElementById("text");
 
     processor.uservia.setca1(true);
 }
@@ -537,7 +534,7 @@ var printerPort = {
         uservia.setca1(true);
         var newChar = String.fromCharCode(uservia.ora);
         printerTextArea.value += newChar;
-    }
+    },
 };
 
 var emulationConfig = {
@@ -550,10 +547,19 @@ var emulationConfig = {
     getGamepads: function () {
         // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
         return navigator.getGamepads ? navigator.getGamepads() : [];
-    }
+    },
 };
 
-processor = new Cpu6502(model, dbgr, video, audioHandler.soundChip, audioHandler.ddNoise, audioHandler.music5000, cmos, emulationConfig);
+processor = new Cpu6502(
+    model,
+    dbgr,
+    video,
+    audioHandler.soundChip,
+    audioHandler.ddNoise,
+    audioHandler.music5000,
+    cmos,
+    emulationConfig
+);
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
@@ -572,29 +578,32 @@ function sthStartLoad() {
 }
 
 function discSthClick(item) {
-    utils.noteEvent('sth', 'click', item);
+    utils.noteEvent("sth", "click", item);
     setDisc1Image("sth:" + item);
     var needsAutoboot = parsedQuery.autoboot !== undefined;
     if (needsAutoboot) {
         processor.reset(true);
     }
     popupLoading("Loading " + item);
-    loadDiscImage(parsedQuery.disc1).then(function (disc) {
-        processor.fdc.loadDisc(0, disc);
-    }).then(
-        function () {
-            loadingFinished();
-            if (needsAutoboot) {
-                autoboot(item);
+    loadDiscImage(parsedQuery.disc1)
+        .then(function (disc) {
+            processor.fdc.loadDisc(0, disc);
+        })
+        .then(
+            function () {
+                loadingFinished();
+                if (needsAutoboot) {
+                    autoboot(item);
+                }
+            },
+            function (err) {
+                loadingFinished(err);
             }
-        },
-        function (err) {
-            loadingFinished(err);
-        });
+        );
 }
 
 function tapeSthClick(item) {
-    utils.noteEvent('sth', 'clickTape', item);
+    utils.noteEvent("sth", "clickTape", item);
     parsedQuery.tape = "sth:" + item;
     updateUrl();
     popupLoading("Loading " + item);
@@ -604,7 +613,8 @@ function tapeSthClick(item) {
         },
         function (err) {
             loadingFinished(err);
-        });
+        }
+    );
 }
 
 const $sthModal = new bootstrap.Modal(document.getElementById("sth"));
@@ -621,7 +631,7 @@ function makeOnCat(onClick) {
             var Delay = 30;
             var cat = all.slice(0, MaxAtATime);
             var remaining = all.slice(MaxAtATime);
-            var filter = $('#sth-filter').val();
+            var filter = $("#sth-filter").val();
             $.each(cat, function (_, cat) {
                 var row = template.clone().removeClass("template").appendTo(sthList);
                 row.find(".name").text(cat);
@@ -639,7 +649,7 @@ function makeOnCat(onClick) {
 }
 
 function sthOnError() {
-    $('#sth .loading').text("There was an error accessing the STH archive");
+    $("#sth .loading").text("There was an error accessing the STH archive");
     $("#sth .loading").show();
     sthClearList();
 }
@@ -647,8 +657,8 @@ function sthOnError() {
 discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
 
-$('#sth .autoboot').click(function () {
-    if ($('#sth .autoboot').prop('checked')) {
+$("#sth .autoboot").click(function () {
+    if ($("#sth .autoboot").prop("checked")) {
         parsedQuery.autoboot = "";
     } else {
         delete parsedQuery.autoboot;
@@ -657,10 +667,10 @@ $('#sth .autoboot').click(function () {
 });
 
 $(document).on("click", "a.sth", function () {
-    var type = $(this).data('id');
-    if (type === 'discs') {
+    var type = $(this).data("id");
+    if (type === "discs") {
         discSth.populate();
-    } else if (type === 'tapes') {
+    } else if (type === "tapes") {
         tapeSth.populate();
     } else {
         console.log("unknown id", type);
@@ -675,8 +685,8 @@ function setSthFilter(filter) {
     });
 }
 
-$('#sth-filter').on("change keyup", function () {
-    setSthFilter($('#sth-filter').val());
+$("#sth-filter").on("change keyup", function () {
+    setSthFilter($("#sth-filter").val());
 });
 
 function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
@@ -739,7 +749,7 @@ function autoboot(image) {
     var BBC = utils.BBC;
 
     console.log("Autobooting disc");
-    utils.noteEvent('init', 'autoboot', image);
+    utils.noteEvent("init", "autoboot", image);
 
     // Shift-break simulation, hold SHIFT for 1000ms.
     sendRawKeyboardToBBC([BBC.SHIFT, 1000], false);
@@ -747,7 +757,7 @@ function autoboot(image) {
 
 function autoBootType(keys) {
     console.log("Auto typing '" + keys + "'");
-    utils.noteEvent('init', 'autochain');
+    utils.noteEvent("init", "autochain");
 
     var bbcKeys = utils.stringToBBCKeys(keys);
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
@@ -755,7 +765,7 @@ function autoBootType(keys) {
 
 function autoChainTape() {
     console.log("Auto Chaining Tape");
-    utils.noteEvent('init', 'autochain');
+    utils.noteEvent("init", "autochain");
 
     var bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
@@ -763,32 +773,32 @@ function autoChainTape() {
 
 function autoRunTape() {
     console.log("Auto Running Tape");
-    utils.noteEvent('init', 'autorun');
+    utils.noteEvent("init", "autorun");
 
-    var bbcKeys = utils.stringToBBCKeys('*TAPE\n*/\n');
+    var bbcKeys = utils.stringToBBCKeys("*TAPE\n*/\n");
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
 function autoRunBasic() {
     console.log("Auto Running basic");
-    utils.noteEvent('init', 'autorunbasic');
+    utils.noteEvent("init", "autorunbasic");
 
-    var bbcKeys = utils.stringToBBCKeys('RUN\n');
+    var bbcKeys = utils.stringToBBCKeys("RUN\n");
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
 function updateUrl() {
     var url = window.location.origin + window.location.pathname;
-    var sep = '?';
+    var sep = "?";
     $.each(parsedQuery, function (key, value) {
         url += sep + encodeURIComponent(key);
         if (value) url += "=" + encodeURIComponent(value);
-        sep = '&';
+        sep = "&";
     });
     window.history.pushState(null, null, url);
 }
 
-const $errorDialog = $('#error-dialog');
+const $errorDialog = $("#error-dialog");
 const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
 
 function showError(context, error) {
@@ -801,7 +811,7 @@ function splitImage(image) {
     var match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
     var schema = match[2] || match[1] || "";
     image = match[3];
-    return {image: image, schema: schema};
+    return { image: image, schema: schema };
 }
 
 function loadDiscImage(discImage) {
@@ -830,11 +840,11 @@ function loadDiscImage(discImage) {
             discImage = splat[1];
             title = splat[2];
         }
-        return gdLoad({title: title, id: discImage});
+        return gdLoad({ title: title, id: discImage });
     }
     if (schema === "b64data") {
         var ssdData = atob(discImage);
-        discImage = 'disk.ssd';
+        discImage = "disk.ssd";
         return Promise.resolve(disc.discFor(processor.fdc, discImage, ssdData));
     }
     if (schema === "data") {
@@ -865,7 +875,7 @@ function loadTapeImage(tapeImage) {
     tapeImage = split.image;
     var schema = split.schema;
 
-    if (schema === '|' || schema === "sth") {
+    if (schema === "|" || schema === "sth") {
         return tapeSth.fetch(tapeImage).then(function (image) {
             processor.acia.setTape(loadTapeFromData(tapeImage, image));
         });
@@ -892,21 +902,21 @@ function loadTapeImage(tapeImage) {
     });
 }
 
-$('#disc_load').change(function (evt) {
-    utils.noteEvent('local', 'click'); // NB no filename here
+$("#disc_load").change(function (evt) {
+    utils.noteEvent("local", "click"); // NB no filename here
     var file = evt.target.files[0];
     loadHTMLFile(file);
 });
 
-$('#tape_load').change(function (evt) {
+$("#tape_load").change(function (evt) {
     var file = evt.target.files[0];
     var reader = new FileReader();
-    utils.noteEvent('local', 'clickTape'); // NB no filename here
+    utils.noteEvent("local", "clickTape"); // NB no filename here
     reader.onload = function (e) {
         processor.acia.setTape(loadTapeFromData("local file", e.target.result));
         delete parsedQuery.tape;
         updateUrl();
-        $('#tapes').modal("hide");
+        $("#tapes").modal("hide");
     };
     reader.readAsBinaryString(file);
 });
@@ -916,27 +926,27 @@ function anyModalsVisible() {
 }
 
 var modalSavedRunning = false;
-document.addEventListener('show.bs.modal', function () {
+document.addEventListener("show.bs.modal", function () {
     if (!anyModalsVisible()) modalSavedRunning = running;
     if (running) stop(false);
 });
-document.addEventListener('hidden.bs.modal', function () {
+document.addEventListener("hidden.bs.modal", function () {
     if (!anyModalsVisible() && modalSavedRunning) {
         go();
     }
 });
 
-const $loadingDialog = $('#loading-dialog');
+const $loadingDialog = $("#loading-dialog");
 const $loadingDialogModal = new bootstrap.Modal($loadingDialog[0]);
 
 function popupLoading(msg) {
     $loadingDialog.find(".loading").text(msg);
-    $('#google-drive-auth').hide();
+    $("#google-drive-auth").hide();
     $loadingDialogModal.show();
 }
 
 function loadingFinished(error) {
-    $('#google-drive-auth').hide();
+    $("#google-drive-auth").hide();
     if (error) {
         $loadingDialogModal.show();
         $loadingDialog.find(".loading").text("Error: " + error);
@@ -952,20 +962,22 @@ var gdAuthed = false;
 var googleDrive = new GoogleDriveLoader();
 
 function gdAuth(imm) {
-    return googleDrive.authorize(imm)
-        .then(function (authed) {
+    return googleDrive.authorize(imm).then(
+        function (authed) {
             gdAuthed = authed;
             console.log("authed =", authed);
             return authed;
-        }, function (err) {
+        },
+        function (err) {
             console.log("Error handling google auth: " + err);
-            $googleDrive.find('.loading').text("There was an error accessing your Google Drive account: " + err);
-        });
+            $googleDrive.find(".loading").text("There was an error accessing your Google Drive account: " + err);
+        }
+    );
 }
 
 var googleDriveLoadingResolve, googleDriveLoadingReject;
-$('#google-drive-auth form').on("submit", function (e) {
-    $('#google-drive-auth').hide();
+$("#google-drive-auth form").on("submit", function (e) {
+    $("#google-drive-auth").hide();
     e.preventDefault();
     gdAuth(false).then(function (authed) {
         if (authed) googleDriveLoadingResolve();
@@ -981,7 +993,8 @@ function gdLoad(cat) {
      });
      */
     popupLoading("Loading '" + cat.title + "' from Google Drive");
-    return googleDrive.initialise()
+    return googleDrive
+        .initialise()
         .then(function (available) {
             console.log("Google Drive available =", available);
             if (!available) throw new Error("Google Drive is not available");
@@ -995,7 +1008,7 @@ function gdLoad(cat) {
                 return new Promise(function (resolve, reject) {
                     googleDriveLoadingResolve = resolve;
                     googleDriveLoadingReject = reject;
-                    $('#google-drive-auth').show();
+                    $("#google-drive-auth").show();
                 });
             }
         })
@@ -1013,16 +1026,16 @@ function gdLoad(cat) {
         });
 }
 
-$('.if-drive-available').hide();
+$(".if-drive-available").hide();
 googleDrive.initialise().then(function (available) {
     if (available) {
-        $('.if-drive-available').show();
+        $(".if-drive-available").show();
         gdAuth(true);
     }
 });
-const $googleDrive = $('#google-drive');
+const $googleDrive = $("#google-drive");
 const $googleDriveModal = new bootstrap.Modal($googleDrive[0]);
-$('#open-drive-link').on('click', function () {
+$("#open-drive-link").on("click", function () {
     if (gdAuthed) {
         $googleDriveModal.show();
     } else {
@@ -1034,7 +1047,7 @@ $('#open-drive-link').on('click', function () {
     }
     return false;
 });
-$googleDrive[0].addEventListener('show.bs.modal', function () {
+$googleDrive[0].addEventListener("show.bs.modal", function () {
     $googleDrive.find(".loading").text("Loading...").show();
     $googleDrive.find("li").not(".template").remove();
     googleDrive.cat().then(function (cat) {
@@ -1045,7 +1058,7 @@ $googleDrive[0].addEventListener('show.bs.modal', function () {
             var row = template.clone().removeClass("template").appendTo(dbList);
             row.find(".name").text(cat.title);
             $(row).on("click", function () {
-                utils.noteEvent('google-drive', 'click', cat.title);
+                utils.noteEvent("google-drive", "click", cat.title);
                 setDisc1Image("gd:" + cat.id + "/" + cat.title);
                 gdLoad(cat).then(function (ssd) {
                     processor.fdc.loadDisc(0, ssd);
@@ -1055,14 +1068,14 @@ $googleDrive[0].addEventListener('show.bs.modal', function () {
         });
     });
 });
-var discList = $('#disc-list');
+var discList = $("#disc-list");
 var template = discList.find(".template");
 $.each(availableImages, function (i, image) {
     var elem = template.clone().removeClass("template").appendTo(discList);
     elem.find(".name").text(image.name);
     elem.find(".description").text(image.desc);
     $(elem).on("click", function () {
-        utils.noteEvent('images', 'click', image.file);
+        utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         loadDiscImage(parsedQuery.disc1).then(function (disc) {
             processor.fdc.loadDisc(0, disc);
@@ -1078,22 +1091,24 @@ $("#google-drive form").on("submit", function (e) {
     popupLoading("Connecting to Google Drive");
     $googleDriveModal.hide();
     popupLoading("Creating '" + text + "' on Google Drive");
-    googleDrive.create(processor.fdc, text)
-        .then(function (result) {
+    googleDrive.create(processor.fdc, text).then(
+        function (result) {
             setDisc1Image("gd:" + result.fileId + "/" + text);
             processor.fdc.loadDisc(0, result.disc);
             loadingFinished();
-        }, function (error) {
+        },
+        function (error) {
             loadingFinished(error);
-        });
+        }
+    );
 });
 
-$('#hard-reset').click(function (event) {
+$("#hard-reset").click(function (event) {
     processor.reset(true);
     event.preventDefault();
 });
 
-$('#soft-reset').click(function (event) {
+$("#soft-reset").click(function (event) {
     processor.reset(false);
     event.preventDefault();
 });
@@ -1104,7 +1119,7 @@ function guessModelFromUrl() {
     return "B";
 }
 
-$('#tape-menu a').on("click", function (e) {
+$("#tape-menu a").on("click", function (e) {
     var type = $(e.target).attr("data-id");
     if (type === undefined) return;
 
@@ -1112,7 +1127,6 @@ $('#tape-menu a').on("click", function (e) {
         console.log("Rewinding tape to the start");
 
         processor.acia.rewindTape();
-
     } else {
         console.log("unknown type", type);
     }
@@ -1141,98 +1155,115 @@ syncLights = function () {
     cassette.update(processor.acia.motorOn);
 };
 
-var startPromise = Promise.all([audioHandler.initialise(), processor.initialise()])
-    .then(function () {
-        
-        // Ideally would start the loads first. But their completion needs the FDC from the processor
-        var imageLoads = [];
-        if (discImage) imageLoads.push(loadDiscImage(discImage).then(function (disc) {
-            processor.fdc.loadDisc(0, disc);
-        }));
-        if (secondDiscImage) imageLoads.push(loadDiscImage(secondDiscImage).then(function (disc) {
-            processor.fdc.loadDisc(1, disc);
-        }));
-        if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
+var startPromise = Promise.all([audioHandler.initialise(), processor.initialise()]).then(function () {
+    // Ideally would start the loads first. But their completion needs the FDC from the processor
+    var imageLoads = [];
+    if (discImage)
+        imageLoads.push(
+            loadDiscImage(discImage).then(function (disc) {
+                processor.fdc.loadDisc(0, disc);
+            })
+        );
+    if (secondDiscImage)
+        imageLoads.push(
+            loadDiscImage(secondDiscImage).then(function (disc) {
+                processor.fdc.loadDisc(1, disc);
+            })
+        );
+    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
-        function insertBasic(getBasicPromise, needsRun) {
-            imageLoads.push(getBasicPromise.then(function (prog) {
-                return tokeniser.create().then(function (t) {
-                    return t.tokenise(prog);
-                });
-            }).then(function (tokenised) {
-                var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-                var hook = processor.debugInstruction.add(function (addr) {
-                    if (addr !== idleAddr) return;
-                    var page = processor.readmem(0x18) << 8;
-                    for (var i = 0; i < tokenised.length; ++i) {
-                        processor.writemem(page + i, tokenised.charCodeAt(i));
-                    }
-                    // Set VARTOP (0x12/3) and TOP(0x02/3)
-                    var end = page + tokenised.length;
-                    var endLow = end & 0xff;
-                    var endHigh = (end >>> 8) & 0xff;
-                    processor.writemem(0x02, endLow);
-                    processor.writemem(0x03, endHigh);
-                    processor.writemem(0x12, endLow);
-                    processor.writemem(0x13, endHigh);
-                    hook.remove();
-                    if (needsRun) {
-                        autoRunBasic();
-                    }
-                });
-            }));
-        }
+    function insertBasic(getBasicPromise, needsRun) {
+        imageLoads.push(
+            getBasicPromise
+                .then(function (prog) {
+                    return tokeniser.create().then(function (t) {
+                        return t.tokenise(prog);
+                    });
+                })
+                .then(function (tokenised) {
+                    var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+                    var hook = processor.debugInstruction.add(function (addr) {
+                        if (addr !== idleAddr) return;
+                        var page = processor.readmem(0x18) << 8;
+                        for (var i = 0; i < tokenised.length; ++i) {
+                            processor.writemem(page + i, tokenised.charCodeAt(i));
+                        }
+                        // Set VARTOP (0x12/3) and TOP(0x02/3)
+                        var end = page + tokenised.length;
+                        var endLow = end & 0xff;
+                        var endHigh = (end >>> 8) & 0xff;
+                        processor.writemem(0x02, endLow);
+                        processor.writemem(0x03, endHigh);
+                        processor.writemem(0x12, endLow);
+                        processor.writemem(0x13, endHigh);
+                        hook.remove();
+                        if (needsRun) {
+                            autoRunBasic();
+                        }
+                    });
+                })
+        );
+    }
 
-        if (parsedQuery.loadBasic) {
-            var needsRun = needsAutoboot === "run";
-            needsAutoboot = "";
-            insertBasic(new Promise(function (resolve) {
+    if (parsedQuery.loadBasic) {
+        var needsRun = needsAutoboot === "run";
+        needsAutoboot = "";
+        insertBasic(
+            new Promise(function (resolve) {
                 utils.loadData(parsedQuery.loadBasic).then(function (data) {
                     resolve(String.fromCharCode.apply(null, data));
                 });
-            }), needsRun);
-        }
+            }),
+            needsRun
+        );
+    }
 
-        if (parsedQuery.embedBasic) {
-            insertBasic(new Promise(function (resolve) {
+    if (parsedQuery.embedBasic) {
+        insertBasic(
+            new Promise(function (resolve) {
                 resolve(parsedQuery.embedBasic);
-            }), true);
-        }
-
-        return Promise.all(imageLoads);
-    });
-
-startPromise.then(function () {
-    switch (needsAutoboot) {
-        case "boot":
-            $("#sth .autoboot").prop('checked', true);
-            autoboot(discImage);
-            break;
-        case "type":
-            autoBootType(autoType);
-            break;
-        case "chain":
-            autoChainTape();
-            break;
-        case "run":
-            autoRunTape();
-            break;
-        default:
-            $("#sth .autoboot").prop('checked', false);
-            break;
+            }),
+            true
+        );
     }
 
-    if (parsedQuery.patch) {
-        dbgr.setPatch(parsedQuery.patch);
-    }
-
-    go();
-}, function (error) {
-    showError("initialising", error);
-    console.log(error);
+    return Promise.all(imageLoads);
 });
 
-const $ays = $('#are-you-sure');
+startPromise.then(
+    function () {
+        switch (needsAutoboot) {
+            case "boot":
+                $("#sth .autoboot").prop("checked", true);
+                autoboot(discImage);
+                break;
+            case "type":
+                autoBootType(autoType);
+                break;
+            case "chain":
+                autoChainTape();
+                break;
+            case "run":
+                autoRunTape();
+                break;
+            default:
+                $("#sth .autoboot").prop("checked", false);
+                break;
+        }
+
+        if (parsedQuery.patch) {
+            dbgr.setPatch(parsedQuery.patch);
+        }
+
+        go();
+    },
+    function (error) {
+        showError("initialising", error);
+        console.log(error);
+    }
+);
+
+const $ays = $("#are-you-sure");
 const $aysModal = new bootstrap.Modal($ays[0]);
 
 function areYouSure(message, yesText, noText, yesFunc) {
@@ -1255,7 +1286,7 @@ function benchmarkCpu(numCycles) {
     var endTime = performance.now();
     frameSkip = oldFS;
     var msTaken = endTime - startTime;
-    var virtualMhz = (numCycles / msTaken) / 1000;
+    var virtualMhz = numCycles / msTaken / 1000;
     console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
     console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
 }
@@ -1269,7 +1300,7 @@ function benchmarkVideo(numCycles) {
     var endTime = performance.now();
     frameSkip = oldFS;
     var msTaken = endTime - startTime;
-    var virtualMhz = (numCycles / msTaken) / 1000;
+    var virtualMhz = numCycles / msTaken / 1000;
     console.log("Took " + msTaken + "ms to execute " + numCycles + " video cycles");
     console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
 }
@@ -1291,8 +1322,8 @@ var last = 0;
 function VirtualSpeedUpdater() {
     this.cycles = 0;
     this.time = 0;
-    this.v = $('.virtualMHz');
-    this.header = $('#virtual-mhz-header');
+    this.v = $(".virtualMHz");
+    this.header = $("#virtual-mhz-header");
     this.speedy = false;
 
     this.update = function (cycles, time, speedy) {
@@ -1336,7 +1367,7 @@ function draw(now) {
     var motorOn = processor.acia.motorOn;
     var speedy = fastAsPossible || (fastTape && motorOn);
     var useTimeout = speedy || motorOn;
-    var timeout = speedy ? 0 : (1000.0 / 50);
+    var timeout = speedy ? 0 : 1000.0 / 50;
 
     // In speedy mode, we still run all the state machines accurately
     // but we paint less often because painting is the most expensive
@@ -1362,7 +1393,7 @@ function draw(now) {
         if (!speedy) {
             // Now and last are DOMHighResTimeStamp, just a double.
             var sinceLast = now - last;
-            cycles = sinceLast * clocksPerSecond / 1000;
+            cycles = (sinceLast * clocksPerSecond) / 1000;
             cycles = Math.min(cycles, MaxCyclesPerFrame);
         } else {
             cycles = clocksPerSecond / 50;
@@ -1376,7 +1407,7 @@ function draw(now) {
             virtualSpeedUpdater.update(cycles, end - now, speedy);
         } catch (e) {
             running = false;
-            utils.noteEvent('exception', 'thrown', e.stack);
+            utils.noteEvent("exception", "thrown", e.stack);
             dbgr.debug(processor.pc);
             throw e;
         }
@@ -1405,7 +1436,6 @@ function handleVisibilityChange() {
             go();
         }
     }
-
 }
 
 document.addEventListener("visibilitychange", handleVisibilityChange, false);
@@ -1426,10 +1456,10 @@ function stop(debug) {
 (function () {
     const $cubMonitor = $("#cub-monitor");
     const $cubMonitorPic = $("#cub-monitor-pic");
-    const cubOrigHeight = $cubMonitorPic.attr('height');
-    const cubOrigWidth = $cubMonitorPic.attr('width');
-    const cubToScreenHeightRatio = $screen.attr('height') / cubOrigHeight;
-    const cubToScreenWidthRatio = $screen.attr('width') / cubOrigWidth;
+    const cubOrigHeight = $cubMonitorPic.attr("height");
+    const cubOrigWidth = $cubMonitorPic.attr("width");
+    const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
+    const cubToScreenWidthRatio = $screen.attr("width") / cubOrigWidth;
     const navbarHeight = $("#header-bar").height();
     const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
     const minWidth = cubOrigWidth / 4;
@@ -1466,15 +1496,28 @@ window.soundChip = audioHandler.soundChip;
 window.processor = processor;
 window.video = video;
 window.hd = function (start, end) {
-    console.log(utils.hd(function (x) {
-        return processor.readmem(x);
-    }, start, end));
+    console.log(
+        utils.hd(
+            function (x) {
+                return processor.readmem(x);
+            },
+            start,
+            end
+        )
+    );
 };
 window.m7dump = function () {
-    console.log(utils.hd(function (x) {
-        return processor.readmem(x) & 0x7f;
-    }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
+    console.log(
+        utils.hd(
+            function (x) {
+                return processor.readmem(x) & 0x7f;
+            },
+            0x7c00,
+            0x7fe8,
+            { width: 40, gap: false }
+        )
+    );
 };
 
 // Hooks for electron.
-electron({loadDiscImage, processor});
+electron({ loadDiscImage, processor });

@@ -1,14 +1,14 @@
 "use strict";
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 import * as opcodes from "./6502.opcodes.js";
-import * as via from './via.js';
-import {Acia} from './acia.js';
-import {Serial} from './serial.js';
-import {Tube} from './tube.js';
-import {Adc} from './adc.js';
-import {Scheduler} from './scheduler.js';
-import {TouchScreen} from './touchscreen.js';
-import {TeletextAdaptor} from './teletext_adaptor.js';
+import * as via from "./via.js";
+import { Acia } from "./acia.js";
+import { Serial } from "./serial.js";
+import { Tube } from "./tube.js";
+import { Adc } from "./adc.js";
+import { Scheduler } from "./scheduler.js";
+import { TouchScreen } from "./touchscreen.js";
+import { TeletextAdaptor } from "./teletext_adaptor.js";
 
 var signExtend = utils.signExtend;
 
@@ -17,13 +17,15 @@ function Flags() {
         this.c = this.z = this.i = this.d = this.v = this.n = false;
     };
     this.debugString = function () {
-        return (this.n ? "N" : "n") +
+        return (
+            (this.n ? "N" : "n") +
             (this.v ? "V" : "v") +
             "xx" +
             (this.d ? "D" : "d") +
             (this.i ? "I" : "i") +
             (this.z ? "Z" : "z") +
-            (this.c ? "C" : "c");
+            (this.c ? "C" : "c")
+        );
     };
 
     this.asByte = function () {
@@ -167,7 +169,7 @@ function base6502(cpu, model) {
     };
 
     function adcNonBCD(addend) {
-        var result = (cpu.a + addend + (cpu.p.c ? 1 : 0));
+        var result = cpu.a + addend + (cpu.p.c ? 1 : 0);
         cpu.p.v = !!((cpu.a ^ result) & (addend ^ result) & 0x80);
         cpu.p.c = !!(result & 0x100);
         cpu.a = result & 0xff;
@@ -301,12 +303,10 @@ function base6502(cpu, model) {
             cpu.p.z = !cpu.a;
             cpu.p.v = (temp ^ cpu.a) & 0x40;
 
-            if ((al + (al & 1)) > 5)
-                cpu.a = (cpu.a & 0xf0) | ((cpu.a + 6) & 0xf);
+            if (al + (al & 1) > 5) cpu.a = (cpu.a & 0xf0) | ((cpu.a + 6) & 0xf);
 
-            cpu.p.c = (ah + (ah & 1)) > 5;
-            if (cpu.p.c)
-                cpu.a = (cpu.a + 0x60) & 0xff;
+            cpu.p.c = ah + (ah & 1) > 5;
+            if (cpu.p.c) cpu.a = (cpu.a + 0x60) & 0xff;
         } else {
             cpu.a = cpu.a & arg;
             cpu.p.v = !!(((cpu.a >>> 7) ^ (cpu.a >>> 6)) & 0x01);
@@ -404,34 +404,26 @@ function FakeTube() {
     this.read = function () {
         return 0xfe;
     };
-    this.write = function () {
-    };
-    this.execute = function () {
-    };
-    this.reset = function () {
-    };
+    this.write = function () {};
+    this.execute = function () {};
+    this.reset = function () {};
 }
 
 function FakeUserPort() {
     return {
-        write: function () {
-        },
+        write: function () {},
         read: function () {
             return 0xff;
-        }
+        },
     };
 }
 
 function fixUpConfig(config) {
     if (config === undefined) config = {};
-    if (!config.keyLayout)
-        config.keyLayout = "physical";
-    if (!config.cpuMultiplier)
-        config.cpuMultiplier = 1;
-    if (!config.userPort)
-        config.userPort = new FakeUserPort();
-    if (config.printerPort === undefined)
-        config.printerPort = null;
+    if (!config.keyLayout) config.keyLayout = "physical";
+    if (!config.cpuMultiplier) config.cpuMultiplier = 1;
+    if (!config.userPort) config.userPort = new FakeUserPort();
+    if (config.printerPort === undefined) config.printerPort = null;
     config.extraRoms = config.extraRoms || [];
     return config;
 }
@@ -445,10 +437,10 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     this.soundChip = soundChip_;
     this.music5000 = music5000_;
     this.ddNoise = ddNoise_;
-    this.memStatOffsetByIFetchBank = new Uint32Array(16);  // helps in master map of LYNNE for non-opcode read/writes
+    this.memStatOffsetByIFetchBank = new Uint32Array(16); // helps in master map of LYNNE for non-opcode read/writes
     this.memStatOffset = 0;
     this.memStat = new Uint8Array(512);
-    this.memLook = new Int32Array(512);  // Cannot be unsigned as we use negative offsets
+    this.memLook = new Int32Array(512); // Cannot be unsigned as we use negative offsets
     this.ramRomOs = new Uint8Array(128 * 1024 + 17 * 16 * 16384);
     this.romOffset = 128 * 1024;
     this.osOffset = this.romOffset + 16 * 16 * 1024;
@@ -485,7 +477,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
         var swram = model.swram[b & 15] ? 1 : 2;
         for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
-        if (model.isMaster && (b & 0x80)) {
+        if (model.isMaster && b & 0x80) {
             // 4Kb RAM (private RAM - ANDY)
             // Zero offset as 0x8000 mapped to 0x8000
             for (c = 128; c < 144; ++c) {
@@ -505,7 +497,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         // LYNNE lives at 0xb000 in our map, but the offset we use here is 0x8000
         // as the video circuitry will already be looking at 0x3000 or so above
         // the offset.
-        this.videoDisplayPage = (b & 1) ? 0x8000 : 0x0000;
+        this.videoDisplayPage = b & 1 ? 0x8000 : 0x0000;
 
         var bitE = !!(b & 2);
         var bitX = !!(b & 4);
@@ -558,7 +550,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     // Handy debug function to read a string zero or \n terminated.
     this.readString = function (addr) {
         var s = "";
-        for (; ;) {
+        for (;;) {
             var b = this.readmem(addr);
             addr++;
             if (b === 0 || b === 13) break;
@@ -590,33 +582,29 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
 
     this.is1MHzAccess = function (addr) {
         addr &= 0xffff;
-        return (addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >>> 5) & 7]));
+        return addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >>> 5) & 7]);
     };
 
     this.readDevice = function (addr) {
-        if (model.isMaster && (this.acccon & 0x40)) {
+        if (model.isMaster && this.acccon & 0x40) {
             // TST bit of ACCCON
             return this.ramRomOs[this.osOffset + (addr & 0x3fff)];
         }
         addr &= 0xffff;
-            
-        if (model.hasMusic5000)
-        {
+
+        if (model.hasMusic5000) {
             if (addr === 0xfcff) {
                 return this.JimPageSel;
             }
 
-            if ((this.JimPageSel & 0xf0) === 0x30 &&
-                (addr & 0xff00) === 0xfd00)
-            {
+            if ((this.JimPageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
                 return this.music5000.read(this.JimPageSel, addr);
             }
         }
-        
-        switch (addr & ~0x0003) {
 
+        switch (addr & ~0x0003) {
             case 0xfc10:
-                if(model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
+                if (model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
             case 0xfc20:
             case 0xfc24:
@@ -686,8 +674,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             case 0xfe94:
             case 0xfe98:
             case 0xfe9c:
-                if (!model.isMaster)
-                    return this.fdc.read(addr);
+                if (!model.isMaster) return this.fdc.read(addr);
                 break;
             case 0xfec0:
             case 0xfec4:
@@ -737,7 +724,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
             return this.ramRomOs[offset + addr];
         } else {
-            return 0xff;// TODO; peekDevice -- this.peekDevice(addr);
+            return 0xff; // TODO; peekDevice -- this.peekDevice(addr);
         }
     };
 
@@ -756,16 +743,13 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     this.writeDevice = function (addr, b) {
         b |= 0;
 
-        if(model.hasMusic5000)
-        {
+        if (model.hasMusic5000) {
             if (addr === 0xfcff) {
                 this.JimPageSel = b;
                 return;
             }
-        
-            if (((this.JimPageSel & 0xf0) === 0x30 &&
-                (addr & 0xff00) === 0xfd00))
-            {
+
+            if ((this.JimPageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
                 this.music5000.write(this.JimPageSel, addr, b);
                 return;
             }
@@ -773,7 +757,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
 
         switch (addr & ~0x0003) {
             case 0xfc10:
-                if(model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
+                if (model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
                 break;
             case 0xfc20:
             case 0xfc24:
@@ -805,8 +789,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             case 0xfe14:
                 return this.serial.write(addr, b);
             case 0xfe18:
-                if (this.isMaster)
-                    return this.adconverter.write(addr, b);
+                if (this.isMaster) return this.adconverter.write(addr, b);
                 break;
             case 0xfe20:
                 return this.ula.write(addr, b);
@@ -860,8 +843,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             case 0xfe94:
             case 0xfe98:
             case 0xfe9c:
-                if (!model.isMaster)
-                    return this.fdc.write(addr, b);
+                if (!model.isMaster) return this.fdc.write(addr, b);
                 break;
             case 0xfec0:
             case 0xfec4:
@@ -871,8 +853,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             case 0xfed4:
             case 0xfed8:
             case 0xfedc:
-                if (!model.isMaster)
-                    return this.adconverter.write(addr, b);
+                if (!model.isMaster) return this.adconverter.write(addr, b);
                 break;
             case 0xfee0:
             case 0xfee4:
@@ -887,8 +868,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     };
 
     this.loadRom = function (name, offset) {
-        if (name.indexOf('http') !== 0)
-            name = "roms/" + name;
+        if (name.indexOf("http") !== 0) name = "roms/" + name;
         console.log("Loading ROM from " + name);
         var ramRomOs = this.ramRomOs;
         return utils.loadData(name).then(function (data) {
@@ -915,7 +895,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         var capturedThis = this;
         return utils.loadData(os).then(function (data) {
             var len = data.length;
-            if (len < 0x4000 || (len & 0x3fff)) throw new Error("Broken ROM file (length=" + len + ")");
+            if (len < 0x4000 || len & 0x3fff) throw new Error("Broken ROM file (length=" + len + ")");
             for (i = 0; i < 0x4000; ++i) {
                 ramRomOs[capturedThis.osOffset + i] = data[i];
             }
@@ -983,11 +963,17 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             this.videoDisplayPage = 0;
             this.scheduler = new Scheduler();
             this.soundChip.setScheduler(this.scheduler);
-            this.sysvia = via.SysVia(this, this.video, this.soundChip, cmos, model.isMaster, config.keyLayout,
-                config.getGamepads);
+            this.sysvia = via.SysVia(
+                this,
+                this.video,
+                this.soundChip,
+                cmos,
+                model.isMaster,
+                config.keyLayout,
+                config.getGamepads
+            );
             this.uservia = via.UserVia(this, model.isMaster, config.userPort);
-            if (config.printerPort)
-                this.uservia.ca2changecallback = config.printerPort.outputStrobe;
+            if (config.printerPort) this.uservia.ca2changecallback = config.printerPort.outputStrobe;
             this.touchScreen = new TouchScreen(this.scheduler);
             this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
             this.serial = new Serial(this.acia);
@@ -996,8 +982,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             this.crtc = this.video.crtc;
             this.ula = this.video.ula;
             this.adconverter = new Adc(this.sysvia, this.scheduler);
-            if (model.hasTeletextAdaptor)  
-                this.teletextAdaptor = new TeletextAdaptor(this);
+            if (model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
             this.sysvia.reset(hard);
             this.uservia.reset(hard);
         }
@@ -1171,22 +1156,26 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         };
     }
 
-    this.debugInstruction = new DebugHook(this, '_debugInstruction');
-    this.debugRead = new DebugHook(this, '_debugRead');
-    this.debugWrite = new DebugHook(this, '_debugWrite');
+    this.debugInstruction = new DebugHook(this, "_debugInstruction");
+    this.debugRead = new DebugHook(this, "_debugRead");
+    this.debugWrite = new DebugHook(this, "_debugWrite");
 
     this.dumpTrace = function (maxToShow, func) {
         if (!maxToShow) maxToShow = 256;
         if (maxToShow > 256) maxToShow = 256;
         var disassembler = this.disassembler;
-        func = func || function (pc, a, x, y) {
-            var dis = disassembler.disassemble(pc, true)[0];
-            console.log(utils.hexword(pc),
-                (dis + "                       ").substr(0, 15),
-                utils.hexbyte(a),
-                utils.hexbyte(x),
-                utils.hexbyte(y));
-        };
+        func =
+            func ||
+            function (pc, a, x, y) {
+                var dis = disassembler.disassemble(pc, true)[0];
+                console.log(
+                    utils.hexword(pc),
+                    (dis + "                       ").substr(0, 15),
+                    utils.hexbyte(a),
+                    utils.hexbyte(x),
+                    utils.hexbyte(y)
+                );
+            };
         for (var i = maxToShow - 2; i >= 0; --i) {
             var j = (this.oldPcIndex - i) & 255;
             func(this.oldPcArray[j], this.oldAArray[j], this.oldXArray[j], this.oldYArray[j]);

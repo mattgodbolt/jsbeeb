@@ -1,5 +1,5 @@
 "use strict";
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 var BBC = utils.BBC;
 
@@ -24,14 +24,8 @@ export function GamePad() {
     // "start" (often <Space> to start game)
     this.gamepadMapping[9] = BBC.SPACE;
 
-
     // Gamepad joysticks
-    this.gamepadAxisMapping = [
-        [],
-        [],
-        [],
-        []
-    ];
+    this.gamepadAxisMapping = [[], [], [], []];
 }
 
 /*
@@ -172,7 +166,24 @@ GamePad.prototype.update = function (sysvia) {
         if (this.gamepad0) {
             console.log("initing gamepad");
             // 16 buttons
-            this.gamepadButtons = [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+            this.gamepadButtons = [
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+            ];
 
             // two joysticks (so 4 axes)
             this.gamepadAxes = [0, 0, 0, 0];
@@ -209,7 +220,6 @@ GamePad.prototype.update = function (sysvia) {
             }
 
             if (axis !== this.gamepadAxes[i]) {
-
                 // tricky because transition can be
                 // -1 to 0
                 // -1 to 1
@@ -226,7 +236,6 @@ GamePad.prototype.update = function (sysvia) {
                 if (newKey) {
                     sysvia.keyDownRaw(newKey);
                 }
-
             }
 
             // store new state

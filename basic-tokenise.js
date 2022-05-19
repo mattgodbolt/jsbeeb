@@ -1,7 +1,7 @@
 "use strict";
-import * as utils from './utils.js';
-import * as models from './models.js';
-import {fake6502} from './fake6502.js';
+import * as utils from "./utils.js";
+import * as models from "./models.js";
+import { fake6502 } from "./fake6502.js";
 
 export function create() {
     var cpu = fake6502(models.basicOnly);
@@ -50,7 +50,7 @@ export function create() {
                 //
                 // Instead we copy out the newly processed part and advance the pointer
                 // to the unprocessed part.
-                let to = cpu.readmemZpStack(textPtrHi) << 8 | cpu.readmemZpStack(textPtrLo);
+                let to = (cpu.readmemZpStack(textPtrHi) << 8) | cpu.readmemZpStack(textPtrLo);
                 while (offset < to) {
                     result += String.fromCharCode(cpu.readmem(offset));
                     offset++;
@@ -68,7 +68,9 @@ export function create() {
             result += String.fromCharCode(cpu.readmem(i));
         }
         if (safety === 0) {
-            throw new Error("Unable to tokenize '" + line + "' - got as far as '" + result + "' pc=" + utils.hexword(cpu.pc));
+            throw new Error(
+                "Unable to tokenize '" + line + "' - got as far as '" + result + "' pc=" + utils.hexword(cpu.pc)
+            );
         }
         return result;
     };
@@ -80,10 +82,13 @@ export function create() {
         if (tokens.length > 251) {
             throw new Error("Line " + lineNum + " tokenised length " + tokens.length + " > 251 bytes");
         }
-        return '\r' +
+        return (
+            "\r" +
             String.fromCharCode((lineNum >>> 8) & 0xff) +
             String.fromCharCode(lineNum & 0xff) +
-            String.fromCharCode(tokens.length + 4) + tokens;
+            String.fromCharCode(tokens.length + 4) +
+            tokens
+        );
     };
     var tokenise = function (text) {
         var result = "";
@@ -96,7 +101,7 @@ export function create() {
     };
     return cpu.initialise().then(function () {
         return Promise.resolve({
-            tokenise: tokenise
+            tokenise: tokenise,
         });
     });
 }

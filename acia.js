@@ -28,7 +28,7 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
         // clears CR bits (i.e. things stop working until CR is rewritten
         // with sane value). This disagrees with the datasheet.
         // CTS and DTD are based on external inputs so leave them alone.
-        self.sr &= (0x08 | 0x04);
+        self.sr &= 0x08 | 0x04;
         // Reset clears the transmit register so raise the empty bit.
         self.sr |= 0x02;
         self.hadDcdHigh = false;
@@ -133,7 +133,7 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
             // DCD interrupts on low -> high level change.
             self.sr |= 0x84;
             self.hadDcdHigh = true;
-        } else if (!level && (self.sr & 0x04)) {
+        } else if (!level && self.sr & 0x04) {
             self.sr &= ~0x04;
         }
         updateIrq();
@@ -174,7 +174,7 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
             self.sr |= 0xa0;
         } else {
             // If bit 7 contains parity, mask it off.
-            self.dr = byte & ((self.cr & 0x10) ? 0xff : 0x7f);
+            self.dr = byte & (self.cr & 0x10 ? 0xff : 0x7f);
             self.sr |= 0x81;
         }
         updateIrq();
@@ -199,7 +199,7 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
     self.serialReceiveCyclesPerByte = 0;
 
     self.numBitsPerByte = function () {
-        var wordLength = (self.cr & 0x10) ? 8 : 7;
+        var wordLength = self.cr & 0x10 ? 8 : 7;
         var stopBits, parityBits;
         switch ((self.cr >>> 2) & 7) {
             case 0:

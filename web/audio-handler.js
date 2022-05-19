@@ -1,14 +1,17 @@
-import {FakeSoundChip, SoundChip} from "../soundchip.js";
-import {DdNoise, FakeDdNoise} from "../ddnoise.js";
-import {Music5000, FakeMusic5000} from "../music5000.js";
+import { FakeSoundChip, SoundChip } from "../soundchip.js";
+import { DdNoise, FakeDdNoise } from "../ddnoise.js";
+import { Music5000, FakeMusic5000 } from "../music5000.js";
 
 export class AudioHandler {
     constructor(warningNode, audioFilterFreq, audioFilterQ, noSeek) {
         this.warningNode = warningNode;
 
         /*global webkitAudioContext*/
-        this.audioContext = typeof AudioContext !== 'undefined' ? new AudioContext()
-            : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext()
+        this.audioContext =
+            typeof AudioContext !== "undefined"
+                ? new AudioContext()
+                : typeof webkitAudioContext !== "undefined"
+                ? new webkitAudioContext()
                 : null;
         if (this.audioContext) {
             this.audioContext.onstatechange = () => this.checkStatus();
@@ -23,26 +26,28 @@ export class AudioHandler {
             this.ddNoise = new FakeDdNoise();
         }
 
-        this.warningNode.on('mousedown', () => this.tryResume());
+        this.warningNode.on("mousedown", () => this.tryResume());
         this.warningNode.toggle(false);
 
         // Initialise Music 5000 audio context
-        this.audioContextM5000 = typeof AudioContext !== 'undefined' ? new AudioContext({sampleRate: 46875})
-        : typeof webkitAudioContext !== 'undefined' ? new webkitAudioContext({sampleRate: 46875}) 
-            : null;
+        this.audioContextM5000 =
+            typeof AudioContext !== "undefined"
+                ? new AudioContext({ sampleRate: 46875 })
+                : typeof webkitAudioContext !== "undefined"
+                ? new webkitAudioContext({ sampleRate: 46875 })
+                : null;
 
-        if (this.audioContextM5000 && this.audioContextM5000.audioWorklet) 
-        {
+        if (this.audioContextM5000 && this.audioContextM5000.audioWorklet) {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
             this.music5000 = new Music5000((buffer) => this._onBufferMusic5000(buffer));
-         
-            this.audioContextM5000.audioWorklet.addModule('./music5000-worklet.js').then(() => {
-                this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, 'music5000', {outputChannelCount : [2]});
+
+            this.audioContextM5000.audioWorklet.addModule("./music5000-worklet.js").then(() => {
+                this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, "music5000", {
+                    outputChannelCount: [2],
+                });
                 this._music5000workletnode.connect(this.audioContextM5000.destination);
             });
-        }
-        else 
-        {
+        } else {
             this.music5000 = new FakeMusic5000();
         }
     }
@@ -72,16 +77,12 @@ export class AudioHandler {
     // Recent browsers, particularly Safari and Chrome, require a user
     // interaction in order to enable sound playback.
     async tryResume() {
-        if (this.audioContext)
-            await this.audioContext.resume();
-        if (this.audioContextM5000)
-            await this.audioContextM5000.resume();
+        if (this.audioContext) await this.audioContext.resume();
+        if (this.audioContextM5000) await this.audioContextM5000.resume();
     }
 
-    
     _onBufferMusic5000(buffer) {
-        if (this._music5000workletnode)
-            this._music5000workletnode.port.postMessage(buffer);
+        if (this._music5000workletnode) this._music5000workletnode.port.postMessage(buffer);
     }
 
     checkStatus() {

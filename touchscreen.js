@@ -1,18 +1,18 @@
 "use strict";
 
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 export function TouchScreen(scheduler) {
     var self = this;
     var PollHz = 8; // Made up
-    var PollCycles = 2 * 1000 * 1000 / PollHz;
+    var PollCycles = (2 * 1000 * 1000) / PollHz;
     this.scheduler = scheduler;
     this.mouse = [];
     this.outBuffer = new utils.Fifo(16);
     this.delay = 0;
     this.mode = 0;
     this.onMouse = function (x, y, button) {
-        this.mouse = {x: x, y: y, button: button};
+        this.mouse = { x: x, y: y, button: button };
     };
     this.poll = function () {
         self.doRead();
@@ -21,33 +21,31 @@ export function TouchScreen(scheduler) {
     this.pollTask = this.scheduler.newTask(this.poll);
     this.onTransmit = function (val) {
         switch (String.fromCharCode(val)) {
-            case 'M':
+            case "M":
                 self.mode = 0;
                 break;
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9':
-                self.mode = 10 * self.mode + val - '0'.charCodeAt(0);
+            case "0":
+            case "1":
+            case "2":
+            case "3":
+            case "4":
+            case "5":
+            case "6":
+            case "7":
+            case "8":
+            case "9":
+                self.mode = 10 * self.mode + val - "0".charCodeAt(0);
                 break;
-            case '.':
+            case ".":
                 break;
-            case '?':
-                if (self.mode === 1)
-                    self.doRead();
+            case "?":
+                if (self.mode === 1) self.doRead();
                 break;
         }
         self.pollTask.ensureScheduled(self.mode === 129 || self.mode === 130, PollCycles);
     };
     this.tryReceive = function (rts) {
-        if (self.outBuffer.size && rts)
-            return self.outBuffer.get();
+        if (self.outBuffer.size && rts) return self.outBuffer.get();
         return -1;
     };
     this.store = function (byte) {
@@ -60,8 +58,10 @@ export function TouchScreen(scheduler) {
     }
 
     this.doRead = function () {
-        var scaleX = 120, marginX = 0.13;
-        var scaleY = 100, marginY = 0.03;
+        var scaleX = 120,
+            marginX = 0.13;
+        var scaleY = 100,
+            marginY = 0.03;
         var scaledX = doScale(self.mouse.x, scaleX, marginX);
         var scaledY = doScale(1 - self.mouse.y, scaleY, marginY);
         var toSend = [0x4f, 0x4f, 0x4f, 0x4f];
@@ -73,8 +73,7 @@ export function TouchScreen(scheduler) {
             toSend[2] = 0x40 | ((y & 0xf0) >>> 4);
             toSend[3] = 0x40 | (y & 0x0f);
         }
-        for (var i = 0; i < 4; ++i)
-            self.store(toSend[i]);
-        self.store('.'.charCodeAt(0));
+        for (var i = 0; i < 4; ++i) self.store(toSend[i]);
+        self.store(".".charCodeAt(0));
     };
 }

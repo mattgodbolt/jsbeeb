@@ -2,8 +2,7 @@
 
 export class BitStream {
     constructor(data, numBits) {
-        if (numBits === undefined)
-            numBits = 8 * data.length;
+        if (numBits === undefined) numBits = 8 * data.length;
         if (numBits <= 0) {
             // no data is an endless stream of zeros
             data = [0];
@@ -22,8 +21,7 @@ export class BitStream {
         const byteIndex = this._index >>> 3;
         const bitIndex = this._index & 7;
         const result = ((this._bytes[byteIndex] >>> bitIndex) & 1) === 1;
-        if (++this._index === this._numBits)
-            this._index = 0;
+        if (++this._index === this._numBits) this._index = 0;
         return result;
     }
 
@@ -31,8 +29,7 @@ export class BitStream {
         let result = 0;
         for (let i = 0; i < numBits; ++i) {
             result <<= 1;
-            if (this.nextBit())
-                result |= 1;
+            if (this.nextBit()) result |= 1;
         }
         return result;
     }

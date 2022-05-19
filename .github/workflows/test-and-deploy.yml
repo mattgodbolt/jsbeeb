@@ -1,6 +1,6 @@
 name: jsbeeb tests
 
-on: [ push ]
+on: [push]
 
 jobs:
   build-and-test:
@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Use Node.js 12.x
         uses: actions/setup-node@v1
         with:
@@ -25,8 +25,8 @@ jobs:
             ${{ runner.os }}-node-
       - name: npm install
         run: npm install
-      - name: lint
-        run: npm run lint
+      - name: checks
+        run: npm run ci-checks
       - name: Short tests
         run: npm test
 
@@ -35,7 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Use Node.js 12.x
         uses: actions/setup-node@v1
         with:
@@ -55,34 +55,34 @@ jobs:
       - name: long tests
         run: npx npm-run-all test-long:*
 
-#   electron-win-mac:
-#     needs: [build-and-test, long-test]
-#     runs-on: ${{ matrix.os }}
-#     strategy:
-#       matrix:
-#         os: [ macos-latest, windows-latest, ubuntu-20.04 ]
-#     steps:
-#       - uses: actions/checkout@v2
-#       - name: Use Node.js 12.x
-#         uses: actions/setup-node@v1
-#         with:
-#           node-version: 12.x
-#       - name: Get npm cache directory
-#         id: npm-cache
-#         run: |
-#           echo "::set-output name=dir::$(npm config get cache)"
-#       - uses: actions/cache@v1
-#         with:
-#           path: ${{ steps.npm-cache.outputs.dir }}
-#           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-#           restore-keys: |
-#             ${{ runner.os }}-node-
-#       - name: Build and deploy electron app
-#         uses: samuelmeuli/action-electron-builder@v1
-#         with:
-#           github_token: ${{ secrets.github_token }}
-#           # If the commit is tagged with a version (e.g. "v1.0.0"), release the app after building
-#           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
+  #   electron-win-mac:
+  #     needs: [build-and-test, long-test]
+  #     runs-on: ${{ matrix.os }}
+  #     strategy:
+  #       matrix:
+  #         os: [ macos-latest, windows-latest, ubuntu-20.04 ]
+  #     steps:
+  #       - uses: actions/checkout@v2
+  #       - name: Use Node.js 12.x
+  #         uses: actions/setup-node@v1
+  #         with:
+  #           node-version: 12.x
+  #       - name: Get npm cache directory
+  #         id: npm-cache
+  #         run: |
+  #           echo "::set-output name=dir::$(npm config get cache)"
+  #       - uses: actions/cache@v1
+  #         with:
+  #           path: ${{ steps.npm-cache.outputs.dir }}
+  #           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+  #           restore-keys: |
+  #             ${{ runner.os }}-node-
+  #       - name: Build and deploy electron app
+  #         uses: samuelmeuli/action-electron-builder@v1
+  #         with:
+  #           github_token: ${{ secrets.github_token }}
+  #           # If the commit is tagged with a version (e.g. "v1.0.0"), release the app after building
+  #           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
   update-web:
     needs: [build-and-test, long-test]
@@ -114,4 +114,4 @@ jobs:
           AWS_S3_BUCKET: bbc.godbolt.org
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          SOURCE_DIR: 'out/dist'
+          SOURCE_DIR: "out/dist"

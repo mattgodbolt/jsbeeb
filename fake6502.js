@@ -1,19 +1,18 @@
 // Fakes out a 6502
 "use strict";
 
-import {FakeVideo} from "./video.js";
-import {FakeSoundChip} from "./soundchip.js";
-import {TEST_6502, TEST_65C12} from "./models.js";
-import {FakeDdNoise} from "./ddnoise.js";
-import {Cpu6502} from "./6502.js";
-import {Cmos} from "./cmos.js";
-import {FakeMusic5000} from "./music5000.js"
+import { FakeVideo } from "./video.js";
+import { FakeSoundChip } from "./soundchip.js";
+import { TEST_6502, TEST_65C12 } from "./models.js";
+import { FakeDdNoise } from "./ddnoise.js";
+import { Cpu6502 } from "./6502.js";
+import { Cmos } from "./cmos.js";
+import { FakeMusic5000 } from "./music5000.js";
 
 var fakeVideo = new FakeVideo();
 var soundChip = new FakeSoundChip();
 var dbgr = {
-    setCpu: function () {
-    }
+    setCpu: function () {},
 };
 
 export function fake6502(model, opts) {
