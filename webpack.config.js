@@ -3,7 +3,7 @@
 import * as path from 'path';
 import CopyWebpackPlugin from "copy-webpack-plugin";
 import MiniCssExtractPlugin from "mini-css-extract-plugin";
-import OptimizeCssAssetsPlugin from "optimize-css-assets-webpack-plugin";
+import CssMinimizerPlugin from "css-minimizer-webpack-plugin";
 import TerserPlugin from "terser-webpack-plugin";
 import {CleanWebpackPlugin} from "clean-webpack-plugin";
 import HtmlWebpackPlugin from 'html-webpack-plugin';
@@ -19,11 +19,7 @@ function getOptimizationSettings() {
     return {
         minimize: !isDev,
         minimizer: [
-            new OptimizeCssAssetsPlugin({
-                cssProcessorPluginOptions: {
-                    preset: ["default", {discardComments: {removeAll: true}}],
-                },
-            }),
+            new CssMinimizerPlugin(),
             new TerserPlugin(),
         ],
     };

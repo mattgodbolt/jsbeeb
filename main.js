@@ -21,6 +21,7 @@ import * as canvasLib from './canvas.js';
 import {Config} from './config.js';
 import {initialise as electron} from './app/electron.js';
 import {AudioHandler} from "./web/audio-handler.js";
+import {allModels} from "./models.js";
 
 var processor;
 var video;
@@ -152,15 +153,20 @@ if (queryString) {
 if (parsedQuery.frameSkip)
     frameSkip = parseInt(parsedQuery.frameSkip);
 
+$('.model-menu').empty();
+allModels.forEach(m => {
+    $('.model-menu').append(`<li><a href="#" class="dropdown-item" data-target="${m.name}">${m.name}</a></li>`);
+});
+
 var config = new Config(
     function (changed) {
         parsedQuery = _.extend(parsedQuery, changed);
-        updateUrl();
         if (changed.model) {
             areYouSure("Changing model requires a restart of the emulator. Restart now?",
                 "Yes, restart now",
                 "No, thanks",
                 function () {
+                    updateUrl();
                     window.location.reload();
                 });
         }
@@ -825,6 +831,11 @@ function loadDiscImage(discImage) {
             title = splat[2];
         }
         return gdLoad({title: title, id: discImage});
+    }
+    if (schema === "b64data") {
+        var ssdData = atob(discImage);
+        discImage = 'disk.ssd';
+        return Promise.resolve(disc.discFor(processor.fdc, discImage, ssdData));
     }
     if (schema === "data") {
         var arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
