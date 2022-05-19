@@ -6,9 +6,9 @@ A BBC Micro emulator in Javascript. Runs on Firefox, Chrome and Microsoft Edge. 
 and a 128K BBC Master. The BBC had a somewhat different-looking keyboard to a modern PC, and so it's useful to
 know some of the mappings:
 
--   BBC F0 is F10
--   BBC Break key is F12
--   BBC star is on " (if it doesn't work for you try shift-2)
+- BBC F0 is F10
+- BBC Break key is F12
+- BBC star is on " (if it doesn't work for you try shift-2)
 
 To play right now, visit [http://bbc.godbolt.org/](http://bbc.godbolt.org/). To load the default disc image (Elite in
 this case), press shift-F12 (which is shift-Break on the BBC).
@@ -21,24 +21,24 @@ You can then run `npm start` to get a local webserver which will autoreload on c
 
 ## URL parameters
 
--   `autoboot` - fakes a shift break
--   `disc1=XXX` - loads disc XXX (from the `discs/` directory) into drive 1
--   `disc2=XXX` - as above
--   `disc1=local:YYY` - creates a local disk YYY which will be kept in browser local storage
--   `disc1=sth:ZZZ` - loads disc ZZZ from the Stairway to Hell archive
--   `tape=XXX` - loads tape XXX (from the `tapes/` directory)
--   `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
--   `patch=P` - applies a memory patch `P`. See below.
--   `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
--   `embedBasic=X` - loads 'X' (a URI-encoded string) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
--   `autorun` - types `*TAPE` then `*/` to run from tape. In conjunction with `loadBasic` it types `RUN`.
--   `autochain` - types `*TAPE` then `CH.""` to run from tape.
--   `autotype` - types whatever you put after. e.g. `&autotype=PRINT"Matt is cool"%0a` (return is URI escaped to `%0a`)
--   `embed` - Adjust the navigation entries to make the page clearer within a 921x733 iframe in a third-party site.
--   `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
--   `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into problems on smaller screens; bottom taller than 100 or so similarly.
--   `videoCyclesBatch` - the number of video cycles to batch up befofre running the video emulation. Defaults to zero: anything higher leads to emulation inaccuracies. Useful for showing why accuracy is important, even if less efficient.
--   `rom` - load the given URL or path as an extra ROM. If a URL is provided, that URL must allow cross-site requests. Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom` file assumed to be within.
+- `autoboot` - fakes a shift break
+- `disc1=XXX` - loads disc XXX (from the `discs/` directory) into drive 1
+- `disc2=XXX` - as above
+- `disc1=local:YYY` - creates a local disk YYY which will be kept in browser local storage
+- `disc1=sth:ZZZ` - loads disc ZZZ from the Stairway to Hell archive
+- `tape=XXX` - loads tape XXX (from the `tapes/` directory)
+- `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
+- `patch=P` - applies a memory patch `P`. See below.
+- `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
+- `embedBasic=X` - loads 'X' (a URI-encoded string) as text, tokenises it and puts it in `PAGE` as if you'd typed it in to the emulator
+- `autorun` - types `*TAPE` then `*/` to run from tape. In conjunction with `loadBasic` it types `RUN`.
+- `autochain` - types `*TAPE` then `CH.""` to run from tape.
+- `autotype` - types whatever you put after. e.g. `&autotype=PRINT"Matt is cool"%0a` (return is URI escaped to `%0a`)
+- `embed` - Adjust the navigation entries to make the page clearer within a 921x733 iframe in a third-party site.
+- `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
+- `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into problems on smaller screens; bottom taller than 100 or so similarly.
+- `videoCyclesBatch` - the number of video cycles to batch up befofre running the video emulation. Defaults to zero: anything higher leads to emulation inaccuracies. Useful for showing why accuracy is important, even if less efficient.
+- `rom` - load the given URL or path as an extra ROM. If a URL is provided, that URL must allow cross-site requests. Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom` file assumed to be within.
 
 ## Patches
 
@@ -46,9 +46,9 @@ Patches can be applied by making a `patch=P` URL parameter. `P` is a sequence of
 
 ## Loading BASIC files from GitHub gists
 
--   Create a gist with your code. https://gist.github.com/ - here's an [example](https://gist.github.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341)
--   Get the "Raw" link by clicking "raw" and copying the URL . In the case above that's: https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas
--   Add that after "https://bbc.godbolt.org/?autorun&loadBasic=" or similar, for example, [this link](https://bbc.godbolt.org/?loadBasic=https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas&autorun)
+- Create a gist with your code. https://gist.github.com/ - here's an [example](https://gist.github.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341)
+- Get the "Raw" link by clicking "raw" and copying the URL . In the case above that's: https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas
+- Add that after "https://bbc.godbolt.org/?autorun&loadBasic=" or similar, for example, [this link](https://bbc.godbolt.org/?loadBasic=https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas&autorun)
 
 Note that every update you make means you need to make a new raw link.
 
@@ -56,39 +56,39 @@ Note that every update you make means you need to make a new raw link.
 
 If you're looking to help:
 
--   Testing
-    -   Play lots of games and report issues either on [github](https://github.com/mattgodbolt/jsbeeb/issues) or by email (matt@godbolt.org).
--   Core
-    -   Save state ability
-        -   Once we have this I'd love to get some "reverse step" debugging support
-    -   Get the "boo" of the boot "boo-beep" working (disabled currently as the Javascript startup makes the sound dreadfully
-        choppy on Chrome at least).
--   Save disc support
-    -   Local discs need to be made more workable and need an "export" feature
-    -   Multiple discs need a UI
--   `git grep -i todo`
--   Optimisation
-    -   While every attempt to make things fast has been made, I'm sure there's some more clever things that can be done without
-        compromising emulation accuracy
+- Testing
+  - Play lots of games and report issues either on [github](https://github.com/mattgodbolt/jsbeeb/issues) or by email (matt@godbolt.org).
+- Core
+  - Save state ability
+    - Once we have this I'd love to get some "reverse step" debugging support
+  - Get the "boo" of the boot "boo-beep" working (disabled currently as the Javascript startup makes the sound dreadfully
+    choppy on Chrome at least).
+- Save disc support
+  - Local discs need to be made more workable and need an "export" feature
+  - Multiple discs need a UI
+- `git grep -i todo`
+- Optimisation
+  - While every attempt to make things fast has been made, I'm sure there's some more clever things that can be done without
+    compromising emulation accuracy
 
 ## Tests
 
 For general correctness there are several tests in the `tests` directory, including:
 
--   Klaus Dormann's exhaustive test of all documented opcodes for 6502 and 65C12.
-    This is brought in as a git submodule from a forked version of Klaus's original as it needed
-    a few tweaks to get 65C12 working.
--   hoglet's Binary Coded Decimal tests.
--   A public domain Commodore 64 6502 test suite which tests every 6502 opcode (documented or
-    otherwise) for every possible input and flags condition.
+- Klaus Dormann's exhaustive test of all documented opcodes for 6502 and 65C12.
+  This is brought in as a git submodule from a forked version of Klaus's original as it needed
+  a few tweaks to get 65C12 working.
+- hoglet's Binary Coded Decimal tests.
+- A public domain Commodore 64 6502 test suite which tests every 6502 opcode (documented or
+  otherwise) for every possible input and flags condition.
 
 For timing correctness we have:
 
--   A timing test program written by Rich. It has been run on a real live BBC B and
-    the results are in the directory. An SSD of the same tests is in the `discs/` directory.
--   Some of Kevin Edwards' protection systems (stripped of the games themselves). These are extremely
-    timing- and correctness-sensitive when it comes to the timers and interrupts of the BBC.
--   Some 65C12-specific read-modify-write tests written by Ed Spittles.
+- A timing test program written by Rich. It has been run on a real live BBC B and
+  the results are in the directory. An SSD of the same tests is in the `discs/` directory.
+- Some of Kevin Edwards' protection systems (stripped of the games themselves). These are extremely
+  timing- and correctness-sensitive when it comes to the timers and interrupts of the BBC.
+- Some 65C12-specific read-modify-write tests written by Ed Spittles.
 
 Tests can be run automatically if you have `node` installed - just run `make` and it'll ensure the relevant libraries are installed, then it'll run the tests.
 Please note it can take a while to run the whole test suite.

@@ -50,29 +50,29 @@ Put trap instructions at `$FFD2`, `$E16F`, `$FFE4`, `$8000` and `$A474`, where t
 
 if `PC == $FFD2` (Print character):
 
--   Set `$030C = 0`
--   Print `PETSCII` character corresponding to value of `A`
--   Pop return address from stack
--   Set `PC` to return address
--   Re-start the CPU
+- Set `$030C = 0`
+- Print `PETSCII` character corresponding to value of `A`
+- Pop return address from stack
+- Set `PC` to return address
+- Re-start the CPU
 
 if `PC == $E16F` (Load):
 
--   `$BB` is `PETSCII` filename address, low byte
--   `$BC` is `PETSCII` filename address, high byte
--   `$B7` is `PETSCII` filename length
--   Load the file
--   Pop return address from stack
--   Set `PC` to `$0816`
--   Re-start the CPU
+- `$BB` is `PETSCII` filename address, low byte
+- `$BC` is `PETSCII` filename address, high byte
+- `$B7` is `PETSCII` filename length
+- Load the file
+- Pop return address from stack
+- Set `PC` to `$0816`
+- Re-start the CPU
 
 if `PC == $FFE4` (Scan keyboard):
 
--   Set `A` to 3
--   Pop return address from stack
--   Set `PC` to return address
--   Re-start the CPU
+- Set `A` to 3
+- Pop return address from stack
+- Set `PC` to return address
+- Re-start the CPU
 
 if `PC == $8000` or `PC == $A474`:
 
--   Exit
+- Exit
