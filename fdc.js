@@ -74,7 +74,7 @@ export function BaseDisc(fdc, name, data, flusher) {
     if (data === null || data === undefined) throw new Error("Bad disc data");
     let nameDetails = utils.discImageSize(name);
     let isDsd = nameDetails.isDsd;
-    let isDoubleDensity = nameDetails.isDoubleDensity;
+    let sectorsPerTrack = nameDetails.isDoubleDensity ? 16 : 10;
     let byteSize = nameDetails.byteSize;
     if (data.length > byteSize && !isDsd) {
         // For safety, if SSD is too big, assume it's a mis-named DSD.
@@ -87,7 +87,7 @@ export function BaseDisc(fdc, name, data, flusher) {
     this.fdc = fdc;
     this.name = name;
     this.isDsd = isDsd;
-    this.isDoubleDensity = isDoubleDensity;
+    this.sectorsPerTrack = sectorsPerTrack;
     this.flusher = flusher;
     this.data = data;
     this.byteWithinSector = 0;
@@ -142,7 +142,7 @@ export function BaseDisc(fdc, name, data, flusher) {
             case 6:
                 this.fdc.discFinishRead();
                 this.rsector++;
-                if (this.rsector === (this.isDoubleDensity ? 16 : 10)) this.rsector = 0;
+                if (this.rsector === (this.sectorsPerTrack)) this.rsector = 0;
                 return;
         }
         this.byteWithinSector++;
@@ -157,7 +157,7 @@ export function BaseDisc(fdc, name, data, flusher) {
         if (++this.byteWithinSector === 256) {
             this.byteWithinSector = 0;
             this.sectorOffset += 256;
-            if (++this.formatSector === (this.isDoubleDensity ? 16 : 10)) {
+            if (++this.formatSector === (this.sectorsPerTrack)) {
                 this.fdc.discFinishRead();
                 this.flush();
                 return;
@@ -170,7 +170,7 @@ export function BaseDisc(fdc, name, data, flusher) {
         if (this.flusher) this.flusher();
     };
     BaseDisc.prototype.seek = (track) => {
-        this.seekOffset = track * (this.isDoubleDensity ? 16 : 10) * 256;
+        this.seekOffset = track * this.sectorsPerTrack * 256;
         if (this.isDsd) this.seekOffset <<= 1;
         const oldTrack = this.track;
         this.track = track;
@@ -187,7 +187,7 @@ export function BaseDisc(fdc, name, data, flusher) {
         if (!this.check(track, side, density)) return;
         this.side = side;
         this.readTask.reschedule(DiscTimeSlice);
-        this.sectorOffset = sector * 256 + (side ? (this.isDoubleDensity ? 16 : 10) * 256 : 0);
+        this.sectorOffset = sector * 256 + (side ? this.sectorsPerTrack * 256 : 0);
         this.byteWithinSector = 0;
     };
     BaseDisc.prototype.write = (sector, track, side, density) => {
@@ -197,7 +197,7 @@ export function BaseDisc(fdc, name, data, flusher) {
         // I'm not sure why that was required. So I'm ignoring it here. Any funny disc write bugs might be
         // traceable to this change.
         this.writeTask.reschedule(DiscTimeSlice);
-        this.sectorOffset = sector * 256 + (side ? (this.isDoubleDensity ? 16 : 10) * 256 : 0);
+        this.sectorOffset = sector * 256 + (side ? this.sectorsPerTrack * 256 : 0);
         this.byteWithinSector = 0;
     };
     BaseDisc.prototype.address = (track, side, density) => {
@@ -212,7 +212,7 @@ export function BaseDisc(fdc, name, data, flusher) {
         this.side = side;
         this.formatTask.reschedule(DiscTimeSlice);
         this.formatSector = 0;
-        this.sectorOffset = side ? (this.isDoubleDensity ? 16 : 10) * 256 : 0;
+        this.sectorOffset = side ? (this.sectorsPerTrack) * 256 : 0;
         this.byteWithinSector = 0;
     };
 }
