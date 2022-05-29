@@ -1025,6 +1025,7 @@ var knownDiscExtensions = {
     uef: true,
     ssd: true,
     dsd: true,
+    adl: true,
 };
 
 var knownRomExtensions = {
@@ -1078,13 +1079,21 @@ export function discImageSize(name) {
     // - 10 sectors per track.
     // - 256 bytes per sector.
     var isDsd = false;
+    var isDoubleDensity = false;
     var byteSize = 80 * 10 * 256;
     // DSD, aka. double-sided disc is twice the size.
     if (name.toLowerCase().endsWith(".dsd")) {
         byteSize *= 2;
         isDsd = true;
     }
-    return { isDsd: isDsd, byteSize: byteSize };
+    if (name.toLowerCase().endsWith(".adl")) {
+        // ADFS (Large) disks are:
+        // double density, double sided, 80 track, 16 sectors per track, 256 bytes per sector (640K)
+        byteSize = 2 * 80 * 16 * 256;
+        isDsd = true;
+        isDoubleDensity = true;
+    }
+    return { isDsd: isDsd, isDoubleDensity: isDoubleDensity, byteSize: byteSize };
 }
 
 export function setDiscName(data, name) {

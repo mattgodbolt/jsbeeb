@@ -70,7 +70,7 @@ export const allModels = [
         false
     ),
     new Model(
-        "BBC B with Teletext",
+        "BBC B (with Teletext)",
         ["BTeletext"],
         ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ats-3.0.rom"],
         true,
@@ -81,7 +81,7 @@ export const allModels = [
         true
     ),
     new Model(
-        "BBC B with Music 5000",
+        "BBC B (with Music 5000)",
         ["BMusic5000"],
         ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ample.rom"],
         true,
