@@ -1,4 +1,4 @@
-require(['jquery', 'tests/test'], function ($, test) {
+require(["jquery", "tests/test"], function ($, test) {
     "use strict";
     var currentTest = null;
 
@@ -11,7 +11,7 @@ require(['jquery', 'tests/test'], function ($, test) {
     }
 
     function beginTest(name) {
-        currentTest = $('#test-info > .template').clone().removeClass("template").appendTo($('#test-info'));
+        currentTest = $("#test-info > .template").clone().removeClass("template").appendTo($("#test-info"));
         currentTest.find(".test-name").text(name);
     }
 
@@ -24,17 +24,16 @@ require(['jquery', 'tests/test'], function ($, test) {
     }
 
     $(function () {
-        var canvas = $('#screen');
+        var canvas = $("#screen");
         var fb32;
-        var paint = function () {
-        };
+        var paint = function () {};
         if (canvas.length) {
-            canvas = $('#screen')[0];
-            var ctx = canvas.getContext('2d');
-            ctx.fillStyle = 'black';
+            canvas = $("#screen")[0];
+            var ctx = canvas.getContext("2d");
+            ctx.fillStyle = "black";
             ctx.fillRect(0, 0, 1280, 768);
             if (!ctx.getImageData) {
-                window.alert('Unsupported browser');
+                window.alert("Unsupported browser");
                 return;
             }
             var backBuffer = document.createElement("canvas");

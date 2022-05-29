@@ -1,15 +1,15 @@
-import {describe, it} from 'mocha';
-import assert from 'assert';
-import {Scheduler} from "../../scheduler.js";
+import { describe, it } from "mocha";
+import assert from "assert";
+import { Scheduler } from "../../scheduler.js";
 
-describe('Scheduler tests', function () {
+describe("Scheduler tests", function () {
     "use strict";
-    it('creates', function (done) {
+    it("creates", function (done) {
         new Scheduler();
         done();
     });
 
-    it('handles simple cases', function (done) {
+    it("handles simple cases", function (done) {
         const s = new Scheduler();
         let called = false;
         const t = s.newTask(function () {
@@ -26,7 +26,7 @@ describe('Scheduler tests', function () {
 
         done();
     });
-    it('handles simple cases with a big step', function (done) {
+    it("handles simple cases with a big step", function (done) {
         const s = new Scheduler();
         let called = false;
         const t = s.newTask(function () {
@@ -41,7 +41,7 @@ describe('Scheduler tests', function () {
 
         done();
     });
-    it('handles simple cases with a big step past', function (done) {
+    it("handles simple cases with a big step past", function (done) {
         const s = new Scheduler();
         let called = false;
         const t = s.newTask(function () {
@@ -56,116 +56,116 @@ describe('Scheduler tests', function () {
 
         done();
     });
-    it('calls callbacks in the order registered when occurring on same cycle', function (done) {
+    it("calls callbacks in the order registered when occurring on same cycle", function (done) {
         const s = new Scheduler();
         let called = "";
         s.newTask(function () {
-            called += 'a';
+            called += "a";
         }).schedule(2);
         s.newTask(function () {
-            called += 'b';
+            called += "b";
         }).schedule(2);
         s.newTask(function () {
-            called += 'c';
+            called += "c";
         }).schedule(2);
-        assert.strictEqual(called, '');
+        assert.strictEqual(called, "");
         s.polltime(1);
-        assert.strictEqual(called, '');
+        assert.strictEqual(called, "");
         s.polltime(1);
-        assert.strictEqual(called, 'abc');
+        assert.strictEqual(called, "abc");
         s.polltime(1);
 
         done();
     });
-    it('cancels first occurring event', function (done) {
+    it("cancels first occurring event", function (done) {
         const s = new Scheduler();
         let called = "";
         const a = s.newTask(function () {
-            called += 'a';
+            called += "a";
         });
         a.schedule(2);
         s.newTask(function () {
-            called += 'b';
+            called += "b";
         }).schedule(2);
         s.newTask(function () {
-            called += 'c';
+            called += "c";
         }).schedule(2);
         a.cancel();
         s.polltime(2);
-        assert.strictEqual(called, 'bc');
+        assert.strictEqual(called, "bc");
         done();
     });
-    it('cancels middle occurring event', function (done) {
+    it("cancels middle occurring event", function (done) {
         const s = new Scheduler();
         let called = "";
         s.newTask(function () {
-            called += 'a';
+            called += "a";
         }).schedule(2);
         const b = s.newTask(function () {
-            called += 'b';
+            called += "b";
         });
         b.schedule(2);
         s.newTask(function () {
-            called += 'c';
+            called += "c";
         }).schedule(2);
         b.cancel();
         s.polltime(2);
-        assert.strictEqual(called, 'ac');
+        assert.strictEqual(called, "ac");
         done();
     });
-    it('cancels last occurring event', function (done) {
+    it("cancels last occurring event", function (done) {
         const s = new Scheduler();
         let called = "";
         s.newTask(function () {
-            called += 'a';
+            called += "a";
         }).schedule(2);
         s.newTask(function () {
-            called += 'b';
+            called += "b";
         }).schedule(2);
         const c = s.newTask(function () {
-            called += 'c';
+            called += "c";
         });
         c.schedule(2);
         c.cancel();
         s.polltime(2);
-        assert.strictEqual(called, 'ab');
+        assert.strictEqual(called, "ab");
         done();
     });
-    it('handle events registered in reverse (CBA) order', function (done) {
+    it("handle events registered in reverse (CBA) order", function (done) {
         const s = new Scheduler();
         let called = "";
         s.newTask(function () {
-            called += 'a';
+            called += "a";
         }).schedule(4);
         s.newTask(function () {
-            called += 'b';
+            called += "b";
         }).schedule(3);
         s.newTask(function () {
-            called += 'c';
+            called += "c";
         }).schedule(2);
         s.polltime(10);
-        assert.strictEqual(called, 'cba');
+        assert.strictEqual(called, "cba");
 
         done();
     });
-    it('handle events registered in CAB order', function (done) {
+    it("handle events registered in CAB order", function (done) {
         const s = new Scheduler();
         let called = "";
         s.newTask(function () {
-            called += 'a';
+            called += "a";
         }).schedule(3);
         s.newTask(function () {
-            called += 'b';
+            called += "b";
         }).schedule(4);
         s.newTask(function () {
-            called += 'c';
+            called += "c";
         }).schedule(2);
         s.polltime(10);
-        assert.strictEqual(called, 'cab');
+        assert.strictEqual(called, "cab");
 
         done();
     });
-    it('works properly with epochs', function (done) {
+    it("works properly with epochs", function (done) {
         const s = new Scheduler();
         s.polltime(12346);
         const epochBefore = s.epoch;
@@ -177,7 +177,7 @@ describe('Scheduler tests', function () {
         assert.strictEqual(4, epochAtCall - epochBefore);
         done();
     });
-    it('allows you to reschedule from within a callback', function (done) {
+    it("allows you to reschedule from within a callback", function (done) {
         const s = new Scheduler();
         s.polltime(12346);
         const times = [1000, 1000, 100000, 1000];

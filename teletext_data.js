@@ -2,6 +2,7 @@
 
 // Extremely heavily based on b-em.
 export function makeChars() {
+    // prettier-ignore
     return new Uint8Array([
         // 0x20 ' '
         0, 0, 0, 0, 0, 0,

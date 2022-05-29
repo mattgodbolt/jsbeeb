@@ -1,10 +1,10 @@
 "use strict";
 import * as utils from "../utils.js";
-import {Video} from "../video.js";
+import { Video } from "../video.js";
 import * as fdc from "../fdc.js";
 import * as Tokeniser from "../basic-tokenise.js";
-import {fake6502} from "../fake6502.js";
-import {findModel} from "../models.js";
+import { fake6502 } from "../fake6502.js";
+import { findModel } from "../models.js";
 
 var processor;
 var video;
@@ -16,27 +16,30 @@ var log, beginTest, endTest;
 
 // TODO, should really use a consistent test harness for this...
 var tests = [
-    {test: "Test NOPs", func: testNops, model: 'Master'},
-    {test: "Test RMX.x (65C12)", func: testRmw, model: 'Master'},
-    {test: "Test RMW,x (6502)", func: testRmw},
-    {test: "Test BCD (65C12)", func: testBCD, model: 'Master'},
-    {test: "Test BCD (6502)", func: testBCD},
-    {test: "Test timings", func: testTimings},
+    { test: "Test NOPs", func: testNops, model: "Master" },
+    { test: "Test RMX.x (65C12)", func: testRmw, model: "Master" },
+    { test: "Test RMW,x (6502)", func: testRmw },
+    { test: "Test BCD (65C12)", func: testBCD, model: "Master" },
+    { test: "Test BCD (6502)", func: testBCD },
+    { test: "Test timings", func: testTimings },
     {
-        test: "Alien8 protection", func: function () {
+        test: "Alien8 protection",
+        func: function () {
             return testKevinEdwards("ALIEN8");
-        }
+        },
     },
     {
-        test: "Nightshade protection", func: function () {
+        test: "Nightshade protection",
+        func: function () {
             return testKevinEdwards("NIGHTSH");
-        }
+        },
     },
     {
-        test: "Lunar Jetman protection", func: function () {
+        test: "Lunar Jetman protection",
+        func: function () {
             return testKevinEdwards("JETMAN");
-        }
-    }
+        },
+    },
 ];
 
 export function run(log_, beginTest_, endTest_, frameBuffer, paint) {
@@ -45,17 +48,19 @@ export function run(log_, beginTest_, endTest_, frameBuffer, paint) {
     endTest = endTest_;
     video = new Video(false, frameBuffer, paint);
 
-    return tests.reduce(function (p, test) {
-        return p.then(function () {
-            return runTest(test.test, test.func, test.model);
-        });
-    }, Promise.resolve()).then(function () {
+    return tests
+        .reduce(function (p, test) {
+            return p.then(function () {
+                return runTest(test.test, test.func, test.model);
+            });
+        }, Promise.resolve())
+        .then(function () {
             return anyFailures;
-        }
-    ).catch(function (err) {
-        anyFailures = true;
-        log(err);
-    });
+        })
+        .catch(function (err) {
+            anyFailures = true;
+            log(err);
+        });
 }
 
 function runFor(cycles) {
@@ -128,13 +133,12 @@ export function type(text) {
         if (ch === '"') {
             ch = 50;
             shift = true;
-        } else if (ch === '*') {
+        } else if (ch === "*") {
             ch = utils.keyCodes.APOSTROPHE;
             shift = true;
-        } else if (ch === '.') {
+        } else if (ch === ".") {
             ch = utils.keyCodes.PERIOD;
-        } else
-            ch = ch.toUpperCase().charCodeAt(0);
+        } else ch = ch.toUpperCase().charCodeAt(0);
         if (shift) {
             processor.sysvia.keyDown(16);
             return runFor(cycles).then(function () {
@@ -148,13 +152,16 @@ export function type(text) {
         }
     }
 
-    return text.split("").reduce(function (p, char) {
-        return p.then(function () {
-            return typeChar(char);
+    return text
+        .split("")
+        .reduce(function (p, char) {
+            return p.then(function () {
+                return typeChar(char);
+            });
+        }, Promise.resolve())
+        .then(function () {
+            return kd(13);
         });
-    }, Promise.resolve()).then(function () {
-        return kd(13);
-    });
 }
 
 var currentTest = null;
@@ -175,6 +182,7 @@ function expectEq(expected, actual, msg) {
 }
 
 function testTimings() {
+    // prettier-ignore
     var expected = [
         0x4436, 0x00, 0xDD,
         0x4443, 0x00, 0xDD,
@@ -203,35 +211,40 @@ function testTimings() {
         0x45A6, 0xC0, 0x00,
         0x0000, 0x00, 0x00,
     ];
-    return fdc.load("discs/TestTimings.ssd").then(function (data) {
-        processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
-        return runUntilInput();
-    }).then(function () {
-        return type('CHAIN "TEST"');
-    }).then(runUntilInput).then(function () {
-        var num = processor.readmem(0x71) + 1;
-        expectEq(expected.length / 3, num, "Different number of timings");
-        for (var i = 0; i < num; ++i) {
-            var irqAddr = (processor.readmem(0x4300 + i) << 8) | processor.readmem(0x4000 + i);
-            var a = processor.readmem(0x4100 + i);
-            var b = processor.readmem(0x4200 + i);
-            expectEq(expected[i * 3 + 0], irqAddr, "IRQ address wrong at " + i);
-            expectEq(expected[i * 3 + 1], a, "A differed at " + i);
-            expectEq(expected[i * 3 + 2], b, "B differed at " + i);
-        }
-    });
+    return fdc
+        .load("discs/TestTimings.ssd")
+        .then(function (data) {
+            processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
+            return runUntilInput();
+        })
+        .then(function () {
+            return type('CHAIN "TEST"');
+        })
+        .then(runUntilInput)
+        .then(function () {
+            var num = processor.readmem(0x71) + 1;
+            expectEq(expected.length / 3, num, "Different number of timings");
+            for (var i = 0; i < num; ++i) {
+                var irqAddr = (processor.readmem(0x4300 + i) << 8) | processor.readmem(0x4000 + i);
+                var a = processor.readmem(0x4100 + i);
+                var b = processor.readmem(0x4200 + i);
+                expectEq(expected[i * 3 + 0], irqAddr, "IRQ address wrong at " + i);
+                expectEq(expected[i * 3 + 1], a, "A differed at " + i);
+                expectEq(expected[i * 3 + 2], b, "B differed at " + i);
+            }
+        });
 }
 
 function Capturer(cpu, onElement) {
     var attributes = {
         x: 0,
         y: 0,
-        text: '',
+        text: "",
         foreground: 7,
         background: 0,
-        mode: 7
+        mode: 7,
     };
-    var currentText = '';
+    var currentText = "";
     var params = [];
     var nextN = 0;
     var vduProc = null;
@@ -242,7 +255,7 @@ function Capturer(cpu, onElement) {
             onElement(attributes);
             attributes.x += currentText.length; // Approximately...anyway
         }
-        currentText = '';
+        currentText = "";
     }
 
     function onChar(c) {
@@ -272,10 +285,8 @@ function Capturer(cpu, onElement) {
             case 17: // Text colour
                 nextN = 1;
                 vduProc = function (params) {
-                    if (params[0] & 0x80)
-                        attributes.background = params[0] & 0xf;
-                    else
-                        attributes.foreground = params[0] & 0xf;
+                    if (params[0] & 0x80) attributes.background = params[0] & 0xf;
+                    else attributes.foreground = params[0] & 0xf;
                 };
                 break;
             case 18: // GCOL
@@ -310,8 +321,7 @@ function Capturer(cpu, onElement) {
         }
         if (c >= 32 && c < 0x7f) {
             currentText += String.fromCharCode(c);
-        } else
-            flush();
+        } else flush();
         return false;
     }
 
@@ -326,7 +336,7 @@ function Capturer(cpu, onElement) {
 
 function testNops() {
     var numCaptures = 0;
-    return Promise.all([utils.loadData('tests/unit/nops.bas'), Tokeniser.create(), runUntilInput()])
+    return Promise.all([utils.loadData("tests/unit/nops.bas"), Tokeniser.create(), runUntilInput()])
         .then(function (results) {
             var data = utils.uint8ArrayToString(results[0]);
             var tokeniser = results[1];
@@ -371,88 +381,107 @@ function testNops() {
 }
 
 function testRmw() {
-    return fdc.load("discs/RmwX.ssd").then(function (data) {
-        processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
-        return runUntilInput();
-    }).then(function () {
-        return type("*TIMINGS");
-    }).then(runUntilInput).then(function () {
-        var result = "";
-        for (var i = 0x100; i < 0x110; i += 4) {
-            if (i !== 0x100) result += " ";
-            for (var j = 3; j >= 0; --j) {
-                result += utils.hexbyte(processor.readmem(i + j));
+    return fdc
+        .load("discs/RmwX.ssd")
+        .then(function (data) {
+            processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
+            return runUntilInput();
+        })
+        .then(function () {
+            return type("*TIMINGS");
+        })
+        .then(runUntilInput)
+        .then(function () {
+            var result = "";
+            for (var i = 0x100; i < 0x110; i += 4) {
+                if (i !== 0x100) result += " ";
+                for (var j = 3; j >= 0; --j) {
+                    result += utils.hexbyte(processor.readmem(i + j));
+                }
             }
-        }
-        var expected = processor.model.isMaster ?
-            "f4ff0a16 eaeadee9 f2fe0a16 c3ced9e5" :
-            "f2fe0a16 eaeadae6 f2fe0a16 c1cdd9e5";
-        if (result !== expected) {
-            log("failed! got:\n" + result + " expected:\n" + expected);
-            failures++;
-        }
-    });
+            var expected = processor.model.isMaster
+                ? "f4ff0a16 eaeadee9 f2fe0a16 c3ced9e5"
+                : "f2fe0a16 eaeadae6 f2fe0a16 c1cdd9e5";
+            if (result !== expected) {
+                log("failed! got:\n" + result + " expected:\n" + expected);
+                failures++;
+            }
+        });
 }
 
 function testBCD() {
     var output = "";
     var hook;
-    return fdc.load("discs/bcdtest.ssd").then(function (data) {
-        processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
-        return runUntilInput();
-    }).then(function () {
-        return type("*BCDTEST");
-    }).then(function () {
-        var printAddr = processor.model.isMaster ? 0xce52 : 0xc4c0;
-        hook = processor.debugInstruction.add(function (addr) {
-            if (addr === printAddr) {
-                output += String.fromCharCode(processor.a);
+    return fdc
+        .load("discs/bcdtest.ssd")
+        .then(function (data) {
+            processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
+            return runUntilInput();
+        })
+        .then(function () {
+            return type("*BCDTEST");
+        })
+        .then(function () {
+            var printAddr = processor.model.isMaster ? 0xce52 : 0xc4c0;
+            hook = processor.debugInstruction.add(function (addr) {
+                if (addr === printAddr) {
+                    output += String.fromCharCode(processor.a);
+                }
+            });
+            return runUntilInput();
+        })
+        .then(function () {
+            hook.remove();
+            if (output.indexOf("PASSED") < 0) {
+                log("Failed: ", output);
+                failures++;
             }
         });
-        return runUntilInput();
-    }).then(function () {
-        hook.remove();
-        if (output.indexOf("PASSED") < 0) {
-            log("Failed: ", output);
-            failures++;
-        }
-    });
 }
 
-function testKevinEdwards(name) { // Well, at least his protection system...
-    return fdc.load("discs/Protection.ssd").then(function (data) {
-        processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
-        return runUntilInput();
-    }).then(function () {
-        return type('CHAIN "B.' + name + '"');
-    }).then(function () {
-        var hook = processor.debugInstruction.add(function (addr) {
-            if (addr === 0xfff4 && processor.a === 200 && processor.x === 3) {
-                log("Failed");
-                return true;
-            }
-            return false;
+function testKevinEdwards(name) {
+    // Well, at least his protection system...
+    return fdc
+        .load("discs/Protection.ssd")
+        .then(function (data) {
+            processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
+            return runUntilInput();
+        })
+        .then(function () {
+            return type('CHAIN "B.' + name + '"');
+        })
+        .then(function () {
+            var hook = processor.debugInstruction.add(function (addr) {
+                if (addr === 0xfff4 && processor.a === 200 && processor.x === 3) {
+                    log("Failed");
+                    return true;
+                }
+                return false;
+            });
+            return runUntilAddress(0xe00, 100 * 1000 * 1000).then(function (hit) {
+                hook.remove();
+                expectEq(true, hit, "Decoded and hit end of protection");
+            });
         });
-        return runUntilAddress(0xe00, 100 * 1000 * 1000).then(function (hit) {
-            hook.remove();
-            expectEq(true, hit, "Decoded and hit end of protection");
-        });
-    });
 }
 
 function runTest(name, func, model) {
-    model = model || 'B';
+    model = model || "B";
     log("Running", name);
     beginTest(name);
-    processor = fake6502(findModel(model), {video: video});
+    processor = fake6502(findModel(model), { video: video });
     failures = 0;
-    return processor.initialise().then(func).then(function () {
-        log("Finished", name);
-        if (failures) anyFailures = true;
-        endTest(name, failures);
-    }).catch(function (err) {
-        log("Caught error in", name, err, err.stack);
-        anyFailures = true;
-        endTest(name, true);
-    });
+    return processor
+        .initialise()
+        .then(func)
+        .then(function () {
+            log("Finished", name);
+            if (failures) anyFailures = true;
+            endTest(name, failures);
+        })
+        .catch(function (err) {
+            log("Caught error in", name, err, err.stack);
+            anyFailures = true;
+            endTest(name, true);
+        });
 }

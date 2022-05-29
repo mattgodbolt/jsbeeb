@@ -1,12 +1,13 @@
 "use strict";
 
-import * as utils from './utils.js';
-import $ from 'jquery';
+import * as utils from "./utils.js";
+import $ from "jquery";
 
 export function StairwayToHell(onStart, onCat, onError, tape) {
     var self = this;
     var baseUrl = document.location.protocol + "//www.stairwaytohell.com/bbc/archive/";
-    if (tape) baseUrl += "tapeimages/"; else baseUrl += "diskimages/";
+    if (tape) baseUrl += "tapeimages/";
+    else baseUrl += "diskimages/";
 
     var catalogUrl = "reclist.php?sort=name&filter=.zip";
     var catalog = [];

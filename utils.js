@@ -1,16 +1,16 @@
 "use strict";
-import * as jsunzip from './lib/jsunzip.js';
+import * as jsunzip from "./lib/jsunzip.js";
 
-export const runningInNode = typeof window === 'undefined';
+export const runningInNode = typeof window === "undefined";
 
 export function isFirefox() {
     // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
     // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-    return typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
+    return typeof InstallTrigger !== "undefined"; // Firefox 1.0+
 }
 
 export function parseAddr(s) {
-    if (s[0] === '$' || s[0] === '&') return parseInt(s.substr(1), 16);
+    if (s[0] === "$" || s[0] === "&") return parseInt(s.substr(1), 16);
     if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
     return parseInt(s, 16);
 }
@@ -154,88 +154,88 @@ export function stringToBBCKeys(str) {
             needsShift = true;
         } else {
             switch (charStr) {
-                case '\n':
+                case "\n":
                     bbcKey = BBC.RETURN;
                     break;
-                case '\t':
+                case "\t":
                     bbcKey = BBC.TAB;
                     break;
-                case ' ':
+                case " ":
                     bbcKey = BBC.SPACE;
                     break;
-                case '-':
+                case "-":
                     bbcKey = BBC.MINUS;
                     break;
-                case '=':
+                case "=":
                     bbcKey = BBC.MINUS;
                     needsShift = true;
                     break;
-                case '^':
+                case "^":
                     bbcKey = BBC.HAT_TILDE;
                     break;
-                case '~':
+                case "~":
                     bbcKey = BBC.HAT_TILDE;
                     needsShift = true;
                     break;
-                case '\\':
+                case "\\":
                     bbcKey = BBC.PIPE_BACKSLASH;
                     break;
-                case '|':
+                case "|":
                     bbcKey = BBC.PIPE_BACKSLASH;
                     needsShift = true;
                     break;
-                case '@':
+                case "@":
                     bbcKey = BBC.AT;
                     break;
-                case '[':
+                case "[":
                     bbcKey = BBC.LEFT_SQUARE_BRACKET;
                     break;
-                case '{':
+                case "{":
                     bbcKey = BBC.LEFT_SQUARE_BRACKET;
                     needsShift = true;
                     break;
-                case '_':
+                case "_":
                     bbcKey = BBC.UNDERSCORE_POUND;
                     break;
-                case ';':
+                case ";":
                     bbcKey = BBC.SEMICOLON_PLUS;
                     break;
-                case '+':
+                case "+":
                     bbcKey = BBC.SEMICOLON_PLUS;
                     needsShift = true;
                     break;
-                case ':':
+                case ":":
                     bbcKey = BBC.COLON_STAR;
                     break;
-                case '*':
+                case "*":
                     bbcKey = BBC.COLON_STAR;
                     needsShift = true;
                     break;
-                case ']':
+                case "]":
                     bbcKey = BBC.RIGHT_SQUARE_BRACKET;
                     break;
-                case '}':
+                case "}":
                     bbcKey = BBC.RIGHT_SQUARE_BRACKET;
                     needsShift = true;
                     break;
-                case ',':
+                case ",":
                     bbcKey = BBC.COMMA;
                     break;
-                case '<':
+                case "<":
                     bbcKey = BBC.COMMA;
                     needsShift = true;
                     break;
-                case '.':
+                case ".":
                     bbcKey = BBC.PERIOD;
                     break;
-                case '>':
+                case ">":
                     bbcKey = BBC.PERIOD;
                     needsShift = true;
                     break;
-                case '/':
+                case "/":
                     bbcKey = BBC.SLASH;
                     break;
-                case '?':
+                case "?":
                     bbcKey = BBC.SLASH;
                     needsShift = true;
                     break;
@@ -377,9 +377,8 @@ export const keyCodes = {
     ALT_LEFT: 258, // hack, jsbeeb only
     ALT_RIGHT: 259, // hack, jsbeeb only
     CTRL_LEFT: 260, // hack, jsbeeb only
-    CTRL_RIGHT: 261 // hack, jsbeeb only
+    CTRL_RIGHT: 261, // hack, jsbeeb only
 };
-
 
 function detectKeyboardLayout() {
     if (runningInNode) {
@@ -392,7 +391,7 @@ function detectKeyboardLayout() {
         if (navigator.language.toLowerCase() === "en-gb") return "UK";
         if (navigator.language.toLowerCase() === "en-us") return "US";
     }
-    return "UK";  // Default guess of UK
+    return "UK"; // Default guess of UK
 }
 
 var isUKlayout = detectKeyboardLayout() === "UK";
@@ -441,14 +440,18 @@ export function getKeyMap(keyLayout) {
     // shiftDown MUST be true or false (not undefined)
     function doMap(s, colRow, shiftDown) {
         if (keys2[shiftDown][s] && keys2[shiftDown][s] !== colRow) {
-            console.log("Warning: duplicate binding for key", (shiftDown ? "<SHIFT>" : "") + s, colRow, keys2[shiftDown][s]);
+            console.log(
+                "Warning: duplicate binding for key",
+                (shiftDown ? "<SHIFT>" : "") + s,
+                colRow,
+                keys2[shiftDown][s]
+            );
         }
         keys2[shiftDown][s] = colRow;
     }
 
     // shiftDown undefined -> map both
     function map(s, colRow, shiftDown) {
-
         if ((!s && s !== 0) || !colRow) {
             console.log("error binding key", s, colRow);
         }
@@ -525,7 +528,6 @@ export function getKeyMap(keyLayout) {
     map(keyCodes.DOWN, BBC.DOWN);
 
     if (keyLayout === "natural") {
-
         // "natural" keyboard
 
         map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
@@ -590,7 +592,6 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.BACKSPACE, BBC.DELETE);
 
         map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
-
     } else if (keyLayout === "gaming") {
         // gaming keyboard
 
@@ -779,8 +780,7 @@ export function signExtend(val) {
     return signExtendTable[val | 0] | 0;
 }
 
-export function noop() {
-}
+export function noop() {}
 
 export function bench() {
     for (var j = 0; j < 10; ++j) {
@@ -798,9 +798,9 @@ export function noteEvent(category, type, label) {
     if (!runningInNode && window.location.origin === "https://bbc.godbolt.org") {
         // Only note events on the public site
         /*global ga*/
-        ga('send', 'event', category, type, label);
+        ga("send", "event", category, type, label);
     }
-    console.log('event noted:', category, type, label);
+    console.log("event noted:", category, type, label);
 }
 
 var baseUrl = "";
@@ -827,7 +827,7 @@ function loadDataHttp(url) {
     return new Promise(function (resolve, reject) {
         var request = new XMLHttpRequest();
         request.open("GET", baseUrl + url, true);
-        request.overrideMimeType('text/plain; charset=x-user-defined');
+        request.overrideMimeType("text/plain; charset=x-user-defined");
         request.onload = function () {
             if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));
             if (typeof request.response !== "string") {
@@ -854,8 +854,8 @@ async function loadDataNode(url) {
         return read(url, "binary");
     } else {
         // Node
-        const fs = await import('fs');
-        if (url[0] === '/') url = "." + url;
+        const fs = await import("fs");
+        if (url[0] === "/") url = "." + url;
         return fs.readFileSync(url);
     }
 }
@@ -869,15 +869,11 @@ export function loadData(url) {
 }
 
 export function readInt32(data, offset) {
-    return (data[offset + 3] << 24)
-        | (data[offset + 2] << 16)
-        | (data[offset + 1] << 8)
-        | (data[offset + 0]);
+    return (data[offset + 3] << 24) | (data[offset + 2] << 16) | (data[offset + 1] << 8) | data[offset + 0];
 }
 
 export function readInt16(data, offset) {
-    return (data[offset + 1] << 8)
-        | (data[offset + 0]);
+    return (data[offset + 1] << 8) | data[offset + 0];
 }
 
 var tempBuf = new ArrayBuffer(4);
@@ -914,7 +910,7 @@ export function ungzip(data) {
         }
         var maxDecompressSize = 16384;
         var result;
-        for (; ;) {
+        for (;;) {
             // Loop around trying to decompress this block, doubling in size if we can't fit a block.
             result = tinf.uncompress(data, dataOffset, maxDecompressSize);
             if (result.status !== 0) throw "Unable to ungzip";
@@ -1026,14 +1022,14 @@ export function makeFast32(u32) {
 }
 
 var knownDiscExtensions = {
-    'uef': true,
-    'ssd': true,
-    'dsd': true,
-    'adl': true
+    uef: true,
+    ssd: true,
+    dsd: true,
+    adl: true
 };
 
 var knownRomExtensions = {
-    'rom': true
+    rom: true,
 };
 
 function unzipImage(data, knownExtensions) {
@@ -1065,7 +1061,7 @@ function unzipImage(data, knownExtensions) {
         throw new Error("Failed to uncompress file '" + loadedFile + "' - " + uncompressed.error);
     }
     console.log("Unzipped '" + loadedFile + "'");
-    return {data: uncompressed.data, name: loadedFile};
+    return { data: uncompressed.data, name: loadedFile };
 }
 
 export function unzipDiscImage(data) {
@@ -1101,8 +1097,7 @@ export function discImageSize(name) {
 }
 
 export function setDiscName(data, name) {
-    for (var i = 0; i < 8; ++i)
-        data[i] = name.charCodeAt(i) & 0xff;
+    for (var i = 0; i < 8; ++i) data[i] = name.charCodeAt(i) & 0xff;
 }
 
 export function resizeUint8Array(array, byteSize) {

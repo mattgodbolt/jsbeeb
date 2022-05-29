@@ -1,6 +1,6 @@
 "use strict";
-import {makeChars} from './teletext_data.js';
-import {makeFast32} from './utils.js';
+import { makeChars } from "./teletext_data.js";
+import { makeFast32 } from "./utils.js";
 
 export function Teletext() {
     this.prevCol = 0;
@@ -47,7 +47,7 @@ export function Teletext() {
             var blendedR = Math.pow(foregroundR * alpha + backgroundR * (1.0 - alpha), gamma) * 240;
             var blendedG = Math.pow(foregroundG * alpha + backgroundG * (1.0 - alpha), gamma) * 240;
             var blendedB = Math.pow(foregroundB * alpha + backgroundB * (1.0 - alpha), gamma) * 240;
-            this.colour[i] = blendedR | (blendedG << 8) | (blendedB << 16) | (0xFF << 24);
+            this.colour[i] = blendedR | (blendedG << 8) | (blendedB << 16) | (0xff << 24);
         }
 
         function getLoResGlyphRow(c, row) {
@@ -57,7 +57,7 @@ export function Teletext() {
                 var index = c * 60 + (row >>> 1) * 6;
                 var result = 0;
                 for (var x = 0; x < 6; ++x) {
-                    result |= ((charData[index++] * 3) << (x * 2));
+                    result |= (charData[index++] * 3) << (x * 2);
                 }
                 return result;
             }
@@ -73,13 +73,23 @@ export function Teletext() {
                 for (var row = 0; row < 20; ++row) {
                     var data;
                     if (!graphicsGlyphs || !!(c & 32)) {
-                        data = combineRows(getLoResGlyphRow(c, row), getLoResGlyphRow(c, row + ((row & 1) ? 1 : -1)));
+                        data = combineRows(getLoResGlyphRow(c, row), getLoResGlyphRow(c, row + (row & 1 ? 1 : -1)));
                     } else {
                         data = getLoResGlyphRow(c, row);
                     }
-                    dest[index++] = ((data & 0x1) * 0x7) + ((data & 0x2) * 0x14) + ((data & 0x4) * 0x34) + ((data & 0x8) * 0xE0) +
-                        ((data & 0x10) * 0x280) + ((data & 0x20) * 0x680) + ((data & 0x40) * 0x1C00) + ((data & 0x80) * 0x5000) +
-                        ((data & 0x100) * 0xD000) + ((data & 0x200) * 0x38000) + ((data & 0x400) * 0xA0000) + ((data & 0x800) * 0x1A0000);
+                    dest[index++] =
+                        (data & 0x1) * 0x7 +
+                        (data & 0x2) * 0x14 +
+                        (data & 0x4) * 0x34 +
+                        (data & 0x8) * 0xe0 +
+                        (data & 0x10) * 0x280 +
+                        (data & 0x20) * 0x680 +
+                        (data & 0x40) * 0x1c00 +
+                        (data & 0x80) * 0x5000 +
+                        (data & 0x100) * 0xd000 +
+                        (data & 0x200) * 0x38000 +
+                        (data & 0x400) * 0xa0000 +
+                        (data & 0x800) * 0x1a0000;
                 }
             }
         }
@@ -89,7 +99,7 @@ export function Teletext() {
         function setGraphicsBlock(c, x, y, w, h, sep, n) {
             for (var yy = 0; yy < h; ++yy) {
                 for (var xx = 0; xx < w; ++xx) {
-                    charData[c * 60 + (y + yy) * 6 + (x + xx)] = (sep && (xx === 0 || yy === (h - 1))) ? 0 : n;
+                    charData[c * 60 + (y + yy) * 6 + (x + xx)] = sep && (xx === 0 || yy === h - 1) ? 0 : n;
                 }
             }
         }
@@ -211,9 +221,8 @@ Teletext.prototype.handleControlCode = function (data) {
 
 Teletext.prototype.fetchData = function (data) {
     this.dataQueue.shift();
-    this.dataQueue.push(data & 0x7F);
+    this.dataQueue.push(data & 0x7f);
 };
-
 
 Teletext.prototype.setDEW = function (level) {
     // The SAA5050 input pin "DEW" is connected to the 6845 output pin
@@ -284,7 +293,7 @@ Teletext.prototype.render = function (buf, offset) {
     var i;
     var data = this.dataQueue[0];
 
-    var scanline = (this.scanlineCounter << 1);
+    var scanline = this.scanlineCounter << 1;
     if (this.levelRA0) {
         scanline++;
     }
@@ -303,7 +312,7 @@ Teletext.prototype.render = function (buf, offset) {
     }
 
     if (this.oldDbl) {
-        scanline = (scanline >>> 1);
+        scanline = scanline >>> 1;
         if (this.secondHalfOfDouble) {
             scanline += 10;
         }

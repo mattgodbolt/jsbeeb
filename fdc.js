@@ -1,5 +1,5 @@
 // Floppy disc controller and assorted utils.
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 const DiscTimeSlice = 16 * 16;
 
@@ -17,11 +17,15 @@ export function emptySsd(fdc) {
         },
         notFoundTask: scheduler.newTask(() => {
             fdc.notFound();
-        })
+        }),
     };
-    result.read = result.write = result.address = result.format = () => {
-        this.notFoundTask.reschedule(500 * DiscTimeSlice);
-    };
+    result.read =
+        result.write =
+        result.address =
+        result.format =
+            () => {
+                this.notFoundTask.reschedule(500 * DiscTimeSlice);
+            };
     return result;
 }
 
@@ -78,7 +82,7 @@ export function BaseDisc(fdc, name, data, flusher) {
     let byteSize = nameDetails.byteSize;
     if (data.length > byteSize && !isDsd) {
         // For safety, if SSD is too big, assume it's a mis-named DSD.
-        nameDetails = utils.discImageSize('.dsd');
+        nameDetails = utils.discImageSize(".dsd");
         isDsd = true;
         byteSize = nameDetails.byteSize;
     }
@@ -113,7 +117,9 @@ export function BaseDisc(fdc, name, data, flusher) {
             this.fdc.writeProtect();
             return;
         }
-        this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = this.fdc.readDiscData(this.byteWithinSector === 255);
+        this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = this.fdc.readDiscData(
+            this.byteWithinSector === 255
+        );
         if (++this.byteWithinSector === 256) {
             this.fdc.discFinishRead();
             this.flush();
@@ -249,7 +255,7 @@ export class I8271 {
                 this.motorOn[1] = false;
                 this.drvout &= ~0x80;
                 noise.spinDown(); // TODO multiple discs!
-            })
+            }),
         ];
         this.written = false;
         this.verify = false;
@@ -333,8 +339,16 @@ export class I8271 {
 
     numParams(command) {
         const paramMap = {
-            0x35: 4, 0x29: 1, 0x2c: 0, 0x3d: 1, 0x3a: 2, 0x13: 3, 0x0b: 3,
-            0x1b: 3, 0x1f: 3, 0x23: 5
+            0x35: 4,
+            0x29: 1,
+            0x2c: 0,
+            0x3d: 1,
+            0x3a: 2,
+            0x13: 3,
+            0x0b: 3,
+            0x1b: 3,
+            0x1f: 3,
+            0x23: 5,
         };
         const found = paramMap[command];
         if (!found) return 0;
@@ -345,10 +359,10 @@ export class I8271 {
         if (this.status & 0x80) return;
         this.curCommand = val & 0x3f;
         if (this.curCommand === 0x17) this.curCommand = 0x13;
-        this.curDrive = (val & 0x80) ? 1 : 0;
+        this.curDrive = val & 0x80 ? 1 : 0;
         if (this.curCommand < 0x2c) {
             this.drvout &= ~(0x80 | 0x40);
-            this.drvout |= (val & (0x80 | 0x40));
+            this.drvout |= val & (0x80 | 0x40);
         }
         this.paramNum = 0;
         this.paramReq = this.numParams(this.curCommand);
@@ -358,8 +372,8 @@ export class I8271 {
                 // read drive status
                 this.status = 0x10;
                 this.result = 0x80;
-                this.result |= (this.realTrack[this.curDrive] ? 0 : 2);
-                this.result |= (this.drives[this.curDrive].writeProt ? 0x08 : 0);
+                this.result |= this.realTrack[this.curDrive] ? 0 : 2;
+                this.result |= this.drives[this.curDrive].writeProt ? 0x08 : 0;
                 if (this.drvout & 0x40) this.result |= 0x04;
                 if (this.drvout & 0x80) this.result |= 0x40;
             } else {
@@ -436,9 +450,8 @@ export class I8271 {
 
     seek(track) {
         let realTrack = this.realTrack[this.curDrive];
-        realTrack += (track - this.curTrack[this.curDrive]);
-        if (realTrack < 0)
-            realTrack = 0;
+        realTrack += track - this.curTrack[this.curDrive];
+        if (realTrack < 0) realTrack = 0;
         if (realTrack > 79) {
             realTrack = 79;
         }
@@ -491,8 +504,7 @@ export class I8271 {
         }
     }
 
-    reset() {
-    }
+    reset() {}
 
     data(val) {
         this.curData = val;
@@ -648,7 +660,7 @@ export class WD1770 {
             scheduler.newTask(() => {
                 this.motorOn[1] = false;
                 this.checkSpinDownNoise();
-            })
+            }),
         ];
         this.scheduler = scheduler;
         this.drives = [emptySsd(this), emptySsd(this)];
@@ -658,8 +670,7 @@ export class WD1770 {
     }
 
     checkSpinDownNoise() {
-        if (!this.motorOn[0] && !this.motorOn[1])
-            this.noise.spinDown();
+        if (!this.motorOn[0] && !this.motorOn[1]) this.noise.spinDown();
     }
 
     spinUp() {
@@ -747,20 +758,20 @@ export class WD1770 {
     write(addr, byte) {
         switch (addr) {
             case 0xfe80:
-                this.curDrive = (byte & 2) ? 1 : 0;
-                this.side = (byte & 4) ? 1 : 0;
+                this.curDrive = byte & 2 ? 1 : 0;
+                this.side = byte & 4 ? 1 : 0;
                 this.density = !(byte & 8);
                 break;
             case 0xfe24:
-                this.curDrive = (byte & 2) ? 1 : 0;
-                this.side = (byte & 16) ? 1 : 0;
+                this.curDrive = byte & 2 ? 1 : 0;
+                this.side = byte & 16 ? 1 : 0;
                 this.density = !(byte & 32);
                 break;
             case 0xfe84:
             case 0xfe28: {
                 const command = (byte >>> 4) & 0xf;
                 const isInterrupt = command === 0x0d;
-                if ((this.status & 1) && !isInterrupt) {
+                if (this.status & 1 && !isInterrupt) {
                     // Attempt to write while controller is busy.
                     return;
                 }

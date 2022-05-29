@@ -1,13 +1,13 @@
-import {describe, it} from 'mocha';
-import assert from 'assert';
+import { describe, it } from "mocha";
+import assert from "assert";
 
-import {fake65C12} from '../../fake6502.js';
+import { fake65C12 } from "../../fake6502.js";
 
 const cpu = fake65C12();
 
-describe('BCD tests', function () {
+describe("BCD tests", function () {
     "use strict";
-    it('handles 65c12sbc1', function () {
+    it("handles 65c12sbc1", function () {
         return cpu.initialise().then(function () {
             cpu.p.reset();
             cpu.p.d = true;
@@ -19,7 +19,7 @@ describe('BCD tests', function () {
         });
     });
 
-    it('handles 65c12sbc2', function () {
+    it("handles 65c12sbc2", function () {
         return cpu.initialise().then(function () {
             cpu.p.reset();
             cpu.p.d = true;

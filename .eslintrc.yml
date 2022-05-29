@@ -5,12 +5,12 @@ env:
   es2021: true
   node: true
 ignorePatterns:
-    - lib/*
-    - out/*
+  - lib/*
+  - out/*
 extends:
   - eslint:recommended
 parserOptions:
   ecmaVersion: 2020
   sourceType: module
 rules:
-  indent: [0, 4]  # TODO enable
+  indent: [0, 4] # TODO enable
