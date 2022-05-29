@@ -1025,7 +1025,7 @@ var knownDiscExtensions = {
     uef: true,
     ssd: true,
     dsd: true,
-    adl: true
+    adl: true,
 };
 
 var knownRomExtensions = {
@@ -1093,7 +1093,7 @@ export function discImageSize(name) {
         isDsd = true;
         isDoubleDensity = true;
     }
-    return {isDsd: isDsd, isDoubleDensity: isDoubleDensity, byteSize: byteSize};
+    return { isDsd: isDsd, isDoubleDensity: isDoubleDensity, byteSize: byteSize };
 }
 
 export function setDiscName(data, name) {

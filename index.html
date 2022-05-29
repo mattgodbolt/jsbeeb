@@ -70,16 +70,19 @@
                     >From STH archive</a
                   >
                 </li>
-                <li><a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
-                    From examples or local</a></li>
-                <li class="if-drive-available">
-                    <a href="#google-drive" class="dropdown-item" id="open-drive-link">From Google Drive</a>
+                <li>
+                  <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
+                    From examples or local</a
+                  >
                 </li>
-                <hr>
                 <li class="if-drive-available">
-                    <a href="#download-drive" class="dropdown-item" id="download-drive-link">Download drive 0 image</a>
+                  <a href="#google-drive" class="dropdown-item" id="open-drive-link">From Google Drive</a>
                 </li>
-             </ul>
+                <hr />
+                <li class="if-drive-available">
+                  <a href="#download-drive" class="dropdown-item" id="download-drive-link">Download drive 0 image</a>
+                </li>
+              </ul>
             </li>
             <li class="nav-item dropdown embed-hide">
               <a
@@ -436,30 +439,30 @@
     <div class="modal fade" id="discs" tabindex="-1" aria-labelledby="discModalLabel" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="discModalLabel">Load disc image</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
+          <div class="modal-header">
+            <h5 class="modal-title" id="discModalLabel">Load disc image</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <ul id="disc-list">
+              <li class="template">
+                <a href="#"><span class="name"></span></a> - <span class="description"></span>
+              </li>
+            </ul>
+            To load a custom disc image, get an SSD, DSD or ADL file and load it below. Search the web, or check
+            somewhere like
+            <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these. Be aware the images are
+            usually stored in a ZIP file, and you'll need to unzip first.
+            <div class="disc">
+              <label
+                >Load local SSD, DSD or ADL file:
+                <input type="file" id="disc_load" accept=".ssd,.dsd,.adl,application/binary" />
+              </label>
             </div>
-            <div class="modal-body">
-                <ul id="disc-list">
-                    <li class="template">
-                        <a href="#"><span class="name"></span></a> - <span class="description"></span>
-                    </li>
-                </ul>
-                To load a custom disc image, get an SSD, DSD or ADL file and load it below. Search the web, or check
-                somewhere like
-                <a href="http://www.bbcmicrogames.com/GettingStarted.html">here</a> for these. Be aware the
-                images are usually stored in a ZIP file, and you'll need to unzip first.
-                <div class="disc">
-                    <label>Load local SSD, DSD or ADL file:
-                        <input type="file" id="disc_load" accept=".ssd,.dsd,.adl,application/binary">
-                    </label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
         </div>
       </div>
     </div>

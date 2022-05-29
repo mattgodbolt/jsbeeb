@@ -148,7 +148,7 @@ export function BaseDisc(fdc, name, data, flusher) {
             case 6:
                 this.fdc.discFinishRead();
                 this.rsector++;
-                if (this.rsector === (this.sectorsPerTrack)) this.rsector = 0;
+                if (this.rsector === this.sectorsPerTrack) this.rsector = 0;
                 return;
         }
         this.byteWithinSector++;
@@ -163,7 +163,7 @@ export function BaseDisc(fdc, name, data, flusher) {
         if (++this.byteWithinSector === 256) {
             this.byteWithinSector = 0;
             this.sectorOffset += 256;
-            if (++this.formatSector === (this.sectorsPerTrack)) {
+            if (++this.formatSector === this.sectorsPerTrack) {
                 this.fdc.discFinishRead();
                 this.flush();
                 return;
@@ -189,15 +189,15 @@ export function BaseDisc(fdc, name, data, flusher) {
         }
         return true;
     };
-    BaseDisc.prototype.read = (sector, track, side, density) => {
-        if (!this.check(track, side, density)) return;
+    BaseDisc.prototype.read = (sector, track, side) => {
+        if (!this.check(track, side)) return;
         this.side = side;
         this.readTask.reschedule(DiscTimeSlice);
         this.sectorOffset = sector * 256 + (side ? this.sectorsPerTrack * 256 : 0);
         this.byteWithinSector = 0;
     };
-    BaseDisc.prototype.write = (sector, track, side, density) => {
-        if (!this.check(track, side, density)) return;
+    BaseDisc.prototype.write = (sector, track, side) => {
+        if (!this.check(track, side)) return;
         this.side = side;
         // NB in old code this used to override "time" to be -1000, which immediately forced a write.
         // I'm not sure why that was required. So I'm ignoring it here. Any funny disc write bugs might be
@@ -206,19 +206,19 @@ export function BaseDisc(fdc, name, data, flusher) {
         this.sectorOffset = sector * 256 + (side ? this.sectorsPerTrack * 256 : 0);
         this.byteWithinSector = 0;
     };
-    BaseDisc.prototype.address = (track, side, density) => {
-        if (!this.check(track, side, density)) return;
+    BaseDisc.prototype.address = (track, side) => {
+        if (!this.check(track, side)) return;
         this.side = side;
         this.readAddrTask.reschedule(DiscTimeSlice);
         this.byteWithinSector = 0;
         this.rsector = 0;
     };
-    BaseDisc.prototype.format = (track, side, density) => {
-        if (!this.check(track, side, density)) return;
+    BaseDisc.prototype.format = (track, side) => {
+        if (!this.check(track, side)) return;
         this.side = side;
         this.formatTask.reschedule(DiscTimeSlice);
         this.formatSector = 0;
-        this.sectorOffset = side ? (this.sectorsPerTrack) * 256 : 0;
+        this.sectorOffset = side ? this.sectorsPerTrack * 256 : 0;
         this.byteWithinSector = 0;
     };
 }

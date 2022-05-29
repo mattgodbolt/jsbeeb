@@ -1103,13 +1103,13 @@ $("#google-drive form").on("submit", function (e) {
     );
 });
 
-$('#download-drive-link').on('click', function () {
+$("#download-drive-link").on("click", function () {
     var a = document.createElement("a");
     document.body.appendChild(a);
     a.style = "display: none";
 
-    var blob = new Blob([processor.fdc.drives[0].data], {type: 'application/octet-stream'}),
-    url = window.URL.createObjectURL(blob);
+    var blob = new Blob([processor.fdc.drives[0].data], { type: "application/octet-stream" }),
+        url = window.URL.createObjectURL(blob);
     a.href = url;
     a.download = processor.fdc.drives[0].name;
     a.click();
