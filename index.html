@@ -51,7 +51,7 @@
           <ul class="navbar-nav nav mb-2 mb-lg-0">
             <li class="nav-item">
               <a href="#configuration" class="nav-link" data-bs-toggle="modal" data-bs-target="#configuration">
-                Config (<span class="bbc-model">BBC B</span>)</a
+                <span class="bbc-model">BBC B</span></a
               >
             </li>
             <li class="nav-item dropdown embed-hide">
@@ -635,11 +635,14 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
-            <div class="row g-2 align-items-center">
-              <div class="col-auto">
-                <label for="bbc-model-dropdown" class="col-form-label">Model</label>
+            <div class="row align-items-center">
+              <div class="col-sm-6">
+                <label for="bbc-model-dropdown" class="col-form-label"
+                  >Base model:<br />
+                  <small>(including disk interface)</small>
+                </label>
               </div>
-              <div class="col-auto dropdown">
+              <div class="col-sm-6 dropdown">
                 <button
                   type="button"
                   class="btn btn-secondary dropdown-toggle"
@@ -653,19 +656,26 @@
                   role="menu"
                   aria-labelledby="bbc-model-dropdown"
                 >
-                  <li><a href="#" class="dropdown-item" data-target="B">BBC B</a></li>
-                  <li><a href="#" class="dropdown-item" data-target="BTeletext">BBC B (with Teletext adaptor)</a></li>
-                  <li><a href="#" class="dropdown-item" data-target="BMusic5000">BBC B (with Music 5000)</a></li>
-                  <li><a href="#" class="dropdown-item" data-target="Master">BBC Master 128</a></li>
-                  <li><a href="#" class="dropdown-item" data-target="MasterTurbo">BBC Master Turbo</a></li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="B-DFS1.2">BBC B with DFS 1.2</a>
+                  </li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="B-DFS0.9">BBC B with DFS 0.9</a>
+                  </li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="B1770">BBC B with ADFS</a>
+                  </li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="Master">BBC Master 128</a>
+                  </li>
                 </ul>
               </div>
             </div>
-            <div class="row g-2 align-items-center">
-              <div class="col-auto">
-                <label for="keyboardDropdown" class="col-form-label">Keyboard layout</label>
+            <div class="row align-items-center">
+              <div class="col-sm-6">
+                <label for="keyboardDropdown" class="col-form-label">Keyboard layout:</label>
               </div>
-              <div class="col-auto dropdown">
+              <div class="col-sm-6 dropdown">
                 <button
                   type="button"
                   class="btn btn-secondary dropdown-toggle"
@@ -682,11 +692,38 @@
                   <li>
                     <a href="#" class="dropdown-item" data-target="physical">Physical: '*' is next to Enter/Return</a>
                   </li>
-                  <li><a href="#" class="dropdown-item" data-target="natural">Natural: '*' is shift-8</a></li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="natural">Natural: '*' is shift-8</a>
+                  </li>
                   <li>
                     <a href="#" class="dropdown-item" data-target="gaming">Gaming: handy for games like Zalaga</a>
                   </li>
                 </ul>
+              </div>
+            </div>
+            <div class="align-items-center">
+              <div class="row">
+                <div class="col-sm-6">
+                  <label for="bbc-peripherals" class="col-form-label"
+                    >Additional peripherals:<br /><small
+                      >(some combinations may cause compatibility issues)</small
+                    ></label
+                  >
+                </div>
+                <div class="col-sm-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="65c02" name="65c02" />
+                    <label class="form-check-label" for="65c02">65c02 co-processor</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="hasMusic5000" name="hasMusic5000" />
+                    <label class="form-check-label" for="hasMusic5000">Music 5000 synthesiser</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="hasTeletextAdaptor" name="hasTeletextAdaptor" />
+                    <label class="form-check-label" for="hasTeletextAdaptor">Teletext adaptor</label>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

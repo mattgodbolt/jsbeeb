@@ -21,7 +21,6 @@ import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
-import { allModels } from "./models.js";
 
 var processor;
 var video;
@@ -153,14 +152,14 @@ if (queryString) {
 
 if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
 
-$(".model-menu").empty();
-allModels.forEach((m) => {
-    $(".model-menu").append(`<li><a href="#" class="dropdown-item" data-target="${m.name}">${m.name}</a></li>`);
-});
-
 var config = new Config(function (changed) {
     parsedQuery = _.extend(parsedQuery, changed);
-    if (changed.model) {
+    if (
+        changed.model ||
+        changed.coProcessor !== undefined ||
+        changed.hasMusic5000 !== undefined ||
+        changed.hasTeletextAdaptor !== undefined
+    ) {
         areYouSure(
             "Changing model requires a restart of the emulator. Restart now?",
             "Yes, restart now",
@@ -177,8 +176,16 @@ var config = new Config(function (changed) {
         processor.updateKeyLayout();
     }
 });
+
+// Perform mapping of legacy models to the new format
+config.mapLegacyModels(parsedQuery);
+
 config.setModel(parsedQuery.model || guessModelFromUrl());
 config.setKeyLayout(keyLayout);
+config.set65c02(parsedQuery.coProcessor);
+config.setMusic5000(parsedQuery.hasMusic5000);
+config.setTeletext(parsedQuery.hasTeletextAdaptor);
+
 model = config.model;
 
 function sbBind(div, url, onload) {
@@ -539,6 +546,7 @@ var printerPort = {
 
 var emulationConfig = {
     keyLayout: keyLayout,
+    coProcessor: parsedQuery.coProcessor,
     cpuMultiplier: cpuMultiplier,
     videoCyclesBatch: parsedQuery.videoCyclesBatch,
     extraRoms: extraRoms,
@@ -556,7 +564,7 @@ processor = new Cpu6502(
     video,
     audioHandler.soundChip,
     audioHandler.ddNoise,
-    audioHandler.music5000,
+    model.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
     emulationConfig
 );
@@ -791,9 +799,10 @@ function updateUrl() {
     var url = window.location.origin + window.location.pathname;
     var sep = "?";
     $.each(parsedQuery, function (key, value) {
-        url += sep + encodeURIComponent(key);
-        if (value) url += "=" + encodeURIComponent(value);
-        sep = "&";
+        if (key.length > 0 && value) {
+            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+            sep = "&";
+        }
     });
     window.history.pushState(null, null, url);
 }
@@ -1127,9 +1136,9 @@ $("#soft-reset").click(function (event) {
 });
 
 function guessModelFromUrl() {
-    if (window.location.hostname.indexOf("bbc") === 0) return "B";
+    if (window.location.hostname.indexOf("bbc") === 0) return "B-DFS1.2";
     if (window.location.hostname.indexOf("master") === 0) return "Master";
-    return "B";
+    return "B-DFS1.2";
 }
 
 $("#tape-menu a").on("click", function (e) {
@@ -1160,6 +1169,7 @@ var caps = new Light("capslight");
 var shift = new Light("shiftlight");
 var drive0 = new Light("drive0");
 var drive1 = new Light("drive1");
+
 syncLights = function () {
     caps.update(processor.sysvia.capsLockLight);
     shift.update(processor.sysvia.shiftLockLight);

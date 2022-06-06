@@ -3,7 +3,7 @@
 import { I8271, WD1770 } from "./fdc.js";
 
 class Model {
-    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube, hasTeletextAdaptor, hasMusic5000) {
+    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -13,8 +13,6 @@ class Model {
         this.swram = swram;
         this.isTest = false;
         this.tube = tube;
-        this.hasTeletextAdaptor = hasTeletextAdaptor;
-        this.hasMusic5000 = hasMusic5000;
     }
 }
 
@@ -55,57 +53,27 @@ const masterSwram = [
     false,
     false,
 ];
-const tube65c02 = new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false);
 export const allModels = [
     new Model(
-        "BBC B",
-        ["B"],
-        ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
-        true,
-        false,
-        beebSwram,
-        I8271,
-        null,
-        false,
-        false
-    ),
-    new Model(
-        "BBC B (with Teletext)",
-        ["BTeletext"],
-        ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ats-3.0.rom"],
-        true,
-        false,
-        beebSwram,
-        I8271,
-        null,
-        true
-    ),
-    new Model(
-        "BBC B (with Music 5000)",
-        ["BMusic5000"],
-        ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom", "ample.rom"],
-        true,
-        false,
-        beebSwram,
-        I8271,
-        null,
-        true,
-        true
-    ),
-    new Model("BBC B (DFS 0.9)", ["B-DFS0.9"], ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"], true, false, beebSwram, I8271),
-    new Model("BBC B (DFS 1.2)", ["B-DFS1.2"], ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"], true, false, beebSwram, I8271),
-    new Model(
-        "BBC B (with 65c02 Tube)",
-        ["B-Tube"],
+        "BBC B with DFS 1.2",
+        ["B-DFS1.2"],
         ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
         true,
         false,
         beebSwram,
-        I8271,
-        tube65c02
+        I8271
     ),
     new Model(
-        "BBC B (1770)",
+        "BBC B with DFS 0.9",
+        ["B-DFS0.9"],
+        ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
+        true,
+        false,
+        beebSwram,
+        I8271
+    ),
+    new Model(
+        "BBC B with ADFS",
         ["B1770"],
         ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
         true,
@@ -114,7 +82,7 @@ export const allModels = [
         WD1770
     ),
     new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, masterSwram, WD1770),
-    new Model("BBC Master Turbo", ["MasterTurbo"], ["master/mos3.20"], false, true, masterSwram, WD1770, tube65c02),
+    new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
 ];
 
 export function findModel(name) {
