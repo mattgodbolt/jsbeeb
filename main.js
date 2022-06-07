@@ -1483,7 +1483,6 @@ function stop(debug) {
     const cubOrigWidth = $cubMonitorPic.attr("width");
     const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
     const cubToScreenWidthRatio = $screen.attr("width") / cubOrigWidth;
-    const navbarHeight = $("#header-bar").height();
     const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
     const minWidth = cubOrigWidth / 4;
     const minHeight = cubOrigHeight / 4;
@@ -1491,6 +1490,7 @@ function stop(debug) {
     const bottomReservedSize = 100;
 
     function resizeTv() {
+        let navbarHeight = $("#header-bar").height();
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
         if (width / height <= desiredAspectRatio) {
@@ -1504,7 +1504,7 @@ function stop(debug) {
     }
 
     window.onresize = resizeTv;
-    resizeTv();
+    window.setTimeout(resizeTv, 500);
 })();
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
