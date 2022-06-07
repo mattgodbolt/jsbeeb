@@ -324,3 +324,7 @@ div.modal-body > div:not(:first-child) {
   background-color: #440000;
   margin-top: 5px;
 }
+
+small {
+  color: #999;
+}
