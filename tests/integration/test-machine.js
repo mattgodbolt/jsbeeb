@@ -54,6 +54,20 @@ export class TestMachine {
         return this.runFor(10 * 1000);
     }
 
+    async runUntilAddress(targetAddr, secs) {
+        if (!secs) secs = 120;
+        let hit = false;
+        const hook = this.processor.debugInstruction.add((addr) => {
+            if (addr === targetAddr) {
+                hit = true;
+                return true;
+            }
+        });
+        await this.runFor(secs * 2 * 1000 * 1000);
+        hook.remove();
+        assert(hit, "did not hit appropriate breakpoint in time");
+    }
+
     async loadDisc(image) {
         const data = await fdc.load(image);
         this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, "", data));
