@@ -3,7 +3,7 @@ import { TestMachine } from "./test-machine.js";
 import assert from "assert";
 
 describe("test binary coded decimal behaviour", function () {
-    this.timeout(5000);
+    this.timeout(10000);
     const doTest = async (model) => {
         const testMachine = new TestMachine(model);
         await testMachine.initialise();
