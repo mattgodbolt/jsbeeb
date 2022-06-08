@@ -15,8 +15,6 @@ var log, beginTest, endTest;
 
 // TODO, should really use a consistent test harness for this...
 var tests = [
-    { test: "Test BCD (65C12)", func: testBCD, model: "Master" },
-    { test: "Test BCD (6502)", func: testBCD },
     { test: "Test timings", func: testTimings },
     {
         test: "Alien8 protection",
@@ -227,36 +225,6 @@ function testTimings() {
                 expectEq(expected[i * 3 + 0], irqAddr, "IRQ address wrong at " + i);
                 expectEq(expected[i * 3 + 1], a, "A differed at " + i);
                 expectEq(expected[i * 3 + 2], b, "B differed at " + i);
-            }
-        });
-}
-
-function testBCD() {
-    var output = "";
-    var hook;
-    return fdc
-        .load("discs/bcdtest.ssd")
-        .then(function (data) {
-            processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
-            return runUntilInput();
-        })
-        .then(function () {
-            return type("*BCDTEST");
-        })
-        .then(function () {
-            var printAddr = processor.model.isMaster ? 0xce52 : 0xc4c0;
-            hook = processor.debugInstruction.add(function (addr) {
-                if (addr === printAddr) {
-                    output += String.fromCharCode(processor.a);
-                }
-            });
-            return runUntilInput();
-        })
-        .then(function () {
-            hook.remove();
-            if (output.indexOf("PASSED") < 0) {
-                log("Failed: ", output);
-                failures++;
             }
         });
 }
