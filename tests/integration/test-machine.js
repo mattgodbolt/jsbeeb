@@ -107,6 +107,18 @@ export class TestMachine {
             });
     }
 
+    writebyte(addr, val) {
+        this.processor.writemem(addr, val);
+    }
+
+    readbyte(addr) {
+        return this.processor.readmem(addr);
+    }
+
+    readword(addr) {
+        return this.readbyte(addr) | (this.readbyte(addr + 1) << 8);
+    }
+
     captureText(onElement) {
         const attributes = {
             x: 0,
@@ -197,7 +209,7 @@ export class TestMachine {
             return false;
         }
 
-        const wrchv = this.processor.readmem(0x20e) | (this.processor.readmem(0x20f) << 8);
+        const wrchv = this.readword(0x20e);
         this.processor.debugInstruction.add((addr) => {
             if (addr === wrchv) onChar(this.processor.a);
             return false;

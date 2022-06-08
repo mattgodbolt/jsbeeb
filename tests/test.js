@@ -15,7 +15,6 @@ var log, beginTest, endTest;
 
 // TODO, should really use a consistent test harness for this...
 var tests = [
-    { test: "Test timings", func: testTimings },
     {
         test: "Alien8 protection",
         func: function () {
@@ -173,60 +172,6 @@ function expectEq(expected, actual, msg) {
         log(msg, "failure - actual", hexword(actual), "expected", hexword(expected));
         failures++;
     }
-}
-
-function testTimings() {
-    // prettier-ignore
-    var expected = [
-        0x4436, 0x00, 0xDD,
-        0x4443, 0x00, 0xDD,
-        0x4450, 0x00, 0xDD,
-        0x445E, 0x00, 0xDD,
-        0x0000, 0x00, 0x00,
-        0x0000, 0x00, 0x00,
-        0x4488, 0x00, 0xFF,
-        0x4497, 0x00, 0x00,
-        0x0000, 0x00, 0x00,
-        0x44B8, 0xC0, 0xFF,
-        0x44C5, 0xC0, 0xFF,
-        0x0000, 0x00, 0x00,
-        0x0000, 0x00, 0x00,
-        0x44F6, 0xC0, 0xDB,
-        0x4506, 0xC0, 0xDC,
-        0x4516, 0xC0, 0xFF,
-        0x4527, 0xC0, 0x00,
-        0x453A, 0xC0, 0x01,
-        0x454A, 0xC0, 0x01,
-        0x4559, 0xC0, 0x00,
-        0x4569, 0xC0, 0x00,
-        0x4578, 0xC0, 0x01,
-        0x458A, 0xC0, 0xFF,
-        0x4599, 0xC0, 0x00,
-        0x45A6, 0xC0, 0x00,
-        0x0000, 0x00, 0x00,
-    ];
-    return fdc
-        .load("discs/TestTimings.ssd")
-        .then(function (data) {
-            processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
-            return runUntilInput();
-        })
-        .then(function () {
-            return type('CHAIN "TEST"');
-        })
-        .then(runUntilInput)
-        .then(function () {
-            var num = processor.readmem(0x71) + 1;
-            expectEq(expected.length / 3, num, "Different number of timings");
-            for (var i = 0; i < num; ++i) {
-                var irqAddr = (processor.readmem(0x4300 + i) << 8) | processor.readmem(0x4000 + i);
-                var a = processor.readmem(0x4100 + i);
-                var b = processor.readmem(0x4200 + i);
-                expectEq(expected[i * 3 + 0], irqAddr, "IRQ address wrong at " + i);
-                expectEq(expected[i * 3 + 1], a, "A differed at " + i);
-                expectEq(expected[i * 3 + 2], b, "B differed at " + i);
-            }
-        });
 }
 
 function testKevinEdwards(name) {

@@ -15,7 +15,7 @@ describe("test read-modify-write behaviour", function () {
         for (let i = 0x100; i < 0x110; i += 4) {
             if (i !== 0x100) result += " ";
             for (let j = 3; j >= 0; --j) {
-                result += utils.hexbyte(testMachine.processor.readmem(i + j));
+                result += utils.hexbyte(testMachine.readbyte(i + j));
             }
         }
         return result;
