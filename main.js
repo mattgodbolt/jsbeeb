@@ -1504,6 +1504,7 @@ function stop(debug) {
     }
 
     window.onresize = resizeTv;
+    window.setTimeout(resizeTv, 1);
     window.setTimeout(resizeTv, 500);
 })();
 
