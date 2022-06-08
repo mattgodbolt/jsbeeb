@@ -466,7 +466,7 @@ function testKevinEdwards(name) {
 }
 
 function runTest(name, func, model) {
-    model = model || "B";
+    model = model || "B-DFS1.2";
     log("Running", name);
     beginTest(name);
     processor = fake6502(findModel(model), { video: video });
