@@ -15,8 +15,6 @@ var log, beginTest, endTest;
 
 // TODO, should really use a consistent test harness for this...
 var tests = [
-    { test: "Test RMX.x (65C12)", func: testRmw, model: "Master" },
-    { test: "Test RMW,x (6502)", func: testRmw },
     { test: "Test BCD (65C12)", func: testBCD, model: "Master" },
     { test: "Test BCD (6502)", func: testBCD },
     { test: "Test timings", func: testTimings },
@@ -229,35 +227,6 @@ function testTimings() {
                 expectEq(expected[i * 3 + 0], irqAddr, "IRQ address wrong at " + i);
                 expectEq(expected[i * 3 + 1], a, "A differed at " + i);
                 expectEq(expected[i * 3 + 2], b, "B differed at " + i);
-            }
-        });
-}
-
-function testRmw() {
-    return fdc
-        .load("discs/RmwX.ssd")
-        .then(function (data) {
-            processor.fdc.loadDisc(0, fdc.discFor(processor.fdc, "", data));
-            return runUntilInput();
-        })
-        .then(function () {
-            return type("*TIMINGS");
-        })
-        .then(runUntilInput)
-        .then(function () {
-            var result = "";
-            for (var i = 0x100; i < 0x110; i += 4) {
-                if (i !== 0x100) result += " ";
-                for (var j = 3; j >= 0; --j) {
-                    result += utils.hexbyte(processor.readmem(i + j));
-                }
-            }
-            var expected = processor.model.isMaster
-                ? "f4ff0a16 eaeadee9 f2fe0a16 c3ced9e5"
-                : "f2fe0a16 eaeadae6 f2fe0a16 c1cdd9e5";
-            if (result !== expected) {
-                log("failed! got:\n" + result + " expected:\n" + expected);
-                failures++;
             }
         });
 }
