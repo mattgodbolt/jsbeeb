@@ -32,7 +32,32 @@ export function Cmos(persistence) {
         // - Address Select low.
         // - Data Select high.
         // - Read high.
-        if (!addressSelect && dataSelect && isRead) return store[cmosAddr] & 0xff;
+
+        if (!addressSelect && dataSelect && isRead) {
+            // The first 10 bytes of CMOS RAM store the RTC clock
+            if (cmosAddr < 10) {
+                var current = new Date();
+                switch (cmosAddr) {
+                    // Note values are returned in BCD format
+                    case 0:
+                        return parseInt(current.getSeconds().toString(10), 16);
+                    case 2:
+                        return parseInt(current.getMinutes().toString(10), 16);
+                    case 4:
+                        return parseInt(current.getHours().toString(10), 16);
+                    case 6:
+                        return parseInt((current.getDay() + 1).toString(10), 16);
+                    case 7:
+                        return parseInt(current.getDate().toString(10), 16);
+                    case 8:
+                        return parseInt((current.getMonth() + 1).toString(10), 16);
+                    case 9:
+                        return parseInt(current.getFullYear().toString(10), 16);
+                }
+            } else {
+                return store[cmosAddr] & 0xff;
+            }
+        }
         return 0xff;
     }
 
