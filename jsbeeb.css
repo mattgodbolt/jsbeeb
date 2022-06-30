@@ -33,6 +33,12 @@
   bottom: -100px;
 }
 
+#audio-warning {
+  position: absolute;
+  width: 100%;
+  z-index: 1;
+}
+
 #screen {
   position: absolute;
   z-index: -1;
