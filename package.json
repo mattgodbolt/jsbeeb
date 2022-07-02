@@ -27,7 +27,7 @@
     "clean-webpack-plugin": "^4.0.0",
     "copy-webpack-plugin": "^11.0.0",
     "css-loader": "^6.7.1",
-    "electron": "^18.0.3",
+    "electron": "^19.0.7",
     "electron-builder": "^23.0.3",
     "eslint": "^8.15.0",
     "eslint-config-standard": "^17.0.0",
