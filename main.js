@@ -1485,11 +1485,11 @@ function stop(debug) {
     const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
     const minWidth = cubOrigWidth / 4;
     const minHeight = cubOrigHeight / 4;
-    const borderReservedSize = 100;
-    const bottomReservedSize = 100;
+    const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
+    const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
 
     function resizeTv() {
-        let navbarHeight = $("#header-bar").height();
+        let navbarHeight = $("#header-bar").outerHeight();
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
         if (width / height <= desiredAspectRatio) {
