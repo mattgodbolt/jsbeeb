@@ -131,6 +131,7 @@ if (queryString) {
                     break;
                 case "embed":
                     $(".embed-hide").hide();
+                    $("body").css("background-color", "transparent");
                     break;
                 case "fasttape":
                     fastTape = true;
