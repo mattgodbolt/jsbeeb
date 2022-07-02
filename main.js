@@ -1388,8 +1388,9 @@ function draw(now) {
     }
 
     var motorOn = processor.acia.motorOn;
+    var discOn = processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
     var speedy = fastAsPossible || (fastTape && motorOn);
-    var useTimeout = speedy || motorOn;
+    var useTimeout = speedy || motorOn || discOn;
     var timeout = speedy ? 0 : 1000.0 / 50;
 
     // In speedy mode, we still run all the state machines accurately
@@ -1404,6 +1405,7 @@ function draw(now) {
     // a) We're trying to run as fast as possible.
     // b) Tape is playing, normal speed but backgrounded tab should run.
     if (useTimeout) {
+        console.log("time");
         window.setTimeout(draw, timeout);
     } else {
         window.requestAnimationFrame(draw);
@@ -1451,7 +1453,8 @@ let wasPreviouslyRunning = false;
 function handleVisibilityChange() {
     if (document.visibilityState === "hidden") {
         wasPreviouslyRunning = running;
-        if (running && !processor.acia.motorOn) {
+        const keepRunningWhenHidden = processor.acia.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
+        if (running && !keepRunningWhenHidden) {
             stop(false);
         }
     } else {
