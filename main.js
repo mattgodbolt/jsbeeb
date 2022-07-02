@@ -131,7 +131,6 @@ if (queryString) {
                     break;
                 case "embed":
                     $(".embed-hide").hide();
-                    $("#about").append(" jsbeeb");
                     break;
                 case "fasttape":
                     fastTape = true;
