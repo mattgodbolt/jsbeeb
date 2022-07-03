@@ -65,7 +65,7 @@ export const allModels = [
     ),
     new Model(
         "BBC B with DFS 0.9",
-        ["B-DFS0.9"],
+        ["B-DFS0.9", "B"],
         ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
         true,
         false,

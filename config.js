@@ -102,27 +102,26 @@ export function Config(onClose) {
     };
 
     this.mapLegacyModels = function (parsedQuery) {
+        if (!parsedQuery.model) {
+            return;
+        }
+
         // "MasterTurbo" = Master + 6502 second processor
-        if (parsedQuery.model === "MasterTurbo") {
+        if (parsedQuery.model.toLowerCase() === "masterturbo") {
             parsedQuery.model = "Master";
             parsedQuery.coProcessor = true;
         }
 
         // "BMusic5000" = BBC DFS 1.2 + Music 5000
-        if (parsedQuery.model === "BMusic5000") {
+        if (parsedQuery.model.toLowerCase() === "bmusic5000") {
             parsedQuery.model = "B-DFS1.2";
             parsedQuery.hasMusic5000 = true;
         }
 
-        // "MasterTurbo" = BBC DFS 1.2 + Teletext adaptor
-        if (parsedQuery.model === "BTeletext") {
+        // "BTeletext" = BBC DFS 1.2 + Teletext adaptor
+        if (parsedQuery.model.toLowerCase() === "bteletext") {
             parsedQuery.model = "B-DFS1.2";
             parsedQuery.hasTeletextAdaptor = true;
-        }
-
-        // "B" (old default) = BBC DFS 0.9
-        if (parsedQuery.model === "B") {
-            parsedQuery.model = "B-DFS0.9";
         }
     };
 }
