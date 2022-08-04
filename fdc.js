@@ -44,10 +44,10 @@ export function discFor(fdc, name, stringData, onChange) {
         return res;
     }
 
-    return new BaseDisc(fdc, name, data, () => {
+    return new BaseDisc(fdc, name, data, (disc) => {
         if (!changed()) return;
         if (onChange) {
-            onChange(this.data);
+            onChange(disc.data);
         }
     });
 }
@@ -64,10 +64,10 @@ export function localDisc(fdc, name) {
         console.log("Loading browser-local disc " + name);
         data = utils.stringToUint8Array(dataString);
     }
-    return new BaseDisc(fdc, discName, data, () => {
-        const str = utils.uint8ArrayToString(this.data);
+    return new BaseDisc(fdc, discName, data, (disc) => {
         try {
-            window.localStorage.setItem(this.name, str);
+            const str = utils.uint8ArrayToString(disc.data);
+            window.localStorage.setItem(disc.name, str);
         } catch (e) {
             window.alert("Writing to localStorage failed: " + e);
         }
@@ -173,7 +173,7 @@ export function BaseDisc(fdc, name, data, flusher) {
     });
 
     BaseDisc.prototype.flush = () => {
-        if (this.flusher) this.flusher();
+        if (this.flusher) this.flusher(this);
     };
     BaseDisc.prototype.seek = (track) => {
         this.seekOffset = track * this.sectorsPerTrack * 256;
