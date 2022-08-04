@@ -240,8 +240,10 @@ Teletext.prototype.setDEW = function (level) {
     this.scanlineCounter = 0;
     this.secondHalfOfDouble = false;
 
-    if (++this.flashTime === 48) this.flashTime = 0;
-    this.flashOn = this.flashTime < 16;
+    // 3:1 flash ratio.
+    if (++this.flashTime === 64) this.flashTime = 0;
+    // Flashing text and the cursor should go out at the same time.
+    this.flashOn = this.flashTime > 48;
 };
 
 Teletext.prototype.setDISPTMG = function (level) {
