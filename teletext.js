@@ -242,8 +242,13 @@ Teletext.prototype.setDEW = function (level) {
 
     // 3:1 flash ratio.
     if (++this.flashTime === 64) this.flashTime = 0;
-    // Flashing text and the cursor should go out at the same time.
-    this.flashOn = this.flashTime > 48;
+    // Flashing text starts off in sync with a slow cursor, extinguished
+    // together.  Multiple MODE changes gradually desynchronise the
+    // frame counters.
+    // TODO: this point is being reached a MOS-dependent number of times
+    // before Video.frameCount rises.  The next line achieves initial
+    // sync under MOS 1.20 only.
+    this.flashOn = this.flashTime < 16;
 };
 
 Teletext.prototype.setDISPTMG = function (level) {
