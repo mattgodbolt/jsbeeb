@@ -7,13 +7,15 @@ function UefTape(stream) {
     var dummyData, state, count, curByte, numDataBits, parity;
     var numParityBits, numStopBits, carrierBefore, carrierAfter;
 
+    const ParityN = "N".charCodeAt(0);
+
     self.rewind = function () {
         dummyData = [false, false, true, false, true, false, true, false, true, true];
         state = -1;
         count = 0;
         curByte = 0;
         numDataBits = 8;
-        parity = "N";
+        parity = ParityN;
         numParityBits = 0;
         numStopBits = 1;
         carrierBefore = 0;
@@ -102,7 +104,7 @@ function UefTape(stream) {
                     numDataBits = curChunk.stream.readByte();
                     parity = curChunk.stream.readByte();
                     numStopBits = curChunk.stream.readByte();
-                    numParityBits = parity !== "N" ? 1 : 0;
+                    numParityBits = parity !== ParityN ? 1 : 0;
                     console.log("Defined data with " + numDataBits + String.fromCharCode(parity) + numStopBits);
                     state = 0;
                 }
@@ -119,7 +121,7 @@ function UefTape(stream) {
                     state++;
                 } else if (state < 1 + numDataBits + numParityBits) {
                     var bit = parityOf(curByte);
-                    if (parity === "N") bit = !bit;
+                    if (parity === ParityN) bit = !bit;
                     acia.tone(bit ? 2 * baseFrequency : baseFrequency);
                     state++;
                 } else if (state < 1 + numDataBits + numParityBits + numStopBits) {
