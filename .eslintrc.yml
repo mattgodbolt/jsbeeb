@@ -12,5 +12,3 @@ extends:
 parserOptions:
   ecmaVersion: 2020
   sourceType: module
-rules:
-  indent: [0, 4] # TODO enable
