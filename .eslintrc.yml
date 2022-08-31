@@ -1,3 +1,6 @@
+---
+plugins:
+  - prettier
 env:
   browser: true
   amd: true
@@ -9,6 +12,10 @@ ignorePatterns:
   - out/*
 extends:
   - eslint:recommended
+  - prettier
 parserOptions:
   ecmaVersion: 2020
   sourceType: module
+rules:
+  prettier/prettier: error
+

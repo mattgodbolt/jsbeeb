@@ -31,8 +31,10 @@
     "electron-builder": "^23.0.3",
     "eslint": "^8.15.0",
     "eslint-config-standard": "^17.0.0",
+    "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-prettier": "^4.2.1",
     "eslint-plugin-promise": "^6.0.0",
     "html-loader": "^4.1.0",
     "html-webpack-plugin": "^5.5.0",
@@ -70,7 +72,7 @@
     "start": "webpack serve",
     "build": "webpack --node-env production",
     "prepare": "husky install",
-    "ci-checks": "eslint . && prettier --check .",
+    "ci-checks": "eslint .",
     "lint": "eslint .",
     "lint-fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -85,6 +87,6 @@
   },
   "lint-staged": {
     "*.js": "eslint --cache --fix",
-    "*.{js,css,md}": "prettier --write"
+    "*.{css,md}": "prettier --write"
   }
 }
