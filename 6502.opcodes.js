@@ -985,21 +985,22 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                 ig.tick(3);
                 ig = ig.split("addrWithCarry !== addrNonCarry");
                 if (op.read && !op.write) {
-                    if (!is65c12) {
-                        ig.ifTrue.readOp("addrNonCarry");
-                    } else {
+                    if (is65c12) {
+                        // the 65c12 reads the instruction byte again while it's carrying.
                         ig.ifTrue.tick(1);
+                    } else {
+                        // the 6502 reads the uncarried address
+                        ig.ifTrue.readOp("addrNonCarry");
                     }
                     ig.readOp("addrWithCarry", "REG");
                 } else if (op.read) {
-                    if (is65c12 && op.rotate) {
-                        // For rotates on the 65c12, there's an optimization to avoid the extra cycle with no carry
+                    if (is65c12) {
+                        // RMWs on 65c12 burn a cycle reading the instruction byte again while carrying.
                         ig.ifTrue.tick(1);
-                        ig.readOp("addrWithCarry", "REG");
-                        ig.writeOp("addrWithCarry", "REG");
-                    } else if (is65c12) {
-                        ig.ifTrue.tick(1);
-                        ig.ifFalse.readOp("addrWithCarry", "REG");
+                        // For anything but rotates, there's a bug: during carrying the CPU reads again.
+                        // beebjit reads the carried address, but I can't see how that could be the case,
+                        // so I read the non-carry here.
+                        if (!op.rotate) ig.ifFalse.readOp("addrNonCarry", "REG");
                         ig.readOp("addrWithCarry", "REG");
                         ig.writeOp("addrWithCarry", "REG");
                     } else {
