@@ -981,16 +981,23 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                 ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
                 ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                 ig.tick(3);
+                ig = ig.split("addrWithCarry !== addrNonCarry");
                 if (op.read && !op.write) {
-                    // For non-RMW, we only pay the cost of the spurious read if the address carried.
-                    ig = ig.split("addrWithCarry !== addrNonCarry");
-                    ig.ifTrue.readOp("addrNonCarry");
+                    if (!is65c12) {
+                        ig.ifTrue.readOp("addrNonCarry");
+                    } else {
+                        ig.ifTrue.tick(1);
+                    }
                     ig.readOp("addrWithCarry", "REG");
                 } else if (op.read) {
                     if (is65c12 && op.rotate) {
                         // For rotates on the 65c12, there's an optimization to avoid the extra cycle with no carry
-                        ig = ig.split("addrWithCarry !== addrNonCarry");
-                        ig.ifTrue.readOp("addrNonCarry");
+                        ig.ifTrue.tick(1);
+                        ig.readOp("addrWithCarry", "REG");
+                        ig.writeOp("addrWithCarry", "REG");
+                    } else if (is65c12) {
+                        ig.ifTrue.tick(1);
+                        ig.ifFalse.readOp("addrWithCarry", "REG");
                         ig.readOp("addrWithCarry", "REG");
                         ig.writeOp("addrWithCarry", "REG");
                     } else {
@@ -1000,8 +1007,16 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                         ig.spuriousOp("addrWithCarry", "REG");
                     }
                 } else if (op.write) {
-                    // Pure stores still exhibit a read at the non-carried address.
-                    ig.readOp("addrNonCarry");
+                    if (is65c12) {
+                        // Discovered on Stardot: https://stardot.org.uk/forums/viewtopic.php?f=55&t=25298&sid=86e65177447d407aa6510f1f98efca87&start=30
+                        // With page crossing, the CPU re-reads the third byte of the instruction.
+                        ig.ifTrue.tick(1);
+                        // Without page crossing, the CPU still has the bug of reading the non-carried address(!)
+                        ig.ifFalse.readOp("addrNonCarry");
+                    } else {
+                        // Pure stores still exhibit a read at the non-carried address.
+                        ig.readOp("addrNonCarry");
+                    }
                 }
                 ig.append(op.op);
                 if (op.write) ig.writeOp("addrWithCarry", "REG");
@@ -1051,8 +1066,13 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                 ig.append("var addrWithCarry = (addr + cpu.y) & 0xffff;");
                 ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                 if (op.read && !op.write) {
+                    // For non-RMW, we only pay the cost of the spurious read if the address carried on 6502
                     ig = ig.split("addrWithCarry !== addrNonCarry");
-                    ig.ifTrue.readOp("addrNonCarry");
+                    if (!is65c12) {
+                        ig.ifTrue.readOp("addrNonCarry");
+                    } else {
+                        ig.ifTrue.tick(1);
+                    }
                     ig.readOp("addrWithCarry", "REG");
                 } else if (op.read) {
                     // For RMW we always have a spurious read and then a spurious read or write
@@ -1262,9 +1282,8 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
                 case 0xdc:
                 case 0xfc:
-                    // three bytes, four cycles
-                    cpu.getw();
-                    cpu.polltime(4);
+                    // three bytes, four cycles (plus a memory access)
+                    cpu.polltimeAddr(4, cpu.getw());
                     break;
 
                 default:
