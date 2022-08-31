@@ -411,9 +411,9 @@ function getOp(op, arg) {
                 write: true,
             };
         case "SHX":
-            return { op: "REG = (cpu.x & ((addr >>> 8)+1)) & 0xff;", write: true };
+            return { op: "REG = (cpu.x & ((addr >>> 8)+1)) & 0xff;", write: true, zpQuirk: true };
         case "SHY":
-            return { op: "REG = (cpu.y & ((addr >>> 8)+1)) & 0xff;", write: true };
+            return { op: "REG = (cpu.y & ((addr >>> 8)+1)) & 0xff;", write: true, zpQuirk: true };
         case "LAX": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
             return {
                 op: ["var magic = 0xff;", "cpu.a = cpu.x = cpu.setzn((cpu.a|magic) & REG);"],
@@ -474,11 +474,13 @@ function getOp(op, arg) {
             return {
                 op: ["REG = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"],
                 write: true,
+                zpQuirk: true,
             };
         case "SHS":
             return {
                 op: ["cpu.s = cpu.a & cpu.x;", "REG = cpu.a & cpu.x & ((addr >>> 8) + 1) & 0xff;"],
                 write: true,
+                zpQuirk: true,
             };
         case "ISB":
             return {
@@ -1016,6 +1018,10 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                     } else {
                         // Pure stores still exhibit a read at the non-carried address.
                         ig.readOp("addrNonCarry");
+                        if (op.zpQuirk) {
+                            // with this quirk on undocumented instructions, a page crossing writes to 00XX
+                            ig.append("if (addrWithCarry !== addrNonCarry) addrWithCarry &= 0xff;");
+                        }
                     }
                 }
                 ig.append(op.op);
@@ -1082,6 +1088,10 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                 } else if (op.write) {
                     // Pure stores still exhibit a read at the non-carried address.
                     ig.readOp("addrNonCarry");
+                    if (op.zpQuirk) {
+                        // with this quirk on undocumented instructions, a page crossing writes to 00XX
+                        ig.append("if (addrWithCarry !== addrNonCarry) addrWithCarry &= 0xff;");
+                    }
                 }
                 ig.append(op.op);
                 if (op.write) ig.writeOp("addrWithCarry", "REG");
