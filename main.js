@@ -167,6 +167,28 @@ const printerPort = {
 };
 
 let userPort = null;
+
+const keyswitch = true;
+if (keyswitch) {
+    let switchState = 0xff;
+
+    const switchKey = function (down, code) {
+        const bit = 1 << (code - utils.keyCodes.K1);
+        if (down) switchState &= 0xff ^ bit;
+        else switchState |= bit;
+    };
+
+    for (let idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
+        emuKeyHandlers[idx] = switchKey;
+    }
+    userPort = {
+        write: function () {},
+        read: function () {
+            return switchState;
+        },
+    };
+}
+
 const emulationConfig = {
     keyLayout: keyLayout,
     coProcessor: parsedQuery.coProcessor,
@@ -521,27 +543,6 @@ const cmos = new Cmos({
         window.localStorage.cmosRam = JSON.stringify(data);
     },
 });
-
-const keyswitch = true;
-if (keyswitch) {
-    let switchState = 0xff;
-
-    const switchKey = function (down, code) {
-        const bit = 1 << (code - utils.keyCodes.K1);
-        if (down) switchState &= 0xff ^ bit;
-        else switchState |= bit;
-    };
-
-    for (let idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
-        emuKeyHandlers[idx] = switchKey;
-    }
-    userPort = {
-        write: function () {},
-        read: function () {
-            return switchState;
-        },
-    };
-}
 
 let printerWindow = null;
 let printerTextArea = null;
