@@ -4,7 +4,7 @@
 // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
 // http://www.classiccmp.org/dunfield/r/6850.pdf
 export function Acia(cpu, toneGen, scheduler, rs423Handler) {
-    var self = this;
+    const self = this;
     self.sr = 0x00;
     self.cr = 0x00;
     self.dr = 0x00;
@@ -60,7 +60,7 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
             updateIrq();
             return self.dr;
         } else {
-            var result = (self.sr & 0x7f) | (self.sr & self.cr & 0x80);
+            let result = (self.sr & 0x7f) | (self.sr & self.cr & 0x80);
             // MC6850: "A low CTS indicates that there is a Clear-to-Send
             // from the modem. In the high state, the Transmit Data Register
             // Empty bit is inhibited".
@@ -120,7 +120,7 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
     };
 
     self.dcdLineUpdated = function () {
-        var level;
+        let level;
         if (self.rs423Selected) {
             // AUG: "It will always be low when the RS423 interface is
             // selected".
@@ -199,8 +199,8 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
     self.serialReceiveCyclesPerByte = 0;
 
     self.numBitsPerByte = function () {
-        var wordLength = self.cr & 0x10 ? 8 : 7;
-        var stopBits, parityBits;
+        const wordLength = self.cr & 0x10 ? 8 : 7;
+        let stopBits, parityBits;
         switch ((self.cr >>> 2) & 7) {
             case 0:
                 stopBits = 2;
@@ -263,7 +263,7 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
 
     function runRs423() {
         if (!rs423Handler) return;
-        var rcv = self.rs423Handler.tryReceive(self.rts());
+        const rcv = self.rs423Handler.tryReceive(self.rts());
         if (rcv >= 0) self.receive(rcv);
         self.runRs423Task.reschedule(self.serialReceiveCyclesPerByte);
     }

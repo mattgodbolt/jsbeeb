@@ -1,7 +1,7 @@
 "use strict";
 import * as utils from "./utils.js";
 
-var BBC = utils.BBC;
+const BBC = utils.BBC;
 
 export function GamePad() {
     this.gamepad0 = null;
@@ -44,7 +44,7 @@ GamePad.prototype.remap = function (gamepadKey, bbcKey) {
         bbcKey = "K" + bbcKey;
     }
 
-    var mappedBbcKey = BBC[bbcKey];
+    const mappedBbcKey = BBC[bbcKey];
     if (!mappedBbcKey) {
         console.log("unknown BBC key: " + bbcKey);
         return;
@@ -72,7 +72,7 @@ GamePad.prototype.remap = function (gamepadKey, bbcKey) {
             this.gamepadAxisMapping[3][1] = mappedBbcKey;
             break;
         case "FIRE":
-            for (var i = 0; i < 16; i++) {
+            for (let i = 0; i < 16; i++) {
                 this.gamepadMapping[i] = mappedBbcKey;
             }
             break;
@@ -160,7 +160,7 @@ GamePad.prototype.update = function (sysvia) {
     // gamepad not necessarily available until a button press
     // so need to check gamepads[0] continuously
     if (navigator.getGamepads && !this.gamepad0) {
-        var gamepads = navigator.getGamepads();
+        const gamepads = navigator.getGamepads();
         this.gamepad0 = gamepads[0];
 
         if (this.gamepad0) {
@@ -198,9 +198,8 @@ GamePad.prototype.update = function (sysvia) {
             this.gamepad0 = navigator.getGamepads()[0];
         }
 
-        for (var i = 0; i < 4; i++) {
-            var axisRaw = this.gamepad0.axes[i];
-            var axis;
+        for (let i = 0; i < 4; i++) {
+            const axisRaw = this.gamepad0.axes[i];
 
             // Mike's XBox 360 controller, zero positions
             // console.log(i, axisRaw, axis);
@@ -208,9 +207,10 @@ GamePad.prototype.update = function (sysvia) {
             //1 -0.037033677101135254 -1
             //2 0.055374979972839355 1
             //3 0.06575113534927368 1
-            var threshold = 0.15;
+            const threshold = 0.15;
 
             // normalize to -1, 0, 1
+            let axis;
             if (axisRaw < -threshold) {
                 axis = -1;
             } else if (axisRaw > threshold) {
@@ -227,12 +227,12 @@ GamePad.prototype.update = function (sysvia) {
                 // 0 to -1
                 // 1 to 0
                 // 1 to -1
-                var oldKey = this.gamepadAxisMapping[i][this.gamepadAxes[i]];
+                const oldKey = this.gamepadAxisMapping[i][this.gamepadAxes[i]];
                 if (oldKey) {
                     sysvia.keyUpRaw(oldKey);
                 }
 
-                var newKey = this.gamepadAxisMapping[i][axis];
+                const newKey = this.gamepadAxisMapping[i][axis];
                 if (newKey) {
                     sysvia.keyDownRaw(newKey);
                 }
@@ -242,9 +242,9 @@ GamePad.prototype.update = function (sysvia) {
             this.gamepadAxes[i] = axis;
         }
 
-        for (i = 0; i < 16; i++) {
+        for (let i = 0; i < 16; i++) {
             if (this.gamepad0.buttons[i]) {
-                var button = this.gamepad0.buttons[i];
+                const button = this.gamepad0.buttons[i];
 
                 if (button.pressed !== this.gamepadButtons[i]) {
                     // different to last time

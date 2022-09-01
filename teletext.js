@@ -30,23 +30,23 @@ export function Teletext() {
     this.heldGlyphs = this.normalGlyphs;
 
     this.init = function () {
-        var charData = makeChars();
-        var i;
+        let c;
+        const charData = makeChars();
 
         // Build palette
-        var gamma = 1.0 / 2.2;
-        for (i = 0; i < 256; ++i) {
-            var alpha = (i & 3) / 3.0;
-            var foregroundR = !!(i & 4);
-            var foregroundG = !!(i & 8);
-            var foregroundB = !!(i & 16);
-            var backgroundR = !!(i & 32);
-            var backgroundG = !!(i & 64);
-            var backgroundB = !!(i & 128);
+        const gamma = 1.0 / 2.2;
+        for (let i = 0; i < 256; ++i) {
+            const alpha = (i & 3) / 3.0;
+            const foregroundR = !!(i & 4);
+            const foregroundG = !!(i & 8);
+            const foregroundB = !!(i & 16);
+            const backgroundR = !!(i & 32);
+            const backgroundG = !!(i & 64);
+            const backgroundB = !!(i & 128);
             // Gamma-corrected blending
-            var blendedR = Math.pow(foregroundR * alpha + backgroundR * (1.0 - alpha), gamma) * 240;
-            var blendedG = Math.pow(foregroundG * alpha + backgroundG * (1.0 - alpha), gamma) * 240;
-            var blendedB = Math.pow(foregroundB * alpha + backgroundB * (1.0 - alpha), gamma) * 240;
+            const blendedR = Math.pow(foregroundR * alpha + backgroundR * (1.0 - alpha), gamma) * 240;
+            const blendedG = Math.pow(foregroundG * alpha + backgroundG * (1.0 - alpha), gamma) * 240;
+            const blendedB = Math.pow(foregroundB * alpha + backgroundB * (1.0 - alpha), gamma) * 240;
             this.colour[i] = blendedR | (blendedG << 8) | (blendedB << 16) | (0xff << 24);
         }
 
@@ -54,9 +54,9 @@ export function Teletext() {
             if (row < 0 || row >= 20) {
                 return 0;
             } else {
-                var index = c * 60 + (row >>> 1) * 6;
-                var result = 0;
-                for (var x = 0; x < 6; ++x) {
+                let index = c * 60 + (row >>> 1) * 6;
+                let result = 0;
+                for (let x = 0; x < 6; ++x) {
                     result |= (charData[index++] * 3) << (x * 2);
                 }
                 return result;
@@ -68,10 +68,10 @@ export function Teletext() {
         }
 
         function makeHiResGlyphs(dest, graphicsGlyphs) {
-            var index = 0;
-            for (var c = 0; c < 96; ++c) {
-                for (var row = 0; row < 20; ++row) {
-                    var data;
+            let index = 0;
+            for (let c = 0; c < 96; ++c) {
+                for (let row = 0; row < 20; ++row) {
+                    let data;
                     if (!graphicsGlyphs || !!(c & 32)) {
                         data = combineRows(getLoResGlyphRow(c, row), getLoResGlyphRow(c, row + (row & 1 ? 1 : -1)));
                     } else {
@@ -97,15 +97,15 @@ export function Teletext() {
         makeHiResGlyphs(this.normalGlyphs, false);
 
         function setGraphicsBlock(c, x, y, w, h, sep, n) {
-            for (var yy = 0; yy < h; ++yy) {
-                for (var xx = 0; xx < w; ++xx) {
+            for (let yy = 0; yy < h; ++yy) {
+                for (let xx = 0; xx < w; ++xx) {
                     charData[c * 60 + (y + yy) * 6 + (x + xx)] = sep && (xx === 0 || yy === h - 1) ? 0 : n;
                 }
             }
         }
 
         // Build graphics character set
-        for (var c = 0; c < 96; ++c) {
+        for (c = 0; c < 96; ++c) {
             if (!(c & 32)) {
                 setGraphicsBlock(c, 0, 0, 3, 3, false, !!(c & 1));
                 setGraphicsBlock(c, 3, 0, 3, 3, false, !!(c & 2));
@@ -227,7 +227,7 @@ Teletext.prototype.fetchData = function (data) {
 Teletext.prototype.setDEW = function (level) {
     // The SAA5050 input pin "DEW" is connected to the 6845 output pin
     // "VSYNC" and it is used to track frames.
-    var oldlevel = this.levelDEW;
+    const oldlevel = this.levelDEW;
     this.levelDEW = level;
 
     // Trigger on high -> low. This appears to be what the hardware does.
@@ -254,7 +254,7 @@ Teletext.prototype.setDEW = function (level) {
 Teletext.prototype.setDISPTMG = function (level) {
     // The SAA5050 input pin "LOSE" is connected to the 6845 output pin
     // "DISPTMG" and it is used to track scanlines.
-    var oldlevel = this.levelDISPTMG;
+    const oldlevel = this.levelDISPTMG;
     this.levelDISPTMG = level;
 
     // Trigger on high -> low. This is probably what the hardware does as
@@ -297,10 +297,9 @@ Teletext.prototype.setRA0 = function (level) {
 };
 
 Teletext.prototype.render = function (buf, offset) {
-    var i;
-    var data = this.dataQueue[0];
+    let data = this.dataQueue[0];
 
-    var scanline = this.scanlineCounter << 1;
+    let scanline = this.scanlineCounter << 1;
     if (this.levelRA0) {
         scanline++;
     }
@@ -310,7 +309,7 @@ Teletext.prototype.render = function (buf, offset) {
     this.prevCol = this.col;
     this.curGlyphs = this.nextGlyphs;
 
-    var prevFlash = this.flash;
+    const prevFlash = this.flash;
     if (data < 0x20) {
         data = this.handleControlCode(data);
     } else if (this.gfx) {
@@ -324,18 +323,18 @@ Teletext.prototype.render = function (buf, offset) {
             scanline += 10;
         }
     }
-    var chardef = this.curGlyphs[(data - 32) * 20 + scanline];
+    let chardef = this.curGlyphs[(data - 32) * 20 + scanline];
 
     if ((prevFlash && this.flashOn) || (this.secondHalfOfDouble && !this.dbl)) {
-        var backgroundColour = this.colour[(this.bg & 7) << 5];
-        for (i = 0; i < 16; ++i) {
+        const backgroundColour = this.colour[(this.bg & 7) << 5];
+        for (let i = 0; i < 16; ++i) {
             buf[offset++] = backgroundColour;
         }
     } else {
-        var paletteIndex = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
+        const paletteIndex = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
 
         // TODO: see if we should unroll here (we used to, before it got more complex).
-        for (var pixel = 0; pixel < 16; ++pixel) {
+        for (let pixel = 0; pixel < 16; ++pixel) {
             buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
             chardef >>>= 2;
         }

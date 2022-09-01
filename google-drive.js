@@ -4,12 +4,12 @@ import * as utils from "./utils.js";
 import { BaseDisc } from "./fdc.js";
 
 export function GoogleDriveLoader() {
-    var self = this;
-    var MIME_TYPE = "application/vnd.jsbeeb.disc-image";
-    var CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com";
-    var SCOPES = "https://www.googleapis.com/auth/drive.file";
-    var gapi = null;
-    var BaseSsd = BaseDisc;
+    const self = this;
+    const MIME_TYPE = "application/vnd.jsbeeb.disc-image";
+    const CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com";
+    const SCOPES = "https://www.googleapis.com/auth/drive.file";
+    let gapi = null;
+    const BaseSsd = BaseDisc;
 
     self.initialise = function () {
         return new Promise(function (resolve) {
@@ -51,16 +51,16 @@ export function GoogleDriveLoader() {
         });
     };
 
-    var boundary = "-------314159265358979323846";
-    var delimiter = "\r\n--" + boundary + "\r\n";
-    var close_delim = "\r\n--" + boundary + "--";
+    const boundary = "-------314159265358979323846";
+    const delimiter = "\r\n--" + boundary + "\r\n";
+    const close_delim = "\r\n--" + boundary + "--";
 
     function listFiles() {
         return new Promise(function (resolve) {
-            var retrievePageOfFiles = function (request, result) {
+            const retrievePageOfFiles = function (request, result) {
                 request.execute(function (resp) {
                     result = result.concat(resp.items);
-                    var nextPageToken = resp.nextPageToken;
+                    const nextPageToken = resp.nextPageToken;
                     if (nextPageToken) {
                         request = gapi.client.drive.files.list({
                             pageToken: nextPageToken,
@@ -81,15 +81,15 @@ export function GoogleDriveLoader() {
     }
 
     function saveFile(name, data, idOrNone) {
-        var metadata = {
+        const metadata = {
             title: name,
             parents: ["jsbeeb disc images"], // TODO: parents doesn't work; also should probably prevent overwriting this on every save
             mimeType: MIME_TYPE,
         };
 
-        var str = utils.uint8ArrayToString(data);
-        var base64Data = btoa(str);
-        var multipartRequestBody =
+        const str = utils.uint8ArrayToString(data);
+        const base64Data = btoa(str);
+        const multipartRequestBody =
             delimiter +
             "Content-Type: application/json\r\n\r\n" +
             JSON.stringify(metadata) +
@@ -102,7 +102,7 @@ export function GoogleDriveLoader() {
             base64Data +
             close_delim;
 
-        var request = gapi.client.request({
+        return gapi.client.request({
             path: "/upload/drive/v2/files" + (idOrNone ? "/" + idOrNone : ""),
             method: idOrNone ? "PUT" : "POST",
             params: { uploadType: "multipart", newRevision: false },
@@ -111,7 +111,6 @@ export function GoogleDriveLoader() {
             },
             body: multipartRequestBody,
         });
-        return request;
     }
 
     function loadMetadata(fileId) {
@@ -120,11 +119,11 @@ export function GoogleDriveLoader() {
 
     self.create = function (fdc, name) {
         console.log("Google Drive: creating disc image: '" + name + "'");
-        var byteSize = utils.discImageSize(name).byteSize;
-        var data = new Uint8Array(byteSize);
+        const byteSize = utils.discImageSize(name).byteSize;
+        const data = new Uint8Array(byteSize);
         utils.setDiscName(data, name);
         return saveFile(name, data).then(function (response) {
-            var meta = response.result;
+            const meta = response.result;
             return { fileId: meta.id, disc: makeDisc(fdc, data, meta) };
         });
     };
@@ -132,8 +131,8 @@ export function GoogleDriveLoader() {
     function downloadFile(file) {
         if (file.downloadUrl) {
             return new Promise(function (resolve, reject) {
-                var accessToken = gapi.auth.getToken().access_token;
-                var xhr = new XMLHttpRequest();
+                const accessToken = gapi.auth.getToken().access_token;
+                const xhr = new XMLHttpRequest();
                 xhr.open("GET", file.downloadUrl, true);
                 xhr.setRequestHeader("Authorization", "Bearer " + accessToken);
                 xhr.overrideMimeType("text/plain; charset=x-user-defined");
@@ -158,8 +157,8 @@ export function GoogleDriveLoader() {
     }
 
     function makeDisc(fdc, data, meta) {
-        var flusher = null;
-        var name = meta.title;
+        let flusher = null;
+        const name = meta.title;
         if (meta.editable) {
             console.log("Making editable disc");
             flusher = _.debounce(function () {
@@ -174,7 +173,7 @@ export function GoogleDriveLoader() {
     }
 
     self.load = function (fdc, fileId) {
-        var meta = false;
+        let meta = false;
         return loadMetadata(fileId)
             .then(function (response) {
                 meta = response.result;

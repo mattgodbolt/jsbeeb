@@ -1,12 +1,12 @@
 "use strict";
 import * as utils from "./utils.js";
 
-var hexword = utils.hexword;
-var hexbyte = utils.hexbyte;
-var signExtend = utils.signExtend;
+const hexword = utils.hexword;
+const hexbyte = utils.hexbyte;
+const signExtend = utils.signExtend;
 
 function rotate(left, logical) {
-    var lines = [];
+    const lines = [];
     if (!left) {
         if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
         lines.push("cpu.p.c = !!(REG & 0x01);");
@@ -49,7 +49,7 @@ function push(reg) {
 }
 
 function InstructionGen(is65c12) {
-    var self = this;
+    const self = this;
     self.is65c12 = is65c12;
     self.ops = {};
     self.cycle = 0;
@@ -96,7 +96,7 @@ function InstructionGen(is65c12) {
     };
     self.readOp = function (addr, reg, spurious) {
         self.cycle++;
-        var op;
+        let op;
         if (reg) op = reg + " = cpu.readmem(" + addr + ");";
         else op = "cpu.readmem(" + addr + ");";
         if (spurious) op += " // spurious";
@@ -104,7 +104,7 @@ function InstructionGen(is65c12) {
     };
     self.writeOp = function (addr, reg, spurious) {
         self.cycle++;
-        var op = "cpu.writemem(" + addr + ", " + reg + ");";
+        let op = "cpu.writemem(" + addr + ", " + reg + ");";
         if (spurious) op += " // spurious";
         self.append(self.cycle, op, true, addr);
     };
@@ -130,10 +130,9 @@ function InstructionGen(is65c12) {
     };
     self.renderInternal = function (startCycle) {
         startCycle = startCycle || 0;
-        var i;
-        var toSkip = 0;
-        var out = [];
-        for (i = startCycle; i < self.cycle; ++i) {
+        let toSkip = 0;
+        let out = [];
+        for (let i = startCycle; i < self.cycle; ++i) {
             if (!self.ops[i]) {
                 toSkip++;
                 continue;
@@ -167,7 +166,7 @@ function InstructionGen(is65c12) {
 }
 
 function SplitInstruction(preamble, condition, is65c12) {
-    var self = this;
+    const self = this;
     self.preamble = preamble;
     self.ifTrue = new InstructionGen(is65c12);
     self.ifTrue.tick(preamble.cycle);
@@ -182,7 +181,7 @@ function SplitInstruction(preamble, condition, is65c12) {
     });
 
     function indent(a) {
-        var result = [];
+        const result = [];
         a.forEach(function (x) {
             result.push("  " + x);
         });
@@ -492,7 +491,7 @@ function getOp(op, arg) {
     return null;
 }
 
-var opcodes6502 = {
+const opcodes6502 = {
     0x00: "BRK",
     0x01: "ORA (,x)",
     0x03: "SLO (,x)",
@@ -739,7 +738,7 @@ var opcodes6502 = {
     0xff: "ISB abs,x",
 };
 
-var opcodes65c12 = {
+const opcodes65c12 = {
     0x00: "BRK",
     0x01: "ORA (,x)",
     0x04: "TSB zp",
@@ -923,13 +922,13 @@ var opcodes65c12 = {
 
 function makeCpuFunctions(cpu, opcodes, is65c12) {
     function getInstruction(opcodeString, needsReg) {
-        var split = opcodeString.split(" ");
-        var opcode = split[0];
-        var arg = split[1];
-        var op = getOp(opcode, arg);
+        const split = opcodeString.split(" ");
+        const opcode = split[0];
+        const arg = split[1];
+        const op = getOp(opcode, arg);
         if (!op) return null;
 
-        var ig = new InstructionGen(is65c12);
+        let ig = new InstructionGen(is65c12);
         if (needsReg) ig.append("var REG = 0|0;");
 
         switch (arg) {
@@ -1142,8 +1141,8 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
     }
 
     function getIndentedSource(indent, opcodeNum, needsReg) {
-        var opcode = opcodes[opcodeNum];
-        var lines = null;
+        const opcode = opcodes[opcodeNum];
+        let lines = null;
         if (opcode) {
             lines = getInstruction(opcode, !!needsReg);
         }
@@ -1158,8 +1157,8 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
     function Runner() {}
 
     function generate6502JumpTable() {
-        var funcs = [];
-        for (var opcode = 0; opcode < 256; ++opcode) {
+        const funcs = [];
+        for (let opcode = 0; opcode < 256; ++opcode) {
             funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode, true));
         }
         return function exec(opcode) {
@@ -1177,25 +1176,25 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
         }
 
         this.disassemble = function (addr, plain) {
-            var formatAddr = formatAddr_;
-            var formatJumpAddr = formatJumpAddr_;
+            let formatAddr = formatAddr_;
+            let formatJumpAddr = formatJumpAddr_;
             if (plain) {
                 formatAddr = hexword;
                 formatJumpAddr = hexword;
             }
-            var opcode = opcodes[cpu.peekmem(addr)];
+            const opcode = opcodes[cpu.peekmem(addr)];
             if (!opcode) {
                 return ["???", addr + 1];
             }
-            var split = opcode.split(" ");
+            const split = opcode.split(" ");
             if (!split[1]) {
                 return [opcode, addr + 1];
             }
-            var param = split[1] || "";
-            var suffix = "";
-            var suffix2 = "";
-            var index = param.match(/(.*),([xy])$/);
-            var destAddr, indDest;
+            let param = split[1] || "";
+            let suffix = "";
+            let suffix2 = "";
+            const index = param.match(/(.*),([xy])$/);
+            let destAddr, indDest;
             if (index) {
                 param = index[1];
                 suffix = "," + index[2].toUpperCase();
@@ -1204,10 +1203,11 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
             switch (param) {
                 case "imm":
                     return [split[0] + " #$" + hexbyte(cpu.peekmem(addr + 1)) + suffix, addr + 2];
-                case "abs":
-                    var formatter = split[0] === "JMP" || split[0] === "JSR" ? formatJumpAddr : formatAddr;
+                case "abs": {
+                    const formatter = split[0] === "JMP" || split[0] === "JSR" ? formatJumpAddr : formatAddr;
                     destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
                     return [split[0] + " $" + formatter(destAddr) + suffix, addr + 3, destAddr];
+                }
                 case "branch":
                     destAddr = addr + signExtend(cpu.peekmem(addr + 1)) + 2;
                     return [split[0] + " $" + formatJumpAddr(destAddr) + suffix, addr + 2, destAddr];

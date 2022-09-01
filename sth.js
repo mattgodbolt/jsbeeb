@@ -4,26 +4,26 @@ import * as utils from "./utils.js";
 import $ from "jquery";
 
 export function StairwayToHell(onStart, onCat, onError, tape) {
-    var self = this;
-    var baseUrl = document.location.protocol + "//www.stairwaytohell.com/bbc/archive/";
+    const self = this;
+    let baseUrl = document.location.protocol + "//www.stairwaytohell.com/bbc/archive/";
     if (tape) baseUrl += "tapeimages/";
     else baseUrl += "diskimages/";
 
-    var catalogUrl = "reclist.php?sort=name&filter=.zip";
-    var catalog = [];
+    const catalogUrl = "reclist.php?sort=name&filter=.zip";
+    const catalog = [];
 
     self.populate = function () {
         onStart();
         if (catalog.length === 0) {
-            var request = new XMLHttpRequest();
+            const request = new XMLHttpRequest();
             request.open("GET", baseUrl + catalogUrl, true);
             request.onerror = function () {
                 if (onError) onError();
             };
             request.onload = function () {
-                var doc = $($.parseHTML(this.responseText, null, false));
+                const doc = $($.parseHTML(this.responseText, null, false));
                 doc.find("tr td:nth-child(3) a").each(function (_, link) {
-                    var href = $(link).attr("href");
+                    const href = $(link).attr("href");
                     if (href.indexOf(".zip") > 0) catalog.push(href);
                 });
                 if (onCat) onCat(catalog);
@@ -39,7 +39,7 @@ export function StairwayToHell(onStart, onCat, onError, tape) {
     };
 
     self.fetch = function (file) {
-        var name = baseUrl + file;
+        const name = baseUrl + file;
         console.log("Loading ZIP from " + name);
         return utils.loadData(name).then(function (data) {
             return utils.unzipDiscImage(data).data;

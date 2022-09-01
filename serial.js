@@ -1,7 +1,7 @@
 "use strict";
 
 export function Serial(acia) {
-    var self = this;
+    const self = this;
 
     function reset() {
         self.reg = 0;
@@ -9,7 +9,7 @@ export function Serial(acia) {
         self.receiveRate = 0;
     }
 
-    var table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
+    const table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
 
     function write(addr, val) {
         val &= 0xff;

@@ -1,6 +1,6 @@
 "use strict";
 
-export var initialise = function () {};
+export let initialise = function () {};
 
 function init(args) {
     const { loadDiscImage, processor } = args;

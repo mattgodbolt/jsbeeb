@@ -88,11 +88,11 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     };
 
     this.clearPaintBuffer = function () {
-        var fb32 = this.fb32;
+        const fb32 = this.fb32;
         if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
-            var line = this.frameCount & 1;
+            let line = this.frameCount & 1;
             while (line < 625) {
-                var start = line * 1024;
+                const start = line * 1024;
                 fb32.fill(0, start, start + 1024);
                 line += 2;
             }
@@ -107,7 +107,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             this.clearPaintBuffer();
         }
         this.dispEnabled &= ~FRAMESKIPENABLE;
-        var enable = FRAMESKIPENABLE;
+        let enable = FRAMESKIPENABLE;
         if (this.frameSkipCount > 1) {
             if (this.frameCount % this.frameSkipCount) enable = 0;
         }
@@ -121,12 +121,12 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     };
 
     function copyFb(dest, src) {
-        for (var i = 0; i < 1024 * 768; ++i) {
+        for (let i = 0; i < 1024 * 768; ++i) {
             dest[i] = src[i];
         }
     }
 
-    var debugPrevScreen = null;
+    let debugPrevScreen = null;
 
     this.debugOffset = function (x, y) {
         if (x < 0 || x >= 1024) return -1;
@@ -135,7 +135,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     };
 
     function lerp1(a, b, alpha) {
-        var val = (b - a) * alpha + a;
+        let val = (b - a) * alpha + a;
         if (val < 0) val = 0;
         if (val > 255) val = 255;
         return val;
@@ -144,15 +144,15 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     function lerp(col1, col2, alpha) {
         if (alpha < 0) alpha = 0;
         if (alpha > 1) alpha = 1;
-        var r1 = (col1 >>> 16) & 0xff;
-        var g1 = (col1 >>> 8) & 0xff;
-        var b1 = (col1 >>> 0) & 0xff;
-        var r2 = (col2 >>> 16) & 0xff;
-        var g2 = (col2 >>> 8) & 0xff;
-        var b2 = (col2 >>> 0) & 0xff;
-        var red = lerp1(r1, r2, alpha);
-        var green = lerp1(g1, g2, alpha);
-        var blue = lerp1(b1, b2, alpha);
+        const r1 = (col1 >>> 16) & 0xff;
+        const g1 = (col1 >>> 8) & 0xff;
+        const b1 = (col1 >>> 0) & 0xff;
+        const r2 = (col2 >>> 16) & 0xff;
+        const g2 = (col2 >>> 8) & 0xff;
+        const b2 = (col2 >>> 0) & 0xff;
+        const red = lerp1(r1, r2, alpha);
+        const green = lerp1(g1, g2, alpha);
+        const blue = lerp1(b1, b2, alpha);
         return (red << 16) | (green << 8) | blue;
     }
 
@@ -161,13 +161,13 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             debugPrevScreen = new Uint32Array(1024 * 768);
         }
         copyFb(debugPrevScreen, this.fb32);
-        var dotSize = 10;
-        var x, y;
+        const dotSize = 10;
+        let x, y;
         for (y = -dotSize; y <= dotSize; y++) {
             for (x = -dotSize; x <= dotSize; ++x) {
-                var dist = Math.sqrt(x * x + y * y) / dotSize;
+                const dist = Math.sqrt(x * x + y * y) / dotSize;
                 if (dist > 1) continue;
-                var offset = this.debugOffset(this.bitmapX + x, this.bitmapY + y);
+                const offset = this.debugOffset(this.bitmapX + x, this.bitmapY + y);
                 this.fb32[offset] = lerp(this.fb32[offset], 0xffffff, Math.pow(1 - dist, 2));
             }
         }
@@ -180,8 +180,8 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     }
 
     this.table4bpp = (function () {
-        var t = new Uint8Array(4 * 256 * 16);
-        var i, b, temp, left;
+        const t = new Uint8Array(4 * 256 * 16);
+        let i, b, temp, left;
         for (b = 0; b < 256; ++b) {
             temp = b;
             for (i = 0; i < 16; ++i) {
@@ -206,17 +206,16 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     this.blitFb = function (dat, destOffset, numPixels, doubledY) {
         destOffset |= 0;
         numPixels |= 0;
-        var offset = table4bppOffset(this.ulaMode, dat);
-        var fb32 = this.fb32;
-        var ulaPal = this.ulaPal;
-        var table4bpp = this.table4bpp;
-        var i = 0;
+        const offset = table4bppOffset(this.ulaMode, dat);
+        const fb32 = this.fb32;
+        const ulaPal = this.ulaPal;
+        const table4bpp = this.table4bpp;
         if (doubledY) {
-            for (i = 0; i < numPixels; ++i) {
+            for (let i = 0; i < numPixels; ++i) {
                 fb32[destOffset + i] = fb32[destOffset + i + 1024] = ulaPal[table4bpp[offset + i]];
             }
         } else {
-            for (i = 0; i < numPixels; ++i) {
+            for (let i = 0; i < numPixels; ++i) {
                 fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
             }
         }
@@ -224,12 +223,11 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
 
     this.handleCursor = function (offset) {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
-            var i;
-            for (i = 0; i < this.pixelsPerChar; ++i) {
+            for (let i = 0; i < this.pixelsPerChar; ++i) {
                 this.fb32[offset + i] ^= 0x00ffffff;
             }
             if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
-                for (i = 0; i < this.pixelsPerChar; ++i) {
+                for (let i = 0; i < this.pixelsPerChar; ++i) {
                     this.fb32[offset + 1024 + i] ^= 0x00ffffff;
                 }
             }
@@ -248,7 +246,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             // Address offset by scanline is ignored.
             // On model B only, there's a quirk for reading 0x3c00.
             // See: http://www.retrosoftware.co.uk/forum/viewtopic.php?f=73&t=1011
-            var memAddr = this.addr & 0x3ff;
+            let memAddr = this.addr & 0x3ff;
             if (this.addr & 0x800 || this.isMaster) {
                 memAddr |= 0x7c00;
             } else {
@@ -256,7 +254,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             }
             return this.cpu.videoRead(memAddr);
         } else {
-            var addr = (this.scanlineCounter & 0x07) | (this.addr << 3);
+            let addr = (this.scanlineCounter & 0x07) | (this.addr << 3);
             // Perform screen address wrap around if MA12 set
             if (this.addr & 0x1000) addr += this.screenAdd;
             return this.cpu.videoRead(addr & 0x7fff);
@@ -269,7 +267,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3fff;
         this.lineStartAddr = this.nextLineStartAddr;
         this.dispEnableSet(VDISPENABLE);
-        var cursorFlash = (this.regs[10] & 0x60) >>> 5;
+        const cursorFlash = (this.regs[10] & 0x60) >>> 5;
         this.cursorOnThisFrame = cursorFlash === 0 || !!(this.frameCount & this.cursorFlashMask[cursorFlash]);
         this.lastRenderWasEven = this.isEvenRender;
         this.isEvenRender = !(this.frameCount & 1);
@@ -305,7 +303,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         this.vpulseCounter = (this.vpulseCounter + 1) & 0x0f;
 
         // Pre-counter increment compares and logic.
-        var r9Hit = this.scanlineCounter === this.regs[9];
+        const r9Hit = this.scanlineCounter === this.regs[9];
         if (r9Hit) {
             // An R9 hit always loads a new character row address, even if
             // we're in vertical adjust!
@@ -324,7 +322,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         if (!this.teletextMode) {
             // Scanlines 8-15 are off but they display again at 16,
             // mirroring 0-7, and it repeats.
-            var off = (this.scanlineCounter >>> 3) & 1;
+            const off = (this.scanlineCounter >>> 3) & 1;
             if (off) {
                 this.dispEnableClear(SCANLINEDISPENABLE);
             } else {
@@ -341,7 +339,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             this.inVertAdjust = true;
         }
 
-        var endOfFrame = false;
+        let endOfFrame = false;
 
         if (this.endOfFrameLatched) {
             endOfFrame = true;
@@ -374,14 +372,14 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
 
         this.addr = this.lineStartAddr;
 
-        var cursorStartLine = this.regs[10] & 0x1f;
+        const cursorStartLine = this.regs[10] & 0x1f;
         if (this.scanlineCounter === cursorStartLine) this.cursorOn = true;
 
         // The teletext SAA5050 chip has its CRS pin connected to RA0, so
         // we need to update it.
         // The external RA0 value is modified in "interlace sync and video"
         // mode to be odd for odd interlace frames.
-        var externalScanline = this.scanlineCounter;
+        let externalScanline = this.scanlineCounter;
         if (this.interlacedSyncAndVideo && this.frameCount & 1) {
             externalScanline++;
         }
@@ -428,8 +426,8 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     this.dispEnableChanged = function () {
         // The DISPTMG output pin is wired to the SAA5050 teletext chip,
         // for scanline tracking, so keep it apprised.
-        var mask = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
-        var disptmg = (this.dispEnabled & mask) === mask;
+        const mask = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
+        const disptmg = (this.dispEnabled & mask) === mask;
         this.teletext.setDISPTMG(disptmg);
     };
 
@@ -462,7 +460,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             if (this.inHSync) this.handleHSync();
 
             // Handle delayed display enable due to skew
-            var displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
+            const displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
             if (this.horizCounter === displayEnablePos) {
                 this.dispEnableSet(SKEWDISPENABLE);
             }
@@ -494,14 +492,14 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             // at the end of vertical adjust.
             // Without interlace, frames are 312 scanlines. With interlace,
             // both odd and even frames are 312.5 scanlines.
-            var isInterlace = !!(this.regs[8] & 1);
+            const isInterlace = !!(this.regs[8] & 1);
             // TODO: is this off-by-one? b2 uses regs[0]+1.
             // TODO: does this only hit at the half-scanline or is it a
             // half-scanline counter that starts when an R7 hit is noticed?
-            var halfR0Hit = this.horizCounter === this.regs[0] >>> 1;
-            var isVsyncPoint = !isInterlace || !this.doEvenFrameLogic || halfR0Hit;
-            var vSyncEnding = false;
-            var vSyncStarting = false;
+            const halfR0Hit = this.horizCounter === this.regs[0] >>> 1;
+            const isVsyncPoint = !isInterlace || !this.doEvenFrameLogic || halfR0Hit;
+            let vSyncEnding = false;
+            let vSyncStarting = false;
             if (this.inVSync && this.vpulseCounter === this.vpulseWidth && isVsyncPoint) {
                 vSyncEnding = true;
                 this.inVSync = false;
@@ -537,10 +535,10 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
 
             // TODO: this will be cleaner if we rework skew to have fetch
             // independent from render.
-            var insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
+            const insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
             if ((insideBorder || this.cursorDrawIndex) && this.dispEnabled & FRAMESKIPENABLE) {
                 // Read data from address pointer if both horizontal and vertical display enabled.
-                var dat = this.readVideoMem();
+                const dat = this.readVideoMem();
                 if (insideBorder) {
                     if (this.teletextMode) {
                         this.teletext.fetchData(dat);
@@ -559,8 +557,8 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
 
                 // Render data depending on display enable state.
                 if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
-                    var doubledLines = false;
-                    var offset = this.bitmapY;
+                    let doubledLines = false;
+                    let offset = this.bitmapY;
                     // There's a painting subtlety here: if we're in an
                     // interlace mode but R6>R4 then we'll get stuck
                     // painting just an odd or even frame, so we double up
@@ -642,7 +640,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             // We do this after the render and various counter increments
             // because there seems to be a 1 character delay between setting
             // R6=C4 and display actually stopping.
-            var r6Hit = this.vertCounter === this.regs[6];
+            const r6Hit = this.vertCounter === this.regs[6];
             if (r6Hit && !this.firstScanline && this.dispEnabled & VDISPENABLE) {
                 this.dispEnableClear(VDISPENABLE);
                 // Perhaps surprisingly, this happens here. Both cursor
@@ -653,7 +651,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             // Interlace quirk: an even frame appears to need to see
             // either of an R6 hit or R7 hit in order to activate the
             // dummy raster.
-            var r7Hit = this.vertCounter === this.regs[7];
+            const r7Hit = this.vertCounter === this.regs[7];
             if (r6Hit || r7Hit) {
                 this.doEvenFrameLogic = !!(this.frameCount & 1);
             }
@@ -693,9 +691,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
                     this.video.hpulseWidth = val & 0x0f;
                     this.video.vpulseWidth = (val & 0xf0) >>> 4;
                     break;
-                case 8:
+                case 8: {
                     this.video.interlacedSyncAndVideo = (val & 3) === 3;
-                    var skew = (val & 0x30) >>> 4;
+                    const skew = (val & 0x30) >>> 4;
                     if (skew < 3) {
                         this.video.displayEnableSkew = skew;
                         this.video.dispEnableSet(USERDISPENABLE);
@@ -703,6 +701,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
                         this.video.dispEnableClear(USERDISPENABLE);
                     }
                     break;
+                }
                 case 14:
                 case 15:
                     this.video.cursorPos = (this.video.regs[15] | (this.video.regs[14] << 8)) & 0x3fff;
@@ -721,11 +720,10 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
     Ula.prototype.write = function (addr, val) {
         addr |= 0;
         val |= 0;
-        var index;
         if (addr & 1) {
-            index = (val >>> 4) & 0xf;
+            const index = (val >>> 4) & 0xf;
             this.video.actualPal[index] = val & 0xf;
-            var ulaCol = val & 7;
+            let ulaCol = val & 7;
             if (!(val & 8 && this.video.ulactrl & 1)) ulaCol ^= 7;
             if (this.video.ulaPal[index] !== this.video.collook[ulaCol]) {
                 this.video.ulaPal[index] = this.video.collook[ulaCol];
@@ -733,9 +731,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         } else {
             if ((this.video.ulactrl ^ val) & 1) {
                 // Flash colour has changed.
-                var flashEnabled = !!(val & 1);
-                for (var i = 0; i < 16; ++i) {
-                    index = this.video.actualPal[i] & 7;
+                const flashEnabled = !!(val & 1);
+                for (let i = 0; i < 16; ++i) {
+                    let index = this.video.actualPal[i] & 7;
                     if (!(flashEnabled && this.video.actualPal[i] & 8)) index ^= 7;
                     if (this.video.ulaPal[i] !== this.video.collook[index]) {
                         this.video.ulaPal[i] = this.video.collook[index];
@@ -745,7 +743,7 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             this.video.ulactrl = val;
             this.video.pixelsPerChar = val & 0x10 ? 8 : 16;
             this.video.halfClock = !(val & 0x10);
-            var newMode = (val >>> 2) & 3;
+            const newMode = (val >>> 2) & 3;
             if (newMode !== this.video.ulaMode) {
                 this.video.ulaMode = newMode;
             }

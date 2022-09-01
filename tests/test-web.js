@@ -1,10 +1,10 @@
 require(["jquery", "tests/test"], function ($, test) {
     "use strict";
-    var currentTest = null;
+    let currentTest = null;
 
     function log() {
         console.log.apply(console, arguments);
-        var msg = Array.prototype.join.call(arguments, " ");
+        let msg = Array.prototype.join.call(arguments, " ");
         if (currentTest) {
             currentTest.find(".template").clone().removeClass("template").text(msg).appendTo(currentTest);
         }
@@ -24,29 +24,29 @@ require(["jquery", "tests/test"], function ($, test) {
     }
 
     $(function () {
-        var canvas = $("#screen");
-        var fb32;
-        var paint = function () {};
+        let canvas = $("#screen");
+        let fb32;
+        let paint = function () {};
         if (canvas.length) {
             canvas = $("#screen")[0];
-            var ctx = canvas.getContext("2d");
+            let ctx = canvas.getContext("2d");
             ctx.fillStyle = "black";
             ctx.fillRect(0, 0, 1280, 768);
             if (!ctx.getImageData) {
                 window.alert("Unsupported browser");
                 return;
             }
-            var backBuffer = document.createElement("canvas");
+            let backBuffer = document.createElement("canvas");
             backBuffer.width = 1280;
             backBuffer.height = 768;
-            var backCtx = backBuffer.getContext("2d");
-            var imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
-            var fb8 = imageData.data;
-            var canvasWidth = canvas.width;
-            var canvasHeight = canvas.height;
+            let backCtx = backBuffer.getContext("2d");
+            let imageData = backCtx.createImageData(backBuffer.width, backBuffer.height);
+            let fb8 = imageData.data;
+            let canvasWidth = canvas.width;
+            let canvasHeight = canvas.height;
             paint = function (minx, miny, maxx, maxy) {
-                var width = maxx - minx;
-                var height = maxy - miny;
+                let width = maxx - minx;
+                let height = maxy - miny;
                 backCtx.putImageData(imageData, 0, 0, minx, miny, width, height);
                 ctx.drawImage(backBuffer, minx, miny, width, height, 0, 0, canvasWidth, canvasHeight);
             };

@@ -5,12 +5,12 @@ import * as utils from "../utils.js";
 import { fake6502, fake65C12 } from "../fake6502.js";
 
 function runTest(processor, test, name) {
-    var base = "tests/6502_65C02_functional_tests/bin_files/" + test;
+    let base = "tests/6502_65C02_functional_tests/bin_files/" + test;
 
     function parseSuccess(listing) {
-        var expectedPc = null;
-        var next = false;
-        var successRe = /^\s*success\b\s*(;.*)?$/;
+        let expectedPc = null;
+        let next = false;
+        let successRe = /^\s*success\b\s*(;.*)?$/;
         _.each(listing.split("\n"), function (line) {
             if (next) {
                 next = false;
@@ -25,11 +25,11 @@ function runTest(processor, test, name) {
     }
 
     return Promise.all([utils.loadData(base + ".lst"), utils.loadData(base + ".bin")]).then(function (results) {
-        var expectedPc = parseSuccess(results[0].toString());
-        var data = results[1];
-        for (var i = 0; i < data.length; ++i) processor.writemem(i, data[i]);
+        let expectedPc = parseSuccess(results[0].toString());
+        let data = results[1];
+        for (let i = 0; i < data.length; ++i) processor.writemem(i, data[i]);
         processor.pc = 0x400;
-        var log = false;
+        let log = false;
         processor.debugInstruction.add(function (addr) {
             if (log) {
                 console.log(
@@ -54,7 +54,7 @@ function runTest(processor, test, name) {
 function fail(processor) {
     console.log("Failed at " + utils.hexword(processor.pc));
     console.log("Previous PCs:");
-    for (var i = 1; i < 16; ++i) {
+    for (let i = 1; i < 16; ++i) {
         console.log("  " + utils.hexword(processor.getPrevPc(i)));
     }
     console.log("A: " + utils.hexbyte(processor.a));
@@ -74,8 +74,8 @@ function fail(processor) {
     process.exit(1);
 }
 
-var cpu6502 = fake6502();
-var test6502 = cpu6502
+let cpu6502 = fake6502();
+let test6502 = cpu6502
     .initialise()
     .then(function () {
         return runTest(cpu6502, "6502_functional_test", "6502");
@@ -84,8 +84,8 @@ var test6502 = cpu6502
         if (!success) fail(cpu6502);
     });
 
-var test65c12 = test6502.then(function () {
-    var cpu65c12 = fake65C12();
+let test65c12 = test6502.then(function () {
+    let cpu65c12 = fake65C12();
     return cpu65c12
         .initialise()
         .then(function () {

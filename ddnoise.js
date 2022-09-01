@@ -2,10 +2,10 @@
 import * as utils from "./utils.js";
 import _ from "underscore";
 
-var IDLE = 0,
-    SPIN_UP = 1,
-    SPINNING = 2;
-var VOLUME = 0.25;
+const IDLE = 0;
+const SPIN_UP = 1;
+const SPINNING = 2;
+const VOLUME = 0.25;
 
 export function DdNoise(context) {
     this.context = context;
@@ -33,9 +33,9 @@ function loadSounds(context, sounds) {
             });
         })
     ).then(function (loaded) {
-        var keys = _.keys(sounds);
-        var result = {};
-        for (var i = 0; i < keys.length; ++i) {
+        const keys = _.keys(sounds);
+        const result = {};
+        for (let i = 0; i < keys.length; ++i) {
             result[keys[i]] = loaded[i];
         }
         return result;
@@ -43,7 +43,7 @@ function loadSounds(context, sounds) {
 }
 
 DdNoise.prototype.initialise = function () {
-    var self = this;
+    const self = this;
     return loadSounds(self.context, {
         motorOn: "sounds/disc525/motoron.wav",
         motorOff: "sounds/disc525/motoroff.wav",
@@ -58,10 +58,10 @@ DdNoise.prototype.initialise = function () {
 };
 
 DdNoise.prototype.oneShot = function (sound) {
-    var duration = sound.duration;
-    var context = this.context;
+    const duration = sound.duration;
+    const context = this.context;
     if (context.state !== "running") return duration;
-    var source = context.createBufferSource();
+    const source = context.createBufferSource();
     source.buffer = sound;
     source.connect(this.gain);
     source.start();
@@ -70,9 +70,9 @@ DdNoise.prototype.oneShot = function (sound) {
 
 DdNoise.prototype.play = function (sound, loop) {
     if (this.context.state !== "running") return Promise.reject();
-    var self = this;
+    const self = this;
     return new Promise(function (resolve) {
-        var source = self.context.createBufferSource();
+        const source = self.context.createBufferSource();
         source.loop = !!loop;
         source.buffer = sound;
         source.connect(self.gain);
@@ -91,7 +91,7 @@ DdNoise.prototype.play = function (sound, loop) {
 DdNoise.prototype.spinUp = function () {
     if (this.state === SPINNING || this.state === SPIN_UP) return;
     this.state = SPIN_UP;
-    var self = this;
+    const self = this;
     this.play(this.sounds.motorOn).then(
         function () {
             // Handle race: we may have had spinDown() called on us before the

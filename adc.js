@@ -32,16 +32,16 @@ Adc.prototype.write = function (addr, val) {
 };
 
 Adc.prototype.onComplete = function () {
-    var val = 0x8000;
+    let val = 0x8000;
 
-    var pads = this.sysvia.getGamepads();
+    const pads = this.sysvia.getGamepads();
     if (pads && pads[0]) {
-        var pad = pads[0];
-        var pad2 = pads[1];
+        const pad = pads[0];
+        const pad2 = pads[1];
 
-        var rawValue = 0;
+        let rawValue = 0;
 
-        var stick = Math.floor(this.status & 0x03);
+        const stick = Math.floor(this.status & 0x03);
 
         switch (stick) {
             default:

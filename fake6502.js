@@ -9,15 +9,15 @@ import { Cpu6502 } from "./6502.js";
 import { Cmos } from "./cmos.js";
 import { FakeMusic5000 } from "./music5000.js";
 
-var fakeVideo = new FakeVideo();
-var soundChip = new FakeSoundChip();
-var dbgr = {
-    setCpu: function () {},
+const fakeVideo = new FakeVideo();
+const soundChip = new FakeSoundChip();
+const dbgr = {
+    setCpu: () => {},
 };
 
 export function fake6502(model, opts) {
     opts = opts || {};
-    var video = opts.video || fakeVideo;
+    const video = opts.video || fakeVideo;
     model = model || TEST_6502;
     return new Cpu6502(model, dbgr, video, soundChip, new FakeDdNoise(), new FakeMusic5000(), new Cmos());
 }

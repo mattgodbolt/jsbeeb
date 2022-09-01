@@ -1,7 +1,7 @@
 "use strict";
 
 export function Cmos(persistence) {
-    var store = null;
+    let store = null;
     if (persistence) {
         store = persistence.load();
     }
@@ -13,11 +13,11 @@ export function Cmos(persistence) {
         ];
         save();
     }
-    var enabled = false;
-    var isRead = false;
-    var addressSelect = false;
-    var dataSelect = false;
-    var cmosAddr = 0;
+    let enabled = false;
+    let isRead = false;
+    let addressSelect = false;
+    let dataSelect = false;
+    let cmosAddr = 0;
 
     function save() {
         if (persistence) {
@@ -36,7 +36,7 @@ export function Cmos(persistence) {
         if (!addressSelect && dataSelect && isRead) {
             // The first 10 bytes of CMOS RAM store the RTC clock
             if (cmosAddr < 10) {
-                var current = new Date();
+                const current = new Date();
                 switch (cmosAddr) {
                     // Note values are returned in BCD format
                     case 0:
@@ -64,8 +64,8 @@ export function Cmos(persistence) {
     function cmosWriteControl(portbpins, portapins, IC32) {
         enabled = !!(portbpins & 0x40);
         if (!enabled) return;
-        var oldDataSelect = dataSelect;
-        var oldAddressSelect = addressSelect;
+        const oldDataSelect = dataSelect;
+        const oldAddressSelect = addressSelect;
         isRead = !!(IC32 & 2);
         dataSelect = !!(IC32 & 4);
         addressSelect = !!(portbpins & 0x80);
