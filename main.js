@@ -152,6 +152,21 @@ if (queryString) {
 
 if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
 
+const printerPort = {
+    outputStrobe: function (level, output) {
+        if (!printerTextArea) return;
+        if (!output || level) return;
+
+        const uservia = processor.uservia;
+        // Ack the character by pulsing CA1 low.
+        uservia.setca1(false);
+        uservia.setca1(true);
+        const newChar = String.fromCharCode(uservia.ora);
+        printerTextArea.value += newChar;
+    },
+};
+
+let userPort = null;
 const emulationConfig = {
     keyLayout: keyLayout,
     coProcessor: parsedQuery.coProcessor,
@@ -507,7 +522,6 @@ const cmos = new Cmos({
     },
 });
 
-let userPort = null;
 const keyswitch = true;
 if (keyswitch) {
     let switchState = 0xff;
@@ -543,20 +557,6 @@ function checkPrinterWindow() {
 
     processor.uservia.setca1(true);
 }
-
-const printerPort = {
-    outputStrobe: function (level, output) {
-        if (!printerTextArea) return;
-        if (!output || level) return;
-
-        const uservia = processor.uservia;
-        // Ack the character by pulsing CA1 low.
-        uservia.setca1(false);
-        uservia.setca1(true);
-        const newChar = String.fromCharCode(uservia.ora);
-        printerTextArea.value += newChar;
-    },
-};
 
 processor = new Cpu6502(
     model,
