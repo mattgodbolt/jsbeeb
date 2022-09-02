@@ -37,11 +37,11 @@ export class Music5000 {
         this.sampleLeft = 0;
         this.sampleRight = 0;
 
-        this.chordBase = new Array(0, 8.25, 24.75, 57.75, 123.75, 255.75, 519.75, 1047.75);
-        this.stepInc = new Array(0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0);
+        this.chordBase = [0, 8.25, 24.75, 57.75, 123.75, 255.75, 519.75, 1047.75];
+        this.stepInc = [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0];
 
-        this.stereoLeft = new Array(0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100, 83, 67, 50, 33, 17);
-        this.stereoRight = new Array(100, 100, 100, 100, 100, 100, 100, 100, 0, 0, 0, 17, 33, 50, 67, 83);
+        this.stereoLeft = [0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100, 83, 67, 50, 33, 17];
+        this.stereoRight = [100, 100, 100, 100, 100, 100, 100, 100, 0, 0, 0, 17, 33, 50, 67, 83];
 
         this.D2ATable = new Uint16Array(128);
 
@@ -78,10 +78,10 @@ export class Music5000 {
             console.log("Music 5000: initialisation");
 
             // Build the D2A table
-            var i = 0;
-            for (var chord = 0; chord < 8; chord++) {
-                var val = this.chordBase[chord];
-                for (var step = 0; step < 16; step++) {
+            let i = 0;
+            for (let chord = 0; chord < 8; chord++) {
+                let val = this.chordBase[chord];
+                for (let step = 0; step < 16; step++) {
                     this.D2ATable[i] = Math.floor(val * 4); // Multiply up to get an integer
                     val += this.stepInc[chord];
                     i++;
@@ -90,29 +90,29 @@ export class Music5000 {
         }
 
         // Clear RAM
-        for (var w = 0; w < RAM_SIZE; w++) {
+        for (let w = 0; w < RAM_SIZE; w++) {
             this.waveRam[w] = 0;
         }
 
-        for (var p = 0; p < NUM_CHANNELS; p++) {
+        for (let p = 0; p < NUM_CHANNELS; p++) {
             this.phaseRam[p] = 0;
         }
     }
 
     read(page, addr) {
         // Bit0 unused
-        var offset = ((page & 0x0e) << 7) + addr;
+        const offset = ((page & 0x0e) << 7) + addr;
         return this.waveRam[offset];
     }
 
     write(page, addr, value) {
         // Bit0 unused
-        var offset = ((page & 0x0e) << 7) + (addr & 0xff);
+        const offset = ((page & 0x0e) << 7) + (addr & 0xff);
         this.waveRam[offset] = value;
     }
 
     polltime(cycles) {
-        var c4d,
+        let c4d,
             freq,
             offset,
             wavetable,
@@ -157,7 +157,7 @@ export class Music5000 {
             if (amplitude > 0x80) amplitude = 0x80;
             data = (data * amplitude) / 0x80;
 
-            var sample = this.D2ATable[parseInt(data)];
+            let sample = this.D2ATable[parseInt(data)];
             if (control & CTRL_INVERT_WAVE) sign ^= DATA_SIGN;
             if (sign) sample = -sample;
 
@@ -167,7 +167,7 @@ export class Music5000 {
             this.sampleRight += (sample * this.stereoRight[pos]) / 100;
 
             this.curCh++;
-            if (this.curCh == NUM_CHANNELS) {
+            if (this.curCh === NUM_CHANNELS) {
                 this.curCh = 0;
                 this.activeRegSet = REG_SET_NORMAL;
 
@@ -181,7 +181,7 @@ export class Music5000 {
                 this.sampleBuffer[this.position++] = this.sampleLeft;
                 this.sampleBuffer[this.position++] = this.sampleRight;
 
-                if (this.position == AUDIO_BUFFER_SIZE) {
+                if (this.position === AUDIO_BUFFER_SIZE) {
                     this._onBufferMusic5000(this.sampleBuffer);
                     this.position = 0;
                 }

@@ -4,8 +4,8 @@ import * as models from "./models.js";
 import { fake6502 } from "./fake6502.js";
 
 export function create() {
-    var cpu = fake6502(models.basicOnly);
-    var callTokeniser = function (line) {
+    const cpu = fake6502(models.basicOnly);
+    const callTokeniser = function (line) {
         // Address of the tokenisation subroutine in the Master's BASIC ROM.
         // With thanks to http://8bs.com/basic/basic4-8db2.htm
         const tokeniseBASIC = 0x8db2;
@@ -21,7 +21,7 @@ export function create() {
 
         cpu.pc = tokeniseBASIC;
         cpu.s = stackTop;
-        var offset = workSpace;
+        let offset = workSpace;
         // Set flags to indicate that we're at the start of a statement
         // but have already processed the line number.
         cpu.writemem(0x3b, 0x00);
@@ -30,12 +30,12 @@ export function create() {
         cpu.writemem(textPtrHi, (offset >>> 8) & 0xff);
         // Set the paged ROM latch to page in the BASIC.
         cpu.writemem(0xfe30, 12);
-        for (var i = 0; i < line.length; ++i) {
+        for (let i = 0; i < line.length; ++i) {
             cpu.writemem(offset + i, line.charCodeAt(i));
         }
         cpu.writemem(offset + line.length, 0x0d);
-        var safety = 20 * 1000 * 1000;
-        var result = "";
+        let safety = 20 * 1000 * 1000;
+        let result = "";
         while (cpu.s <= stackTop) {
             cpu.execute(1);
             if (--safety === 0) {
@@ -64,7 +64,7 @@ export function create() {
                 cpu.pc += 3;
             }
         }
-        for (i = offset; cpu.readmem(i) !== 0x0d; ++i) {
+        for (let i = offset; cpu.readmem(i) !== 0x0d; ++i) {
             result += String.fromCharCode(cpu.readmem(i));
         }
         if (safety === 0) {
@@ -74,11 +74,11 @@ export function create() {
         }
         return result;
     };
-    var lineRe = /^([0-9]+)?(.*)/;
-    var tokeniseLine = function (line, lineNumIfNotSpec) {
-        var lineSplit = line.match(lineRe);
-        var lineNum = lineSplit[1] ? parseInt(lineSplit[1]) : lineNumIfNotSpec;
-        var tokens = callTokeniser(lineSplit[2]);
+    const lineRe = /^([0-9]+)?(.*)/;
+    const tokeniseLine = function (line, lineNumIfNotSpec) {
+        const lineSplit = line.match(lineRe);
+        const lineNum = lineSplit[1] ? parseInt(lineSplit[1]) : lineNumIfNotSpec;
+        const tokens = callTokeniser(lineSplit[2]);
         if (tokens.length > 251) {
             throw new Error("Line " + lineNum + " tokenised length " + tokens.length + " > 251 bytes");
         }
@@ -90,8 +90,8 @@ export function create() {
             tokens
         );
     };
-    var tokenise = function (text) {
-        var result = "";
+    const tokenise = function (text) {
+        let result = "";
         text.split("\n").forEach(function (line, i) {
             if (line) {
                 result += tokeniseLine(line, 10 + i * 10);

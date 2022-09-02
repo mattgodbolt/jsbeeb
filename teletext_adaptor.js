@@ -59,7 +59,7 @@ export class TeletextAdaptor {
 
     loadChannelStream(channel) {
         console.log("Teletext adaptor: switching to channel " + channel);
-        var teletextRef = this;
+        const teletextRef = this;
         utils.loadData("teletext/txt" + channel + ".dat").then(function (data) {
             teletextRef.streamData = data;
             teletextRef.totalFrames = data.length / TELETEXT_FRAME_SIZE;
@@ -68,7 +68,7 @@ export class TeletextAdaptor {
     }
 
     read(addr) {
-        var data = 0x00;
+        let data = 0x00;
 
         switch (addr) {
             case 0x00: // Status Register
@@ -92,14 +92,14 @@ export class TeletextAdaptor {
         switch (addr) {
             case 0x00:
                 // Status register
-                this.teletextInts = (value & 0x08) == 0x08;
+                this.teletextInts = (value & 0x08) === 0x08;
                 if (this.teletextInts && this.teletextStatus & 0x80) {
                     this.cpu.interrupt |= 1 << TELETEXT_IRQ; // Interrupt if INT and interrupts enabled
                 } else {
                     this.cpu.interrupt &= ~(1 << TELETEXT_IRQ); // Clear interrupt
                 }
-                this.teletextEnable = (value & 0x04) == 0x04;
-                if ((value & 0x03) != this.channel && this.teletextEnable) {
+                this.teletextEnable = (value & 0x04) === 0x04;
+                if ((value & 0x03) !== this.channel && this.teletextEnable) {
                     this.channel = value & 0x03;
                     this.loadChannelStream(this.channel);
                 }
@@ -141,17 +141,17 @@ export class TeletextAdaptor {
             this.currentFrame = 0;
         }
 
-        var offset = this.currentFrame * TELETEXT_FRAME_SIZE + 3 * 43;
+        const offset = this.currentFrame * TELETEXT_FRAME_SIZE + 3 * 43;
 
         this.teletextStatus &= 0x0f;
         this.teletextStatus |= 0xd0; // data ready so latch INT, DOR, and FSYN
 
         if (this.teletextEnable) {
             // Copy current stream position into the frame buffer
-            for (var i = 0; i < 16; ++i) {
-                if (this.streamData[offset + i * 43] != 0) {
+            for (let i = 0; i < 16; ++i) {
+                if (this.streamData[offset + i * 43] !== 0) {
                     this.frameBuffer[i][0] = 0x67;
-                    for (var j = 1; j <= 42; j++) {
+                    for (let j = 1; j <= 42; j++) {
                         this.frameBuffer[i][j] = this.streamData[offset + (i * 43 + (j - 1))];
                     }
                 } else {

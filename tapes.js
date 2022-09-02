@@ -2,10 +2,10 @@
 import * as utils from "./utils.js";
 
 function UefTape(stream) {
-    var self = this;
+    const self = this;
 
-    var dummyData, state, count, curByte, numDataBits, parity;
-    var numParityBits, numStopBits, carrierBefore, carrierAfter;
+    let dummyData, state, count, curByte, numDataBits, parity;
+    let numParityBits, numStopBits, carrierBefore, carrierAfter;
 
     const ParityN = "N".charCodeAt(0);
 
@@ -22,24 +22,24 @@ function UefTape(stream) {
         carrierAfter = 0;
 
         stream.seek(10);
-        var minor = stream.readByte();
-        var major = stream.readByte();
+        const minor = stream.readByte();
+        const major = stream.readByte();
         if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
     };
 
     self.rewind();
 
     function readChunk() {
-        var chunkId = stream.readInt16();
-        var length = stream.readInt32();
+        const chunkId = stream.readInt16();
+        const length = stream.readInt32();
         return {
             id: chunkId,
             stream: stream.substream(length),
         };
     }
 
-    var curChunk = readChunk();
-    var baseFrequency = 1200;
+    let curChunk = readChunk();
+    let baseFrequency = 1200;
 
     function secsToClocks(secs) {
         return (2 * 1000 * 1000 * secs) | 0;
@@ -50,7 +50,7 @@ function UefTape(stream) {
     }
 
     function parityOf(curByte) {
-        var parity = false;
+        let parity = false;
         while (curByte) {
             parity = !parity;
             curByte >>>= 1;
@@ -68,7 +68,7 @@ function UefTape(stream) {
             curChunk = readChunk();
         }
 
-        var gap;
+        let gap;
         switch (curChunk.id) {
             case 0x0000:
                 console.log("Origin: " + curChunk.stream.readNulString());
@@ -120,7 +120,7 @@ function UefTape(stream) {
                     acia.tone(curByte & (1 << (state - 1)) ? 2 * baseFrequency : baseFrequency);
                     state++;
                 } else if (state < 1 + numDataBits + numParityBits) {
-                    var bit = parityOf(curByte);
+                    let bit = parityOf(curByte);
                     if (parity === ParityN) bit = !bit;
                     acia.tone(bit ? 2 * baseFrequency : baseFrequency);
                     state++;
@@ -201,22 +201,22 @@ function UefTape(stream) {
 }
 
 function TapefileTape(stream) {
-    var self = this;
+    const self = this;
 
     self.count = 0;
     self.stream = stream;
 
-    var dividerTable = [1, 16, 64, -1];
+    const dividerTable = [1, 16, 64, -1];
 
     function rate(acia) {
-        var bitsPerByte = 9;
+        let bitsPerByte = 9;
         if (!(acia.cr & 0x80)) {
             bitsPerByte++; // Not totally correct if the AUG is to be believed.
         }
-        var divider = dividerTable[acia.cr & 0x03];
+        const divider = dividerTable[acia.cr & 0x03];
         // http://beebwiki.mdfs.net/index.php/Serial_ULA says the serial rate is ignored
         // for cassette mode.
-        var cpp = (2 * 1000 * 1000) / (19200 / divider);
+        const cpp = (2 * 1000 * 1000) / (19200 / divider);
         return Math.floor(bitsPerByte * cpp);
     }
 
@@ -226,7 +226,7 @@ function TapefileTape(stream) {
 
     self.poll = function (acia) {
         if (stream.eof()) return 100000;
-        var byte = stream.readByte();
+        let byte = stream.readByte();
         if (byte === 0xff) {
             byte = stream.readByte();
             if (byte === 0) {
@@ -246,7 +246,7 @@ function TapefileTape(stream) {
 }
 
 export function loadTapeFromData(name, data) {
-    var stream = new utils.DataStream(name, data);
+    const stream = new utils.DataStream(name, data);
     if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
         console.log("Detected a 'tapefile' tape");
         return new TapefileTape(stream);

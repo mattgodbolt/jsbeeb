@@ -3,9 +3,9 @@
 import * as utils from "./utils.js";
 
 export function TouchScreen(scheduler) {
-    var self = this;
-    var PollHz = 8; // Made up
-    var PollCycles = (2 * 1000 * 1000) / PollHz;
+    const self = this;
+    const PollHz = 8; // Made up
+    const PollCycles = (2 * 1000 * 1000) / PollHz;
     this.scheduler = scheduler;
     this.mouse = [];
     this.outBuffer = new utils.Fifo(16);
@@ -58,22 +58,22 @@ export function TouchScreen(scheduler) {
     }
 
     this.doRead = function () {
-        var scaleX = 120,
+        const scaleX = 120,
             marginX = 0.13;
-        var scaleY = 100,
+        const scaleY = 100,
             marginY = 0.03;
-        var scaledX = doScale(self.mouse.x, scaleX, marginX);
-        var scaledY = doScale(1 - self.mouse.y, scaleY, marginY);
-        var toSend = [0x4f, 0x4f, 0x4f, 0x4f];
-        var x = Math.min(255, Math.max(0, scaledX)) | 0;
-        var y = Math.min(255, Math.max(0, scaledY)) | 0;
+        const scaledX = doScale(self.mouse.x, scaleX, marginX);
+        const scaledY = doScale(1 - self.mouse.y, scaleY, marginY);
+        const toSend = [0x4f, 0x4f, 0x4f, 0x4f];
+        const x = Math.min(255, Math.max(0, scaledX)) | 0;
+        const y = Math.min(255, Math.max(0, scaledY)) | 0;
         if (self.mouse.button) {
             toSend[0] = 0x40 | ((x & 0xf0) >>> 4);
             toSend[1] = 0x40 | (x & 0x0f);
             toSend[2] = 0x40 | ((y & 0xf0) >>> 4);
             toSend[3] = 0x40 | (y & 0x0f);
         }
-        for (var i = 0; i < 4; ++i) self.store(toSend[i]);
+        for (let i = 0; i < 4; ++i) self.store(toSend[i]);
         self.store(".".charCodeAt(0));
     };
 }

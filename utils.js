@@ -126,16 +126,15 @@ export const BBC = {
 };
 
 export function stringToBBCKeys(str) {
-    var array = [];
-    var i;
-    var shiftState = false;
-    var capsLockState = true;
-    for (i = 0; i < str.length; ++i) {
-        var c = str.charCodeAt(i);
-        var charStr = str.charAt(i);
-        var bbcKey = null;
-        var needsShift = false;
-        var needsCapsLock = true;
+    const array = [];
+    let shiftState = false;
+    let capsLockState = true;
+    for (let i = 0; i < str.length; ++i) {
+        const c = str.charCodeAt(i);
+        let charStr = str.charAt(i);
+        let bbcKey = null;
+        let needsShift = false;
+        let needsCapsLock = true;
         if (c >= 65 && c <= 90) {
             // A-Z
             bbcKey = BBC[charStr];
@@ -394,7 +393,7 @@ function detectKeyboardLayout() {
     return "UK"; // Default guess of UK
 }
 
-var isUKlayout = detectKeyboardLayout() === "UK";
+const isUKlayout = detectKeyboardLayout() === "UK";
 
 if (isFirefox()) {
     keyCodes.SEMICOLON = 59;
@@ -429,7 +428,7 @@ if (!runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
 }
 
 export function getKeyMap(keyLayout) {
-    var keys2 = [];
+    const keys2 = [];
 
     // shift pressed
     keys2[true] = {};
@@ -730,7 +729,7 @@ export function getKeyMap(keyLayout) {
     // user keymapping
     // do last (to override defaults)
     while (userKeymap.length > 0) {
-        var mapping = userKeymap.pop();
+        const mapping = userKeymap.pop();
         map(keyCodes[mapping.native], BBC[mapping.bbc]);
     }
 
@@ -747,12 +746,12 @@ export function hexword(value) {
 
 export function hd(reader, start, end, opts) {
     opts = opts || {};
-    var width = opts.width || 16;
-    var gap = opts.gap === undefined ? 8 : opts.gap;
-    var res = [];
-    var str = "";
-    var j = 0;
-    for (var i = start; i < end; ++i) {
+    const width = opts.width || 16;
+    const gap = opts.gap === undefined ? 8 : opts.gap;
+    const res = [];
+    let str = "";
+    let j = 0;
+    for (let i = start; i < end; ++i) {
         str += " ";
         str += hexbyte(reader(i));
         if (++j === gap) str += " ";
@@ -763,16 +762,16 @@ export function hd(reader, start, end, opts) {
         }
     }
     if (str) res.push(str);
-    var joined = "";
-    for (i = 0; i < res.length; ++i) {
+    let joined = "";
+    for (let i = 0; i < res.length; ++i) {
         joined += hexword(start + i * width) + " :" + res[i] + "\n";
     }
     return joined;
 }
 
-var signExtendTable = (function () {
-    var table = [];
-    for (var i = 0; i < 256; ++i) table[i] = i >= 128 ? i - 256 : i;
+const signExtendTable = (function () {
+    const table = [];
+    for (let i = 0; i < 256; ++i) table[i] = i >= 128 ? i - 256 : i;
     return table;
 })();
 
@@ -783,13 +782,13 @@ export function signExtend(val) {
 export function noop() {}
 
 export function bench() {
-    for (var j = 0; j < 10; ++j) {
-        var res = 0;
-        var start = Date.now();
-        for (var i = 0; i < 4096 * 1024; ++i) {
+    for (let j = 0; j < 10; ++j) {
+        let res = 0;
+        const start = Date.now();
+        for (let i = 0; i < 4096 * 1024; ++i) {
             res += signExtend(i & 0xff);
         }
-        var tt = Date.now() - start;
+        const tt = Date.now() - start;
         console.log(res, tt);
     }
 }
@@ -803,29 +802,29 @@ export function noteEvent(category, type, label) {
     console.log("event noted:", category, type, label);
 }
 
-var baseUrl = "";
+let baseUrl = "";
 
 export function setBaseUrl(url) {
     baseUrl = url;
 }
 
 export function uint8ArrayToString(array) {
-    var str = "";
-    for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
+    let str = "";
+    for (let i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
     return str;
 }
 
 export function stringToUint8Array(str) {
     if (str instanceof Uint8Array) return str;
-    var len = str.length;
-    var array = new Uint8Array(len);
-    for (var i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
+    const len = str.length;
+    const array = new Uint8Array(len);
+    for (let i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
     return array;
 }
 
 function loadDataHttp(url) {
     return new Promise(function (resolve, reject) {
-        var request = new XMLHttpRequest();
+        const request = new XMLHttpRequest();
         request.open("GET", baseUrl + url, true);
         request.overrideMimeType("text/plain; charset=x-user-defined");
         request.onload = function () {
@@ -876,9 +875,9 @@ export function readInt16(data, offset) {
     return (data[offset + 1] << 8) | data[offset + 0];
 }
 
-var tempBuf = new ArrayBuffer(4);
-var tempBuf8 = new Uint8Array(tempBuf);
-var tempBufF32 = new Float32Array(tempBuf);
+const tempBuf = new ArrayBuffer(4);
+const tempBuf8 = new Uint8Array(tempBuf);
+const tempBufF32 = new Float32Array(tempBuf);
 
 export function readFloat32(data, offset) {
     tempBuf8[0] = data[offset];
@@ -889,13 +888,13 @@ export function readFloat32(data, offset) {
 }
 
 export function ungzip(data) {
-    var tinf = new jsunzip.TINF();
+    const tinf = new jsunzip.TINF();
     tinf.init();
-    var results = [];
+    const results = [];
     while (data.length) {
         if (results.length > 1000) throw new Error("Seems like something went wrong");
         if (data[0] !== 0x1f || data[1] !== 0x8b) throw new Error("Corrupt data");
-        var dataOffset = 10;
+        let dataOffset = 10;
         if (data[3] & 0x02) dataOffset += 2; // Header CRC
         if (data[3] & 0x04) {
             dataOffset += 2 + readInt16(data, dataOffset); // FEXTRA
@@ -908,8 +907,8 @@ export function ungzip(data) {
             while (data[dataOffset] !== 0) dataOffset++; // FCOMMENT
             dataOffset++;
         }
-        var maxDecompressSize = 16384;
-        var result;
+        let maxDecompressSize = 16384;
+        let result;
         for (;;) {
             // Loop around trying to decompress this block, doubling in size if we can't fit a block.
             result = tinf.uncompress(data, dataOffset, maxDecompressSize);
@@ -918,14 +917,14 @@ export function ungzip(data) {
             maxDecompressSize *= 2;
         }
         results.push(result.data.subarray(0, result.dataSize));
-        var nextOffset = result.offset + 8; // skip CRC and uncompressed length
+        const nextOffset = result.offset + 8; // skip CRC and uncompressed length
         data = data.subarray(nextOffset);
     }
-    var total = results.reduce(function (prev, cur) {
+    const total = results.reduce(function (prev, cur) {
         return prev + cur.length;
     }, 0);
-    var finalData = new Uint8Array(total);
-    var offset = 0;
+    const finalData = new Uint8Array(total);
+    let offset = 0;
     results.forEach(function (res) {
         finalData.set(res, offset);
         offset += res.length;
@@ -934,7 +933,7 @@ export function ungzip(data) {
 }
 
 export function DataStream(name_, data_, dontUnzip_) {
-    var self = this;
+    const self = this;
     self.name = name_;
     self.pos = 0;
     self.data = stringToUint8Array(data_);
@@ -984,9 +983,9 @@ export function DataStream(name_, data_, dontUnzip_) {
 
     self.readNulString = function (pos, maxLength) {
         if (!maxLength) maxLength = 1024;
-        var posToUse = pos === undefined ? self.pos : pos;
-        var result = "";
-        var c;
+        let posToUse = pos === undefined ? self.pos : pos;
+        let result = "";
+        let c;
         while ((c = self.readByte(posToUse++)) !== 0 && --maxLength) {
             result += String.fromCharCode(c);
         }
@@ -996,7 +995,7 @@ export function DataStream(name_, data_, dontUnzip_) {
     };
 
     self.substream = function (posOrLength, length) {
-        var pos;
+        let pos;
         if (length === undefined) {
             length = posOrLength;
             pos = self.advance(length);
@@ -1021,28 +1020,28 @@ export function makeFast32(u32) {
     return new Int32Array(u32.buffer);
 }
 
-var knownDiscExtensions = {
+const knownDiscExtensions = {
     uef: true,
     ssd: true,
     dsd: true,
     adl: true,
 };
 
-var knownRomExtensions = {
+const knownRomExtensions = {
     rom: true,
 };
 
 function unzipImage(data, knownExtensions) {
-    var unzip = new jsunzip.JSUnzip();
+    const unzip = new jsunzip.JSUnzip();
     console.log("Attempting to unzip");
-    var result = unzip.open(data);
+    const result = unzip.open(data);
     if (!result.status) {
         throw new Error("Error unzipping " + result.error);
     }
-    var uncompressed = null;
-    var loadedFile;
-    for (var f in unzip.files) {
-        var match = f.match(/.*\.([a-z]+)/i);
+    let uncompressed = null;
+    let loadedFile;
+    for (const f in unzip.files) {
+        const match = f.match(/.*\.([a-z]+)/i);
         if (!match || !knownExtensions[match[1].toLowerCase()]) {
             console.log("Skipping file", f);
             continue;
@@ -1078,9 +1077,9 @@ export function discImageSize(name) {
     // - 80 tracks.
     // - 10 sectors per track.
     // - 256 bytes per sector.
-    var isDsd = false;
-    var isDoubleDensity = false;
-    var byteSize = 80 * 10 * 256;
+    let isDsd = false;
+    let isDoubleDensity = false;
+    let byteSize = 80 * 10 * 256;
     // DSD, aka. double-sided disc is twice the size.
     if (name.toLowerCase().endsWith(".dsd")) {
         byteSize *= 2;
@@ -1097,11 +1096,11 @@ export function discImageSize(name) {
 }
 
 export function setDiscName(data, name) {
-    for (var i = 0; i < 8; ++i) data[i] = name.charCodeAt(i) & 0xff;
+    for (let i = 0; i < 8; ++i) data[i] = name.charCodeAt(i) & 0xff;
 }
 
 export function resizeUint8Array(array, byteSize) {
-    var newArray = new Uint8Array(byteSize);
+    const newArray = new Uint8Array(byteSize);
     newArray.set(array.subarray(0, byteSize));
     return newArray;
 }
@@ -1136,7 +1135,7 @@ Fifo.prototype.put = function (b) {
 
 Fifo.prototype.get = function () {
     if (this.empty()) return;
-    var res = this.buffer[this.rPtr % this.buffer.length];
+    const res = this.buffer[this.rPtr % this.buffer.length];
     this.rPtr++;
     this.size--;
     return res;

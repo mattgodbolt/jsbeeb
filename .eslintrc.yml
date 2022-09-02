@@ -18,4 +18,5 @@ parserOptions:
   sourceType: module
 rules:
   prettier/prettier: error
-
+  no-var: error
+  eqeqeq: [error, always]

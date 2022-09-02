@@ -53,9 +53,7 @@ export function Config(onClose) {
     $(".model-menu a").on(
         "click",
         function (e) {
-            const modelName = $(e.target).attr("data-target");
-            changed.model = modelName;
-
+            changed.model = $(e.target).attr("data-target");
             setDropdownText($(e.target).text());
         }.bind(this)
     );
@@ -95,7 +93,7 @@ export function Config(onClose) {
             this.model.os.push(romName);
         } else {
             let pos = this.model.os.indexOf(romName);
-            if (pos != -1) {
+            if (pos !== -1) {
                 this.model.os.splice(pos, 1);
             }
         }

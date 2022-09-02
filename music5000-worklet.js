@@ -15,20 +15,20 @@ registerProcessor(
         onmessage(event) {
             // Receive a new 128-byte sample from the audio processor and write to the FIFO buffer
             const { data } = event;
-            var sample = new Float32Array(data);
+            const sample = new Float32Array(data);
 
-            if (this.writePosition == BUFFER_SIZE) {
+            if (this.writePosition === BUFFER_SIZE) {
                 this.writePosition = 0;
             }
 
-            for (var i = 0; i < data.length; i++) {
+            for (let i = 0; i < data.length; i++) {
                 this.sampleBuffer[this.writePosition++] = sample[i] / 32768.0; // Conversion to a range -1 to +1
             }
         }
 
         process(inputs, outputs) {
             // Playback
-            if (this.readPosition == BUFFER_SIZE) {
+            if (this.readPosition === BUFFER_SIZE) {
                 this.readPosition = 0;
             }
 

@@ -32,7 +32,7 @@ Tube.prototype.updateInterrupts = function () {
         (this.r1stat & 0x04 && this.pstat[3] & 0x80)
     );
 
-    var hp3Size = this.r1stat & 0x10 ? 1 : 0;
+    const hp3Size = this.r1stat & 0x10 ? 1 : 0;
     this.parasiteCpu.nmi = !!(this.r1stat & 0x08 && (this.hp3pos > hp3Size || this.ph3pos === 0));
 };
 
@@ -46,14 +46,14 @@ Tube.prototype.reset = function () {
 };
 
 Tube.prototype.hostRead = function (addr) {
-    var result = 0xfe;
+    let result = 0xfe;
     switch (addr & 7) {
         case 0:
             result = (this.hstat[0] & 0xc0) | this.r1stat;
             break;
         case 1:
             result = this.ph1[0];
-            for (var i = 0; i < 23; ++i) this.ph1[i] = this.ph1[i + 1];
+            for (let i = 0; i < 23; ++i) this.ph1[i] = this.ph1[i + 1];
             this.pstat[0] |= 0x40;
             if (!--this.ph1pos) {
                 this.hstat[0] &= ~0x80;
@@ -138,7 +138,7 @@ Tube.prototype.hostWrite = function (addr, b) {
 };
 
 Tube.prototype.parasiteRead = function (addr) {
-    var result = 0;
+    let result = 0;
     switch (addr & 7) {
         case 0: // Stat
             result = this.pstat[0] | this.r1stat;

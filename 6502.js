@@ -10,7 +10,7 @@ import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 
-var signExtend = utils.signExtend;
+const signExtend = utils.signExtend;
 
 function Flags() {
     this.reset = function () {
@@ -29,7 +29,7 @@ function Flags() {
     };
 
     this.asByte = function () {
-        var temp = 0x30;
+        let temp = 0x30;
         if (this.c) temp |= 0x01;
         if (this.z) temp |= 0x02;
         if (this.i) temp |= 0x04;
@@ -55,13 +55,13 @@ function base6502(cpu, model) {
     };
 
     cpu.getb = function () {
-        var result = cpu.readmem(cpu.pc);
+        const result = cpu.readmem(cpu.pc);
         cpu.incpc();
         return result | 0;
     };
 
     cpu.getw = function () {
-        var result = cpu.readmem(cpu.pc) | 0;
+        let result = cpu.readmem(cpu.pc) | 0;
         cpu.incpc();
         result |= (cpu.readmem(cpu.pc) | 0) << 8;
         cpu.incpc();
@@ -98,13 +98,13 @@ function base6502(cpu, model) {
         // Behavior here generally discovered via Visual 6502 analysis.
         // 6502 has a quirky BRK; it was sanitized in 65c12.
         // See also https://wiki.nesdev.com/w/index.php/CPU_interrupts
-        var pushAddr = cpu.pc;
+        let pushAddr = cpu.pc;
         if (!isIrq) pushAddr = (pushAddr + 1) & 0xffff;
         cpu.readmem(pushAddr);
 
         cpu.push(pushAddr >>> 8);
         cpu.push(pushAddr & 0xff);
-        var pushFlags = cpu.p.asByte();
+        let pushFlags = cpu.p.asByte();
         if (isIrq) pushFlags &= ~0x10;
         cpu.push(pushFlags);
 
@@ -112,7 +112,7 @@ function base6502(cpu, model) {
         // sequence, and yes, on 6502, an NMI can redirect the vector
         // for a half-way done BRK instruction.
         cpu.polltime(4);
-        var vector = 0xfffe;
+        let vector = 0xfffe;
         if ((model.nmos || isIrq) && this.nmi) {
             vector = 0xfffa;
             cpu.nmi = false;
@@ -136,15 +136,15 @@ function base6502(cpu, model) {
     };
 
     cpu.branch = function (taken) {
-        var offset = signExtend(cpu.getb());
+        const offset = signExtend(cpu.getb());
         if (!taken) {
             cpu.polltime(1);
             cpu.checkInt();
             cpu.polltime(1);
             return;
         }
-        var newPc = (cpu.pc + offset) & 0xffff;
-        var pageCrossed = !!((cpu.pc & 0xff00) ^ (newPc & 0xff00));
+        const newPc = (cpu.pc + offset) & 0xffff;
+        const pageCrossed = !!((cpu.pc & 0xff00) ^ (newPc & 0xff00));
         cpu.pc = newPc;
         if (!model.nmos) {
             cpu.polltime(2 + pageCrossed);
@@ -160,7 +160,7 @@ function base6502(cpu, model) {
             // See https://wiki.nesdev.com/w/index.php/CPU_interrupts
             cpu.polltime(1);
             cpu.checkInt();
-            var sawInt = cpu.takeInt;
+            const sawInt = cpu.takeInt;
             cpu.polltime(2);
             cpu.checkInt();
             cpu.takeInt |= sawInt;
@@ -169,7 +169,7 @@ function base6502(cpu, model) {
     };
 
     function adcNonBCD(addend) {
-        var result = cpu.a + addend + (cpu.p.c ? 1 : 0);
+        const result = cpu.a + addend + (cpu.p.c ? 1 : 0);
         cpu.p.v = !!((cpu.a ^ result) & (addend ^ result) & 0x80);
         cpu.p.c = !!(result & 0x100);
         cpu.a = result & 0xff;
@@ -179,10 +179,10 @@ function base6502(cpu, model) {
     // For flags and stuff see URLs like:
     // http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f86911eaeaea&steps=16
     function adcBCD(addend) {
-        var ah = 0;
-        var tempb = (cpu.a + addend + (cpu.p.c ? 1 : 0)) & 0xff;
+        let ah = 0;
+        const tempb = (cpu.a + addend + (cpu.p.c ? 1 : 0)) & 0xff;
         cpu.p.z = !tempb;
-        var al = (cpu.a & 0xf) + (addend & 0xf) + (cpu.p.c ? 1 : 0);
+        let al = (cpu.a & 0xf) + (addend & 0xf) + (cpu.p.c ? 1 : 0);
         if (al > 9) {
             al -= 10;
             al &= 0xf;
@@ -203,9 +203,9 @@ function base6502(cpu, model) {
     // With reference to c64doc: http://vice-emu.sourceforge.net/plain/64doc.txt
     // and http://www.visual6502.org/JSSim/expert.html?graphics=false&a=0&d=a900f8e988eaeaea&steps=18
     function sbcBCD(subend) {
-        var carry = cpu.p.c ? 0 : 1;
-        var al = (cpu.a & 0xf) - (subend & 0xf) - carry;
-        var ah = (cpu.a >>> 4) - (subend >>> 4);
+        const carry = cpu.p.c ? 0 : 1;
+        let al = (cpu.a & 0xf) - (subend & 0xf) - carry;
+        let ah = (cpu.a >>> 4) - (subend >>> 4);
         if (al & 0x10) {
             al = (al - 6) & 0xf;
             ah--;
@@ -214,7 +214,7 @@ function base6502(cpu, model) {
             ah = (ah - 6) & 0xf;
         }
 
-        var result = cpu.a - subend - carry;
+        const result = cpu.a - subend - carry;
         cpu.p.n = !!(result & 0x80);
         cpu.p.z = !(result & 0xff);
         cpu.p.v = !!((cpu.a ^ result) & (subend ^ cpu.a) & 0x80);
@@ -224,9 +224,9 @@ function base6502(cpu, model) {
 
     function adcBCDcmos(addend) {
         cpu.polltime(1); // One more cycle, apparently
-        var carry = cpu.p.c ? 1 : 0;
-        var al = (cpu.a & 0xf) + (addend & 0xf) + carry;
-        var ah = (cpu.a >>> 4) + (addend >>> 4);
+        const carry = cpu.p.c ? 1 : 0;
+        let al = (cpu.a & 0xf) + (addend & 0xf) + carry;
+        let ah = (cpu.a >>> 4) + (addend >>> 4);
         if (al > 9) {
             al = (al - 10) & 0xf;
             ah++;
@@ -242,9 +242,9 @@ function base6502(cpu, model) {
 
     function sbcBCDcmos(subend) {
         cpu.polltime(1); // One more cycle, apparently
-        var carry = cpu.p.c ? 0 : 1;
-        var al = (cpu.a & 0xf) - (subend & 0xf) - carry;
-        var result = cpu.a - subend - carry;
+        const carry = cpu.p.c ? 0 : 1;
+        const al = (cpu.a & 0xf) - (subend & 0xf) - carry;
+        let result = cpu.a - subend - carry;
         if (result < 0) {
             result -= 0x60;
         }
@@ -293,10 +293,10 @@ function base6502(cpu, model) {
         // http://www.6502.org/users/andre/petindex/local/64doc.txt as reference,
         // tidying up as needed and fixing a couple of typos.
         if (cpu.p.d) {
-            var temp = cpu.a & arg;
+            const temp = cpu.a & arg;
 
-            var ah = temp >>> 4;
-            var al = temp & 0x0f;
+            const ah = temp >>> 4;
+            const al = temp & 0x0f;
 
             cpu.p.n = cpu.p.c;
             cpu.a = (temp >>> 1) | (cpu.p.c ? 0x80 : 0x00);
@@ -380,7 +380,7 @@ function Tube6502(model, cpu) {
         this.cycles += cycles * 2;
         if (this.cycles < 3) return;
         while (this.cycles > 0) {
-            var opcode = this.readmem(this.pc);
+            const opcode = this.readmem(this.pc);
             this.incpc();
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
@@ -389,11 +389,11 @@ function Tube6502(model, cpu) {
 
     this.loadOs = function () {
         console.log("Loading tube rom from roms/" + model.os);
-        var tubeRom = this.rom;
+        const tubeRom = this.rom;
         return utils.loadData("roms/" + model.os).then(function (data) {
-            var len = data.length;
+            const len = data.length;
             if (len !== 2048) throw new Error("Broken ROM file (length=" + len + ")");
-            for (var i = 0; i < len; ++i) {
+            for (let i = 0; i < len; ++i) {
                 tubeRom[i + 2048] = data[i];
             }
         });
@@ -470,17 +470,16 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     // 0b000 - 10000 -> LYNNE - 20KB
 
     this.romSelect = function (b) {
-        var c;
         this.romsel = b;
-        var bankOffset = ((b & 15) << 14) + this.romOffset;
-        var offset = bankOffset - 0x8000;
-        for (c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
-        var swram = model.swram[b & 15] ? 1 : 2;
-        for (c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
+        const bankOffset = ((b & 15) << 14) + this.romOffset;
+        const offset = bankOffset - 0x8000;
+        for (let c = 128; c < 192; ++c) this.memLook[c] = this.memLook[256 + c] = offset;
+        const swram = model.swram[b & 15] ? 1 : 2;
+        for (let c = 128; c < 192; ++c) this.memStat[c] = this.memStat[256 + c] = swram;
         if (model.isMaster && b & 0x80) {
             // 4Kb RAM (private RAM - ANDY)
             // Zero offset as 0x8000 mapped to 0x8000
-            for (c = 128; c < 144; ++c) {
+            for (let c = 128; c < 144; ++c) {
                 this.memLook[c] = this.memLook[256 + c] = 0;
                 this.memStat[c] = this.memStat[256 + c] = 1;
             }
@@ -499,13 +498,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         // the offset.
         this.videoDisplayPage = b & 1 ? 0x8000 : 0x0000;
 
-        var bitE = !!(b & 2);
-        var bitX = !!(b & 4);
-        var bitY = !!(b & 8);
-        var i;
+        const bitE = !!(b & 2);
+        const bitX = !!(b & 4);
+        const bitY = !!(b & 8);
         // The "X" bit controls the "illegal" paging 20KB region overlay of LYNNE.
         // This loop rewires which paged RAM 0x3000 - 0x7fff hits.
-        for (i = 48; i < 128; ++i) {
+        for (let i = 48; i < 128; ++i) {
             // For "normal" access, it's simple: shadow or not.
             this.memLook[i] = bitX ? 0x8000 : 0;
             // For special Master opcode access at 0xc000 - 0xdfff,
@@ -523,9 +521,9 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         }
         // The "Y" bit pages in HAZEL at c000->dfff. HAZEL is mapped in our RAM
         // at 0x9000, so (0x9000 - 0xc000) = -0x3000 is needed as an offset.
-        var hazelRAM = bitY ? 1 : 2;
-        var hazelOff = bitY ? -0x3000 : this.osOffset - 0xc000;
-        for (i = 192; i < 224; ++i) {
+        const hazelRAM = bitY ? 1 : 2;
+        const hazelOff = bitY ? -0x3000 : this.osOffset - 0xc000;
+        for (let i = 192; i < 224; ++i) {
             this.memLook[i] = this.memLook[i + 256] = hazelOff;
             this.memStat[i] = this.memStat[i + 256] = hazelRAM;
         }
@@ -536,7 +534,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     // Works for unpaged RAM only (ie stack and zp)
     this.readmemZpStack = function (addr) {
         addr &= 0xffff;
-        var res = this.ramRomOs[addr];
+        const res = this.ramRomOs[addr];
         if (this._debugRead) this._debugRead(addr, 0, res);
         return res | 0;
     };
@@ -549,9 +547,9 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
 
     // Handy debug function to read a string zero or \n terminated.
     this.readString = function (addr) {
-        var s = "";
+        let s = "";
         for (;;) {
-            var b = this.readmem(addr);
+            const b = this.readmem(addr);
             addr++;
             if (b === 0 || b === 13) break;
             s += String.fromCharCode(b);
@@ -562,7 +560,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     this.findString = function (string, addr) {
         addr = addr | 0;
         for (; addr < 0xffff; ++addr) {
-            for (var i = 0; i < string.length; ++i) {
+            let i;
+            for (i = 0; i < string.length; ++i) {
                 if (this.readmem(addr + i) !== string.charCodeAt(i)) break;
             }
             if (i === string.length) {
@@ -573,8 +572,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     };
 
     this.readArea = function (addr, len) {
-        var str = "";
-        for (var i = 0; i < len; ++i) {
+        let str = "";
+        for (let i = 0; i < len; ++i) {
             str += utils.hexbyte(this.readmem(addr + i));
         }
         return str;
@@ -706,14 +705,13 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
 
     this.readmem = function (addr) {
         addr &= 0xffff;
-        var res = 0;
         if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
-            var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
-            res = this.ramRomOs[offset + addr];
+            const offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+            const res = this.ramRomOs[offset + addr];
             if (this._debugRead) this._debugRead(addr, res, offset);
             return res | 0;
         } else {
-            res = this.readDevice(addr);
+            const res = this.readDevice(addr);
             if (this._debugRead) this._debugRead(addr, res, 0);
             return res | 0;
         }
@@ -721,7 +719,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
 
     this.peekmem = function (addr) {
         if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
-            var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+            const offset = this.memLook[this.memStatOffset + (addr >>> 8)];
             return this.ramRomOs[offset + addr];
         } else {
             return 0xff; // TODO; peekDevice -- this.peekDevice(addr);
@@ -733,7 +731,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         b |= 0;
         if (this._debugWrite) this._debugWrite(addr, b);
         if (this.memStat[this.memStatOffset + (addr >>> 8)] === 1) {
-            var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+            const offset = this.memLook[this.memStatOffset + (addr >>> 8)];
             this.ramRomOs[offset + addr] = b;
             return;
         }
@@ -870,47 +868,46 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     this.loadRom = function (name, offset) {
         if (name.indexOf("http") !== 0) name = "roms/" + name;
         console.log("Loading ROM from " + name);
-        var ramRomOs = this.ramRomOs;
+        const ramRomOs = this.ramRomOs;
         return utils.loadData(name).then(function (data) {
             if (/\.zip/i.test(name)) {
                 data = utils.unzipRomImage(data).data;
             }
 
-            var len = data.length;
+            const len = data.length;
             if (len !== 16384 && len !== 8192) {
                 throw new Error("Broken rom file");
             }
-            for (var i = 0; i < len; ++i) {
+            for (let i = 0; i < len; ++i) {
                 ramRomOs[offset + i] = data[i];
             }
         });
     };
 
     this.loadOs = function (os) {
-        var i;
-        var extraRoms = Array.prototype.slice.call(arguments, 1).concat(config.extraRoms);
+        const extraRoms = Array.prototype.slice.call(arguments, 1).concat(config.extraRoms);
         os = "roms/" + os;
         console.log("Loading OS from " + os);
-        var ramRomOs = this.ramRomOs;
-        var capturedThis = this;
+        const ramRomOs = this.ramRomOs;
+        const capturedThis = this;
         return utils.loadData(os).then(function (data) {
-            var len = data.length;
+            const len = data.length;
             if (len < 0x4000 || len & 0x3fff) throw new Error("Broken ROM file (length=" + len + ")");
-            for (i = 0; i < 0x4000; ++i) {
+            for (let i = 0; i < 0x4000; ++i) {
                 ramRomOs[capturedThis.osOffset + i] = data[i];
             }
-            var numExtraBanks = (len - 0x4000) / 0x4000;
-            var romIndex = 16 - numExtraBanks;
-            for (i = 0; i < numExtraBanks; ++i) {
-                var srcBase = 0x4000 + 0x4000 * i;
-                var destBase = capturedThis.romOffset + (romIndex + i) * 0x4000;
-                for (var j = 0; j < 0x4000; ++j) {
+            const numExtraBanks = (len - 0x4000) / 0x4000;
+            let romIndex = 16 - numExtraBanks;
+            for (let i = 0; i < numExtraBanks; ++i) {
+                const srcBase = 0x4000 + 0x4000 * i;
+                const destBase = capturedThis.romOffset + (romIndex + i) * 0x4000;
+                for (let j = 0; j < 0x4000; ++j) {
                     ramRomOs[destBase + j] = data[srcBase + j];
                 }
             }
-            var awaiting = [];
+            const awaiting = [];
 
-            for (i = 0; i < extraRoms.length; ++i) {
+            for (let i = 0; i < extraRoms.length; ++i) {
                 romIndex--;
                 awaiting.push(capturedThis.loadRom(extraRoms[i], capturedThis.romOffset + romIndex * 0x4000));
             }
@@ -923,9 +920,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     };
 
     this.reset = function (hard) {
-        var i;
         if (hard) {
-            for (i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
+            for (let i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
             if (model.isMaster) {
                 // On the Master, opcodes exeucting from 0xc000 - 0xdfff
                 // can have optionally have their memory accesses
@@ -934,16 +930,16 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
                 this.memStatOffsetByIFetchBank[0xd] = 256;
             }
             if (!model.isTest) {
-                for (i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
-                for (i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
-                for (i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-                for (i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
-                for (i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
+                for (let i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
+                for (let i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
+                for (let i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
+                for (let i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
+                for (let i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
-                for (i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
             } else {
                 // Test sets everything as RAM.
-                for (i = 0; i < 256; ++i) {
+                for (let i = 0; i < 256; ++i) {
                     this.memStat[i] = this.memStat[256 + i] = 1;
                     this.memLook[i] = this.memLook[256 + i] = 0;
                 }
@@ -951,7 +947,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             // DRAM content is not guaranteed to contain any particular
             // value on start up, so we choose values that help avoid
             // bugs in various games.
-            for (i = 0; i < this.romOffset; ++i) {
+            for (let i = 0; i < this.romOffset; ++i) {
                 if (i < 0x100) {
                     // For Clogger.
                     this.ramRomOs[i] = 0x00;
@@ -1067,7 +1063,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         // find the smaller of the target and current cycles, and if that's over one second's worth; subtract
         // that from both, to keep the domain low (while accumulating seconds). Take care to preserve the bottom
         // bit though; as that encodes whether we're on an even or odd bus cycle.
-        var smaller = Math.min(this.targetCycles, this.currentCycles) & 0xfffffffe;
+        const smaller = Math.min(this.targetCycles, this.currentCycles) & 0xfffffffe;
         if (smaller >= 2 * 1000 * 1000) {
             this.targetCycles -= 2 * 1000 * 1000;
             this.currentCycles -= 2 * 1000 * 1000;
@@ -1082,12 +1078,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         }
     };
     this.executeInternal = function () {
-        var first = true;
+        let first = true;
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
             this.oldPcArray[this.oldPcIndex] = this.pc;
             this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
-            var opcode = this.readmem(this.pc);
+            const opcode = this.readmem(this.pc);
             if (this._debugInstruction && !first && this._debugInstruction(this.pc, opcode)) {
                 return false;
             }
@@ -1105,7 +1101,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     this.executeInternalFast = function () {
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
-            var opcode = this.readmem(this.pc);
+            const opcode = this.readmem(this.pc);
             this.incpc();
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
@@ -1123,12 +1119,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         this.functionName = functionName;
         this.handlers = [];
         this.add = function (handler) {
-            var self = this;
+            const self = this;
             this.handlers.push(handler);
             if (!this.cpu[this.functionName]) {
                 this.cpu[this.functionName] = function () {
-                    for (var i = 0; i < self.handlers.length; ++i) {
-                        var handler = self.handlers[i];
+                    for (let i = 0; i < self.handlers.length; ++i) {
+                        const handler = self.handlers[i];
                         if (handler.apply(handler, arguments)) {
                             self.cpu.stop();
                             return true;
@@ -1143,7 +1139,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             return handler;
         };
         this.remove = function (handler) {
-            var i = this.handlers.indexOf(handler);
+            const i = this.handlers.indexOf(handler);
             if (i < 0) throw "Unable to find debug hook handler";
             this.handlers = this.handlers.slice(0, i).concat(this.handlers.slice(i + 1));
             if (this.handlers.length === 0) {
@@ -1163,11 +1159,11 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     this.dumpTrace = function (maxToShow, func) {
         if (!maxToShow) maxToShow = 256;
         if (maxToShow > 256) maxToShow = 256;
-        var disassembler = this.disassembler;
+        const disassembler = this.disassembler;
         func =
             func ||
             function (pc, a, x, y) {
-                var dis = disassembler.disassemble(pc, true)[0];
+                const dis = disassembler.disassemble(pc, true)[0];
                 console.log(
                     utils.hexword(pc),
                     (dis + "                       ").substr(0, 15),
@@ -1176,19 +1172,19 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
                     utils.hexbyte(y)
                 );
             };
-        for (var i = maxToShow - 2; i >= 0; --i) {
-            var j = (this.oldPcIndex - i) & 255;
+        for (let i = maxToShow - 2; i >= 0; --i) {
+            const j = (this.oldPcIndex - i) & 255;
             func(this.oldPcArray[j], this.oldAArray[j], this.oldXArray[j], this.oldYArray[j]);
         }
         func(this.pc, this.a, this.x, this.y);
     };
 
     this.initialise = function () {
-        var loadOsPromise = Promise.resolve();
+        let loadOsPromise = Promise.resolve();
         if (model.os.length) {
             loadOsPromise = this.loadOs.apply(this, model.os);
         }
-        var capturedThis = this;
+        const capturedThis = this;
         if (model.tube) {
             loadOsPromise = loadOsPromise.then(function () {
                 return capturedThis.tube.loadOs();

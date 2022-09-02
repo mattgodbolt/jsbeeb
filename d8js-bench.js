@@ -3,7 +3,7 @@
 
 ///////////////////////////////////////////////////
 // Enough of the code assumes there's a console.log that I've just made one here
-var console = {
+const console = {
     log: function () {
         print.apply(console, arguments);
     },
@@ -32,17 +32,17 @@ requirejs(["fake6502", "fdc", "models"], function (Fake6502, disc, models) {
     function benchmarkCpu(cpu, numCycles) {
         numCycles = numCycles || 10 * 1000 * 1000;
         console.log("Benchmarking over " + numCycles + " cpu cycles");
-        var startTime = Date.now();
+        const startTime = Date.now();
         cpu.execute(numCycles);
-        var endTime = Date.now();
-        var msTaken = endTime - startTime;
-        var virtualMhz = numCycles / msTaken / 1000;
+        const endTime = Date.now();
+        const msTaken = endTime - startTime;
+        const virtualMhz = numCycles / msTaken / 1000;
         console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
         console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
     }
 
-    var discName = "elite";
-    var cpu = Fake6502.fake6502(models.findModel("B"));
+    const discName = "elite";
+    const cpu = Fake6502.fake6502(models.findModel("B"));
     cpu.initialise()
         .then(function () {
             return disc.load("discs/" + discName + ".ssd");

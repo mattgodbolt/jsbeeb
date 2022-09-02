@@ -1,6 +1,6 @@
 "use strict";
 
-var MaxHeadroom = 0xffffffff;
+const MaxHeadroom = 0xffffffff;
 
 export function Scheduler() {
     this.scheduled = null;
@@ -23,12 +23,12 @@ Scheduler.prototype.schedule = function (task, delay) {
         throw new Error("Task is already scheduled");
     }
 
-    var expireEpoch = delay + this.epoch;
+    const expireEpoch = delay + this.epoch;
     task.expireEpoch = expireEpoch;
     task._scheduled = true;
 
-    var before = this.scheduled;
-    var prev = null;
+    let before = this.scheduled;
+    let prev = null;
     while (before && before.expireEpoch <= expireEpoch) {
         prev = before;
         before = before.next;
@@ -59,9 +59,9 @@ Scheduler.prototype.cancel = function (task) {
 };
 
 Scheduler.prototype.polltime = function (ticks) {
-    var targetEpoch = this.epoch + ticks;
+    const targetEpoch = this.epoch + ticks;
     while (this.scheduled && this.scheduled.expireEpoch <= targetEpoch) {
-        var head = this.scheduled;
+        const head = this.scheduled;
         this.epoch = head.expireEpoch;
         head.cancel(); // cancel first
         head.onExpire(); // expiry may reschedule

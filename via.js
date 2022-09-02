@@ -25,7 +25,7 @@ const ORB = 0x0,
     INT_CB2 = 0x08;
 
 function via(cpu, irq) {
-    var self = {
+    const self = {
         ora: 0,
         orb: 0,
         ira: 0,
@@ -69,7 +69,7 @@ function via(cpu, irq) {
         polltime: function (cycles) {
             cycles |= 0;
             self.justhit = 0;
-            var newT1c = self.t1c - cycles;
+            let newT1c = self.t1c - cycles;
             if (newT1c < -2 && self.t1c > -3) {
                 if (!self.t1hit) {
                     self.ifr |= TIMER1INT;
@@ -85,7 +85,7 @@ function via(cpu, irq) {
             self.t1c = newT1c;
 
             if (!(self.acr & 0x20)) {
-                var newT2c = self.t2c - cycles;
+                let newT2c = self.t2c - cycles;
                 if (newT2c < -2) {
                     if (!self.t2hit) {
                         self.ifr |= TIMER2INT;
@@ -112,7 +112,7 @@ function via(cpu, irq) {
         },
 
         write: function (addr, val) {
-            var mode;
+            let mode;
             val |= 0;
             switch (addr & 0xf) {
                 case ORA:
@@ -247,7 +247,6 @@ function via(cpu, irq) {
         },
 
         read: function (addr) {
-            var temp;
             switch (addr & 0xf) {
                 case ORA:
                     self.ifr &= ~INT_CA1;
@@ -264,13 +263,13 @@ function via(cpu, irq) {
                     self.recalculatePortAPins();
                     return self.portapins;
 
-                case ORB:
+                case ORB: {
                     self.ifr &= ~INT_CB1;
                     if ((self.pcr & 0xa0) !== 0x20) self.ifr &= ~INT_CB2;
                     self.updateIFR();
 
                     self.recalculatePortBPins();
-                    temp = self.orb & self.ddrb;
+                    let temp = self.orb & self.ddrb;
                     if (self.acr & 2) temp |= self.irb & ~self.ddrb;
                     else temp |= self.portbpins & ~self.ddrb;
                     // If PB7 is active, it is mixed in regardless of
@@ -280,7 +279,7 @@ function via(cpu, irq) {
                         temp |= self.t1_pb7 << 7;
                     }
 
-                    var buttons = this.getJoysticks();
+                    const buttons = this.getJoysticks();
 
                     // clear PB4 and PB5
                     temp = temp & 0xcf; // 11001111
@@ -298,7 +297,7 @@ function via(cpu, irq) {
                     }
 
                     return temp;
-
+                }
                 case DDRA:
                     return self.ddra;
                 case DDRB:
@@ -359,7 +358,7 @@ function via(cpu, irq) {
 
         setca1: function (level) {
             if (level === self.ca1) return;
-            var pcrSet = !!(self.pcr & 1);
+            const pcrSet = !!(self.pcr & 1);
             if (pcrSet === level) {
                 if (self.acr & 1) self.ira = self.portapins;
                 self.ifr |= INT_CA1;
@@ -375,10 +374,10 @@ function via(cpu, irq) {
         setca2: function (level) {
             if (level === self.ca2) return;
             self.ca2 = level;
-            var output = !!(self.pcr & 0x08);
+            const output = !!(self.pcr & 0x08);
             if (self.ca2changecallback) self.ca2changecallback(level, output);
             if (output) return;
-            var pcrSet = !!(self.pcr & 4);
+            const pcrSet = !!(self.pcr & 4);
             if (pcrSet === level) {
                 self.ifr |= INT_CA2;
                 self.updateIFR();
@@ -387,7 +386,7 @@ function via(cpu, irq) {
 
         setcb1: function (level) {
             if (level === self.cb1) return;
-            var pcrSet = !!(self.pcr & 0x10);
+            const pcrSet = !!(self.pcr & 0x10);
             if (pcrSet === level) {
                 if (self.acr & 2) self.irb = self.portbpins;
                 self.ifr |= INT_CB1;
@@ -403,10 +402,10 @@ function via(cpu, irq) {
         setcb2: function (level) {
             if (level === self.cb2) return;
             self.cb2 = level;
-            var output = !!(self.pcr & 0x80);
+            const output = !!(self.pcr & 0x80);
             if (self.cb2changecallback) self.cb2changecallback(level, output);
             if (output) return;
-            var pcrSet = !!(self.pcr & 0x40);
+            const pcrSet = !!(self.pcr & 0x40);
             if (pcrSet === level) {
                 self.ifr |= INT_CB2;
                 self.updateIFR();
@@ -417,13 +416,13 @@ function via(cpu, irq) {
 }
 
 export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, getGamepads) {
-    var self = via(cpu, 0x01);
+    const self = via(cpu, 0x01);
 
     self.IC32 = 0;
     self.capsLockLight = false;
     self.shiftLockLight = false;
     self.keys = [];
-    for (var i = 0; i < 16; ++i) {
+    for (let i = 0; i < 16; ++i) {
         self.keys[i] = new Uint8Array(16);
     }
 
@@ -437,8 +436,8 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
     self.keyboardEnabled = true;
 
     function clearKeys() {
-        for (var i = 0; i < self.keys.length; ++i) {
-            for (var j = 0; j < self.keys[i].length; ++j) {
+        for (let i = 0; i < self.keys.length; ++i) {
+            for (let j = 0; j < self.keys[i].length; ++j) {
                 self.keys[i][j] = false;
             }
         }
@@ -462,7 +461,7 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
             return;
         }
 
-        var colrow = self.keycodeToRowCol[!!shiftDown][key];
+        const colrow = self.keycodeToRowCol[!!shiftDown][key];
         if (!colrow) return;
 
         self.keys[colrow[0]][colrow[1]] = val;
@@ -492,10 +491,9 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
     };
     self.hasAnyKeyDown = function () {
         // 10 for BBC, 13 for Master 128
-        var numCols = 13;
-        var i, j;
-        for (i = 0; i < numCols; ++i) {
-            for (j = 0; j < 8; ++j) {
+        const numCols = 13;
+        for (let i = 0; i < numCols; ++i) {
+            for (let j = 0; j < 8; ++j) {
                 if (self.keys[i][j]) {
                     return true;
                 }
@@ -506,11 +504,10 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
 
     self.updateKeys = function () {
         // 10 for BBC, 13 for Master 128
-        var numCols = 13;
-        var i, j;
+        const numCols = 13;
         if (self.IC32 & 8) {
-            for (i = 0; i < numCols; ++i) {
-                for (j = 1; j < 8; ++j) {
+            for (let i = 0; i < numCols; ++i) {
+                for (let j = 1; j < 8; ++j) {
                     if (self.keys[i][j]) {
                         self.setca2(true);
                         return;
@@ -522,9 +519,9 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
             // "wins" vs. CMOS.
             // At 0 also wins against an output pin.
 
-            var portapins = self.portapins;
-            var keyrow = (portapins >>> 4) & 7;
-            var keycol = portapins & 0xf;
+            const portapins = self.portapins;
+            const keyrow = (portapins >>> 4) & 7;
+            const keycol = portapins & 0xf;
             if (!self.keys[keycol][keyrow]) {
                 self.portapins &= 0x7f;
             } else if (!(self.ddra & 0x80)) {
@@ -532,7 +529,7 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
             }
 
             if (keycol < numCols) {
-                for (j = 1; j < 8; ++j) {
+                for (let j = 1; j < 8; ++j) {
                     if (self.keys[keycol][j]) {
                         self.setca2(true);
                         return;
@@ -549,7 +546,7 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
     };
 
     self.portBUpdated = function () {
-        var portbpins = self.portbpins;
+        const portbpins = self.portbpins;
         if (portbpins & 8) self.IC32 |= 1 << (portbpins & 7);
         else self.IC32 &= ~(1 << (portbpins & 7));
 
@@ -569,7 +566,7 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
         // https://stardot.org.uk/forums/viewtopic.php?f=4&t=17597
         // If either keyboard or CMOS pulls a given pin low, it "wins"
         // vs. via output.
-        var busval = 0xff;
+        let busval = 0xff;
         if (isMaster) busval &= cmos.read(self.IC32);
         self.portapins &= busval;
         self.updateKeys();
@@ -586,13 +583,13 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
     };
 
     self.getJoysticks = function () {
-        var button1 = false;
-        var button2 = false;
+        let button1 = false;
+        let button2 = false;
 
-        var pads = self.getGamepads();
+        const pads = self.getGamepads();
         if (pads && pads[0]) {
-            var pad = pads[0];
-            var pad2 = pads[1];
+            const pad = pads[0];
+            const pad2 = pads[1];
 
             button1 = pad.buttons[10].pressed;
             // if two gamepads, use button from 2nd
@@ -608,7 +605,7 @@ export function SysVia(cpu, video, soundChip, cmos, isMaster, initialLayout, get
 }
 
 export function UserVia(cpu, isMaster, userPortPeripheral) {
-    var self = via(cpu, 0x02);
+    const self = via(cpu, 0x02);
 
     // nothing connected to user VIA
     self.getJoysticks = function () {
