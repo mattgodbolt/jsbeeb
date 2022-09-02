@@ -4,6 +4,7 @@ import { findModel } from "../../models.js";
 import { FakeVideo } from "../../video.js";
 import assert from "assert";
 import * as utils from "../../utils.js";
+import * as Tokeniser from "../../basic-tokenise.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 
@@ -71,6 +72,24 @@ export class TestMachine {
     async loadDisc(image) {
         const data = await fdc.load(image);
         this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, "", data));
+    }
+
+    async loadBasic(source) {
+        const tokeniser = await Tokeniser.create();
+        const tokenised = tokeniser.tokenise(source);
+        // TODO: dedupe from main.js
+        const page = this.readbyte(0x18) << 8;
+        for (let i = 0; i < tokenised.length; ++i) {
+            this.writebyte(page + i, tokenised.charCodeAt(i));
+        }
+        // Set VARTOP (0x12/3) and TOP(0x02/3)
+        const end = page + tokenised.length;
+        const endLow = end & 0xff;
+        const endHigh = (end >>> 8) & 0xff;
+        this.writebyte(0x02, endLow);
+        this.writebyte(0x03, endHigh);
+        this.writebyte(0x12, endLow);
+        this.writebyte(0x13, endHigh);
     }
 
     async type(text) {

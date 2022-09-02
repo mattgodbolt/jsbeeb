@@ -123,7 +123,7 @@ function InstructionGen(is65c12) {
     };
     self.spuriousOp = function (addr, reg) {
         if (self.is65c12) {
-            self.readOp(addr, reg, true);
+            self.readOp(addr, "", true);
         } else {
             self.writeOp(addr, reg, true);
         }
