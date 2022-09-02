@@ -1402,7 +1402,6 @@ function draw(now) {
     // a) We're trying to run as fast as possible.
     // b) Tape is playing, normal speed but backgrounded tab should run.
     if (useTimeout) {
-        console.log("time");
         window.setTimeout(draw, timeout);
     } else {
         window.requestAnimationFrame(draw);
