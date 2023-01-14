@@ -912,13 +912,16 @@ function loadTapeImage(tapeImage) {
     });
 }
 
-$("#disc_load").change(function (evt) {
+$("#disc_load").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
     loadHTMLFile(file);
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$("#tape_load").change(function (evt) {
+$("#tape_load").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
     const file = evt.target.files[0];
     const reader = new FileReader();
     utils.noteEvent("local", "clickTape"); // NB no filename here
@@ -929,6 +932,7 @@ $("#tape_load").change(function (evt) {
         $("#tapes").modal("hide");
     };
     reader.readAsBinaryString(file);
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
 function anyModalsVisible() {
