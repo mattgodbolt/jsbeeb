@@ -24,7 +24,7 @@ export function emptySsd(fdc) {
         result.address =
         result.format =
             () => {
-                this.notFoundTask.reschedule(500 * DiscTimeSlice);
+                result.notFoundTask.reschedule(500 * DiscTimeSlice);
             };
     return result;
 }
