@@ -99,6 +99,11 @@ export default {
                 test: /\.(png|svg|jpg|jpeg|gif)$/i,
                 type: "asset",
             },
+            {
+                test: /\.js$/,
+                enforce: "pre",
+                use: ["source-map-loader"],
+            },
         ],
     },
 };
