@@ -35,7 +35,7 @@ jobs:
       - name: npm install
         run: npm install
       - name: long tests
-        run: npx npm-run-all test-long:*
+        run: npm run test-long
 
   #   electron-win-mac:
   #     needs: [build-and-test, long-test]
