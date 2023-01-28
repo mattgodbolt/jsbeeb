@@ -532,17 +532,20 @@ window.onbeforeunload = function () {
     }
 };
 
-const cmos = new Cmos({
-    load: function () {
-        if (window.localStorage.cmosRam) {
-            return JSON.parse(window.localStorage.cmosRam);
-        }
-        return null;
+const cmos = new Cmos(
+    {
+        load: function () {
+            if (window.localStorage.cmosRam) {
+                return JSON.parse(window.localStorage.cmosRam);
+            }
+            return null;
+        },
+        save: function (data) {
+            window.localStorage.cmosRam = JSON.stringify(data);
+        },
     },
-    save: function (data) {
-        window.localStorage.cmosRam = JSON.stringify(data);
-    },
-});
+    model.cmosOverride
+);
 
 let printerWindow = null;
 let printerTextArea = null;

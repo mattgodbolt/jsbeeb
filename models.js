@@ -3,7 +3,7 @@
 import { I8271, WD1770 } from "./fdc.js";
 
 class Model {
-    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube) {
+    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube, cmosOverride) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -13,7 +13,17 @@ class Model {
         this.swram = swram;
         this.isTest = false;
         this.tube = tube;
+        this.cmosOverride = cmosOverride;
     }
+}
+
+function pickAdfs(cmos) {
+    cmos[19] = (cmos[19] & 0xf0) | 13;
+    return cmos;
+}
+function pickDfs(cmos) {
+    cmos[19] = (cmos[19] & 0xf0) | 9;
+    return cmos;
 }
 
 // TODO: semi-bplus-style to get swram for exile hardcoded here
@@ -81,7 +91,18 @@ export const allModels = [
         beebSwram,
         WD1770
     ),
-    new Model("BBC Master 128", ["Master"], ["master/mos3.20"], false, true, masterSwram, WD1770),
+    new Model("BBC Master 128 (DFS)", ["Master"], ["master/mos3.20"], false, true, masterSwram, WD1770, null, pickDfs),
+    new Model(
+        "BBC Master 128 (ADFS)",
+        ["MasterADFS"],
+        ["master/mos3.20"],
+        false,
+        true,
+        masterSwram,
+        WD1770,
+        null,
+        pickAdfs
+    ),
     new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
 ];
 

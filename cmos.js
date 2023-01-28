@@ -7,7 +7,7 @@ const defaultCmos = [
 ];
 
 export class Cmos {
-    constructor(persistence) {
+    constructor(persistence, cmosOverride) {
         this.store = persistence ? persistence.load() : null;
         this.persistence = persistence;
         this.enabled = false;
@@ -18,8 +18,11 @@ export class Cmos {
 
         if (!this.store) {
             this.store = defaultCmos;
-            this.save();
         }
+        if (cmosOverride) {
+            this.store = cmosOverride(this.store);
+        }
+        this.save();
     }
 
     save() {
