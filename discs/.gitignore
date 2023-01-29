@@ -1,6 +1,8 @@
 # To prevent accidental checking in of images you'll need to specify the SSDs directly to
 # add them to git.
-*.ssd
-*.dsd
+*.adf
 *.adl
+*.adm
+*.dsd
 *.hfe
+*.ssd

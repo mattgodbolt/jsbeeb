@@ -1081,15 +1081,23 @@ export function discImageSize(name) {
     let isDoubleDensity = false;
     let byteSize = 80 * 10 * 256;
     // DSD, aka. double-sided disc is twice the size.
-    if (name.toLowerCase().endsWith(".dsd")) {
+    let lowerName = name.toLowerCase();
+    if (lowerName.endsWith(".dsd")) {
         byteSize *= 2;
         isDsd = true;
     }
-    if (name.toLowerCase().endsWith(".adl")) {
+    if (lowerName.endsWith(".adl")) {
         // ADFS (Large) disks are:
         // double density, double sided, 80 track, 16 sectors per track, 256 bytes per sector (640K)
         byteSize = 2 * 80 * 16 * 256;
         isDsd = true;
+        isDoubleDensity = true;
+    }
+    if (lowerName.endsWith(".adf") || lowerName.endsWith(".adm")) {
+        // ADFS (Small) disks are:
+        // single density, double sided, 80 track, 16 sectors per track, 256 bytes per sector (640K)
+        byteSize = 80 * 16 * 256;
+        isDsd = false;
         isDoubleDensity = true;
     }
     return { isDsd: isDsd, isDoubleDensity: isDoubleDensity, byteSize: byteSize };
