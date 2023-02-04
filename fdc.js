@@ -74,129 +74,135 @@ export function localDisc(fdc, name) {
     });
 }
 
-export function BaseDisc(fdc, name, data, flusher) {
-    if (data === null || data === undefined) throw new Error("Bad disc data");
-    let nameDetails = utils.discImageSize(name);
-    let isDsd = nameDetails.isDsd;
-    let sectorsPerTrack = nameDetails.isDoubleDensity ? 16 : 10;
-    let byteSize = nameDetails.byteSize;
-    if (data.length > byteSize && !isDsd) {
-        // For safety, if SSD is too big, assume it's a mis-named DSD.
-        nameDetails = utils.discImageSize(".dsd");
-        isDsd = true;
-        byteSize = nameDetails.byteSize;
-    }
-    data = utils.resizeUint8Array(data, byteSize);
+export class BaseDisc {
+    constructor(fdc, name, data, flusher) {
+        if (data === null || data === undefined) throw new Error("Bad disc data");
+        let nameDetails = utils.discImageSize(name);
+        let isDsd = nameDetails.isDsd;
+        let sectorsPerTrack = nameDetails.isDoubleDensity ? 16 : 10;
+        let byteSize = nameDetails.byteSize;
+        if (data.length > byteSize && !isDsd) {
+            // For safety, if SSD is too big, assume it's a mis-named DSD.
+            nameDetails = utils.discImageSize(".dsd");
+            isDsd = true;
+            byteSize = nameDetails.byteSize;
+        }
+        data = utils.resizeUint8Array(data, byteSize);
 
-    this.fdc = fdc;
-    this.name = name;
-    this.isDsd = isDsd;
-    this.sectorsPerTrack = sectorsPerTrack;
-    this.flusher = flusher;
-    this.data = data;
-    this.byteWithinSector = 0;
-    this.writeProt = !flusher;
-    this.seekOffset = 0;
-    this.sectorOffset = 0;
-    this.formatSector = 0;
-    this.rsector = 0;
-    this.track = 0;
-    this.side = -1;
+        this.fdc = fdc;
+        this.name = name;
+        this.isDsd = isDsd;
+        this.sectorsPerTrack = sectorsPerTrack;
+        this.flusher = flusher;
+        this.data = data;
+        this.byteWithinSector = 0;
+        this.writeProt = !flusher;
+        this.seekOffset = 0;
+        this.sectorOffset = 0;
+        this.formatSector = 0;
+        this.rsector = 0;
+        this.track = 0;
+        this.side = -1;
 
-    this.notFoundTask = fdc.scheduler.newTask(() => this.fdc.notFound());
-    this.readTask = fdc.scheduler.newTask(() => {
-        this.fdc.discData(this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector]);
-        if (++this.byteWithinSector === 256) {
-            this.fdc.discFinishRead();
-        } else {
-            this.readTask.reschedule(DiscTimeSlice);
-        }
-    });
-    this.writeTask = fdc.scheduler.newTask(() => {
-        if (this.writeProt) {
-            this.fdc.writeProtect();
-            return;
-        }
-        this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = this.fdc.readDiscData(
-            this.byteWithinSector === 255
-        );
-        if (++this.byteWithinSector === 256) {
-            this.fdc.discFinishRead();
-            this.flush();
-        } else {
-            this.writeTask.reschedule(DiscTimeSlice);
-        }
-    });
-    this.readAddrTask = fdc.scheduler.newTask(() => {
-        switch (this.byteWithinSector) {
-            case 0:
-                this.fdc.discData(this.track);
-                break;
-            case 1:
-                this.fdc.discData(this.side);
-                break;
-            case 2:
-                this.fdc.discData(this.rsector);
-                break;
-            case 3:
-                this.fdc.discData(1);
-                break;
-            case 4:
-            case 5:
-                this.fdc.discData(0);
-                break;
-            case 6:
+        this.notFoundTask = fdc.scheduler.newTask(() => this.fdc.notFound());
+        this.readTask = fdc.scheduler.newTask(() => {
+            this.fdc.discData(this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector]);
+            if (++this.byteWithinSector === 256) {
                 this.fdc.discFinishRead();
-                this.rsector++;
-                if (this.rsector === this.sectorsPerTrack) this.rsector = 0;
-                return;
-        }
-        this.byteWithinSector++;
-        this.readAddrTask.reschedule(DiscTimeSlice);
-    });
-    this.formatTask = fdc.scheduler.newTask(() => {
-        if (this.writeProt) {
-            this.fdc.writeProtect();
-            return;
-        }
-        this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = 0;
-        if (++this.byteWithinSector === 256) {
-            this.byteWithinSector = 0;
-            this.sectorOffset += 256;
-            if (++this.formatSector === this.sectorsPerTrack) {
-                this.fdc.discFinishRead();
-                this.flush();
+            } else {
+                this.readTask.reschedule(DiscTimeSlice);
+            }
+        });
+        this.writeTask = fdc.scheduler.newTask(() => {
+            if (this.writeProt) {
+                this.fdc.writeProtect();
                 return;
             }
-        }
-        this.formatTask.reschedule(DiscTimeSlice);
-    });
+            this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = this.fdc.readDiscData(
+                this.byteWithinSector === 255
+            );
+            if (++this.byteWithinSector === 256) {
+                this.fdc.discFinishRead();
+                this.flush();
+            } else {
+                this.writeTask.reschedule(DiscTimeSlice);
+            }
+        });
+        this.readAddrTask = fdc.scheduler.newTask(() => {
+            switch (this.byteWithinSector) {
+                case 0:
+                    this.fdc.discData(this.track);
+                    break;
+                case 1:
+                    this.fdc.discData(this.side);
+                    break;
+                case 2:
+                    this.fdc.discData(this.rsector);
+                    break;
+                case 3:
+                    this.fdc.discData(1);
+                    break;
+                case 4:
+                case 5:
+                    this.fdc.discData(0);
+                    break;
+                case 6:
+                    this.fdc.discFinishRead();
+                    this.rsector++;
+                    if (this.rsector === this.sectorsPerTrack) this.rsector = 0;
+                    return;
+            }
+            this.byteWithinSector++;
+            this.readAddrTask.reschedule(DiscTimeSlice);
+        });
+        this.formatTask = fdc.scheduler.newTask(() => {
+            if (this.writeProt) {
+                this.fdc.writeProtect();
+                return;
+            }
+            this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = 0;
+            if (++this.byteWithinSector === 256) {
+                this.byteWithinSector = 0;
+                this.sectorOffset += 256;
+                if (++this.formatSector === this.sectorsPerTrack) {
+                    this.fdc.discFinishRead();
+                    this.flush();
+                    return;
+                }
+            }
+            this.formatTask.reschedule(DiscTimeSlice);
+        });
+    }
 
-    BaseDisc.prototype.flush = () => {
+    flush() {
         if (this.flusher) this.flusher(this);
-    };
-    BaseDisc.prototype.seek = (track) => {
+    }
+
+    seek(track) {
         this.seekOffset = track * this.sectorsPerTrack * 256;
         if (this.isDsd) this.seekOffset <<= 1;
         const oldTrack = this.track;
         this.track = track;
         return this.track - oldTrack;
-    };
-    BaseDisc.prototype.check = (track, side) => {
+    }
+
+    check(track, side) {
         if (this.track !== track || (side && !this.isDsd)) {
             this.notFoundTask.reschedule(500 * DiscTimeSlice);
             return false;
         }
         return true;
-    };
-    BaseDisc.prototype.read = (sector, track, side) => {
+    }
+
+    read(sector, track, side) {
         if (!this.check(track, side)) return;
         this.side = side;
         this.readTask.reschedule(DiscTimeSlice);
         this.sectorOffset = sector * 256 + (side ? this.sectorsPerTrack * 256 : 0);
         this.byteWithinSector = 0;
-    };
-    BaseDisc.prototype.write = (sector, track, side) => {
+    }
+
+    write(sector, track, side) {
         if (!this.check(track, side)) return;
         this.side = side;
         // NB in old code this used to override "time" to be -1000, which immediately forced a write.
@@ -205,22 +211,24 @@ export function BaseDisc(fdc, name, data, flusher) {
         this.writeTask.reschedule(DiscTimeSlice);
         this.sectorOffset = sector * 256 + (side ? this.sectorsPerTrack * 256 : 0);
         this.byteWithinSector = 0;
-    };
-    BaseDisc.prototype.address = (track, side) => {
+    }
+
+    address(track, side) {
         if (!this.check(track, side)) return;
         this.side = side;
         this.readAddrTask.reschedule(DiscTimeSlice);
         this.byteWithinSector = 0;
         this.rsector = 0;
-    };
-    BaseDisc.prototype.format = (track, side) => {
+    }
+
+    format(track, side) {
         if (!this.check(track, side)) return;
         this.side = side;
         this.formatTask.reschedule(DiscTimeSlice);
         this.formatSector = 0;
         this.sectorOffset = side ? this.sectorsPerTrack * 256 : 0;
         this.byteWithinSector = 0;
-    };
+    }
 }
 
 export class I8271 {
@@ -268,6 +276,7 @@ export class I8271 {
     }
 
     loadDisc(drive, disc) {
+        console.log(`loading ${disc.name} in ${drive}`);
         this.drives[drive] = disc;
     }
 
