@@ -1,10 +1,28 @@
 "use strict";
 
+import { hexbyte } from "./utils.js";
+
 const defaultCmos = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0xc9, 0xff, 0xff, 0x12, 0x00, 0x17, 0xca, 0x1e, 0x05, 0x00, 0x35, 0xa6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ];
+
+let timeOffset = 0;
+
+function getBbcDateTime() {
+    const result = new Date(Date.now() + timeOffset);
+    result.setMilliseconds(0);
+    return result;
+}
+
+function toBcd(value) {
+    return parseInt(value.toString(10), 16);
+}
+
+function fromBcd(value) {
+    return parseInt(value.toString(16), 10);
+}
 
 export class Cmos {
     constructor(persistence, cmosOverride) {
@@ -42,23 +60,22 @@ export class Cmos {
         if (!this.addressSelect && this.dataSelect && this.isRead) {
             // The first 10 bytes of CMOS RAM store the RTC clock
             if (this.cmosAddr < 10) {
-                const current = new Date();
+                const current = getBbcDateTime();
                 switch (this.cmosAddr) {
-                    // Note values are returned in BCD format
                     case 0:
-                        return parseInt(current.getSeconds().toString(10), 16);
+                        return toBcd(current.getSeconds());
                     case 2:
-                        return parseInt(current.getMinutes().toString(10), 16);
+                        return toBcd(current.getMinutes());
                     case 4:
-                        return parseInt(current.getHours().toString(10), 16);
+                        return toBcd(current.getHours());
                     case 6:
-                        return parseInt((current.getDay() + 1).toString(10), 16);
+                        return toBcd(current.getDay() + 1);
                     case 7:
-                        return parseInt(current.getDate().toString(10), 16);
+                        return toBcd(current.getDate());
                     case 8:
-                        return parseInt((current.getMonth() + 1).toString(10), 16);
+                        return toBcd(current.getMonth() + 1);
                     case 9:
-                        return parseInt(current.getFullYear().toString(10), 16);
+                        return toBcd(current.getFullYear());
                 }
             } else {
                 return this.store[this.cmosAddr] & 0xff;
@@ -76,9 +93,48 @@ export class Cmos {
         this.dataSelect = !!(IC32 & 4);
         this.addressSelect = !!(portBpins & 0x80);
         if (oldAddressSelect && !this.addressSelect) this.cmosAddr = portApins & 0x3f;
-        if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead && this.cmosAddr > 0xb) {
-            this.store[this.cmosAddr] = portApins;
-            this.save();
+        if (oldDataSelect && !this.dataSelect && !this.addressSelect && !this.isRead) {
+            if (this.cmosAddr > 0xb) {
+                this.store[this.cmosAddr] = portApins;
+                this.save();
+            } else {
+                const bbcTime = getBbcDateTime();
+                switch (this.cmosAddr) {
+                    case 0:
+                        bbcTime.setSeconds(fromBcd(portApins));
+                        break;
+                    case 2:
+                        bbcTime.setMinutes(fromBcd(portApins));
+                        break;
+                    case 4:
+                        bbcTime.setHours(fromBcd(portApins));
+                        break;
+                    // I tried some day offset stuff to lazily simulate the fact the day is separate
+                    // from the date, but I couldn't easily get it to work during the multi-write update
+                    // cycle/ I'm probably being dumb. Or else I should emulate the clock "properly" but
+                    // that seems like an awful lot of work.
+                    // case 6:
+                    //     dayOffset = (bbcTime.getDay() - fromBcd(portApins - 1)) % 7;
+                    //     break;
+                    case 7:
+                        bbcTime.setDate(fromBcd(portApins));
+                        break;
+                    case 8:
+                        bbcTime.setMonth(fromBcd(portApins - 1));
+                        break;
+                    case 9: {
+                        const yearBase = fromBcd(portApins) > 80 ? 1900 : 2000;
+                        bbcTime.setFullYear(fromBcd(portApins) + yearBase);
+                        break;
+                    }
+                }
+                const secondsNow = Math.floor(Date.now() / 1000) * 1000;
+                timeOffset = bbcTime.getTime() - secondsNow;
+                console.log(
+                    `CMOS write ${hexbyte(portApins)} to ${this.cmosAddr}; bbcTime=${bbcTime},` +
+                        `timeOffset=${timeOffset}`
+                );
+            }
         }
     }
 }
