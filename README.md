@@ -15,9 +15,11 @@ this case), press shift-F12 (which is shift-Break on the BBC).
 
 ## Getting set up to run locally
 
-jsbeeb needs to be built with webpack. If you're developing locally you'll need a recent `node` and then run `npm install` to install needed packages.
+jsbeeb needs to be built with webpack. If you're developing locally you'll need a recent `node` and then run `npm install` to install needed packages. `node` can be installed from https://nodejs.org/.
 
 You can then run `npm start` to get a local webserver which will autoreload on changes in the code - visit http://localhost:8080/ and off you go.
+
+jsbeeb uses node and webpack to afford me simple and standard web development tooling and third party library access without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the site to make it smaller and faster to load when it's deployed to https://bbc.godbolt.org.
 
 ## URL parameters
 
