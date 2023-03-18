@@ -13,6 +13,7 @@ export function Config(onClose) {
         this.set65c02(this.model.tube);
         this.setTeletext(this.model.hasTeletextAdaptor);
         this.setMusic5000(this.model.hasMusic5000);
+        this.setEconet(this.model.hasEconet);
     });
 
     $configuration.addEventListener("hide.bs.modal", () => onClose(changed));
@@ -30,6 +31,16 @@ export function Config(onClose) {
         enabled = !!enabled;
         $("#65c02").prop("checked", enabled);
         this.model.tube = enabled ? findModel("Tube65c02") : null;
+    };
+
+    this.setEconet = function (enabled) {
+        enabled = !!enabled;
+        $("#hasEconet").prop("checked", enabled);
+        this.model.hasEconet = enabled;
+
+        if (enabled && this.model.name.toString().includes("Master")) {
+            this.addRemoveROM("master/anfs-4.25.rom", true);
+        }
     };
 
     this.setMusic5000 = function (enabled) {
@@ -69,6 +80,13 @@ export function Config(onClose) {
         "click",
         function () {
             changed.hasTeletextAdaptor = $("#hasTeletextAdaptor").prop("checked");
+        }.bind(this)
+    );
+
+    $("#hasEconet").on(
+        "click",
+        function () {
+            changed.hasEconet = $("#hasEconet").prop("checked");
         }.bind(this)
     );
 

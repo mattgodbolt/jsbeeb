@@ -21,6 +21,7 @@ import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
+import { Econet } from "./econet.js";
 
 let processor;
 let video;
@@ -61,6 +62,8 @@ let pauseEmu = false;
 let stepEmuWhenPaused = false;
 let audioFilterFreq = 7000;
 let audioFilterQ = 5;
+let stationId = 101;
+let econet = null;
 
 if (queryString) {
     if (queryString[queryString.length - 1] === "/")
@@ -145,6 +148,9 @@ if (queryString) {
                 case "audiofilterq":
                     audioFilterQ = Number(val);
                     break;
+                case "stationId":
+                    stationId = Number(val);
+                    break;
             }
         }
     });
@@ -209,7 +215,8 @@ const config = new Config(function (changed) {
         changed.model ||
         changed.coProcessor !== undefined ||
         changed.hasMusic5000 !== undefined ||
-        changed.hasTeletextAdaptor !== undefined
+        changed.hasTeletextAdaptor !== undefined ||
+        changed.hasEconet !== undefined
     ) {
         areYouSure(
             "Changing model requires a restart of the emulator. Restart now?",
@@ -234,6 +241,7 @@ config.mapLegacyModels(parsedQuery);
 config.setModel(parsedQuery.model || guessModelFromUrl());
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
+config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 
@@ -459,6 +467,7 @@ function keyUp(evt) {
 }
 
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
+const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
 
 function loadHTMLFile(file) {
     const reader = new FileReader();
@@ -468,6 +477,25 @@ function loadHTMLFile(file) {
         delete parsedQuery.disc1;
         updateUrl();
         $discsModal.hide();
+    };
+    reader.readAsBinaryString(file);
+}
+
+function loadSCSIFile(file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        processor.filestore.scsi = utils.stringToUint8Array(e.target.result);
+
+        processor.filestore.PC = 0x400;
+        processor.filestore.SP = 0xff;
+        processor.filestore.A = 1;
+        processor.filestore.emulationSpeed = 0;
+
+        // Reset any open receive blocks
+        processor.econet.receiveBlocks = [];
+        processor.econet.nextReceiveBlockNumber = 1;
+
+        $fsModal.hide();
     };
     reader.readAsBinaryString(file);
 }
@@ -532,6 +560,12 @@ window.onbeforeunload = function () {
     }
 };
 
+if (model.hasEconet) {
+    econet = new Econet(stationId);
+} else {
+    $("#fsmenuitem").hide();
+}
+
 const cmos = new Cmos(
     {
         load: function () {
@@ -544,7 +578,8 @@ const cmos = new Cmos(
             window.localStorage.cmosRam = JSON.stringify(data);
         },
     },
-    model.cmosOverride
+    model.cmosOverride,
+    econet
 );
 
 let printerWindow = null;
@@ -570,7 +605,8 @@ processor = new Cpu6502(
     audioHandler.ddNoise,
     model.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
-    emulationConfig
+    emulationConfig,
+    econet
 );
 
 function setDisc1Image(name) {
@@ -923,6 +959,14 @@ $("#disc_load").on("change", function (evt) {
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
+$("#fs_load").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
+    utils.noteEvent("local", "click"); // NB no filename here
+    const file = evt.target.files[0];
+    loadSCSIFile(file);
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
+});
+
 $("#tape_load").on("change", function (evt) {
     if (evt.target.files.length === 0) return;
     const file = evt.target.files[0];
@@ -1133,6 +1177,19 @@ $("#download-drive-link").on("click", function () {
     window.URL.revokeObjectURL(url);
 });
 
+$("#download-filestore-link").on("click", function () {
+    const a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    const blob = new Blob([processor.filestore.scsi], { type: "application/octet-stream" }),
+        url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = "scsi.dat";
+    a.click();
+    window.URL.revokeObjectURL(url);
+});
+
 $("#hard-reset").click(function (event) {
     processor.reset(true);
     event.preventDefault();
@@ -1177,6 +1234,7 @@ const caps = new Light("capslight");
 const shift = new Light("shiftlight");
 const drive0 = new Light("drive0");
 const drive1 = new Light("drive1");
+const network = new Light("networklight");
 
 syncLights = function () {
     caps.update(processor.sysvia.capsLockLight);
@@ -1184,6 +1242,9 @@ syncLights = function () {
     drive0.update(processor.fdc.motorOn[0]);
     drive1.update(processor.fdc.motorOn[1]);
     cassette.update(processor.acia.motorOn);
+    if (model.hasEconet) {
+        network.update(processor.econet.activityLight());
+    }
 };
 
 const startPromise = Promise.all([audioHandler.initialise(), processor.initialise()]).then(function () {

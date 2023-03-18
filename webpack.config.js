@@ -49,6 +49,9 @@ function getPlugins() {
                 {
                     from: "music5000-worklet.js",
                 },
+                {
+                    from: "econet/*.dat",
+                },
             ],
         }),
         new MiniCssExtractPlugin({
