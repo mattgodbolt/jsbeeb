@@ -15,6 +15,7 @@ export class Filestore {
         this.pollCount = 0;
         this.ram = new Uint8Array((64 + 32) * 1024);
         this.emulationSpeed = 0;
+        this.logTemp = "";
 
         this.A = this.X = this.Y = this.SP = this.M = 0;
         this.PC = this.XPC = this.L = this.R = 0;
@@ -49,16 +50,35 @@ export class Filestore {
         return v;
     }
 
+    oswrch(char) {
+        if (this.emulationSpeed === 0) {
+            // During startup, run the FS emulation at full speed and log output
+            if (char >= 32 && char <= 127) {
+                this.logTemp += String.fromCharCode(char);
+            }
+
+            if (char === 13) {
+                console.log("Filestore: " + this.logTemp.trim());
+                if (this.logTemp.includes("Starting")) {
+                    this.emulationSpeed = 20; // Once started up, we can slow down the emulation considerably
+                }
+                this.logTemp = "";
+            }
+        }
+    }
+
     osword() {
         let p = (this.Y << 8) | this.X;
         switch (this.A) {
             case 0x0: {
                 // Read line (put '1' into buffer, Drives/stations = 1)
                 let k = this.ram[p] | (this.ram[p + 1] << 8);
-                this.ram[k] = 49;
+                this.ram[k] = 49; // '1'
                 this.ram[k + 1] = 13;
                 this.Y = 1;
                 this.C = 0;
+
+                this.oswrch(49); // '1'
                 break;
             }
 
@@ -135,9 +155,6 @@ export class Filestore {
                         this.econet.nextReceiveBlockNumber = 1;
                     }
 
-                    if (rxBuffer.id > 2) {
-                        this.emulationSpeed = 20;
-                    }
                     //console.log("Filestore: new receive block " + rxBuffer.id + " " + rxBuffer.receivePort.toString(16) + " " + rxBuffer.bufferStart.toString(16) + " " + rxBuffer.bufferEnd.toString(16));
                 } // Read and delete receive block
                 else {
@@ -635,6 +652,8 @@ export class Filestore {
                     case 0xffe7: //OSNEWL
                     case 0xffe3: //OSASCI
                     case 0xffee: //OSWRCH
+                        this.oswrch(this.A);
+                        break;
                     case 0xfff7: //OSCLI
                         break;
                     default:
