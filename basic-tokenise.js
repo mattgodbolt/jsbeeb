@@ -3,7 +3,7 @@ import * as utils from "./utils.js";
 import * as models from "./models.js";
 import { fake6502 } from "./fake6502.js";
 
-export function create() {
+export async function create() {
     const cpu = fake6502(models.basicOnly);
     const callTokeniser = function (line) {
         // Address of the tokenisation subroutine in the Master's BASIC ROM.
@@ -99,9 +99,6 @@ export function create() {
         });
         return result + "\r\xff";
     };
-    return cpu.initialise().then(function () {
-        return Promise.resolve({
-            tokenise: tokenise,
-        });
-    });
+    await cpu.initialise();
+    return { tokenise };
 }
