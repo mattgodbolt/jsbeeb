@@ -944,11 +944,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             const awaiting = [];
 
             for (let i = 0; i < extraRoms.length; ++i) {
+                // Skip over banks 4-7 (sideways RAM on a Master)
                 romIndex--;
-                if (model.isMaster) {
-                    // Skip over banks 4-7 (sideways RAM on a Master)
-                    if (romIndex === 7) romIndex = 3;
+                while (capturedThis.model.swram[romIndex]) {
+                    romIndex--;
                 }
+
                 awaiting.push(capturedThis.loadRom(extraRoms[i], capturedThis.romOffset + romIndex * 0x4000));
             }
             return Promise.all(awaiting);
