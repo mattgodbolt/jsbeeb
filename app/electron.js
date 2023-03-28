@@ -1,5 +1,8 @@
 "use strict";
 
+// Left for posterity and the hope that one day Electron (the standalone app generator)
+// supports ES Modules. See https://github.com/electron/electron/issues/21457
+
 export let initialise = function () {};
 
 function init(args) {

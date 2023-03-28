@@ -37,35 +37,6 @@ jobs:
       - name: long tests
         run: npm run test-long
 
-  #   electron-win-mac:
-  #     needs: [build-and-test, long-test]
-  #     runs-on: ${{ matrix.os }}
-  #     strategy:
-  #       matrix:
-  #         os: [ macos-latest, windows-latest, ubuntu-20.04 ]
-  #     steps:
-  #       - uses: actions/checkout@v2
-  #       - name: Use Node.js 12.x
-  #         uses: actions/setup-node@v1
-  #         with:
-  #           node-version: 12.x
-  #       - name: Get npm cache directory
-  #         id: npm-cache
-  #         run: |
-  #           echo "::set-output name=dir::$(npm config get cache)"
-  #       - uses: actions/cache@v1
-  #         with:
-  #           path: ${{ steps.npm-cache.outputs.dir }}
-  #           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-  #           restore-keys: |
-  #             ${{ runner.os }}-node-
-  #       - name: Build and deploy electron app
-  #         uses: samuelmeuli/action-electron-builder@v1
-  #         with:
-  #           github_token: ${{ secrets.github_token }}
-  #           # If the commit is tagged with a version (e.g. "v1.0.0"), release the app after building
-  #           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-
   update-web:
     needs: [build-and-test, long-test]
     if: github.ref == 'refs/heads/main'
