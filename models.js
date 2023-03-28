@@ -21,6 +21,10 @@ function pickAdfs(cmos) {
     cmos[19] = (cmos[19] & 0xf0) | 13;
     return cmos;
 }
+function pickAnfs(cmos) {
+    cmos[19] = (cmos[19] & 0xf0) | 8;
+    return cmos;
+}
 function pickDfs(cmos) {
     cmos[19] = (cmos[19] & 0xf0) | 9;
     return cmos;
@@ -102,6 +106,17 @@ export const allModels = [
         WD1770,
         null,
         pickAdfs
+    ),
+    new Model(
+        "BBC Master 128 (ANFS)",
+        ["MasterANFS"],
+        ["master/mos3.20"],
+        false,
+        true,
+        masterSwram,
+        WD1770,
+        null,
+        pickAnfs
     ),
     new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
 ];

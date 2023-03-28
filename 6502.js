@@ -9,6 +9,7 @@ import { Adc } from "./adc.js";
 import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
+import { Filestore } from "./filestore.js";
 
 const signExtend = utils.signExtend;
 
@@ -428,7 +429,7 @@ function fixUpConfig(config) {
     return config;
 }
 
-export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, cmos, config) {
+export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, cmos, config, econet_) {
     config = fixUpConfig(config);
 
     base6502(this, model);
@@ -462,6 +463,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
     };
     this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
     this.JimPageSel = 0;
+    this.econet = econet_;
 
     // BBC Master memory map (within ramRomOs array):
     // 00000 - 08000 -> base 32KB RAM
@@ -601,6 +603,24 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             }
         }
 
+        if (this.econet) {
+            if ((!model.isMaster && addr === 0xfe20) || (model.isMaster && addr === 0xfe3c)) {
+                if (!this.econet.econetNMIEnabled) {
+                    // was off
+                    this.econet.econetNMIEnabled = true;
+                    if (this.econet.ADLC.status1 & 128) {
+                        // irq pending
+                        this.NMI(true); // delayed NMI asserted
+                    }
+                }
+            }
+
+            if ((!model.isMaster && addr === 0xfe18) || (model.isMaster && addr === 0xfe38)) {
+                this.econet.econetNMIEnabled = false;
+                return this.econet.stationId;
+            }
+        }
+
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
@@ -674,6 +694,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             case 0xfe98:
             case 0xfe9c:
                 if (!model.isMaster) return this.fdc.read(addr);
+                break;
+            case 0xfea0:
+                // Econet status register
+                if (this.econet) {
+                    return this.econet.readRegister(addr & 3);
+                }
                 break;
             case 0xfec0:
             case 0xfec4:
@@ -753,6 +779,13 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             }
         }
 
+        if (this.econet) {
+            if (addr >= 0xfea0 && addr < 0xfebf) {
+                this.econet.writeRegister(addr & 3, b);
+                return;
+            }
+        }
+
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
@@ -787,7 +820,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             case 0xfe14:
                 return this.serial.write(addr, b);
             case 0xfe18:
-                if (this.isMaster) return this.adconverter.write(addr, b);
+                if (model.isMaster) return this.adconverter.write(addr, b);
+                if (!model.isMaster && this.econet) this.econet.econetNMIEnabled = false;
                 break;
             case 0xfe20:
                 return this.ula.write(addr, b);
@@ -810,6 +844,8 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
                 }
                 return this.romSelect(b);
             case 0xfe38:
+                if (model.isMaster && this.econet) this.econet.econetNMIEnabled = false;
+                break;
             case 0xfe3c:
                 if (!model.isMaster) {
                     return this.romSelect(b);
@@ -908,7 +944,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             const awaiting = [];
 
             for (let i = 0; i < extraRoms.length; ++i) {
+                // Skip over banks 4-7 (sideways RAM on a Master)
                 romIndex--;
+                while (capturedThis.model.swram[romIndex]) {
+                    romIndex--;
+                }
+
                 awaiting.push(capturedThis.loadRom(extraRoms[i], capturedThis.romOffset + romIndex * 0x4000));
             }
             return Promise.all(awaiting);
@@ -979,6 +1020,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             this.ula = this.video.ula;
             this.adconverter = new Adc(this.sysvia, this.scheduler);
             if (model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
+            if (this.econet) this.filestore = new Filestore(this, this.econet);
             this.sysvia.reset(hard);
             this.uservia.reset(hard);
         }
@@ -998,6 +1040,10 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         if (hard) this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
         if (this.music5000) this.music5000.reset(hard);
+        if (hard && this.econet) {
+            this.econet.reset();
+            this.filestore.reset();
+        }
     };
 
     this.updateKeyLayout = function () {
@@ -1035,6 +1081,13 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         this.tube.execute(cycles);
         if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
         if (this.music5000) this.music5000.polltime(cycles);
+        if (this.econet) {
+            let donmi = this.econet.polltime(cycles);
+            if (donmi && this.econet.econetNMIEnabled) {
+                this.NMI(true);
+            }
+            this.filestore.polltime(cycles);
+        }
     };
 
     // Faster, but more limited version
@@ -1048,6 +1101,13 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         this.tube.execute(cycles);
         if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
         if (this.music5000) this.music5000.polltime(cycles);
+        if (this.econet) {
+            let donmi = this.econet.polltime(cycles);
+            if (donmi && this.econet.econetNMIEnabled) {
+                this.NMI(true);
+            }
+            this.filestore.polltime(cycles);
+        }
     };
 
     if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {
