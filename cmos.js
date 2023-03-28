@@ -42,6 +42,10 @@ export class Cmos {
         }
         if (econet) {
             this.store[0xe] = econet.stationId;
+            if (this.store[0xf] === 0) {
+                // Catch an invalid FS configuration setting (possibly as a result of using a prior version that didn't set a default of 254 in CMOS)
+                this.store[0xf] = 254;
+            }
         }
         this.save();
     }
