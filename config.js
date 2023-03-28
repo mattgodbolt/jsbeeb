@@ -2,38 +2,67 @@
 import $ from "jquery";
 import { findModel } from "./models.js";
 
-export function Config(onClose) {
-    let changed = {};
-    this.model = null;
-    this.coProcessor = null;
-    const $configuration = document.getElementById("configuration");
-    $configuration.addEventListener("show.bs.modal", () => {
-        changed = {};
-        setDropdownText(this.model.name);
-        this.set65c02(this.model.tube);
-        this.setTeletext(this.model.hasTeletextAdaptor);
-        this.setMusic5000(this.model.hasMusic5000);
-        this.setEconet(this.model.hasEconet);
-    });
+export class Config {
+    constructor(onClose) {
+        this.changed = {};
+        this.model = null;
+        this.coProcessor = null;
+        const $configuration = document.getElementById("configuration");
+        $configuration.addEventListener("show.bs.modal", () => {
+            this.changed = {};
+            this.setDropdownText(this.model.name);
+            this.set65c02(this.model.tube);
+            this.setTeletext(this.model.hasTeletextAdaptor);
+            this.setMusic5000(this.model.hasMusic5000);
+            this.setEconet(this.model.hasEconet);
+        });
 
-    $configuration.addEventListener("hide.bs.modal", () => onClose(changed));
+        $configuration.addEventListener("hide.bs.modal", () => onClose(this.changed));
 
-    this.setModel = function (modelName) {
+        $(".model-menu a").on("click", (e) => {
+            this.changed.model = $(e.target).attr("data-target");
+            this.setDropdownText($(e.target).text());
+        });
+
+        $("#65c02").on("click", () => {
+            this.changed.coProcessor = $("#65c02").prop("checked");
+        });
+
+        $("#hasTeletextAdaptor").on("click", () => {
+            this.changed.hasTeletextAdaptor = $("#hasTeletextAdaptor").prop("checked");
+        });
+
+        $("#hasEconet").on("click", () => {
+            this.changed.hasEconet = $("#hasEconet").prop("checked");
+        });
+
+        $("#hasMusic5000").on("click", () => {
+            this.changed.hasMusic5000 = $("#hasMusic5000").prop("checked");
+        });
+
+        $(".keyboard-menu a").on("click", (e) => {
+            const keyLayout = $(e.target).attr("data-target");
+            this.changed.keyLayout = keyLayout;
+            this.setKeyLayout(keyLayout);
+        });
+    }
+
+    setModel(modelName) {
         this.model = findModel(modelName);
         $(".bbc-model").text(this.model.name);
-    };
+    }
 
-    this.setKeyLayout = function (keyLayout) {
+    setKeyLayout(keyLayout) {
         $(".keyboard-layout").text(keyLayout[0].toUpperCase() + keyLayout.substr(1));
-    };
+    }
 
-    this.set65c02 = function (enabled) {
+    set65c02(enabled) {
         enabled = !!enabled;
         $("#65c02").prop("checked", enabled);
         this.model.tube = enabled ? findModel("Tube65c02") : null;
-    };
+    }
 
-    this.setEconet = function (enabled) {
+    setEconet(enabled) {
         enabled = !!enabled;
         $("#hasEconet").prop("checked", enabled);
         this.model.hasEconet = enabled;
@@ -41,72 +70,27 @@ export function Config(onClose) {
         if (enabled && this.model.isMaster) {
             this.addRemoveROM("master/anfs-4.25.rom", true);
         }
-    };
+    }
 
-    this.setMusic5000 = function (enabled) {
+    setMusic5000(enabled) {
         enabled = !!enabled;
         $("#hasMusic5000").prop("checked", enabled);
         this.model.hasMusic5000 = enabled;
         this.addRemoveROM("ample.rom", enabled);
-    };
+    }
 
-    this.setTeletext = function (enabled) {
+    setTeletext(enabled) {
         enabled = !!enabled;
         $("#hasTeletextAdaptor").prop("checked", enabled);
         this.model.hasTeletextAdaptor = enabled;
         this.addRemoveROM("ats-3.0.rom", enabled);
-    };
+    }
 
-    function setDropdownText(modelName) {
+    setDropdownText(modelName) {
         $("#bbc-model-dropdown .bbc-model").text(modelName);
     }
 
-    $(".model-menu a").on(
-        "click",
-        function (e) {
-            changed.model = $(e.target).attr("data-target");
-            setDropdownText($(e.target).text());
-        }.bind(this)
-    );
-
-    $("#65c02").on(
-        "click",
-        function () {
-            changed.coProcessor = $("#65c02").prop("checked");
-        }.bind(this)
-    );
-
-    $("#hasTeletextAdaptor").on(
-        "click",
-        function () {
-            changed.hasTeletextAdaptor = $("#hasTeletextAdaptor").prop("checked");
-        }.bind(this)
-    );
-
-    $("#hasEconet").on(
-        "click",
-        function () {
-            changed.hasEconet = $("#hasEconet").prop("checked");
-        }.bind(this)
-    );
-
-    $("#hasMusic5000").on(
-        "click",
-        function () {
-            changed.hasMusic5000 = $("#hasMusic5000").prop("checked");
-        }.bind(this)
-    );
-
-    $(".keyboard-menu a").on(
-        "click",
-        function (e) {
-            const keyLayout = $(e.target).attr("data-target");
-            changed.keyLayout = keyLayout;
-            this.setKeyLayout(keyLayout);
-        }.bind(this)
-    );
-
-    this.addRemoveROM = function (romName, required) {
+    addRemoveROM(romName, required) {
         if (required && !this.model.os.includes(romName)) {
             this.model.os.push(romName);
         } else {
@@ -115,9 +99,9 @@ export function Config(onClose) {
                 this.model.os.splice(pos, 1);
             }
         }
-    };
+    }
 
-    this.mapLegacyModels = function (parsedQuery) {
+    mapLegacyModels(parsedQuery) {
         if (!parsedQuery.model) {
             return;
         }
@@ -139,5 +123,5 @@ export function Config(onClose) {
             parsedQuery.model = "B-DFS1.2";
             parsedQuery.hasTeletextAdaptor = true;
         }
-    };
+    }
 }
