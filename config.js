@@ -38,7 +38,7 @@ export function Config(onClose) {
         $("#hasEconet").prop("checked", enabled);
         this.model.hasEconet = enabled;
 
-        if (enabled && this.model.name.toString().includes("Master")) {
+        if (enabled && this.model.isMaster) {
             this.addRemoveROM("master/anfs-4.25.rom", true);
         }
     };

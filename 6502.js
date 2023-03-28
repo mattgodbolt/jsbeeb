@@ -586,6 +586,23 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         return addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >>> 5) & 7]);
     };
 
+    this.handleEconetStationId = function () {
+        this.econet.econetNMIEnabled = false;
+        return this.econet.stationId;
+    };
+
+    this.handleEconetNMIEnable = function () {
+        if (!this.econet.econetNMIEnabled) {
+            // was off
+            this.econet.econetNMIEnabled = true;
+            if (this.econet.ADLC.status1 & 128) {
+                // irq pending
+                this.NMI(true); // delayed NMI asserted
+            }
+        }
+        return 0xff;
+    };
+
     this.readDevice = function (addr) {
         if (model.isMaster && this.acccon & 0x40) {
             // TST bit of ACCCON
@@ -655,7 +672,9 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
             case 0xfe14:
                 return this.serial.read(addr);
             case 0xfe18:
-                if (model.isMaster) return this.adconverter.read(addr);
+                return model.isMaster ? this.adconverter.read(addr) : this.handleEconetStationId();
+            case 0xfe20:
+                if (!model.isMaster) return this.handleEconetNMIEnable();
                 break;
             case 0xfe24:
             case 0xfe28:
@@ -666,6 +685,12 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
                 break;
             case 0xfe34:
                 if (model.isMaster) return this.acccon;
+                break;
+            case 0xfe38:
+                if (model.isMaster) return this.handleEconetStationId();
+                break;
+            case 0xfe3c:
+                if (model.isMaster) return this.handleEconetNMIEnable();
                 break;
             case 0xfe40:
             case 0xfe44:
@@ -1082,7 +1107,7 @@ export function Cpu6502(model, dbgr, video_, soundChip_, ddNoise_, music5000_, c
         if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
         if (this.music5000) this.music5000.polltime(cycles);
         if (this.econet) {
-            let donmi = this.econet.polltime(cycles);
+            const donmi = this.econet.polltime(cycles);
             if (donmi && this.econet.econetNMIEnabled) {
                 this.NMI(true);
             }
