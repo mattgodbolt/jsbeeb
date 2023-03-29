@@ -13,12 +13,52 @@ import { Filestore } from "./filestore.js";
 
 const signExtend = utils.signExtend;
 
+function _set(byte, mask, set) {
+    return (byte & ~mask) | (set ? mask : 0);
+}
 class Flags {
     constructor() {
         this.reset();
+        this._byte = 0;
+    }
+    get c() {
+        return !!(this._byte & 0x01);
+    }
+    set c(val) {
+        this._byte = _set(this._byte, 0x01, val);
+    }
+    get z() {
+        return !!(this._byte & 0x02);
+    }
+    set z(val) {
+        this._byte = _set(this._byte, 0x02, val);
+    }
+    get i() {
+        return !!(this._byte & 0x04);
+    }
+    set i(val) {
+        this._byte = _set(this._byte, 0x04, val);
+    }
+    get d() {
+        return !!(this._byte & 0x08);
+    }
+    set d(val) {
+        this._byte = _set(this._byte, 0x08, val);
+    }
+    get v() {
+        return !!(this._byte & 0x40);
+    }
+    set v(val) {
+        this._byte = _set(this._byte, 0x40, val);
+    }
+    get n() {
+        return !!(this._byte & 0x80);
+    }
+    set n(val) {
+        this._byte = _set(this._byte, 0x80, val);
     }
     reset() {
-        this.c = this.z = this.i = this.d = this.v = this.n = false;
+        this._byte = 0;
     }
     debugString() {
         return (
@@ -32,14 +72,7 @@ class Flags {
         );
     }
     asByte() {
-        let temp = 0x30;
-        if (this.c) temp |= 0x01;
-        if (this.z) temp |= 0x02;
-        if (this.i) temp |= 0x04;
-        if (this.d) temp |= 0x08;
-        if (this.v) temp |= 0x40;
-        if (this.n) temp |= 0x80;
-        return temp;
+        return this._byte | 0x30;
     }
 }
 
