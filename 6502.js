@@ -13,11 +13,14 @@ import { Filestore } from "./filestore.js";
 
 const signExtend = utils.signExtend;
 
-function Flags() {
-    this.reset = function () {
+class Flags {
+    constructor() {
+        this.reset();
+    }
+    reset() {
         this.c = this.z = this.i = this.d = this.v = this.n = false;
-    };
-    this.debugString = function () {
+    }
+    debugString() {
         return (
             (this.n ? "N" : "n") +
             (this.v ? "V" : "v") +
@@ -27,9 +30,8 @@ function Flags() {
             (this.z ? "Z" : "z") +
             (this.c ? "C" : "c")
         );
-    };
-
-    this.asByte = function () {
+    }
+    asByte() {
         let temp = 0x30;
         if (this.c) temp |= 0x01;
         if (this.z) temp |= 0x02;
@@ -38,9 +40,7 @@ function Flags() {
         if (this.v) temp |= 0x40;
         if (this.n) temp |= 0x80;
         return temp;
-    };
-
-    this.reset();
+    }
 }
 
 function base6502(cpu, model) {
@@ -321,25 +321,25 @@ function base6502(cpu, model) {
     cpu.runner = cpu.opcodes.runInstruction;
 }
 
-function Tube6502(model, cpu) {
-    base6502(this, model);
+class Tube6502 {
+    constructor(model, cpu) {
+        base6502(this, model);
 
-    this.cycles = 0;
-    this.romPaged = true;
-    this.memory = new Uint8Array(65536);
-    this.rom = new Uint8Array(4096);
-    this.p = new Flags();
+        this.cycles = 0;
+        this.romPaged = true;
+        this.memory = new Uint8Array(65536);
+        this.rom = new Uint8Array(4096);
+        this.p = new Flags();
 
-    this.tube = new Tube(cpu, this);
-
-    this.reset = function (hard) {
+        this.tube = new Tube(cpu, this);
+    }
+    reset(hard) {
         this.romPaged = true;
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
         this.tube.reset(hard);
-    };
-
-    this.readmem = function (offset) {
+    }
+    readmem(offset) {
         if ((offset & 0xfff8) === 0xfef8) {
             if ((offset & 7) === 0) {
                 this.romPaged = false;
@@ -350,34 +350,32 @@ function Tube6502(model, cpu) {
             return this.rom[offset & 0xfff];
         }
         return this.memory[offset & 0xffff];
-    };
-    this.readmemZpStack = function (offset) {
+    }
+    readmemZpStack(offset) {
         return this.memory[offset & 0xffff];
-    };
-    this.writemem = function (addr, b) {
+    }
+    writemem(addr, b) {
         if ((addr & 0xfff8) === 0xfef8) {
             return this.tube.parasiteWrite(addr, b);
         }
         this.memory[addr & 0xffff] = b;
-    };
-    this.writememZpStack = function (addr, b) {
+    }
+    writememZpStack(addr, b) {
         this.memory[addr & 0xffff] = b;
-    };
-
-    this.polltime = function (cycles) {
+    }
+    polltime(cycles) {
         this.cycles -= cycles;
-    };
-    this.polltimeAddr = this.polltime;
-
-    this.read = function (addr) {
+    }
+    polltimeAddr(cycles) {
+        this.polltime(cycles);
+    }
+    read(addr) {
         return this.tube.hostRead(addr);
-    };
-
-    this.write = function (addr, b) {
+    }
+    write(addr, b) {
         this.tube.hostWrite(addr, b);
-    };
-
-    this.execute = function (cycles) {
+    }
+    execute(cycles) {
         this.cycles += cycles * 2;
         if (this.cycles < 3) return;
         while (this.cycles > 0) {
@@ -386,37 +384,33 @@ function Tube6502(model, cpu) {
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
         }
-    };
-
-    this.loadOs = function () {
-        console.log("Loading tube rom from roms/" + model.os);
+    }
+    async loadOs() {
+        console.log("Loading tube rom from roms/" + this.model.os);
         const tubeRom = this.rom;
-        return utils.loadData("roms/" + model.os).then(function (data) {
-            const len = data.length;
-            if (len !== 2048) throw new Error("Broken ROM file (length=" + len + ")");
-            for (let i = 0; i < len; ++i) {
-                tubeRom[i + 2048] = data[i];
-            }
-        });
-    };
+        const data = await utils.loadData("roms/" + this.model.os);
+        const len = data.length;
+        if (len !== 2048) throw new Error("Broken ROM file (length=" + len + ")");
+        for (let i = 0; i < len; ++i) {
+            tubeRom[i + 2048] = data[i];
+        }
+    }
 }
 
-function FakeTube() {
-    this.read = function () {
+class FakeTube {
+    read() {
         return 0xfe;
-    };
-    this.write = function () {};
-    this.execute = function () {};
-    this.reset = function () {};
+    }
+    write() {}
+    execute() {}
+    reset() {}
 }
 
-function FakeUserPort() {
-    return {
-        write: function () {},
-        read: function () {
-            return 0xff;
-        },
-    };
+class FakeUserPort {
+    write() {}
+    read() {
+        return 0xff;
+    }
 }
 
 function fixUpConfig(config) {
