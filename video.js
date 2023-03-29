@@ -298,9 +298,8 @@ export class Video {
         }
         debugCopyFb(this.debugPrevScreen, this.fb32);
         const dotSize = 10;
-        let x, y;
-        for (y = -dotSize; y <= dotSize; y++) {
-            for (x = -dotSize; x <= dotSize; ++x) {
+        for (let y = -dotSize; y <= dotSize; y++) {
+            for (let x = -dotSize; x <= dotSize; ++x) {
                 const dist = Math.sqrt(x * x + y * y) / dotSize;
                 if (dist > 1) continue;
                 const offset = this.debugOffset(this.bitmapX + x, this.bitmapY + y);
