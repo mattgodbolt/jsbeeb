@@ -18,7 +18,7 @@ function _set(byte, mask, set) {
 }
 class Flags {
     constructor() {
-        this._byte = 0;
+        this._byte = 0x30;
     }
     get c() {
         return !!(this._byte & 0x01);
@@ -57,7 +57,7 @@ class Flags {
         this._byte = _set(this._byte, 0x80, val);
     }
     reset() {
-        this._byte = 0;
+        this._byte = 0x30;
     }
     debugString() {
         return (
@@ -72,6 +72,9 @@ class Flags {
     }
     asByte() {
         return this._byte | 0x30;
+    }
+    setFromByte(byte) {
+        this._byte = byte | 0x30;
     }
 }
 

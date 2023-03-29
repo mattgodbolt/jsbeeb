@@ -30,15 +30,7 @@ function rotate(left, logical) {
 
 function pull(reg) {
     if (reg === "p") {
-        return [
-            "var tempFlags = cpu.pull();",
-            "cpu.p.c = !!(tempFlags & 0x01);",
-            "cpu.p.z = !!(tempFlags & 0x02);",
-            "cpu.p.i = !!(tempFlags & 0x04);",
-            "cpu.p.d = !!(tempFlags & 0x08);",
-            "cpu.p.v = !!(tempFlags & 0x40);",
-            "cpu.p.n = !!(tempFlags & 0x80);",
-        ];
+        return ["cpu.p.setFromByte(cpu.pull());"];
     }
     return ["cpu." + reg + " = cpu.setzn(cpu.pull());"];
 }
