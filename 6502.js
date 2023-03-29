@@ -18,7 +18,6 @@ function _set(byte, mask, set) {
 }
 class Flags {
     constructor() {
-        this.reset();
         this._byte = 0;
     }
     get c() {
