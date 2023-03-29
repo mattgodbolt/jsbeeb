@@ -11,83 +11,249 @@ const VDISPENABLE = 1 << 0,
     EVERYTHINGENABLED =
         VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
-export function Video(isMaster, fb32_param, paint_ext_param) {
-    this.isMaster = isMaster;
-    this.fb32 = utils.makeFast32(fb32_param);
-    this.collook = utils.makeFast32(
-        new Uint32Array([
-            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-        ])
-    );
-    this.screenAddrAdd = new Uint16Array([0x4000, 0x3000, 0x6000, 0x5800]);
-    this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
-    this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x08, 0x10]);
-    this.regs = new Uint8Array(32);
-    this.bitmapX = 0;
-    this.bitmapY = 0;
-    this.oddClock = false;
-    this.frameCount = 0;
-    this.doEvenFrameLogic = false;
-    this.isEvenRender = true;
-    this.lastRenderWasEven = false;
-    this.firstScanline = true;
-    this.inHSync = false;
-    this.inVSync = false;
-    this.hadVSyncThisRow = false;
-    this.checkVertAdjust = false;
-    this.endOfMainLatched = false;
-    this.endOfVertAdjustLatched = false;
-    this.endOfFrameLatched = false;
-    this.inVertAdjust = false;
-    this.inDummyRaster = false;
-    this.hpulseWidth = 0;
-    this.vpulseWidth = 0;
-    this.hpulseCounter = 0;
-    this.vpulseCounter = 0;
-    this.dispEnabled = FRAMESKIPENABLE;
-    this.horizCounter = 0;
-    this.vertCounter = 0;
-    this.scanlineCounter = 0;
-    this.vertAdjustCounter = 0;
-    this.addr = 0;
-    this.lineStartAddr = 0;
-    this.nextLineStartAddr = 0;
-    this.ulactrl = 0;
-    this.pixelsPerChar = 8;
-    this.halfClock = false;
-    this.ulaMode = 0;
-    this.teletextMode = false;
-    this.displayEnableSkew = 0;
-    this.ulaPal = utils.makeFast32(new Uint32Array(16));
-    this.actualPal = new Uint8Array(16);
-    this.teletext = new Teletext();
-    this.cursorOn = false;
-    this.cursorOff = false;
-    this.cursorOnThisFrame = false;
-    this.cursorDrawIndex = 0;
-    this.cursorPos = 0;
-    this.interlacedSyncAndVideo = false;
-    this.doubledScanlines = true;
-    this.frameSkipCount = 0;
+////////////////////
+// ULA interface
+class Ula {
+    constructor(video) {
+        this.video = video;
+    }
+    write(addr, val) {
+        addr |= 0;
+        val |= 0;
+        if (addr & 1) {
+            const index = (val >>> 4) & 0xf;
+            this.video.actualPal[index] = val & 0xf;
+            let ulaCol = val & 7;
+            if (!(val & 8 && this.video.ulactrl & 1)) ulaCol ^= 7;
+            if (this.video.ulaPal[index] !== this.video.collook[ulaCol]) {
+                this.video.ulaPal[index] = this.video.collook[ulaCol];
+            }
+        } else {
+            if ((this.video.ulactrl ^ val) & 1) {
+                // Flash colour has changed.
+                const flashEnabled = !!(val & 1);
+                for (let i = 0; i < 16; ++i) {
+                    let index = this.video.actualPal[i] & 7;
+                    if (!(flashEnabled && this.video.actualPal[i] & 8)) index ^= 7;
+                    if (this.video.ulaPal[i] !== this.video.collook[index]) {
+                        this.video.ulaPal[i] = this.video.collook[index];
+                    }
+                }
+            }
+            this.video.ulactrl = val;
+            this.video.pixelsPerChar = val & 0x10 ? 8 : 16;
+            this.video.halfClock = !(val & 0x10);
+            const newMode = (val >>> 2) & 3;
+            if (newMode !== this.video.ulaMode) {
+                this.video.ulaMode = newMode;
+            }
+            this.video.teletextMode = !!(val & 2);
+        }
+    }
+}
 
-    this.topBorder = 12;
-    this.bottomBorder = 13;
-    this.leftBorder = 5 * 16;
-    this.rightBorder = 3 * 16;
+////////////////////
+// CRTC interface
+class Crtc {
+    constructor(video) {
+        this.video = video;
+        this.curReg = 0;
+        this.crtcmask = new Uint8Array([
+            0xff, 0xff, 0xff, 0xff, 0x7f, 0x1f, 0x7f, 0x7f, 0xf3, 0x1f, 0x7f, 0x1f, 0x3f, 0xff, 0x3f, 0xff, 0x3f, 0xff,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
+    }
+    read(addr) {
+        if (!(addr & 1)) return 0;
+        switch (this.curReg) {
+            case 12:
+            case 13:
+            case 14:
+            case 15:
+            case 16:
+            case 17:
+                return this.video.regs[this.curReg];
+        }
+        return 0;
+    }
+    write(addr, val) {
+        if (addr & 1) {
+            this.video.regs[this.curReg] = val & this.crtcmask[this.curReg];
+            switch (this.curReg) {
+                case 3:
+                    this.video.hpulseWidth = val & 0x0f;
+                    this.video.vpulseWidth = (val & 0xf0) >>> 4;
+                    break;
+                case 8: {
+                    this.video.interlacedSyncAndVideo = (val & 3) === 3;
+                    const skew = (val & 0x30) >>> 4;
+                    if (skew < 3) {
+                        this.video.displayEnableSkew = skew;
+                        this.video.dispEnableSet(USERDISPENABLE);
+                    } else {
+                        this.video.dispEnableClear(USERDISPENABLE);
+                    }
+                    break;
+                }
+                case 14:
+                case 15:
+                    this.video.cursorPos = (this.video.regs[15] | (this.video.regs[14] << 8)) & 0x3fff;
+                    break;
+            }
+        } else this.curReg = val & 31;
+    }
+}
 
-    this.paint_ext = paint_ext_param;
+function copyFb(dest, src) {
+    for (let i = 0; i < 1024 * 768; ++i) {
+        dest[i] = src[i];
+    }
+}
 
-    this.reset = function (cpu, via) {
+function lerp1(a, b, alpha) {
+    let val = (b - a) * alpha + a;
+    if (val < 0) val = 0;
+    if (val > 255) val = 255;
+    return val;
+}
+
+function lerp(col1, col2, alpha) {
+    if (alpha < 0) alpha = 0;
+    if (alpha > 1) alpha = 1;
+    const r1 = (col1 >>> 16) & 0xff;
+    const g1 = (col1 >>> 8) & 0xff;
+    const b1 = (col1 >>> 0) & 0xff;
+    const r2 = (col2 >>> 16) & 0xff;
+    const g2 = (col2 >>> 8) & 0xff;
+    const b2 = (col2 >>> 0) & 0xff;
+    const red = lerp1(r1, r2, alpha);
+    const green = lerp1(g1, g2, alpha);
+    const blue = lerp1(b1, b2, alpha);
+    return (red << 16) | (green << 8) | blue;
+}
+
+function table4bppOffset(ulamode, byte) {
+    return (ulamode << 12) | (byte << 4);
+}
+
+////////////////////
+// The video class
+
+////////////////////
+// The video class
+export class Video {
+    constructor(isMaster, fb32_param, paint_ext_param) {
+        this.isMaster = isMaster;
+        this.fb32 = utils.makeFast32(fb32_param);
+        this.collook = utils.makeFast32(
+            new Uint32Array([
+                0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
+            ])
+        );
+        this.screenAddrAdd = new Uint16Array([0x4000, 0x3000, 0x6000, 0x5800]);
+        this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
+        this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x08, 0x10]);
+        this.regs = new Uint8Array(32);
+        this.bitmapX = 0;
+        this.bitmapY = 0;
+        this.oddClock = false;
+        this.frameCount = 0;
+        this.doEvenFrameLogic = false;
+        this.isEvenRender = true;
+        this.lastRenderWasEven = false;
+        this.firstScanline = true;
+        this.inHSync = false;
+        this.inVSync = false;
+        this.hadVSyncThisRow = false;
+        this.checkVertAdjust = false;
+        this.endOfMainLatched = false;
+        this.endOfVertAdjustLatched = false;
+        this.endOfFrameLatched = false;
+        this.inVertAdjust = false;
+        this.inDummyRaster = false;
+        this.hpulseWidth = 0;
+        this.vpulseWidth = 0;
+        this.hpulseCounter = 0;
+        this.vpulseCounter = 0;
+        this.dispEnabled = FRAMESKIPENABLE;
+        this.horizCounter = 0;
+        this.vertCounter = 0;
+        this.scanlineCounter = 0;
+        this.vertAdjustCounter = 0;
+        this.addr = 0;
+        this.lineStartAddr = 0;
+        this.nextLineStartAddr = 0;
+        this.ulactrl = 0;
+        this.pixelsPerChar = 8;
+        this.halfClock = false;
+        this.ulaMode = 0;
+        this.teletextMode = false;
+        this.displayEnableSkew = 0;
+        this.ulaPal = utils.makeFast32(new Uint32Array(16));
+        this.actualPal = new Uint8Array(16);
+        this.teletext = new Teletext();
+        this.cursorOn = false;
+        this.cursorOff = false;
+        this.cursorOnThisFrame = false;
+        this.cursorDrawIndex = 0;
+        this.cursorPos = 0;
+        this.interlacedSyncAndVideo = false;
+        this.doubledScanlines = true;
+        this.frameSkipCount = 0;
+        this.screenAdd = 0;
+
+        this.topBorder = 12;
+        this.bottomBorder = 13;
+        this.leftBorder = 5 * 16;
+        this.rightBorder = 3 * 16;
+
+        this.paint_ext = paint_ext_param;
+
+        this.debugPrevScreen = null;
+
+        this.table4bpp = (() => {
+            const t = new Uint8Array(4 * 256 * 16);
+            let i, b, temp, left;
+            for (b = 0; b < 256; ++b) {
+                temp = b;
+                for (i = 0; i < 16; ++i) {
+                    left = 0;
+                    if (temp & 2) left |= 1;
+                    if (temp & 8) left |= 2;
+                    if (temp & 32) left |= 4;
+                    if (temp & 128) left |= 8;
+                    t[table4bppOffset(3, b) + i] = left;
+                    temp <<= 1;
+                    temp |= 1;
+                }
+                for (i = 0; i < 16; ++i) {
+                    t[table4bppOffset(2, b) + i] = t[table4bppOffset(3, b) + (i >>> 1)];
+                    t[table4bppOffset(1, b) + i] = t[table4bppOffset(3, b) + (i >>> 2)];
+                    t[table4bppOffset(0, b) + i] = t[table4bppOffset(3, b) + (i >>> 3)];
+                }
+            }
+            return t;
+        })();
+
+        this.crtc = new Crtc(this);
+        this.ula = new Ula(this);
+
+        this.reset(null);
+        this.clearPaintBuffer();
+        this.paint();
+    }
+
+    reset(cpu, via) {
         this.cpu = cpu;
         this.sysvia = via;
         if (via) via.cb2changecallback = this.cb2changed.bind(this);
-    };
+    }
 
-    this.paint = function () {
+    paint() {
         this.paint_ext(this.leftBorder, this.topBorder, 1024 - this.rightBorder, 625 - this.bottomBorder);
-    };
+    }
 
-    this.clearPaintBuffer = function () {
+    clearPaintBuffer() {
         const fb32 = this.fb32;
         if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
             let line = this.frameCount & 1;
@@ -99,9 +265,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         } else {
             fb32.fill(0);
         }
-    };
+    }
 
-    this.paintAndClear = function () {
+    paintAndClear() {
         if (this.dispEnabled & FRAMESKIPENABLE) {
             this.paint();
             this.clearPaintBuffer();
@@ -118,49 +284,19 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
             this.bitmapY = -1;
         }
-    };
-
-    function copyFb(dest, src) {
-        for (let i = 0; i < 1024 * 768; ++i) {
-            dest[i] = src[i];
-        }
     }
 
-    let debugPrevScreen = null;
-
-    this.debugOffset = function (x, y) {
+    debugOffset(x, y) {
         if (x < 0 || x >= 1024) return -1;
         if (y < 0 || y >= 768) return -1;
         return y * 1024 + x;
-    };
-
-    function lerp1(a, b, alpha) {
-        let val = (b - a) * alpha + a;
-        if (val < 0) val = 0;
-        if (val > 255) val = 255;
-        return val;
     }
 
-    function lerp(col1, col2, alpha) {
-        if (alpha < 0) alpha = 0;
-        if (alpha > 1) alpha = 1;
-        const r1 = (col1 >>> 16) & 0xff;
-        const g1 = (col1 >>> 8) & 0xff;
-        const b1 = (col1 >>> 0) & 0xff;
-        const r2 = (col2 >>> 16) & 0xff;
-        const g2 = (col2 >>> 8) & 0xff;
-        const b2 = (col2 >>> 0) & 0xff;
-        const red = lerp1(r1, r2, alpha);
-        const green = lerp1(g1, g2, alpha);
-        const blue = lerp1(b1, b2, alpha);
-        return (red << 16) | (green << 8) | blue;
-    }
-
-    this.debugPaint = function () {
-        if (!debugPrevScreen) {
-            debugPrevScreen = new Uint32Array(1024 * 768);
+    debugPaint() {
+        if (!this.debugPrevScreen) {
+            this.debugPrevScreen = new Uint32Array(1024 * 768);
         }
-        copyFb(debugPrevScreen, this.fb32);
+        copyFb(this.debugPrevScreen, this.fb32);
         const dotSize = 10;
         let x, y;
         for (y = -dotSize; y <= dotSize; y++) {
@@ -172,38 +308,10 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             }
         }
         this.paint();
-        copyFb(this.fb32, debugPrevScreen);
-    };
-
-    function table4bppOffset(ulamode, byte) {
-        return (ulamode << 12) | (byte << 4);
+        copyFb(this.fb32, this.debugPrevScreen);
     }
 
-    this.table4bpp = (function () {
-        const t = new Uint8Array(4 * 256 * 16);
-        let i, b, temp, left;
-        for (b = 0; b < 256; ++b) {
-            temp = b;
-            for (i = 0; i < 16; ++i) {
-                left = 0;
-                if (temp & 2) left |= 1;
-                if (temp & 8) left |= 2;
-                if (temp & 32) left |= 4;
-                if (temp & 128) left |= 8;
-                t[table4bppOffset(3, b) + i] = left;
-                temp <<= 1;
-                temp |= 1;
-            }
-            for (i = 0; i < 16; ++i) {
-                t[table4bppOffset(2, b) + i] = t[table4bppOffset(3, b) + (i >>> 1)];
-                t[table4bppOffset(1, b) + i] = t[table4bppOffset(3, b) + (i >>> 2)];
-                t[table4bppOffset(0, b) + i] = t[table4bppOffset(3, b) + (i >>> 3)];
-            }
-        }
-        return t;
-    })();
-
-    this.blitFb = function (dat, destOffset, numPixels, doubledY) {
+    blitFb(dat, destOffset, numPixels, doubledY) {
         destOffset |= 0;
         numPixels |= 0;
         const offset = table4bppOffset(this.ulaMode, dat);
@@ -219,9 +327,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
                 fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
             }
         }
-    };
+    }
 
-    this.handleCursor = function (offset) {
+    handleCursor(offset) {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
             for (let i = 0; i < this.pixelsPerChar; ++i) {
                 this.fb32[offset + i] ^= 0x00ffffff;
@@ -233,14 +341,13 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             }
         }
         if (++this.cursorDrawIndex === 7) this.cursorDrawIndex = 0;
-    };
+    }
 
-    this.screenAdd = 0;
-    this.setScreenAdd = function (viaScreenAdd) {
+    setScreenAdd(viaScreenAdd) {
         this.screenAdd = this.screenAddrAdd[viaScreenAdd];
-    };
+    }
 
-    this.readVideoMem = function () {
+    readVideoMem() {
         if (this.addr & 0x2000) {
             // Mode 7 chunky addressing mode if MA13 set.
             // Address offset by scanline is ignored.
@@ -259,9 +366,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             if (this.addr & 0x1000) addr += this.screenAdd;
             return this.cpu.videoRead(addr & 0x7fff);
         }
-    };
+    }
 
-    this.endOfFrame = function () {
+    endOfFrame() {
         this.vertCounter = 0;
         this.firstScanline = true;
         this.nextLineStartAddr = (this.regs[13] | (this.regs[12] << 8)) & 0x3fff;
@@ -274,9 +381,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         if (!this.inVSync) {
             this.doEvenFrameLogic = false;
         }
-    };
+    }
 
-    this.endOfCharacterLine = function () {
+    endOfCharacterLine() {
         this.vertCounter = (this.vertCounter + 1) & 0x7f;
 
         this.scanlineCounter = 0;
@@ -284,9 +391,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         this.dispEnableSet(SCANLINEDISPENABLE);
         this.cursorOn = false;
         this.cursorOff = false;
-    };
+    }
 
-    this.endOfScanline = function () {
+    endOfScanline() {
         // End of scanline is the most complicated and quirky area of the
         // 6845. A lot of different states and outcomes are possible.
         // From the start of the frame, we traverse various states
@@ -384,9 +491,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             externalScanline++;
         }
         this.teletext.setRA0(!!(externalScanline & 1));
-    };
+    }
 
-    this.handleHSync = function () {
+    handleHSync() {
         this.hpulseCounter = (this.hpulseCounter + 1) & 0x0f;
         if (this.hpulseCounter === this.hpulseWidth >>> 1) {
             // Start at -8 because the +8 is added before the pixel render.
@@ -409,9 +516,9 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
         } else if (this.hpulseCounter === (this.regs[3] & 0x0f)) {
             this.inHSync = false;
         }
-    };
+    }
 
-    this.cb2changed = function (level, output) {
+    cb2changed(level, output) {
         // Even with no light pen physically attached, the system VIA can
         // configure CB2 as an output and make the CRTC think it sees a
         // real light pen pulse.
@@ -421,29 +528,29 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
             this.regs[16] = (this.addr >> 8) & 0x3f;
             this.regs[17] = this.addr & 0xff;
         }
-    };
+    }
 
-    this.dispEnableChanged = function () {
+    dispEnableChanged() {
         // The DISPTMG output pin is wired to the SAA5050 teletext chip,
         // for scanline tracking, so keep it apprised.
         const mask = HDISPENABLE | VDISPENABLE | USERDISPENABLE;
         const disptmg = (this.dispEnabled & mask) === mask;
         this.teletext.setDISPTMG(disptmg);
-    };
+    }
 
-    this.dispEnableSet = function (flag) {
+    dispEnableSet(flag) {
         this.dispEnabled |= flag;
         this.dispEnableChanged();
-    };
+    }
 
-    this.dispEnableClear = function (flag) {
+    dispEnableClear(flag) {
         this.dispEnabled &= ~flag;
         this.dispEnableChanged();
-    };
+    }
 
     ////////////////////
     // Main drawing routine
-    this.polltime = function (clocks) {
+    polltime(clocks) {
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
@@ -455,7 +562,6 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
 
             // This emulates the Hitachi 6845SP CRTC.
             // Other variants have different quirks.
-
             // Handle HSync
             if (this.inHSync) this.handleHSync();
 
@@ -656,118 +762,20 @@ export function Video(isMaster, fb32_param, paint_ext_param) {
                 this.doEvenFrameLogic = !!(this.frameCount & 1);
             }
         } // matches while
-    };
-    ////////////////////
-
-    ////////////////////
-    // CRTC interface
-    function Crtc(video) {
-        this.video = video;
-        this.curReg = 0;
-        this.crtcmask = new Uint8Array([
-            0xff, 0xff, 0xff, 0xff, 0x7f, 0x1f, 0x7f, 0x7f, 0xf3, 0x1f, 0x7f, 0x1f, 0x3f, 0xff, 0x3f, 0xff, 0x3f, 0xff,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ]);
     }
-
-    Crtc.prototype.read = function (addr) {
-        if (!(addr & 1)) return 0;
-        switch (this.curReg) {
-            case 12:
-            case 13:
-            case 14:
-            case 15:
-            case 16:
-            case 17:
-                return this.video.regs[this.curReg];
-        }
-        return 0;
-    };
-    Crtc.prototype.write = function (addr, val) {
-        if (addr & 1) {
-            this.video.regs[this.curReg] = val & this.crtcmask[this.curReg];
-            switch (this.curReg) {
-                case 3:
-                    this.video.hpulseWidth = val & 0x0f;
-                    this.video.vpulseWidth = (val & 0xf0) >>> 4;
-                    break;
-                case 8: {
-                    this.video.interlacedSyncAndVideo = (val & 3) === 3;
-                    const skew = (val & 0x30) >>> 4;
-                    if (skew < 3) {
-                        this.video.displayEnableSkew = skew;
-                        this.video.dispEnableSet(USERDISPENABLE);
-                    } else {
-                        this.video.dispEnableClear(USERDISPENABLE);
-                    }
-                    break;
-                }
-                case 14:
-                case 15:
-                    this.video.cursorPos = (this.video.regs[15] | (this.video.regs[14] << 8)) & 0x3fff;
-                    break;
-            }
-        } else this.curReg = val & 31;
-    };
-    this.crtc = new Crtc(this);
-
-    ////////////////////
-    // ULA interface
-    function Ula(video) {
-        this.video = video;
-    }
-
-    Ula.prototype.write = function (addr, val) {
-        addr |= 0;
-        val |= 0;
-        if (addr & 1) {
-            const index = (val >>> 4) & 0xf;
-            this.video.actualPal[index] = val & 0xf;
-            let ulaCol = val & 7;
-            if (!(val & 8 && this.video.ulactrl & 1)) ulaCol ^= 7;
-            if (this.video.ulaPal[index] !== this.video.collook[ulaCol]) {
-                this.video.ulaPal[index] = this.video.collook[ulaCol];
-            }
-        } else {
-            if ((this.video.ulactrl ^ val) & 1) {
-                // Flash colour has changed.
-                const flashEnabled = !!(val & 1);
-                for (let i = 0; i < 16; ++i) {
-                    let index = this.video.actualPal[i] & 7;
-                    if (!(flashEnabled && this.video.actualPal[i] & 8)) index ^= 7;
-                    if (this.video.ulaPal[i] !== this.video.collook[index]) {
-                        this.video.ulaPal[i] = this.video.collook[index];
-                    }
-                }
-            }
-            this.video.ulactrl = val;
-            this.video.pixelsPerChar = val & 0x10 ? 8 : 16;
-            this.video.halfClock = !(val & 0x10);
-            const newMode = (val >>> 2) & 3;
-            if (newMode !== this.video.ulaMode) {
-                this.video.ulaMode = newMode;
-            }
-            this.video.teletextMode = !!(val & 2);
-        }
-    };
-
-    this.ula = new Ula(this);
-
-    this.reset(null);
-
-    this.clearPaintBuffer();
-    this.paint();
 }
 
-export function FakeVideo() {
-    this.reset = function () {};
-    this.ula = this.crtc = {
-        read: function () {
-            return 0xff;
-        },
-        write: utils.noop,
-    };
-    this.polltime = utils.noop;
-    this.setScreenAdd = utils.noop;
-    this.regs = new Uint8Array(32);
+export class FakeVideo {
+    constructor() {
+        this.ula = this.crtc = {
+            read: function () {
+                return 0xff;
+            },
+            write: utils.noop,
+        };
+        this.regs = new Uint8Array(32);
+    }
+    reset() {}
+    polltime() {}
+    setScreenAdd() {}
 }
