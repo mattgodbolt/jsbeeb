@@ -104,7 +104,10 @@ class Crtc {
     }
 }
 
-function copyFb(dest, src) {
+////////////////////
+// Misc support functions
+
+function debugCopyFb(dest, src) {
     for (let i = 0; i < 1024 * 768; ++i) {
         dest[i] = src[i];
     }
@@ -135,9 +138,6 @@ function lerp(col1, col2, alpha) {
 function table4bppOffset(ulamode, byte) {
     return (ulamode << 12) | (byte << 4);
 }
-
-////////////////////
-// The video class
 
 ////////////////////
 // The video class
@@ -296,7 +296,7 @@ export class Video {
         if (!this.debugPrevScreen) {
             this.debugPrevScreen = new Uint32Array(1024 * 768);
         }
-        copyFb(this.debugPrevScreen, this.fb32);
+        debugCopyFb(this.debugPrevScreen, this.fb32);
         const dotSize = 10;
         let x, y;
         for (y = -dotSize; y <= dotSize; y++) {
@@ -308,7 +308,7 @@ export class Video {
             }
         }
         this.paint();
-        copyFb(this.fb32, this.debugPrevScreen);
+        debugCopyFb(this.fb32, this.debugPrevScreen);
     }
 
     blitFb(dat, destOffset, numPixels, doubledY) {
