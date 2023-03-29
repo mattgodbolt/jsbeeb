@@ -1,7 +1,5 @@
 "use strict";
 
-import { hexbyte } from "./utils.js";
-
 const defaultCmos = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfe, 0x00, 0xeb, 0x00,
     0xc9, 0xff, 0xff, 0x12, 0x00, 0x17, 0xca, 0x1e, 0x05, 0x00, 0x35, 0xa6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -137,10 +135,6 @@ export class Cmos {
                 }
                 const secondsNow = Math.floor(Date.now() / 1000) * 1000;
                 timeOffset = bbcTime.getTime() - secondsNow;
-                console.log(
-                    `CMOS write ${hexbyte(portApins)} to ${this.cmosAddr}; bbcTime=${bbcTime},` +
-                        `timeOffset=${timeOffset}`
-                );
             }
         }
     }
