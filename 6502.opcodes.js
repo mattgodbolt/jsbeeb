@@ -48,121 +48,112 @@ function push(reg) {
     return "cpu.push(cpu." + reg + ");";
 }
 
-function InstructionGen(is65c12) {
-    const self = this;
-    self.is65c12 = is65c12;
-    self.ops = {};
-    self.cycle = 0;
+class InstructionGen {
+    constructor(is65c12) {
+        this.is65c12 = is65c12;
+        this.ops = {};
+        this.cycle = 0;
+    }
 
-    function appendOrPrepend(combiner, cycle, op, exact, addr) {
+    appendOrPrepend(combiner, cycle, op, exact, addr) {
         if (op === undefined) {
             op = cycle;
-            cycle = self.cycle;
+            cycle = this.cycle;
         }
         exact = exact || false;
         if (typeof op === "string") op = [op];
-        if (self.ops[cycle]) {
-            self.ops[cycle].op = combiner(self.ops[cycle].op, op);
-            if (exact) self.ops[cycle].exact = true;
-            if (!self.ops[cycle].addr) self.ops[cycle].addr = addr;
-        } else self.ops[cycle] = { op: op, exact: exact, addr: addr };
+        if (this.ops[cycle]) {
+            this.ops[cycle].op = combiner(this.ops[cycle].op, op);
+            if (exact) this.ops[cycle].exact = true;
+            if (!this.ops[cycle].addr) this.ops[cycle].addr = addr;
+        } else this.ops[cycle] = { op: op, exact: exact, addr: addr };
     }
 
-    self.append = function (cycle, op, exact, addr) {
-        appendOrPrepend(
-            function (lhs, rhs) {
-                return lhs.concat(rhs);
-            },
-            cycle,
-            op,
-            exact,
-            addr
-        );
-    };
-    self.prepend = function (cycle, op, exact, addr) {
-        appendOrPrepend(
-            function (lhs, rhs) {
-                return rhs.concat(lhs);
-            },
-            cycle,
-            op,
-            exact,
-            addr
-        );
-    };
+    append(cycle, op, exact, addr) {
+        this.appendOrPrepend((lhs, rhs) => lhs.concat(rhs), cycle, op, exact, addr);
+    }
+    prepend(cycle, op, exact, addr) {
+        this.appendOrPrepend((lhs, rhs) => rhs.concat(lhs), cycle, op, exact, addr);
+    }
 
-    self.tick = function (cycles) {
-        self.cycle += cycles || 1;
-    };
-    self.readOp = function (addr, reg, spurious) {
-        self.cycle++;
+    tick(cycles) {
+        this.cycle += cycles || 1;
+    }
+
+    readOp(addr, reg, spurious) {
+        this.cycle++;
         let op;
         if (reg) op = reg + " = cpu.readmem(" + addr + ");";
         else op = "cpu.readmem(" + addr + ");";
         if (spurious) op += " // spurious";
-        self.append(self.cycle, op, true, addr);
-    };
-    self.writeOp = function (addr, reg, spurious) {
-        self.cycle++;
+        this.append(this.cycle, op, true, addr);
+    }
+    writeOp(addr, reg, spurious) {
+        this.cycle++;
         let op = "cpu.writemem(" + addr + ", " + reg + ");";
         if (spurious) op += " // spurious";
-        self.append(self.cycle, op, true, addr);
-    };
-    self.zpReadOp = function (addr, reg) {
-        self.cycle++;
-        self.append(self.cycle, reg + " = cpu.readmemZpStack(" + addr + ");", false);
-    };
-    self.zpWriteOp = function (addr, reg) {
-        self.cycle++;
-        self.append(self.cycle, "cpu.writememZpStack(" + addr + ", " + reg + ");", true);
-    };
-    self.render = function (startCycle) {
-        if (self.cycle < 2) self.cycle = 2;
-        self.prepend(self.cycle - 1, "cpu.checkInt();", true);
-        return self.renderInternal(startCycle);
-    };
-    self.spuriousOp = function (addr, reg) {
-        if (self.is65c12) {
-            self.readOp(addr, "", true);
+        this.append(this.cycle, op, true, addr);
+    }
+
+    zpReadOp(addr, reg) {
+        this.cycle++;
+        this.append(this.cycle, reg + " = cpu.readmemZpStack(" + addr + ");", false);
+    }
+    zpWriteOp(addr, reg) {
+        this.cycle++;
+        this.append(this.cycle, "cpu.writememZpStack(" + addr + ", " + reg + ");", true);
+    }
+
+    render(startCycle) {
+        if (this.cycle < 2) this.cycle = 2;
+        this.prepend(this.cycle - 1, "cpu.checkInt();", true);
+        return this.renderInternal(startCycle);
+    }
+
+    spuriousOp(addr, reg) {
+        if (this.is65c12) {
+            this.readOp(addr, "", true);
         } else {
-            self.writeOp(addr, reg, true);
+            this.writeOp(addr, reg, true);
         }
-    };
-    self.renderInternal = function (startCycle) {
+    }
+
+    renderInternal(startCycle) {
         startCycle = startCycle || 0;
         let toSkip = 0;
         let out = [];
-        for (let i = startCycle; i < self.cycle; ++i) {
-            if (!self.ops[i]) {
+        for (let i = startCycle; i < this.cycle; ++i) {
+            if (!this.ops[i]) {
                 toSkip++;
                 continue;
             }
-            if (toSkip && self.ops[i].exact) {
-                if (self.ops[i].addr) {
-                    out.push("cpu.polltimeAddr(" + toSkip + ", " + self.ops[i].addr + ");");
+            if (toSkip && this.ops[i].exact) {
+                if (this.ops[i].addr) {
+                    out.push("cpu.polltimeAddr(" + toSkip + ", " + this.ops[i].addr + ");");
                 } else {
                     out.push("cpu.polltime(" + toSkip + ");");
                 }
                 toSkip = 0;
             }
-            out = out.concat(self.ops[i].op);
+            out = out.concat(this.ops[i].op);
             toSkip++;
         }
         if (toSkip) {
-            if (self.ops[self.cycle] && self.ops[self.cycle].addr) {
-                out.push("cpu.polltimeAddr(" + toSkip + ", " + self.ops[self.cycle].addr + ");");
+            if (this.ops[this.cycle] && this.ops[this.cycle].addr) {
+                out.push("cpu.polltimeAddr(" + toSkip + ", " + this.ops[this.cycle].addr + ");");
             } else {
                 out.push("cpu.polltime(" + toSkip + ");");
             }
         }
-        if (self.ops[self.cycle]) out = out.concat(self.ops[self.cycle].op);
+        if (this.ops[this.cycle]) out = out.concat(this.ops[this.cycle].op);
         return out.filter(function (l) {
             return l;
         });
-    };
-    self.split = function (condition) {
-        return new SplitInstruction(this, condition, self.is65c12);
-    };
+    }
+
+    split(condition) {
+        return new SplitInstruction(this, condition, this.is65c12);
+    }
 }
 
 function SplitInstruction(preamble, condition, is65c12) {
