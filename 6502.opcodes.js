@@ -138,9 +138,7 @@ class InstructionGen {
             }
         }
         if (this.ops[this.cycle]) out = out.concat(this.ops[this.cycle].op);
-        return out.filter(function (l) {
-            return l;
-        });
+        return out.filter((l) => l);
     }
 
     split(condition) {
@@ -148,38 +146,36 @@ class InstructionGen {
     }
 }
 
-function SplitInstruction(preamble, condition, is65c12) {
-    const self = this;
-    self.preamble = preamble;
-    self.ifTrue = new InstructionGen(is65c12);
-    self.ifTrue.tick(preamble.cycle);
-    self.ifFalse = new InstructionGen(is65c12);
-    self.ifFalse.tick(preamble.cycle);
+class SplitInstruction {
+    constructor(preamble, condition, is65c12) {
+        this.preamble = preamble;
+        this.condition = condition;
+        this.ifTrue = new InstructionGen(is65c12);
+        this.ifTrue.tick(preamble.cycle);
+        this.ifFalse = new InstructionGen(is65c12);
+        this.ifFalse.tick(preamble.cycle);
 
-    ["append", "prepend", "readOp", "writeOp", "spuriousOp"].forEach(function (op) {
-        self[op] = function () {
-            self.ifTrue[op].apply(self.ifTrue, arguments);
-            self.ifFalse[op].apply(self.ifFalse, arguments);
-        };
-    });
-
-    function indent(a) {
-        const result = [];
-        a.forEach(function (x) {
-            result.push("  " + x);
+        ["append", "prepend", "readOp", "writeOp", "spuriousOp"].forEach((op) => {
+            this[op] = (...args) => {
+                this.ifTrue[op](...args);
+                this.ifFalse[op](...args);
+            };
         });
-        return result;
     }
 
-    self.render = function () {
-        return self.preamble
+    indent(lines) {
+        return lines.map((line) => `  ${line}`);
+    }
+
+    render() {
+        return this.preamble
             .renderInternal()
-            .concat(["if (" + condition + ") {"])
-            .concat(indent(self.ifTrue.render(preamble.cycle)))
-            .concat(["} else {"])
-            .concat(indent(self.ifFalse.render(preamble.cycle)))
+            .concat("if (" + this.condition + ") {")
+            .concat(this.indent(this.ifTrue.render(this.preamble.cycle)))
+            .concat("} else {")
+            .concat(this.indent(this.ifFalse.render(this.preamble.cycle)))
             .concat("}");
-    };
+    }
 }
 
 function getOp(op, arg) {
