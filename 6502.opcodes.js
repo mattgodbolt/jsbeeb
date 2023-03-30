@@ -906,8 +906,8 @@ class Disassemble6502 {
     }
 
     disassemble(addr, plain) {
-        let formatAddr = (addr) => `<span class='instr_mem_ref'>${hexword(addr)}</span>`;
-        let formatJumpAddr = (addr) => `<span class='instr_instr_ref'>${hexword(addr)}</span>`;
+        let formatAddr = (addr) => `<span class='instr_mem_ref' data-ref='${addr}'>${hexword(addr)}</span>`;
+        let formatJumpAddr = (addr) => `<span class='instr_instr_ref' data-ref='${addr}'>${hexword(addr)}</span>`;
         if (plain) {
             formatAddr = hexword;
             formatJumpAddr = hexword;

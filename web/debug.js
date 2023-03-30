@@ -85,7 +85,6 @@ export class Debugger {
         this.patchInstructions = {};
         this._enabled = false;
         this.disass = $("#disassembly");
-        this.disassemble = null;
         this._memoryView = new MemoryView($("#memory"), (address) => (this.cpu ? this.cpu.peekmem(address) : 0));
         this.debugNode = $("#debug, #hardware_debug, #crtc_debug");
         this.disassPc = 0;
@@ -131,10 +130,13 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
-        this.disassemble = cpu.disassembler.disassemble;
         this.sysvia = this.setupVia($("#sysvia"), cpu.sysvia);
         this.uservia = this.setupVia($("#uservia"), cpu.uservia);
         this.crtc = this.setupCrtc($("#crtc_debug"), cpu.video);
+    }
+
+    disassemble(addr) {
+        return this.cpu.disassembler.disassemble(addr);
     }
 
     setupCrtc(node, video) {
@@ -337,8 +339,8 @@ export class Debugger {
             elem.find(".instr_bytes").text(dump.hex.join(" "));
             elem.find(".instr_asc").text(dump.asc.join(""));
             const disNode = elem.find(".disassembly").html(result[0]);
-            disNode.find(".instr_mem_ref").click(this.memClick);
-            disNode.find(".instr_instr_ref").click(this.instrClick);
+            disNode.find(".instr_mem_ref").click((e) => this.memClick(e));
+            disNode.find(".instr_instr_ref").click((e) => this.instrClick(e));
             elem.find(".bp_gutter").toggleClass("active", !!this.breakpoints[address]);
             elem.data({ addr: address, ref: result[2] });
             return result[1];
@@ -455,13 +457,13 @@ export class Debugger {
     }
 
     instrClick(e) {
-        const info = $(e.target).closest(".dis_elem").data();
+        const info = $(e.target).data();
         this.disassStack.push(this.disassPc);
         this.updateDisassembly(info.ref);
     }
 
     memClick(e) {
-        const info = $(e.target).closest(".dis_elem").data();
+        const info = $(e.target).data();
         this._memoryView.update(info.ref);
     }
 
