@@ -899,6 +899,76 @@ const opcodes65c12 = {
     0xfe: "INC abs,x",
 };
 
+class Disassemble6502 {
+    constructor(cpu, opcodes) {
+        this.cpu = cpu;
+        this.opcodes = opcodes;
+    }
+
+    disassemble(addr, plain) {
+        let formatAddr = (addr) => `<span class='instr_mem_ref'>${hexword(addr)}</span>`;
+        let formatJumpAddr = (addr) => `<span class='instr_instr_ref'>${hexword(addr)}</span>`;
+        if (plain) {
+            formatAddr = hexword;
+            formatJumpAddr = hexword;
+        }
+        const opcode = this.opcodes[this.cpu.peekmem(addr)];
+        if (!opcode) {
+            return ["???", addr + 1];
+        }
+        const split = opcode.split(" ");
+        if (!split[1]) {
+            return [opcode, addr + 1];
+        }
+        let param = split[1] || "";
+        let suffix = "";
+        let suffix2 = "";
+        const index = param.match(/(.*),([xy])$/);
+        if (index) {
+            param = index[1];
+            suffix = "," + index[2].toUpperCase();
+            suffix2 = " + " + index[2].toUpperCase();
+        }
+        switch (param) {
+            case "imm":
+                return [`${split[0]} #$${hexbyte(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
+            case "abs": {
+                const formatter = split[0] === "JMP" || split[0] === "JSR" ? formatJumpAddr : formatAddr;
+                const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
+                return [`${split[0]} $${formatter(destAddr)}${suffix}`, addr + 3, destAddr];
+            }
+            case "branch": {
+                const destAddr = addr + signExtend(this.cpu.peekmem(addr + 1)) + 2;
+                return [`${split[0]} $${formatJumpAddr(destAddr)}${suffix}`, addr + 2, destAddr];
+            }
+            case "zp":
+                return [`${split[0]} $${hexbyte(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
+            case "(,x)":
+                return [`${split[0]} ($${hexbyte(this.cpu.peekmem(addr + 1))}, X)${suffix}`, addr + 2];
+            case "()": {
+                const zp = this.cpu.peekmem(addr + 1);
+                const destAddr = this.cpu.peekmem(zp) | (this.cpu.peekmem(zp + 1) << 8);
+                return [`${split[0]} ($${hexbyte(zp)})${suffix} ; $${utils.hexword(destAddr)}${suffix2}`, addr + 2];
+            }
+            case "(abs)": {
+                const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
+                const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
+                return [
+                    `${split[0]} ($${formatJumpAddr(destAddr)})${suffix} ; $${utils.hexword(indDest)}${suffix2}`,
+                    addr + 3,
+                    indDest,
+                ];
+            }
+            case "(abs,x)": {
+                const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
+                const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
+                return [`${split[0]} ($${formatJumpAddr(destAddr)},x)${suffix}`, addr + 3, indDest];
+            }
+        }
+        return [opcode, addr + 1];
+    }
+}
+
 function makeCpuFunctions(cpu, opcodes, is65c12) {
     function getInstruction(opcodeString, needsReg) {
         const split = opcodeString.split(" ");
@@ -1145,93 +1215,6 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
         };
     }
 
-    function Disassemble6502(cpu) {
-        function formatAddr_(addr) {
-            return "<span class='instr_mem_ref'>" + hexword(addr) + "</span>";
-        }
-
-        function formatJumpAddr_(addr) {
-            return "<span class='instr_instr_ref'>" + hexword(addr) + "</span>";
-        }
-
-        this.disassemble = function (addr, plain) {
-            let formatAddr = formatAddr_;
-            let formatJumpAddr = formatJumpAddr_;
-            if (plain) {
-                formatAddr = hexword;
-                formatJumpAddr = hexword;
-            }
-            const opcode = opcodes[cpu.peekmem(addr)];
-            if (!opcode) {
-                return ["???", addr + 1];
-            }
-            const split = opcode.split(" ");
-            if (!split[1]) {
-                return [opcode, addr + 1];
-            }
-            let param = split[1] || "";
-            let suffix = "";
-            let suffix2 = "";
-            const index = param.match(/(.*),([xy])$/);
-            let destAddr, indDest;
-            if (index) {
-                param = index[1];
-                suffix = "," + index[2].toUpperCase();
-                suffix2 = " + " + index[2].toUpperCase();
-            }
-            switch (param) {
-                case "imm":
-                    return [split[0] + " #$" + hexbyte(cpu.peekmem(addr + 1)) + suffix, addr + 2];
-                case "abs": {
-                    const formatter = split[0] === "JMP" || split[0] === "JSR" ? formatJumpAddr : formatAddr;
-                    destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
-                    return [split[0] + " $" + formatter(destAddr) + suffix, addr + 3, destAddr];
-                }
-                case "branch":
-                    destAddr = addr + signExtend(cpu.peekmem(addr + 1)) + 2;
-                    return [split[0] + " $" + formatJumpAddr(destAddr) + suffix, addr + 2, destAddr];
-                case "zp":
-                    return [split[0] + " $" + hexbyte(cpu.peekmem(addr + 1)) + suffix, addr + 2];
-                case "(,x)":
-                    return [split[0] + " ($" + hexbyte(cpu.peekmem(addr + 1)) + ", X)" + suffix, addr + 2];
-                case "()":
-                    destAddr = cpu.peekmem(addr + 1);
-                    destAddr = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
-                    return [
-                        split[0] +
-                            " ($" +
-                            hexbyte(cpu.peekmem(addr + 1)) +
-                            ")" +
-                            suffix +
-                            " ; $" +
-                            utils.hexword(destAddr) +
-                            suffix2,
-                        addr + 2,
-                    ];
-                case "(abs)":
-                    destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
-                    indDest = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
-                    return [
-                        split[0] +
-                            " ($" +
-                            formatJumpAddr(destAddr) +
-                            ")" +
-                            suffix +
-                            " ; $" +
-                            utils.hexword(indDest) +
-                            suffix2,
-                        addr + 3,
-                        indDest,
-                    ];
-                case "(abs,x)":
-                    destAddr = cpu.peekmem(addr + 1) | (cpu.peekmem(addr + 2) << 8);
-                    indDest = cpu.peekmem(destAddr) | (cpu.peekmem(destAddr + 1) << 8);
-                    return [split[0] + " ($" + formatJumpAddr(destAddr) + ",x)" + suffix, addr + 3, indDest];
-            }
-            return [opcode, addr + 1];
-        };
-    }
-
     function invalidOpcode(cpu, opcode) {
         if (is65c12) {
             // All undefined opcodes are NOPs on 65c12 (of varying lengths)
@@ -1296,7 +1279,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
     Runner.prototype.run = generate6502JumpTable();
 
     return {
-        Disassemble: Disassemble6502,
+        disassembler: new Disassemble6502(cpu, opcodes),
         runInstruction: new Runner(),
         opcodes: opcodes,
         getInstruction: getInstruction,

@@ -84,7 +84,7 @@ class Base6502 {
         this.a = this.x = this.y = this.s = 0;
         this.pc = 0;
         this.opcodes = model.nmos ? opcodes.Cpu6502(this) : opcodes.Cpu65c12(this);
-        this.disassembler = new this.opcodes.Disassemble(this);
+        this.disassembler = this.opcodes.disassembler;
         this.forceTracing = false;
         this.runner = this.opcodes.runInstruction;
 
