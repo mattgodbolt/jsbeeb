@@ -66,9 +66,6 @@ let stationId = 101;
 let econet = null;
 
 if (queryString) {
-    if (queryString[queryString.length - 1] === "/")
-        // workaround for shonky python web server
-        queryString = queryString.substring(0, queryString.length - 1);
     queryString.split("&").forEach(function (keyval) {
         const keyAndVal = keyval.split("=");
         const key = decodeURIComponent(keyAndVal[0]);

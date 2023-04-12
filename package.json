@@ -67,6 +67,9 @@
       "releaseType": "release"
     }
   },
+  "mocha": {
+    "spec": "tests/unit/**/*.js"
+  },
   "scripts": {
     "start": "webpack serve",
     "build": "webpack --node-env production",
@@ -76,8 +79,8 @@
     "lint-fix": "eslint . --fix",
     "format": "prettier --write .",
     "test-long:cpu": "node tests/test-suite.js",
-    "test:unit": "mocha tests/unit",
-    "test:integration": "mocha tests/integration",
+    "test:unit": "mocha --recursive tests/unit",
+    "test:integration": "mocha --recursive tests/integration",
     "test:dormann": "node tests/test-dormann.js",
     "test": "npm-run-all -p test:*",
     "test-long": "npm-run-all -p test-long:*"
