@@ -74,6 +74,8 @@ export function combineQuery(parsedQuery, argTypes) {
             case "boolIfPresent":
                 if (val) urlParts.push(`${encodeURIComponent(key)}`);
                 break;
+            default:
+                throw new Error(`Unknown arg type ${argTypes.get(key)}`);
         }
     }
     return urlParts.join("&");

@@ -52,7 +52,7 @@ const queryTypeMap = (() => {
     map.set("autoboot", "boolIfPresent");
     map.set("autochain", "boolIfPresent");
     map.set("autorun", "boolIfPresent");
-    map.set("fasttape", "boolIfPresent");
+    map.set("fastTape", "boolIfPresent");
     map.set("noseek", "boolIfPresent");
     map.set("audiofilterfreq", "float");
     map.set("audiofilterq", "float");
@@ -60,9 +60,10 @@ const queryTypeMap = (() => {
     map.set("rom", "array");
     map.set("glEnabled", "bool");
     map.set("fakeVideo", "boolIfPresent");
+    map.set("cpuMultiplier", "float");
+    return map;
 })();
 let parsedQuery = parseQuery(queryString, queryTypeMap);
-window.parsedQuery = parsedQuery; // DO NOT COMMIT
 for (const key of Object.keys(parsedQuery)) {
     const val = parsedQuery[key];
     if (key.toUpperCase().startsWith("KEY.")) {
@@ -116,7 +117,7 @@ const stationId = parsedQuery.stationId === undefined ? 101 : parsedQuery.statio
 let frameSkip = parsedQuery.frameSkip || 0;
 
 const emuKeyHandlers = {};
-let cpuMultiplier = 1;
+const cpuMultiplier = parsedQuery.cpuMultiplier || 1;
 let fastAsPossible = false;
 let pauseEmu = false;
 let stepEmuWhenPaused = false;
@@ -231,8 +232,7 @@ sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
     div.css({ bottom: -img.height() });
 });
 
-if (parsedQuery.cpuMultiplier) {
-    cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
+if (cpuMultiplier !== 1) {
     console.log("CPU multiplier set to " + cpuMultiplier);
 }
 const clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
@@ -667,11 +667,7 @@ discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, 
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
 
 $("#sth .autoboot").click(function () {
-    if ($("#sth .autoboot").prop("checked")) {
-        parsedQuery.autoboot = "";
-    } else {
-        delete parsedQuery.autoboot;
-    }
+    parsedQuery.autoboot = $("#sth .autoboot").prop("checked");
     updateUrl();
 });
 
