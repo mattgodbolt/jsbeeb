@@ -22,12 +22,12 @@ import { Config } from "./config.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
+import { joinQuery, parseQuery, combineQuery } from "./web/query-string.js";
 
 let processor;
 let video;
 let dbgr;
 let frames = 0;
-let frameSkip = 0;
 let syncLights;
 let discSth;
 let tapeSth;
@@ -36,7 +36,6 @@ let model;
 const gamepad = new GamePad();
 let availableImages;
 let discImage;
-const extraRoms = [];
 if (typeof starCat === "function") {
     availableImages = starCat();
 
@@ -44,116 +43,84 @@ if (typeof starCat === "function") {
         discImage = availableImages[0].file;
     }
 }
-let queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
-let secondDiscImage = null;
-let parsedQuery = {};
-let needsAutoboot = false;
-let autoType = "";
-let keyLayout = window.localStorage.keyLayout || "physical";
-
 const BBC = utils.BBC;
 const keyCodes = utils.keyCodes;
+
+const queryString = joinQuery(document.location.search.substring(1), window.location.hash.substring(1));
+const queryTypeMap = (() => {
+    const map = new Map();
+    map.set("autoboot", "boolIfPresent");
+    map.set("autochain", "boolIfPresent");
+    map.set("autorun", "boolIfPresent");
+    map.set("fasttape", "boolIfPresent");
+    map.set("noseek", "boolIfPresent");
+    map.set("audiofilterfreq", "float");
+    map.set("audiofilterq", "float");
+    map.set("stationId", "int");
+    map.set("rom", "array");
+    map.set("glEnabled", "bool");
+    map.set("fakeVideo", "boolIfPresent");
+})();
+let parsedQuery = parseQuery(queryString, queryTypeMap);
+window.parsedQuery = parsedQuery; // DO NOT COMMIT
+for (const key of Object.keys(parsedQuery)) {
+    const val = parsedQuery[key];
+    if (key.toUpperCase().startsWith("KEY.")) {
+        const bbcKey = val.toUpperCase();
+
+        if (BBC[bbcKey]) {
+            const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
+            if (keyCodes[nativeKey]) {
+                console.log("mapping " + nativeKey + " to " + bbcKey);
+                utils.userKeymap.push({ native: nativeKey, bbc: bbcKey });
+            } else {
+                console.log("unknown key: " + nativeKey);
+            }
+        } else {
+            console.log("unknown BBC key: " + val);
+        }
+    } else if (key.startsWith("GP.") === 0) {
+        // gamepad mapping
+        // eg ?GP.FIRE2=RETURN
+        const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
+        gamepad.remap(gamepadKey, val.toUpperCase());
+    }
+}
+
+for (const key of ["UP", "DOWN", "LEFT", "RIGHT", "FIRE"]) {
+    const val = parsedQuery[key];
+    if (val) gamepad.remap(key, val.toUpperCase());
+}
+
+let needsAutoboot = false;
+let autoType = parsedQuery.autotype;
+if (parsedQuery.autoboot) needsAutoboot = "boot";
+else if (parsedQuery.autochain) needsAutoboot = "chain";
+else if (parsedQuery.autorun) needsAutoboot = "run";
+else if (parsedQuery.autotype) needsAutoboot = "type";
+discImage = parsedQuery.disc || parsedQuery.disc1 || discImage;
+const extraRoms = parsedQuery.rom;
+
+const secondDiscImage = parsedQuery.disc2;
+const keyLayout = parsedQuery.keyLayout || window.localStorage.keyLayout || "physical";
+
+if (parsedQuery.embed) {
+    $(".embed-hide").hide();
+    $("body").css("background-color", "transparent");
+}
+const fastTape = !!parsedQuery.fastTape;
+const noSeek = !!parsedQuery.noseek;
+const audioFilterFreq = parsedQuery.audiofilterfreq || 7000;
+const audioFilterQ = parsedQuery.audiofilterq || 5;
+const stationId = parsedQuery.stationId === undefined ? 101 : parsedQuery.stationId;
+let frameSkip = parsedQuery.frameSkip || 0;
+
 const emuKeyHandlers = {};
 let cpuMultiplier = 1;
 let fastAsPossible = false;
-let fastTape = false;
-let noSeek = false;
 let pauseEmu = false;
 let stepEmuWhenPaused = false;
-let audioFilterFreq = 7000;
-let audioFilterQ = 5;
-let stationId = 101;
 let econet = null;
-
-if (queryString) {
-    queryString.split("&").forEach(function (keyval) {
-        const keyAndVal = keyval.split("=");
-        const key = decodeURIComponent(keyAndVal[0]);
-        let val = null;
-        if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
-        parsedQuery[key] = val;
-
-        // eg KEY.CAPSLOCK=CTRL
-        let bbcKey;
-        if (key.toUpperCase().indexOf("KEY.") === 0) {
-            bbcKey = val.toUpperCase();
-
-            if (BBC[bbcKey]) {
-                const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
-                if (keyCodes[nativeKey]) {
-                    console.log("mapping " + nativeKey + " to " + bbcKey);
-                    utils.userKeymap.push({ native: nativeKey, bbc: bbcKey });
-                } else {
-                    console.log("unknown key: " + nativeKey);
-                }
-            } else {
-                console.log("unknown BBC key: " + val);
-            }
-        } else if (key.indexOf("GP.") === 0) {
-            // gamepad mapping
-            // eg ?GP.FIRE2=RETURN
-            const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
-            gamepad.remap(gamepadKey, val.toUpperCase());
-        } else {
-            switch (key) {
-                case "LEFT":
-                case "RIGHT":
-                case "UP":
-                case "DOWN":
-                case "FIRE":
-                    gamepad.remap(key, val.toUpperCase());
-                    break;
-                case "autoboot":
-                    needsAutoboot = "boot";
-                    break;
-                case "autochain":
-                    needsAutoboot = "chain";
-                    break;
-                case "autorun":
-                    needsAutoboot = "run";
-                    break;
-                case "autotype":
-                    needsAutoboot = "type";
-                    autoType = val;
-                    break;
-                case "keyLayout":
-                    keyLayout = (val + "").toLowerCase();
-                    break;
-                case "disc":
-                case "disc1":
-                    discImage = val;
-                    break;
-                case "rom":
-                    extraRoms.push(val);
-                    break;
-                case "disc2":
-                    secondDiscImage = val;
-                    break;
-                case "embed":
-                    $(".embed-hide").hide();
-                    $("body").css("background-color", "transparent");
-                    break;
-                case "fasttape":
-                    fastTape = true;
-                    break;
-                case "noseek":
-                    noSeek = true;
-                    break;
-                case "audiofilterfreq":
-                    audioFilterFreq = Number(val);
-                    break;
-                case "audiofilterq":
-                    audioFilterQ = Number(val);
-                    break;
-                case "stationId":
-                    stationId = Number(val);
-                    break;
-            }
-        }
-    });
-}
-
-if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
 
 const printerPort = {
     outputStrobe: function (level, output) {
@@ -207,7 +174,7 @@ const emulationConfig = {
 };
 
 const config = new Config(function (changed) {
-    parsedQuery = _.extend(parsedQuery, changed);
+    parsedQuery = { ...parsedQuery, ...changed };
     if (
         changed.model ||
         changed.coProcessor !== undefined ||
@@ -271,10 +238,7 @@ if (parsedQuery.cpuMultiplier) {
 const clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
 const MaxCyclesPerFrame = clocksPerSecond / 10;
 
-let tryGl = true;
-if (parsedQuery.glEnabled !== undefined) {
-    tryGl = parsedQuery.glEnabled === "true";
-}
+const tryGl = parsedQuery.glEnabled === undefined ? true : parsedQuery.glEnabled;
 const $screen = $("#screen");
 const canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
@@ -283,7 +247,7 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
     frames = 0;
     canvas.paint(minx, miny, maxx, maxy);
 });
-if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
+if (parsedQuery.fakeVideo) video = new FakeVideo();
 
 const audioHandler = new AudioHandler($("#audio-warning"), audioFilterFreq, audioFilterQ, noSeek);
 // Firefox will report that audio is suspended even when it will
@@ -833,14 +797,7 @@ function autoRunBasic() {
 }
 
 function updateUrl() {
-    let url = window.location.origin + window.location.pathname;
-    let sep = "?";
-    $.each(parsedQuery, function (key, value) {
-        if (key.length > 0 && value) {
-            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
-            sep = "&";
-        }
-    });
+    const url = `${window.location.origin}${window.location.pathname}?${combineQuery(parsedQuery, queryTypeMap)}`;
     window.history.pushState(null, null, url);
 }
 
@@ -1550,8 +1507,8 @@ function stop(debug) {
     const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
     const minWidth = cubOrigWidth / 4;
     const minHeight = cubOrigHeight / 4;
-    const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
-    const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
+    const borderReservedSize = parsedQuery.embed ? 0 : 100;
+    const bottomReservedSize = parsedQuery.embed ? 0 : 68;
 
     function resizeTv() {
         let navbarHeight = $("#header-bar").outerHeight();

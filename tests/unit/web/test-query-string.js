@@ -50,6 +50,16 @@ describe("Query parser tests", () => {
         assert.deepStrictEqual(parseQuery("someBool", types), { someBool: false });
         assert.deepStrictEqual(parseQuery("someBool=false", types), { someBool: false });
         assert.deepStrictEqual(parseQuery("someBool=true", types), { someBool: true });
+        assert.deepStrictEqual(parseQuery("", types), {});
+    });
+    it("should handle boolIfPresent types", () => {
+        const types = new Map();
+        types.set("someBool", "boolIfPresent");
+        assert.deepStrictEqual(parseQuery("someBool=123", types), { someBool: true });
+        assert.deepStrictEqual(parseQuery("someBool", types), { someBool: true });
+        assert.deepStrictEqual(parseQuery("someBool=false", types), { someBool: false });
+        assert.deepStrictEqual(parseQuery("someBool=true", types), { someBool: true });
+        assert.deepStrictEqual(parseQuery("", types), {});
     });
 });
 
@@ -76,21 +86,25 @@ describe("Query combiner tests", () => {
         types.set("boolean1", "bool");
         types.set("boolean2", "bool");
         types.set("boolean3", "bool");
+        types.set("amIHere", "boolIfPresent");
+        types.set("amNotHere", "boolIfPresent");
         types.set("array", "array");
         assert.equal(
             combineQuery(
                 {
-                    string: "string",
+                    string: "stringy",
                     int: 123,
                     float: 123.456,
                     boolean1: true,
                     boolean2: false,
                     boolean3: "something truthy",
+                    amIHere: true,
+                    amNotHere: false,
                     array: ["one", "two", "three", "a space"],
                 },
                 types
             ),
-            "string=string&int=123&float=123.456&boolean1=true&boolean2=false&boolean3=true&array=one&array=two&array=three&array=a%20space"
+            "string=stringy&int=123&float=123.456&boolean1=true&boolean2=false&boolean3=true&amIHere&array=one&array=two&array=three&array=a%20space"
         );
     });
 });

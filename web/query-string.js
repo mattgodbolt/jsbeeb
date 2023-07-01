@@ -36,6 +36,9 @@ export function parseQuery(queryString, argTypes) {
             case "bool":
                 parsedQuery[key] = val === "true";
                 break;
+            case "boolIfPresent":
+                parsedQuery[key] = val !== "false";
+                break;
             default:
                 throw new Error(`Unknown arg type ${argTypes.get(key)}`);
         }
@@ -67,6 +70,9 @@ export function combineQuery(parsedQuery, argTypes) {
                 break;
             case "bool":
                 urlParts.push(`${encodeURIComponent(key)}=${val ? "true" : "false"}`);
+                break;
+            case "boolIfPresent":
+                if (val) urlParts.push(`${encodeURIComponent(key)}`);
                 break;
         }
     }
