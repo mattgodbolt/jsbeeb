@@ -87,9 +87,19 @@ export const allModels = [
         I8271
     ),
     new Model(
-        "BBC B with ADFS",
+        "BBC B with 1770 (DFS)",
         ["B1770"],
         ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
+        true,
+        false,
+        beebSwram,
+        WD1770
+    ),
+    // putting ADFS in a higher ROM slot gives it priority
+    new Model(
+        "BBC B with 1770 (ADFS)",
+        ["B1770A"],
+        ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
         true,
         false,
         beebSwram,
