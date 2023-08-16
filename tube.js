@@ -110,7 +110,6 @@ export class Tube {
                 else {
                     this.r1stat &= ~(b & 0x3f);
                 }
-
                 this.hstat[0] = (this.hstat[0] & 0xc0) | (b & 0x3f);
                 break;
             case 1:
