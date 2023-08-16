@@ -33,7 +33,7 @@ export class Tube {
         );
 
         const hp3Size = this.r1stat & 0x10 ? 1 : 0;
-        this.parasiteCpu.nmi = !!(this.r1stat & 0x08 && (this.hp3pos > hp3Size || this.ph3pos === 0));
+        this.parasiteCpu.nmi = !!(this.r1stat & 0x08 && (this.hp3pos > hp3Size));
     }
     reset() {
         this.ph1pos = this.hp3pos = 0;
@@ -41,7 +41,10 @@ export class Tube {
         this.r1stat = 0;
         this.hstat[0] = this.hstat[1] = this.hstat[3] = 0x40;
         this.hstat[2] = 0xc0;
-        this.pstat[0] = this.pstat[1] = this.pstat[2] = this.pstat[3] = 0x40;
+
+        this.pstat[0] = 0x40;
+        this.pstat[1] = this.pstat[2] = this.pstat[3] = 0x7f;
+        this.updateInterrupts();
     }
     hostRead(addr) {
         let result = 0xfe;
@@ -97,8 +100,16 @@ export class Tube {
         if (this.debug) console.log("host write " + utils.hexword(addr) + " = " + utils.hexbyte(b));
         switch (addr & 7) {
             case 0:
-                if (b & 0x80) this.r1stat |= b & 0x3f;
-                else this.r1stat &= ~(b & 0x3f);
+                if (b & 0x80) {
+                    this.r1stat |= b & 0x3f;
+                }
+                else if (this.r1stat & 0x20) {
+                    this.reset();
+                    this.parasiteCpu.reset();
+                }
+                else {
+                    this.r1stat &= ~(b & 0x3f);
+                }
                 this.hstat[0] = (this.hstat[0] & 0xc0) | (b & 0x3f);
                 break;
             case 1:
@@ -210,7 +221,7 @@ export class Tube {
                     this.ph3[0] = b;
                     this.ph3pos = 1;
                     this.hstat[2] |= 0x80;
-                    this.pstat[2] &= ~0xc0;
+                    this.pstat[2] &= ~0x40;
                 }
                 break;
             case 7:
