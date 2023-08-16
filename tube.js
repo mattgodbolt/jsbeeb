@@ -101,14 +101,15 @@ export class Tube {
         switch (addr & 7) {
             case 0:
                 if (b & 0x80)
-                this.r1stat |= b & 0x3f;
+                    this.r1stat |= b & 0x3f;
                 else if (this.r1stat & 0x20) {
                     this.reset();
                     this.parasiteCpu.reset();
                 }
                 else
                     this.r1stat &= ~(b & 0x3f);
-                    this.hstat[0] = (this.hstat[0] & 0xc0) | (b & 0x3f);
+
+                this.hstat[0] = (this.hstat[0] & 0xc0) | (b & 0x3f);
                 break;
             case 1:
                 this.hp1 = b;
