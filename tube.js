@@ -128,9 +128,6 @@ export class Tube {
         this.parasiteCpu.resetHeldLow = (this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_PARASITE_RESET_ACTIVE_LOW);
     }
     hostRead(address) {
-        //  Not implemented - needs to be integrated with the parasite CPU code:
-        //  Boot mode is terminated by the software when it selects any one of the Tube addresses.
-        //  This deselects the ROM
         let result = 0xfe;
         switch (address & 7) {
             case TUBE_ULA_R1_STATUS_ADDRESS:
@@ -253,6 +250,9 @@ export class Tube {
         this.updateInterrupts();
     }
     parasiteRead(address) {
+        //  Not implemented - needs to be integrated with the parasite CPU code:
+        //  Boot mode is terminated by the software when it selects any one of the Tube addresses.
+        //  This deselects the ROM
         let result = 0;
         switch (address & 7) {
             case TUBE_ULA_R1_STATUS_ADDRESS:
@@ -301,6 +301,9 @@ export class Tube {
         return result;
     }
     parasiteWrite(address, value) {
+        //  Not implemented - needs to be integrated with the parasite CPU code:
+        //  Boot mode is terminated by the software when it selects any one of the Tube addresses.
+        //  This deselects the ROM
         if (this.debug) {
             console.log("TUBE ULA: parasite write " + utils.hexword(address) + " = " + utils.hexbyte(value));
         }
