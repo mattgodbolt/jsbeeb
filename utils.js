@@ -769,14 +769,8 @@ export function hd(reader, start, end, opts) {
     return joined;
 }
 
-const signExtendTable = (function () {
-    const table = [];
-    for (let i = 0; i < 256; ++i) table[i] = i >= 128 ? i - 256 : i;
-    return table;
-})();
-
 export function signExtend(val) {
-    return signExtendTable[val | 0] | 0;
+    return val >= 128 ? val - 256 : val;
 }
 
 export function noop() {}
