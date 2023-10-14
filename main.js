@@ -225,7 +225,7 @@ const config = new Config(function (changed) {
             function () {
                 updateUrl();
                 window.location.reload();
-            }
+            },
         );
     }
     if (changed.keyLayout) {
@@ -579,7 +579,7 @@ const cmos = new Cmos(
         },
     },
     model.cmosOverride,
-    econet
+    econet,
 );
 
 let printerWindow = null;
@@ -590,7 +590,7 @@ function checkPrinterWindow() {
 
     printerWindow = window.open("", "_blank", "height=300,width=400");
     printerWindow.document.write(
-        '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>'
+        '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>',
     );
     printerTextArea = printerWindow.document.getElementById("text");
 
@@ -606,7 +606,7 @@ processor = new Cpu6502(
     model.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
     emulationConfig,
-    econet
+    econet,
 );
 
 function setDisc1Image(name) {
@@ -646,7 +646,7 @@ function discSthClick(item) {
             },
             function (err) {
                 loadingFinished(err);
-            }
+            },
         );
 }
 
@@ -661,7 +661,7 @@ function tapeSthClick(item) {
         },
         function (err) {
             loadingFinished(err);
-        }
+        },
     );
 }
 
@@ -1032,7 +1032,7 @@ function gdAuth(imm) {
         function (err) {
             console.log("Error handling google auth: " + err);
             $googleDrive.find(".loading").text("There was an error accessing your Google Drive account: " + err);
-        }
+        },
     );
 }
 
@@ -1160,7 +1160,7 @@ $("#google-drive form").on("submit", function (e) {
         },
         function (error) {
             loadingFinished(error);
-        }
+        },
     );
 });
 
@@ -1254,13 +1254,13 @@ const startPromise = Promise.all([audioHandler.initialise(), processor.initialis
         imageLoads.push(
             loadDiscImage(discImage).then(function (disc) {
                 processor.fdc.loadDisc(0, disc);
-            })
+            }),
         );
     if (secondDiscImage)
         imageLoads.push(
             loadDiscImage(secondDiscImage).then(function (disc) {
                 processor.fdc.loadDisc(1, disc);
-            })
+            }),
         );
     if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
@@ -1293,7 +1293,7 @@ const startPromise = Promise.all([audioHandler.initialise(), processor.initialis
                             autoRunBasic();
                         }
                     });
-                })
+                }),
         );
     }
 
@@ -1306,7 +1306,7 @@ const startPromise = Promise.all([audioHandler.initialise(), processor.initialis
                     resolve(String.fromCharCode.apply(null, data));
                 });
             }),
-            needsRun
+            needsRun,
         );
     }
 
@@ -1315,7 +1315,7 @@ const startPromise = Promise.all([audioHandler.initialise(), processor.initialis
             new Promise(function (resolve) {
                 resolve(parsedQuery.embedBasic);
             }),
-            true
+            true,
         );
     }
 
@@ -1352,7 +1352,7 @@ startPromise.then(
     function (error) {
         showError("initialising", error);
         console.log(error);
-    }
+    },
 );
 
 const $ays = $("#are-you-sure");
@@ -1593,8 +1593,8 @@ window.hd = function (start, end) {
                 return processor.readmem(x);
             },
             start,
-            end
-        )
+            end,
+        ),
     );
 };
 window.m7dump = function () {
@@ -1605,8 +1605,8 @@ window.m7dump = function () {
             },
             0x7c00,
             0x7fe8,
-            { width: 40, gap: false }
-        )
+            { width: 40, gap: false },
+        ),
     );
 };
 

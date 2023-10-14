@@ -46,7 +46,7 @@ export function GoogleDriveLoader() {
                         console.log("Google Drive: Need to auth");
                         resolve(false);
                     }
-                }
+                },
             );
         });
     };
@@ -75,7 +75,7 @@ export function GoogleDriveLoader() {
                 gapi.client.drive.files.list({
                     q: "mimeType = '" + MIME_TYPE + "'",
                 }),
-                []
+                [],
             );
         });
     }

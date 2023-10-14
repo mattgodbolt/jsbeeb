@@ -74,7 +74,7 @@ export class DdNoise {
                     this.state = SPINNING;
                 });
             },
-            () => {}
+            () => {},
         );
     }
     spinDown() {
@@ -113,7 +113,7 @@ async function loadSounds(context, sounds) {
                     resolve(decodedData);
                 });
             });
-        })
+        }),
     );
     const keys = _.keys(sounds);
     const result = {};

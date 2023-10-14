@@ -37,7 +37,7 @@ function runTest(processor, test, name) {
                         " : " +
                         utils.hexbyte(processor.a) +
                         " : " +
-                        processor.disassembler.disassemble(processor.pc)[0]
+                        processor.disassembler.disassemble(processor.pc)[0],
                 );
             }
 
@@ -68,8 +68,8 @@ function fail(processor) {
                 return processor.readmem(i);
             },
             0x00,
-            0x40
-        )
+            0x40,
+        ),
     );
     process.exit(1);
 }

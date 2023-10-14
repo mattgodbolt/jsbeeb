@@ -147,7 +147,7 @@ export class Econet {
                     this.SERVER_STATION_ID,
                     0,
                     this.serverTx.controlFlag,
-                    this.serverTx.port
+                    this.serverTx.port,
                 );
                 this.advanceState(this.FWH_RX_Scout_Received); // 1 - RX Received scout - waiting for ack sent
             }
@@ -169,7 +169,7 @@ export class Econet {
                                 this.SERVER_STATION_ID,
                                 0,
                                 this.serverTx.controlFlag,
-                                this.serverTx.port
+                                this.serverTx.port,
                             );
                             this.advanceState(this.FWH_RX_Scout_Received); // reset timer
                             break;
@@ -424,7 +424,7 @@ export class Econet {
                     if (this.beebTx.bytesInBuffer >= 6 && this.wireState === this.FWH_TX_Scout_Sent) {
                         // if at state 4, copy to server RX block, drop ack into BeebRX and move to state 0
                         let serverReceiveBlock = this.receiveBlocks.find(
-                            (element) => element.receivePort === this.txPort
+                            (element) => element.receivePort === this.txPort,
                         );
                         if (serverReceiveBlock) {
                             this.copyBuffer(serverReceiveBlock.data, this.beebTx);

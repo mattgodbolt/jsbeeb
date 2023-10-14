@@ -144,7 +144,7 @@ export class Filestore {
                             (this.ram[p + 10] << 8) |
                             (this.ram[p + 11] << 16) |
                             (this.ram[p + 12] << 24)) >>>
-                            0
+                            0,
                     );
 
                     this.econet.receiveBlocks.push(rxBuffer);

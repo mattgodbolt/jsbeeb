@@ -443,7 +443,7 @@ export function getKeyMap(keyLayout) {
                 "Warning: duplicate binding for key",
                 (shiftDown ? "<SHIFT>" : "") + s,
                 colRow,
-                keys2[shiftDown][s]
+                keys2[shiftDown][s],
             );
         }
         keys2[shiftDown][s] = colRow;

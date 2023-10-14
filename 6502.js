@@ -1111,7 +1111,7 @@ export class Cpu6502 extends Base6502 {
                 this.cmos,
                 this.model.isMaster,
                 this.config.keyLayout,
-                this.config.getGamepads
+                this.config.getGamepads,
             );
             this.uservia = via.UserVia(this, this.model.isMaster, this.config.userPort);
             if (this.config.printerPort) this.uservia.ca2changecallback = this.config.printerPort.outputStrobe;
@@ -1282,7 +1282,7 @@ export class Cpu6502 extends Base6502 {
                     (dis + "                       ").substr(0, 15),
                     utils.hexbyte(a),
                     utils.hexbyte(x),
-                    utils.hexbyte(y)
+                    utils.hexbyte(y),
                 );
             };
         for (let i = maxToShow - 2; i >= 0; --i) {

@@ -100,7 +100,7 @@ export class GlCanvas {
             0,
             checkedGl.RGBA,
             checkedGl.UNSIGNED_BYTE,
-            this.fb8
+            this.fb8,
         );
         checkedGl.bindTexture(checkedGl.TEXTURE_2D, null);
 
@@ -140,7 +140,7 @@ export class GlCanvas {
             maxy - miny,
             gl.RGBA,
             gl.UNSIGNED_BYTE,
-            this.fb8.subarray(miny * width * 4, maxy * width * 4)
+            this.fb8.subarray(miny * width * 4, maxy * width * 4),
         );
         const extent = { minx, miny, maxx, maxy };
 

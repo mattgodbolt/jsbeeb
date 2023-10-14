@@ -39,5 +39,5 @@ registerProcessor(
 
             return true;
         }
-    }
+    },
 );

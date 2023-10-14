@@ -119,7 +119,7 @@ export class BaseDisc {
                 return;
             }
             this.data[this.seekOffset + this.sectorOffset + this.byteWithinSector] = this.fdc.readDiscData(
-                this.byteWithinSector === 255
+                this.byteWithinSector === 255,
             );
             if (++this.byteWithinSector === 256) {
                 this.fdc.discFinishRead();

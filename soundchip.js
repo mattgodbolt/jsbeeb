@@ -173,7 +173,7 @@ export function SoundChip(sampleRate) {
                 if (this.active) {
                     poke(this.slowDataBus);
                 }
-            }.bind(this)
+            }.bind(this),
         );
     };
 

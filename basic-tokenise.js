@@ -69,7 +69,7 @@ export async function create() {
         }
         if (safety === 0) {
             throw new Error(
-                "Unable to tokenize '" + line + "' - got as far as '" + result + "' pc=" + utils.hexword(cpu.pc)
+                "Unable to tokenize '" + line + "' - got as far as '" + result + "' pc=" + utils.hexword(cpu.pc),
             );
         }
         return result;

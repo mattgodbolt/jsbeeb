@@ -75,7 +75,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        I8271
+        I8271,
     ),
     new Model(
         "BBC B with DFS 0.9",
@@ -84,7 +84,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        I8271
+        I8271,
     ),
     new Model(
         "BBC B with 1770 (DFS)",
@@ -93,7 +93,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        WD1770
+        WD1770,
     ),
     // putting ADFS in a higher ROM slot gives it priority
     new Model(
@@ -103,7 +103,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        WD1770
+        WD1770,
     ),
     new Model("BBC Master 128 (DFS)", ["Master"], ["master/mos3.20"], false, true, masterSwram, WD1770, null, pickDfs),
     new Model(
@@ -115,7 +115,7 @@ export const allModels = [
         masterSwram,
         WD1770,
         null,
-        pickAdfs
+        pickAdfs,
     ),
     new Model(
         "BBC Master 128 (ANFS)",
@@ -126,7 +126,7 @@ export const allModels = [
         masterSwram,
         WD1770,
         null,
-        pickAnfs
+        pickAnfs,
     ),
     new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
 ];

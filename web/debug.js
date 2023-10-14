@@ -225,7 +225,7 @@ export class Debugger {
                     const reg = via[elem];
                     this.updateElem(
                         value,
-                        hexbyte((reg >>> 16) & 0xff) + hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff)
+                        hexbyte((reg >>> 16) & 0xff) + hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff),
                     );
                 });
             } else {
