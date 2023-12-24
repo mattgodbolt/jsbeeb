@@ -586,7 +586,7 @@ export class Cpu6502 extends Base6502 {
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
         this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
         this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
-        this.JimPageSel = 0;
+        this.music5000PageSel = 0;
         this.econet = econet_;
 
         this.peripheralCycles = 0;
@@ -750,16 +750,6 @@ export class Cpu6502 extends Base6502 {
         }
         addr &= 0xffff;
 
-        if (this.model.hasMusic5000) {
-            if (addr === 0xfcff) {
-                return this.JimPageSel;
-            }
-
-            if ((this.JimPageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                return this.music5000.read(this.JimPageSel, addr);
-            }
-        }
-
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
@@ -783,6 +773,9 @@ export class Cpu6502 extends Base6502 {
             case 0xfc58:
             case 0xfc5c:
                 // IDE
+                break;
+            case 0xfcfc:
+                if (addr === 0xfcff && this.model.hasMusic5000) return this.music5000PageSel;
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -868,6 +861,13 @@ export class Cpu6502 extends Base6502 {
             case 0xfefc:
                 return this.tube.read(addr);
         }
+
+        if (this.model.hasMusic5000) {
+            if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
+                return this.music5000.read(this.music5000PageSel, addr);
+            }
+        }
+
         if (addr >= 0xfc00 && addr < 0xfe00) return 0xff;
         return addr >>> 8;
     }
@@ -916,18 +916,12 @@ export class Cpu6502 extends Base6502 {
     }
 
     writeDevice(addr, b) {
+        addr &= 0xffff;
         b |= 0;
 
-        if (this.model.hasMusic5000) {
-            if (addr === 0xfcff) {
-                this.JimPageSel = b;
-                return;
-            }
-
-            if ((this.JimPageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
-                this.music5000.write(this.JimPageSel, addr, b);
-                return;
-            }
+        if (this.model.hasMusic5000 && (addr & 0xff00) === 0xfd00 && (this.music5000PageSel & 0xf0) === 0x30) {
+            this.music5000.write(this.music5000PageSel, addr, b);
+            return;
         }
 
         switch (addr & ~0x0003) {
@@ -953,6 +947,11 @@ export class Cpu6502 extends Base6502 {
             case 0xfc58:
             case 0xfc5c:
                 // IDE
+                break;
+            case 0xfcfc:
+                if (addr === 0xfcff && this.model.hasMusic5000) {
+                    this.music5000PageSel = b;
+                }
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -1179,7 +1178,7 @@ export class Cpu6502 extends Base6502 {
         this.p.i = true;
         this.nmi = false;
         this.halted = false;
-        this.JimPageSel = 0;
+        this.music5000PageSel = 0;
         this.video.reset(this, this.sysvia, hard);
         if (hard) this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
