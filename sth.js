@@ -3,46 +3,44 @@
 import * as utils from "./utils.js";
 import $ from "jquery";
 
-export function StairwayToHell(onStart, onCat, onError, tape) {
-    const self = this;
-    let baseUrl = document.location.protocol + "//www.stairwaytohell.com/bbc/archive/";
-    if (tape) baseUrl += "tapeimages/";
-    else baseUrl += "diskimages/";
+const catalogUrl = "reclist.php?sort=name&filter=.zip";
+const sthArchive = "www.stairwaytohell.com/bbc/archive";
 
-    const catalogUrl = "reclist.php?sort=name&filter=.zip";
-    const catalog = [];
+export class StairwayToHell {
+    constructor(onStart, onCat, onError, tape) {
+        this._baseUrl = `${document.location.protocol}//${sthArchive}/${tape ? "tape" : "disk"}images/`;
+        this._catalog = [];
+        this._onStart = onStart;
+        this._onCat = onCat;
+        this._onError = onError;
+    }
 
-    self.populate = function () {
-        onStart();
-        if (catalog.length === 0) {
+    populate() {
+        this._onStart();
+        if (this._catalog.length === 0) {
             const request = new XMLHttpRequest();
-            request.open("GET", baseUrl + catalogUrl, true);
-            request.onerror = function () {
-                if (onError) onError();
+            request.open("GET", this._baseUrl + catalogUrl, true);
+            request.onerror = () => {
+                if (this._onError) this._onError();
             };
-            request.onload = function () {
-                const doc = $($.parseHTML(this.responseText, null, false));
-                doc.find("tr td:nth-child(3) a").each(function (_, link) {
+            request.onload = () => {
+                const doc = $($.parseHTML(request.responseText, null, false));
+                doc.find("tr td:nth-child(3) a").each((_, link) => {
                     const href = $(link).attr("href");
-                    if (href.indexOf(".zip") > 0) catalog.push(href);
+                    if (href.indexOf(".zip") > 0) this._catalog.push(href);
                 });
-                if (onCat) onCat(catalog);
+                if (this._onCat) this._onCat(this._catalog);
             };
             request.send();
         } else {
-            if (onCat) onCat(catalog);
+            if (this._onCat) this._onCat(this._catalog);
         }
-    };
+    }
 
-    self.catalog = function () {
-        return catalog;
-    };
-
-    self.fetch = function (file) {
-        const name = baseUrl + file;
+    async fetch(file) {
+        const name = this._baseUrl + file;
         console.log("Loading ZIP from " + name);
-        return utils.loadData(name).then(function (data) {
-            return utils.unzipDiscImage(data).data;
-        });
-    };
+        const data = await utils.loadData(name);
+        return utils.unzipDiscImage(data).data;
+    }
 }
