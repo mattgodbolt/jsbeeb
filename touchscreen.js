@@ -21,7 +21,7 @@ export class TouchScreen {
     }
 
     tryReceive(rts) {
-        if (self.outBuffer.size && rts) return self.outBuffer.get();
+        if (this.outBuffer.size && rts) return this.outBuffer.get();
         return -1;
     }
 
@@ -30,28 +30,28 @@ export class TouchScreen {
             marginX = 0.13;
         const scaleY = 100,
             marginY = 0.03;
-        const scaledX = doScale(self.mouse.x, scaleX, marginX);
-        const scaledY = doScale(1 - self.mouse.y, scaleY, marginY);
+        const scaledX = doScale(this.mouse.x, scaleX, marginX);
+        const scaledY = doScale(1 - this.mouse.y, scaleY, marginY);
         const toSend = [0x4f, 0x4f, 0x4f, 0x4f];
         const x = Math.min(255, Math.max(0, scaledX)) | 0;
         const y = Math.min(255, Math.max(0, scaledY)) | 0;
-        if (self.mouse.button) {
+        if (this.mouse.button) {
             toSend[0] = 0x40 | ((x & 0xf0) >>> 4);
             toSend[1] = 0x40 | (x & 0x0f);
             toSend[2] = 0x40 | ((y & 0xf0) >>> 4);
             toSend[3] = 0x40 | (y & 0x0f);
         }
-        for (let i = 0; i < 4; ++i) self.store(toSend[i]);
-        self.store(".".charCodeAt(0));
+        for (let i = 0; i < 4; ++i) this.store(toSend[i]);
+        this.store(".".charCodeAt(0));
     }
 
     poll() {
-        self.doRead();
-        self.pollTask.reschedule(PollCycles);
+        this.doRead();
+        this.pollTask.reschedule(PollCycles);
     }
 
     store(byte) {
-        self.outBuffer.put(byte);
+        this.outBuffer.put(byte);
     }
 
     onMouse(x, y, button) {
@@ -61,7 +61,7 @@ export class TouchScreen {
     onTransmit(val) {
         switch (String.fromCharCode(val)) {
             case "M":
-                self.mode = 0;
+                this.mode = 0;
                 break;
             case "0":
             case "1":
@@ -73,14 +73,14 @@ export class TouchScreen {
             case "7":
             case "8":
             case "9":
-                self.mode = 10 * self.mode + val - "0".charCodeAt(0);
+                this.mode = 10 * this.mode + val - "0".charCodeAt(0);
                 break;
             case ".":
                 break;
             case "?":
-                if (self.mode === 1) self.doRead();
+                if (this.mode === 1) this.doRead();
                 break;
         }
-        self.pollTask.ensureScheduled(self.mode === 129 || self.mode === 130, PollCycles);
+        this.pollTask.ensureScheduled(this.mode === 129 || this.mode === 130, PollCycles);
     }
 }
