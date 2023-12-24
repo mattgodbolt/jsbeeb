@@ -1161,7 +1161,7 @@ export class Cpu6502 extends Base6502 {
             this.videoDisplayPage = 0;
             this.scheduler = new Scheduler();
             this.soundChip.setScheduler(this.scheduler);
-            this.sysvia = via.SysVia(
+            this.sysvia = new via.SysVia(
                 this,
                 this.video,
                 this.soundChip,
@@ -1170,7 +1170,7 @@ export class Cpu6502 extends Base6502 {
                 this.config.keyLayout,
                 this.config.getGamepads,
             );
-            this.uservia = via.UserVia(this, this.model.isMaster, this.config.userPort);
+            this.uservia = new via.UserVia(this, this.model.isMaster, this.config.userPort);
             if (this.config.printerPort) this.uservia.ca2changecallback = this.config.printerPort.outputStrobe;
             this.touchScreen = new TouchScreen(this.scheduler);
             this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
