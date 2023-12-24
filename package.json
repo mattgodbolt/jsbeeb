@@ -80,7 +80,8 @@
     "test:integration": "mocha tests/integration",
     "test:dormann": "node tests/test-dormann.js",
     "test": "npm-run-all -p test:*",
-    "test-long": "npm-run-all -p test-long:*"
+    "test-long": "npm-run-all -p test-long:*",
+    "benchmark": "node app-bench.js"
   },
   "lint-staged": {
     "*.js": "eslint --cache --fix",

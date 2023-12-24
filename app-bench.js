@@ -28,4 +28,4 @@ async function main() {
     benchmarkCpu(cpu, 100 * 1000 * 1000);
 }
 
-main();
+main().then(() => {});
