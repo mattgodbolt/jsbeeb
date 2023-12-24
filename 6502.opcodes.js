@@ -24,7 +24,7 @@ function rotate(left, logical) {
             lines.push("REG = ((REG << 1) & 0xff) | newBotBit;");
         }
     }
-    lines.push("cpu.setzn(REG);");
+    lines.push("cpu.p.setzn(REG);");
     return lines;
 }
 
@@ -32,7 +32,7 @@ function pull(reg) {
     if (reg === "p") {
         return ["cpu.p.setFromByte(cpu.pull());"];
     }
-    return ["cpu." + reg + " = cpu.setzn(cpu.pull());"];
+    return ["cpu." + reg + " = cpu.p.setzn(cpu.pull());"];
 }
 
 function push(reg) {
@@ -199,11 +199,11 @@ function getOp(op, arg) {
         case "CLV":
             return { op: "cpu.p.v = false;" };
         case "LDA":
-            return { op: ["cpu.a = cpu.setzn(REG);"], read: true };
+            return { op: ["cpu.a = cpu.p.setzn(REG);"], read: true };
         case "LDX":
-            return { op: ["cpu.x = cpu.setzn(REG);"], read: true };
+            return { op: ["cpu.x = cpu.p.setzn(REG);"], read: true };
         case "LDY":
-            return { op: ["cpu.y = cpu.setzn(REG);"], read: true };
+            return { op: ["cpu.y = cpu.p.setzn(REG);"], read: true };
         case "STA":
             return { op: "REG = cpu.a;", write: true };
         case "STX":
@@ -212,24 +212,24 @@ function getOp(op, arg) {
             return { op: "REG = cpu.y;", write: true };
         case "INC":
             return {
-                op: ["REG = cpu.setzn(REG + 1);"],
+                op: ["REG = cpu.p.setzn(REG + 1);"],
                 read: true,
                 write: true,
             };
         case "DEC":
             return {
-                op: ["REG = cpu.setzn(REG - 1);"],
+                op: ["REG = cpu.p.setzn(REG - 1);"],
                 read: true,
                 write: true,
             };
         case "INX":
-            return { op: ["cpu.x = cpu.setzn(cpu.x + 1);"] };
+            return { op: ["cpu.x = cpu.p.setzn(cpu.x + 1);"] };
         case "INY":
-            return { op: ["cpu.y = cpu.setzn(cpu.y + 1);"] };
+            return { op: ["cpu.y = cpu.p.setzn(cpu.y + 1);"] };
         case "DEX":
-            return { op: ["cpu.x = cpu.setzn(cpu.x - 1);"] };
+            return { op: ["cpu.x = cpu.p.setzn(cpu.x - 1);"] };
         case "DEY":
-            return { op: ["cpu.y = cpu.setzn(cpu.y - 1);"] };
+            return { op: ["cpu.y = cpu.p.setzn(cpu.y - 1);"] };
         case "ADC":
             return { op: "cpu.adc(REG);", read: true };
         case "SBC":
@@ -258,38 +258,38 @@ function getOp(op, arg) {
         case "LSR":
             return { op: rotate(false, true), read: true, write: true, rotate: true };
         case "EOR":
-            return { op: ["cpu.a = cpu.setzn(cpu.a ^ REG);"], read: true };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.a ^ REG);"], read: true };
         case "AND":
-            return { op: ["cpu.a = cpu.setzn(cpu.a & REG);"], read: true };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.a & REG);"], read: true };
         case "ORA":
-            return { op: ["cpu.a = cpu.setzn(cpu.a | REG);"], read: true };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.a | REG);"], read: true };
         case "CMP":
             return {
-                op: ["cpu.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"],
+                op: ["cpu.p.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"],
                 read: true,
             };
         case "CPX":
             return {
-                op: ["cpu.setzn(cpu.x - REG);", "cpu.p.c = cpu.x >= REG;"],
+                op: ["cpu.p.setzn(cpu.x - REG);", "cpu.p.c = cpu.x >= REG;"],
                 read: true,
             };
         case "CPY":
             return {
-                op: ["cpu.setzn(cpu.y - REG);", "cpu.p.c = cpu.y >= REG;"],
+                op: ["cpu.p.setzn(cpu.y - REG);", "cpu.p.c = cpu.y >= REG;"],
                 read: true,
             };
         case "TXA":
-            return { op: ["cpu.a = cpu.setzn(cpu.x);"] };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.x);"] };
         case "TAX":
-            return { op: ["cpu.x = cpu.setzn(cpu.a);"] };
+            return { op: ["cpu.x = cpu.p.setzn(cpu.a);"] };
         case "TXS":
             return { op: "cpu.s = cpu.x;" };
         case "TSX":
-            return { op: ["cpu.x = cpu.setzn(cpu.s);"] };
+            return { op: ["cpu.x = cpu.p.setzn(cpu.s);"] };
         case "TYA":
-            return { op: ["cpu.a = cpu.setzn(cpu.y);"] };
+            return { op: ["cpu.a = cpu.p.setzn(cpu.y);"] };
         case "TAY":
-            return { op: ["cpu.y = cpu.setzn(cpu.a);"] };
+            return { op: ["cpu.y = cpu.p.setzn(cpu.a);"] };
         case "BEQ":
             return { op: "cpu.branch(cpu.p.z);" };
         case "BNE":
@@ -384,7 +384,7 @@ function getOp(op, arg) {
             };
         case "SLO": // equivalent to ASL zp:ORA zp
             return {
-                op: rotate(true, true).concat(["cpu.a |= REG;", "cpu.setzn(cpu.a);"]),
+                op: rotate(true, true).concat(["cpu.a |= REG;", "cpu.p.setzn(cpu.a);"]),
                 read: true,
                 write: true,
             };
@@ -394,47 +394,47 @@ function getOp(op, arg) {
             return { op: "REG = (cpu.y & ((addr >>> 8)+1)) & 0xff;", write: true, zpQuirk: true };
         case "LAX": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
             return {
-                op: ["var magic = 0xff;", "cpu.a = cpu.x = cpu.setzn((cpu.a|magic) & REG);"],
+                op: ["var magic = 0xff;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
             };
         case "LXA": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
             return {
-                op: ["var magic = 0xee;", "cpu.a = cpu.x = cpu.setzn((cpu.a|magic) & REG);"],
+                op: ["var magic = 0xee;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
             };
         case "SRE":
             return {
-                op: rotate(false, true).concat(["cpu.a = cpu.setzn(cpu.a ^ REG);"]),
+                op: rotate(false, true).concat(["cpu.a = cpu.p.setzn(cpu.a ^ REG);"]),
                 read: true,
                 write: true,
             };
         case "RLA":
             return {
-                op: rotate(true, false).concat(["cpu.a = cpu.setzn(cpu.a & REG);"]),
+                op: rotate(true, false).concat(["cpu.a = cpu.p.setzn(cpu.a & REG);"]),
                 read: true,
                 write: true,
             };
         case "ANC":
             return {
-                op: ["cpu.a = cpu.setzn(cpu.a & REG); cpu.p.c = cpu.p.n;"],
+                op: ["cpu.a = cpu.p.setzn(cpu.a & REG); cpu.p.c = cpu.p.n;"],
                 read: true,
             };
         case "ANE":
             return {
-                op: ["cpu.a = cpu.setzn((cpu.a | 0xee) & REG & cpu.x);"],
+                op: ["cpu.a = cpu.p.setzn((cpu.a | 0xee) & REG & cpu.x);"],
                 read: true,
             };
         case "ARR":
             return { op: "cpu.arr(REG);", read: true };
         case "DCP":
             return {
-                op: ["REG = cpu.setzn(REG - 1);", "cpu.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"],
+                op: ["REG = cpu.p.setzn(REG - 1);", "cpu.p.setzn(cpu.a - REG);", "cpu.p.c = cpu.a >= REG;"],
                 read: true,
                 write: true,
             };
         case "LAS":
             return {
-                op: ["cpu.a = cpu.x = cpu.s = cpu.setzn(cpu.s & REG);"],
+                op: ["cpu.a = cpu.x = cpu.s = cpu.p.setzn(cpu.s & REG);"],
                 read: true,
             };
         case "RRA":
@@ -445,7 +445,7 @@ function getOp(op, arg) {
             };
         case "SBX":
             return {
-                op: ["var temp = cpu.a & cpu.x;", "cpu.p.c = temp >= REG;", "cpu.x = cpu.setzn(temp - REG);"],
+                op: ["var temp = cpu.a & cpu.x;", "cpu.p.c = temp >= REG;", "cpu.x = cpu.p.setzn(temp - REG);"],
                 read: true,
             };
         case "SHA":

@@ -16,49 +16,64 @@ const signExtend = utils.signExtend;
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
 }
+
 class Flags {
     constructor() {
         this._byte = 0x30;
     }
+
     get c() {
         return !!(this._byte & 0x01);
     }
+
     set c(val) {
         this._byte = _set(this._byte, 0x01, val);
     }
+
     get z() {
         return !!(this._byte & 0x02);
     }
+
     set z(val) {
         this._byte = _set(this._byte, 0x02, val);
     }
+
     get i() {
         return !!(this._byte & 0x04);
     }
+
     set i(val) {
         this._byte = _set(this._byte, 0x04, val);
     }
+
     get d() {
         return !!(this._byte & 0x08);
     }
+
     set d(val) {
         this._byte = _set(this._byte, 0x08, val);
     }
+
     get v() {
         return !!(this._byte & 0x40);
     }
+
     set v(val) {
         this._byte = _set(this._byte, 0x40, val);
     }
+
     get n() {
         return !!(this._byte & 0x80);
     }
+
     set n(val) {
         this._byte = _set(this._byte, 0x80, val);
     }
+
     reset() {
         this._byte = 0x30;
     }
+
     debugString() {
         return (
             (this.n ? "N" : "n") +
@@ -70,9 +85,17 @@ class Flags {
             (this.c ? "C" : "c")
         );
     }
+
+    setzn(v) {
+        v &= 0xff;
+        this._byte = (this._byte & ~(0x02 | 0x80)) | (v & 0x80) | (v === 0 ? 0x02 : 0x00);
+        return v | 0;
+    }
+
     asByte() {
         return this._byte | 0x30;
     }
+
     setFromByte(byte) {
         this._byte = byte | 0x30;
     }
@@ -82,11 +105,13 @@ class Base6502 {
     constructor(model) {
         this.model = model;
         this.a = this.x = this.y = this.s = 0;
+        this.p = new Flags();
         this.pc = 0;
         this.opcodes = model.nmos ? opcodes.Cpu6502(this) : opcodes.Cpu65c12(this);
         this.disassembler = this.opcodes.disassembler;
         this.forceTracing = false;
         this.runner = this.opcodes.runInstruction;
+        this.interrupt = 0;
 
         if (model.nmos) {
             this.adc = function (addend) {
@@ -147,10 +172,25 @@ class Base6502 {
     }
 
     setzn(v) {
-        v &= 0xff;
-        this.p.z = !v;
-        this.p.n = !!(v & 0x80);
-        return v | 0;
+        return this.p.setzn(v);
+    }
+
+    // eslint-disable-next-line no-unused-vars
+    writemem(address, value) {
+        throw new Error("Must be overridden");
+    }
+
+    writememZpStack(address, value) {
+        this.writemem(address, value);
+    }
+
+    // eslint-disable-next-line no-unused-vars
+    readmem(address) {
+        throw new Error("Must be overridden");
+    }
+
+    readmemZpStack(address) {
+        return this.readmem(address);
     }
 
     push(v) {
@@ -165,6 +205,10 @@ class Base6502 {
 
     NMI(nmi) {
         this.nmi = !!nmi;
+    }
+
+    polltime() {
+        throw new Error("Must be overridden");
     }
 
     brk(isIrq) {
@@ -245,8 +289,7 @@ class Base6502 {
         const result = this.a + addend + (this.p.c ? 1 : 0);
         this.p.v = !!((this.a ^ result) & (addend ^ result) & 0x80);
         this.p.c = !!(result & 0x100);
-        this.a = result & 0xff;
-        this.setzn(this.a);
+        this.a = this.p.setzn(result);
     }
 
     // For flags and stuff see URLs like:
@@ -310,7 +353,7 @@ class Base6502 {
             ah = (ah - 10) & 0xf;
             this.p.c = true;
         }
-        this.a = this.setzn(al | (ah << 4));
+        this.a = this.p.setzn(al | (ah << 4));
     }
 
     sbcBCDcmos(subend) {
@@ -324,7 +367,7 @@ class Base6502 {
         if (al < 0) result -= 0x06;
 
         this.adcNonBCD(subend ^ 0xff); // For flags
-        this.a = this.setzn(result);
+        this.a = this.p.setzn(result);
     }
 
     arr(arg) {
@@ -351,7 +394,7 @@ class Base6502 {
             this.p.v = !!(((this.a >>> 7) ^ (this.a >>> 6)) & 0x01);
             this.a >>>= 1;
             if (this.p.c) this.a |= 0x80;
-            this.setzn(this.a);
+            this.p.setzn(this.a);
             this.p.c = !!(this.a & 0x40);
         }
     }
@@ -365,16 +408,17 @@ class Tube6502 extends Base6502 {
         this.romPaged = true;
         this.memory = new Uint8Array(65536);
         this.rom = new Uint8Array(4096);
-        this.p = new Flags();
 
         this.tube = new Tube(cpu, this);
     }
+
     reset(hard) {
         this.romPaged = true;
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
         this.tube.reset(hard);
     }
+
     readmem(offset) {
         if ((offset & 0xfff8) === 0xfef8) {
             if ((offset & 7) === 0) {
@@ -387,30 +431,38 @@ class Tube6502 extends Base6502 {
         }
         return this.memory[offset & 0xffff];
     }
+
     readmemZpStack(offset) {
         return this.memory[offset & 0xffff];
     }
+
     writemem(addr, b) {
         if ((addr & 0xfff8) === 0xfef8) {
             return this.tube.parasiteWrite(addr, b);
         }
         this.memory[addr & 0xffff] = b;
     }
+
     writememZpStack(addr, b) {
         this.memory[addr & 0xffff] = b;
     }
+
     polltime(cycles) {
         this.cycles -= cycles;
     }
+
     polltimeAddr(cycles) {
         this.polltime(cycles);
     }
+
     read(addr) {
         return this.tube.hostRead(addr);
     }
+
     write(addr, b) {
         this.tube.hostWrite(addr, b);
     }
+
     execute(cycles) {
         this.cycles += cycles * 2;
         if (this.cycles < 3) return;
@@ -421,6 +473,7 @@ class Tube6502 extends Base6502 {
             if (this.takeInt) this.brk(true);
         }
     }
+
     async loadOs() {
         console.log("Loading tube rom from roms/" + this.model.os);
         const tubeRom = this.rom;
@@ -437,13 +490,17 @@ class FakeTube {
     read() {
         return 0xfe;
     }
+
     write() {}
+
     execute() {}
+
     reset() {}
 }
 
 class FakeUserPort {
     write() {}
+
     read() {
         return 0xff;
     }
@@ -465,6 +522,7 @@ class DebugHook {
         this.functionName = functionName;
         this.handlers = [];
     }
+
     add(handler) {
         const self = this;
         this.handlers.push(handler);
@@ -485,6 +543,7 @@ class DebugHook {
         };
         return handler;
     }
+
     remove(handler) {
         const i = this.handlers.indexOf(handler);
         if (i < 0) throw "Unable to find debug hook handler";
@@ -493,6 +552,7 @@ class DebugHook {
             this.cpu[this.functionName] = null;
         }
     }
+
     clear() {
         this.handlers = [];
         this.cpu[this.functionName] = null;
@@ -519,7 +579,6 @@ export class Cpu6502 extends Base6502 {
         this.osOffset = this.romOffset + 16 * 16 * 1024;
         this.romsel = 0;
         this.acccon = 0;
-        this.interrupt = 0;
         this.FEslowdown = [true, false, true, true, false, false, true, false];
         this.oldPcArray = new Uint16Array(256);
         this.oldAArray = new Uint8Array(256);
@@ -624,6 +683,7 @@ export class Cpu6502 extends Base6502 {
         if (this._debugRead) this._debugRead(addr, 0, res);
         return res | 0;
     }
+
     writememZpStack(addr, b) {
         addr &= 0xffff;
         b |= 0;
@@ -873,6 +933,7 @@ export class Cpu6502 extends Base6502 {
         if (addr < 0xfc00 || addr >= 0xff00) return;
         this.writeDevice(addr, b);
     }
+
     writeDevice(addr, b) {
         b |= 0;
 
@@ -1135,7 +1196,6 @@ export class Cpu6502 extends Base6502 {
             this.cycleSeconds = 0;
         }
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
-        this.p = new Flags();
         this.p.i = true;
         this.nmi = false;
         this.halted = false;
@@ -1232,6 +1292,7 @@ export class Cpu6502 extends Base6502 {
             return this.executeInternalFast();
         }
     }
+
     executeInternal() {
         let first = true;
         while (!this.halted && this.currentCycles < this.targetCycles) {
@@ -1253,6 +1314,7 @@ export class Cpu6502 extends Base6502 {
         }
         return !this.halted;
     }
+
     executeInternalFast() {
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
