@@ -171,10 +171,6 @@ class Base6502 {
         this.takeInt |= this.nmi;
     }
 
-    setzn(v) {
-        return this.p.setzn(v);
-    }
-
     // eslint-disable-next-line no-unused-vars
     writemem(address, value) {
         throw new Error("Must be overridden");
