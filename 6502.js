@@ -1218,20 +1218,8 @@ export class Cpu6502 extends Base6502 {
         this.polltime(cycles);
     }
 
-    // Slow version allows video batching and cpu multipliers
-    polltimeSlow(cycles) {
-        cycles |= 0;
-        this.currentCycles += cycles;
-        this.peripheralCycles += cycles;
-        this.videoCycles += cycles;
-        cycles = (this.videoCycles / this.cpuMultiplier) | 0;
-        if (cycles > this.videoCyclesBatch) {
-            this.video.polltime(cycles);
-            this.videoCycles -= (cycles * this.cpuMultiplier) | 0;
-        }
-        cycles = (this.peripheralCycles / this.cpuMultiplier) | 0;
-        if (!cycles) return;
-        this.peripheralCycles -= (cycles * this.cpuMultiplier) | 0;
+    // Common between polltimeSlow and polltimeFast
+    polltimeCommon(cycles) {
         this.sysvia.polltime(cycles);
         this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
@@ -1247,24 +1235,29 @@ export class Cpu6502 extends Base6502 {
         }
     }
 
+    // Slow version allows video batching and cpu multipliers
+    polltimeSlow(cycles) {
+        cycles |= 0;
+        this.currentCycles += cycles;
+        this.peripheralCycles += cycles;
+        this.videoCycles += cycles;
+        cycles = (this.videoCycles / this.cpuMultiplier) | 0;
+        if (cycles > this.videoCyclesBatch) {
+            this.video.polltime(cycles);
+            this.videoCycles -= (cycles * this.cpuMultiplier) | 0;
+        }
+        cycles = (this.peripheralCycles / this.cpuMultiplier) | 0;
+        if (!cycles) return;
+        this.peripheralCycles -= (cycles * this.cpuMultiplier) | 0;
+        this.polltimeCommon(cycles);
+    }
+
     // Faster, but more limited version
     polltimeFast(cycles) {
         cycles |= 0;
         this.currentCycles += cycles;
         this.video.polltime(cycles);
-        this.sysvia.polltime(cycles);
-        this.uservia.polltime(cycles);
-        this.scheduler.polltime(cycles);
-        this.tube.execute(cycles);
-        if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
-        if (this.music5000) this.music5000.polltime(cycles);
-        if (this.econet) {
-            let donmi = this.econet.polltime(cycles);
-            if (donmi && this.econet.econetNMIEnabled) {
-                this.NMI(true);
-            }
-            this.filestore.polltime(cycles);
-        }
+        this.polltimeCommon(cycles);
     }
 
     execute(numCyclesToRun) {

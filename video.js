@@ -17,6 +17,7 @@ class Ula {
     constructor(video) {
         this.video = video;
     }
+
     write(addr, val) {
         addr |= 0;
         val |= 0;
@@ -63,6 +64,7 @@ class Crtc {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]);
     }
+
     read(addr) {
         if (!(addr & 1)) return 0;
         switch (this.curReg) {
@@ -76,6 +78,7 @@ class Crtc {
         }
         return 0;
     }
+
     write(addr, val) {
         if (addr & 1) {
             this.video.regs[this.curReg] = val & this.crtcmask[this.curReg];
@@ -310,19 +313,19 @@ export class Video {
         debugCopyFb(this.fb32, this.debugPrevScreen);
     }
 
-    blitFb(dat, destOffset, numPixels, doubledY) {
+    blitFb(dat, destOffset, numPixels) {
         destOffset |= 0;
-        numPixels |= 0;
         const offset = table4bppOffset(this.ulaMode, dat);
         const fb32 = this.fb32;
         const ulaPal = this.ulaPal;
         const table4bpp = this.table4bpp;
-        if (doubledY) {
-            for (let i = 0; i < numPixels; ++i) {
-                fb32[destOffset + i] = fb32[destOffset + i + 1024] = ulaPal[table4bpp[offset + i]];
+        // Take advantage of numPixels being either 8 or 16
+        if (numPixels === 8) {
+            for (let i = 0; i < 8; ++i) {
+                fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
             }
         } else {
-            for (let i = 0; i < numPixels; ++i) {
+            for (let i = 0; i < 16; ++i) {
                 fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
             }
         }
@@ -681,11 +684,11 @@ export class Video {
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                         if (this.teletextMode) {
                             this.teletext.render(this.fb32, offset);
-                            if (doubledLines) {
-                                this.teletext.render(this.fb32, offset + 1024);
-                            }
                         } else {
                             this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
+                        }
+                        if (doubledLines) {
+                            this.fb32.copyWithin(offset + 1024, offset, offset + this.pixelsPerChar);
                         }
                     }
                     if (this.cursorDrawIndex) {
@@ -774,7 +777,10 @@ export class FakeVideo {
         };
         this.regs = new Uint8Array(32);
     }
+
     reset() {}
+
     polltime() {}
+
     setScreenAdd() {}
 }
