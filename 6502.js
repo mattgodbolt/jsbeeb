@@ -760,24 +760,6 @@ export class Cpu6502 extends Base6502 {
             }
         }
 
-        if (this.econet) {
-            if ((!this.model.isMaster && addr === 0xfe20) || (this.model.isMaster && addr === 0xfe3c)) {
-                if (!this.econet.econetNMIEnabled) {
-                    // was off
-                    this.econet.econetNMIEnabled = true;
-                    if (this.econet.ADLC.status1 & 128) {
-                        // irq pending
-                        this.NMI(true); // delayed NMI asserted
-                    }
-                }
-            }
-
-            if ((!this.model.isMaster && addr === 0xfe18) || (this.model.isMaster && addr === 0xfe38)) {
-                this.econet.econetNMIEnabled = false;
-                return this.econet.stationId;
-            }
-        }
-
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
@@ -948,13 +930,6 @@ export class Cpu6502 extends Base6502 {
             }
         }
 
-        if (this.econet) {
-            if (addr >= 0xfea0 && addr < 0xfebf) {
-                this.econet.writeRegister(addr & 3, b);
-                return;
-            }
-        }
-
         switch (addr & ~0x0003) {
             case 0xfc10:
                 if (this.model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
@@ -1047,6 +1022,17 @@ export class Cpu6502 extends Base6502 {
             case 0xfe98:
             case 0xfe9c:
                 if (!this.model.isMaster) return this.fdc.write(addr, b);
+                break;
+
+            case 0xfea0:
+            case 0xfea4:
+            case 0xfea8:
+            case 0xfeac:
+            case 0xfeb0:
+            case 0xfeb4:
+            case 0xfeb8:
+            case 0xfebc:
+                if (this.econet) this.econet.writeRegister(addr & 3, b);
                 break;
             case 0xfec0:
             case 0xfec4:
