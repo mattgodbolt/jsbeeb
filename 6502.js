@@ -555,6 +555,11 @@ class DebugHook {
     }
 }
 
+function is1MHzAccess(addr) {
+    const FEslowdown = [true, false, true, true, false, false, true, false];
+    return addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || FEslowdown[(addr >>> 5) & 7]);
+}
+
 export class Cpu6502 extends Base6502 {
     constructor(model, dbgr, video_, soundChip_, ddNoise_, music5000_, cmos, config, econet_) {
         super(model);
@@ -575,7 +580,6 @@ export class Cpu6502 extends Base6502 {
         this.osOffset = this.romOffset + 16 * 16 * 1024;
         this.romsel = 0;
         this.acccon = 0;
-        this.FEslowdown = [true, false, true, true, false, false, true, false];
         this.oldPcArray = new Uint16Array(256);
         this.oldAArray = new Uint8Array(256);
         this.oldXArray = new Uint8Array(256);
@@ -719,11 +723,6 @@ export class Cpu6502 extends Base6502 {
             str += utils.hexbyte(this.readmem(addr + i));
         }
         return str;
-    }
-
-    is1MHzAccess(addr) {
-        addr &= 0xffff;
-        return addr >= 0xfc00 && addr < 0xff00 && (addr < 0xfe00 || this.FEslowdown[(addr >>> 5) & 7]);
     }
 
     handleEconetStationId() {
@@ -1195,7 +1194,7 @@ export class Cpu6502 extends Base6502 {
 
     polltimeAddr(cycles, addr) {
         cycles = cycles | 0;
-        if (this.is1MHzAccess(addr)) {
+        if (is1MHzAccess(addr)) {
             cycles += 1 + ((cycles ^ this.currentCycles) & 1);
         }
         this.polltime(cycles);
