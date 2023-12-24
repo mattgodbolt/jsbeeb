@@ -566,7 +566,7 @@ export class Cpu6502 extends Base6502 {
         this.soundChip = soundChip_;
         this.music5000 = music5000_;
         this.ddNoise = ddNoise_;
-        this.memStatOffsetByIFetchBank = new Uint32Array(16); // helps in master map of LYNNE for non-opcode read/writes
+        this.memStatOffsetByIFetchBank = 0;
         this.memStatOffset = 0;
         this.memStat = new Uint8Array(512);
         this.memLook = new Int32Array(512); // Cannot be unsigned as we use negative offsets
@@ -896,8 +896,9 @@ export class Cpu6502 extends Base6502 {
 
     readmem(addr) {
         addr &= 0xffff;
-        if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
-            const offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+        const statOffset = this.memStatOffset + (addr >>> 8);
+        if (this.memStat[statOffset]) {
+            const offset = this.memLook[statOffset];
             const res = this.ramRomOs[offset + addr];
             if (this._debugRead) this._debugRead(addr, res, offset);
             return res | 0;
@@ -909,8 +910,9 @@ export class Cpu6502 extends Base6502 {
     }
 
     peekmem(addr) {
-        if (this.memStat[this.memStatOffset + (addr >>> 8)]) {
-            const offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+        const statOffset = this.memStatOffset + (addr >>> 8);
+        if (this.memStat[statOffset]) {
+            const offset = this.memLook[statOffset];
             return this.ramRomOs[offset + addr];
         } else {
             return 0xff; // TODO; peekDevice -- this.peekDevice(addr);
@@ -921,8 +923,9 @@ export class Cpu6502 extends Base6502 {
         addr &= 0xffff;
         b |= 0;
         if (this._debugWrite) this._debugWrite(addr, b);
-        if (this.memStat[this.memStatOffset + (addr >>> 8)] === 1) {
-            const offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+        const statOffset = this.memStatOffset + (addr >>> 8);
+        if (this.memStat[statOffset] === 1) {
+            const offset = this.memLook[statOffset];
             this.ramRomOs[offset + addr] = b;
             return;
         }
@@ -1123,14 +1126,9 @@ export class Cpu6502 extends Base6502 {
 
     reset(hard) {
         if (hard) {
-            for (let i = 0; i < 16; ++i) this.memStatOffsetByIFetchBank[i] = 0;
-            if (this.model.isMaster) {
-                // On the Master, opcodes exeucting from 0xc000 - 0xdfff
-                // can have optionally have their memory accesses
-                // redirected to shadow RAM.
-                this.memStatOffsetByIFetchBank[0xc] = 256;
-                this.memStatOffsetByIFetchBank[0xd] = 256;
-            }
+            // On the Master, opcodes executing from 0xc000 - 0xdfff can optionally have their memory accesses
+            // redirected to shadow RAM.
+            this.memStatOffsetByIFetchBank = this.model.isMaster ? (1 << 0xc) | (1 << 0xd) : 0x0000;
             if (!this.model.isTest) {
                 for (let i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
                 for (let i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
@@ -1287,7 +1285,7 @@ export class Cpu6502 extends Base6502 {
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
             this.oldPcArray[this.oldPcIndex] = this.pc;
-            this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
+            this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
             const opcode = this.readmem(this.pc);
             if (this._debugInstruction && !first && this._debugInstruction(this.pc, opcode)) {
                 return false;
@@ -1306,7 +1304,7 @@ export class Cpu6502 extends Base6502 {
 
     executeInternalFast() {
         while (!this.halted && this.currentCycles < this.targetCycles) {
-            this.memStatOffset = this.memStatOffsetByIFetchBank[this.pc >>> 12];
+            this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
             const opcode = this.readmem(this.pc);
             this.incpc();
             this.runner.run(opcode);
