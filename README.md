@@ -10,7 +10,7 @@ know some of the mappings:
 - BBC Break key is F12
 - BBC star is on " (if it doesn't work for you try shift-2)
 
-To play right now, visit [http://bbc.godbolt.org/](http://bbc.godbolt.org/). To load the default disc image (Elite in
+To play right now, visit [http://bbc.xania.org/](http://bbc.xania.org/). To load the default disc image (Elite in
 this case), press shift-F12 (which is shift-Break on the BBC).
 
 ## Getting set up to run locally
@@ -19,7 +19,7 @@ jsbeeb needs to be built with webpack. If you're developing locally you'll need 
 
 You can then run `npm start` to get a local webserver which will autoreload on changes in the code - visit http://localhost:8080/ and off you go.
 
-jsbeeb uses node and webpack to afford me simple and standard web development tooling and third party library access without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the site to make it smaller and faster to load when it's deployed to https://bbc.godbolt.org.
+jsbeeb uses node and webpack to afford me simple and standard web development tooling and third party library access without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the site to make it smaller and faster to load when it's deployed to https://bbc.xania.org.
 
 ## URL parameters
 
@@ -50,7 +50,7 @@ Patches can be applied by making a `patch=P` URL parameter. `P` is a sequence of
 
 - Create a gist with your code. https://gist.github.com/ - here's an [example](https://gist.github.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341)
 - Get the "Raw" link by clicking "raw" and copying the URL . In the case above that's: https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas
-- Add that after "https://bbc.godbolt.org/?autorun&loadBasic=" or similar, for example, [this link](https://bbc.godbolt.org/?loadBasic=https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas&autorun)
+- Add that after "https://bbc.xania.org/?autorun&loadBasic=" or similar, for example, [this link](https://bbc.xania.org/?loadBasic=https://gist.githubusercontent.com/mattgodbolt/fc8d6f3d6e5e015dce399013719c8341/raw/bd5cb4314bfc3ee4330783ecf82cb329a36b915c/foo.bas&autorun)
 
 Note that every update you make means you need to make a new raw link.
 

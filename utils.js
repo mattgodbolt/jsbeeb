@@ -788,7 +788,10 @@ export function bench() {
 }
 
 export function noteEvent(category, type, label) {
-    if (!runningInNode && window.location.host.endsWith(".godbolt.org")) {
+    if (
+        !runningInNode &&
+        (window.location.host.endsWith(".godbolt.org") || window.location.host.endsWith(".xania.org"))
+    ) {
         // Only note events on the public site
         /*global gtag*/
         gtag("event", category, { type, label });
