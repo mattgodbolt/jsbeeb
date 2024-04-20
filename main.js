@@ -1575,6 +1575,16 @@ function stop(debug) {
     window.setTimeout(resizeTv, 500);
 })();
 
+const $infoModal = new bootstrap.Modal(document.getElementById("info"));
+const $ppTosModal = new bootstrap.Modal(document.getElementById("pp-tos"));
+
+if (Object.hasOwn(parsedQuery, "about")) {
+    $infoModal.show();
+}
+if (Object.hasOwn(parsedQuery, "pp-tos")) {
+    $ppTosModal.show();
+}
+
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
 window.benchmarkCpu = _.debounce(benchmarkCpu, 1);

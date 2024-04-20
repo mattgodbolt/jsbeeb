@@ -35,8 +35,7 @@
           data-bs-target="#navbarSupportedContent"
           aria-controls="navbarSupportedContent"
           aria-expanded="false"
-          aria-label="Toggle  },
-          navigation"
+          aria-label="Toggle navigation"
         >
           <span class="navbar-toggler-icon"></span>
         </button>
@@ -137,6 +136,9 @@
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
                 <li><a href="#" id="fs" class="dropdown-item">Fullscreen</a></li>
                 <li><a href="#help" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#help">Help</a></li>
+                <li>
+                  <a href="#pp-tos" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#pp-tos">Privacy Policy &amp; ToS</a>
+                </li>
                 <li><a href="mailto:matt@godbolt.org" class="dropdown-item">Contact the Author</a></li>
                 <li>
                   <a href="http://xania.org/MattGodbolt" class="dropdown-item" rel="author" target="_blank">
@@ -369,6 +371,35 @@
             <div>
               I f you're looking for more information on the BBC or to find like-minded people to chat about the
               hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="pp-tos" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="infoModalLabel">Privacy Policy &amp; Terms of Service</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div>
+              jsbeeb uses cookies for simple analytics. Those analytics are used to track usage and improve
+              user experience. If you'd like to run a local copy of jsbeeb instead, the source is on 
+              <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. There's no server logs or information
+              kept on the jsbeeb servers, we just serve up this HTML from an AWS bucket.
+            </div>
+            <div>No personal information is kept. If you choose to access Google Drive for disc storage,
+              only the minimal information needed to log in and access your own discs is kept in cookies.
+              That information is never shared with the jsbeeb developers.
+            </div>
+            <div>Use of jsbeeb is at your own risk. Reasonable efforts are used to keep the site up to
+              date and working. You may use jsbeeb for whatever lawful purpose you wish.
             </div>
           </div>
           <div class="modal-footer">
