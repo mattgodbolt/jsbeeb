@@ -336,7 +336,8 @@ export class Filestore {
                 j = 0;
 
             this.XPC = this.PC;
-            if (this.PC >= 0xf800) op = 0x60; //ROM, read rts
+            if (this.PC >= 0xf800)
+                op = 0x60; //ROM, read rts
             else op = this.GBYTE();
 
             i = op & 0x1f; //row

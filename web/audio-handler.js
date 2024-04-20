@@ -11,8 +11,8 @@ export class AudioHandler {
             typeof AudioContext !== "undefined"
                 ? new AudioContext()
                 : typeof webkitAudioContext !== "undefined"
-                ? new webkitAudioContext()
-                : null;
+                  ? new webkitAudioContext()
+                  : null;
         if (this.audioContext) {
             this.audioContext.onstatechange = () => this.checkStatus();
             // TODO: try and remove the dependency on this being created first? maybe? like, why should the soundchip
@@ -34,8 +34,8 @@ export class AudioHandler {
             typeof AudioContext !== "undefined"
                 ? new AudioContext({ sampleRate: 46875 })
                 : typeof webkitAudioContext !== "undefined"
-                ? new webkitAudioContext({ sampleRate: 46875 })
-                : null;
+                  ? new webkitAudioContext({ sampleRate: 46875 })
+                  : null;
 
         if (this.audioContextM5000 && this.audioContextM5000.audioWorklet) {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
