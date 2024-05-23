@@ -1,7 +1,7 @@
 import { describe, it } from "mocha";
 import assert from "assert";
 
-import { IbmDiscFormat } from "../../disc.js";
+import { Disc, DiscConfig, IbmDiscFormat } from "../../disc.js";
 
 describe("IBM disc format tests", function () {
     it("calculates FM crcs", () => {
@@ -89,5 +89,71 @@ describe("IBM disc format tests", function () {
 
         assert(IbmDiscFormat.checkPulse(4.0, false));
         assert(IbmDiscFormat.checkPulse(8.0, false));
+    });
+});
+
+describe("Disc builder tests", () => {
+    const someData = new Uint8Array(256);
+    someData.fill(0x33);
+    it("should write a simple FM track without blowing up", () => {
+        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        builder
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmByte(0) // track
+            .appendFmByte(0)
+            .appendFmByte(0) // sector
+            .appendFmByte(1)
+            .appendCrc(false)
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmChunk(someData)
+            .appendCrc(false)
+            .fillFmByte(0xff);
+    });
+
+    it("should write a simple MFM track without blowing up", () => {
+        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        builder
+            .appendRepeatMfmByte(0x4e, 60)
+            .appendRepeatMfmByte(0x00, 12)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmByte(IbmDiscFormat.idMarkDataPattern)
+            .appendMfmByte(0) // track
+            .appendMfmByte(0)
+            .appendMfmByte(0) // sector
+            .appendMfmByte(1)
+            .appendCrc(true)
+            .appendRepeatMfmByte(0x4e, 22)
+            .appendRepeatMfmByte(0x00, 12)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
+            .appendMfmChunk(someData)
+            .appendCrc(true)
+            .appendRepeatMfmByte(0x4e, 24)
+            .fillMfmByte(0x4e);
+    });
+
+    it("should note how much disc is being used", () => {
+        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        assert.equal(disc.tracksUsed, 0);
+        assert(!disc.isDoubleSided);
+        disc.buildTrack(false, 0);
+        assert.equal(disc.tracksUsed, 1);
+        assert(!disc.isDoubleSided);
+        disc.buildTrack(false, 3);
+        assert.equal(disc.tracksUsed, 4);
+        assert(!disc.isDoubleSided);
+        disc.buildTrack(true, 1);
+        assert.equal(disc.tracksUsed, 4);
+        assert(disc.isDoubleSided);
     });
 });

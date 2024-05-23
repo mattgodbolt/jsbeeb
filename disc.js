@@ -1,6 +1,204 @@
 // Translated from beebjit by Chris Evans.
 // https://github.com/scarybeasts/beebjit
 
+class TrackBuilder {
+    /**
+     * @param {Track} track
+     */
+    constructor(track) {
+        this._track = track;
+        this._track.length = IbmDiscFormat.bytesPerTrack;
+        this._index = 0;
+        this._pulsesIndex = 0;
+        this._lastMfmBit = 0;
+        this._crc = 0;
+    }
+
+    setTrackLength() {
+        if (this._index > IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
+        if (this._index !== 0) this._track.length = this._index;
+        return this;
+    }
+
+    resetCrc() {
+        this._crc = IbmDiscFormat.crcInit(false);
+        return this;
+    }
+
+    appendFmDataAndClocks(data, clocks) {
+        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflow in disc buliding");
+        this._track.pulses2Us[this._index++] = IbmDiscFormat.fmTo2usPulses(clocks, data);
+        this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
+        return this;
+    }
+
+    appendFmByte(data) {
+        this.appendFmDataAndClocks(data, 0xff);
+        return this;
+    }
+
+    appendRepeatFmByte(data, count) {
+        for (let i = 0; i < count; ++i) this.appendFmByte(data);
+        return this;
+    }
+
+    fillFmByte(data) {
+        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
+        this.appendRepeatFmByte(data, IbmDiscFormat.bytesPerTrack - this._index);
+        return this;
+    }
+
+    appendRepeatFmByteWithClocks(data, clocks, count) {
+        for (let i = 0; i < count; ++i) this.appendFmDataAndClocks(data, clocks);
+        return this;
+    }
+
+    appendFmChunk(bytes) {
+        for (const byte of bytes) this.appendFmByte(byte);
+        return this;
+    }
+
+    appendCrc(isMfm) {
+        // TODO consider remembering isMfM if nothing else needs to know/
+        // could then break this into MFM and FM builder
+        const firstByte = (this._crc >>> 8) & 0xff;
+        const secondByte = this._crc & 0xff;
+        if (isMfm) {
+            this.appendMfmByte(firstByte);
+            this.appendMfmByte(secondByte);
+        } else {
+            this.appendFmByte(firstByte);
+            this.appendFmByte(secondByte);
+        }
+        return this;
+    }
+
+    appendMfmPulses(pulses) {
+        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
+        const existingPulses = this._track.pulses2Us[this._index];
+        const mask = 0xffff << this._pulsesIndex;
+        this._pulsesIndex = (this._pulsesIndex + 16) & 15;
+        this._track.pulses2Us[this._index] = (existingPulses & mask) | (pulses << this._pulsesIndex);
+        if (this._pulsesIndex === 0) this._index++;
+        return this;
+    }
+
+    appendMfmByte(data) {
+        const { lastBit, pulses } = IbmDiscFormat.mfmTo2usPulses(this._lastMfmBit, data);
+        this._lastMfmBit = lastBit;
+        this.appendMfmPulses(pulses);
+        this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
+        return this;
+    }
+
+    appendRepeatMfmByte(data, count) {
+        for (let i = 0; i < count; ++i) this.appendMfmByte(data);
+        return this;
+    }
+
+    appendMfm3xA1Sync() {
+        for (let i = 0; i < 3; ++i) {
+            this.appendMfmPulses(IbmDiscFormat.mfmA1Sync);
+            this._crc = IbmDiscFormat.crcAddByte(this._crc, 0xa1);
+        }
+        return this;
+    }
+
+    appendMfmChunk(bytes) {
+        for (const byte of bytes) this.appendMfmByte(byte);
+        return this;
+    }
+
+    fillMfmByte(data) {
+        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
+        while (this._index < IbmDiscFormat.bytesPerTrack) this.appendMfmByte(data);
+        return this;
+    }
+}
+
+class Track {
+    constructor(initialByte) {
+        this.length = IbmDiscFormat.bytesPerTrack;
+        this.pulses2Us = new Uint32Array(256 * 13);
+        this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 32));
+    }
+}
+
+class Side {
+    constructor(initialByte) {
+        this.tracks = [];
+        for (let i = 0; i < IbmDiscFormat.tracksPerDisc; ++i) this.tracks[i] = new Track(initialByte);
+    }
+}
+
+export class DiscConfig {
+    constructor() {
+        this.logProtection = false;
+        this.logIffyPulses = false;
+        this.expandTo80 = false;
+        this.isQuantizeFm = false;
+        this.isSkipOddTracks = false;
+        this.isSkipUpperSide = false;
+        this.rev = 0;
+        this.revSpec = "";
+    }
+}
+
+export class Disc {
+    constructor(data, filename, isWriteable, isMutable, config) {
+        this.config = config;
+
+        this.isDirty = false;
+        this.dirtySide = -1;
+        this.dirtyTrack = -1;
+        this.tracksUsed = 0;
+        this.isDoubleSided = false;
+
+        // todo look up file extensions, populate write callback. of maybe support
+        // in memory changes?
+        this.writeTrackCallback = undefined;
+
+        if (isMutable && !this.writeTrackCallback) {
+            console.log("Cannot writeback to file type, making read only");
+            isMutable = isWriteable = false; // TODO reconsider
+        }
+
+        this.isWriteable = isWriteable;
+        this.isMutableRequested = isMutable;
+        this.isMutable = false; // set by load
+
+        // TODO disc surface builders for
+        this.load();
+    }
+
+    getTrack(isSideUpper, trackNum) {
+        return isSideUpper ? this.upperSide.tracks[trackNum] : this.lowerSide.tracks[trackNum];
+    }
+
+    buildTrack(isSideUpper, trackNum) {
+        this.setTrackUsed(isSideUpper, trackNum);
+        return new TrackBuilder(this.getTrack(isSideUpper, trackNum));
+    }
+
+    setTrackUsed(isSideUpper, trackNum) {
+        if (isSideUpper) this.isDoubleSided = true;
+        this.tracksUsed = Math.max(this.tracksUsed, trackNum + 1);
+    }
+
+    load() {
+        this.initSurface(0);
+        // various loads builders etc
+    }
+
+    initSurface(initialByte) {
+        this.lowerSide = new Side(initialByte);
+        this.upperSide = new Side(initialByte);
+
+        this.tracksUsed = 0;
+        this.isDoubleSided = false;
+    }
+}
+
 export class IbmDiscFormat {
     static get bytesPerTrack() {
         return 3125;
