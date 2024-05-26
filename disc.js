@@ -290,6 +290,7 @@ export class Disc {
         this.load();
     }
 
+    /// @returns {Track}
     getTrack(isSideUpper, trackNum) {
         return isSideUpper ? this.upperSide.tracks[trackNum] : this.lowerSide.tracks[trackNum];
     }
@@ -315,6 +316,10 @@ export class Disc {
 
         this.tracksUsed = 0;
         this.isDoubleSided = false;
+    }
+
+    readPulses(isSideUpper, track, position) {
+        return this.getTrack(isSideUpper, track).pulses2Us[position];
     }
 }
 
