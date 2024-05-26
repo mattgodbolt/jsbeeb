@@ -14,6 +14,10 @@ class TrackBuilder {
         this._crc = 0;
     }
 
+    get track() {
+        return this._track;
+    }
+
     setTrackLength() {
         if (this._index > IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
         if (this._index !== 0) this._track.length = this._index;
@@ -114,20 +118,60 @@ class TrackBuilder {
         while (this._index < IbmDiscFormat.bytesPerTrack) this.appendMfmByte(data);
         return this;
     }
+
+    /**
+     * @param {number[]} pulseDeltas array of lengths between pulses
+     * @param {boolean} isMfm whether this is an MFM track
+     */
+    buildFromPulses(pulseDeltas, isMfm) {
+        let hasWarned = false;
+        for (const pulse of pulseDeltas) {
+            if (!IbmDiscFormat.checkPulse(pulse, isMfm)) {
+                console.log(`Found a bad pulse for ${this.track.description}`);
+            }
+            if (!this.appendPulseDelta(pulse, isMfm) && !hasWarned) {
+                console.log(`Truncated disc data for ${this.track.description}, ignoring the rest`);
+                hasWarned = true;
+            }
+        }
+        this.setTrackLength();
+    }
+
+    appendPulseDelta(deltaUs, quantizeMfm) {
+        let num2UsUnits = quantizeMfm ? Math.round(deltaUs / 2) : 2 * Math.round(deltaUs / 4);
+        while (num2UsUnits--) {
+            if (this._index === IbmDiscFormat.bytesPerTrack) return false;
+            if (num2UsUnits === 0) {
+                this._track.pulses2Us[this._index] |= 0x80000000 >>> this._pulsesIndex;
+            }
+            this._pulsesIndex++;
+            if (this._pulsesIndex === 32) {
+                this._pulsesIndex = 0;
+                this._index++;
+            }
+        }
+        return true;
+    }
 }
 
 class Track {
-    constructor(initialByte) {
+    constructor(upper, trackNum, initialByte) {
         this.length = IbmDiscFormat.bytesPerTrack;
+        this.upper = upper;
+        this.trackNum = trackNum;
         this.pulses2Us = new Uint32Array(256 * 13);
         this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 32));
+    }
+
+    get description() {
+        return `Track ${this.trackNum} ${this.upper ? "upper" : "lower"}`;
     }
 }
 
 class Side {
-    constructor(initialByte) {
+    constructor(upper, initialByte) {
         this.tracks = [];
-        for (let i = 0; i < IbmDiscFormat.tracksPerDisc; ++i) this.tracks[i] = new Track(initialByte);
+        for (let i = 0; i < IbmDiscFormat.tracksPerDisc; ++i) this.tracks[i] = new Track(upper, i, initialByte);
     }
 }
 
@@ -191,8 +235,8 @@ export class Disc {
     }
 
     initSurface(initialByte) {
-        this.lowerSide = new Side(initialByte);
-        this.upperSide = new Side(initialByte);
+        this.lowerSide = new Side(false, initialByte);
+        this.upperSide = new Side(true, initialByte);
 
         this.tracksUsed = 0;
         this.isDoubleSided = false;

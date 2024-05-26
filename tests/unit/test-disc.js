@@ -156,4 +156,18 @@ describe("Disc builder tests", () => {
         assert.equal(disc.tracksUsed, 4);
         assert(disc.isDoubleSided);
     });
+    it("should build from FM pulses", () => {
+        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        const pulses = [4, 4, 8, 8, 4, 8, 8, 8, 8, 8, 8, 8, 8];
+        builder.buildFromPulses(pulses, false);
+        assert.equal(builder.track.length, 1);
+    });
+    it("should build from MFM pulses", () => {
+        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        const pulses = [4, 4, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6];
+        builder.buildFromPulses(pulses, true);
+        assert.equal(builder.track.length, 1);
+    });
 });
