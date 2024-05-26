@@ -1,7 +1,8 @@
 import { describe, it } from "mocha";
 import assert from "assert";
 
-import { Disc, DiscConfig, IbmDiscFormat } from "../../disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../disc.js";
+import * as fs from "node:fs";
 
 describe("IBM disc format tests", function () {
     it("calculates FM crcs", () => {
@@ -96,7 +97,7 @@ describe("Disc builder tests", () => {
     const someData = new Uint8Array(256);
     someData.fill(0x33);
     it("should write a simple FM track without blowing up", () => {
-        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const disc = new Disc(true, true, new DiscConfig());
         const builder = disc.buildTrack(false, 0);
         builder
             .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
@@ -118,7 +119,7 @@ describe("Disc builder tests", () => {
     });
 
     it("should write a simple MFM track without blowing up", () => {
-        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const disc = new Disc(true, true, new DiscConfig());
         const builder = disc.buildTrack(false, 0);
         builder
             .appendRepeatMfmByte(0x4e, 60)
@@ -143,7 +144,7 @@ describe("Disc builder tests", () => {
     });
 
     it("should note how much disc is being used", () => {
-        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const disc = new Disc(true, true, new DiscConfig());
         assert.equal(disc.tracksUsed, 0);
         assert(!disc.isDoubleSided);
         disc.buildTrack(false, 0);
@@ -156,18 +157,29 @@ describe("Disc builder tests", () => {
         assert.equal(disc.tracksUsed, 4);
         assert(disc.isDoubleSided);
     });
+
     it("should build from FM pulses", () => {
-        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const disc = new Disc(true, true, new DiscConfig());
         const builder = disc.buildTrack(false, 0);
         const pulses = [4, 4, 8, 8, 4, 8, 8, 8, 8, 8, 8, 8, 8];
         builder.buildFromPulses(pulses, false);
         assert.equal(builder.track.length, 1);
     });
+
     it("should build from MFM pulses", () => {
-        const disc = new Disc(null, "test.ssd", true, true, new DiscConfig());
+        const disc = new Disc(true, true, new DiscConfig());
         const builder = disc.buildTrack(false, 0);
         const pulses = [4, 4, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6];
         builder.buildFromPulses(pulses, true);
         assert.equal(builder.track.length, 1);
+    });
+});
+
+describe("SSD loader tests", () => {
+    it("should load Elite", () => {
+        const data = fs.readFileSync("discs/elite.ssd");
+        const disc = new Disc(true, true, new DiscConfig());
+        loadSsd(disc, data, false);
+        assert.equal(disc.tracksUsed, 80);
     });
 });

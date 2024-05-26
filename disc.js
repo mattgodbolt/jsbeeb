@@ -188,8 +188,83 @@ export class DiscConfig {
     }
 }
 
+class SsdFormat {
+    static get sectorSize() {
+        return 256;
+    }
+
+    static get sectorsPerTrack() {
+        return 10;
+    }
+
+    static get tracksPerDisc() {
+        return 80;
+    }
+}
+
+/**
+ * @param {Disc} disc
+ * @param {Uint8Array} data
+ * @param {boolean} isDsd
+ */
+export function loadSsd(disc, data, isDsd) {
+    const numSides = isDsd ? 2 : 1;
+    if (data.length % SsdFormat.sectorSize !== 0) {
+        throw new Error("SSD file size is not a multiple of sector size");
+    }
+    const maxSize = SsdFormat.sectorSize * SsdFormat.sectorsPerTrack * SsdFormat.tracksPerDisc * numSides;
+    if (data.length > maxSize) {
+        throw new Error("SSD file is too large");
+    }
+
+    let offset = 0;
+    for (let track = 0; track < SsdFormat.tracksPerDisc; ++track) {
+        for (let side = 0; side < numSides; ++side) {
+            const trackBuilder = disc.buildTrack(side === 1, track);
+            // Sync pattern at start of track, as the index pulse starts, aka GAP 5.
+            trackBuilder
+                .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+                .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
+
+            for (let sector = 0; sector < SsdFormat.sectorsPerTrack; ++sector) {
+                // Sector header, aka ID.
+                trackBuilder
+                    .resetCrc()
+                    .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+                    .appendFmByte(track)
+                    .appendFmByte(0)
+                    .appendFmByte(sector)
+                    .appendFmByte(1)
+                    .appendCrc(false);
+
+                // Sync pattern between sector header and sector data, aka GAP 2.
+                trackBuilder
+                    .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+                    .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
+
+                // Sector data.
+                trackBuilder
+                    .resetCrc()
+                    .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
+                    .appendFmChunk(data.subarray(offset, SsdFormat.sectorSize))
+                    .appendCrc(false);
+
+                offset += SsdFormat.sectorSize;
+
+                if (sector !== SsdFormat.sectorsPerTrack - 1) {
+                    // Sync pattern between sectors, aka GAP 3.
+                    trackBuilder
+                        .appendRepeatFmByte(0xff, IbmDiscFormat.std10SectorGap3FFs)
+                        .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
+                }
+            }
+            trackBuilder.setTrackLength();
+        }
+    }
+}
+
 export class Disc {
-    constructor(data, filename, isWriteable, isMutable, config) {
+    constructor(isWriteable, isMutable, config) {
         this.config = config;
 
         this.isDirty = false;
