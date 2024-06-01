@@ -148,4 +148,8 @@ export class DiscDrive {
         // The 8271 datasheet says that the index pulse must be held for over 0.5us. Most drives are in the milisecond range.
         return this._headPosition < (this.trackLength * DiscDrive.DiscIndexMs) / 200;
     }
+
+    writePulses(pulses) {
+        throw new Error(`Not supported: ${pulses}`);
+    }
 }
