@@ -15,6 +15,11 @@ export class DiscDrive {
         return 4;
     }
 
+    // scarybeast's Chinon drive holds the index pulse low for about 4ms. */
+    static get DiscIndexMs() {
+        return 4;
+    }
+
     /**
      *
      * @param id which drive id this is (0 or 1)
@@ -135,5 +140,12 @@ export class DiscDrive {
     addDisc(disc) {
         if (this._discs.length === DiscDrive.MaxDiscsPerDrive) throw new Error("Too many discs added");
         this._discs.push(disc);
+    }
+
+    get indexPulse() {
+        // With no disc loaded the drive asserts the index all the time.
+        if (!this.disc) return true;
+        // The 8271 datasheet says that the index pulse must be held for over 0.5us. Most drives are in the milisecond range.
+        return this._headPosition < (this.trackLength * DiscDrive.DiscIndexMs) / 200;
     }
 }
