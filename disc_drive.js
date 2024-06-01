@@ -11,6 +11,10 @@ export class DiscDrive {
         return 400000;
     }
 
+    static get MaxDiscsPerDrive() {
+        return 4;
+    }
+
     /**
      *
      * @param id which drive id this is (0 or 1)
@@ -20,7 +24,7 @@ export class DiscDrive {
         this._id = id;
         this._discIndex = 0;
         this._scheduler = scheduler;
-        this._discs = [null, null, null, null, null];
+        this._discs = [];
         this._is40Track = false;
         // Physically always 80 tracks even if we're in 40 track mode. 40 track mode essentially double steps.
         this._track = 0;
@@ -37,7 +41,7 @@ export class DiscDrive {
     }
 
     /**
-     * @returns {Disc}
+     * @returns {Disc|undefined}
      */
     get disc() {
         return this._discs[this._discIndex];
@@ -119,5 +123,17 @@ export class DiscDrive {
 
     startSpinning() {
         this._timer.schedule(1);
+    }
+
+    stopSpinning() {
+        this._timer.cancel();
+    }
+
+    /**
+     * @param {Disc} disc
+     */
+    addDisc(disc) {
+        if (this._discs.length === DiscDrive.MaxDiscsPerDrive) throw new Error("Too many discs added");
+        this._discs.push(disc);
     }
 }

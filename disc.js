@@ -264,6 +264,12 @@ export function loadSsd(disc, data, isDsd) {
 }
 
 export class Disc {
+    /**
+     * @returns {Disc} a new blank disc
+     */
+    static createBlank() {
+        return new Disc(true, true, new DiscConfig());
+    }
     constructor(isWriteable, isMutable, config) {
         this.config = config;
 
