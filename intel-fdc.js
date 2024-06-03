@@ -68,6 +68,43 @@ const DriveOut = {
     writeEnable: 0x01,
 };
 
+const Address = {
+    // Read.
+    status: 0,
+    result: 1,
+    unknown_read_2: 2,
+    unknown_read_3: 3,
+
+    // Write.
+    command: 0,
+    parameter: 1,
+    reset: 2,
+
+    // Read / write.
+    data: 4,
+};
+
+// const Result = {
+//     ok: 0x00,
+//     clockError: 0x08,
+//     lateDma: 0x0a,
+//     idCrcError: 0x0c,
+//     dataCrcError: 0x0e,
+//     driveNotReady: 0x10,
+//     writeProtected: 0x12,
+//     sectorNotFound: 0x18,
+//     flagDeletedData: 0x20,
+// };
+
+const StatusFlag = {
+    busy: 0x00,
+    commandFull: 0x40,
+    paramFull: 0x20,
+    resultReady: 0x10,
+    nmi: 0x08,
+    needData: 0x04,
+};
+
 export class IntelFdc {
     static get NumRegisters() {
         return 32;
@@ -109,6 +146,8 @@ export class IntelFdc {
         this._stateIsIndexPulse = false;
         this._crc = 0;
         this._onDiscCrc = 0;
+
+        this._logCommands = false;
     }
 
     /**
@@ -155,12 +194,47 @@ export class IntelFdc {
         return addr & 0xff;
     }
 
+    _log(message) {
+        console.log(`8271: ${message}`);
+    }
+
+    _logCommand(message) {
+        if (this._logCommands) this._log(message);
+    }
+
     /**
      * @param {Number} addr hardware address
      * @param {Number} val byte to write
      */
     write(addr, val) {
-        throw new Error(`Not supported: ${addr}=${val}`);
+        switch (addr & 7) {
+            case Address.command:
+                this._commandWritten(val);
+                break;
+            case Address.parameter:
+                this._paramWritten(val);
+                break;
+            case Address.data:
+            case Address.data + 1:
+            case Address.data + 2:
+            case Address.data + 3:
+                this._statusLower(StatusFlag.needData | StatusFlag.nmi);
+                this._regs[Registers.internalData] = val;
+                break;
+            case Address.Reset:
+                //On a real 8271, crazy crazy things happen if you write 2 or especially 4 to this register.
+                if (val !== 0 && val !== 1) {
+                    this._log("funky reset");
+                }
+                if (val === 1) {
+                    this._logCommand("reset");
+                    this.reset();
+                }
+                break;
+            case 3:
+            default:
+                this._log(`Not supported: ${addr}=${val}`);
+        }
     }
 
     _pulsesCallback(pulses, count) {
@@ -175,8 +249,69 @@ export class IntelFdc {
             const data = this._mmioData;
             const pulses = IbmDiscFormat.fmTo2usPulses(clocks, data);
             if (clocks !== 0xff && clocks !== IbmDiscFormat.markClockPattern)
-                console.log(`8271: writing unusual clocks=${hexbyte(clocks)} data=${hexbyte(data)}`);
+                this._log(`writing unusual clocks=${hexbyte(clocks)} data=${hexbyte(data)}`);
             this._currentDrive.writePulses(pulses);
         }
+    }
+
+    _statusLower(statusFlags) {
+        this._regs[Registers.internalStatus] &= ~statusFlags;
+        if (statusFlags & StatusFlag.nmi) {
+            this._updateNmi();
+        }
+        this._updateExternalStatus();
+    }
+
+    _updateNmi() {
+        const status = this.internalStatus;
+        const level = !!(status & StatusFlag.nmi);
+        if (this._cpu.nmi && level) {
+            this._log("edge triggered NMI already high");
+        }
+        this._cpu.NMI(level);
+    }
+
+    _updateExternalStatus() {
+        // EMU NOTE: currently, the emulation responds instantly to getting commands
+        // started, accepting parameters, transitioning between states, etc.
+        // This is inaccurate.
+        // The real 8271 is an asynchronously running general purpose microcontroller,
+        // where each instruction takes 2us+ and processing between states uses a
+        // large and variable number of instructions.
+        // Some food for though, latency timings on a BBC + 8271, including setup:
+        // WRITE SPECIAL REGISTER:                   211us
+        // WRITE SPECIAL REGISTER (0 param version): 157us
+        // READ DRIVE STATUS:                        188us
+        // write $35 to parameter register:           31us
+        // write 3rd SPECIFY parameter:               27us
+        let status = this.internalStatus;
+        // The internal status register appears to be shared with some mode bits that
+        // must be masked out.
+        status &= ~0x03;
+        // Current best thinking is that the internal register uses bit value 0x10 for
+        // something different, and that "result ready" is maintained by the external
+        // register logic.
+        status &= ~StatusFlag.resultReady;
+        if (this._isResultReady) {
+            status |= StatusFlag.resultReady;
+        }
+
+        // TODO: "command register full", bit value 0x40, isn't understood. In
+        // particular, the mode register (shared with the status register we
+        // believe) is set to 0xC1 in typical operation. This would seem to raise
+        // 0x40 after it has been lowered at command register acceptance. However,
+        // the bit is not returned.
+        // Don't return it, ever, for now.
+        // Also avoid "parameter register full".
+        status &= ~0x60;
+
+        this._status = status;
+    }
+
+    _commandWritten(command) {
+        throw new Error(`Unsupported ${command} write`);
+    }
+    _paramWritten(command) {
+        throw new Error(`Unsupported ${command} write`);
     }
 }
