@@ -107,8 +107,21 @@ export class DiscDrive {
         this._timer.schedule(nextTicks - thisTicks);
     }
 
+    get headPosition() { 
+        return this._headPosition;
+    }
+
+    get track() {
+        return this._track;
+    }
+
     get positionFraction() {
         return (this._headPosition + this._pulsePosition / 32) / this.trackLength;
+    }
+
+    set positionFraction(fraction) {
+        this._headPosition = (this.trackLength * fraction)|0;
+        this._pulsePosition = 0;
     }
 
     get positionTime() {
@@ -134,6 +147,13 @@ export class DiscDrive {
         this._timer.cancel();
     }
 
+    selectSide(isSideUpper) {
+        const fraction = this.positionFraction;
+        // TODO flush writes here
+        this._isSideUpper = isSideUpper;
+        this.positionFraction = fraction;
+    }
+
     /**
      * @param {Disc} disc
      */
@@ -151,5 +171,9 @@ export class DiscDrive {
 
     writePulses(pulses) {
         throw new Error(`Not supported: ${pulses}`);
+    }
+
+    get writeProtect() {
+        return this.disc ? this.disc.writeProtect : false;
     }
 }
