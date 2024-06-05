@@ -1,13 +1,13 @@
 // Translated from beebjit by Chris Evans.
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
-import { Cpu6502 } from "./6502";
-import { IbmDiscFormat } from "./disc";
+import { Cpu6502 } from "./6502.js";
+import { IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
-import { DiscDrive } from "./disc_drive";
+import { DiscDrive } from "./disc_drive.js";
 // eslint-disable-next-line no-unused-vars
-import { Scheduler } from "./scheduler";
-import { hexbyte } from "./utils";
+import { Scheduler } from "./scheduler.js";
+import * as utils from "./utils.js";
 
 const Registers = {
     internalPointer: 0x00,
@@ -122,7 +122,7 @@ const Command = {
 };
 
 const StatusFlag = {
-    busy: 0x00,
+    busy: 0x80,
     commandFull: 0x40,
     paramFull: 0x20,
     resultReady: 0x10,
@@ -245,8 +245,8 @@ export class IntelFdc {
     setDrives(drive0, drive1) {
         this._drives = [drive0, drive1];
         const callback = (pulses, count) => this._pulsesCallback(pulses, count);
-        drive0.setPulsesCallback(callback);
-        drive1.setPulsesCallback(callback);
+        if (drive0) drive0.setPulsesCallback(callback);
+        if (drive1) drive1.setPulsesCallback(callback);
     }
 
     powerOnReset() {
@@ -337,7 +337,7 @@ export class IntelFdc {
             const data = this._mmioData;
             const pulses = IbmDiscFormat.fmTo2usPulses(clocks, data);
             if (clocks !== 0xff && clocks !== IbmDiscFormat.markClockPattern)
-                this._log(`writing unusual clocks=${hexbyte(clocks)} data=${hexbyte(data)}`);
+                this._log(`writing unusual clocks=${utils.hexbyte(clocks)} data=${utils.hexbyte(data)}`);
             this._currentDrive.writePulses(pulses);
         }
     }
@@ -417,15 +417,17 @@ export class IntelFdc {
     _commandWritten(command) {
         const status = this.internalStatus;
         if (status & StatusFlag.busy) {
-            this._log(`command ${hexbyte(command)} while busy with ${hexbyte(this._regs[Registers.internalCommand])}`);
+            this._log(
+                `command ${utils.hexbyte(command)} while busy with ${utils.hexbyte(this._regs[Registers.internalCommand])}`,
+            );
         }
 
         // Set command.
         this._regs[Registers.internalCommand] = command;
 
         // Set busy, lower command full in status, result to 0.
-        this._statusRaise(Registers.busy);
-        this._statusLower(Registers.commandFull);
+        this._statusRaise(StatusFlag.busy);
+        this._statusLower(StatusFlag.commandFull);
         this._setResult(0);
 
         // Calculate parameters expected. Taken from the logic in the 8271 ROM.
@@ -440,6 +442,11 @@ export class IntelFdc {
         } else {
             this._startCommand();
         }
+    }
+
+    _resultConsumed() {
+        this._isResultReady = false;
+        this._updateExternalStatus();
     }
 
     _paramWritten(param) {
@@ -486,7 +493,7 @@ export class IntelFdc {
             case Registers.mmioData & 0x07:
                 return this._mmioData;
             default:
-                this._log(`direct read from MMIO register ${hexbyte(reg)}`);
+                this._log(`direct read from MMIO register ${utils.hexbyte(reg)}`);
                 break;
         }
         return 0;
@@ -516,7 +523,7 @@ export class IntelFdc {
                 this._mmioData = val;
                 break;
             default:
-                this._log(`direct write to MMIO register ${hexbyte(reg)}`);
+                this._log(`direct write to MMIO register ${utils.hexbyte(reg)}`);
                 break;
         }
     }
@@ -625,7 +632,7 @@ export class IntelFdc {
         commandReg &= 0x3c;
         this._regs[Registers.internalCommand] = commandReg;
         this._logCommand(
-            `command ${hexbyte(origCommand & 0x3f)} sel ${hexbyte(selectBits)} params ``${hexbyte(this._regs[Registers.internalParam_1])} ``${hexbyte(this._regs[Registers.internalParam_2])} ``${hexbyte(this._regs[Registers.internalParam_3])} ``${hexbyte(this._regs[Registers.internalParam_4])} ``${hexbyte(this._regs[Registers.internalParam_5])} ``ptrk ${this._currentDrive ? this._currentDrive.track : -1} ``hpos ${this._currentDrive ? this._currentDrive.headPosition : -1}`,
+            `command ${utils.hexbyte(origCommand & 0x3f)} sel ${utils.hexbyte(selectBits)} params ${utils.hexbyte(this._regs[Registers.internalParam_1])} ${utils.hexbyte(this._regs[Registers.internalParam_2])} ${utils.hexbyte(this._regs[Registers.internalParam_3])} ${utils.hexbyte(this._regs[Registers.internalParam_4])} ${utils.hexbyte(this._regs[Registers.internalParam_5])} ptrk ${this._currentDrive ? this._currentDrive.track : -1} hpos ${this._currentDrive ? this._currentDrive.headPosition : -1}`,
         );
 
         const command = this._internalCommand;
@@ -795,7 +802,7 @@ export class IntelFdc {
 
     _lowerBusyAndLog() {
         this._statusLower(StatusFlag.busy);
-        this._logCommand(`status ${hexbyte(this._status)} result ${hexbyte(this._result)}`);
+        this._logCommand(`status ${utils.hexbyte(this._status)} result ${utils.hexbyte(this._result)}`);
     }
 
     _spinDown() {

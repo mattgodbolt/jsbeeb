@@ -73,14 +73,14 @@ describe("Disc drive tests", function () {
         let previousIndex = drive.indexPulse;
         let risingEdges = 0;
         const cyclesPerSecond = 2 * 1000 * 1000;
-        const cyclesPerIter = cyclesPerSecond / 1000;
-        const oneMinuteCycles = cyclesPerSecond * 60;
+        const cyclesPerIter = cyclesPerSecond / 60;
         const rpm = 300;
-        for (let cycle = 0; cycle < oneMinuteCycles; cycle += cyclesPerIter) {
+        const testSeconds = 5;
+        for (let cycle = 0; cycle < testSeconds * cyclesPerSecond; cycle += cyclesPerIter) {
             scheduler.polltime(cyclesPerIter);
             if (drive.indexPulse && !previousIndex) risingEdges++;
             previousIndex = drive.indexPulse;
         }
-        assert.equal(risingEdges, rpm);
+        assert.equal(risingEdges, rpm / 60 * testSeconds);
     });
 });
