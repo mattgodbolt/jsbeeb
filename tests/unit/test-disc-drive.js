@@ -2,7 +2,7 @@ import { describe, it } from "mocha";
 import assert from "assert";
 
 import { Disc, IbmDiscFormat } from "../../disc.js";
-import { DiscDrive } from "../../disc_drive.js";
+import { DiscDrive } from "../../disc-drive.js";
 import { Scheduler } from "../../scheduler.js";
 
 describe("Disc drive tests", function () {

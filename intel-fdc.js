@@ -4,7 +4,7 @@
 import { Cpu6502 } from "./6502.js";
 import { IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
-import { DiscDrive } from "./disc_drive.js";
+import { DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 import * as utils from "./utils.js";
