@@ -68,6 +68,7 @@ const DriveOut = {
     direction: 0x04,
     step: 0x02,
     writeEnable: 0x01,
+    selectFlags: 0xc0,
 };
 
 const FdcMode = {
@@ -91,17 +92,17 @@ const Address = {
     data: 4,
 };
 
-// const Result = {
-//     ok: 0x00,
-//     clockError: 0x08,
-//     lateDma: 0x0a,
-//     idCrcError: 0x0c,
-//     dataCrcError: 0x0e,
-//     driveNotReady: 0x10,
-//     writeProtected: 0x12,
-//     sectorNotFound: 0x18,
-//     flagDeletedData: 0x20,
-// };
+const Result = {
+    ok: 0x00,
+    clockError: 0x08,
+    lateDma: 0x0a,
+    idCrcError: 0x0c,
+    dataCrcError: 0x0e,
+    driveNotReady: 0x10,
+    writeProtected: 0x12,
+    sectorNotFound: 0x18,
+    flagDeletedData: 0x20,
+};
 
 const Command = {
     scanData: 0,
@@ -114,6 +115,7 @@ const Command = {
     verify: 7,
     format: 8,
     unused_9: 9,
+    seek: 10,
     readDriveStatus: 11,
     unused_12: 12,
     specify: 13,
@@ -218,7 +220,7 @@ export class IntelFdc {
 
         this._regs = new Uint8Array(IntelFdc.NumRegisters);
         this._isResultReady = false;
-        // Derived from one of the regs plus is_result_ready.
+        // Derived from one of the regs plus _isResultReady.
         this._status = 0;
         this._mmioData = 0;
         this._mmioClocks = 0;
@@ -431,11 +433,11 @@ export class IntelFdc {
         this._setResult(0);
 
         // Calculate parameters expected. Taken from the logic in the 8271 ROM.
-        const num_params = command & 0x18 ? command & 0x3 : 5;
-        this._regs[Registers.internalParamCount] = num_params;
+        const numParams = command & 0x18 ? command & 0x3 : 5;
+        this._regs[Registers.internalParamCount] = numParams;
 
         // Are we waiting for parameters?
-        if (num_params) {
+        if (numParams) {
             // Parameters write from R7 downwards.
             this._regs[Registers.internalPointer] = Registers.internalParam_1;
             this._paramCallback = ParamAccept.command;
@@ -541,15 +543,24 @@ export class IntelFdc {
 
         // Note: unclear what to do if both drives are selected. We select no drive
         // for now, to avoid shenanigans.
-        const selectBits = driveOut & 0xc0;
-        if (selectBits === 0x40) this._currentDrive = this._drives[0];
-        else if (selectBits == 0x80) this._currentDrive = this._drives[1];
+        const selectBits = driveOut & DriveOut.selectFlags;
+        if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
+        else if (selectBits == DriveOut.select_1) this._currentDrive = this._drives[1];
 
         if (this._currentDrive) {
             if (driveOut & DriveOut.loadHead) this._currentDrive.startSpinning();
             this._currentDrive.selectSide(!!(driveOut & DriveOut.side));
         }
         this._driveOut = driveOut;
+    }
+
+    _setState(state) {
+        this._state = state;
+        this._stateCount = 0;
+        if (state === State.syncingForId || state === State.syncingForData) {
+            this._shiftRegister = 0;
+            this._numShifts = 0;
+        }
     }
 
     /**
@@ -604,6 +615,116 @@ export class IntelFdc {
             this._regs[Registers.trackDrive_0] = this._regs[Registers.internalSeekTarget_2];
             this._regs[Registers.trackDrive_1] = this._regs[Registers.internalSeekTarget_2];
         }
+        this._doSeekStep();
+    }
+
+    _doSeekStep() {
+        if (
+            (this._trk0 && this._regs[Registers.internalParam_2] === 0) || // Seek to 0 done, TRK0 detected
+            this._regs[Registers.internalSeekCount] === 0
+        ) {
+            this._doLoadHead();
+            return;
+        }
+        //  We're going to actually step so we'll need settle if the head is already loaded.
+        this._didSeekStep = true;
+        this._regs[Registers.internalSeekCount]--;
+
+        if (this._currentDrive) this._currentDrive.seekTrack(this._driveOut & DriveOut.direction ? 1 : -1);
+
+        let stepRate = this._regs[Registers.headStepRate];
+        if (stepRate === 0) {
+            // Step rate is up to the drive. Let's say 3ms.
+            stepRate = 3;
+        } else {
+            // The datasheet is ambiguous about whether the units are 1ms or 2ms for 5.25" drives. 1ms might be your best guess from the datasheet, but timing on a real machine, it appears to be 2ms.
+            stepRate *= 2;
+        }
+        this._setTimerMs(TimerState.seekStep, stepRate);
+    }
+
+    _doLoadHead() {
+        let postSeekTimeMs = 0;
+        // The head load time replaces the settle time if there is both.
+        if (!(this._driveOut & DriveOut.loadHead)) {
+            this._driveOutRaise(DriveOut.loadHead);
+            // Head load units are 4ms.
+            postSeekTimeMs = 4 * (this._regs[Registers.headLoadUnload] & 0xf);
+        } else if (this._didSeekStep) {
+            // All references state the units are 2ms for 5.25" drives.
+            postSeekTimeMs = 2 * this._regs[Registers.headSettleTime];
+        }
+        if (postSeekTimeMs) {
+            this._setTimerMs(TimerState.postStep, postSeekTimeMs);
+        } else {
+            this._postSeekDispatch();
+        }
+    }
+
+    _postSeekDispatch() {
+        this._timerState = TimerState.none;
+        if (!this._checkDriveReady()) return;
+        switch (this._callContext) {
+            case Call.seek:
+                this._finishCommand(Result.ok);
+                break;
+            case Call.readId:
+                this._pulsesCallback = IndexPulse.startReadId;
+                break;
+            case Call.format:
+                this._setupSectorSize();
+                this._pulsesCallback = IndexPulse.startFormat;
+                this._checkWriteProtect();
+                break;
+            case Call.read:
+            case Call.write:
+                this._setupSectorSize();
+                this._startIndexPulseTimeout();
+                this._startSyncingForHeader();
+                if (this._callContext === Call.write) this._checkWriteProtect();
+                break;
+            default:
+                throw new Error(`Surprising call context post seek ${this._callContext}`);
+        }
+    }
+
+    get _sectorSize() {
+        const size = this._regs[Registers.internalParam_3] >>> 5;
+        return 128 << size;
+    }
+
+    _setupSectorSize() {
+        const msb = (this._sectorSize >>> 7) - 1;
+        this._regs[Registers.internalCountLsb] = 0x80;
+        this._regs[Registers.internalCountMsb] = msb;
+        // Note the is R0, i.e. R0 is trashed here.
+        this._regs[Registers.internalCountMsbCopy] = msb;
+    }
+
+    _setTimerMs(state, timerMs) {
+        this._timerTask.cancel();
+        this._timerState = state;
+        this._timerTask.schedule(timerMs * 2000);
+    }
+
+    _startIndexPulseTimeout() {
+        this._regs[Registers.internalIndexPulseCount] = 3;
+        this._indexPulseCallback = IndexPulse.timeout;
+    }
+
+    _startSyncingForHeader() {
+        this._regs[Registers.internalHeaderPointer] = 0x0c;
+        this._setState(State.syncingForId);
+    }
+
+    _checkDriveReady() {
+        this._doReadDriveStatus();
+        const mask = this._driveOut & DriveOut.select_1 ? 0x40 : 0x04;
+        if (!(this._regs[Registers.internalDriveInLatched] & mask)) {
+            this._finishCommand(Result.driveNotReady);
+            return false;
+        }
+        return true;
     }
 
     _startCommand() {
@@ -617,19 +738,18 @@ export class IntelFdc {
 
         // Select the drive before logging so that head position is reported.
         // The MMIO clocks register really is used as a temporary storage for this.
-        const selectBits = commandReg & 0xc0;
+        const selectBits = commandReg & DriveOut.selectFlags;
         this._mmioClocks = selectBits;
-        if (selectBits !== (this._driveOut & 0xc0)) {
-            // A change of drive select bits clears all drive out bits other than side
-            // select.
+        if (selectBits !== (this._driveOut & DriveOut.selectFlags)) {
+            // A change of drive select bits clears all drive out bits other than side select.
             // For example, the newly selected drive won't have the load head signal
             // active. This spins down any previously selected drive.
             const newSelectBits = selectBits | (this._driveOut & DriveOut.side);
             this._setDriveOut(newSelectBits);
         }
 
-        // Mask out drive select bits from the command register.
-        commandReg &= 0x3c;
+        // Mask out drive select bits from the command register, and parameter count.
+        commandReg &= ~(DriveOut.selectFlags | 0x03);
         this._regs[Registers.internalCommand] = commandReg;
         this._logCommand(
             `command ${utils.hexbyte(origCommand & 0x3f)} sel ${utils.hexbyte(selectBits)} params ${utils.hexbyte(this._regs[Registers.internalParam_1])} ${utils.hexbyte(this._regs[Registers.internalParam_2])} ${utils.hexbyte(this._regs[Registers.internalParam_3])} ${utils.hexbyte(this._regs[Registers.internalParam_4])} ${utils.hexbyte(this._regs[Registers.internalParam_5])} ptrk ${this._currentDrive ? this._currentDrive.track : -1} hpos ${this._currentDrive ? this._currentDrive.headPosition : -1}`,
@@ -643,7 +763,7 @@ export class IntelFdc {
     }
 
     get _internalCommand() {
-        return (this._regs[Registers.internalCommand] & 0x3c) >>> 2;
+        return (this._regs[Registers.internalCommand] & ~(DriveOut.selectFlags | 0x03)) >>> 2;
     }
 
     get _currentDiscIsSpinning() {
@@ -775,6 +895,16 @@ export class IntelFdc {
         }
     }
 
+    _finishCommand(result) {
+        if (result !== Result.ok) {
+            this._driveOutLower(DriveOut.direction | DriveOut.step | DriveOut.writeEnable);
+        }
+        this._setResult(result | this._result);
+        // Raise command completion IRQ.
+        this._statusRaise(StatusFlag.nmi);
+        this._finishSimpleCommand();
+    }
+
     get _irqCallbacks() {
         return (this._regs[Registers.internalStatus] & 0x30) === 0x30;
     }
@@ -806,7 +936,7 @@ export class IntelFdc {
     }
 
     _spinDown() {
-        this._driveOutLower(DriveOut.select_0 | DriveOut.select_1 | DriveOut.loadHead);
+        this._driveOutLower(DriveOut.selectFlags | DriveOut.loadHead);
     }
 
     _timerFired() {
