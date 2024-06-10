@@ -9,7 +9,13 @@ import { DiscDrive } from "./disc-drive.js";
 import { Scheduler } from "./scheduler.js";
 import * as utils from "./utils.js";
 
-const Registers = {
+/**
+ * Register indices.
+ *
+ * @readonly
+ * @enum {number}
+ */
+const Registers = Object.freeze({
     internalPointer: 0x00,
     internalCountMsbCopy: 0x00,
     internalParamCount: 0x01,
@@ -57,9 +63,15 @@ const Registers = {
     mmioDriveOut: 0x23,
     mmioClocks: 0x24,
     mmioData: 0x25,
-};
+});
 
-const DriveOut = {
+/**
+ * Drive output bitmask.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const DriveOut = Object.freeze({
     select_1: 0x80,
     select_0: 0x40,
     side: 0x20,
@@ -69,14 +81,26 @@ const DriveOut = {
     step: 0x02,
     writeEnable: 0x01,
     selectFlags: 0xc0,
-};
+});
 
-const FdcMode = {
+/**
+ * Floopy disc controller mode.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const FdcMode = Object.freeze({
     singleActuator: 0x02,
     noDma: 0x01,
-};
+});
 
-const Address = {
+/**
+ * Register address.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const Address = Object.freeze({
     // Read.
     status: 0,
     result: 1,
@@ -90,9 +114,15 @@ const Address = {
 
     // Read / write.
     data: 4,
-};
+});
 
-const Result = {
+/**
+ * Result bitmask.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const Result = Object.freeze({
     ok: 0x00,
     clockError: 0x08,
     lateDma: 0x0a,
@@ -102,9 +132,15 @@ const Result = {
     writeProtected: 0x12,
     sectorNotFound: 0x18,
     flagDeletedData: 0x20,
-};
+});
 
-const Command = {
+/**
+ * Command number.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const Command = Object.freeze({
     scanData: 0,
     scanDataAndDeleted: 1,
     writeData: 2,
@@ -121,39 +157,69 @@ const Command = {
     specify: 13,
     writeSpecialRegister: 14,
     readSpecialRegister: 15,
-};
+});
 
-const StatusFlag = {
+/**
+ * Status flags
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const StatusFlag = Object.freeze({
     busy: 0x80,
     commandFull: 0x40,
     paramFull: 0x20,
     resultReady: 0x10,
     nmi: 0x08,
     needData: 0x04,
-};
+});
 
-const ParamAccept = {
+/**
+ * Parameter acceptance state machine.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const ParamAccept = Object.freeze({
     none: 0,
     command: 1,
     specify: 2,
-};
+});
 
-const IndexPulse = {
+/**
+ * Index pulse state machine.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const IndexPulse = Object.freeze({
     none: 1,
     timeout: 2,
     spindown: 3,
     startReadId: 4,
     startFormat: 5,
     stopFormat: 6,
-};
+});
 
-const TimerState = {
+/**
+ * Timer state machine.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const TimerState = Object.freeze({
     none: 0,
     seekStep: 1,
     postStep: 2,
-};
+});
 
-const State = {
+/**
+ * Overall state machine.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const State = Object.freeze({
     null: 0,
     idle: 1,
     syncingForIdWait: 2,
@@ -179,9 +245,15 @@ const State = {
     formatDataCrc_2: 22,
     formatDataCrc_3: 23,
     formatGap_4: 24,
-};
+});
 
-const Call = {
+/**
+ * Callback state machine.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const Call = Object.freeze({
     uninitialised: 0,
     unchanged: 1,
     seek: 2,
@@ -194,7 +266,7 @@ const Call = {
     gap2_FFs: 9,
     gap2_00s: 10,
     formatData: 11,
-};
+});
 
 export class IntelFdc {
     static get NumRegisters() {
@@ -537,6 +609,9 @@ export class IntelFdc {
         this._setDriveOut(this._driveOut & ~bits);
     }
 
+    /**
+     * @param {DriveOut} driveOut 
+     */
     _setDriveOut(driveOut) {
         if (this._currentDrive) this._currentDrive.stopSpinning();
         this._currentDrive = null;
@@ -554,6 +629,9 @@ export class IntelFdc {
         this._driveOut = driveOut;
     }
 
+    /**
+     * @param {State} state 
+     */
     _setState(state) {
         this._state = state;
         this._stateCount = 0;
