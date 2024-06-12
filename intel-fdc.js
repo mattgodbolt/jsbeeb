@@ -414,6 +414,296 @@ export class IntelFdc {
                 this._log(`writing unusual clocks=${utils.hexbyte(clocks)} data=${utils.hexbyte(data)}`);
             this._currentDrive.writePulses(pulses);
         }
+
+        // The external data register is always copied across to the bit processor's
+        // MMIO data register. If a write command is in a state where it needed to
+        // provide a data byte internally (i.e. a GAP byte, marker, etc.), it
+        // overrides by re-writing the MMIO data register in the state machine below.
+        const dataRegister = this._regs[Registers.internalData];
+        this._mmioData = dataRegister;
+
+        switch (this._state) {
+            case State.idle:
+                break;
+            case State.syncingForIdWait:
+            case State.syncingForId:
+            case State.checkIdMarker:
+            case State.inId:
+            case State.inIdCrc:
+            case State.skipGap_2:
+            case State.syncingForData:
+            case State.checkDataMarker:
+            case State.inData:
+            case State.inDataCrc: {
+                for (let i = 0; i < 16; ++i) {
+                    const bit = !!(pulses & 0xc0000000);
+                    pulses = (pulses << 2) & 0xffffffff;
+                    this._shiftDataBit(bit);
+                }
+                break;
+            }
+            case State.writeRun:
+            case State.writeDataMark:
+            case State.dynamicDispatch:
+            case State.writeSectorData:
+            case State.writeCrc_2:
+            case State.writeCrc_3:
+            case State.formatWriteIdMarker:
+            case State.formatIdCrc_2:
+            case State.formatIdCrc_3:
+            case State.formatWriteDataMarker:
+            case State.formatDataCrc_2:
+            case State.formatDataCrc_3:
+            case State.formatGap_4:
+                this._byteCallbackWriting();
+                break;
+            default:
+                throw new Error(`Unkonown state ${this._state}`);
+        }
+    }
+
+    _shiftDataBit(bit) {
+        const state = this._state;
+        switch (state) {
+            case State.syncingForIdWait:
+                this._stateCount++;
+                // THe controller seems to need recovery time after a sector header before
+                // it can sync to another one. Measuring the "read sector IDs" command, 0x1b,
+                // it needs 4 bytes to recover prior to the 2 byte sync.
+                if (this._stateCount === 4 * 8 * 2) {
+                    this._startSyncingForHeader();
+                }
+                break;
+            case State.syncingForId:
+            case State.syncingForData: {
+                const stateCount = this._stateCount;
+                // Need to see bit pattern of 1010101010... to gather sync. This
+                // represents a string of 1 clock bits followed by 0 data bits.
+                if (bit === !(stateCount & 1)) {
+                    this._stateCount++;
+                } else if (stateCount >= 32 && stateCount & 1) {
+                    // Here we hit a 1 daya bit while in sync, so it's the start of a marker byte.
+                    if (!bit) {
+                        throw new Error("Assertion failed; was expecting a one bit");
+                    }
+                    this._setState(state === State.syncingForId ? State.checkIdMarker : State.checkDataMarker);
+                    this._shiftRegister = 3;
+                    this._numShifts = 2;
+                } else {
+                    // Restart sync.
+                    this._stateCount = bit ? 1 : 0;
+                }
+                break;
+            }
+            case State.checkIdMarker:
+            case State.inId:
+            case State.inIdCrc:
+            case State.checkDataMarker:
+            case State.inData:
+            case State.inDataCrc:
+            case State.skipGap_2: {
+                const shiftRegister = ((this._shiftRegister << 1) & 0xffffffff) | (bit ? 1 : 0);
+                this._shiftRegister = shiftRegister;
+                this._numShifts++;
+                if (this._numShifts !== 16) break;
+                const clockByte = IntelFdc.extractBits(shiftRegister);
+                const dataByte = IntelFdc.extractBits(shiftRegister << 1);
+                if (
+                    clockByte !== 0xff &&
+                    state != State.checkIdMarker &&
+                    state != State.checkDataMarker &&
+                    state != State.skipGap_2
+                ) {
+                    // Nothing. From tewsting the 8271 doesn't deliver bytes with missing
+                    // clock bits in the middle of a synced byte stream.
+                } else {
+                    this._byteCallbackReading(dataByte, clockByte);
+                }
+                this._shiftRegister = 0;
+                this._numShifts = 0;
+                break;
+            }
+            case State.idle:
+            case State.writeRun:
+                break;
+            default:
+                throw new Error(`"Unexected state ${state}"`);
+        }
+    }
+
+    static extractBits(bits) {
+        let byte = 0;
+        if (bits & 0x8000) byte |= 0x80;
+        if (bits & 0x2000) byte |= 0x40;
+        if (bits & 0x0800) byte |= 0x20;
+        if (bits & 0x0200) byte |= 0x10;
+        if (bits & 0x0080) byte |= 0x08;
+        if (bits & 0x0020) byte |= 0x04;
+        if (bits & 0x0008) byte |= 0x02;
+        if (bits & 0x0002) byte |= 0x01;
+        return byte;
+    }
+
+    _checkDataLossOk() {
+        let ok = true;
+
+        // Abort if DMA transfer is selected. This is not supported in a BBC.
+        if (this._regs[Registers.mode] & FdcMode.noDma) ok = false;
+
+        // Abort command if it's any type of scan. The 8271 requires DMA to be wired
+        // up for scan commands, which is not done in the BBC application.
+        const command = this._internalCommand;
+        if (command === Command.scanData || command === Command.scanDataAndDeleted) ok = false;
+
+        // Abort command if previous data byte wasn't picked up.
+        if (this.internalStatus & StatusFlag.needData) ok = false;
+
+        if (ok) return true;
+
+        this._commandAbort();
+        this._finishCommand(Result.lateDma);
+        return false;
+    }
+
+    _byteCallbackReading(dataByte, clockByte) {
+        const command = this._internalCommand;
+        if (this._irqCallbacks) {
+            if (!this.checkDataLossOk()) return;
+            this._regs[Registers.internalData] = dataByte;
+            this._statusRaise(StatusFlag.nmi | StatusFlag.needData);
+        }
+
+        switch (this._state) {
+            case State.skipGap_2:
+                // The controller requires a minimum byte count of 12 before sync then
+                // sector data. 2 bytes of sync are needed, so absolute minumum gap here is
+                // 14. The controller formats to 17 (not user controllable).
+
+                // The controller enforced gap skip is 11 bytes of read, as per the
+                // ROM. The practical count of 12 is likely because the controller takes
+                // some number of microseconds to start the sync detector after this
+                // counter expires.
+                this._regs[Registers.internalGap2Skip] = (this._regs[Registers.internalGap2Skip] - 1) & 0xff;
+                if (this._regs[Registers.internalGap2Skip]) break;
+                if (this._callContext === Call.read) this._setState(State.syncingForData);
+                else if (this._callContext === Call.write) this._doWriteRun(Call.write, 0x00);
+                else throw new Error(`Unexpected call context ${this._callContext}`);
+                break;
+            case State.checkIdMarker:
+                if (clockByte === IbmDiscFormat.markClockPattern && dataByte === IbmDiscFormat.idMarkDataPattern) {
+                    this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+                    if (command === Command.readId) this._startIrqCallbacks();
+                    this._setState(State.inId);
+                } else {
+                    this._startSyncingForHeader();
+                }
+                break;
+            case State.inId:
+                this._crc = IbmDiscFormat.crcAddByte(dataByte);
+                this._writeRegister(this._regs[Registers.internalHeaderPointer], dataByte);
+                this._regs[Registers.internalHeaderPointer]--;
+                if ((this._regs[Registers.internalHeaderPointer] & 0x07) === 0) {
+                    this._onDiscCrc = 0;
+                    this._stopIrqCallbacks();
+                    this._setState(State.inIdCrc);
+                }
+                break;
+            case State.inIdCrc:
+                this._onDiscCrc = ((this._onDiscCrc << 8) | dataByte) & 0xffffffff;
+                if (++this._stateCount === 2) {
+                    // On a real 8271, an ID CRC error seems to end things decisively
+                    // even if a subsequent ok ID would match.
+                    if (!this._checkCrc(Result.idCrcError)) break;
+                    // This is a test for the READ ID command.
+                    if (this._regs[Registers.internalCommand] === 0x18) {
+                        this._checkCompletion();
+                    } else if (this._regs[Registers.internalIdTrack] !== this._regs[Registers.internalParam_1]) {
+                        // Upon any mismatch of found track vs. expected track, the drive will try
+                        // twice more on the next two tracks.
+                        if (++this._regs[Registers.internalSeekRetryCount] === 3) {
+                            this._finishCommand(Result.sectorNotFound);
+                        } else {
+                            this._logCommand("stepping due to track mismatch");
+                            this._doSeek(Call.unchanged);
+                        }
+                    } else if (this._regs[Registers.internalIdSector] === this._regs[Registers.internalParam_2]) {
+                        // Set up for the first 5 bytes of the 0x00 sync.
+                        this._regs[Registers.internalCountMsb] = 0;
+                        this._regs[Registers.internalCountLsb] = 5;
+                        this._setState(State.skipGap_2);
+                    } else {
+                        this._setState(State.syncingForIdWait);
+                    }
+                }
+                break;
+            case State.checkDataMarker:
+                if (
+                    clockByte === IbmDiscFormat.markClockPattern &&
+                    (dataByte === IbmDiscFormat.dataMarkDataPattern ||
+                        dataByte === IbmDiscFormat.deletedDataMarkDataPattern)
+                ) {
+                    let doIrqs = true;
+                    if (dataByte === IbmDiscFormat.deletedDataMarkDataPattern) {
+                        if ((this._regs[Registers.internalCommand] & 0x0f) === 0) doIrqs = false;
+                        this._setResult(Result.flagDeletedData);
+                    }
+                    // No IRQ callbacks if verify.
+                    if (this._regs[Registers.internalCommand] === 0x1c) doIrqs = false;
+                    if (doIrqs) this._startIrqCallbacks();
+                    this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+                    this, this._setState(State.inData);
+                } else {
+                    this._finishCommand(Result.clockError);
+                }
+                break;
+            case State.inData: {
+                this._crc = IbmDiscFormat.crcAddByte(this._crc, dataByte);
+                if (this._decrementCounter()) {
+                    this._onDiscCrc = 0;
+                    this._setState(State.inDataCrc);
+                }
+                break;
+            }
+            case State.inDataCrc:
+                this._onDiscCrc = ((this._onDiscCrc << 8) | dataByte) & 0xffffffff;
+                if (++this._stateCount === 2) {
+                    if (!this._checkCrc(Result.dataCrcError)) break;
+                    this._checkCompletion();
+                }
+                break;
+            default:
+                throw new Error(`Unexpected state ${this._state}`);
+        }
+    }
+
+    _checkCompletion() {
+        if (!this._checkDriveReady()) return;
+
+        // Lower write enable.
+        this._driveOutLower(DriveOut.writeEnable);
+        this._clearCallbacks();
+
+        // One less sector to go. Specifying 0 sectors seems to result in 32 read, due
+        // to underflow of the 5-bit counter. On commands other than read id, any underflow
+        // has other side effects such as modifying the sector size.
+        if ((--this._regs[Registers.internalParam_3] & 0x1f) === 0) {
+            this._finishCommand(Result.ok);
+        } else {
+            // This looks strange as it is set up to be just an increment (R4==1 in sector
+            // operations). but it's what the 8271 ROM does.
+            this._regs[Registers.internalParam_2] += this._regs[Registers.internalParam_4] & 0x3f;
+            // This is also what the 8271 ROM does, just re-dispatches the current command.
+            this._doCommandDispatch();
+        }
+    }
+
+    /**
+     * @param {Result} error error if invalid
+     */
+    _checkCrc(error) {
+        if (this._crc === this._onDiscCrc) return true;
+        this._finishCommand(error);
+        return false;
     }
 
     _statusRaise(statusFlags) {
@@ -610,7 +900,7 @@ export class IntelFdc {
     }
 
     /**
-     * @param {DriveOut} driveOut 
+     * @param {DriveOut} driveOut
      */
     _setDriveOut(driveOut) {
         if (this._currentDrive) this._currentDrive.stopSpinning();
@@ -630,7 +920,7 @@ export class IntelFdc {
     }
 
     /**
-     * @param {State} state 
+     * @param {State} state
      */
     _setState(state) {
         this._state = state;
@@ -995,6 +1285,17 @@ export class IntelFdc {
     _stopIrqCallbacks() {
         // These bits don't affect the external status, so no need to re-calculate.
         this._regs[Registers.internalStatus] &= ~0x30;
+    }
+
+    _decrementCounter() {
+        if (--this._regs[Registers.internalCountLsb]) return false;
+        if (--this._regs[Registers.internalCountMsb] !== 0xff) {
+            this._regs[Registers.internalCountLsb] = 0x80;
+            return false;
+        }
+        this._regs[Registers.internalCountMsb] = 0;
+        this._stopIrqCallbacks();
+        return true;
     }
 
     _clearCallbacks() {
