@@ -270,6 +270,11 @@ export class Disc {
     static createBlank() {
         return new Disc(true, true, new DiscConfig());
     }
+    /**
+     * @param {boolean} isWriteable 
+     * @param {boolean} isMutable 
+     * @param {DiscConfig} config 
+     */
     constructor(isWriteable, isMutable, config) {
         this.config = config;
 
@@ -326,6 +331,23 @@ export class Disc {
 
     readPulses(isSideUpper, track, position) {
         return this.getTrack(isSideUpper, track).pulses2Us[position];
+    }
+
+    flushWrites() {
+        if (!this.isDirty) {
+            if (this.dirtySide !== -1 || this.dirtyTrack !== -1) throw new Error("Bad state in disc dirty tracking");
+            return;
+        }
+
+        const dirtySide = this.dirtySide;
+        const dirtyTrack = this.dirtyTrack;
+        this.isDirty = false;
+        this.dirtySide = -1;
+        this.dirtyTrack = -1;
+        if (!this.isMutable) return;
+        const trackObj = this.getTrack(dirtySide, dirtyTrack);
+        this.writeTrackCallback(this, dirtySide, dirtyTrack, trackObj.length, trackObj.pulses2Us);
+        this.setTrackUsed(dirtySide, dirtyTrack);
     }
 }
 

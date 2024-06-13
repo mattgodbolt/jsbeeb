@@ -22,7 +22,7 @@ export class DiscDrive {
 
     /**
      *
-     * @param id which drive id this is (0 or 1)
+     * @param {Number} id which drive id this is (0 or 1)
      * @param {Scheduler} scheduler scheduler to register callbacks etc
      */
     constructor(id, scheduler) {
@@ -101,7 +101,7 @@ export class DiscDrive {
 
         if (this._headPosition === this.trackLength) {
             this._headPosition = 0;
-            // TODO this is where we'd flush writes to the disc.
+            this._checkTrackNeedsWrite();
         }
 
         this._timer.schedule(nextTicks - thisTicks);
@@ -175,5 +175,34 @@ export class DiscDrive {
 
     get writeProtect() {
         return this.disc ? this.disc.writeProtect : false;
+    }
+
+    /**
+     * Seek a relative track.
+     * 
+     * @param {Number} delta track step delta, either 1 or -1
+     */
+    seekTrack(delta) {
+        if (this._is40Track) delta *= 2;
+        this._selectTrack(this._track + delta);
+    }
+
+    /**
+     * @param {Number} track
+     */
+    _selectTrack(track) {
+        this._checkTrackNeedsWrite();
+        if (track < 0) {track = 0; console.log("Clang! disc head stopped at track 0");}
+        else if (track >= IbmDiscFormat.tracksPerDisc) {
+            track = IbmDiscFormat.tracksPerDisc-1;
+            console.log("Clang! disc head stopper at track max");
+        }
+        const fraction = this.positionFraction;
+        this._track = track;
+        this.positionFraction = fraction;
+    }
+
+    _checkTrackNeedsWrite() {
+        if (this.disc) this.disc.flushWrites();
     }
 }
