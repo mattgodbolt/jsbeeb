@@ -4,6 +4,7 @@
 import { Scheduler } from "./scheduler.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc, IbmDiscFormat } from "./disc.js";
+import * as utils from "./utils.js";
 
 export class DiscDrive {
     static get TicksPerRevolution() {
@@ -27,9 +28,9 @@ export class DiscDrive {
      */
     constructor(id, scheduler) {
         this._id = id;
-        this._discIndex = 0;
         this._scheduler = scheduler;
-        this._discs = [];
+        /** @type {Disc|undefined} */
+        this._disc = undefined;
         this._is40Track = false;
         // Physically always 80 tracks even if we're in 40 track mode. 40 track mode essentially double steps.
         this._track = 0;
@@ -49,7 +50,7 @@ export class DiscDrive {
      * @returns {Disc|undefined}
      */
     get disc() {
-        return this._discs[this._discIndex];
+        return this._disc;
     }
 
     getQuasiRandomPulses() {
@@ -80,6 +81,7 @@ export class DiscDrive {
         if (pulses === 0) pulses = this.getQuasiRandomPulses();
 
         if (this._pulsesCallback) {
+            console.log(`"Pulses @ ${this._track}:${this._headPosition} = ${utils.bin32(pulses)}"`);
             this._pulsesCallback(pulses, numPulses);
         }
 
@@ -107,7 +109,7 @@ export class DiscDrive {
         this._timer.schedule(nextTicks - thisTicks);
     }
 
-    get headPosition() { 
+    get headPosition() {
         return this._headPosition;
     }
 
@@ -120,7 +122,7 @@ export class DiscDrive {
     }
 
     set positionFraction(fraction) {
-        this._headPosition = (this.trackLength * fraction)|0;
+        this._headPosition = (this.trackLength * fraction) | 0;
         this._pulsePosition = 0;
     }
 
@@ -157,9 +159,8 @@ export class DiscDrive {
     /**
      * @param {Disc} disc
      */
-    addDisc(disc) {
-        if (this._discs.length === DiscDrive.MaxDiscsPerDrive) throw new Error("Too many discs added");
-        this._discs.push(disc);
+    setDisc(disc) {
+        this._disc = disc;
     }
 
     get indexPulse() {
@@ -179,7 +180,7 @@ export class DiscDrive {
 
     /**
      * Seek a relative track.
-     * 
+     *
      * @param {Number} delta track step delta, either 1 or -1
      */
     seekTrack(delta) {
@@ -192,9 +193,11 @@ export class DiscDrive {
      */
     _selectTrack(track) {
         this._checkTrackNeedsWrite();
-        if (track < 0) {track = 0; console.log("Clang! disc head stopped at track 0");}
-        else if (track >= IbmDiscFormat.tracksPerDisc) {
-            track = IbmDiscFormat.tracksPerDisc-1;
+        if (track < 0) {
+            track = 0;
+            console.log("Clang! disc head stopped at track 0");
+        } else if (track >= IbmDiscFormat.tracksPerDisc) {
+            track = IbmDiscFormat.tracksPerDisc - 1;
             console.log("Clang! disc head stopper at track max");
         }
         const fraction = this.positionFraction;

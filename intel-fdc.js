@@ -2,7 +2,7 @@
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502 } from "./6502.js";
-import { IbmDiscFormat } from "./disc.js";
+import { Disc, IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
 import { DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
@@ -279,8 +279,7 @@ export class IntelFdc {
      */
     constructor(cpu, scheduler) {
         this._cpu = cpu;
-        /** @type {DiscDrive[]} */
-        this._drives = [];
+        this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
         /** @type {DiscDrive} */
         this._currentDrive = null;
 
@@ -307,20 +306,31 @@ export class IntelFdc {
         this._crc = 0;
         this._onDiscCrc = 0;
 
-        this._logCommands = false;
+        this._logCommands = true; // TODO: false;
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
+
+        const callback = (pulses, count) => this._pulsesCallback(pulses, count);
+        for (const drive of this._drives) drive.setPulsesCallback(callback);
+
+        this.powerOnReset();
     }
 
-    /**
-     * @param {DiscDrive} drive0
-     * @param {DiscDrive} drive1
-     */
-    setDrives(drive0, drive1) {
-        this._drives = [drive0, drive1];
-        const callback = (pulses, count) => this._pulsesCallback(pulses, count);
-        if (drive0) drive0.setPulsesCallback(callback);
-        if (drive1) drive1.setPulsesCallback(callback);
+    _commandAbort() {
+        // If we're aborting a command in the middle of writing data, it usually
+        // doesn't leave a clean byte end on the disc. This is not particularly
+        // important to emulate at all but it does help create new copy protection
+        // schemes under emulation.
+        if (this.driveOut & DriveOut.writeEnable) {
+            this._currentDrive.writePulses(IbmDiscFormat.fmTo2usPulses(0xff, 0xff));
+        }
+
+        // Lower any NMI assertion. This is particularly important for error $0A,
+        // aka. late DMA, which will abort the command while NMI is asserted. We
+        // therefore need to de-assert NMI so that the NMI for command completion
+        // isn't lost.
+        // TODO(matt) - we don't model NMIs properly here, each device should have its own nmi line
+        this._cpu.NMI(false);
     }
 
     powerOnReset() {
@@ -353,7 +363,31 @@ export class IntelFdc {
      * @returns {Number} byte at the given hardware address
      */
     read(addr) {
-        return addr & 0xff;
+        switch (addr & 0x07) {
+            case Address.status:
+                return this._status;
+            case Address.result: {
+                const result = this._result;
+                this._resultConsumed();
+                this._statusLower(StatusFlag.nmi);
+                return result;
+            }
+            case Address.data:
+            case Address.data + 1:
+            case Address.data + 2:
+            case Address.data + 3:
+                this._statusLower(StatusFlag.needData | StatusFlag.nmi);
+                return this._regs[Registers.internalData];
+            // Register address 2 and 3 are not documented as having anything
+            // wired up for reading, BUT on a model B, they appear to give the MSB and
+            // LSB of the sector byte counter in internal registers 19 ($13) and 20 ($14).
+            case Address.unknown_read_2:
+                return this._regs[Registers.internalCountMsb];
+            case Address.unknown_read_3:
+                return this._regs[Registers.internalCountLsb];
+            default:
+                throw new Error(`"Unexpected read of addr ${addr}"`);
+        }
     }
 
     _log(message) {
@@ -396,6 +430,61 @@ export class IntelFdc {
             case 3:
             default:
                 this._log(`Not supported: ${addr}=${val}`);
+        }
+    }
+
+    _checkIndexPulse() {
+        const wasIndexPulse = this._stateIsIndexPulse;
+        this._stateIsIndexPulse = this._index;
+
+        // Looking for pulse going high
+        if (!this._stateIsIndexPulse || wasIndexPulse) return;
+
+        switch (this._indexPulseCallback) {
+            case IndexPulse.none:
+                break;
+            case IndexPulse.timeout:
+                // If we see too many index pulses without the progress of a sector, the command times out with 0x18.
+                // Interestingly enough, something like an e.g. 8192 byte sector read /times out because such a crazy
+                // read hits the default 3 index pulse limit.
+                if (--this._regs[Registers.internalIndexPulseCount] === 0) this._finishCommand(Result.sectorNotFound);
+                break;
+            case IndexPulse.spindown:
+                if (--this._regs[Registers.internalIndexPulseCount] === 0) {
+                    this._logCommand("automatic head unload");
+                    this._spinDown();
+                    this._indexPulseCallback = IndexPulse.none;
+                }
+                break;
+            case IndexPulse.startFormat:
+                // Note that format doesn't set an index pulse timeout. No matter how
+                // large the format sector size request, even 16384, the command never
+                // exits due to 2 index pulses counted. This differs from read _and_
+                // write. Format will exit on the next index pulse after all the sectors
+                // have been written.
+                // Disc Duplicator III needs this to work correctly when deformatting
+                // tracks.
+                if (this._regs[Registers.internalParam_4] !== 0) {
+                    throw new Error("format GAP5 not supported");
+                }
+                // Decrement GAP3 as the CRC generator emits a third byte as 0xff.
+                this._regs[Registers.internalParam_2]--;
+                this._regs[Registers.internalDynamicDispatch] = 4;
+                // This will start writing immediately because we check index pulse callbacks
+                // before we process read/write state.
+                this._indexPulseCallback = IndexPulse.none;
+                // param_5 is GAP1.
+                this._writeFFsAnd00s(Call.gap1OrGap3FFs, this._regs[Registers.internalParam_5]);
+                break;
+            case IndexPulse.stopFormat:
+                this._checkCompletion();
+                break;
+            case IndexPulse.startReadId:
+                this._startIndexPulseTimeout();
+                this._startSyncingForHeader();
+                break;
+            default:
+                throw new Error(`Unexpected index pulse callback ${this._indexPulseCallback}`);
         }
     }
 
@@ -458,7 +547,7 @@ export class IntelFdc {
                 this._byteCallbackWriting();
                 break;
             default:
-                throw new Error(`Unkonown state ${this._state}`);
+                throw new Error(`Unknown state ${this._state}`);
         }
     }
 
@@ -481,8 +570,8 @@ export class IntelFdc {
                 // represents a string of 1 clock bits followed by 0 data bits.
                 if (bit === !(stateCount & 1)) {
                     this._stateCount++;
-                } else if (stateCount >= 32 && stateCount & 1) {
-                    // Here we hit a 1 daya bit while in sync, so it's the start of a marker byte.
+                } else if (stateCount >= 32 && (stateCount & 1)) {
+                    // Here we hit a 1 data bit while in sync, so it's the start of a marker byte.
                     if (!bit) {
                         throw new Error("Assertion failed; was expecting a one bit");
                     }
@@ -510,11 +599,11 @@ export class IntelFdc {
                 const dataByte = IntelFdc.extractBits(shiftRegister << 1);
                 if (
                     clockByte !== 0xff &&
-                    state != State.checkIdMarker &&
-                    state != State.checkDataMarker &&
-                    state != State.skipGap_2
+                    state !== State.checkIdMarker &&
+                    state !== State.checkDataMarker &&
+                    state !== State.skipGap_2
                 ) {
-                    // Nothing. From tewsting the 8271 doesn't deliver bytes with missing
+                    // Nothing. From testing the 8271 doesn't deliver bytes with missing
                     // clock bits in the middle of a synced byte stream.
                 } else {
                     this._byteCallbackReading(dataByte, clockByte);
@@ -568,7 +657,7 @@ export class IntelFdc {
     _byteCallbackReading(dataByte, clockByte) {
         const command = this._internalCommand;
         if (this._irqCallbacks) {
-            if (!this.checkDataLossOk()) return;
+            if (!this._checkDataLossOk()) return;
             this._regs[Registers.internalData] = dataByte;
             this._statusRaise(StatusFlag.nmi | StatusFlag.needData);
         }
@@ -794,6 +883,10 @@ export class IntelFdc {
         this._statusLower(StatusFlag.commandFull);
         this._setResult(0);
 
+        // Default parameters. This supports the 1x128 byte sector commands.
+        this._regs[Registers.internalParam_3] = 1;
+        this._regs[Registers.internalParam_4] = 1;
+
         // Calculate parameters expected. Taken from the logic in the 8271 ROM.
         const numParams = command & 0x18 ? command & 0x3 : 5;
         this._regs[Registers.internalParamCount] = numParams;
@@ -829,7 +922,7 @@ export class IntelFdc {
                 break;
             }
             case ParamAccept.specify: {
-                this._logCommand(`specify param ${param}`);
+                this._logCommand(`specify param ${utils.hexbyte(param)}`);
                 this._writeRegister(this._regs[Registers.internalPointer], param);
                 ++this._regs[Registers.internalPointer];
                 if (--this._regs[Registers.internalParamCount] === 0) {
@@ -837,6 +930,8 @@ export class IntelFdc {
                 }
                 break;
             }
+            default:
+                throw new Error(`Unexpected param callback ${this._paramCallback}`);
         }
     }
 
@@ -910,7 +1005,7 @@ export class IntelFdc {
         // for now, to avoid shenanigans.
         const selectBits = driveOut & DriveOut.selectFlags;
         if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
-        else if (selectBits == DriveOut.select_1) this._currentDrive = this._drives[1];
+        else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
 
         if (this._currentDrive) {
             if (driveOut & DriveOut.loadHead) this._currentDrive.startSpinning();
@@ -988,7 +1083,7 @@ export class IntelFdc {
 
     _doSeekStep() {
         if (
-            (this._trk0 && this._regs[Registers.internalParam_2] === 0) || // Seek to 0 done, TRK0 detected
+            (this._trk0 && this._regs[Registers.internalSeekTarget_2] === 0) || // Seek to 0 done, TRK0 detected
             this._regs[Registers.internalSeekCount] === 0
         ) {
             this._doLoadHead();
@@ -1120,12 +1215,20 @@ export class IntelFdc {
         commandReg &= ~(DriveOut.selectFlags | 0x03);
         this._regs[Registers.internalCommand] = commandReg;
         this._logCommand(
-            `command ${utils.hexbyte(origCommand & 0x3f)} sel ${utils.hexbyte(selectBits)} params ${utils.hexbyte(this._regs[Registers.internalParam_1])} ${utils.hexbyte(this._regs[Registers.internalParam_2])} ${utils.hexbyte(this._regs[Registers.internalParam_3])} ${utils.hexbyte(this._regs[Registers.internalParam_4])} ${utils.hexbyte(this._regs[Registers.internalParam_5])} ptrk ${this._currentDrive ? this._currentDrive.track : -1} hpos ${this._currentDrive ? this._currentDrive.headPosition : -1}`,
+            `command ${utils.hexbyte(origCommand & 0x3f)} ` +
+                `sel ${utils.hexbyte(selectBits)} ` +
+                `params ${utils.hexbyte(this._regs[Registers.internalParam_1])} ` +
+                `${utils.hexbyte(this._regs[Registers.internalParam_2])} ` +
+                `${utils.hexbyte(this._regs[Registers.internalParam_3])} ` +
+                `${utils.hexbyte(this._regs[Registers.internalParam_4])} ` +
+                `${utils.hexbyte(this._regs[Registers.internalParam_5])} ` +
+                `ptrk ${this._currentDrive ? this._currentDrive.track : -1} ` +
+                `hpos ${this._currentDrive ? this._currentDrive.headPosition : -1}`,
         );
 
         const command = this._internalCommand;
         if (command === Command.scanData || command === Command.scanDataAndDeleted) {
-            this._log("scan sectrors doesn't work in a beeb");
+            this._log("scan sectors doesn't work in a beeb");
         }
         this._doCommandDispatch();
     }
@@ -1214,7 +1317,7 @@ export class IntelFdc {
                 // This can also be used as an undocumented mode of READ_ID where a
                 // non-zero value to the second parameter will skip syncing to the index
                 // pulse.
-                if (this._regs[Registers.internalParam_2] == 0) {
+                if (this._regs[Registers.internalParam_2] === 0) {
                     this._doSeek(Call.readId);
                 } else {
                     this._startSyncingForHeader();
@@ -1330,5 +1433,19 @@ export class IntelFdc {
                 this._postSeekDispatch();
                 break;
         }
+    }
+
+    /// jsbeeb compatibility stuff
+    /**
+     *
+     * @param {Number} drive
+     * @param {Disc} disc
+     */
+    loadDisc(drive, disc) {
+        this._drives[drive].setDisc(disc);
+    }
+
+    get motorOn() {
+        return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
     }
 }

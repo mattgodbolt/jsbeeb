@@ -1,4 +1,5 @@
 // Floppy disc controller and assorted utils.
+import { Disc, DiscConfig, loadSsd } from "./disc.js";
 import * as utils from "./utils.js";
 
 const DiscTimeSlice = 16 * 16;
@@ -31,25 +32,29 @@ export function emptySsd(fdc) {
 
 export function discFor(fdc, name, stringData, onChange) {
     const data = typeof stringData !== "string" ? stringData : utils.stringToUint8Array(stringData);
-    const prevData = new Uint8Array(data);
+    // const prevData = new Uint8Array(data);
 
-    function changed() {
-        let res = false;
-        for (let i = 0; i < data.length; ++i) {
-            if (data[i] !== prevData[i]) {
-                prevData[i] = data[i];
-                res = true;
-            }
-        }
-        return res;
-    }
+    //// HACKY MCHACKFACE
+    const disc = new Disc(false, false, new DiscConfig());
+    return loadSsd(disc, data, false);
 
-    return new BaseDisc(fdc, name, data, (disc) => {
-        if (!changed()) return;
-        if (onChange) {
-            onChange(disc.data);
-        }
-    });
+    // function changed() {
+    //     let res = false;
+    //     for (let i = 0; i < data.length; ++i) {
+    //         if (data[i] !== prevData[i]) {
+    //             prevData[i] = data[i];
+    //             res = true;
+    //         }
+    //     }
+    //     return res;
+    // }
+
+    // return new BaseDisc(fdc, name, data, (disc) => {
+    //     if (!changed()) return;
+    //     if (onChange) {
+    //         onChange(disc.data);
+    //     }
+    // });
 }
 
 export function localDisc(fdc, name) {

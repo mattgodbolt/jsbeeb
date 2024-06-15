@@ -1,6 +1,7 @@
 "use strict";
 
 import { I8271, WD1770 } from "./fdc.js";
+import { IntelFdc } from "./intel-fdc.js";
 
 class Model {
     constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube, cmosOverride) {
@@ -75,7 +76,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        I8271,
+        IntelFdc,
     ),
     new Model(
         "BBC B with DFS 0.9",
