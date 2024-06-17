@@ -105,8 +105,9 @@ export class DiscDrive {
             this._headPosition = 0;
             this._checkTrackNeedsWrite();
         }
-
-        this._timer.schedule(nextTicks - thisTicks);
+        // Forcibly reschedule. Some of the callbacks may "stopSpinning/startSpinning" and thus
+        // rescheduled this callback already, but we want to override that.
+        this._timer.reschedule(nextTicks - thisTicks);
     }
 
     get headPosition() {

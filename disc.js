@@ -261,6 +261,7 @@ export function loadSsd(disc, data, isDsd) {
             trackBuilder.setTrackLength();
         }
     }
+    return disc;
 }
 
 export class Disc {
