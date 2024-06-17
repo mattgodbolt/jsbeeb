@@ -4,7 +4,7 @@
 import { Cpu6502 } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc, IbmDiscFormat } from "./disc.js";
- 
+
 import { DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
@@ -389,7 +389,7 @@ export class IntelFdc {
             case Address.unknown_read_3:
                 return this._regs[Registers.internalCountLsb];
             default:
-                throw new Error(`"Unexpected read of addr ${addr}"`);
+                throw new Error(`"Unexpected read of addr ${utils.hexword(addr)}"`);
         }
     }
 
@@ -432,7 +432,7 @@ export class IntelFdc {
                 break;
             case 3:
             default:
-                this._log(`Not supported: ${addr}=${val}`);
+                this._log(`Not supported: ${utils.hexword(addr)}=${utils.hexbyte(val)}`);
         }
     }
 
@@ -640,7 +640,7 @@ export class IntelFdc {
         let ok = true;
 
         // Abort if DMA transfer is selected. This is not supported in a BBC.
-        if (this._regs[Registers.mode] & FdcMode.noDma) ok = false;
+        if (!(this._regs[Registers.mode] & FdcMode.noDma)) ok = false;
 
         // Abort command if it's any type of scan. The 8271 requires DMA to be wired
         // up for scan commands, which is not done in the BBC application.
@@ -675,8 +675,7 @@ export class IntelFdc {
                 // ROM. The practical count of 12 is likely because the controller takes
                 // some number of microseconds to start the sync detector after this
                 // counter expires.
-                this._regs[Registers.internalGap2Skip] = (this._regs[Registers.internalGap2Skip] - 1) & 0xff;
-                if (this._regs[Registers.internalGap2Skip]) break;
+                if (--this._regs[Registers.internalGap2Skip]) break;
                 if (this._callContext === Call.read) this._setState(State.syncingForData);
                 else if (this._callContext === Call.write) this._doWriteRun(Call.write, 0x00);
                 else throw new Error(`Unexpected call context ${this._callContext}`);
@@ -691,7 +690,7 @@ export class IntelFdc {
                 }
                 break;
             case State.inId:
-                this._crc = IbmDiscFormat.crcAddByte(dataByte);
+                this._crc = IbmDiscFormat.crcAddByte(this._crc, dataByte);
                 this._writeRegister(this._regs[Registers.internalHeaderPointer], dataByte);
                 this._regs[Registers.internalHeaderPointer]--;
                 if ((this._regs[Registers.internalHeaderPointer] & 0x07) === 0) {
@@ -719,9 +718,12 @@ export class IntelFdc {
                             this._doSeek(Call.unchanged);
                         }
                     } else if (this._regs[Registers.internalIdSector] === this._regs[Registers.internalParam_2]) {
-                        // Set up for the first 5 bytes of the 0x00 sync.
-                        this._regs[Registers.internalCountMsb] = 0;
-                        this._regs[Registers.internalCountLsb] = 5;
+                        this._regs[Registers.internalGap2Skip] = 11;
+                        if (this._callContext == Call.write) {
+                            // Set up for the first 5 bytes of the 0x00 sync.
+                            this._regs[Registers.internalCountMsb] = 0;
+                            this._regs[Registers.internalCountLsb] = 5;
+                        }
                         this._setState(State.skipGap_2);
                     } else {
                         this._setState(State.syncingForIdWait);
@@ -743,7 +745,7 @@ export class IntelFdc {
                     if (this._regs[Registers.internalCommand] === 0x1c) doIrqs = false;
                     if (doIrqs) this._startIrqCallbacks();
                     this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
-                    this, this._setState(State.inData);
+                    this._setState(State.inData);
                 } else {
                     this._finishCommand(Result.clockError);
                 }
@@ -1021,6 +1023,7 @@ export class IntelFdc {
      * @param {State} state
      */
     _setState(state) {
+        this._log(`State ${this._state} -> ${state}`);
         this._state = state;
         this._stateCount = 0;
         if (state === State.syncingForId || state === State.syncingForData) {
