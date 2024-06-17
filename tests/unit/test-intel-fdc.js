@@ -67,8 +67,7 @@ describe("Intel 8271 tests", function () {
         const fakeCpu = fake6502();
         const scheduler = new Scheduler();
         const fakeDrive = new FakeDrive();
-        const fdc = new IntelFdc(fakeCpu, scheduler);
-        fdc.setDrives(fakeDrive, null);
+        const fdc = new IntelFdc(fakeCpu, scheduler, [fakeDrive]);
         assert.equal(fdc._driveOut & loadHead, 0);
         assert(!fakeDrive.spinning);
         sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);
@@ -79,8 +78,7 @@ describe("Intel 8271 tests", function () {
         const fakeCpu = fake6502();
         const scheduler = new Scheduler();
         const fakeDrive = new FakeDrive();
-        const fdc = new IntelFdc(fakeCpu, scheduler);
-        fdc.setDrives(fakeDrive, null);
+        const fdc = new IntelFdc(fakeCpu, scheduler, [fakeDrive]);
         sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);
         // nb will seek two more due to bad track nonsense
         sendCommand(fdc, seekCmd, 2);

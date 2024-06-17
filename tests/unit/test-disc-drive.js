@@ -17,17 +17,17 @@ describe("Disc drive tests", function () {
         });
         scheduler.polltime(1000000);
     });
-    it("adds a disc", () => {
+    it("sets a disc", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
         const disc = Disc.createBlank();
-        drive.addDisc(disc);
+        drive.setDisc(disc);
         assert.equal(drive.disc, disc);
     });
     it("calls back with pulses after spinning starts", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
-        drive.addDisc(Disc.createBlank());
+        drive.setDisc(0, Disc.createBlank());
         drive.setPulsesCallback(() => {
             assert(false); // no callbacks expected
         });
@@ -46,7 +46,7 @@ describe("Disc drive tests", function () {
     it("generates quasi random pulses with a blank disc", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
-        drive.addDisc(Disc.createBlank());
+        drive.setDisc(Disc.createBlank());
         drive.getQuasiRandomPulses = () => {
             return 0xdeadbeef;
         };
@@ -68,7 +68,7 @@ describe("Disc drive tests", function () {
     it("asserts index periodically with a spinning disc", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
-        drive.addDisc(Disc.createBlank());
+        drive.setDisc(Disc.createBlank());
         drive.startSpinning();
         let previousIndex = drive.indexPulse;
         let risingEdges = 0;

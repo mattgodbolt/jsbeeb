@@ -2,8 +2,9 @@
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502 } from "./6502.js";
-import { Disc, IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
+import { Disc, IbmDiscFormat } from "./disc.js";
+ 
 import { DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
@@ -276,10 +277,12 @@ export class IntelFdc {
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
+     * @param {DiscDrive[] | undefined} drives
      */
-    constructor(cpu, scheduler) {
+    constructor(cpu, scheduler, drives) {
         this._cpu = cpu;
-        this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
+        if (drives) this._drives = drives;
+        else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
         /** @type {DiscDrive} */
         this._currentDrive = null;
 
@@ -570,7 +573,7 @@ export class IntelFdc {
                 // represents a string of 1 clock bits followed by 0 data bits.
                 if (bit === !(stateCount & 1)) {
                     this._stateCount++;
-                } else if (stateCount >= 32 && (stateCount & 1)) {
+                } else if (stateCount >= 32 && stateCount & 1) {
                     // Here we hit a 1 data bit while in sync, so it's the start of a marker byte.
                     if (!bit) {
                         throw new Error("Assertion failed; was expecting a one bit");
