@@ -4,7 +4,6 @@
 import { Scheduler } from "./scheduler.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc, IbmDiscFormat } from "./disc.js";
-import * as utils from "./utils.js";
 
 export class DiscDrive {
     static get TicksPerRevolution() {
@@ -44,6 +43,7 @@ export class DiscDrive {
         this._pulsesCallback = null;
 
         this._timer = this._scheduler.newTask(this._onTimer.bind(this));
+        this._spinning = false;
     }
 
     /**
@@ -81,7 +81,7 @@ export class DiscDrive {
         if (pulses === 0) pulses = this.getQuasiRandomPulses();
 
         if (this._pulsesCallback) {
-            console.log(`"Pulses @ ${this._track}:${this._headPosition} = ${utils.bin32(pulses)}"`);
+            // console.log(`"Pulses @ ${this._track}:${this._headPosition} = ${utils.bin32(pulses)}"`);
             this._pulsesCallback(pulses, numPulses);
         }
 
@@ -139,15 +139,19 @@ export class DiscDrive {
     }
 
     get spinning() {
-        return this._timer.scheduled();
+        // beebjit uses the timer's scheduledness here, but our schedule system deschedules timers
+        // during callbacks, which makes this briefly "false" and disturbs things.
+        return this._spinning;
     }
 
     startSpinning() {
-        this._timer.schedule(1);
+        if (!this._spinning) this._timer.schedule(1);
+        this._spinning = true;
     }
 
     stopSpinning() {
         this._timer.cancel();
+        this._spinning = false;
     }
 
     selectSide(isSideUpper) {

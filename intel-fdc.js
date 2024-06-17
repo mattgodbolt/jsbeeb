@@ -1400,7 +1400,9 @@ export class IntelFdc {
 
     _decrementCounter() {
         if (--this._regs[Registers.internalCountLsb]) return false;
-        if (--this._regs[Registers.internalCountMsb] !== 0xff) {
+        // JS's clamping for Uint8Array happens on assignemnt; so I can do if (--regs[x] !== 0xff) here.
+        --this._regs[Registers.internalCountMsb];
+        if (this._regs[Registers.internalCountMsb] !== 0xff) {
             this._regs[Registers.internalCountLsb] = 0x80;
             return false;
         }
