@@ -450,7 +450,9 @@ export class IntelFdc {
                 // If we see too many index pulses without the progress of a sector, the command times out with 0x18.
                 // Interestingly enough, something like an e.g. 8192 byte sector read /times out because such a crazy
                 // read hits the default 3 index pulse limit.
-                if (--this._regs[Registers.internalIndexPulseCount] === 0) this._finishCommand(Result.sectorNotFound);
+                if (--this._regs[Registers.internalIndexPulseCount] === 0) {
+                    this._finishCommand(Result.sectorNotFound);
+                }
                 break;
             case IndexPulse.spindown:
                 if (--this._regs[Registers.internalIndexPulseCount] === 0) {

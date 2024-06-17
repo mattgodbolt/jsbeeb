@@ -246,7 +246,7 @@ export function loadSsd(disc, data, isDsd) {
                 trackBuilder
                     .resetCrc()
                     .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
-                    .appendFmChunk(data.subarray(offset, SsdFormat.sectorSize))
+                    .appendFmChunk(data.subarray(offset, offset + SsdFormat.sectorSize))
                     .appendCrc(false);
 
                 offset += SsdFormat.sectorSize;
@@ -258,7 +258,7 @@ export function loadSsd(disc, data, isDsd) {
                         .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
                 }
             }
-            trackBuilder.setTrackLength();
+            trackBuilder.fillFmByte(0xff);
         }
     }
     return disc;
