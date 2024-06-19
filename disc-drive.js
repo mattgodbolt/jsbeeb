@@ -108,6 +108,7 @@ export class DiscDrive {
         // Forcibly reschedule. Some of the callbacks may "stopSpinning/startSpinning" and thus
         // rescheduled this callback already, but we want to override that.
         this._timer.reschedule(nextTicks - thisTicks);
+        this._spinning = true;
     }
 
     get headPosition() {
@@ -141,7 +142,7 @@ export class DiscDrive {
     get spinning() {
         // beebjit uses the timer's scheduledness here, but our schedule system deschedules timers
         // during callbacks, which makes this briefly "false" and disturbs things.
-        return this._spinning;
+        return this._spinning || this._timer.scheduled();
     }
 
     startSpinning() {

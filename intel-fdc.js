@@ -211,7 +211,7 @@ const IndexPulse = Object.freeze({
 const TimerState = Object.freeze({
     none: 0,
     seekStep: 1,
-    postStep: 2,
+    postSeek: 2,
 });
 
 /**
@@ -303,13 +303,13 @@ export class IntelFdc {
         this._shiftRegister = 0;
         this._numShifts = 0;
 
-        this._state = 0;
+        this._state = State.null;
         this._stateCount = 0;
         this._stateIsIndexPulse = false;
         this._crc = 0;
         this._onDiscCrc = 0;
 
-        this._logCommands = true; // TODO: false;
+        this._logCommands = false;
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
 
@@ -1025,7 +1025,7 @@ export class IntelFdc {
      * @param {State} state
      */
     _setState(state) {
-        this._log(`State ${this._state} -> ${state}`);
+        //this._log(`State ${this._state} -> ${state}`);
         this._state = state;
         this._stateCount = 0;
         if (state === State.syncingForId || state === State.syncingForData) {
@@ -1126,7 +1126,7 @@ export class IntelFdc {
             postSeekTimeMs = 2 * this._regs[Registers.headSettleTime];
         }
         if (postSeekTimeMs) {
-            this._setTimerMs(TimerState.postStep, postSeekTimeMs);
+            this._setTimerMs(TimerState.postSeek, postSeekTimeMs);
         } else {
             this._postSeekDispatch();
         }
@@ -1419,7 +1419,7 @@ export class IntelFdc {
             this._timerState = TimerState.none;
         }
         // Think of this as the read/write callback from the bit processor.
-        this._state = State.idle;
+        this._setState(State.idle);
     }
 
     _lowerBusyAndLog() {
