@@ -272,9 +272,9 @@ export class Disc {
         return new Disc(true, true, new DiscConfig());
     }
     /**
-     * @param {boolean} isWriteable 
-     * @param {boolean} isMutable 
-     * @param {DiscConfig} config 
+     * @param {boolean} isWriteable
+     * @param {boolean} isMutable
+     * @param {DiscConfig} config
      */
     constructor(isWriteable, isMutable, config) {
         this.config = config;
@@ -302,7 +302,11 @@ export class Disc {
         this.load();
     }
 
-    /// @returns {Track}
+    get writeProtected() {
+        return !this.isWriteable;
+    }
+
+    /** @returns {Track} */
     getTrack(isSideUpper, trackNum) {
         return isSideUpper ? this.upperSide.tracks[trackNum] : this.lowerSide.tracks[trackNum];
     }
@@ -332,6 +336,26 @@ export class Disc {
 
     readPulses(isSideUpper, track, position) {
         return this.getTrack(isSideUpper, track).pulses2Us[position];
+    }
+
+    /**
+     * @param {boolean} isSideUpper
+     * @param {Number} track
+     * @param {Number} position
+     * @param {Number} pulses
+     */
+    writePulses(isSideUpper, track, position, pulses) {
+        const trackObj = this.getTrack(isSideUpper, track);
+        if (position >= trackObj.length)
+            throw new Error(`Attempt to write off end of track ${position} > ${track.length}`);
+        if (this.isDirty) {
+            if (isSideUpper !== this.dirtySide || track !== this.dirtyTrack)
+                throw new Error("Switched dirty track or side");
+        }
+        this.isDirty = true;
+        this.dirtySide = isSideUpper;
+        this.dirtyTrack = track;
+        trackObj.pulses2Us[position] = pulses;
     }
 
     flushWrites() {

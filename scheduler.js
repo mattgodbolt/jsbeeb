@@ -4,7 +4,7 @@ export class Scheduler {
     static get MaxHeadroom() {
         return MaxHeadroom;
     }
-    
+
     constructor() {
         /** @type {ScheduledTask|null} */
         this.scheduled = null;

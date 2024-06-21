@@ -262,10 +262,10 @@ const Call = Object.freeze({
     read: 4,
     write: 5,
     format: 6,
-    gap1OrGap3FFs: 7,
-    gap1orGap300s: 8,
-    gap2_FFs: 9,
-    gap2_00s: 10,
+    formatGap1OrGap3FFs: 7,
+    formatGap1orGap300s: 8,
+    formatGap2_FFs: 9,
+    formatGap2_00s: 10,
     formatData: 11,
 });
 
@@ -772,6 +772,174 @@ export class IntelFdc {
         }
     }
 
+    _callbackWriteRun() {
+        if (!this._decrementCounter()) {
+            this._mmioData = this._regs[Registers.internalWriteRunData];
+            this._crc = IbmDiscFormat.crcAddByte(this._crc, this._mmioData);
+            return;
+        }
+        switch (this._callContext) {
+            case Call.write:
+                this._mmioData = 0;
+                this._startIrqCallbacks();
+                this._setState(State.writeDataMark);
+                break;
+            case Call.formatGap1OrGap3FFs:
+                // Flip from writing ffs to 00s.
+                this._regs[Registers.internalCountLsb] = 5;
+                this._doWriteRun(Call.formatGap1orGap300s, 0x00);
+                break;
+            case Call.formatGap1orGap300s:
+                this._mmioData = 0x00;
+                this._startIrqCallbacks();
+                this._setState(State.formatWriteIdMarker);
+                break;
+            case State.formatGap2_FFs:
+                // Flip from writing ffs to 00s.
+                this._regs[Registers.internalCountLsb] = 5;
+                this._doWriteRun(Call.formatGap2_00s, 0x00);
+                break;
+            case State.formatGap2_00s:
+                this._mmioData = 0;
+                this._setState(State.formatWriteDataMarker);
+                break;
+            case State.formatData:
+                this._mmioData = (this._crc >>> 8) & 0xff;
+                this._setState(State.formatDataCrc_2);
+                break;
+            default:
+                throw new Error(`Unepxected call context ${this.callContext}`);
+        }
+    }
+
+    _callbackDynamicDispatch() {
+        const routine = this._regs[Registers.internalDynamicDispatch]++;
+        switch (routine) {
+            // Routines 0 - 2 used for write sector.
+            case 0:
+                this._crc = IbmDiscFormat.crcAddByte(this._crc, this._mmioData);
+                break;
+            case 1:
+                this._mmioData = (this._crc >>> 8) & 0xff;
+                this._setState(State.writeCrc_2);
+                break;
+            case 2:
+                this._checkCompletion();
+                break;
+            // Routines 4 - 11 used for format.
+            // 4 - 7 write the 4 user-supplied sector header bytes.
+            case 4:
+                this._mmioClocks = 0xff;
+            // fallthrough
+            case 5:
+            case 6:
+            case 7:
+                if (routine === 6) this._stopIrqCallbacks();
+                this._crc = IbmDiscFormat.crcAddByte(this._crc, this._mmioData);
+                break;
+            // write the sector header CRC
+            case 8:
+                this._mmioData = (this._crc >>> 8) & 0xff;
+                this._setState(State.formatIdCrc_2);
+                break;
+            // write GAP2
+            case 9:
+                // This value 10 is GAP2 0xff length minus 1. The CRC generator emits a third
+                // byte of 0xff.
+                // The other -1 here is because we will we set the count registers ourselves. In the ROM,
+                // LSB is written here but not MSB.
+                this._regs[this.internalCountLsb] = 10;
+                this._writeFFsAnd00s(Call.formatGap2_FFs, -1);
+                break;
+            case 10:
+                this._resetSectorByteCount();
+                this._doWriteRun(Call.formatData, 0xe5);
+                break;
+            // 11 is after the sector data CRC is written.
+            case 11:
+                this._mmioData = 0xff;
+                if ((--this._regs[Registers.internalParam_3] & 0x1f) === 0) {
+                    // Format sectors done. Write GAP4 until end of track.
+                    // Reset param 3 to 1, to ensure immediate exit in the command exit
+                    // path in intel_fdc_check_completion().
+                    this._regs[Registers.internalParam_3] = 1;
+                    this._indexPulseCallback = IndexPulse.stopFormat;
+                    this._setState(State.formatGap_4);
+                } else {
+                    // Format sectors not done. Next one. Reset state machine index, param2 is GAP3.
+                    this._Regs[Registers.internalDynamicDispatch] = 4;
+                    this._writeFFsAnd00s(Call.formatGap1OrGap3FFs, this._regs[Registers.internalParam_2]);
+                }
+                break;
+            default:
+                throw new Error(`Dodgy routine number ${routine}`);
+        }
+    }
+
+    _byteCallbackWriting() {
+        if (this._irqCallbacks) {
+            if (!this._checkDataLossOk()) return;
+            this._statusRaise(StatusFlag.nmi | StatusFlag.needData);
+        }
+
+        switch (this._state) {
+            case State.writeRun:
+                this._callbackWriteRun();
+                break;
+            case State.writeDataMark:
+                this._mmioData = this._regs[Registers.internalParamDataMarker];
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), this._mmioData);
+                this._mmioClocks = IbmDiscFormat.markClockPattern;
+                this._resetSectorByteCount(); /////
+                // This strange decrement is how the ROM does it.
+                this._regs[Registers.internalCountLsb]--;
+                this._setState(State.writeSectorData);
+                break;
+            case State.writeSectorData:
+                this._mmioClocks = 0xff;
+                this._crc = IbmDiscFormat.crcAddByte(this._crc, this._mmioData);
+                if (this._decrementCounter()) {
+                    this._regs[Registers.internalDynamicDispatch] = 0;
+                    this._setState(State.dynamicDispatch);
+                }
+                break;
+            case State.writeCrc_2:
+                this._mmioData = this._crc & 0xff;
+                this._setState(State.writeCrc_3);
+                break;
+            case State.writeCrc_3:
+                this._mmioData = 0xff;
+                this._setState(State.dynamicDispatch);
+                break;
+            case State.dynamicDispatch:
+                this._callbackDynamicDispatch();
+                break;
+            case State.formatWriteIdMarker:
+                this._mmioData = IbmDiscFormat.idMarkDataPattern;
+                this._mmioClocks = IbmDiscFormat.markClockPattern;
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), this._mmioData);
+                this._setState(State.dynamicDispatch);
+                break;
+            case State.formatIdCrc_2:
+                this._mmioData = this._crc & 0xff;
+                this._setState(State.formatDataCrc_3);
+                break;
+            case State.formatDataCrc_3:
+                this._mmioData = 0xff;
+                this._setState(State.dynamicDispatch);
+                break;
+            case State.formatGap_4:
+                // GAP 4 writes until the index pulse, handled in the callback there.
+                this._mmioData = 0xff;
+                break;
+        }
+    }
+
+    _resetSectorByteCount() {
+        this._regs[Registers.internalCountMsb] = this._regs[Registers.internalCountMsbCopy];
+        this._regs[Registers.internalCountLsb] = 0x80;
+    }
+
     _checkCompletion() {
         if (!this._checkDriveReady()) return;
 
@@ -1108,7 +1276,8 @@ export class IntelFdc {
             // Step rate is up to the drive. Let's say 3ms.
             stepRate = 3;
         } else {
-            // The datasheet is ambiguous about whether the units are 1ms or 2ms for 5.25" drives. 1ms might be your best guess from the datasheet, but timing on a real machine, it appears to be 2ms.
+            // The datasheet is ambiguous about whether the units are 1ms or 2ms for 5.25" drives. 1ms might
+            // be your best guess from the datasheet, but timing on a real machine, it appears to be 2ms.
             stepRate *= 2;
         }
         this._setTimerMs(TimerState.seekStep, stepRate);
@@ -1196,6 +1365,12 @@ export class IntelFdc {
             return false;
         }
         return true;
+    }
+
+    _checkWriteProtect() {
+        if (this._regs[Registers.internalDriveInLatched] & 0x08) {
+            this._finishCommand(Result.writeProtected);
+        }
     }
 
     _startCommand() {
@@ -1445,6 +1620,16 @@ export class IntelFdc {
         }
     }
 
+    _doWriteRun(callContext, byte) {
+        this._mmioData = byte & 0xff;
+        this._mmioClocks = 0xff;
+        this._crc = IbmDiscFormat.crcAddByte(this._crc, this._mmioData);
+        this._regs[Registers.internalWriteRunData] = this._mmioData;
+        this._driveOutRaise(DriveOut.writeEnable);
+        this._callContext = callContext;
+        this._setState(State.writeRun);
+    }
+
     /// jsbeeb compatibility stuff
     /**
      *
@@ -1457,5 +1642,9 @@ export class IntelFdc {
 
     get motorOn() {
         return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
+    }
+
+    get isPulseLevel() {
+        return true;
     }
 }

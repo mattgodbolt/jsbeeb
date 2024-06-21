@@ -1158,7 +1158,7 @@ export class Cpu6502 extends Base6502 {
             this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
             this.serial = new Serial(this.acia);
             this.ddNoise.spinDown();
-            this.fdc = new this.model.Fdc(this, this.scheduler);
+            this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler);
             this.crtc = this.video.crtc;
             this.ula = this.video.ula;
             this.adconverter = new Adc(this.sysvia, this.scheduler);

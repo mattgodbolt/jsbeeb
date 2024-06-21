@@ -81,6 +81,6 @@ describe("Disc drive tests", function () {
             if (drive.indexPulse && !previousIndex) risingEdges++;
             previousIndex = drive.indexPulse;
         }
-        assert.equal(risingEdges, rpm / 60 * testSeconds);
+        assert.equal(risingEdges, (rpm / 60) * testSeconds);
     });
 });

@@ -105,10 +105,7 @@ export class DiscDrive {
             this._headPosition = 0;
             this._checkTrackNeedsWrite();
         }
-        // Forcibly reschedule. Some of the callbacks may "stopSpinning/startSpinning" and thus
-        // rescheduled this callback already, but we want to override that.
-        this._timer.reschedule(nextTicks - thisTicks);
-        this._spinning = true;
+        if (this._spinning) this._timer.reschedule(nextTicks - thisTicks);
     }
 
     get headPosition() {
@@ -142,7 +139,7 @@ export class DiscDrive {
     get spinning() {
         // beebjit uses the timer's scheduledness here, but our schedule system deschedules timers
         // during callbacks, which makes this briefly "false" and disturbs things.
-        return this._spinning || this._timer.scheduled();
+        return this._spinning;
     }
 
     startSpinning() {
@@ -177,7 +174,16 @@ export class DiscDrive {
     }
 
     writePulses(pulses) {
-        throw new Error(`Not supported: ${pulses}`);
+        if (!this.disc) return;
+        // All drives seen have a write protect failsafe on the drive itself.
+        if (this.disc.writeProtected) return;
+        if (this._in32usMode) {
+            if (pulses & 0xffff0000) throw new Error(`Unable to write 32us pulses for ${pulses}`);
+            const existingPulses = this.disc.readPulses(this._isSideUpper, this.track, this.headPosition);
+            if (this._pulsePosition === 0) pulses = (existingPulses & 0x0000ffff) | (pulses << 16);
+            else pulses = (existingPulses & 0xffff0000) | pulses;
+        }
+        this.disc.writePulses(this._isSideUpper, this.track, this.headPosition, pulses);
     }
 
     get writeProtect() {

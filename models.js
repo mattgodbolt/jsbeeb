@@ -68,16 +68,31 @@ const masterSwram = [
     false,
     false,
 ];
+class IntelFdcAdapter extends IntelFdc {
+    constructor(cpu, ddNoise, scheduler) {
+        // TODO something clever with ddNoise...
+        super(cpu, scheduler);
+    }
+}
 export const allModels = [
     new Model(
-        "BBC B with DFS 1.2",
+        "BBC B with DFS 1.2 (new fdc)",
         ["B-DFS1.2"],
         ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
         true,
         false,
         beebSwram,
-        IntelFdc,
+        IntelFdcAdapter,
     ),
+    // new Model(
+    //     "BBC B with DFS 1.2 (old)",
+    //     ["B-DFS1.2"],
+    //     ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
+    //     true,
+    //     false,
+    //     beebSwram,
+    //     I8271,
+    // ),
     new Model(
         "BBC B with DFS 0.9",
         ["B-DFS0.9", "B"],
