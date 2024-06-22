@@ -154,7 +154,7 @@ export class DiscDrive {
 
     selectSide(isSideUpper) {
         const fraction = this.positionFraction;
-        // TODO flush writes here
+        this._checkTrackNeedsWrite();
         this._isSideUpper = isSideUpper;
         this.positionFraction = fraction;
     }
@@ -187,7 +187,7 @@ export class DiscDrive {
     }
 
     get writeProtect() {
-        return this.disc ? this.disc.writeProtect : false;
+        return this.disc ? this.disc.writeProtected : false;
     }
 
     /**

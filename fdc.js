@@ -36,7 +36,7 @@ export function discFor(fdc, name, stringData, onChange) {
 
     if (fdc.isPulseLevel) {
         //// TODO: handle onChange
-        const disc = new Disc(false, false, new DiscConfig());
+        const disc = new Disc(true, false, new DiscConfig());
         return loadSsd(disc, data, false);
     }
     function changed() {

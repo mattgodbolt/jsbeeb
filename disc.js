@@ -289,10 +289,11 @@ export class Disc {
         // in memory changes?
         this.writeTrackCallback = undefined;
 
-        if (isMutable && !this.writeTrackCallback) {
-            console.log("Cannot writeback to file type, making read only");
-            isMutable = isWriteable = false; // TODO reconsider
-        }
+        // TODO massive rethink of this
+        // if (isMutable && !this.writeTrackCallback) {
+        //     console.log("Cannot writeback to file type, making read only");
+        //     isMutable = isWriteable = false; // TODO reconsider
+        // }
 
         this.isWriteable = isWriteable;
         this.isMutableRequested = isMutable;
