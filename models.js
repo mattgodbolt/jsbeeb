@@ -69,9 +69,9 @@ const masterSwram = [
     false,
 ];
 class IntelFdcAdapter extends IntelFdc {
-    constructor(cpu, ddNoise, scheduler) {
+    constructor(cpu, ddNoise, scheduler, debugFlags) {
         // TODO something clever with ddNoise...
-        super(cpu, scheduler);
+        super(cpu, scheduler, undefined, debugFlags);
     }
 }
 export const allModels = [

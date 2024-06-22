@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Debug" type="JavascriptDebugType" uri="http://localhost:8080" useFirstLineBreakpoints="true">
+  <configuration default="false" name="Debug" type="JavascriptDebugType" uri="http://localhost:8080?logFdcCommands" useFirstLineBreakpoints="true">
     <method v="2" />
   </configuration>
 </component>

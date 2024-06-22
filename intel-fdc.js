@@ -278,8 +278,9 @@ export class IntelFdc {
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
      * @param {DiscDrive[] | undefined} drives
+     * @param {*} debugFlags
      */
-    constructor(cpu, scheduler, drives) {
+    constructor(cpu, scheduler, drives, debugFlags) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
@@ -309,7 +310,7 @@ export class IntelFdc {
         this._crc = 0;
         this._onDiscCrc = 0;
 
-        this._logCommands = false;
+        this._logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
 
@@ -705,7 +706,9 @@ export class IntelFdc {
                 if (++this._stateCount === 2) {
                     // On a real 8271, an ID CRC error seems to end things decisively
                     // even if a subsequent ok ID would match.
-                    if (!this._checkCrc(Result.idCrcError)) break;
+                    if (!this._checkCrc(Result.idCrcError)) {
+                        break;
+                    }
                     // This is a test for the READ ID command.
                     if (this._regs[Registers.internalCommand] === 0x18) {
                         this._checkCompletion();
@@ -1164,6 +1167,7 @@ export class IntelFdc {
     _driveOutRaise(bits) {
         this._setDriveOut(bits | this._driveOut);
     }
+
     _driveOutLower(bits) {
         this._setDriveOut(this._driveOut & ~bits);
     }

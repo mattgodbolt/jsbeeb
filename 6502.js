@@ -509,6 +509,7 @@ function fixUpConfig(config) {
     if (!config.userPort) config.userPort = new FakeUserPort();
     if (config.printerPort === undefined) config.printerPort = null;
     config.extraRoms = config.extraRoms || [];
+    config.debugFlags = config.debugFlags || {};
     return config;
 }
 
@@ -564,6 +565,7 @@ export class Cpu6502 extends Base6502 {
     constructor(model, dbgr, video_, soundChip_, ddNoise_, music5000_, cmos, config, econet_) {
         super(model);
         this.config = fixUpConfig(config);
+        this.debugFlags = this.config.debugFlags;
         this.cmos = cmos;
         this.debugger = dbgr;
 
@@ -1158,7 +1160,7 @@ export class Cpu6502 extends Base6502 {
             this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
             this.serial = new Serial(this.acia);
             this.ddNoise.spinDown();
-            this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler);
+            this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
             this.crtc = this.video.crtc;
             this.ula = this.video.ula;
             this.adconverter = new Adc(this.sysvia, this.scheduler);
