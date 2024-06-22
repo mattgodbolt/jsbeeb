@@ -14,7 +14,7 @@ import * as utils from "./utils.js";
  * Register indices.
  *
  * @readonly
- * @enum {number}
+ * @enum {Number}
  */
 const Registers = Object.freeze({
     internalPointer: 0x00,
@@ -85,7 +85,7 @@ const DriveOut = Object.freeze({
 });
 
 /**
- * Floopy disc controller mode.
+ * Floppy disc controller mode.
  *
  * @readonly
  * @enum {Number}
@@ -322,9 +322,9 @@ export class IntelFdc {
     _commandAbort() {
         // If we're aborting a command in the middle of writing data, it usually
         // doesn't leave a clean byte end on the disc. This is not particularly
-        // important to emulate at all but it does help create new copy protection
+        // important to emulate at all, but it does help create new copy protection
         // schemes under emulation.
-        if (this.driveOut & DriveOut.writeEnable) {
+        if (this._driveOut & DriveOut.writeEnable) {
             this._currentDrive.writePulses(IbmDiscFormat.fmTo2usPulses(0xff, 0xff));
         }
 
@@ -420,8 +420,8 @@ export class IntelFdc {
                 this._statusLower(StatusFlag.needData | StatusFlag.nmi);
                 this._regs[Registers.internalData] = val;
                 break;
-            case Address.Reset:
-                //On a real 8271, crazy crazy things happen if you write 2 or especially 4 to this register.
+            case Address.reset:
+                //On a real 8271, crazy things happen if you write 2 or especially 4 to this register.
                 if (val !== 0 && val !== 1) {
                     this._log("funky reset");
                 }
@@ -479,7 +479,7 @@ export class IntelFdc {
                 // before we process read/write state.
                 this._indexPulseCallback = IndexPulse.none;
                 // param_5 is GAP1.
-                this._writeFFsAnd00s(Call.gap1OrGap3FFs, this._regs[Registers.internalParam_5]);
+                this._writeFFsAnd00s(Call.formatGap1OrGap3FFs, this._regs[Registers.internalParam_5]);
                 break;
             case IndexPulse.stopFormat:
                 this._checkCompletion();
@@ -513,8 +513,7 @@ export class IntelFdc {
         // MMIO data register. If a write command is in a state where it needed to
         // provide a data byte internally (i.e. a GAP byte, marker, etc.), it
         // overrides by re-writing the MMIO data register in the state machine below.
-        const dataRegister = this._regs[Registers.internalData];
-        this._mmioData = dataRegister;
+        this._mmioData = this._regs[Registers.internalData];
 
         switch (this._state) {
             case State.idle:
@@ -621,7 +620,7 @@ export class IntelFdc {
             case State.writeRun:
                 break;
             default:
-                throw new Error(`"Unexected state ${state}"`);
+                throw new Error(`"Unexpected state ${state}"`);
         }
     }
 
@@ -670,7 +669,7 @@ export class IntelFdc {
         switch (this._state) {
             case State.skipGap_2:
                 // The controller requires a minimum byte count of 12 before sync then
-                // sector data. 2 bytes of sync are needed, so absolute minumum gap here is
+                // sector data. 2 bytes of sync are needed, so absolute minimum gap here is
                 // 14. The controller formats to 17 (not user controllable).
 
                 // The controller enforced gap skip is 11 bytes of read, as per the
@@ -721,7 +720,7 @@ export class IntelFdc {
                         }
                     } else if (this._regs[Registers.internalIdSector] === this._regs[Registers.internalParam_2]) {
                         this._regs[Registers.internalGap2Skip] = 11;
-                        if (this._callContext == Call.write) {
+                        if (this._callContext === Call.write) {
                             // Set up for the first 5 bytes of the 0x00 sync.
                             this._regs[Registers.internalCountMsb] = 0;
                             this._regs[Registers.internalCountLsb] = 5;
@@ -743,7 +742,7 @@ export class IntelFdc {
                         if ((this._regs[Registers.internalCommand] & 0x0f) === 0) doIrqs = false;
                         this._setResult(Result.flagDeletedData);
                     }
-                    // No IRQ callbacks if verify.
+                    // No IRQ callbacks if 'verify'.
                     if (this._regs[Registers.internalCommand] === 0x1c) doIrqs = false;
                     if (doIrqs) this._startIrqCallbacks();
                     this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
@@ -808,7 +807,7 @@ export class IntelFdc {
                 this._setState(State.formatDataCrc_2);
                 break;
             default:
-                throw new Error(`Unepxected call context ${this.callContext}`);
+                throw new Error(`Unexpected call context ${this._callContext}`);
         }
     }
 
@@ -848,7 +847,7 @@ export class IntelFdc {
                 // byte of 0xff.
                 // The other -1 here is because we will we set the count registers ourselves. In the ROM,
                 // LSB is written here but not MSB.
-                this._regs[this.internalCountLsb] = 10;
+                this._regs[Registers.internalCountLsb] = 10;
                 this._writeFFsAnd00s(Call.formatGap2_FFs, -1);
                 break;
             case 10:
@@ -867,7 +866,7 @@ export class IntelFdc {
                     this._setState(State.formatGap_4);
                 } else {
                     // Format sectors not done. Next one. Reset state machine index, param2 is GAP3.
-                    this._Regs[Registers.internalDynamicDispatch] = 4;
+                    this._regs[Registers.internalDynamicDispatch] = 4;
                     this._writeFFsAnd00s(Call.formatGap1OrGap3FFs, this._regs[Registers.internalParam_2]);
                 }
                 break;
@@ -962,7 +961,7 @@ export class IntelFdc {
     }
 
     /**
-     * @param {Result} error error if invalid
+     * @param {Result|Number} error error if invalid
      */
     _checkCrc(error) {
         if (this._crc === this._onDiscCrc) return true;
@@ -1143,7 +1142,7 @@ export class IntelFdc {
         switch (reg) {
             case Registers.mmioDriveOut & 0x07:
                 // Bit 0x20 is important as it's used to select the side of the disc for
-                // double sided discs.
+                // double-sided discs.
                 // Bit 0x08 is important as it provides manual head load / unload control,
                 // which includes motor spin up / down.
                 // The parameter also includes drive select bits which override those in
@@ -1170,7 +1169,7 @@ export class IntelFdc {
     }
 
     /**
-     * @param {DriveOut} driveOut
+     * @param {DriveOut|Number} driveOut
      */
     _setDriveOut(driveOut) {
         if (this._currentDrive) this._currentDrive.stopSpinning();
@@ -1190,7 +1189,7 @@ export class IntelFdc {
     }
 
     /**
-     * @param {State} state
+     * @param {State|Number} state
      */
     _setState(state) {
         //this._log(`State ${this._state} -> ${state}`);
@@ -1203,7 +1202,7 @@ export class IntelFdc {
     }
 
     /**
-     * @param {Call} callContext
+     * @param {Call|Number} callContext
      */
     _doSeek(callContext) {
         if (callContext !== Call.unchanged) this._callContext = callContext;
@@ -1265,7 +1264,7 @@ export class IntelFdc {
             this._doLoadHead();
             return;
         }
-        //  We're going to actually step so we'll need settle if the head is already loaded.
+        //  We're going to actually step, so we'll need settle if the head is already loaded.
         this._didSeekStep = true;
         this._regs[Registers.internalSeekCount]--;
 
@@ -1438,7 +1437,7 @@ export class IntelFdc {
     }
 
     get _driveIn() {
-        // Note: on @scarybeasts' machine, bit 7 and bit 0 appear to be always set.
+        // Note: on @scarybeasts machine, bit 7 and bit 0 appear to be always set.
         let driveIn = 0x81;
         if (this._currentDiscIsSpinning) {
             // TRK0
@@ -1575,7 +1574,7 @@ export class IntelFdc {
 
     _decrementCounter() {
         if (--this._regs[Registers.internalCountLsb]) return false;
-        // JS's clamping for Uint8Array happens on assignemnt; so I can do if (--regs[x] !== 0xff) here.
+        // Javascript's clamping for Uint8Array happens on assignment; so I can do if (--regs[x] !== 0xff) here.
         --this._regs[Registers.internalCountMsb];
         if (this._regs[Registers.internalCountMsb] !== 0xff) {
             this._regs[Registers.internalCountLsb] = 0x80;
@@ -1628,6 +1627,14 @@ export class IntelFdc {
         this._driveOutRaise(DriveOut.writeEnable);
         this._callContext = callContext;
         this._setState(State.writeRun);
+    }
+
+    _writeFFsAnd00s(callContext, numFFs) {
+        if (numFFs !== -1) {
+            this._regs[Registers.internalCountLsb] = numFFs;
+            this._regs[Registers.internalCountMsb] = 0;
+        }
+        this._doWriteRun(callContext, 0xff);
     }
 
     /// jsbeeb compatibility stuff

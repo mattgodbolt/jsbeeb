@@ -11,10 +11,6 @@ export class DiscDrive {
         return 400000;
     }
 
-    static get MaxDiscsPerDrive() {
-        return 4;
-    }
-
     // scarybeast's Chinon drive holds the index pulse low for about 4ms. */
     static get DiscIndexMs() {
         return 4;
@@ -26,7 +22,6 @@ export class DiscDrive {
      * @param {Scheduler} scheduler scheduler to register callbacks etc
      */
     constructor(id, scheduler) {
-        this._id = id;
         this._scheduler = scheduler;
         /** @type {Disc|undefined} */
         this._disc = undefined;
@@ -169,13 +164,13 @@ export class DiscDrive {
     get indexPulse() {
         // With no disc loaded the drive asserts the index all the time.
         if (!this.disc) return true;
-        // The 8271 datasheet says that the index pulse must be held for over 0.5us. Most drives are in the milisecond range.
+        // The 8271 datasheet says that the index pulse must be held for over 0.5us. Most drives are in the millisecond range.
         return this._headPosition < (this.trackLength * DiscDrive.DiscIndexMs) / 200;
     }
 
     writePulses(pulses) {
         if (!this.disc) return;
-        // All drives seen have a write protect failsafe on the drive itself.
+        // All drives seen have a write-protect failsafe on the drive itself.
         if (this.disc.writeProtected) return;
         if (this._in32usMode) {
             if (pulses & 0xffff0000) throw new Error(`Unable to write 32us pulses for ${pulses}`);

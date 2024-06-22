@@ -160,7 +160,7 @@ class Track {
         this.upper = upper;
         this.trackNum = trackNum;
         this.pulses2Us = new Uint32Array(256 * 13);
-        this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 32));
+        this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 24));
     }
 
     get description() {
