@@ -1,6 +1,30 @@
 // Translated from beebjit by Chris Evans.
 // https://github.com/scarybeasts/beebjit
 
+import * as utils from "./utils.js";
+
+class Crc32Builder {
+    constructor() {
+        this._crc = 0xffffffff;
+    }
+
+    add(data) {
+        for (let i = 0; i < data.length; ++i) {
+            const byte = data[i];
+            this._crc ^= byte;
+            for (let j = 0; j < 8; ++j) {
+                const doEor = this._crc & 1;
+                this._crc = this._crc >>> 1;
+                if (doEor) this._crc ^= 0xedb88320;
+            }
+        }
+    }
+
+    get crc() {
+        return ~this._crc;
+    }
+}
+
 class TrackBuilder {
     /**
      * @param {Track} track
@@ -154,6 +178,26 @@ class TrackBuilder {
     }
 }
 
+class Sector {
+    constructor(track, isMfm, bitOffset) {
+        this.track = track;
+        this.isMfm = isMfm;
+        this.bitOffset = bitOffset;
+        this.bitPosData = null;
+        this.isDeleted = false;
+    }
+
+    read() {
+        // TODO readers? etc
+        const pulsesPerByte = this.isMfm ? 16 : 32;
+        if (this.isMfm) {
+            throw new Error("MFM sector reading not implemented");
+        } else {
+            throw new Error("FM reading not implemented");
+        }
+    }
+}
+
 class Track {
     constructor(upper, trackNum, initialByte) {
         this.length = IbmDiscFormat.bytesPerTrack;
@@ -165,6 +209,99 @@ class Track {
 
     get description() {
         return `Track ${this.trackNum} ${this.upper ? "upper" : "lower"}`;
+    }
+
+    // Debug functionality to try and interpret the track.
+    findSectors() {
+        const sectors = this.findSectorIds();
+        for (const sector of sectors) sector.read();
+        return sectors;
+    }
+
+    /**
+     * @returns {Sector[]}
+     */
+    findSectorIds() {
+        const sectors = [];
+        // Pass 1: walk the track and find header and data markers.
+        const bitLength = this.length * 32;
+        let shiftRegister = 0;
+        let numShifts = 0;
+        let doMfmMarkerByte = false;
+        let isMfm = false;
+        let pulses = 0;
+        let markDetector = 0n;
+        let markDetectorPrev = 0n;
+        const all64b = 0xffffffffffffffffn;
+        const top32of64b = 0xffffffff00000000n;
+        const fmMarker = 0x8888888800000000n;
+        const mfmMarker = 0xaaaa448944894489n;
+        let dataByte = 0;
+        let sector = null;
+        for (let pulseIndex = 0; pulseIndex < bitLength; ++pulseIndex) {
+            if ((pulseIndex & 31) === 0) pulses = this.pulses2Us[pulseIndex >> 5];
+            markDetectorPrev = (markDetectorPrev << 1n) & all64b;
+            markDetectorPrev |= markDetector >> 63n;
+            markDetector = (markDetector << 1n) & all64b;
+            shiftRegister = (shiftRegister << 1) & 0xffffffff;
+            numShifts++;
+            if (pulses & 0x80000000) {
+                markDetector |= 1n;
+                shiftRegister |= 1;
+            }
+            pulses = (pulses << 1) & 0xffffffff;
+            if ((markDetector & top32of64b) === fmMarker) {
+                const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(Number(markDetector & 0xffffffffn));
+                if (iffyPulses || clocks !== IbmDiscFormat.markClockPattern) continue;
+                isMfm = false;
+                doMfmMarkerByte = false;
+                let num0s = 8;
+                for (let bits = markDetectorPrev; (bits & 0xfn) === 0x8n; bits >>= 4n) {
+                    num0s++;
+                }
+                if (num0s <= 16) {
+                    console.log(`Short zeros sync ${this.description}`);
+                }
+                dataByte = data;
+            } else if (markDetector === mfmMarker) {
+                // Next byte is MFM marker.
+                isMfm = true;
+                doMfmMarkerByte = true;
+                shiftRegister = 0;
+                numShifts = 0;
+                continue;
+            } else if (doMfmMarkerByte && numShifts === 16) {
+                dataByte = IbmDiscFormat._2usPulsesToMfm(shiftRegister);
+                doMfmMarkerByte = false;
+            } else {
+                continue;
+            }
+            switch (dataByte) {
+                case IbmDiscFormat.idMarkDataPattern: {
+                    sector = new Sector(this, isMfm, pulseIndex + 1);
+                    sectors.push(sector);
+                    shiftRegister = 0;
+                    numShifts = 0;
+                    break;
+                }
+                case IbmDiscFormat.dataMarkDataPattern:
+                case IbmDiscFormat.deletedDataMarkDataPattern:
+                    if (!sector || sector.bitPosData) {
+                        console.log(`Sector data without header ${this.description}`);
+                    } else {
+                        sector.bitPosData = pulseIndex + 1;
+                        if (dataByte === IbmDiscFormat.deletedDataMarkDataPattern) {
+                            sector.isDeleted = true;
+                        }
+                        shiftRegister = 0;
+                        numShifts = 0;
+                    }
+                    break;
+                default:
+                    console.log(`Unknown marker byte ${utils.hexbyte(dataByte)} ${this.description}`);
+            }
+        }
+        return sectors;
     }
 }
 
@@ -271,6 +408,7 @@ export class Disc {
     static createBlank() {
         return new Disc(true, true, new DiscConfig());
     }
+
     /**
      * @param {boolean} isWriteable
      * @param {boolean} isMutable
@@ -374,6 +512,21 @@ export class Disc {
         const trackObj = this.getTrack(dirtySide, dirtyTrack);
         this.writeTrackCallback(this, dirtySide, dirtyTrack, trackObj.length, trackObj.pulses2Us);
         this.setTrackUsed(dirtySide, dirtyTrack);
+    }
+
+    logSummary() {
+        const maxTrack = this.tracksUsed;
+
+        for (let side = 0; side < this.isDoubleSided ? 2 : 1; ++side) {
+            const sectorT0S0 = new Uint8Array(256);
+            const sectorT0S1 = new Uint8Array(256);
+            const discCrc = new Crc32Builder();
+            const discCrcEven = new Crc32Builder();
+
+            for (let trackNum = 0; trackNum < maxTrack; ++trackNum) {
+                const track = this.getTrack(side === 1, trackNum);
+            }
+        }
     }
 }
 

@@ -176,10 +176,16 @@ describe("Disc builder tests", () => {
 });
 
 describe("SSD loader tests", () => {
+    const data = fs.readFileSync("discs/elite.ssd");
     it("should load Elite", () => {
-        const data = fs.readFileSync("discs/elite.ssd");
         const disc = new Disc(true, true, new DiscConfig());
         loadSsd(disc, data, false);
         assert.equal(disc.tracksUsed, 80);
+    });
+    it("should have sane tracks", () => {
+        const disc = new Disc(true, true, new DiscConfig());
+        loadSsd(disc, data, false);
+        const sectors = disc.getTrack(0, 0).findSectors();
+        assert.equal(sectors.length, 10);
     });
 });
