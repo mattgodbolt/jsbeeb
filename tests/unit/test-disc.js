@@ -187,5 +187,9 @@ describe("SSD loader tests", () => {
         loadSsd(disc, data, false);
         const sectors = disc.getTrack(0, 0).findSectors();
         assert.equal(sectors.length, 10);
+        for (const sector of sectors) {
+            assert(!sector.hasHeaderCrcError);
+            assert(!sector.hasDataCrcError);
+        }
     });
 });

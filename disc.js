@@ -3,6 +3,8 @@
 
 import * as utils from "./utils.js";
 
+/*
+ * TODO: use in fingerprinting
 class Crc32Builder {
     constructor() {
         this._crc = 0xffffffff;
@@ -24,7 +26,7 @@ class Crc32Builder {
         return ~this._crc;
     }
 }
-
+*/
 class TrackBuilder {
     /**
      * @param {Track} track
@@ -178,23 +180,175 @@ class TrackBuilder {
     }
 }
 
+class RawDiscReader {
+    /**
+     * @param {Track} track
+     * @param {Number} bitOffset
+     */
+    constructor(track, bitOffset) {
+        this._track = track;
+        this._pos = bitOffset;
+    }
+
+    readPulses() {
+        let pulsesPos = this._pos >>> 5;
+        const bitPos = this._pos & 0x1f;
+        let sourcePulses = this._track.pulses2Us[pulsesPos];
+        let pulses = (sourcePulses << bitPos) & 0xfffffffff;
+        if (pulsesPos === this._track.length) {
+            pulsesPos = 0;
+            this._pos = bitPos;
+        } else {
+            pulsesPos++;
+            this._pos += 32;
+        }
+        if (bitPos > 0) {
+            sourcePulses = this._track.pulses2Us[pulsesPos];
+            pulses |= sourcePulses >>> (32 - bitPos);
+        }
+        return pulses;
+    }
+}
+
+class MfmReader {
+    /**
+     * @param {RawDiscReader} rawReader
+     */
+    constructor(rawReader) {
+        this._rawReader = rawReader;
+    }
+    read(numBytes) {
+        const data = new Uint8Array[numBytes]();
+        let pulses = 0;
+        for (let offset = 0; offset < numBytes; ++offset) {
+            if ((offset & 1) === 0) {
+                pulses = this._rawReader.readPulses();
+            } else {
+                pulses = (pulses << 16) & 0xffffffff;
+            }
+            data[offset] = IbmDiscFormat._2usPulsesToMfm(pulses >>> 16);
+        }
+        return { data, clocks: null, iffyPulses: false };
+    }
+
+    get initialCrc() {
+        let crc = IbmDiscFormat.crcInit(0);
+        crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
+        crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
+        crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
+        return crc;
+    }
+}
+
+class FmReader {
+    /**
+     * @param {RawDiscReader} rawReader
+     */
+    constructor(rawReader) {
+        this._rawReader = rawReader;
+    }
+
+    read(numBytes) {
+        const data = new Uint8Array(numBytes);
+        const clocks = new Uint8Array(numBytes);
+        let iffyPulses = false;
+        for (let offset = 0; offset < numBytes; ++offset) {
+            const pulses = this._rawReader.readPulses();
+            const { data: dataByte, clock: clockByte, iffyPulses: iffy } = IbmDiscFormat._2usPulsesToFm(pulses);
+            data[offset] = dataByte;
+            clocks[offset] = clockByte;
+            iffyPulses |= iffy;
+        }
+        return { data, clocks, iffyPulses };
+    }
+    get initialCrc() {
+        return IbmDiscFormat.crcInit(0);
+    }
+}
+
 class Sector {
     constructor(track, isMfm, bitOffset) {
         this.track = track;
         this.isMfm = isMfm;
-        this.bitOffset = bitOffset;
-        this.bitPosData = null;
+        this.bitOffset = bitOffset; // better naems ..
+        this.bitPosData = null; // better names ^^
         this.isDeleted = false;
+        this.header = null;
+        this.data = null;
+        this.hasHeaderCrcError = false;
+        this.hasDataCrcError = false;
+        this.byteLength = null;
     }
 
-    read() {
-        // TODO readers? etc
-        const pulsesPerByte = this.isMfm ? 16 : 32;
-        if (this.isMfm) {
-            throw new Error("MFM sector reading not implemented");
-        } else {
-            throw new Error("FM reading not implemented");
+    _readerAt(bitOffset) {
+        const rawReader = new RawDiscReader(this.track, bitOffset);
+        return this.isMfm ? new MfmReader(rawReader) : new FmReader(rawReader);
+    }
+
+    /**
+     * @param {Sector|undefined} nextSector
+     */
+    read(nextSector) {
+        const idReader = this._readerAt(this.bitOffset);
+        const pulsesPerByte = this.isMfm ? 16 : 32; // todo put in reader
+        const { data: headerData, iffyPulses } = idReader.read(6);
+        if (iffyPulses) {
+            console.log(`Iffy pulse in sector header ${this.track}`);
         }
+        this.header = headerData;
+        let crc = idReader.initialCrc;
+        crc = IbmDiscFormat.crcAddByte(crc, IbmDiscFormat.idMarkDataPattern);
+        crc = IbmDiscFormat.crcAddBytes(crc, this.header.slice(0, 4));
+        const discCrc = (this.header[4] << 8) | this.header[5];
+        if (crc !== discCrc) {
+            this.hasHeaderCrcError = true;
+        }
+        if (this.bitPosData === null) {
+            console.log(`"Sector header without data ${this.track}"`);
+            return;
+        }
+
+        const dataMarker = this.isDeleted
+            ? IbmDiscFormat.deletedDataMarkDataPattern
+            : IbmDiscFormat.dataMarkDataPattern;
+        const sectorStartByte = this.bitPosData / pulsesPerByte;
+        const sectorEndByte = nextSector ? nextSector.bitOffset / pulsesPerByte : this.track.length;
+        // Account for CRC and sync bytes.
+        let sectorSize = Sector.toSectorSize(sectorEndByte - sectorStartByte - 5);
+
+        this.hasDataCrcError = true;
+        let seenIffyData = false;
+        do {
+            const { crcOk, sectorData, iffyPulses } = this._tryLoadSectorData(dataMarker, sectorSize);
+            seenIffyData = iffyPulses;
+            if (crcOk) {
+                this.byteLength = sectorSize;
+                this.hasDataCrcError = false;
+                this.sectorData = sectorData;
+                break;
+            }
+            sectorSize = sectorSize >>> 1;
+        } while (sectorSize >= 128);
+        if (seenIffyData) {
+            console.log(`"Iffy pulse in sector data ${this.track}"`);
+        }
+    }
+
+    _tryLoadSectorData(dataMarker, sectorSize) {
+        const dataReader = this._readerAt(this.bitPosData);
+        let crc = IbmDiscFormat.crcAddByte(dataReader.initialCrc, dataMarker);
+        const { data: sectorData, iffyPulses } = dataReader.read(sectorSize + 2);
+        crc = IbmDiscFormat.crcAddBytes(crc, sectorData.slice(0, sectorSize));
+        const dataCrc = (sectorData[sectorSize] << 8) | sectorData[sectorSize + 1];
+        return { crcOk: dataCrc === crc, sectorData, iffyPulses };
+    }
+
+    static toSectorSize(size) {
+        if (size < 256) return 128;
+        if (size < 512) return 256;
+        if (size < 1024) return 512;
+        if (size < 2048) return 1024;
+        return 2048;
     }
 }
 
@@ -211,10 +365,16 @@ class Track {
         return `Track ${this.trackNum} ${this.upper ? "upper" : "lower"}`;
     }
 
-    // Debug functionality to try and interpret the track.
+    /**
+     * Debug functionality to try and interpret the track.
+     * @returns {Sector[]}
+     */
     findSectors() {
         const sectors = this.findSectorIds();
-        for (const sector of sectors) sector.read();
+        for (let sectorIndex = 0; sectorIndex !== sectors.length; ++sectorIndex) {
+            const nextSector = sectors[sectorIndex + 1]; // Will be unset for last
+            sectors[sectorIndex].read(nextSector);
+        }
         return sectors;
     }
 
@@ -516,16 +676,31 @@ export class Disc {
 
     logSummary() {
         const maxTrack = this.tracksUsed;
-
-        for (let side = 0; side < this.isDoubleSided ? 2 : 1; ++side) {
-            const sectorT0S0 = new Uint8Array(256);
-            const sectorT0S1 = new Uint8Array(256);
-            const discCrc = new Crc32Builder();
-            const discCrcEven = new Crc32Builder();
-
+        const numSides = this.isDoubleSided ? 2 : 1;
+        for (let side = 0; side < numSides; ++side) {
             for (let trackNum = 0; trackNum < maxTrack; ++trackNum) {
                 const track = this.getTrack(side === 1, trackNum);
+                const sectors = track.findSectors();
+                if (sectors.length) {
+                    if (track.length >= IbmDiscFormat.bytesPerTrack * 1.015) {
+                        console.log(`Long track ${track.description}, ${track.length} bytes`);
+                    } else if (track.length <= IbmDiscFormat.bytesPerTrack * 0.985) {
+                        console.log(`Short track ${track.description}, ${track.length} bytes`);
+                    }
+                    if (sectors[0].isMfm) {
+                        if (sectors.length !== 16 && sectors.length !== 18) {
+                            console.log(`Non-standard MFM sector count ${track.description} count ${sectors.length}`);
+                        }
+                    } else {
+                        if (sectors.length !== 10) {
+                            console.log(`Non-standard FM sector count ${track.description} count ${sectors.length}`);
+                        }
+                    }
+                } else {
+                    console.log(`"Unformatted track ${track.description}"`);
+                }
             }
+            // TODO add fingerprintings, catalog etcetc
         }
     }
 }
@@ -592,6 +767,10 @@ export class IbmDiscFormat {
             if (bitTest) crc ^= 0x1021;
             byte <<= 1;
         }
+        return crc;
+    }
+    static crcAddBytes(crc, bytes) {
+        for (const byte of bytes) crc = IbmDiscFormat.crcAddByte(crc, byte);
         return crc;
     }
 
