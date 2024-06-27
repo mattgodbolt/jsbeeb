@@ -209,6 +209,7 @@ const emulationConfig = {
     },
     debugFlags: {
         logFdcCommands: parsedQuery.logFdcCommands !== undefined,
+        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
     },
 };
 

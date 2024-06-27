@@ -311,6 +311,7 @@ export class IntelFdc {
         this._onDiscCrc = 0;
 
         this._logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
+        this._logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
 
         this._timerTask = scheduler.newTask(() => this._timerFired());
 
@@ -1196,7 +1197,9 @@ export class IntelFdc {
      * @param {State|Number} state
      */
     _setState(state) {
-        //this._log(`State ${this._state} -> ${state}`);
+        if (this._logStateChanges) {
+            this._log(`State ${this._state} -> ${state}`);
+        }
         this._state = state;
         this._stateCount = 0;
         if (state === State.syncingForId || state === State.syncingForData) {

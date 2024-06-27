@@ -267,17 +267,32 @@ class FmReader {
 }
 
 class Sector {
-    constructor(track, isMfm, bitOffset) {
+    /**
+     * @param {Track} track
+     * @param {boolean} isMfm
+     * @param {Number} idPosBitOffset
+     */
+    constructor(track, isMfm, idPosBitOffset) {
         this.track = track;
         this.isMfm = isMfm;
-        this.bitOffset = bitOffset; // better naems ..
-        this.bitPosData = null; // better names ^^
+        this.idPosBitOffset = idPosBitOffset;
+        this.dataPosBitOffset = null;
         this.isDeleted = false;
-        this.header = null;
-        this.data = null;
-        this.hasHeaderCrcError = false;
+        this.sectorData = null;
         this.hasDataCrcError = false;
         this.byteLength = null;
+
+        const idReader = this._readerAt(this.idPosBitOffset);
+        const { data: headerData, iffyPulses } = idReader.read(6);
+        if (iffyPulses) {
+            console.log(`Iffy pulse in sector header ${this.description}`);
+        }
+        this.header = headerData;
+        let crc = idReader.initialCrc;
+        crc = IbmDiscFormat.crcAddByte(crc, IbmDiscFormat.idMarkDataPattern);
+        crc = IbmDiscFormat.crcAddBytes(crc, this.header.slice(0, 4));
+        const discCrc = (this.header[4] << 8) | this.header[5];
+        this.hasHeaderCrcError = crc !== discCrc;
     }
 
     _readerAt(bitOffset) {
@@ -285,34 +300,33 @@ class Sector {
         return this.isMfm ? new MfmReader(rawReader) : new FmReader(rawReader);
     }
 
+    get trackNumber() {
+        return this.header ? this.header[0] : undefined;
+    }
+
+    get sectorNumber() {
+        return this.header ? this.header[2] : undefined;
+    }
+
+    get description() {
+        return `${this.track.description} idpos ${this.idPosBitOffset} idtrack ${this.trackNumber} idsector ${this.sectorNumber} datapos ${this.dataPosBitOffset}`;
+    }
+
     /**
      * @param {Sector|undefined} nextSector
      */
     read(nextSector) {
-        const idReader = this._readerAt(this.bitOffset);
         const pulsesPerByte = this.isMfm ? 16 : 32; // todo put in reader
-        const { data: headerData, iffyPulses } = idReader.read(6);
-        if (iffyPulses) {
-            console.log(`Iffy pulse in sector header ${this.track}`);
-        }
-        this.header = headerData;
-        let crc = idReader.initialCrc;
-        crc = IbmDiscFormat.crcAddByte(crc, IbmDiscFormat.idMarkDataPattern);
-        crc = IbmDiscFormat.crcAddBytes(crc, this.header.slice(0, 4));
-        const discCrc = (this.header[4] << 8) | this.header[5];
-        if (crc !== discCrc) {
-            this.hasHeaderCrcError = true;
-        }
-        if (this.bitPosData === null) {
-            console.log(`"Sector header without data ${this.track}"`);
+        if (this.dataPosBitOffset === null) {
+            console.log(`"Sector header without data ${this.description}"`);
             return;
         }
 
         const dataMarker = this.isDeleted
             ? IbmDiscFormat.deletedDataMarkDataPattern
             : IbmDiscFormat.dataMarkDataPattern;
-        const sectorStartByte = this.bitPosData / pulsesPerByte;
-        const sectorEndByte = nextSector ? nextSector.bitOffset / pulsesPerByte : this.track.length;
+        const sectorStartByte = this.dataPosBitOffset / pulsesPerByte;
+        const sectorEndByte = nextSector ? nextSector.idPosBitOffset / pulsesPerByte : this.track.length;
         // Account for CRC and sync bytes.
         let sectorSize = Sector.toSectorSize(sectorEndByte - sectorStartByte - 5);
 
@@ -330,12 +344,12 @@ class Sector {
             sectorSize = sectorSize >>> 1;
         } while (sectorSize >= 128);
         if (seenIffyData) {
-            console.log(`"Iffy pulse in sector data ${this.track}"`);
+            console.log(`"Iffy pulse in sector data ${this.description}"`);
         }
     }
 
     _tryLoadSectorData(dataMarker, sectorSize) {
-        const dataReader = this._readerAt(this.bitPosData);
+        const dataReader = this._readerAt(this.dataPosBitOffset);
         let crc = IbmDiscFormat.crcAddByte(dataReader.initialCrc, dataMarker);
         const { data: sectorData, iffyPulses } = dataReader.read(sectorSize + 2);
         crc = IbmDiscFormat.crcAddBytes(crc, sectorData.slice(0, sectorSize));
@@ -446,10 +460,12 @@ class Track {
                 }
                 case IbmDiscFormat.dataMarkDataPattern:
                 case IbmDiscFormat.deletedDataMarkDataPattern:
-                    if (!sector || sector.bitPosData) {
-                        console.log(`Sector data without header ${this.description}`);
+                    if (!sector || sector.dataPosBitOffset) {
+                        console.log(
+                            `Sector data without header ${this.description}; mark bitpos ${pulseIndex}; previous good sector ${sector ? sector.description : "none"}`,
+                        );
                     } else {
-                        sector.bitPosData = pulseIndex + 1;
+                        sector.dataPosBitOffset = pulseIndex + 1;
                         if (dataByte === IbmDiscFormat.deletedDataMarkDataPattern) {
                             sector.isDeleted = true;
                         }
@@ -505,6 +521,7 @@ class SsdFormat {
  * @param {boolean} isDsd
  */
 export function loadSsd(disc, data, isDsd) {
+    const blankSector = new Uint8Array(SsdFormat.sectorSize);
     const numSides = isDsd ? 2 : 1;
     if (data.length % SsdFormat.sectorSize !== 0) {
         throw new Error("SSD file size is not a multiple of sector size");
@@ -540,13 +557,13 @@ export function loadSsd(disc, data, isDsd) {
                     .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
 
                 // Sector data.
+                const sectorData = offset < data.length ? data.subarray(offset, offset + SsdFormat.sectorSize) : blankSector;
+                offset += SsdFormat.sectorSize;
                 trackBuilder
                     .resetCrc()
                     .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
-                    .appendFmChunk(data.subarray(offset, offset + SsdFormat.sectorSize))
+                    .appendFmChunk(sectorData)
                     .appendCrc(false);
-
-                offset += SsdFormat.sectorSize;
 
                 if (sector !== SsdFormat.sectorsPerTrack - 1) {
                     // Sync pattern between sectors, aka GAP 3.
@@ -655,6 +672,8 @@ export class Disc {
         this.dirtySide = isSideUpper;
         this.dirtyTrack = track;
         trackObj.pulses2Us[position] = pulses;
+        // TODO a debug log flag for this
+        // console.log(`wrote to ${track}:${position * 32}`);
     }
 
     flushWrites() {
@@ -695,6 +714,12 @@ export class Disc {
                         if (sectors.length !== 10) {
                             console.log(`Non-standard FM sector count ${track.description} count ${sectors.length}`);
                         }
+                    }
+                    /// MG stuff
+                    for (const sector of sectors) {
+                        if (sector.hasHeaderCrcError) console.log(`${sector.description} has bad header crc`);
+                        if (sector.trackNumber !== trackNum) console.log(`${sector.description} has bad track id`);
+                        if (sector.hasDataCrcError) console.log(`${sector.description} has bad data crc`);
                     }
                 } else {
                     console.log(`"Unformatted track ${track.description}"`);
