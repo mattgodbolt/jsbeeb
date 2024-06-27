@@ -10,6 +10,18 @@ import { DiscDrive } from "./disc-drive.js";
 import { Scheduler } from "./scheduler.js";
 import * as utils from "./utils.js";
 
+// TODOs remaining for intel-fdc and related functionality
+// - support loading other disc formats (including HFE whatever it is)
+// - support "writeback" to SSD (at least); tested with
+//   - google drive
+//   - download disc image
+// - ideally support "writeback" to high fidelity output formats
+// - disc drive noises (yeah I know)
+// - UI elements for visualisation
+// - better debug url param handling (ui?)
+// - test formatting
+// - WD1770...
+
 /**
  * Register indices.
  *
