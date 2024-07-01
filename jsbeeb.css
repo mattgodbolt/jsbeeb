@@ -334,3 +334,8 @@ div.modal-body > div:not(:first-child) {
 small {
   color: #999;
 }
+
+/* ensure pointer events for disabled buttons so tooltips show up */
+.btn:disabled {
+  pointer-events: auto;
+}
