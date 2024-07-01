@@ -541,6 +541,12 @@ document.onkeydown = keyDown;
 document.onkeypress = keyPress;
 document.onkeyup = keyUp;
 
+$("#debug-pause").click(() => stop(true));
+$("#debug-play").click(() => {
+    dbgr.hide();
+    go();
+});
+
 // To lower chance of data loss, only accept drop events in the drop
 // zone in the menu bar.
 document.ondragover = function (event) {
@@ -1530,9 +1536,15 @@ function handleVisibilityChange() {
 
 document.addEventListener("visibilitychange", handleVisibilityChange, false);
 
+function updateDebugButtons() {
+    $("#debug-play").attr("disabled", running);
+    $("#debug-pause").attr("disabled", !running);
+}
+
 function go() {
     audioHandler.unmute();
     running = true;
+    updateDebugButtons();
     run();
 }
 
@@ -1541,6 +1553,7 @@ function stop(debug) {
     processor.stop();
     if (debug) dbgr.debug(processor.pc);
     audioHandler.mute();
+    updateDebugButtons();
 }
 
 (function () {
