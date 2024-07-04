@@ -1670,6 +1670,10 @@ export class IntelFdc {
         return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
     }
 
+    get drives() {
+        return this._drives;
+    }
+
     get isPulseLevel() {
         return true;
     }

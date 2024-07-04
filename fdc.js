@@ -32,13 +32,13 @@ export function emptySsd(fdc) {
 
 export function discFor(fdc, name, stringData, onChange) {
     const data = typeof stringData !== "string" ? stringData : utils.stringToUint8Array(stringData);
-    const prevData = new Uint8Array(data);
 
     if (fdc.isPulseLevel) {
-        //// TODO: handle onChange
-        const disc = new Disc(true, false, new DiscConfig());
-        return loadSsd(disc, data, false);
+        const disc = new Disc(true, new DiscConfig(), name);
+        return loadSsd(disc, data, false, onChange);
     }
+
+    const prevData = new Uint8Array(data);
     function changed() {
         let res = false;
         for (let i = 0; i < data.length; ++i) {

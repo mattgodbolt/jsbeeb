@@ -490,6 +490,7 @@ class Side {
 
 export class DiscConfig {
     constructor() {
+        // TODO is this even usedful?
         this.logProtection = false;
         this.logIffyPulses = false;
         this.expandTo80 = false;
@@ -519,8 +520,9 @@ class SsdFormat {
  * @param {Disc} disc
  * @param {Uint8Array} data
  * @param {boolean} isDsd
+ * @param {*} onChange
  */
-export function loadSsd(disc, data, isDsd) {
+export function loadSsd(disc, data, isDsd, onChange) {
     const blankSector = new Uint8Array(SsdFormat.sectorSize);
     const numSides = isDsd ? 2 : 1;
     if (data.length % SsdFormat.sectorSize !== 0) {
@@ -533,6 +535,8 @@ export function loadSsd(disc, data, isDsd) {
 
     let offset = 0;
     for (let track = 0; track < SsdFormat.tracksPerDisc; ++track) {
+        if (offset >= data.length) break;
+
         for (let side = 0; side < numSides; ++side) {
             const trackBuilder = disc.buildTrack(side === 1, track);
             // Sync pattern at start of track, as the index pulse starts, aka GAP 5.
@@ -557,7 +561,8 @@ export function loadSsd(disc, data, isDsd) {
                     .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s);
 
                 // Sector data.
-                const sectorData = offset < data.length ? data.subarray(offset, offset + SsdFormat.sectorSize) : blankSector;
+                const sectorData =
+                    offset < data.length ? data.subarray(offset, offset + SsdFormat.sectorSize) : blankSector;
                 offset += SsdFormat.sectorSize;
                 trackBuilder
                     .resetCrc()
@@ -575,7 +580,52 @@ export function loadSsd(disc, data, isDsd) {
             trackBuilder.fillFmByte(0xff);
         }
     }
+
+    if (onChange) {
+        // TODO, maybe construct the disc directly with this stuff?
+        // TODO maybe change this entirely and make it lazy; and have the onChange "pull" the disc as the format it wants
+        // instead of doing this here. Most stuff doesn't care about changes and only needs the image on save.
+        // Create a dataCopy large enough for all the sectors and tracks.
+        const dataCopy = new Uint8Array(maxSize);
+        dataCopy.set(data);
+        disc.setWriteTrackCallback(
+            /** @param {Track} trackObj  */
+            (side, trackNum, trackObj) => {
+                const trackOffset =
+                    SsdFormat.sectorSize * SsdFormat.sectorsPerTrack * (trackNum * numSides + (side ? 1 : 0));
+                for (const sector of trackObj.findSectors()) {
+                    const sectorOffset = sector.sectorNumber * SsdFormat.sectorSize;
+                    for (let x = 0; x < SsdFormat.sectorSize; ++x)
+                        dataCopy[trackOffset + sectorOffset + x] = sector.sectorData[x];
+                }
+                onChange(dataCopy);
+            },
+        );
+    }
     return disc;
+}
+
+/**
+ * @returns {Uint8Array}
+ * @param {Disc} disc
+ */
+export function toSsdOrDsd(disc) {
+    const numSides = disc.isDoubleSided ? 2 : 1;
+    const result = new Uint8Array(
+        numSides * SsdFormat.tracksPerDisc * SsdFormat.sectorsPerTrack * SsdFormat.sectorSize,
+    );
+    let offset = 0;
+    for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
+        for (let side = 0; side < numSides; ++side) {
+            const trackObj = disc.getTrack(side === 1, trackNum);
+            for (const sector of trackObj.findSectors()) {
+                const sectorOffset = offset + sector.sectorNumber * SsdFormat.sectorSize;
+                for (let x = 0; x < SsdFormat.sectorSize; ++x) result[sectorOffset + x] = sector.sectorData[x];
+            }
+            offset += SsdFormat.sectorsPerTrack * SsdFormat.sectorSize;
+        }
+    }
+    return result.slice(0, offset);
 }
 
 export class Disc {
@@ -583,39 +633,33 @@ export class Disc {
      * @returns {Disc} a new blank disc
      */
     static createBlank() {
-        return new Disc(true, true, new DiscConfig());
+        return new Disc(true, new DiscConfig());
     }
 
     /**
      * @param {boolean} isWriteable
-     * @param {boolean} isMutable
      * @param {DiscConfig} config
+     * @param {string} name
      */
-    constructor(isWriteable, isMutable, config) {
+    constructor(isWriteable, config, name) {
         this.config = config;
 
+        this.name = name;
         this.isDirty = false;
         this.dirtySide = -1;
         this.dirtyTrack = -1;
         this.tracksUsed = 0;
         this.isDoubleSided = false;
 
-        // todo look up file extensions, populate write callback. of maybe support
-        // in memory changes?
         this.writeTrackCallback = undefined;
-
-        // TODO massive rethink of this
-        // if (isMutable && !this.writeTrackCallback) {
-        //     console.log("Cannot writeback to file type, making read only");
-        //     isMutable = isWriteable = false; // TODO reconsider
-        // }
-
         this.isWriteable = isWriteable;
-        this.isMutableRequested = isMutable;
-        this.isMutable = false; // set by load
 
         // TODO disc surface builders for
         this.load();
+    }
+
+    setWriteTrackCallback(callback) {
+        this.writeTrackCallback = callback;
     }
 
     get writeProtected() {
@@ -640,6 +684,7 @@ export class Disc {
     load() {
         this.initSurface(0);
         // various loads builders etc
+        // TODO get rid of this
     }
 
     initSurface(initialByte) {
@@ -687,9 +732,9 @@ export class Disc {
         this.isDirty = false;
         this.dirtySide = -1;
         this.dirtyTrack = -1;
-        if (!this.isMutable) return;
+        if (!this.writeTrackCallback) return;
         const trackObj = this.getTrack(dirtySide, dirtyTrack);
-        this.writeTrackCallback(this, dirtySide, dirtyTrack, trackObj.length, trackObj.pulses2Us);
+        this.writeTrackCallback(dirtySide, dirtyTrack, trackObj);
         this.setTrackUsed(dirtySide, dirtyTrack);
     }
 

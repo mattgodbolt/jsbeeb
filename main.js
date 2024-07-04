@@ -22,6 +22,7 @@ import { Config } from "./config.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
+import { toSsdOrDsd } from "./disc.js";
 
 let processor;
 let video;
@@ -1179,10 +1180,20 @@ $("#download-drive-link").on("click", function () {
     document.body.appendChild(a);
     a.style = "display: none";
 
-    const blob = new Blob([processor.fdc.drives[0].data], { type: "application/octet-stream" }),
-        url = window.URL.createObjectURL(blob);
+    let data;
+    let name;
+    if (processor.fdc.isPulseLevel) {
+        data = toSsdOrDsd(processor.fdc.drives[0].disc);
+        name = processor.fdc.drives[0].disc.name;
+    } else {
+        data = processor.fdc.drives[0].data;
+        name = processor.fdc.drives[0].name;
+    }
+
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
     a.href = url;
-    a.download = processor.fdc.drives[0].name;
+    a.download = name;
     a.click();
     window.URL.revokeObjectURL(url);
 });
