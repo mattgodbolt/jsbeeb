@@ -18,7 +18,6 @@ import * as utils from "./utils.js";
 // - ideally support "writeback" to high fidelity output formats
 // - UI elements for visualisation
 // - better debug url param handling (ui?)
-// - test formatting
 // - WD1770...
 
 /**
@@ -808,16 +807,16 @@ export class IntelFdc {
                 this._startIrqCallbacks();
                 this._setState(State.formatWriteIdMarker);
                 break;
-            case State.formatGap2_FFs:
+            case Call.formatGap2_FFs:
                 // Flip from writing ffs to 00s.
                 this._regs[Registers.internalCountLsb] = 5;
                 this._doWriteRun(Call.formatGap2_00s, 0x00);
                 break;
-            case State.formatGap2_00s:
+            case Call.formatGap2_00s:
                 this._mmioData = 0;
                 this._setState(State.formatWriteDataMarker);
                 break;
-            case State.formatData:
+            case Call.formatData:
                 this._mmioData = (this._crc >>> 8) & 0xff;
                 this._setState(State.formatDataCrc_2);
                 break;
@@ -936,9 +935,23 @@ export class IntelFdc {
                 break;
             case State.formatIdCrc_2:
                 this._mmioData = this._crc & 0xff;
+                this._setState(State.formatIdCrc_3);
+                break;
+            case State.formatIdCrc_3:
+                this._mmioData = 0xff;
+                this._setState(State.dynamicDispatch);
+                break;
+            case State.formatWriteDataMarker:
+                this._mmioData = IbmDiscFormat.dataMarkDataPattern;
+                this._mmioClocks = IbmDiscFormat.markClockPattern;
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), this._mmioData);
+                this._setState(State.dynamicDispatch);
+                break;
+            case State.formatDataCrc_2:
+                this._mmioData = this._crc & 0xff;
                 this._setState(State.formatDataCrc_3);
                 break;
-            case State.formatDataCrc_3:
+                case State.formatDataCrc_3:
                 this._mmioData = 0xff;
                 this._setState(State.dynamicDispatch);
                 break;
@@ -946,6 +959,8 @@ export class IntelFdc {
                 // GAP 4 writes until the index pulse, handled in the callback there.
                 this._mmioData = 0xff;
                 break;
+                default:
+                    throw new Error(`Bad write state ${this._state}`);
         }
     }
 
@@ -1208,7 +1223,7 @@ export class IntelFdc {
      * @param {State|Number} state
      */
     _setState(state) {
-        if (this._logStateChanges) {
+        if (this._state !== state && this._logStateChanges) {
             this._log(`State ${this._state} -> ${state}`);
         }
         this._state = state;
@@ -1327,11 +1342,11 @@ export class IntelFdc {
                 this._finishCommand(Result.ok);
                 break;
             case Call.readId:
-                this._pulsesCallback = IndexPulse.startReadId;
+                this._indexPulseCallback = IndexPulse.startReadId;
                 break;
             case Call.format:
                 this._setupSectorSize();
-                this._pulsesCallback = IndexPulse.startFormat;
+                this._indexPulseCallback = IndexPulse.startFormat;
                 this._checkWriteProtect();
                 break;
             case Call.read:

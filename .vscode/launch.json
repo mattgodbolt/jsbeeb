@@ -5,7 +5,7 @@
       "type": "chrome",
       "request": "launch",
       "name": "Debug a running webpack dev server",
-      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands",
+      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands&disc1=Welcome.ssd#",
       "webRoot": "${workspaceFolder}",
       "sourceMaps": true,
       "trace": true
