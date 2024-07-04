@@ -13,8 +13,8 @@ import * as utils from "./utils.js";
 // TODOs remaining for intel-fdc and related functionality
 // - support loading other disc formats (including HFE whatever it is)
 // - support "writeback" to SSD (at least); tested with
-//   - google drive
-//   - download disc image
+//   - google drive - broken currently :'()
+//   - download disc image DONE
 // - ideally support "writeback" to high fidelity output formats
 // - disc drive noises (yeah I know)
 // - UI elements for visualisation
