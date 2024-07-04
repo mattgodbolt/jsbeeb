@@ -175,8 +175,9 @@ describe("Disc builder tests", () => {
     });
 });
 
-describe("SSD loader tests", () => {
+describe("SSD loader tests", function () {
     const data = fs.readFileSync("discs/elite.ssd");
+    this.timeout(5000);  // roundtripping elite can be slow
     it("should load Elite", () => {
         const disc = new Disc(true, new DiscConfig());
         loadSsd(disc, data, false);
