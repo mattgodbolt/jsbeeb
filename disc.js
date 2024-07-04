@@ -490,7 +490,7 @@ class Side {
 
 export class DiscConfig {
     constructor() {
-        // TODO is this even usedful?
+        // TODO is this even useful?
         this.logProtection = false;
         this.logIffyPulses = false;
         this.expandTo80 = false;

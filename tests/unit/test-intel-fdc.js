@@ -24,9 +24,10 @@ class FakeDrive {
     stopSpinning() {
         this.spinning = false;
     }
-    seekTrack(dir) {
+    seekOneTrack(dir) {
         this.track = this.track + dir;
     }
+    notifySeek() {}
 }
 
 /**

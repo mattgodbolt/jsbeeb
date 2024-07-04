@@ -16,7 +16,6 @@ import * as utils from "./utils.js";
 //   - google drive - broken currently :'()
 //   - download disc image DONE
 // - ideally support "writeback" to high fidelity output formats
-// - disc drive noises (yeah I know)
 // - UI elements for visualisation
 // - better debug url param handling (ui?)
 // - test formatting
@@ -1261,6 +1260,7 @@ export class IntelFdc {
             this._regs[Registers.internalSeekCount] = curTrack - newTrack;
             this._driveOut &= ~DriveOut.direction;
         }
+        if (this._currentDrive) this._currentDrive.notifySeek(newTrack);
 
         // Seek pulses on the 8271 are about 10us, so let's just lower the output bit and make them unobservable
         // as we suspect they are on a real machine.
@@ -1287,7 +1287,7 @@ export class IntelFdc {
         this._didSeekStep = true;
         this._regs[Registers.internalSeekCount]--;
 
-        if (this._currentDrive) this._currentDrive.seekTrack(this._driveOut & DriveOut.direction ? 1 : -1);
+        if (this._currentDrive) this._currentDrive.seekOneTrack(this._driveOut & DriveOut.direction ? 1 : -1);
 
         let stepRate = this._regs[Registers.headStepRate];
         if (stepRate === 0) {

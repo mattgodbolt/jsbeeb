@@ -70,8 +70,22 @@ const masterSwram = [
 ];
 class IntelFdcAdapter extends IntelFdc {
     constructor(cpu, ddNoise, scheduler, debugFlags) {
-        // TODO something clever with ddNoise...
         super(cpu, scheduler, undefined, debugFlags);
+        let nextSeekTime = 0;
+        let numSpinning = 0;
+        // Update the spin status shortly after the drive state changes to debounce it slightly.
+        const updateSpinStatus = () => {
+            if (numSpinning) ddNoise.spinUp(); else ddNoise.spinDown();
+        };
+        for (const drive of this.drives) {
+            drive.addEventListener("startSpinning", () => { numSpinning++; setTimeout(updateSpinStatus, 2); });
+            drive.addEventListener("stopSpinning", () => { --numSpinning; setTimeout(updateSpinStatus, 2); });
+            drive.addEventListener("step", (evt) => {
+                const now = Date.now();
+                if (now > nextSeekTime)
+                    nextSeekTime = now + ddNoise.seek(evt.stepAmount);
+            });
+        }
     }
 }
 export const allModels = [

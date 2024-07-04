@@ -5,7 +5,14 @@ import { Scheduler } from "./scheduler.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc, IbmDiscFormat } from "./disc.js";
 
-export class DiscDrive {
+class StepEvent extends Event {
+    constructor(stepAmount) {
+        super("step");
+        this.stepAmount = stepAmount;
+    }
+}
+
+export class DiscDrive extends EventTarget {
     static get TicksPerRevolution() {
         // 300 rpm
         return 400000;
@@ -17,11 +24,13 @@ export class DiscDrive {
     }
 
     /**
-     *
+     * Create a new DiscDrive.
+     * 
      * @param {Number} id which drive id this is (0 or 1)
      * @param {Scheduler} scheduler scheduler to register callbacks etc
      */
     constructor(id, scheduler) {
+        super();
         this._scheduler = scheduler;
         /** @type {Disc|undefined} */
         this._disc = undefined;
@@ -138,11 +147,19 @@ export class DiscDrive {
     }
 
     startSpinning() {
-        if (!this._spinning) this._timer.schedule(1);
+        if (!this._spinning) {
+            console.log("start");
+            this.dispatchEvent(new Event("startSpinning"));
+            this._timer.schedule(1);
+        }
         this._spinning = true;
     }
 
     stopSpinning() {
+        if (this._spinning) {
+            console.log("stop");
+            this.dispatchEvent(new Event("stopSpinning"));
+        }
         this._timer.cancel();
         this._spinning = false;
     }
@@ -190,9 +207,16 @@ export class DiscDrive {
      *
      * @param {Number} delta track step delta, either 1 or -1
      */
-    seekTrack(delta) {
+    seekOneTrack(delta) {
         if (this._is40Track) delta *= 2;
         this._selectTrack(this._track + delta);
+    }
+
+    /**
+     * Notify that an overall seek is happening. Purely informational.
+     */
+    notifySeek(newTrack) {
+        this.dispatchEvent(new StepEvent(newTrack - this._track));
     }
 
     /**
