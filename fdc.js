@@ -1,5 +1,5 @@
 // Floppy disc controller and assorted utils.
-import { Disc, DiscConfig, loadSsd } from "./disc.js";
+import { Disc, DiscConfig, loadHfe, loadSsd } from "./disc.js";
 import * as utils from "./utils.js";
 
 const DiscTimeSlice = 16 * 16;
@@ -35,6 +35,9 @@ export function discFor(fdc, name, stringData, onChange) {
 
     if (fdc.isPulseLevel) {
         const disc = new Disc(true, new DiscConfig(), name);
+        if (name.toLowerCase().endsWith(".hfe")) {
+            return loadHfe(disc, data);
+        }
         return loadSsd(disc, data, false, onChange);
     }
 

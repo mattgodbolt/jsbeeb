@@ -1,7 +1,7 @@
 import { describe, it } from "mocha";
 import assert from "assert";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd, toSsdOrDsd } from "../../disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, toSsdOrDsd } from "../../disc.js";
 import * as fs from "node:fs";
 
 describe("IBM disc format tests", function () {
@@ -203,6 +203,22 @@ describe("SSD loader tests", function () {
     it("should have sane tracks", () => {
         const disc = new Disc(true, new DiscConfig());
         loadSsd(disc, data, false);
+        const sectors = disc.getTrack(0, 0).findSectors();
+        assert.equal(sectors.length, 10);
+        for (const sector of sectors) {
+            assert(!sector.hasHeaderCrcError);
+            assert(!sector.hasDataCrcError);
+        }
+    });
+});
+
+describe("HFE loader tests", function () {
+    const data = fs.readFileSync("discs/elite.hfe");
+    this.timeout(5000);  // roundtripping elite can be slow
+    it("should load Elite", () => {
+        const disc = new Disc(true, new DiscConfig());
+        loadHfe(disc, data, false);
+        assert.equal(disc.tracksUsed, 81);
         const sectors = disc.getTrack(0, 0).findSectors();
         assert.equal(sectors.length, 10);
         for (const sector of sectors) {

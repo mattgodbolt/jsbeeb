@@ -628,6 +628,178 @@ export function toSsdOrDsd(disc) {
     return result.slice(0, offset);
 }
 
+const HfeHeaderV1 = "HXCPICFE";
+const HfeHeaderV3 = "HXCHFEV3";
+const HfeV3OpcodeMask = 0xf0;
+const HfeV3OpcodeNop = 0xf0;
+const HfeV3OpcodeSetIndex = 0xf1;
+const HfeV3OpcodeSetBitrate = 0xf2;
+const HfeV3OpcodeSkipBits = 0xf3;
+const HfeV3OpcodeRand = 0xf4;
+
+function hfeByteFlip(val) {
+    let ret = 0;
+    if (val & 0x80) ret |= 0x01;
+    if (val & 0x40) ret |= 0x02;
+    if (val & 0x20) ret |= 0x04;
+    if (val & 0x10) ret |= 0x08;
+    if (val & 0x08) ret |= 0x10;
+    if (val & 0x04) ret |= 0x20;
+    if (val & 0x02) ret |= 0x40;
+    if (val & 0x01) ret |= 0x80;
+
+    return ret;
+}
+
+/**
+ * @param {Uint8Array} metadata
+ * @param {Number} track
+ */
+function hfeGetTrackOffsetAndLength(metadata, track) {
+    const index = track << 2;
+    const offset = 512 * (metadata[index] + (metadata[index + 1] << 8));
+    const length = metadata[index + 2] + (metadata[index + 3] << 8);
+    return { offset, length };
+}
+
+/**
+ * @param {Disc} disc
+ * @param {Uint8Array} data
+ */
+export function loadHfe(disc, data) {
+    if (data.length < 512) throw new Error("HFE file missing header");
+    const header = new TextDecoder("ascii").decode(data.slice(0, 8));
+    let isV3 = false;
+    let hfeVersion = 1; // TODO maybe in metadata?
+
+    if (header === HfeHeaderV1) {
+        // ... note in metadata?
+    } else if (header === HfeHeaderV3) {
+        hfeVersion = 3;
+        isV3 = true;
+    } else {
+        throw new Error(`HFE file bad header '${header}'`);
+    }
+    if (data[8] !== 0) throw new Error("HFE file revision not 0");
+    if (data[11] !== 2 && data[11] !== 0) {
+        if (data[11] === 0xff) {
+            console.log(`Unknown HFE encoding ${data[11]}, trying anyway`);
+        } else {
+            throw new Error(`HFE encoding not ISOIBM_(M)FM_ENCODING: ${data[11]}`);
+        }
+    }
+    const numSides = data[10];
+    if (numSides < 1 || numSides > 2) throw new Error(`Invalid number of sides: ${numSides}`);
+
+    const numTracks = data[9];
+    if (numTracks > IbmDiscFormat.tracksPerDisc) throw new Error(`Too many tracks: ${numTracks}`);
+    let expandShift = 0;
+    if (disc.config.expandTo80 && numTracks * 2 <= IbmDiscFormat.tracksPerDisc) {
+        expandShift = 1;
+        console.log("Expanding 40 tracks to 80");
+    }
+
+    console.log(`HFE v${hfeVersion} loading ${numSides} sides, ${numTracks} tracks`);
+
+    const lutOffset = 512 * (data[18] + (data[19] << 8));
+    if (lutOffset + 512 > data.length) throw new Error("HFE LUT doesn't fit");
+
+    const metadata = data.slice(lutOffset, lutOffset + 512);
+
+    for (let trackNum = 0; trackNum < numTracks; ++trackNum) {
+        let actualTrackNum = trackNum;
+        if (disc.config.isSkipOddTracks) {
+            if (trackNum & 1) continue;
+            actualTrackNum = trackNum >>> 1;
+        }
+        actualTrackNum = actualTrackNum << expandShift;
+        const { offset, length } = hfeGetTrackOffsetAndLength(metadata, trackNum);
+        if (offset + length > data.length)
+            throw new Error(
+                `HFE track ${trackNum} doesn't fit (length ${length} offset ${offset} file length ${data.length})`,
+            );
+        const trackData = data.slice(offset, offset + length);
+
+        for (let sideNum = 0; sideNum < numSides; ++sideNum) {
+            const bufLen = length >> 1;
+            let bytesWritten = 0;
+            if (disc.config.isSkipUpperSide && sideNum === 1) continue;
+
+            let isSetBitRate = false;
+            let isSkipBits = false;
+            let skipBitsLength = 0;
+            let pulses = 0;
+            let shiftCounter = 0;
+
+            const trackObj = disc.getTrack(sideNum === 1, actualTrackNum);
+            disc.setTrackUsed(sideNum === 1, actualTrackNum);
+            const rawPulses = trackObj.pulses2Us;
+            for (let byteIndex = 0; byteIndex < bufLen; ++byteIndex) {
+                if (bytesWritten === rawPulses.length) {
+                    console.log(`HFE track ${trackNum} truncated`);
+                    break;
+                }
+                const index = ((byteIndex >>> 8) << 9) + (sideNum << 8) + (byteIndex & 0xff);
+                let byte = hfeByteFlip(trackData[index]);
+                let numBits = 8;
+
+                if (isSetBitRate) {
+                    isSetBitRate = false;
+                    if (byte < 64 || byte > 80) {
+                        console.log(`HFE v3 SETBITRATE wild (72=250kbit) track: ${trackNum} ${byte}`);
+                    }
+                    continue;
+                } else if (isSkipBits) {
+                    isSkipBits = false;
+                    if (byte === 0 || byte >= 8) {
+                        throw new Error(`HFE v3 invalid skipbits ${byte}`);
+                    }
+                    skipBitsLength = byte;
+                    continue;
+                } else if (skipBitsLength) {
+                    byte = (byte << (8 - skipBitsLength)) & 0xff;
+                    numBits = skipBitsLength;
+                    skipBitsLength = 0;
+                } else if (isV3 && (byte & HfeV3OpcodeMask) === HfeV3OpcodeMask) {
+                    switch (byte) {
+                        case HfeV3OpcodeNop:
+                            continue; // NB continue
+                        case HfeV3OpcodeSetIndex:
+                            if (bytesWritten !== 0)
+                                console.log(`HFEv3 SETINDEX not at byte 0, track ${trackNum}: ${bytesWritten}`);
+                            continue; // NB continue
+                        case HfeV3OpcodeSetBitrate:
+                            isSetBitRate = true;
+                            continue; // NB continue
+                        case HfeV3OpcodeSkipBits:
+                            isSkipBits = true;
+                            continue; // NB continue
+                        case HfeV3OpcodeRand:
+                            // internally we represent weak bits on disc as a no flux area.
+                            byte = 0;
+                            break; // NB a break
+                        default:
+                            throw new Error(`Unknown HFE v3 opcode ${byte}`);
+                    }
+                }
+
+                for (let bitIndex = 0; bitIndex < numBits; ++bitIndex) {
+                    pulses = ((pulses << 1) & 0xffffffff) | (byte & 0x80 ? 1 : 0);
+                    byte = (byte << 1) & 0xff;
+                    if (++shiftCounter === 32) {
+                        rawPulses[bytesWritten] = pulses;
+                        bytesWritten++;
+                        pulses = 0;
+                        shiftCounter = 0;
+                    }
+                }
+            }
+            trackObj.length = bytesWritten;
+        }
+    }
+    return disc;
+}
+
 export class Disc {
     /**
      * @returns {Disc} a new blank disc
@@ -666,7 +838,10 @@ export class Disc {
         return !this.isWriteable;
     }
 
-    /** @returns {Track} */
+    /** 
+     * @param {boolean} isSideUpper
+     * @param {Number} trackNum
+     * @returns {Track} */
     getTrack(isSideUpper, trackNum) {
         return isSideUpper ? this.upperSide.tracks[trackNum] : this.lowerSide.tracks[trackNum];
     }

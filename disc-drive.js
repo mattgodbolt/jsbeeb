@@ -148,7 +148,6 @@ export class DiscDrive extends EventTarget {
 
     startSpinning() {
         if (!this._spinning) {
-            console.log("start");
             this.dispatchEvent(new Event("startSpinning"));
             this._timer.schedule(1);
         }
@@ -157,7 +156,6 @@ export class DiscDrive extends EventTarget {
 
     stopSpinning() {
         if (this._spinning) {
-            console.log("stop");
             this.dispatchEvent(new Event("stopSpinning"));
         }
         this._timer.cancel();

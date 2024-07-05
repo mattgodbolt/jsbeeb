@@ -11,10 +11,11 @@ import { Scheduler } from "./scheduler.js";
 import * as utils from "./utils.js";
 
 // TODOs remaining for intel-fdc and related functionality
-// - support loading other disc formats (including HFE whatever it is)
+// - support loading other disc formats
 // - support "writeback" to SSD (at least); tested with
 //   - google drive - broken currently :'()
 //   - download disc image DONE
+//   - rename the extension appropriately
 // - ideally support "writeback" to high fidelity output formats
 // - UI elements for visualisation
 // - better debug url param handling (ui?)
@@ -1691,5 +1692,27 @@ export class IntelFdc {
 
     get isPulseLevel() {
         return true;
+    }
+}
+
+
+export class NoiseAwareIntelFdc extends IntelFdc {
+    constructor(cpu, ddNoise, scheduler, debugFlags) {
+        super(cpu, scheduler, undefined, debugFlags);
+        let nextSeekTime = 0;
+        let numSpinning = 0;
+        // Update the spin status shortly after the drive state changes to debounce it slightly.
+        const updateSpinStatus = () => {
+            if (numSpinning) ddNoise.spinUp(); else ddNoise.spinDown();
+        };
+        for (const drive of this.drives) {
+            drive.addEventListener("startSpinning", () => { numSpinning++; setTimeout(updateSpinStatus, 2); });
+            drive.addEventListener("stopSpinning", () => { --numSpinning; setTimeout(updateSpinStatus, 2); });
+            drive.addEventListener("step", (evt) => {
+                const now = Date.now();
+                if (now > nextSeekTime)
+                    nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
+            });
+        }
     }
 }

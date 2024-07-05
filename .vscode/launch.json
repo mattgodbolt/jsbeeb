@@ -5,10 +5,11 @@
       "type": "chrome",
       "request": "launch",
       "name": "Debug a running webpack dev server",
-      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands&disc1=Welcome.ssd#",
+      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands&disc1=Exile_D1S1_80T_HG3_EA8CECA2_1.hfe#",
       "webRoot": "${workspaceFolder}",
       "sourceMaps": true,
       "trace": true
     }
   ]
 }
+

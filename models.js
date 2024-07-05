@@ -1,7 +1,7 @@
 "use strict";
 
 import { WD1770 } from "./fdc.js";
-import { IntelFdc } from "./intel-fdc.js";
+import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 
 class Model {
     constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube, cmosOverride) {
@@ -68,26 +68,7 @@ const masterSwram = [
     false,
     false,
 ];
-class IntelFdcAdapter extends IntelFdc {
-    constructor(cpu, ddNoise, scheduler, debugFlags) {
-        super(cpu, scheduler, undefined, debugFlags);
-        let nextSeekTime = 0;
-        let numSpinning = 0;
-        // Update the spin status shortly after the drive state changes to debounce it slightly.
-        const updateSpinStatus = () => {
-            if (numSpinning) ddNoise.spinUp(); else ddNoise.spinDown();
-        };
-        for (const drive of this.drives) {
-            drive.addEventListener("startSpinning", () => { numSpinning++; setTimeout(updateSpinStatus, 2); });
-            drive.addEventListener("stopSpinning", () => { --numSpinning; setTimeout(updateSpinStatus, 2); });
-            drive.addEventListener("step", (evt) => {
-                const now = Date.now();
-                if (now > nextSeekTime)
-                    nextSeekTime = now + ddNoise.seek(evt.stepAmount);
-            });
-        }
-    }
-}
+
 export const allModels = [
     new Model(
         "BBC B with DFS 1.2",
@@ -96,7 +77,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        IntelFdcAdapter,
+        NoiseAwareIntelFdc,
     ),
     new Model(
         "BBC B with DFS 0.9",
@@ -105,7 +86,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        IntelFdcAdapter,
+        NoiseAwareIntelFdc,
     ),
     new Model(
         "BBC B with 1770 (DFS)",
@@ -164,9 +145,9 @@ export function findModel(name) {
     return null;
 }
 
-export const TEST_6502 = new Model("TEST", ["TEST"], [], true, false, beebSwram, IntelFdcAdapter);
+export const TEST_6502 = new Model("TEST", ["TEST"], [], true, false, beebSwram, NoiseAwareIntelFdc);
 TEST_6502.isTest = true;
-export const TEST_65C12 = new Model("TEST", ["TEST"], [], false, false, masterSwram, IntelFdcAdapter);
+export const TEST_65C12 = new Model("TEST", ["TEST"], [], false, false, masterSwram, NoiseAwareIntelFdc);
 TEST_65C12.isTest = true;
 
 export const basicOnly = new Model("Basic only", ["Basic only"], ["master/mos3.20"], false, true, masterSwram, WD1770);
