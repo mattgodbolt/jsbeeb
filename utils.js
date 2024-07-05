@@ -1110,38 +1110,41 @@ export function resizeUint8Array(array, byteSize) {
     return newArray;
 }
 
-export function Fifo(capacity) {
-    this.buffer = new Uint8Array(capacity);
-    this.size = 0;
-    this.wPtr = 0;
-    this.rPtr = 0;
+export class Fifo {
+    constructor(capacity) {
+        this._buffer = new Uint8Array(capacity);
+        this._size = 0;
+        this._wPtr = 0;
+        this._rPtr = 0;
+    }
+    /** @returns {number} */
+    get size() { return this._size; }
+    /** @returns {boolean} */
+    get full() {
+        return this._size === this._buffer.length;
+    }
+    /** @returns {boolean} */
+    get empty() {
+        return this._size === 0;
+    }
+    clear() {
+        this._size = 0;
+        this._wPtr = 0;
+        this._rPtr = 0;
+    }
+    /** @type {Number} b */
+    put(b) {
+        if (this.full) return;
+        this._buffer[this._wPtr % this._buffer.length] = b;
+        this._wPtr++;
+        this._size++;
+    }
+    /** @returns {Number} */
+    get() {
+        if (this.empty) return;
+        const res = this._buffer[this._rPtr % this._buffer.length];
+        this._rPtr++;
+        this._size--;
+        return res;
+    }
 }
-
-Fifo.prototype.full = function () {
-    return this.size === this.buffer.length;
-};
-
-Fifo.prototype.empty = function () {
-    return this.size === 0;
-};
-
-Fifo.prototype.clear = function () {
-    this.size = 0;
-    this.wPtr = 0;
-    this.rPtr = 0;
-};
-
-Fifo.prototype.put = function (b) {
-    if (this.full()) return;
-    this.buffer[this.wPtr % this.buffer.length] = b;
-    this.wPtr++;
-    this.size++;
-};
-
-Fifo.prototype.get = function () {
-    if (this.empty()) return;
-    const res = this.buffer[this.rPtr % this.buffer.length];
-    this.rPtr++;
-    this.size--;
-    return res;
-};
