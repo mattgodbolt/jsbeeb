@@ -8,13 +8,6 @@ export default [
     eslintConfigPrettier,
     {
         plugins: { prettier },
-        // env: {
-        //     browser: true,
-        //     amd: true,
-        //     commonjs: true,
-        //     es2021: true,
-        //     node: true
-        // },
         ignores: ["lib/", "out/"],
         languageOptions: {
             parserOptions: {
