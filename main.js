@@ -1183,8 +1183,10 @@ $("#download-drive-link").on("click", function () {
     let data;
     let name;
     if (processor.fdc.isPulseLevel) {
-        data = toSsdOrDsd(processor.fdc.drives[0].disc);
+        const disc = processor.fdc.drives[0].disc;
+        data = toSsdOrDsd(disc);
         name = processor.fdc.drives[0].disc.name;
+        name = name.substring(0, name.lastIndexOf('.')) + (disc.isDoubleSided ? '.dsd' : '.ssd');
     } else {
         data = processor.fdc.drives[0].data;
         name = processor.fdc.drives[0].name;

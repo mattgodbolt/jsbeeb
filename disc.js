@@ -620,6 +620,10 @@ export function toSsdOrDsd(disc) {
             const trackObj = disc.getTrack(side === 1, trackNum);
             for (const sector of trackObj.findSectors()) {
                 const sectorOffset = offset + sector.sectorNumber * SsdFormat.sectorSize;
+                if (sector.hasDataCrcError || sector.hasHeaderCrcError) {
+                    console.log(`Skipping sector ${sector.description} with bad CRC`);
+                    continue;
+                }
                 for (let x = 0; x < SsdFormat.sectorSize; ++x) result[sectorOffset + x] = sector.sectorData[x];
             }
             offset += SsdFormat.sectorsPerTrack * SsdFormat.sectorSize;

@@ -15,7 +15,6 @@ import * as utils from "./utils.js";
 // - support "writeback" to SSD (at least); tested with
 //   - google drive - broken currently :'()
 //   - download disc image DONE
-//   - rename the extension appropriately
 // - ideally support "writeback" to high fidelity output formats
 // - UI elements for visualisation
 // - better debug url param handling (ui?)
