@@ -801,6 +801,9 @@ export function loadHfe(disc, data) {
             trackObj.length = bytesWritten;
         }
     }
+
+    // TODO consider writeback here
+
     return disc;
 }
 
@@ -830,8 +833,7 @@ export class Disc {
         this.writeTrackCallback = undefined;
         this.isWriteable = isWriteable;
 
-        // TODO disc surface builders for
-        this.load();
+        this.initSurface(0);
     }
 
     setWriteTrackCallback(callback) {
@@ -858,12 +860,6 @@ export class Disc {
     setTrackUsed(isSideUpper, trackNum) {
         if (isSideUpper) this.isDoubleSided = true;
         this.tracksUsed = Math.max(this.tracksUsed, trackNum + 1);
-    }
-
-    load() {
-        this.initSurface(0);
-        // various loads builders etc
-        // TODO get rid of this
     }
 
     initSurface(initialByte) {
