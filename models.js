@@ -1,6 +1,7 @@
 "use strict";
 
-import { I8271, WD1770 } from "./fdc.js";
+import { WD1770 } from "./fdc.js";
+import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 
 class Model {
     constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube, cmosOverride) {
@@ -67,6 +68,7 @@ const masterSwram = [
     false,
     false,
 ];
+
 export const allModels = [
     new Model(
         "BBC B with DFS 1.2",
@@ -75,7 +77,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        I8271,
+        NoiseAwareIntelFdc,
     ),
     new Model(
         "BBC B with DFS 0.9",
@@ -84,7 +86,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        I8271,
+        NoiseAwareIntelFdc,
     ),
     new Model(
         "BBC B with 1770 (DFS)",
@@ -143,9 +145,9 @@ export function findModel(name) {
     return null;
 }
 
-export const TEST_6502 = new Model("TEST", ["TEST"], [], true, false, beebSwram, I8271);
+export const TEST_6502 = new Model("TEST", ["TEST"], [], true, false, beebSwram, NoiseAwareIntelFdc);
 TEST_6502.isTest = true;
-export const TEST_65C12 = new Model("TEST", ["TEST"], [], false, false, masterSwram, I8271);
+export const TEST_65C12 = new Model("TEST", ["TEST"], [], false, false, masterSwram, NoiseAwareIntelFdc);
 TEST_65C12.isTest = true;
 
 export const basicOnly = new Model("Basic only", ["Basic only"], ["master/mos3.20"], false, true, masterSwram, WD1770);

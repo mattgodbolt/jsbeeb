@@ -1,7 +1,8 @@
 import { describe, it } from "mocha";
 import assert from "assert";
 
-import { IbmDiscFormat } from "../../disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, toSsdOrDsd } from "../../disc.js";
+import * as fs from "node:fs";
 
 describe("IBM disc format tests", function () {
     it("calculates FM crcs", () => {
@@ -89,5 +90,140 @@ describe("IBM disc format tests", function () {
 
         assert(IbmDiscFormat.checkPulse(4.0, false));
         assert(IbmDiscFormat.checkPulse(8.0, false));
+    });
+});
+
+describe("Disc builder tests", () => {
+    const someData = new Uint8Array(256);
+    someData.fill(0x33);
+    it("should write a simple FM track without blowing up", () => {
+        const disc = new Disc(true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        builder
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmByte(0) // track
+            .appendFmByte(0)
+            .appendFmByte(0) // sector
+            .appendFmByte(1)
+            .appendCrc(false)
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmChunk(someData)
+            .appendCrc(false)
+            .fillFmByte(0xff);
+    });
+
+    it("should write a simple MFM track without blowing up", () => {
+        const disc = new Disc(true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        builder
+            .appendRepeatMfmByte(0x4e, 60)
+            .appendRepeatMfmByte(0x00, 12)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmByte(IbmDiscFormat.idMarkDataPattern)
+            .appendMfmByte(0) // track
+            .appendMfmByte(0)
+            .appendMfmByte(0) // sector
+            .appendMfmByte(1)
+            .appendCrc(true)
+            .appendRepeatMfmByte(0x4e, 22)
+            .appendRepeatMfmByte(0x00, 12)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
+            .appendMfmChunk(someData)
+            .appendCrc(true)
+            .appendRepeatMfmByte(0x4e, 24)
+            .fillMfmByte(0x4e);
+    });
+
+    it("should note how much disc is being used", () => {
+        const disc = new Disc(true, new DiscConfig());
+        assert.equal(disc.tracksUsed, 0);
+        assert(!disc.isDoubleSided);
+        disc.buildTrack(false, 0);
+        assert.equal(disc.tracksUsed, 1);
+        assert(!disc.isDoubleSided);
+        disc.buildTrack(false, 3);
+        assert.equal(disc.tracksUsed, 4);
+        assert(!disc.isDoubleSided);
+        disc.buildTrack(true, 1);
+        assert.equal(disc.tracksUsed, 4);
+        assert(disc.isDoubleSided);
+    });
+
+    it("should build from FM pulses", () => {
+        const disc = new Disc(true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        const pulses = [4, 4, 8, 8, 4, 8, 8, 8, 8, 8, 8, 8, 8];
+        builder.buildFromPulses(pulses, false);
+        assert.equal(builder.track.length, 1);
+    });
+
+    it("should build from MFM pulses", () => {
+        const disc = new Disc(true, new DiscConfig());
+        const builder = disc.buildTrack(false, 0);
+        const pulses = [4, 4, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6];
+        builder.buildFromPulses(pulses, true);
+        assert.equal(builder.track.length, 1);
+    });
+});
+
+describe("SSD loader tests", function () {
+    const data = fs.readFileSync("discs/elite.ssd");
+    this.timeout(5000);  // roundtripping elite can be slow
+    it("should load Elite", () => {
+        const disc = new Disc(true, new DiscConfig());
+        loadSsd(disc, data, false);
+        assert.equal(disc.tracksUsed, 46);
+    });
+    it("should roundtrip Elite", () => {
+        const disc = new Disc(true, new DiscConfig());
+        loadSsd(disc, data, false);
+        const ssdSaved = toSsdOrDsd(disc);
+        // // Check the first few bytes, else a diff blows things up
+        const maxDiff = 50;
+        assert.deepEqual(ssdSaved.slice(0, maxDiff), Uint8Array.prototype.slice.call(data, 0, maxDiff));
+
+        // But also check everything else; and the padding should be all zeros.
+        assert(ssdSaved.length >= data.length);
+        for (let i = 0; i < data.length; ++i) {
+            assert.equal(ssdSaved[i], data[i]);
+        }
+        for (let i = data.length; i < ssdSaved.length; ++i) {
+            assert.equal(ssdSaved[i], 0);
+        }
+    });
+    it("should have sane tracks", () => {
+        const disc = new Disc(true, new DiscConfig());
+        loadSsd(disc, data, false);
+        const sectors = disc.getTrack(0, 0).findSectors();
+        assert.equal(sectors.length, 10);
+        for (const sector of sectors) {
+            assert(!sector.hasHeaderCrcError);
+            assert(!sector.hasDataCrcError);
+        }
+    });
+});
+
+describe("HFE loader tests", function () {
+    const data = fs.readFileSync("discs/elite.hfe");
+    this.timeout(5000);  // roundtripping elite can be slow
+    it("should load Elite", () => {
+        const disc = new Disc(true, new DiscConfig());
+        loadHfe(disc, data, false);
+        assert.equal(disc.tracksUsed, 81);
+        const sectors = disc.getTrack(0, 0).findSectors();
+        assert.equal(sectors.length, 10);
+        for (const sector of sectors) {
+            assert(!sector.hasHeaderCrcError);
+            assert(!sector.hasDataCrcError);
+        }
     });
 });

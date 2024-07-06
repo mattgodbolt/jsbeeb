@@ -22,6 +22,7 @@ import { Config } from "./config.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
+import { toSsdOrDsd } from "./disc.js";
 
 let processor;
 let video;
@@ -206,6 +207,10 @@ const emulationConfig = {
     getGamepads: function () {
         // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
         return navigator.getGamepads ? navigator.getGamepads() : [];
+    },
+    debugFlags: {
+        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
+        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
     },
 };
 
@@ -1175,10 +1180,22 @@ $("#download-drive-link").on("click", function () {
     document.body.appendChild(a);
     a.style = "display: none";
 
-    const blob = new Blob([processor.fdc.drives[0].data], { type: "application/octet-stream" }),
-        url = window.URL.createObjectURL(blob);
+    let data;
+    let name;
+    if (processor.fdc.isPulseLevel) {
+        const disc = processor.fdc.drives[0].disc;
+        data = toSsdOrDsd(disc);
+        name = processor.fdc.drives[0].disc.name;
+        name = name.substring(0, name.lastIndexOf('.')) + (disc.isDoubleSided ? '.dsd' : '.ssd');
+    } else {
+        data = processor.fdc.drives[0].data;
+        name = processor.fdc.drives[0].name;
+    }
+
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
     a.href = url;
-    a.download = processor.fdc.drives[0].name;
+    a.download = name;
     a.click();
     window.URL.revokeObjectURL(url);
 });

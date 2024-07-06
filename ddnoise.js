@@ -89,9 +89,9 @@ export class DdNoise {
     seek(diff) {
         if (diff < 0) diff = -diff;
         if (diff === 0) return 0;
-        else if (diff === 1) return this.oneShot(this.sounds.step);
-        else if (diff < 10) return this.oneShot(this.sounds.seek);
-        else if (diff < 30) return this.oneShot(this.sounds.seek2);
+        else if (diff <= 2) return this.oneShot(this.sounds.step);
+        else if (diff <= 20) return this.oneShot(this.sounds.seek);
+        else if (diff <= 40) return this.oneShot(this.sounds.seek2);
         else return this.oneShot(this.sounds.seek3);
     }
     mute() {
