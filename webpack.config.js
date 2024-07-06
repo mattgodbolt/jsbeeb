@@ -81,6 +81,9 @@ export default {
         static: {
             publicPath: "/",
             directory: "./",
+            watch: {
+                ignored: "**/.*",
+            },
         },
     },
     optimization: getOptimizationSettings(),
