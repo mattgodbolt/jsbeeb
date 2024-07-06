@@ -1,13 +1,21 @@
-"use strict";
-
 const MaxHeadroom = 0xffffffff;
 
 export class Scheduler {
+    static get MaxHeadroom() {
+        return MaxHeadroom;
+    }
+
     constructor() {
+        /** @type {ScheduledTask|null} */
         this.scheduled = null;
         this.epoch = 0;
     }
 
+    /**
+     * Schedule a task to run after a delay.
+     * @param {ScheduledTask} task
+     * @param {number} delay
+     */
     schedule(task, delay) {
         if (task.scheduler !== this) {
             throw new Error("Wrong scheduler for task, or non-task");
@@ -36,6 +44,10 @@ export class Scheduler {
         }
     }
 
+    /**
+     * Cancel a task.
+     * @param {ScheduledTask} task
+     */
     cancel(task) {
         if (!task.scheduled()) return;
         if (!task.prev) {
@@ -51,6 +63,10 @@ export class Scheduler {
         task._scheduled = false;
     }
 
+    /**
+     * Run all tasks that are due in the next ticks.
+     * @param {number} ticks number of cycles to run
+     */
     polltime(ticks) {
         const targetEpoch = this.epoch + ticks;
         while (this.scheduled && this.scheduled.expireEpoch <= targetEpoch) {
@@ -62,20 +78,34 @@ export class Scheduler {
         this.epoch = targetEpoch;
     }
 
+    /**
+     * The minimum number of cycles that can be run without needing to polltime.
+     * @returns {number} number of cycles
+     */
     headroom() {
         if (this.scheduled === null) return MaxHeadroom;
         return this.scheduled.expireEpoch - this.epoch;
     }
 
+    /**
+     * Create a new task.
+     * @param {function(): void} onExpire function to call when the task expires
+     * @returns {ScheduledTask} a handle to the new task
+     */
     newTask(onExpire) {
-        return new Task(this, onExpire);
+        return new ScheduledTask(this, onExpire);
     }
 }
 
-class Task {
+class ScheduledTask {
+    /**
+     * @param {Scheduler} scheduler
+     * @param {function(): void} onExpire
+     */
     constructor(scheduler, onExpire) {
         this.scheduler = scheduler;
-        this.prev = this.next = null;
+        this.prev = null;
+        this.next = null;
         this.expireEpoch = 0;
         this.onExpire = onExpire;
         this._scheduled = false;
@@ -85,10 +115,16 @@ class Task {
         return this._scheduled;
     }
 
+    /**
+     * @param {number} delay
+     */
     schedule(delay) {
         this.scheduler.schedule(this, delay);
     }
 
+    /**
+     * @param {number} delay
+     */
     reschedule(delay) {
         this.scheduler.cancel(this);
         this.scheduler.schedule(this, delay);
@@ -98,6 +134,10 @@ class Task {
         this.scheduler.cancel(this);
     }
 
+    /**
+     * @param {boolean} state
+     * @param {number} delay
+     */
     ensureScheduled(state, delay) {
         if (state) {
             if (!this.scheduled()) this.schedule(delay);
