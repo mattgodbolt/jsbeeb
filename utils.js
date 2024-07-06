@@ -744,10 +744,6 @@ export function hexword(value) {
     return hexbyte(value >>> 8) + hexbyte(value & 0xff);
 }
 
-export function bin32(value) {
-    return value.toString(2);
-}
-
 export function hd(reader, start, end, opts) {
     opts = opts || {};
     const width = opts.width || 16;

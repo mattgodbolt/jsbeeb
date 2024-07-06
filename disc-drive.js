@@ -85,7 +85,6 @@ export class DiscDrive extends EventTarget {
         if (pulses === 0) pulses = this.getQuasiRandomPulses();
 
         if (this._pulsesCallback) {
-            // console.log(`"Pulses @ ${this._track}:${this._headPosition} = ${utils.bin32(pulses)}"`);
             this._pulsesCallback(pulses, numPulses);
         }
 
