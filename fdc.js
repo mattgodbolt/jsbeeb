@@ -521,4 +521,6 @@ export class WD1770 {
     loadDisc(drive, disc) {
         this.drives[drive] = disc;
     }
+
+    reset() {}
 }
