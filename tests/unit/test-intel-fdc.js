@@ -31,7 +31,6 @@ class FakeDrive {
 }
 
 /**
- *
  * @param {IntelFdc} fdc
  * @param  {Number} command
  * @param  {...Number} params
