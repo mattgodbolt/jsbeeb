@@ -34,11 +34,12 @@ export function discFor(fdc, name, stringData, onChange) {
     const data = typeof stringData !== "string" ? stringData : utils.stringToUint8Array(stringData);
 
     if (fdc.isPulseLevel) {
+        const lowerName = name.toLowerCase();
         const disc = new Disc(true, new DiscConfig(), name);
-        if (name.toLowerCase().endsWith(".hfe")) {
+        if (lowerName.endsWith(".hfe")) {
             return loadHfe(disc, data);
         }
-        return loadSsd(disc, data, false, onChange);
+        return loadSsd(disc, data, lowerName.endsWith(".dsd"), onChange);
     }
 
     const prevData = new Uint8Array(data);
