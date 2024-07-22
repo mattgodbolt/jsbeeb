@@ -3,6 +3,7 @@
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502 } from "./6502.js";
 import { DiscDrive } from "./disc-drive.js";
+import { IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 import * as utils from "./utils.js";
@@ -180,6 +181,9 @@ export class WdFdc {
         this._logCommands = debugFlags ? !!debugFlags.logFdcCommands : false;
         this._logStateChanges = debugFlags ? !!debugFlags.logFdcStateChanges : false;
 
+        const callback = (pulses, count) => this._pulsesCallback(pulses, count);
+        for (const drive of this._drives) drive.setPulsesCallback(callback);
+
         this.powerOnReset();
     }
 
@@ -205,7 +209,7 @@ export class WdFdc {
         // TODO: the cpu handling of NMIs is bad here. Should update to handle multiple
         // NMI/interrupt sources. And when we do go back and implement the checks in the beebjit
         // source here too.
-        this._cpu.nmi(newLevel);
+        this._cpu.NMI(newLevel);
     }
 
     /**
@@ -435,6 +439,31 @@ export class WdFdc {
         }
     }
 
+    /**
+     * @param {State} state
+     */
+    _setState(state) {
+        if (this._logStateChanges && state !== this._state) {
+            this._log(`State ${this._state} -> ${state}`);
+        }
+        this._state = state;
+        this._stateCount = 0;
+    }
+
+    _clearTimer() {
+        // TODO is this ok? differs from beebjit but so do our timer systems.
+        if (this._timerState !== TimerState.none) {
+            this._timerTask.cancel();
+            this._timerState = TimerState.none;
+        }
+    }
+
+    _clearState() {
+        this._setState(State.idle);
+        this._clearTimer();
+        this._indexPulseCount = 0;
+    }
+
     _stepRateMsFor(val) {
         switch (val & 0x03) {
             case 0:
@@ -555,6 +584,387 @@ export class WdFdc {
             this._lastMfmBit = false;
             this._deliverData = 0;
             this._deliverIsMarker = false;
+        }
+    }
+
+    _dispatchCommand() {
+        if (!this._currentDrive) throw new Error("Unexpectedly dispatching a command with no drive set");
+        if (this._isCommandWrite && this._currentDrive.writeProtect) {
+            this._statusRegister |= Status.writeProtected;
+            this._commandDone(true);
+            return;
+        }
+
+        switch (this._command) {
+            case Command.restore:
+                this._trackRegister = 0xff;
+                this._dataRegister = 0;
+            // Falls through...
+            case Command.seek:
+                this._doSeekStepOrVerify();
+                break;
+            case Command.stepInNoUpdate:
+                this._doSeekStep(1, false);
+                break;
+            case Command.stepInWithUpdate:
+                this._doSeekStep(1, true);
+                break;
+            case Command.stepOutNoUpdate:
+                this._doSeekStep(-1, false);
+                break;
+            case Command.stepOutWithUpdate:
+                this._doSeekStep(-1, true);
+                break;
+            case Command.readSector:
+            case Command.readSectorMulti:
+            case Command.writeSector:
+            case Command.writeSectorMulti:
+            case Command.readAddress:
+                this._setState(State.searchId);
+                this._indexPulseCount = 0;
+                break;
+            case Command.readTrack:
+                this._setState(State.waitIndex);
+                this._indexPulseCount = 0;
+                break;
+            case Command.writeTrack:
+                this._setState(State.writeTrackSetup);
+                this._indexPulseCount = 0;
+                break;
+            default:
+                throw new Error(`Invalid command ${this._command} in dispatch`);
+        }
+    }
+
+    _pulsesCallback(pulses, count) {
+        // This callback routine is also used for seek/settle timing which not a precise 64us basis.
+        if (!this._currentDrive || !this._currentDrive.spinning || !(this._statusRegister & Status.motorOn)) {
+            throw new Error("Something unfortunate happened in the 1770 pulses callback");
+        }
+        const wasIndexPulse = this._isIndexPulse;
+        this._isIndexPulse = this._currentDrive.indexPulse;
+        const isIndexPulsePositiveEdge = this._isIndexPulse && !wasIndexPulse;
+        const isMfm = count === 16;
+
+        if (this._isInterruptOnIndexPulse && isIndexPulsePositiveEdge) this._setIntRq(true);
+
+        // EMU Note: if the chip is idle after copmletion of a type I command, this index pulse and
+        // track 0 bits appear maintained. They disappear on spin-down.
+        this._updateTypeIStatusBits();
+
+        switch (this._state) {
+            case State.idle:
+                this._pulsesCallbackIdle();
+                break;
+            case State.timerWait:
+                break;
+            case State.spinUpWait:
+                this._pulsesCallbackSpinUpWait();
+                break;
+            case State.waitIndex:
+                if (isIndexPulsePositiveEdge) {
+                    this._setState(State.inReadTrack);
+                    // Need to include this byte (directly after the index pulse) in the read
+                    // track data. Confirmed with a real 1772 & Gotek.
+                    this._bitstreamReceived(pulses, count, false);
+                }
+                break;
+            case State.searchId:
+            case State.inId:
+            case State.searchData:
+            case State.inData:
+            case State.readTrack:
+                this._bitstreamReceived(pulses, count, isIndexPulsePositiveEdge);
+                if (this._indexPulseCount >= 6) {
+                    this._statusRegister |= Status.recordNotFound;
+                    this._commandDone(true);
+                }
+                break;
+            case State.writeSectorDelay:
+                this._pulsesCallbackSectorDelay();
+                break;
+            case State.writeSectorLeadInFm:
+                this._writeByte(isMfm, 0x00, false);
+                if (++this._stateCount === 6) this._setState(State.writeSectorMarkerFm);
+                break;
+            case State.writeSectorLeadInMfm:
+                if (this._stateCount >= 11) this._writeByte(isMfm, 0x00, false);
+                if (++this._stateCount === 23) this._setState(State.writeSectorMarkerMfm);
+                break;
+            case State.writeSectorMarkerFm: {
+                const dataByte = this._isCommandDeleted
+                    ? IbmDiscFormat.deletedDataMarkDataPattern
+                    : IbmDiscFormat.dataMarkDataPattern;
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+                this._writeByte(false, dataByte, true);
+                this._setState(State.writeSectorBody);
+                break;
+            }
+            case State.writeSectorMarkerMfm:
+                this._pulsesCallbackWriteSectorMarkerMfm();
+                break;
+            case State.writeSectorBody:
+                this._pulsesCallbackWriteSectorBody(isMfm);
+                break;
+            case State.checkMulti:
+                if (this._isCommandMulti) {
+                    this._sectorRegister++;
+                    this._indexPulseCount = 0;
+                    this._setState(State.searchId);
+                } else {
+                    this._commandDone(true);
+                }
+                break;
+            case State.writeTrackSetup:
+                this._pulsesCallbackWriteTrackSetup();
+                break;
+            case State.inWriteTrack:
+                this._pulsescallbackInWriteTrack(isMfm, isIndexPulsePositiveEdge);
+                break;
+            case State.done:
+                this._commandDone(true);
+                break;
+            default:
+                throw new Error(`Unexpected state ${this._state}`);
+        }
+
+        if (isIndexPulsePositiveEdge) this._indexPulseCount++;
+    }
+
+    _pulsesCallbackIdle() {
+        if (this._statusRegister & Status.busy) throw new Error("Unexpectedly busy in idle state");
+        // different sources disagree on 10 vs 9 index pulses for spin down.
+        if (this._indexPulseCount < 9) return;
+        this._logCommand("automatic motor off");
+        this._currentDrive.stopSpinning();
+        this._statusRegister &= ~Status.motorOn;
+        // In @scarybeasts's testing on a 1772 the polled type 1 status bits get cleared on spin down.
+        if (this._commandType === 1) {
+            this._statusRegister &= ~(Status.typeITrack0 | Status.typeIIndex);
+        }
+    }
+
+    _pulsesCallbackSpinUpWait() {
+        if (this._indexPulseCount < 6) return;
+        if (this._commandType === 1) this._statusRegister |= Status.typeISpinUpDone;
+        if (this._isCommandSettle) {
+            const settleMs = this._is1772 ? 15 : 30;
+            this._startTimer(TimerState.settle, settleMs * 1000);
+        } else {
+            this._dispatchCommand();
+        }
+    }
+
+    _pulsesCallbackWriteSectorMarkerMfm() {
+        if (this._stateCount < 3) this._writeByte(true, 0xa1, true);
+        if (++this._stateCount === 4) {
+            const dataByte = this._isCommandDeleted
+                ? IbmDiscFormat.deletedDataMarkDataPattern
+                : IbmDiscFormat.dataMarkDataPattern;
+            this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+            this._writeByte(true, dataByte, true);
+            this._setState(State.writeSectorBody);
+        }
+    }
+
+    _pulsesCallbackWriteSectorBody(isMfm) {
+        if (this._stateCount < this._onDiscLength) {
+            let dataByte = this._dataRegister;
+            if (this._statusRegister & Status.typeIIorIIIDrq) {
+                dataByte = 0;
+                this._statusRegister |= Status.typeIIorIIILostByte;
+            }
+            this._crc = IbmDiscFormat.crcAddByte(this._crc, dataByte);
+            this._writeByte(isMfm, dataByte, false);
+            if (this._stateCount !== this._onDiscLength - 1) this._setDrq(true);
+        } else if (this._stateCount < this._onDiscLength + 2) {
+            this._writeByte(isMfm, (this._crc >>> 8) & 0xff, false);
+            this._crc = (this._crc << 8) & 0xffff;
+        } else {
+            this._writeByte(isMfm, 0xff, false);
+            this._setState(State.checkMulti);
+        }
+        this._stateCount++;
+    }
+
+    _pulsesCallbackWriteTrackSetup() {
+        if (this._stateCount === 0) {
+            this._indexPulseCount = 0;
+            this._setDrq(true);
+        } else if (this._stateCount === 3) {
+            if (this._statusRegister & Status.typeIIorIIIDrq) {
+                this._statusRegister |= Status.typeIIorIIILostByte;
+                this._commandDone(true);
+            } else {
+                this._setState(State.inWriteTrack);
+                return;
+            }
+        }
+        this._stateCount++;
+    }
+
+    _pulsesCallbackInWriteTrack(isMfm, isIndexPulsePositiveEdge) {
+        if (this._stateCount === 0 && !isIndexPulsePositiveEdge) return;
+        if (this._stateCount > 0 && isIndexPulsePositiveEdge) {
+            this._commandDone(true);
+            return;
+        }
+        if (this._isWriteTrackCrcSecondByte) {
+            this._writeByte(isMfm, this._crc & 0xff, false);
+            this._isWriteTrackCrcSecondByte = false;
+            this._setDrq(true);
+            return;
+        }
+        let dataByte = this._dataRegister;
+        if (this._statusRegister & Status.typeIIorIIIDrq) {
+            dataByte = 0;
+            this._statusRegister |= Status.typeIIorIIILostByte;
+        }
+        let isMarker = false;
+        let isPresetCrc = false;
+        switch (dataByte) {
+            // 0xF5 and 0xF6 are documented as "not allowed" in FM mode. They
+            // actually write 0xA1 / 0xC2 respectively, as per MFM, but it's not
+            // known whether any clock bits are omitted, or whether CRC is preset,
+            // so bailing for now rather than guessing.
+            case 0xf5:
+                if (!isMfm) throw new Error("Unhandled 0xf5 in FM");
+                isMarker = true;
+                isPresetCrc = true;
+                dataByte = 0xa1;
+                break;
+            case 0xf6:
+                if (!isMfm) throw new Error("Unhandled 0xf6 in FM");
+                isMarker = true;
+                dataByte = 0xc2;
+                break;
+            case 0xf8:
+            case 0xf9:
+            case 0xfa:
+            case 0xfb:
+            case 0xfe:
+                if (!isMfm) {
+                    isMarker = true;
+                    isPresetCrc = true;
+                }
+                break;
+            case 0xfc:
+                if (!isMfm) isMarker = true;
+                break;
+            default:
+                break;
+        }
+        if (isPresetCrc) {
+            this._crc = IbmDiscFormat.crcInit(isMfm);
+        }
+        if (dataByte === 0xf7) {
+            this._writeByte(isMfm, (this._crc >>> 8) & 0xff, false);
+            this._isWriteTrackCrcSecondByte = true;
+        } else {
+            this._writeByte(isMfm, dataByte, isMarker);
+            if (isMfm && isPresetCrc) {
+                // Nothing.
+            } else {
+                this._crc = IbmDiscFormat.crcAddByte(this._crc, dataByte);
+            }
+            this._setDrq(true);
+        }
+        this._stateCount++;
+    }
+
+    /**
+     * @param {boolean} isMfm
+     * @param {Number} byte
+     * @param {boolean} isMarker
+     */
+    _writeByte(isMfm, byte, isMarker) {
+        let pulses;
+        if (isMfm) {
+            pulses = isMarker ? this._mfmMarkerFor(byte) : IbmDiscFormat.mfmTo2usPulses(this._lastMfmBit, byte);
+        } else {
+            const clocks = isMarker ? this._fmMarkerClocksFor(byte) : 0xff;
+            pulses = IbmDiscFormat.fmTo2usPulses(clocks, byte);
+        }
+        this._currentDrive.writePulses(pulses);
+    }
+
+    _fmMarkerClocksFor(byte) {
+        switch (byte) {
+            case 0xfc:
+                return 0xd7;
+            case 0xf8:
+            case 0xf9:
+            case 0xfa:
+            case 0xfb:
+            case 0xfe:
+                return IbmDiscFormat.markClockPattern;
+        }
+    }
+
+    _mfmMarkerFor(byte) {
+        switch (byte) {
+            case 0xa1:
+                return IbmDiscFormat.mfmA1Sync;
+            case 0xc2:
+                return IbmDiscFormat.mfmC2Sync;
+            default:
+                throw new Error("Bad marker byte");
+        }
+    }
+
+    _commandDone(doRaiseIntRq) {
+        if (!(this._statusRegister & Status.busy)) throw new Error("Should be busy");
+        this._doRaiseIntRq = doRaiseIntRq;
+        this._startTimer(TimerState.done, 32);
+    }
+
+    /// jsbeeb compatibility stuff TODO combine with the noise aware stuff?
+    /**
+     *
+     * @param {Number} drive
+     * @param {Disc} disc
+     */
+    loadDisc(drive, disc) {
+        this._drives[drive].setDisc(disc);
+    }
+
+    get motorOn() {
+        return [this._drives[0] ? this._drives[0].spinning : false, this._drives[0] ? this._drives[1].spinning : false];
+    }
+
+    get drives() {
+        return this._drives;
+    }
+
+    get isPulseLevel() {
+        return true;
+    }
+}
+
+export class NoiseAwareWdFdc extends WdFdc {
+    // TODO: consider deduplicating with the IntelFdc equivalent.
+    constructor(cpu, ddNoise, scheduler, debugFlags) {
+        super(cpu, scheduler, undefined, debugFlags);
+        let nextSeekTime = 0;
+        let numSpinning = 0;
+        // Update the spin status shortly after the drive state changes to debounce it slightly.
+        const updateSpinStatus = () => {
+            if (numSpinning) ddNoise.spinUp();
+            else ddNoise.spinDown();
+        };
+        for (const drive of this.drives) {
+            drive.addEventListener("startSpinning", () => {
+                numSpinning++;
+                setTimeout(updateSpinStatus, 2);
+            });
+            drive.addEventListener("stopSpinning", () => {
+                --numSpinning;
+                setTimeout(updateSpinStatus, 2);
+            });
+            drive.addEventListener("step", (evt) => {
+                const now = Date.now();
+                if (now > nextSeekTime) nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
+            });
         }
     }
 }

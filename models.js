@@ -1,6 +1,7 @@
 "use strict";
 
 import { WD1770 } from "./fdc.js";
+import { NoiseAwareWdFdc } from "./wd-fdc.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 
 class Model {
@@ -95,7 +96,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        WD1770,
+        NoiseAwareWdFdc, // TODO 1772?
     ),
     // putting ADFS in a higher ROM slot gives it priority
     new Model(
@@ -105,7 +106,7 @@ export const allModels = [
         true,
         false,
         beebSwram,
-        WD1770,
+        WD1770, // TODO etc etc 1772?
     ),
     new Model("BBC Master 128 (DFS)", ["Master"], ["master/mos3.20"], false, true, masterSwram, WD1770, null, pickDfs),
     new Model(
@@ -115,7 +116,7 @@ export const allModels = [
         false,
         true,
         masterSwram,
-        WD1770,
+        WD1770, // 1772?
         null,
         pickAdfs,
     ),
@@ -126,7 +127,7 @@ export const allModels = [
         false,
         true,
         masterSwram,
-        WD1770,
+        WD1770, // 1772?
         null,
         pickAnfs,
     ),

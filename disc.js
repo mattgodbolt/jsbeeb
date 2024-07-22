@@ -999,9 +999,13 @@ export class IbmDiscFormat {
         return 21;
     }
 
-    static crcInit(is_mfm) {
+    /**
+     * @param {boolean} isMfm
+     * @returns {Number} initial CRC for type
+     */
+    static crcInit(isMfm) {
         // MFM starts with 3x 0xA1 sync bytes added.
-        return is_mfm ? 0xcdb4 : 0xffff;
+        return isMfm ? 0xcdb4 : 0xffff;
     }
 
     static crcAddByte(crc, byte) {
