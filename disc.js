@@ -232,7 +232,7 @@ class MfmReader {
     }
 
     get initialCrc() {
-        let crc = IbmDiscFormat.crcInit(0);
+        let crc = IbmDiscFormat.crcInit(false);
         crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
         crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
         crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
@@ -262,7 +262,7 @@ class FmReader {
         return { data, clocks, iffyPulses };
     }
     get initialCrc() {
-        return IbmDiscFormat.crcInit(0);
+        return IbmDiscFormat.crcInit(false);
     }
 }
 
@@ -844,7 +844,7 @@ export class Disc {
         return !this.isWriteable;
     }
 
-    /** 
+    /**
      * @param {boolean} isSideUpper
      * @param {Number} trackNum
      * @returns {Track} */

@@ -720,7 +720,7 @@ export class WdFdc {
                 const dataByte = this._isCommandDeleted
                     ? IbmDiscFormat.deletedDataMarkDataPattern
                     : IbmDiscFormat.dataMarkDataPattern;
-                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), dataByte);
                 this._writeByte(false, dataByte, true);
                 this._setState(State.writeSectorBody);
                 break;
@@ -786,7 +786,7 @@ export class WdFdc {
             const dataByte = this._isCommandDeleted
                 ? IbmDiscFormat.deletedDataMarkDataPattern
                 : IbmDiscFormat.dataMarkDataPattern;
-            this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+            this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), dataByte);
             this._writeByte(true, dataByte, true);
             this._setState(State.writeSectorBody);
         }
