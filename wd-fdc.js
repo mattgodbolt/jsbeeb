@@ -7,6 +7,7 @@ import { IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 import * as utils from "./utils.js";
+
 /**
  * Commands.
  *
@@ -400,8 +401,8 @@ export class WdFdc {
             this._isCommandSettle = true;
         if (
             this._command === Command.writeSector ||
-            this._command == Command.writeSectorMulti ||
-            this._command == Command.writeTrack
+            this._command === Command.writeSectorMulti ||
+            this._command === Command.writeTrack
         ) {
             this._isCommandWrite = true;
             this._isCommandDeleted = !!(val & CommandBits.typeIIDeleted);
@@ -440,7 +441,7 @@ export class WdFdc {
     }
 
     /**
-     * @param {State} state
+     * @param {State|Number} state
      */
     _setState(state) {
         if (this._logStateChanges && state !== this._state) {
@@ -511,7 +512,29 @@ export class WdFdc {
     }
 
     _timerFired() {
-        //////////////
+        if (!(this._statusRegister & Status.busy)) throw new Error("Should be busy");
+        const timerState = this._timerState;
+        this._timerState = TimerState.none;
+        switch (timerState) {
+            case TimerState.settle:
+                this._dispatchCommand();
+                break;
+            case TimerState.seek:
+                if (
+                    this._command === Command.stepInNoUpdate ||
+                    this._command === Command.stepInWithUpdate ||
+                    this._command === Command.stepOutNoUpdate ||
+                    this._command === Command.stepOutWithUpdate
+                )
+                    this._checkVerify();
+                else this._doSeekStepOrVerify();
+                break;
+            case TimerState.done:
+                this._doneTimer();
+                break;
+            default:
+                throw new Error(`Unexpected timer state ${timerState}`);
+        }
     }
 
     /**
@@ -520,6 +543,7 @@ export class WdFdc {
     _isSide(value) {
         return !!(value & Control.side);
     }
+
     /**
      * @param {Control} value
      */
@@ -527,6 +551,7 @@ export class WdFdc {
         // Double density (MFM) is active low.
         return !(value & Control.density);
     }
+
     /**
      * @param {Control} value
      */
@@ -719,7 +744,7 @@ export class WdFdc {
                 this._pulsesCallbackWriteTrackSetup();
                 break;
             case State.inWriteTrack:
-                this._pulsescallbackInWriteTrack(isMfm, isIndexPulsePositiveEdge);
+                this._pulsesCallbackInWriteTrack(isMfm, isIndexPulsePositiveEdge);
                 break;
             case State.done:
                 this._commandDone(true);
@@ -912,10 +937,69 @@ export class WdFdc {
         }
     }
 
+    _updateTypeIStatusBits() {
+        if (this._commandType !== 1) return;
+        this._statusRegister &= ~(Status.typeITrack0 | Status.typeIIndex);
+        if (this._currentDrive.track === 0) this._statusRegister |= Status.typeITrack0;
+        if (this._currentDrive.indexPulse) this._statusRegister |= Status.typeIIndex;
+    }
+
+    _startTimer(timerState, waitUs) {
+        if (!(this._statusRegister & Status.busy)) throw new Error("Should be busy");
+        if (this.timerState !== TimerState.none) throw new Error("Timer started but still running");
+        this._timerTask.cancel();
+        this._timerState = timerState;
+        this._setState(State.timerWait);
+        this._timerTask.schedule(waitUs * 2);
+    }
+
     _commandDone(doRaiseIntRq) {
         if (!(this._statusRegister & Status.busy)) throw new Error("Should be busy");
         this._doRaiseIntRq = doRaiseIntRq;
         this._startTimer(TimerState.done, 32);
+    }
+
+    _doneTimer() {
+        this._statusRegister &= ~Status.busy;
+        this._clearState();
+        // Make sure the status are up to date.
+        this._updateTypeIStatusBits();
+
+        // EMU NOTE: leave DRQ alone, if it is raised, leave it raised.
+        if (this._doRaiseIntRq) this._setIntRq(true);
+
+        this._logCommand(`result status ${utils.hexbyte(this._statusRegister)}`);
+    }
+
+    _checkVerify() {
+        if (this._isCommandVerify) {
+            this._indexPulseCount = 0;
+            this._setState(State.searchId);
+        } else {
+            this._commandDone(true);
+        }
+    }
+
+    _doSeekStep(stepDirection, doUpdateTr) {
+        this._currentDrive.seekOneTrack(stepDirection);
+        if (doUpdateTr) this._trackRegister += stepDirection;
+        // TRK0 signal may have been raised or lowered.
+        this._updateTypeIStatusBits();
+        this._startTimer(TimerState.seek, this._commandStepRateMs * 1000);
+    }
+
+    _doSeekStepOrVerify() {
+        if (this._trackRegister === this._dataRegister) {
+            this._checkVerify();
+            return;
+        }
+        const stepDirection = this._trackRegister > this._dataRegister ? -1 : 1;
+        if (this._currentDrive.track === 0 && stepDirection === -1) {
+            this._trackRegister = 0;
+            this._checkVerify();
+            return;
+        }
+        this._doSeekStep(stepDirection, true);
     }
 
     /// jsbeeb compatibility stuff TODO combine with the noise aware stuff?
