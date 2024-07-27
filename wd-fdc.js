@@ -167,7 +167,7 @@ export class WdFdc {
         this._timerTask = scheduler.newTask(() => this._timerFired());
         this._stateCount = 0;
         this._indexPulseCount = 0;
-        this._markDetector = 0;
+        this._markDetector = 0n;
         this._dataShifter = 0;
         this._dataShiftCount = 0;
         this._deliverData = 0;
@@ -206,7 +206,7 @@ export class WdFdc {
     }
 
     _updateNmi() {
-        const newLevel = this._isDrq | (this._isOpus ? this._isIntRq : false);
+        const newLevel = this._isDrq | (this._isOpus ? false : this._isIntRq);
         // TODO: the cpu handling of NMIs is bad here. Should update to handle multiple
         // NMI/interrupt sources. And when we do go back and implement the checks in the beebjit
         // source here too.
@@ -327,14 +327,22 @@ export class WdFdc {
                 if (!this._isReset(this._controlRegister)) this._doCommand(val);
                 break;
             case 5:
+                this._logCommand(`track register now ${val};`);
                 this._trackRegister = val;
                 break;
             case 6:
                 // Ignore sector reg changes in reset; note that track/data registers will still be accepted.
-                if (!this._isReset(this._controlRegister)) this._sectorRegister = val;
+                if (!this._isReset(this._controlRegister)) {
+                    this._logCommand(`sector register now ${val};`);
+                    this._sectorRegister = val;
+                } else {
+                    this._logCommand(`ignoring sector write of ${val};`);
+                }
                 break;
             case 7:
-                if (this._commandType === 2 || this._commandType === 3) this._setDrq(false);
+                if (this._commandType === 2 || this._commandType === 3) {
+                    this._setDrq(false);
+                }
                 this._dataRegister = val;
                 break;
         }
@@ -602,7 +610,7 @@ export class WdFdc {
             this._isDrq = false;
             this._updateNmi();
 
-            this._markDetector = 0;
+            this._markDetector = 0n;
             this._dataShifter = 0;
             this._dataShiftCount = 0;
             this._isIndexPulse = false;
@@ -897,6 +905,92 @@ export class WdFdc {
         this._stateCount++;
     }
 
+    _markDetectorTriggered() {
+        if (this._isDoubleDensity(this._controlRegister)) {
+            // EMU NOTE: unsure as to exactly when MFM sync bytes are spotted. Here we look for MFM 0x00 then MFM 0xa1 (sync).
+            // The documented sequence is 12 0x00, 3x 0xa1 (sync).
+            if ((this._markDetector & 0xffffffffn) === 0xaaaa4489n) {
+                this._deliverData = 0xa1;
+                return true;
+            }
+            // TODO: sync to c2 (5224).
+            // Note than an early, naive attempt had it triggeredin in the middle of the sector data,
+            // so we'll need to study how it actually works in detail.
+            // Tag the byte after 3 sync bytes as a marker.
+            if ((this._markDetector & 0xffffffffffff0000n) === 0x4489448944890000n) {
+                this._deliverIsMarker = true;
+            }
+        } else {
+            // The FM mark detector appears to need 4 data bits' worth of zeros, with clock bits set to 1, to be able to trigger.
+            // Tried on @scarybeasts's real 1772-based machine.
+            if ((this._markDetector & 0x0000ffff00000000n) === 0x0000888800000000n) {
+                const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(
+                    Number(this._markDetector & 0xffffffffn),
+                );
+                if (!iffyPulses && clocks === 0xc7) {
+                    // TODO: see http://info-coach.fr/atari/documents/_mydoc/WD1772-JLG.pdf
+                    // This suggests that a wider ranges of byte values will function as markers. It may also differ FM vs. MFM.
+                    if (data === 0xf8 || data === 0xfb || data === 0xfe) {
+                        // Resync to marker.
+                        this._deliverData = data;
+                        this._deliverIsMarker = true;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param {boolean} bit
+     */
+    _bitReceived(bit) {
+        // Always run the mark detector. For a command like "read track", the 1770
+        // will re-sync in the middle of the command as appropriate.
+        this._markDetector = ((this._markDetector << 1n) & 0xffffffffffffffffn) | (bit ? 1n : 0n);
+        if (this._markDetectorTriggered()) {
+            this._dataShifter = 0;
+            this._dataShiftCount = 0;
+            return;
+        }
+
+        this._dataShifter = ((this._dataShifter << 1) | (bit ? 1 : 0)) & 0xffffffff;
+        this._dataShiftCount++;
+        if (this._isDoubleDensity(this._controlRegister)) {
+            if (this._dataShiftCount === 16) {
+                this._deliverData = IbmDiscFormat._2usPulsesToMfm(this._dataShifter);
+                this._dataShifter = 0;
+                this._dataShiftCount = 0;
+            }
+        } else {
+            if (this._dataShiftCount === 32) {
+                const { data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(this._dataShifter);
+                // If we're reading MFM as FM, the pulses won't all fall on 4us boundaries. This is fuzzy bits;
+                // we'll return a non-stable read.
+                if (iffyPulses) {
+                    const { data: unstableBits } = IbmDiscFormat._2usPulsesToFm(
+                        this._currentDrive.getQuasiRandomPulses(),
+                    );
+                    this._deliverData = unstableBits;
+                } else {
+                    this._deliverData = data;
+                }
+                this._dataShifter = 0;
+                this._dataShiftCount = 0;
+            }
+        }
+    }
+
+    _bitstreamReceived(pulses, pulsesCount, isIndexPulsePositiveEdge) {
+        pulses = (pulses << (32 - pulsesCount)) & 0xffffffff;
+        for (let i = 0; i < pulsesCount; ++i) {
+            this._bitReceived(!!(pulses & 0x80000000));
+            pulses = (pulses << 1) & 0xffffffff;
+        }
+        this._byteReceived(isIndexPulsePositiveEdge);
+    }
+
     /**
      * @param {boolean} isMfm
      * @param {Number} byte
@@ -946,7 +1040,7 @@ export class WdFdc {
 
     _startTimer(timerState, waitUs) {
         if (!(this._statusRegister & Status.busy)) throw new Error("Should be busy");
-        if (this.timerState !== TimerState.none) throw new Error("Timer started but still running");
+        if (this._timerState !== TimerState.none) throw new Error("Timer started but still running");
         this._timerTask.cancel();
         this._timerState = timerState;
         this._setState(State.timerWait);
@@ -1000,6 +1094,163 @@ export class WdFdc {
             return;
         }
         this._doSeekStep(stepDirection, true);
+    }
+
+    _byteReceived(isIndexPulsePositiveEdge) {
+        const isMfm = this._isDoubleDensity(this._controlRegister);
+        const isMarker = this._deliverIsMarker;
+        const data = this._deliverData;
+        this._deliverIsMarker = false;
+
+        switch (this._state) {
+            case State.searchId:
+                if (!isMarker || data !== IbmDiscFormat.idMarkDataPattern) break;
+                this._setState(State.inId);
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(isMfm), IbmDiscFormat.idMarkDataPattern);
+                break;
+            case State.inId:
+                this._byteReceivedInId(data);
+                break;
+            case State.searchData:
+                this._byteReceivedSearchData(data, isMarker);
+                break;
+            case State.inData:
+                this._byteReceivedInData(data);
+                break;
+            case State.inReadTrack:
+                if (!isIndexPulsePositiveEdge) {
+                    this._sendDataToHost(data);
+                } else {
+                    this._commandDone(true);
+                }
+                break;
+            default:
+                throw new Error(`Bad state ${this._state}`);
+        }
+    }
+
+    _byteReceivedInId(data) {
+        const isReadAddress = this._command === Command.readAddress;
+        switch (this._stateCount) {
+            case 0:
+                this._onDiscTrack = data;
+                if (isReadAddress) {
+                    // The datasheet says "The Track Address of the ID field is written into the sector register"
+                    this._sectorRegister = data;
+                }
+                break;
+            case 2:
+                this._onDiscSector = data;
+                break;
+            case 3:
+                // From http://info-coach.fr/atari/documents/_mydoc/WD1772-JLG.pdf, only the lower two bits affect anything.
+                this._onDiscLength = 128 << (data & 0x03);
+                break;
+        }
+        if (isReadAddress) {
+            // Note that unlike the 8271, the CRC bytes are sent along too.
+            this._sendDataToHost(data);
+        }
+        if (this._stateCount < 4) {
+            this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
+        } else {
+            this._onDiscCrc = ((this._onDiscCrc << 8) & 0xffff) | data;
+        }
+        if (++this._stateCount !== 6) return;
+
+        const isCrcError = this._crc !== this._onDiscCrc;
+
+        if (isReadAddress) {
+            if (isCrcError) this._statusRegister |= Status.crcError;
+            // Unlike the 8271, read address returns just a single record. It is also not synronized to the index pulse.
+            // EMU TODO: it's likely that timing is generally off for most states,
+            // i.e. the 1770 takes various numbers of internal clock cycles before it
+            // delivers the CRC error, before it goes not busy, etc.
+            // EMU NOTE: must not clear busy flag right away. The 1770 delivers the
+            // last header byte DRQ separately from lowering the busy flag.
+            this._setState(Status.done);
+            return;
+        }
+
+        // The data sheet specifies no CRC error unless the fields match so check those first.
+        if (this._trackRegister !== this._onDiscTrack) {
+            this._setState(State.searchId);
+            return;
+        }
+        if (this._commandType === 2 && this._sectorRegister !== this._onDiscSector) {
+            this._setState(State.searchId);
+            return;
+        }
+        if (isCrcError) {
+            this._statusRegister |= Status.crcError;
+            // Unlike the 8271, the 1770 keeps going.
+            this._setState(State.searchId);
+            return;
+        }
+        if (this._commandType === 1) this._commandDone(true);
+        else if (this._isCommandWrite) this._setState(State.writeSectorDelay);
+        else this._setState(State.searchData);
+    }
+
+    _byteReceivedSearchData(data, isMarker) {
+        this._stateCount++;
+        const isMfm = this._isDoubleDensity(this._controlRegister);
+        const multiplier = isMfm ? 2 : 1;
+        // Like the 8271 the data mark is only recongized if 14 bytes have passed.
+        // Unlike the 8271, it gives up after a while longer.
+        if (this._stateCount < 14 * multiplier) return;
+        if (this._stateCount > 31 * multiplier) {
+            this._setState(State.searchId);
+            return;
+        }
+        if (!isMarker) return;
+        if (data === IbmDiscFormat.dataMarkDataPattern) {
+            // Nothing...
+        } else if (data === IbmDiscFormat.deletedDataMarkDataPattern) {
+            // EMU NOTE: the datasheet is ambiguous on whether the deleted mark is
+            // visible in the status register immediately, or at the end of a read.
+            // The state machine diagram says "DAM in time" -> "Set Record Type in
+            // Status Bit 5". But later on it says "At the end of the Read... is
+            // recorded...".
+            // Testing on @scarybeasts's 1772, the state machine diagram is correct: the bit is
+            // visible in the status register immediately during the read.
+            // EMU NOTE: on a multi-sector read, the deleted mark bit is set, and left
+            // set, if _any_ deleted data sector was encountered. The datasheet would
+            // seem to imply that only the most recent sector type is reflected in
+            // the bit, but testing on @scarybeasts's 1772, the bit is set and left set even if
+            // a non-deleted sector is encountered subsequently.
+            this._statusRegister |= Status.typeIIorIIIDeletedMark;
+        } else return;
+        this._setState(State.inData);
+        // CRC error is reset here. It's possible to hit a CRC error in a sector header and then find
+        // an OK matching sector header.
+        this._statusRegister &= ~Status.crcError;
+        this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(isMfm), data);
+    }
+
+    _byteReceivedInData(data) {
+        this._stateCount++;
+        if (this._stateCount <= this._onDiscLength) {
+            this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
+            this._sendDataToHost(data);
+            return;
+        } else if (this._stateCount <= this._onDiscLength + 2) {
+            this._onDiscCrc = ((this._onDiscCrc << 8) & 0xffff) | data;
+            return;
+        }
+        if (this._crc !== this._onDiscCrc) {
+            this._statusRegister |= Status.crcError;
+            // Sector data CRC error is terminal, even for a multi-sector read.
+            this._commandDone(true);
+            return;
+        }
+        this._setState(State.checkMulti);
+    }
+
+    _sendDataToHost(data) {
+        if (this._commandType !== 2 && this._commandType !== 3) throw new Error("Bad command type");
+        this._setDrq(true);
+        this._dataRegister = data;
     }
 
     /// jsbeeb compatibility stuff TODO combine with the noise aware stuff?
