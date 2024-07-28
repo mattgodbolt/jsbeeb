@@ -112,6 +112,8 @@ class Base6502 {
         this.forceTracing = false;
         this.runner = this.opcodes.runInstruction;
         this.interrupt = 0;
+        this._nmiLevel = false;
+        this._nmiEdge = false;
 
         if (model.nmos) {
             this.adc = function (addend) {
@@ -168,7 +170,7 @@ class Base6502 {
 
     checkInt() {
         this.takeInt = !!(this.interrupt && !this.p.i);
-        this.takeInt |= this.nmi;
+        this.takeInt |= this._nmiEdge;
     }
 
     // eslint-disable-next-line no-unused-vars
@@ -199,8 +201,13 @@ class Base6502 {
         return this.readmemZpStack(0x100 + this.s);
     }
 
+    get nmi() { return this._nmiLevel; }
+
     NMI(nmi) {
-        this.nmi = !!nmi;
+        const prevLevel = this._nmiLevel;
+        this._nmiLevel = !!nmi;
+        if (this._nmiLevel && !prevLevel)
+            this._nmiEdge = true;
     }
 
     polltime() {
@@ -226,9 +233,9 @@ class Base6502 {
         // for a half-way done BRK instruction.
         this.polltime(4);
         let vector = 0xfffe;
-        if ((this.model.nmos || isIrq) && this.nmi) {
+        if ((this.model.nmos || isIrq) && this._nmiEdge) {
             vector = 0xfffa;
-            this.nmi = false;
+            this._nmiEdge = false;
         }
         this.takeInt = false;
         this.pc = this.readmem(vector) | (this.readmem(vector + 1) << 8);
@@ -1179,7 +1186,8 @@ export class Cpu6502 extends Base6502 {
         }
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
-        this.nmi = false;
+        this._nmiEdge = false;
+        this._nmiLevel = false;
         this.halted = false;
         this.music5000PageSel = 0;
         this.video.reset(this, this.sysvia, hard);

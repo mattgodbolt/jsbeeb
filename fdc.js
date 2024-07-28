@@ -34,11 +34,12 @@ export function discFor(fdc, name, stringData, onChange) {
     const data = typeof stringData !== "string" ? stringData : utils.stringToUint8Array(stringData);
 
     if (fdc.isPulseLevel) {
+        const lowerName = name.toLowerCase();
         const disc = new Disc(true, new DiscConfig(), name);
-        if (name.toLowerCase().endsWith(".hfe")) {
+        if (lowerName.endsWith(".hfe")) {
             return loadHfe(disc, data);
         }
-        return loadSsd(disc, data, false, onChange);
+        return loadSsd(disc, data, lowerName.endsWith(".dsd"), onChange);
     }
 
     const prevData = new Uint8Array(data);
@@ -339,8 +340,7 @@ export class WD1770 {
     }
 
     read(addr) {
-        // b-em clears NMIs, but that happens after each instruction anyway, so
-        // I'm not quite sure what that's all about.
+        this.cpu.NMI(false); // Temporary until the new wdc lands
         switch (addr) {
             case 0xfe84:
             case 0xfe28:
