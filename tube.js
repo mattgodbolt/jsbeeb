@@ -108,9 +108,9 @@ export class Tube {
             this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_PARASITE_NMI_FROM_R3_DATA &&
             (this.hostToParasiteFifoByteCount3 >= r3Size || this.parasiteToHostFifoByteCount3 === 0)
         ) {
-            this.parasiteCpu.nmi = true;
+            this.parasiteCpu.NMI(true);
         } else {
-            this.parasiteCpu.nmi = false;
+            this.parasiteCpu.NMI(false);
         }
         //  parasite CPU RESET held low - not implemented in the CPU - the CPU should be frozen until this signal is released
         this.parasiteCpu.resetHeldLow = this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_PARASITE_RESET_ACTIVE_LOW;
