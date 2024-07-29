@@ -227,7 +227,9 @@ export class WdFdc {
     _setDrq(level) {
         this._isDrq = level;
         if (level) {
-            if (this._statusRegister & Status.typeIIorIIIDrq) this._statusRegister |= Status.typeIIorIIILostByte;
+            if (this._statusRegister & Status.typeIIorIIIDrq) {
+                this._statusRegister |= Status.typeIIorIIILostByte;
+            }
             this._statusRegister |= Status.typeIIorIIIDrq;
         } else {
             this._statusRegister &= ~Status.typeIIorIIIDrq;
@@ -316,7 +318,7 @@ export class WdFdc {
             case 1:
             case 2:
             case 3:
-                this._logCommand(`control register now ${utils.hexbyte(val)};`);
+                this._logCommand(`control register now ${utils.hexbyte(val)}`);
                 if (this._statusRegister & Status.busy && !this._isReset(val)) {
                     throw new Error(`Control register updated while busy; without reset`);
                 }
@@ -327,16 +329,16 @@ export class WdFdc {
                 if (!this._isReset(this._controlRegister)) this._doCommand(val);
                 break;
             case 5:
-                this._logCommand(`track register now ${val};`);
+                this._logCommand(`track register now ${val}`);
                 this._trackRegister = val;
                 break;
             case 6:
                 // Ignore sector reg changes in reset; note that track/data registers will still be accepted.
                 if (!this._isReset(this._controlRegister)) {
-                    this._logCommand(`sector register now ${val};`);
+                    this._logCommand(`sector register now ${val}`);
                     this._sectorRegister = val;
                 } else {
-                    this._logCommand(`ignoring sector write of ${val};`);
+                    this._logCommand(`ignoring sector write of ${val}`);
                 }
                 break;
             case 7:
@@ -355,7 +357,7 @@ export class WdFdc {
                 `cr ${utils.hexbyte(this._controlRegister)} ` +
                 `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
         );
-        const command = val & 0x80;
+        const command = val & 0xf0;
 
         if (command === Command.forceInterrupt) {
             this._handleForceInterrupt(val);
@@ -422,8 +424,7 @@ export class WdFdc {
         // - Spin up if necessary and not inhibited.
         this._setDrq(false);
         this._setIntRq(false);
-        this._statusRegister &= ~Status.motorOn;
-        this._statusRegister |= Status.busy;
+        this._statusRegister = (this._statusRegister & Status.motorOn) | Status.busy;
 
         this._indexPulseCount = 0;
         if (this._statusRegister & Status.motorOn) {
@@ -631,6 +632,7 @@ export class WdFdc {
         switch (this._command) {
             case Command.restore:
                 this._trackRegister = 0xff;
+                this._logCommand(`track register now ${this._trackRegister}`);
                 this._dataRegister = 0;
             // Falls through...
             case Command.seek:
@@ -714,7 +716,7 @@ export class WdFdc {
                 }
                 break;
             case State.writeSectorDelay:
-                this._pulsesCallbackSectorDelay();
+                this._pulsesCallbackSectorDelay(isMfm);
                 break;
             case State.writeSectorLeadInFm:
                 this._writeByte(isMfm, 0x00, false);
@@ -786,6 +788,20 @@ export class WdFdc {
         } else {
             this._dispatchCommand();
         }
+    }
+
+    _pulsesCallbackSectorDelay(isMfm) {
+        // Following the data sheet here for byte-for-byte behaviour.
+        if (this._stateCount === 0) {
+            this._indexPulseCount = 0;
+        } else if (this._stateCount === 1) {
+            this._setDrq(true);
+        } else if (this._stateCount === 10 && this._statusRegister & Status.typeIIorIIIDrq) {
+            this._statusRegister |= Status.typeIIorIIILostByte;
+            this._commandDone(true);
+        }
+        this._stateCount++;
+        if (this._stateCount === 12) this._setState(isMfm ? State.writeSectorLeadInMfm : State.writeSectorLeadInFm);
     }
 
     _pulsesCallbackWriteSectorMarkerMfm() {
