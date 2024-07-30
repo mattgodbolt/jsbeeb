@@ -135,8 +135,8 @@ export class WdFdc {
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
 
         this._isMaster = cpu.model.isMaster;
-        this._is1772 = false; // TODO
-        this._isOpus = false; // TODO
+        this._is1772 = false; // TODO - if we ever support Master Compact
+        this._isOpus = false; // TODO - if we ever support Opus
 
         this._controlRegister = 0;
         /** @type {Status|Number} */
@@ -272,13 +272,25 @@ export class WdFdc {
         return remapped;
     }
 
+    _remapVal(addr, val) {
+        if (this._isMaster) return this._masterRemapVal(addr, val);
+        if (this._isOpus) return this._opusRemapVal(addr, val);
+        return val;
+    }
+
+    _remapAddr(addr) {
+        addr &= 0x07;
+        if (this._isMaster) return addr ^ 0x04;
+        if (this._isOpus) return this._opusRemapAddr(addr);
+        return addr;
+    }
+
     /**
      * @param {Number} addr hardware address
      * @returns {Number} byte at the given hardware address
      */
     read(addr) {
-        const regAddr = this._isOpus ? this._opusRemapAddr(addr & 0x07) : addr & 0x07;
-        switch (regAddr) {
+        switch (this._remapAddr(addr)) {
             case 4:
                 // Reading status register clears INTRQ.
                 this._setIntRq(false);
@@ -306,13 +318,8 @@ export class WdFdc {
      * @param {Number} val byte to write
      */
     write(addr, val) {
-        addr &= 0x07;
-        if (this._isMaster) {
-            val = this._masterRemapVal(addr, val);
-        } else if (this._isOpus) {
-            addr = this._opusRemapAddr(addr);
-            val = this._opusRemapVal(addr, val);
-        }
+        addr = this._remapAddr(addr);
+        val = this._remapVal(addr, val);
         switch (addr) {
             case 0:
             case 1:
