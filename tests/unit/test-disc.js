@@ -231,7 +231,7 @@ describe("ADF loader tests", function () {
     it("should load a somewhat blank ADFS disc", () => {
         const data = new Uint8Array(327680);
         const disc = new Disc(true, new DiscConfig(), "test.adf");
-        loadAdf(disc, data);
+        loadAdf(disc, data, true);
         assert.equal(disc.tracksUsed, 40);
         const sectors = disc.getTrack(false, 0).findSectors();
         assert.equal(sectors.length, 16);

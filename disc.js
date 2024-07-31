@@ -625,10 +625,11 @@ class AdfFormat {
 /**
  * @param {Disc} disc
  * @param {Uint8Array} data
+ * @param {boolean} isDsd
  */
-export function loadAdf(disc, data) {
+export function loadAdf(disc, data, isDsd) {
     const blankSector = new Uint8Array(AdfFormat.sectorSize);
-    const numSides = 2;
+    const numSides = isDsd ? 2 : 1;
     if (data.length % AdfFormat.sectorSize !== 0) {
         throw new Error("ADF file size is not a multiple of sector size");
     }

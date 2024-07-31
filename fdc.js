@@ -36,12 +36,9 @@ export function discFor(fdc, name, stringData, onChange) {
     if (fdc.isPulseLevel) {
         const lowerName = name.toLowerCase();
         const disc = new Disc(true, new DiscConfig(), name);
-        if (lowerName.endsWith(".hfe")) {
-            return loadHfe(disc, data);
-        }
-        if (lowerName.endsWith(".adl") || lowerName.endsWith(".adf")) {
-            return loadAdf(disc, data);
-        }
+        if (lowerName.endsWith(".hfe")) return loadHfe(disc, data);
+        if (lowerName.endsWith(".adl")) return loadAdf(disc, data, true);
+        if (lowerName.endsWith(".adf") || lowerName.endsWith(".adm")) return loadAdf(disc, data, false);
         return loadSsd(disc, data, lowerName.endsWith(".dsd"), onChange);
     }
 

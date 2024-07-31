@@ -818,7 +818,7 @@ export class WdFdc {
                 ? IbmDiscFormat.deletedDataMarkDataPattern
                 : IbmDiscFormat.dataMarkDataPattern;
             this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), dataByte);
-            this._writeByte(true, dataByte, true);
+            this._writeByte(true, dataByte, false);
             this._setState(State.writeSectorBody);
         }
     }
@@ -1050,7 +1050,7 @@ export class WdFdc {
             case 0xc2:
                 return IbmDiscFormat.mfmC2Sync;
             default:
-                throw new Error("Bad marker byte");
+                throw new Error(`Bad marker byte ${utils.hexbyte(byte)}`);
         }
     }
 
