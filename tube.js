@@ -322,14 +322,14 @@ export class Tube {
                 if (this.parasiteStatus[TUBE_ULA_R3] & TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL) {
                     if (this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_2_BYTE_R3_DATA) {
                         if (this.parasiteToHostFifoByteCount3 < 2) {
-                            this.parasiteToHostData[this.parasiteToHostFifoByteCount3++] = value;
+                            this.parasiteToHostData[TUBE_ULA_R3][this.parasiteToHostFifoByteCount3++] = value;
                         }
                         if (this.parasiteToHostFifoByteCount3 === 2) {
                             this.hostStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
                             this.parasiteStatus[TUBE_ULA_R3] &= ~TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
                         }
                     } else {
-                        this.parasiteToHostData[0] = value;
+                        this.parasiteToHostData[TUBE_ULA_R3][0] = value;
                         this.parasiteToHostFifoByteCount3 = 1;
                         this.hostStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
                         this.parasiteStatus[TUBE_ULA_R3] &= ~TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
