@@ -929,56 +929,56 @@ export function ungzip(data) {
     return finalData;
 }
 
-export function DataStream(name_, data_, dontUnzip_) {
-    const self = this;
-    self.name = name_;
-    self.pos = 0;
-    self.data = stringToUint8Array(data_);
-    if (!dontUnzip_ && self.data && self.data.length > 4 && self.data[0] === 0x1f && self.data[1] === 0x8b) {
-        console.log("Ungzipping " + name_);
-        self.data = ungzip(self.data);
+export class DataStream {
+    constructor(name, data, dontUnzip) {
+        this.name = name;
+        this.pos = 0;
+        this.data = stringToUint8Array(data);
+        if (!dontUnzip && this.data && this.data.length > 4 && this.data[0] === 0x1f && this.data[1] === 0x8b) {
+            console.log("Ungzipping " + name);
+            this.data = ungzip(this.data);
+        }
+        if (!this.data) {
+            throw new Error("No data in " + name);
+        }
+        this.end = this.data.length;
     }
-    if (!self.data) {
-        throw new Error("No data in " + name_);
+
+    bytesLeft() {
+        return this.end - this.pos;
     }
 
-    self.end = self.data.length;
+    eof() {
+        return this.bytesLeft() === 0;
+    }
 
-    self.bytesLeft = function () {
-        return self.end - self.pos;
-    };
+    advance(distance) {
+        if (this.bytesLeft() < distance) throw new RangeError("EOF in " + this.name);
+        this.pos += distance;
+        return this.pos - distance;
+    }
 
-    self.eof = function () {
-        return self.bytesLeft() === 0;
-    };
+    readFloat32(pos) {
+        if (pos === undefined) pos = this.advance(4);
+        return readFloat32(this.data, pos);
+    }
 
-    self.advance = function (distance) {
-        if (self.bytesLeft() < distance) throw new RangeError("EOF in " + self.name);
-        self.pos += distance;
-        return self.pos - distance;
-    };
+    readInt32(pos) {
+        if (pos === undefined) pos = this.advance(4);
+        return readInt32(this.data, pos);
+    }
 
-    self.readFloat32 = function (pos) {
-        if (pos === undefined) pos = self.advance(4);
-        return readFloat32(self.data, pos);
-    };
+    readInt16(pos) {
+        if (pos === undefined) pos = this.advance(2);
+        return readInt16(this.data, pos);
+    }
 
-    self.readInt32 = function (pos) {
-        if (pos === undefined) pos = self.advance(4);
-        return readInt32(self.data, pos);
-    };
+    readByte(pos) {
+        if (pos === undefined) pos = this.advance(1);
+        return this.data[pos];
+    }
 
-    self.readInt16 = function (pos) {
-        if (pos === undefined) pos = self.advance(2);
-        return readInt16(self.data, pos);
-    };
-
-    self.readByte = function (pos) {
-        if (pos === undefined) pos = self.advance(1);
-        return self.data[pos];
-    };
-
-    self.readNulString = function (pos, maxLength) {
+    readNulString(pos, maxLength) {
         if (!maxLength) maxLength = 1024;
         let posToUse = pos === undefined ? self.pos : pos;
         let result = "";
@@ -989,24 +989,24 @@ export function DataStream(name_, data_, dontUnzip_) {
         if (maxLength === 0) return "";
         if (pos === undefined) self.pos = posToUse;
         return result;
-    };
+    }
 
-    self.substream = function (posOrLength, length) {
+    substream(posOrLength, length) {
         let pos;
         if (length === undefined) {
             length = posOrLength;
-            pos = self.advance(length);
+            pos = this.advance(length);
         } else {
             pos = posOrLength;
-            if (pos + length >= self.end) throw new RangeError("EOF in " + self.name);
+            if (pos + length >= this.end) throw new RangeError("EOF in " + this.name);
         }
-        return new DataStream(self.name + ".sub", self.data.subarray(pos, pos + length));
-    };
+        return new DataStream(this.name + ".sub", this.data.subarray(pos, pos + length));
+    }
 
-    self.seek = function (to) {
-        if (to >= self.end) throw new RangeError("Seek out of range in " + self.name);
-        self.pos = to;
-    };
+    seek(to) {
+        if (to >= this.end) throw new RangeError("Seek out of range in " + this.name);
+        this.pos = to;
+    }
 }
 
 export function makeFast32(u32) {
@@ -1117,21 +1117,28 @@ export class Fifo {
         this._wPtr = 0;
         this._rPtr = 0;
     }
+
     /** @returns {number} */
-    get size() { return this._size; }
+    get size() {
+        return this._size;
+    }
+
     /** @returns {boolean} */
     get full() {
         return this._size === this._buffer.length;
     }
+
     /** @returns {boolean} */
     get empty() {
         return this._size === 0;
     }
+
     clear() {
         this._size = 0;
         this._wPtr = 0;
         this._rPtr = 0;
     }
+
     /** @type {Number} b */
     put(b) {
         if (this.full) return;
@@ -1139,6 +1146,7 @@ export class Fifo {
         this._wPtr++;
         this._size++;
     }
+
     /** @returns {Number} */
     get() {
         if (this.empty) return;
