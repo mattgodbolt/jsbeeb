@@ -17,8 +17,6 @@ import * as utils from "./utils.js";
 //   - download disc image DONE
 // - ideally support "writeback" to high fidelity output formats
 // - UI elements for visualisation
-// - better debug url param handling (ui?)
-// - WD1770...
 
 /**
  * Register indices.
