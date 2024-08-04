@@ -17,8 +17,6 @@ import * as utils from "./utils.js";
 //   - download disc image DONE
 // - ideally support "writeback" to high fidelity output formats
 // - UI elements for visualisation
-// - better debug url param handling (ui?)
-// - WD1770...
 
 /**
  * Register indices.
@@ -695,7 +693,7 @@ export class IntelFdc {
                 break;
             case State.checkIdMarker:
                 if (clockByte === IbmDiscFormat.markClockPattern && dataByte === IbmDiscFormat.idMarkDataPattern) {
-                    this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+                    this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), dataByte);
                     if (command === Command.readId) this._startIrqCallbacks();
                     this._setState(State.inId);
                 } else {
@@ -759,7 +757,7 @@ export class IntelFdc {
                     // No IRQ callbacks if 'verify'.
                     if (this._regs[Registers.internalCommand] === 0x1c) doIrqs = false;
                     if (doIrqs) this._startIrqCallbacks();
-                    this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), dataByte);
+                    this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), dataByte);
                     this._setState(State.inData);
                 } else {
                     this._finishCommand(Result.clockError);
@@ -901,7 +899,7 @@ export class IntelFdc {
                 break;
             case State.writeDataMark:
                 this._mmioData = this._regs[Registers.internalParamDataMarker];
-                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), this._mmioData);
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), this._mmioData);
                 this._mmioClocks = IbmDiscFormat.markClockPattern;
                 this._resetSectorByteCount(); /////
                 // This strange decrement is how the ROM does it.
@@ -930,7 +928,7 @@ export class IntelFdc {
             case State.formatWriteIdMarker:
                 this._mmioData = IbmDiscFormat.idMarkDataPattern;
                 this._mmioClocks = IbmDiscFormat.markClockPattern;
-                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), this._mmioData);
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), this._mmioData);
                 this._setState(State.dynamicDispatch);
                 break;
             case State.formatIdCrc_2:
@@ -944,14 +942,14 @@ export class IntelFdc {
             case State.formatWriteDataMarker:
                 this._mmioData = IbmDiscFormat.dataMarkDataPattern;
                 this._mmioClocks = IbmDiscFormat.markClockPattern;
-                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(0), this._mmioData);
+                this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), this._mmioData);
                 this._setState(State.dynamicDispatch);
                 break;
             case State.formatDataCrc_2:
                 this._mmioData = this._crc & 0xff;
                 this._setState(State.formatDataCrc_3);
                 break;
-                case State.formatDataCrc_3:
+            case State.formatDataCrc_3:
                 this._mmioData = 0xff;
                 this._setState(State.dynamicDispatch);
                 break;
@@ -959,8 +957,8 @@ export class IntelFdc {
                 // GAP 4 writes until the index pulse, handled in the callback there.
                 this._mmioData = 0xff;
                 break;
-                default:
-                    throw new Error(`Bad write state ${this._state}`);
+            default:
+                throw new Error(`Bad write state ${this._state}`);
         }
     }
 
@@ -1688,12 +1686,7 @@ export class IntelFdc {
     get drives() {
         return this._drives;
     }
-
-    get isPulseLevel() {
-        return true;
-    }
 }
-
 
 export class NoiseAwareIntelFdc extends IntelFdc {
     constructor(cpu, ddNoise, scheduler, debugFlags) {
@@ -1702,15 +1695,21 @@ export class NoiseAwareIntelFdc extends IntelFdc {
         let numSpinning = 0;
         // Update the spin status shortly after the drive state changes to debounce it slightly.
         const updateSpinStatus = () => {
-            if (numSpinning) ddNoise.spinUp(); else ddNoise.spinDown();
+            if (numSpinning) ddNoise.spinUp();
+            else ddNoise.spinDown();
         };
         for (const drive of this.drives) {
-            drive.addEventListener("startSpinning", () => { numSpinning++; setTimeout(updateSpinStatus, 2); });
-            drive.addEventListener("stopSpinning", () => { --numSpinning; setTimeout(updateSpinStatus, 2); });
+            drive.addEventListener("startSpinning", () => {
+                numSpinning++;
+                setTimeout(updateSpinStatus, 2);
+            });
+            drive.addEventListener("stopSpinning", () => {
+                --numSpinning;
+                setTimeout(updateSpinStatus, 2);
+            });
             drive.addEventListener("step", (evt) => {
                 const now = Date.now();
-                if (now > nextSeekTime)
-                    nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
+                if (now > nextSeekTime) nextSeekTime = now + ddNoise.seek(evt.stepAmount) * 1000;
             });
         }
     }

@@ -199,6 +199,10 @@ export class DiscDrive extends EventTarget {
         return this.disc ? this.disc.writeProtected : false;
     }
 
+    set32usMode(isDoubleDensity) {
+        this._in32usMode = isDoubleDensity;
+    }
+
     /**
      * Seek a relative track.
      *

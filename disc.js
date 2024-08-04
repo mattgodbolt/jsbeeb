@@ -107,7 +107,7 @@ class TrackBuilder {
         if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
         const existingPulses = this._track.pulses2Us[this._index];
         const mask = 0xffff << this._pulsesIndex;
-        this._pulsesIndex = (this._pulsesIndex + 16) & 15;
+        this._pulsesIndex = (this._pulsesIndex + 16) & 31;
         this._track.pulses2Us[this._index] = (existingPulses & mask) | (pulses << this._pulsesIndex);
         if (this._pulsesIndex === 0) this._index++;
         return this;
@@ -217,8 +217,9 @@ class MfmReader {
     constructor(rawReader) {
         this._rawReader = rawReader;
     }
+
     read(numBytes) {
-        const data = new Uint8Array[numBytes]();
+        const data = new Uint8Array(numBytes);
         let pulses = 0;
         for (let offset = 0; offset < numBytes; ++offset) {
             if ((offset & 1) === 0) {
@@ -232,7 +233,7 @@ class MfmReader {
     }
 
     get initialCrc() {
-        let crc = IbmDiscFormat.crcInit(0);
+        let crc = IbmDiscFormat.crcInit(false);
         crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
         crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
         crc = IbmDiscFormat.crcAddByte(crc, 0xa1);
@@ -261,8 +262,9 @@ class FmReader {
         }
         return { data, clocks, iffyPulses };
     }
+
     get initialCrc() {
-        return IbmDiscFormat.crcInit(0);
+        return IbmDiscFormat.crcInit(false);
     }
 }
 
@@ -325,8 +327,9 @@ class Sector {
         const dataMarker = this.isDeleted
             ? IbmDiscFormat.deletedDataMarkDataPattern
             : IbmDiscFormat.dataMarkDataPattern;
-        const sectorStartByte = this.dataPosBitOffset / pulsesPerByte;
-        const sectorEndByte = nextSector ? nextSector.idPosBitOffset / pulsesPerByte : this.track.length;
+        const sectorStartByte = (this.dataPosBitOffset / pulsesPerByte) | 0;
+        const sectorEndByte =
+            (nextSector ? nextSector.idPosBitOffset / pulsesPerByte : (this.track.length * 32) / pulsesPerByte) | 0;
         // Account for CRC and sync bytes.
         let sectorSize = Sector.toSectorSize(sectorEndByte - sectorStartByte - 5);
 
@@ -413,7 +416,7 @@ class Track {
         let dataByte = 0;
         let sector = null;
         for (let pulseIndex = 0; pulseIndex < bitLength; ++pulseIndex) {
-            if ((pulseIndex & 31) === 0) pulses = this.pulses2Us[pulseIndex >> 5];
+            if ((pulseIndex & 31) === 0) pulses = this.pulses2Us[pulseIndex >>> 5];
             markDetectorPrev = (markDetectorPrev << 1n) & all64b;
             markDetectorPrev |= markDetector >> 63n;
             markDetector = (markDetector << 1n) & all64b;
@@ -602,6 +605,81 @@ export function loadSsd(disc, data, isDsd, onChange) {
             },
         );
     }
+    return disc;
+}
+
+class AdfFormat {
+    static get sectorSize() {
+        return 256;
+    }
+
+    static get sectorsPerTrack() {
+        return 16;
+    }
+
+    static get tracksPerDisc() {
+        return 80;
+    }
+}
+
+/**
+ * @param {Disc} disc
+ * @param {Uint8Array} data
+ * @param {boolean} isDsd
+ */
+export function loadAdf(disc, data, isDsd) {
+    const blankSector = new Uint8Array(AdfFormat.sectorSize);
+    const numSides = isDsd ? 2 : 1;
+    if (data.length % AdfFormat.sectorSize !== 0) {
+        throw new Error("ADF file size is not a multiple of sector size");
+    }
+    const maxSize = AdfFormat.sectorSize * AdfFormat.sectorsPerTrack * AdfFormat.tracksPerDisc * numSides;
+    if (data.length > maxSize) {
+        throw new Error("ADF file is too large");
+    }
+
+    let offset = 0;
+    for (let track = 0; track < AdfFormat.tracksPerDisc; ++track) {
+        if (offset >= data.length) break;
+
+        for (let side = 0; side < numSides; ++side) {
+            // Using recommended values from the 177x datasheet.
+            const trackBuilder = disc.buildTrack(side === 1, track);
+            trackBuilder.appendRepeatMfmByte(0x4e, 60);
+            for (let sector = 0; sector < AdfFormat.sectorsPerTrack; ++sector) {
+                trackBuilder
+                    .appendRepeatMfmByte(0x00, 12)
+                    .resetCrc()
+                    .appendMfm3xA1Sync()
+                    .appendMfmByte(IbmDiscFormat.idMarkDataPattern)
+                    .appendMfmByte(track)
+                    .appendMfmByte(0)
+                    .appendMfmByte(sector)
+                    .appendMfmByte(1)
+                    .appendCrc(true);
+
+                // Sync pattern between sector header and sector data, aka GAP 2.
+                trackBuilder.appendRepeatMfmByte(0x4e, 22).appendRepeatMfmByte(0x00, 12);
+
+                // Sector data.
+                const sectorData =
+                    offset < data.length ? data.subarray(offset, offset + AdfFormat.sectorSize) : blankSector;
+                offset += AdfFormat.sectorSize;
+                trackBuilder
+                    .resetCrc()
+                    .appendMfm3xA1Sync()
+                    .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
+                    .appendMfmChunk(sectorData)
+                    .appendCrc(true);
+
+                // Sync pattern between sectors, aka GAP 3.
+                trackBuilder.appendRepeatMfmByte(0x4e, 24);
+            }
+            trackBuilder.fillMfmByte(0x4e);
+        }
+    }
+
+    // TODO writeback
     return disc;
 }
 
@@ -844,7 +922,7 @@ export class Disc {
         return !this.isWriteable;
     }
 
-    /** 
+    /**
      * @param {boolean} isSideUpper
      * @param {Number} trackNum
      * @returns {Track} */
@@ -999,9 +1077,13 @@ export class IbmDiscFormat {
         return 21;
     }
 
-    static crcInit(is_mfm) {
+    /**
+     * @param {boolean} isMfm
+     * @returns {Number} initial CRC for type
+     */
+    static crcInit(isMfm) {
         // MFM starts with 3x 0xA1 sync bytes added.
-        return is_mfm ? 0xcdb4 : 0xffff;
+        return isMfm ? 0xcdb4 : 0xffff;
     }
 
     static crcAddByte(crc, byte) {
@@ -1014,6 +1096,7 @@ export class IbmDiscFormat {
         }
         return crc;
     }
+
     static crcAddBytes(crc, bytes) {
         for (const byte of bytes) crc = IbmDiscFormat.crcAddByte(crc, byte);
         return crc;
