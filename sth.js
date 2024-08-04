@@ -1,10 +1,25 @@
 "use strict";
 
 import * as utils from "./utils.js";
-import $ from "jquery";
 
 const catalogUrl = "reclist.php?sort=name&filter=.zip";
 const sthArchive = "www.stairwaytohell.com/bbc/archive";
+
+async function _fetchAndParseCatalog(url) {
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error("Network response was not ok");
+    }
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(await response.text(), "text/html");
+    const result = [];
+    doc.querySelectorAll("tr td:nth-child(3) a").forEach((link) => {
+        const href = link.getAttribute("href");
+        if (href.indexOf(".zip") > 0) result.push(href);
+    });
+    result.sort();
+    return result;
+}
 
 export class StairwayToHell {
     constructor(onStart, onCat, onError, tape) {
@@ -15,32 +30,30 @@ export class StairwayToHell {
         this._onError = onError;
     }
 
-    populate() {
+    async populate() {
         this._onStart();
         if (this._catalog.length === 0) {
-            const request = new XMLHttpRequest();
-            request.open("GET", this._baseUrl + catalogUrl, true);
-            request.onerror = () => {
+            try {
+                this._catalog = await _fetchAndParseCatalog(this._baseUrl + catalogUrl);
+            } catch (error) {
+                console.error("Failed to fetch catalog:", error);
                 if (this._onError) this._onError();
-            };
-            request.onload = () => {
-                const doc = $($.parseHTML(request.responseText, null, false));
-                doc.find("tr td:nth-child(3) a").each((_, link) => {
-                    const href = $(link).attr("href");
-                    if (href.indexOf(".zip") > 0) this._catalog.push(href);
-                });
-                if (this._onCat) this._onCat(this._catalog);
-            };
-            request.send();
-        } else {
-            if (this._onCat) this._onCat(this._catalog);
+                return;
+            }
         }
+        if (this._onCat) this._onCat(this._catalog);
     }
 
     async fetch(file) {
         const name = this._baseUrl + file;
         console.log("Loading ZIP from " + name);
-        const data = await utils.loadData(name);
-        return utils.unzipDiscImage(data).data;
+        const response = await fetch(name);
+        if (!response.ok) throw new Error("Network response was not ok");
+        try {
+            return utils.unzipDiscImage(new Uint8Array(await response.arrayBuffer())).data;
+        } catch (error) {
+            console.error("Failed to fetch file:", error);
+            throw error;
+        }
     }
 }
