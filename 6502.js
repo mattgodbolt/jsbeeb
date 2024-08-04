@@ -201,13 +201,14 @@ class Base6502 {
         return this.readmemZpStack(0x100 + this.s);
     }
 
-    get nmi() { return this._nmiLevel; }
+    get nmi() {
+        return this._nmiLevel;
+    }
 
     NMI(nmi) {
         const prevLevel = this._nmiLevel;
         this._nmiLevel = !!nmi;
-        if (this._nmiLevel && !prevLevel)
-            this._nmiEdge = true;
+        if (this._nmiLevel && !prevLevel) this._nmiEdge = true;
     }
 
     polltime() {

@@ -25,7 +25,7 @@ export class DiscDrive extends EventTarget {
 
     /**
      * Create a new DiscDrive.
-     * 
+     *
      * @param {Number} id which drive id this is (0 or 1)
      * @param {Scheduler} scheduler scheduler to register callbacks etc
      */
