@@ -1,7 +1,7 @@
 "use strict";
 import _ from "underscore";
 import * as utils from "./utils.js";
-import { BaseDisc } from "./fdc.js";
+import { discFor } from "./fdc.js";
 
 export function GoogleDriveLoader() {
     const self = this;
@@ -9,7 +9,6 @@ export function GoogleDriveLoader() {
     const CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com";
     const SCOPES = "https://www.googleapis.com/auth/drive.file";
     let gapi = null;
-    const BaseSsd = BaseDisc;
 
     self.initialise = function () {
         return new Promise(function (resolve) {
@@ -169,7 +168,7 @@ export function GoogleDriveLoader() {
         } else {
             console.log("Making read-only disc");
         }
-        return new BaseSsd(fdc, name, data, flusher);
+        return discFor(fdc, name, data, flusher);
     }
 
     self.load = function (fdc, fileId) {

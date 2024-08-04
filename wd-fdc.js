@@ -1303,10 +1303,6 @@ export class WdFdc {
     get drives() {
         return this._drives;
     }
-
-    get isPulseLevel() {
-        return true;
-    }
 }
 
 export class NoiseAwareWdFdc extends WdFdc {

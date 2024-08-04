@@ -1686,10 +1686,6 @@ export class IntelFdc {
     get drives() {
         return this._drives;
     }
-
-    get isPulseLevel() {
-        return true;
-    }
 }
 
 export class NoiseAwareIntelFdc extends IntelFdc {

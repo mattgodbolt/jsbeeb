@@ -1180,17 +1180,10 @@ $("#download-drive-link").on("click", function () {
     document.body.appendChild(a);
     a.style = "display: none";
 
-    let data;
-    let name;
-    if (processor.fdc.isPulseLevel) {
-        const disc = processor.fdc.drives[0].disc;
-        data = toSsdOrDsd(disc);
-        name = processor.fdc.drives[0].disc.name;
-        name = name.substring(0, name.lastIndexOf('.')) + (disc.isDoubleSided ? '.dsd' : '.ssd');
-    } else {
-        data = processor.fdc.drives[0].data;
-        name = processor.fdc.drives[0].name;
-    }
+    const disc = processor.fdc.drives[0].disc;
+    const data = toSsdOrDsd(disc);
+    let name = processor.fdc.drives[0].disc.name;
+    name = name.substring(0, name.lastIndexOf(".")) + (disc.isDoubleSided ? ".dsd" : ".ssd");
 
     const blob = new Blob([data], { type: "application/octet-stream" });
     const url = window.URL.createObjectURL(blob);
