@@ -1,34 +1,31 @@
 "use strict";
 
-export function Serial(acia) {
-    const self = this;
+const table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
 
-    function reset() {
-        self.reg = 0;
-        self.transmitRate = 0;
-        self.receiveRate = 0;
+export class Serial {
+    constructor(acia) {
+        this.acia = acia;
+        this.reset();
     }
 
-    const table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
+    reset() {
+        this.reg = 0;
+        this.transmitRate = 0;
+        this.receiveRate = 0;
+    }
 
-    function write(addr, val) {
+    write(addr, val) {
         val &= 0xff;
-        self.reg = val;
-        self.transmitRate = val & 0x07;
-        self.receiveRate = (val >>> 3) & 0x07;
-        acia.setSerialReceive(table[self.receiveRate]);
-        acia.setMotor(!!(val & 0x80));
-        acia.selectRs423(!!(val & 0x40));
+        this.reg = val;
+        this.transmitRate = val & 0x07;
+        this.receiveRate = (val >>> 3) & 0x07;
+        this.acia.setSerialReceive(table[this.receiveRate]);
+        this.acia.setMotor(!!(val & 0x80));
+        this.acia.selectRs423(!!(val & 0x40));
     }
 
-    function read() {
-        write(0, 0xfe);
+    read() {
+        this.write(0, 0xfe);
         return 0;
     }
-
-    self.reset = reset;
-    self.write = write;
-    self.read = read;
-
-    reset();
 }
