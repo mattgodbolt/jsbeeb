@@ -5,7 +5,7 @@
       "type": "chrome",
       "request": "launch",
       "name": "Debug a running webpack dev server",
-      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands&model=B1770",
+      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands&model=MasterADFS&disc=CodenameDroid-ADFS_E.adf",
       "webRoot": "${workspaceFolder}",
       "sourceMaps": true,
       "trace": true

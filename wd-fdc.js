@@ -461,14 +461,18 @@ export class WdFdc {
      */
     _setState(state) {
         if (this._logStateChanges && state !== this._state) {
-            this._log(`State ${this._state} -> ${state}`);
+            this._log(
+                `State ${this._state} -> ${state} @ tr ${this._trackRegister} ` +
+                    `sr ${this._sectorRegister} dr ${this._dataRegister} ` +
+                    `cr ${utils.hexbyte(this._controlRegister)} ` +
+                    `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
+            );
         }
         this._state = state;
         this._stateCount = 0;
     }
 
     _clearTimer() {
-        // TODO is this ok? differs from beebjit but so do our timer systems.
         if (this._timerState !== TimerState.none) {
             this._timerTask.cancel();
             this._timerState = TimerState.none;
@@ -817,7 +821,7 @@ export class WdFdc {
             const dataByte = this._isCommandDeleted
                 ? IbmDiscFormat.deletedDataMarkDataPattern
                 : IbmDiscFormat.dataMarkDataPattern;
-            this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(false), dataByte);
+            this._crc = IbmDiscFormat.crcAddByte(IbmDiscFormat.crcInit(true), dataByte);
             this._writeByte(true, dataByte, false);
             this._setState(State.writeSectorBody);
         }
@@ -937,7 +941,7 @@ export class WdFdc {
                 return true;
             }
             // TODO: sync to c2 (5224).
-            // Note than an early, naive attempt had it triggeredin in the middle of the sector data,
+            // Note than an early, naive attempt had it triggered in in the middle of the sector data,
             // so we'll need to study how it actually works in detail.
             // Tag the byte after 3 sync bytes as a marker.
             if ((this._markDetector & 0xffffffffffff0000n) === 0x4489448944890000n) {
@@ -1022,7 +1026,12 @@ export class WdFdc {
     _writeByte(isMfm, byte, isMarker) {
         let pulses;
         if (isMfm) {
-            pulses = isMarker ? this._mfmMarkerFor(byte) : IbmDiscFormat.mfmTo2usPulses(this._lastMfmBit, byte);
+            if (isMarker) pulses = this._mfmMarkerFor(byte);
+            else {
+                const result = IbmDiscFormat.mfmTo2usPulses(this._lastMfmBit, byte);
+                this._lastMfmBit = result.lastBit;
+                pulses = result.pulses;
+            }
         } else {
             const clocks = isMarker ? this._fmMarkerClocksFor(byte) : 0xff;
             pulses = IbmDiscFormat.fmTo2usPulses(clocks, byte);
@@ -1185,7 +1194,8 @@ export class WdFdc {
 
         if (isReadAddress) {
             if (isCrcError) this._statusRegister |= Status.crcError;
-            // Unlike the 8271, read address returns just a single record. It is also not synronized to the index pulse.
+            // Unlike the 8271, read address returns just a single record. It is also not synchronized
+            // to the index pulse.
             // EMU TODO: it's likely that timing is generally off for most states,
             // i.e. the 1770 takes various numbers of internal clock cycles before it
             // delivers the CRC error, before it goes not busy, etc.
@@ -1219,7 +1229,7 @@ export class WdFdc {
         this._stateCount++;
         const isMfm = this._isDoubleDensity(this._controlRegister);
         const multiplier = isMfm ? 2 : 1;
-        // Like the 8271 the data mark is only recongized if 14 bytes have passed.
+        // Like the 8271 the data mark is only recognized if 14 bytes have passed.
         // Unlike the 8271, it gives up after a while longer.
         if (this._stateCount < 14 * multiplier) return;
         if (this._stateCount > 31 * multiplier) {
