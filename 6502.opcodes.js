@@ -64,6 +64,7 @@ class InstructionGen {
     append(cycle, op, exact, addr) {
         this.appendOrPrepend((lhs, rhs) => lhs.concat(rhs), cycle, op, exact, addr);
     }
+
     prepend(cycle, op, exact, addr) {
         this.appendOrPrepend((lhs, rhs) => rhs.concat(lhs), cycle, op, exact, addr);
     }
@@ -80,6 +81,7 @@ class InstructionGen {
         if (spurious) op += " // spurious";
         this.append(this.cycle, op, true, addr);
     }
+
     writeOp(addr, reg, spurious) {
         this.cycle++;
         let op = "cpu.writemem(" + addr + ", " + reg + ");";
@@ -91,6 +93,7 @@ class InstructionGen {
         this.cycle++;
         this.append(this.cycle, reg + " = cpu.readmemZpStack(" + addr + ");", false);
     }
+
     zpWriteOp(addr, reg) {
         this.cycle++;
         this.append(this.cycle, "cpu.writememZpStack(" + addr + ", " + reg + ");", true);
@@ -906,8 +909,8 @@ class Disassemble6502 {
     }
 
     disassemble(addr, plain) {
-        let formatAddr = (addr) => `<span class='instr_mem_ref' data-ref='${addr}'>${hexword(addr)}</span>`;
-        let formatJumpAddr = (addr) => `<span class='instr_instr_ref' data-ref='${addr}'>${hexword(addr)}</span>`;
+        let formatAddr = (addr) => `<span class="instr_mem_ref" data-ref="${addr}">${hexword(addr)}</span>`;
+        let formatJumpAddr = (addr) => `<span class="instr_instr_ref" data-ref="${addr}">${hexword(addr)}</span>`;
         if (plain) {
             formatAddr = hexword;
             formatJumpAddr = hexword;
@@ -1191,15 +1194,16 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
     function getIndentedSource(indent, opcodeNum, needsReg) {
         const opcode = opcodes[opcodeNum];
-        let lines = null;
-        if (opcode) {
-            lines = getInstruction(opcode, !!needsReg);
-        }
-        if (!lines) {
-            lines = ["this.invalidOpcode(cpu, 0x" + utils.hexbyte(opcodeNum) + ");"];
-        }
-        lines = ['"use strict";', "// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"].concat(lines);
-        return indent + lines.join("\n" + indent);
+        return (
+            indent +
+            ['"use strict";', "// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"]
+                .concat(
+                    opcode
+                        ? getInstruction(opcode, !!needsReg)
+                        : ["this.invalidOpcode(cpu, 0x" + utils.hexbyte(opcodeNum) + ");"],
+                )
+                .join("\n" + indent)
+        );
     }
 
     // Empty to hold prototypical stuff.
