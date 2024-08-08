@@ -53,7 +53,7 @@ export class Config {
     }
 
     setKeyLayout(keyLayout) {
-        $(".keyboard-layout").text(keyLayout[0].toUpperCase() + keyLayout.substr(1));
+        $(".keyboard-layout").text(keyLayout[0].toUpperCase() + keyLayout.substring(1));
     }
 
     set65c02(enabled) {

@@ -1325,7 +1325,7 @@ export class Cpu6502 extends Base6502 {
                 const dis = disassembler.disassemble(pc, true)[0];
                 console.log(
                     utils.hexword(pc),
-                    (dis + "                       ").substr(0, 15),
+                    (dis + "                       ").substring(0, 15),
                     utils.hexbyte(a),
                     utils.hexbyte(x),
                     utils.hexbyte(y),

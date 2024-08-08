@@ -10,8 +10,8 @@ export function isFirefox() {
 }
 
 export function parseAddr(s) {
-    if (s[0] === "$" || s[0] === "&") return parseInt(s.substr(1), 16);
-    if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
+    if (s[0] === "$" || s[0] === "&") return parseInt(s.substring(1), 16);
+    if (s.indexOf("0x") === 0) return parseInt(s.substring(2), 16);
     return parseInt(s, 16);
 }
 

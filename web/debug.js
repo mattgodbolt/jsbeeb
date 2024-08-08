@@ -271,7 +271,7 @@ export class Debugger {
         let addr = parseInt(ops[0], 16);
         const setTo = ops[1];
         for (let i = 0; i < setTo.length; i += 2) {
-            const b = parseInt(setTo.substr(i, 2), 16);
+            const b = parseInt(setTo.substring(i, 2), 16);
             this.cpu.writemem(addr, b);
             addr++;
         }
@@ -280,8 +280,8 @@ export class Debugger {
     setPatch(patch) {
         _.each(patch.split(";"), (inst) => {
             if (inst[0] === "@") {
-                const at = parseInt(inst.substr(1, 4), 16);
-                inst = inst.substr(5);
+                const at = parseInt(inst.substring(1, 4), 16);
+                inst = inst.substring(5);
                 if (!this.patchInstructions[at]) this.patchInstructions[at] = [];
                 this.patchInstructions[at].push(inst);
             } else {
