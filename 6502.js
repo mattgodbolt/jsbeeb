@@ -102,11 +102,51 @@ class Flags {
 }
 
 class Base6502 {
+    get a() {
+        return this._regs[0];
+    }
+
+    get x() {
+        return this._regs[1];
+    }
+
+    get y() {
+        return this._regs[2];
+    }
+
+    get s() {
+        return this._regs[3];
+    }
+
+    set a(value) {
+        this._regs[0] = value;
+    }
+
+    set x(value) {
+        this._regs[1] = value;
+    }
+
+    set y(value) {
+        this._regs[2] = value;
+    }
+
+    set s(value) {
+        this._regs[3] = value;
+    }
+
+    get pc() {
+        return this._pc[0];
+    }
+
+    set pc(value) {
+        this._pc[0] = value;
+    }
+
     constructor(model) {
         this.model = model;
-        this.a = this.x = this.y = this.s = 0;
+        this._regs = new Uint8Array(4);
         this.p = new Flags();
-        this.pc = 0;
+        this._pc = new Uint16Array(1);
         this.opcodes = model.nmos ? opcodes.Cpu6502(this) : opcodes.Cpu65c12(this);
         this.disassembler = this.opcodes.disassembler;
         this.forceTracing = false;
@@ -150,21 +190,14 @@ class Base6502 {
         }
     }
 
-    incpc() {
-        this.pc = (this.pc + 1) & 0xffff;
-    }
-
     getb() {
-        const result = this.readmem(this.pc);
-        this.incpc();
+        const result = this.readmem(this.pc++);
         return result | 0;
     }
 
     getw() {
-        let result = this.readmem(this.pc) | 0;
-        this.incpc();
-        result |= (this.readmem(this.pc) | 0) << 8;
-        this.incpc();
+        let result = this.readmem(this.pc++) | 0;
+        result |= (this.readmem(this.pc++) | 0) << 8;
         return result | 0;
     }
 
@@ -471,8 +504,7 @@ class Tube6502 extends Base6502 {
         this.cycles += cycles * 2;
         if (this.cycles < 3) return;
         while (this.cycles > 0) {
-            const opcode = this.readmem(this.pc);
-            this.incpc();
+            const opcode = this.readmem(this.pc++);
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
         }
@@ -1288,7 +1320,7 @@ export class Cpu6502 extends Base6502 {
                 return false;
             }
             first = false;
-            this.incpc();
+            this.pc++;
             this.runner.run(opcode);
             this.oldAArray[this.oldPcIndex] = this.a;
             this.oldXArray[this.oldPcIndex] = this.x;
@@ -1302,8 +1334,7 @@ export class Cpu6502 extends Base6502 {
     executeInternalFast() {
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
-            const opcode = this.readmem(this.pc);
-            this.incpc();
+            const opcode = this.readmem(this.pc++);
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
             if (!this.resetLine) this.reset(false);
