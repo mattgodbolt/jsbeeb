@@ -191,19 +191,17 @@ class Base6502 {
     }
 
     getb() {
-        const result = this.readmem(this.pc++);
-        return result | 0;
+        return this.readmem(this.pc++);
     }
 
     getw() {
-        let result = this.readmem(this.pc++) | 0;
-        result |= (this.readmem(this.pc++) | 0) << 8;
-        return result | 0;
+        const low = this.readmem(this.pc++);
+        const high = this.readmem(this.pc++);
+        return low | (high << 8);
     }
 
     checkInt() {
-        this.takeInt = !!(this.interrupt && !this.p.i);
-        this.takeInt |= this._nmiEdge;
+        this.takeInt = !!(this.interrupt && !this.p.i) || this._nmiEdge;
     }
 
     // eslint-disable-next-line no-unused-vars
@@ -225,13 +223,11 @@ class Base6502 {
     }
 
     push(v) {
-        this.writememZpStack(0x100 + this.s, v);
-        this.s = (this.s - 1) & 0xff;
+        this.writememZpStack(0x100 + this.s--, v);
     }
 
     pull() {
-        this.s = (this.s + 1) & 0xff;
-        return this.readmemZpStack(0x100 + this.s);
+        return this.readmemZpStack(0x100 + ++this.s);
     }
 
     get nmi() {
