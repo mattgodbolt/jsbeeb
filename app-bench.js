@@ -4,16 +4,18 @@ import { fake6502 } from "./fake6502.js";
 import * as models from "./models.js";
 import * as disc from "./fdc.js";
 
-function benchmarkCpu(cpu, numCycles) {
-    numCycles = numCycles || 10 * 1000 * 1000;
-    console.log("Benchmarking over " + numCycles + " cpu cycles");
-    const startTime = Date.now();
-    cpu.execute(numCycles);
-    const endTime = Date.now();
-    const msTaken = endTime - startTime;
-    const virtualMhz = numCycles / msTaken / 1000;
-    console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
-    console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
+function benchmarkCpu(cpu, numCyclesPerRep, numTimes) {
+    console.log(`Benchmarking over ${numCyclesPerRep / 1000000}M cpu cycles, ${numTimes} times`);
+    for (let time = 0; time < numTimes; ++time) {
+        const startTime = Date.now();
+        cpu.execute(numCyclesPerRep);
+        const endTime = Date.now();
+        const msTaken = endTime - startTime;
+        const virtualMhz = numCyclesPerRep / msTaken / 1000;
+        console.log(
+            `${time}: Took ${msTaken}ms to execute ${numCyclesPerRep / 1000000}M cycles; Virtual ${virtualMhz.toFixed(2)}MHz`,
+        );
+    }
 }
 
 async function main() {
@@ -25,7 +27,7 @@ async function main() {
     cpu.sysvia.keyDown(16);
     cpu.execute(10 * 1000 * 1000);
     cpu.sysvia.keyUp(16);
-    benchmarkCpu(cpu, 100 * 1000 * 1000);
+    benchmarkCpu(cpu, 100 * 1000 * 1000, 10);
 }
 
 main().then(() => {});
