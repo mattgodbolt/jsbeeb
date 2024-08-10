@@ -8,7 +8,7 @@ const signExtend = utils.signExtend;
 function rotate(left, logical) {
     const lines = [];
     if (!left) {
-        if (!logical) lines.push("var newTopBit = cpu.p.c ? 0x80 : 0x00;");
+        if (!logical) lines.push("const newTopBit = cpu.p.c ? 0x80 : 0x00;");
         lines.push("cpu.p.c = !!(REG & 0x01);");
         if (logical) {
             lines.push("REG >>>= 1;");
@@ -16,7 +16,7 @@ function rotate(left, logical) {
             lines.push("REG = (REG >>> 1) | newTopBit;");
         }
     } else {
-        if (!logical) lines.push("var newBotBit = cpu.p.c ? 0x01 : 0x00;");
+        if (!logical) lines.push("const newBotBit = cpu.p.c ? 0x01 : 0x00;");
         lines.push("cpu.p.c = !!(REG & 0x80);");
         if (logical) {
             lines.push("REG = (REG << 1) & 0xff;");
@@ -327,13 +327,13 @@ function getOp(op, arg) {
             return { op: push("y"), extra: 2 };
         case "RTS":
             return {
-                op: ["var temp = cpu.pull();", "temp |= cpu.pull() << 8;", "cpu.pc = (temp + 1) & 0xffff;"],
+                op: ["let temp = cpu.pull();", "temp |= cpu.pull() << 8;", "cpu.pc = (temp + 1) & 0xffff;"],
                 extra: 5,
             };
         case "RTI":
             return {
                 preop: [
-                    "var temp = cpu.pull();",
+                    "let temp = cpu.pull();",
                     "cpu.p.c = !!(temp & 0x01);",
                     "cpu.p.z = !!(temp & 0x02);",
                     "cpu.p.i = !!(temp & 0x04);",
@@ -348,7 +348,7 @@ function getOp(op, arg) {
         case "JSR":
             return {
                 op: [
-                    "var pushAddr = cpu.pc - 1;",
+                    "const pushAddr = cpu.pc - 1;",
                     "cpu.push(pushAddr >>> 8);",
                     "cpu.push(pushAddr & 0xff);",
                     "cpu.pc = addr;",
@@ -397,12 +397,12 @@ function getOp(op, arg) {
             return { op: "REG = (cpu.y & ((addr >>> 8)+1)) & 0xff;", write: true, zpQuirk: true };
         case "LAX": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
             return {
-                op: ["var magic = 0xff;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
+                op: ["const magic = 0xff;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
             };
         case "LXA": // NB uses the c64 value for the magic in the OR here. I don't know what would happen on a beeb.
             return {
-                op: ["var magic = 0xee;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
+                op: ["const magic = 0xee;", "cpu.a = cpu.x = cpu.p.setzn((cpu.a|magic) & REG);"],
                 read: true,
             };
         case "SRE":
@@ -448,7 +448,7 @@ function getOp(op, arg) {
             };
         case "SBX":
             return {
-                op: ["var temp = cpu.a & cpu.x;", "cpu.p.c = temp >= REG;", "cpu.x = cpu.p.setzn(temp - REG);"],
+                op: ["const temp = cpu.a & cpu.x;", "cpu.p.c = temp >= REG;", "cpu.x = cpu.p.setzn(temp - REG);"],
                 read: true,
             };
         case "SHA":
@@ -981,7 +981,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
         if (!op) return null;
 
         let ig = new InstructionGen(is65c12);
-        if (needsReg) ig.append("var REG = 0|0;");
+        if (needsReg) ig.append("let REG = 0|0;");
 
         switch (arg) {
             case undefined:
@@ -1001,10 +1001,10 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
             case "zp,y":
                 if (arg === "zp") {
                     ig.tick(2);
-                    ig.append("var addr = cpu.getb() | 0;");
+                    ig.append("const addr = cpu.getb() | 0;");
                 } else {
                     ig.tick(3);
-                    ig.append("var addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
+                    ig.append("const addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
                 }
                 if (op.read) {
                     ig.zpReadOp("addr", "REG");
@@ -1018,7 +1018,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
             case "abs":
                 ig.tick(3 + (op.extra || 0));
-                ig.append("var addr = cpu.getw() | 0;");
+                ig.append("const addr = cpu.getw() | 0;");
                 if (op.read) {
                     ig.readOp("addr", "REG");
                     if (op.write) ig.spuriousOp("addr", "REG");
@@ -1030,9 +1030,9 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
             case "abs,x":
             case "abs,y":
-                ig.append("var addr = cpu.getw() | 0;");
-                ig.append("var addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
-                ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+                ig.append("const addr = cpu.getw() | 0;");
+                ig.append("let addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
+                ig.append("const addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                 ig.tick(3);
                 ig = ig.split("addrWithCarry !== addrNonCarry");
                 if (op.read && !op.write) {
@@ -1101,11 +1101,11 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
             case "(,x)":
                 ig.tick(3); // two, plus one for the seemingly spurious extra read of zp
-                ig.append("var zpAddr = (cpu.getb() + cpu.x) & 0xff;");
-                ig.append("var lo, hi;");
+                ig.append("const zpAddr = (cpu.getb() + cpu.x) & 0xff;");
+                ig.append("let lo, hi;");
                 ig.zpReadOp("zpAddr", "lo");
                 ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("var addr = lo | (hi << 8);");
+                ig.append("const addr = lo | (hi << 8);");
                 if (op.read) {
                     ig.readOp("addr", "REG");
                     if (op.write) ig.spuriousOp("addr", "REG");
@@ -1116,13 +1116,13 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
             case "(),y":
                 ig.tick(2);
-                ig.append("var zpAddr = cpu.getb() | 0;");
-                ig.append("var lo, hi;");
+                ig.append("const zpAddr = cpu.getb() | 0;");
+                ig.append("let lo, hi;");
                 ig.zpReadOp("zpAddr", "lo");
                 ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("var addr = lo | (hi << 8);");
-                ig.append("var addrWithCarry = (addr + cpu.y) & 0xffff;");
-                ig.append("var addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
+                ig.append("const addr = lo | (hi << 8);");
+                ig.append("let addrWithCarry = (addr + cpu.y) & 0xffff;");
+                ig.append("const addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                 if (op.read && !op.write) {
                     // For non-RMW, we only pay the cost of the spurious read if the address carried on 6502
                     ig = ig.split("addrWithCarry !== addrNonCarry");
@@ -1151,37 +1151,37 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
             case "(abs)":
                 ig.tick(is65c12 ? 4 : 3);
-                ig.append("var addr = cpu.getw() | 0;");
+                ig.append("const absAddr = cpu.getw() | 0;");
                 if (is65c12) {
-                    ig.append("var nextAddr = (addr + 1) & 0xffff;");
+                    ig.append("const nextAddr = (absAddr + 1) & 0xffff;");
                 } else {
-                    ig.append("var nextAddr = ((addr + 1) & 0xff) | (addr & 0xff00);");
+                    ig.append("const nextAddr = ((absAddr + 1) & 0xff) | (absAddr & 0xff00);");
                 }
-                ig.append("var lo, hi;");
-                ig.readOp("addr", "lo");
+                ig.append("let lo, hi;");
+                ig.readOp("absAddr", "lo");
                 ig.readOp("nextAddr", "hi");
-                ig.append("addr = lo | (hi << 8);");
+                ig.append("const addr = lo | (hi << 8);");
                 ig.append(op.op);
                 return ig.render();
 
             case "(abs,x)":
                 ig.tick(4);
-                ig.append("var addr = (cpu.getw() + cpu.x) | 0;");
-                ig.append("var lo, hi;");
-                ig.readOp("addr", "lo");
-                ig.readOp("(addr + 1) & 0xffff", "hi");
-                ig.append("addr = lo | (hi << 8);");
+                ig.append("const absAddr = (cpu.getw() + cpu.x) | 0;");
+                ig.append("let lo, hi;");
+                ig.readOp("absAddr", "lo");
+                ig.readOp("(absAddr + 1) & 0xffff", "hi");
+                ig.append("const addr = lo | (hi << 8);");
                 ig.append(op.op);
                 return ig.render();
 
             case "()":
                 // Timing here is guessed at, but appears to be correct.
                 ig.tick(2);
-                ig.append("var zpAddr = cpu.getb() | 0;");
-                ig.append("var lo, hi;");
+                ig.append("const zpAddr = cpu.getb() | 0;");
+                ig.append("let lo, hi;");
                 ig.zpReadOp("zpAddr", "lo");
                 ig.zpReadOp("(zpAddr + 1) & 0xff", "hi");
-                ig.append("var addr = lo | (hi << 8);");
+                ig.append("const addr = lo | (hi << 8);");
                 if (op.read) ig.readOp("addr", "REG");
                 ig.append(op.op);
                 if (op.write) ig.writeOp("addr", "REG");
