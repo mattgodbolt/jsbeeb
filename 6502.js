@@ -635,6 +635,9 @@ export class Cpu6502 extends Base6502 {
         this.music5000PageSel = 0;
         this.econet = econet_;
 
+        this.targetCycles = 0;
+        this.currentCycles = 0;
+        this.cycleSeconds = 0;
         this.peripheralCycles = 0;
         this.videoCycles = 0;
 
