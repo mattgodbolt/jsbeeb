@@ -223,11 +223,13 @@ class Base6502 {
     }
 
     push(v) {
-        this.writememZpStack(0x100 + this.s--, v);
+        this.writememZpStack(0x100 + this.s, v);
+        this.s--;
     }
 
     pull() {
-        return this.readmemZpStack(0x100 + ++this.s);
+        this.s++;
+        return this.readmemZpStack(0x100 + this.s);
     }
 
     get nmi() {
