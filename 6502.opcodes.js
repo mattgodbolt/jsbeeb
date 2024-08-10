@@ -1211,8 +1211,20 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
     function generate6502JumpTable() {
         const funcs = [];
-        for (let opcode = 0; opcode < 256; ++opcode) {
-            funcs[opcode] = new Function("cpu", getIndentedSource("  ", opcode, true));
+        for (let opcodeNum = 0; opcodeNum < 256; ++opcodeNum) {
+            const opcodeFunc = new Function("cpu", getIndentedSource("  ", opcodeNum, true));
+            let funcName = `exec_${utils.hexbyte(opcodeNum)}_`;
+            if (opcodes[opcodeNum]) {
+                const instrName = opcodes[opcodeNum]
+                    .replace("()", "ind")
+                    .replace("(,x)", "ind_x")
+                    .replace("(abs)", "ind_abs")
+                    .replace(/[^A-Za-z0-9]/g, "_")
+                    .toLowerCase();
+                funcName += instrName;
+            } else funcName += "undef";
+            Object.defineProperty(opcodeFunc, "name", { writable: true, value: funcName });
+            funcs[opcodeNum] = opcodeFunc;
         }
         return function exec(opcode) {
             return funcs[opcode].call(this, this.cpu);
