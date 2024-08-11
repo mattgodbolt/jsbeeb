@@ -25,9 +25,10 @@ const ORB = 0x0,
     INT_CB2 = 0x08;
 
 class Via {
-    constructor(cpu, irq) {
+    constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
         this.irq = irq;
+        this.scheduler = scheduler;
 
         this.ora = 0;
         this.orb = 0;
@@ -56,6 +57,9 @@ class Via {
         this.cb2changecallback = null;
         this.justhit = 0;
         this.t1_pb7 = 0;
+
+        this.task = this.scheduler.newTask(() => this._onTimeout());
+        this.lastPolltime = 0;
     }
 
     reset() {
@@ -68,41 +72,62 @@ class Via {
         this.t1hit = this.t2hit = true;
         this.acr = this.pcr = 0;
         this.t1_pb7 = 1;
+        this.updateNextTime();
     }
 
-    polltime(cycles) {
+    updateNextTime() {
+        let nextTimer = this.t1c;
+        if (!(this.acr & 0x20)) nextTimer = Math.min(this.t2c, nextTimer);
+        this.task.reschedule(Math.max(1, nextTimer));
+    }
+
+    _onTimeout() {
+        this._catchUp();
+    }
+
+    _catchUp() {
+        this._polltime(this.scheduler.epoch - this.lastPolltime);
+        this.lastPolltime = this.scheduler.epoch;
+        this.updateNextTime();
+    }
+
+    _polltime(cycles) {
         cycles |= 0;
         this.justhit = 0;
-        let newT1c = this.t1c - cycles;
+        const newT1c = this.t1c - cycles;
+        if (newT1c < -2) this.t1c = this._handleT1c(newT1c);
+        else this.t1c = newT1c;
+
+        if (!(this.acr & 0x20)) {
+            const newT2c = this.t2c - cycles;
+            if (newT2c < -2) this.t2c = this._handleT2c(newT2c);
+            else this.t2c = newT2c;
+        }
+    }
+
+    _handleT1c(newT1c) {
         if (newT1c < -2 && this.t1c > -3) {
             if (!this.t1hit) {
                 this.ifr |= TIMER1INT;
                 this.updateIFR();
-                if (newT1c === -3) {
-                    this.justhit |= 1;
-                }
+                if (newT1c === -3) this.justhit |= 1;
                 this.t1_pb7 = !this.t1_pb7;
             }
             if (!(this.acr & 0x40)) this.t1hit = true;
         }
         while (newT1c < -3) newT1c += this.t1l + 4;
-        this.t1c = newT1c;
+        return newT1c;
+    }
 
-        if (!(this.acr & 0x20)) {
-            let newT2c = this.t2c - cycles;
-            if (newT2c < -2) {
-                if (!this.t2hit) {
-                    this.ifr |= TIMER2INT;
-                    this.updateIFR();
-                    if (newT2c === -3) {
-                        this.justhit |= 2;
-                    }
-                    this.t2hit = true;
-                }
-                newT2c += 0x20000;
-            }
-            this.t2c = newT2c;
+    _handleT2c(newT2c) {
+        if (!this.t2hit) {
+            this.ifr |= TIMER2INT;
+            this.updateIFR();
+            if (newT2c === -3) this.justhit |= 2;
+            this.t2hit = true;
         }
+        newT2c += 0x20000;
+        return newT2c;
     }
 
     updateIFR() {
@@ -116,6 +141,7 @@ class Via {
     }
 
     write(addr, val) {
+        this._catchUp();
         let mode;
         val |= 0;
         switch (addr & 0xf) {
@@ -216,6 +242,7 @@ class Via {
                     this.updateIFR();
                 }
                 this.t1_pb7 = 0;
+                this.updateNextTime();
                 break;
 
             case T2CL:
@@ -233,6 +260,7 @@ class Via {
                     this.updateIFR();
                 }
                 this.t2hit = false;
+                this.updateNextTime();
                 break;
 
             case IER:
@@ -251,6 +279,7 @@ class Via {
     }
 
     read(addr) {
+        this._catchUp();
         switch (addr & 0xf) {
             case ORA:
                 this.ifr &= ~INT_CA1;
@@ -431,8 +460,8 @@ class Via {
 }
 
 export class SysVia extends Via {
-    constructor(cpu, video, soundChip, cmos, isMaster, initialLayout, getGamepads) {
-        super(cpu, 0x01);
+    constructor(cpu, scheduler, video, soundChip, cmos, isMaster, initialLayout, getGamepads) {
+        super(cpu, scheduler, 0x01);
 
         this.IC32 = 0;
         this.capsLockLight = false;
@@ -626,8 +655,8 @@ export class SysVia extends Via {
 }
 
 export class UserVia extends Via {
-    constructor(cpu, isMaster, userPortPeripheral) {
-        super(cpu, 0x02);
+    constructor(cpu, scheduler, isMaster, userPortPeripheral) {
+        super(cpu, scheduler, 0x02);
         this.isMaster = isMaster;
         this.userPortPeripheral = userPortPeripheral;
         this.reset();

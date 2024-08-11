@@ -1155,6 +1155,7 @@ export class Cpu6502 extends Base6502 {
             this.soundChip.setScheduler(this.scheduler);
             this.sysvia = new via.SysVia(
                 this,
+                this.scheduler,
                 this.video,
                 this.soundChip,
                 this.cmos,
@@ -1162,7 +1163,7 @@ export class Cpu6502 extends Base6502 {
                 this.config.keyLayout,
                 this.config.getGamepads,
             );
-            this.uservia = new via.UserVia(this, this.model.isMaster, this.config.userPort);
+            this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
             if (this.config.printerPort) this.uservia.ca2changecallback = this.config.printerPort.outputStrobe;
             this.touchScreen = new TouchScreen(this.scheduler);
             this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
@@ -1215,8 +1216,8 @@ export class Cpu6502 extends Base6502 {
 
     // Common between polltimeSlow and polltimeFast
     polltimeCommon(cycles) {
-        this.sysvia.polltime(cycles);
-        this.uservia.polltime(cycles);
+        // this.sysvia.polltime(cycles);
+        // this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
         if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
