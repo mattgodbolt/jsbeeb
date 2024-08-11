@@ -1216,8 +1216,6 @@ export class Cpu6502 extends Base6502 {
 
     // Common between polltimeSlow and polltimeFast
     polltimeCommon(cycles) {
-        // this.sysvia.polltime(cycles);
-        // this.uservia.polltime(cycles);
         this.scheduler.polltime(cycles);
         this.tube.execute(cycles);
         if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
