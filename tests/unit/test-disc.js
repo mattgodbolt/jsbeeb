@@ -181,7 +181,7 @@ describe("SSD loader tests", function () {
     it("should load Elite", () => {
         const disc = new Disc(true, new DiscConfig(), "test.ssd");
         loadSsd(disc, data, false);
-        assert.equal(disc.tracksUsed, 46);
+        assert.equal(disc.tracksUsed, 80);
     });
     it("should roundtrip Elite", () => {
         const disc = new Disc(true, new DiscConfig(), "test.ssd");
