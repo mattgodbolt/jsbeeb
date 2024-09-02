@@ -980,14 +980,14 @@ export class DataStream {
 
     readNulString(pos, maxLength) {
         if (!maxLength) maxLength = 1024;
-        let posToUse = pos === undefined ? self.pos : pos;
+        let posToUse = pos === undefined ? this.pos : pos;
         let result = "";
         let c;
-        while ((c = self.readByte(posToUse++)) !== 0 && --maxLength) {
+        while ((c = this.readByte(posToUse++)) !== 0 && --maxLength) {
             result += String.fromCharCode(c);
         }
         if (maxLength === 0) return "";
-        if (pos === undefined) self.pos = posToUse;
+        if (pos === undefined) this.pos = posToUse;
         return result;
     }
 
