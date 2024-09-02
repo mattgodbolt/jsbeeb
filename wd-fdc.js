@@ -468,6 +468,9 @@ export class WdFdc {
                     `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
             );
         }
+        if (state === undefined) {
+            throw new Error("Undefined state");
+        }
         this._state = state;
         this._stateCount = 0;
     }
@@ -1201,7 +1204,7 @@ export class WdFdc {
             // delivers the CRC error, before it goes not busy, etc.
             // EMU NOTE: must not clear busy flag right away. The 1770 delivers the
             // last header byte DRQ separately from lowering the busy flag.
-            this._setState(Status.done);
+            this._setState(State.done);
             return;
         }
 
