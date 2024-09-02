@@ -214,10 +214,17 @@ export class DiscDrive extends EventTarget {
     }
 
     /**
-     * Notify that an overall seek is happening. Purely informational.
+     * Notify that an overall seek is happening to a particular track. Purely informational.
      */
     notifySeek(newTrack) {
-        this.dispatchEvent(new StepEvent(newTrack - this._track));
+        this.notifySeekAmount(newTrack - this._track);
+    }
+
+    /**
+     * Notify that an overall seek is happening by some delta smount. Purely informational.
+     */
+    notifySeekAmount(delta) {
+        this.dispatchEvent(new StepEvent(delta));
     }
 
     /**

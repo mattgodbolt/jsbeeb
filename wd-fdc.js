@@ -468,9 +468,6 @@ export class WdFdc {
                     `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
             );
         }
-        if (state === undefined) {
-            throw new Error("Undefined state");
-        }
         this._state = state;
         this._stateCount = 0;
     }
@@ -635,6 +632,10 @@ export class WdFdc {
         }
     }
 
+    _makeSeekNoise(delta) {
+        if (this._currentDrive) this._currentDrive.notifySeekAmount(delta);
+    }
+
     _dispatchCommand() {
         if (!this._currentDrive) throw new Error("Unexpectedly dispatching a command with no drive set");
         if (this._isCommandWrite && this._currentDrive.writeProtect) {
@@ -651,18 +652,23 @@ export class WdFdc {
             // Falls through...
             case Command.seek:
                 this._doSeekStepOrVerify();
+                this._makeSeekNoise(this._dataRegister - this._trackRegister);
                 break;
             case Command.stepInNoUpdate:
                 this._doSeekStep(1, false);
+                this._makeSeekNoise(1);
                 break;
             case Command.stepInWithUpdate:
                 this._doSeekStep(1, true);
+                this._makeSeekNoise(1);
                 break;
             case Command.stepOutNoUpdate:
                 this._doSeekStep(-1, false);
+                this._makeSeekNoise(-1);
                 break;
             case Command.stepOutWithUpdate:
                 this._doSeekStep(-1, true);
+                this._makeSeekNoise(-1);
                 break;
             case Command.readSector:
             case Command.readSectorMulti:
