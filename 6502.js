@@ -102,11 +102,51 @@ class Flags {
 }
 
 class Base6502 {
+    get a() {
+        return this._regs[0];
+    }
+
+    get x() {
+        return this._regs[1];
+    }
+
+    get y() {
+        return this._regs[2];
+    }
+
+    get s() {
+        return this._regs[3];
+    }
+
+    set a(value) {
+        this._regs[0] = value;
+    }
+
+    set x(value) {
+        this._regs[1] = value;
+    }
+
+    set y(value) {
+        this._regs[2] = value;
+    }
+
+    set s(value) {
+        this._regs[3] = value;
+    }
+
+    get pc() {
+        return this._pc[0];
+    }
+
+    set pc(value) {
+        this._pc[0] = value;
+    }
+
     constructor(model) {
         this.model = model;
-        this.a = this.x = this.y = this.s = 0;
+        this._regs = new Uint8Array(4);
         this.p = new Flags();
-        this.pc = 0;
+        this._pc = new Uint16Array(1);
         this.opcodes = model.nmos ? opcodes.Cpu6502(this) : opcodes.Cpu65c12(this);
         this.disassembler = this.opcodes.disassembler;
         this.forceTracing = false;
@@ -150,27 +190,18 @@ class Base6502 {
         }
     }
 
-    incpc() {
-        this.pc = (this.pc + 1) & 0xffff;
-    }
-
     getb() {
-        const result = this.readmem(this.pc);
-        this.incpc();
-        return result | 0;
+        return this.readmem(this.pc++);
     }
 
     getw() {
-        let result = this.readmem(this.pc) | 0;
-        this.incpc();
-        result |= (this.readmem(this.pc) | 0) << 8;
-        this.incpc();
-        return result | 0;
+        const low = this.readmem(this.pc++);
+        const high = this.readmem(this.pc++);
+        return low | (high << 8);
     }
 
     checkInt() {
-        this.takeInt = !!(this.interrupt && !this.p.i);
-        this.takeInt |= this._nmiEdge;
+        this.takeInt = !!(this.interrupt && !this.p.i) || this._nmiEdge;
     }
 
     // eslint-disable-next-line no-unused-vars
@@ -193,11 +224,11 @@ class Base6502 {
 
     push(v) {
         this.writememZpStack(0x100 + this.s, v);
-        this.s = (this.s - 1) & 0xff;
+        this.s--;
     }
 
     pull() {
-        this.s = (this.s + 1) & 0xff;
+        this.s++;
         return this.readmemZpStack(0x100 + this.s);
     }
 
@@ -471,8 +502,7 @@ class Tube6502 extends Base6502 {
         this.cycles += cycles * 2;
         if (this.cycles < 3) return;
         while (this.cycles > 0) {
-            const opcode = this.readmem(this.pc);
-            this.incpc();
+            const opcode = this.readmem(this.pc++);
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
         }
@@ -603,6 +633,9 @@ export class Cpu6502 extends Base6502 {
         this.music5000PageSel = 0;
         this.econet = econet_;
 
+        this.targetCycles = 0;
+        this.currentCycles = 0;
+        this.cycleSeconds = 0;
         this.peripheralCycles = 0;
         this.videoCycles = 0;
 
@@ -1288,7 +1321,7 @@ export class Cpu6502 extends Base6502 {
                 return false;
             }
             first = false;
-            this.incpc();
+            this.pc++;
             this.runner.run(opcode);
             this.oldAArray[this.oldPcIndex] = this.a;
             this.oldXArray[this.oldPcIndex] = this.x;
@@ -1302,8 +1335,7 @@ export class Cpu6502 extends Base6502 {
     executeInternalFast() {
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
-            const opcode = this.readmem(this.pc);
-            this.incpc();
+            const opcode = this.readmem(this.pc++);
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
             if (!this.resetLine) this.reset(false);
