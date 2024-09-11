@@ -356,7 +356,7 @@ class Via {
     portBUpdated() {}
 
     getJoysticks() {
-        return { button1: false, button2: false };
+        return { button1: true, button2: true };
     }
 
     recalculatePortAPins() {
