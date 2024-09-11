@@ -67,4 +67,38 @@ PRINT ?(R%+3)`);
         assert.equal(testMachine.readbyte(0x202), 0);
         assert.equal(testMachine.readbyte(0x203), 128);
     });
+    it("VIA.AC2 - Does ACR write at timer expiry affect behaviour #1?", async function () {
+        // Real BBC: 0, 0
+        const testMachine = await runViaProgram(`
+DIM MC% 100
+R% = &200
+P% = MC%
+[
+OPT 2
+SEI
+LDA #&7F
+STA &FE6E
+LDA #&00
+STA &FE6B
+LDA #&02
+STA &FE64
+LDA #&00
+STA &FE65
+LDA #&40
+STA &FE6B
+LDA &FE64
+STA R%
+LDA &FE6D
+STA R%+1
+CLI
+RTS
+]
+CALL MC%
+PRINT "VIA TEST: DOES ACR WRITE AT TIMER EXPIRY AFFECT BEHAVIOR #1?"
+PRINT "REAL BBC: 0, 0"
+PRINT ?(R%)
+PRINT ?(R%+1)`);
+        assert.equal(testMachine.readbyte(0x200), 0);
+        assert.equal(testMachine.readbyte(0x201), 0);
+    });
 });
