@@ -1,7 +1,6 @@
 import * as fdc from "../../fdc.js";
 import { fake6502 } from "../../fake6502.js";
 import { findModel } from "../../models.js";
-import { FakeVideo } from "../../video.js";
 import assert from "assert";
 import * as utils from "../../utils.js";
 import * as Tokeniser from "../../basic-tokenise.js";
@@ -9,9 +8,9 @@ import * as Tokeniser from "../../basic-tokenise.js";
 const MaxCyclesPerIter = 100 * 1000;
 
 export class TestMachine {
-    constructor(model) {
+    constructor(model, opts) {
         model = model || "B-DFS1.2";
-        this.processor = fake6502(findModel(model), { video: new FakeVideo() });
+        this.processor = fake6502(findModel(model), opts || {});
     }
 
     async initialise() {

@@ -469,8 +469,52 @@ function getOp(op, arg) {
                 read: true,
                 write: true,
             };
+        case "RMB0":
+        case "RMB1":
+        case "RMB2":
+        case "RMB3":
+        case "RMB4":
+        case "RMB5":
+        case "RMB6":
+        case "RMB7":
+            return {
+                op: [`REG = REG & (${~(1 << (op[3] - "0"))});`],
+                read: true,
+                write: true,
+            };
+        case "SMB0":
+        case "SMB1":
+        case "SMB2":
+        case "SMB3":
+        case "SMB4":
+        case "SMB5":
+        case "SMB6":
+        case "SMB7":
+            return {
+                op: [`REG = REG | ${1 << (op[3] - "0")};`],
+                read: true,
+                write: true,
+            };
+        case "BBR0":
+        case "BBR1":
+        case "BBR2":
+        case "BBR3":
+        case "BBR4":
+        case "BBR5":
+        case "BBR6":
+        case "BBR7":
+            return { op: `cpu.branch(!(REG & ${1 << (op[3] - "0")}));`, read: true };
+        case "BBS0":
+        case "BBS1":
+        case "BBS2":
+        case "BBS3":
+        case "BBS4":
+        case "BBS5":
+        case "BBS6":
+        case "BBS7":
+            return { op: `cpu.branch(REG & ${1 << (op[3] - "0")});`, read: true };
     }
-    return null;
+    throw new Error(`Unrecognised operation '${op}'`);
 }
 
 const opcodes6502 = {
@@ -902,6 +946,42 @@ const opcodes65c12 = {
     0xfe: "INC abs,x",
 };
 
+const opcodes65c02 = {
+    ...opcodes65c12,
+    0x07: "RMB0 zp",
+    0x17: "RMB1 zp",
+    0x27: "RMB2 zp",
+    0x37: "RMB3 zp",
+    0x47: "RMB4 zp",
+    0x57: "RMB5 zp",
+    0x67: "RMB6 zp",
+    0x77: "RMB7 zp",
+    0x87: "SMB0 zp",
+    0x97: "SMB1 zp",
+    0xa7: "SMB2 zp",
+    0xb7: "SMB3 zp",
+    0xc7: "SMB4 zp",
+    0xd7: "SMB5 zp",
+    0xe7: "SMB6 zp",
+    0xf7: "SMB7 zp",
+    0x0f: "BBR0 zp,branch",
+    0x1f: "BBR1 zp,branch",
+    0x2f: "BBR2 zp,branch",
+    0x3f: "BBR3 zp,branch",
+    0x4f: "BBR4 zp,branch",
+    0x5f: "BBR5 zp,branch",
+    0x6f: "BBR6 zp,branch",
+    0x7f: "BBR7 zp,branch",
+    0x8f: "BBS0 zp,branch",
+    0x9f: "BBS1 zp,branch",
+    0xaf: "BBS2 zp,branch",
+    0xbf: "BBS3 zp,branch",
+    0xcf: "BBS4 zp,branch",
+    0xdf: "BBS5 zp,branch",
+    0xef: "BBS6 zp,branch",
+    0xff: "BBS7 zp,branch",
+};
+
 class Disassemble6502 {
     constructor(cpu, opcodes) {
         this.cpu = cpu;
@@ -986,7 +1066,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
         switch (arg) {
             case undefined:
                 // Many of these ops need a little special casing.
-                if (op.read || op.write) throw "Unsupported " + opcodeString;
+                if (op.read || op.write) throw new Error(`Unsupported ${opcodeString}`);
                 ig.append(op.preop);
                 ig.tick(Math.max(2, 1 + (op.extra || 0)));
                 ig.append(op.op);
@@ -994,6 +1074,19 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
             case "branch":
                 return [op.op]; // special cased here, would be nice to pull out of cpu
+
+            case "zp,branch":
+                ig.tick(2);
+                ig.append("const addr = cpu.getb() | 0;");
+                if (op.read) {
+                    ig.zpReadOp("addr", "REG");
+                    if (op.write) {
+                        ig.tick(1); // Spurious write
+                    }
+                }
+                ig.append(op.op);
+                if (op.write) ig.zpWriteOp("addr", "REG");
+                return ig.render();
 
             case "zp":
             case "zpx": // Seems to be enough to keep tests happy, but needs investigation.
@@ -1082,7 +1175,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
 
             case "imm":
                 if (op.write) {
-                    throw "This isn't possible";
+                    throw new Error("This isn't possible");
                 }
                 if (op.read) {
                     // NOP imm
@@ -1188,7 +1281,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                 return ig.render();
 
             default:
-                throw "Unknown arg type " + arg;
+                throw new Error(`Unknown arg type ${arg}`);
         }
     }
 
@@ -1308,4 +1401,8 @@ export function Cpu6502(cpu) {
 
 export function Cpu65c12(cpu) {
     return makeCpuFunctions(cpu, opcodes65c12, true);
+}
+
+export function Cpu65c02(cpu) {
+    return makeCpuFunctions(cpu, opcodes65c02, true);
 }
