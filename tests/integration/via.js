@@ -818,8 +818,8 @@ REM REAL BBC! YES: 128
 PRINT ?(R%)`);
         expectArray(testMachine, [128]);
     });
-    // TODO fix! this is broken currently
-    it.skip("VIA.PB7 - sys via checks", async function () {
+    // @scarybeasts' original talks about "SYSVIA" below but this is the user VIA
+    it("VIA.PB7 - user via checks", async function () {
         const testMachine = await runViaProgram(`
 PRINT "RUN AFTER FRESH BOOT"
 R% = ${resultAddress}
@@ -838,7 +838,7 @@ PROCcheck(0, ?&FE6B, "SYSVIA ACR")
 REM READ QUICKLY BEFORE TIMER HITS
 A% = ?&FE60
 REM TIMER EXPIRES IN 65MS
-B% = INKEY(10)
+T%=TIME+10:REPEAT UNTIL TIME>T%
 PROCcheck(127, A%, "SYSVIA PORT B INPUT PB7 LOW")
 PROCcheck(255, ?&FE60, "SYSVIA PORT B INPUT PB7 HIGH")
 ?&FE62 = 255
@@ -852,7 +852,7 @@ DEF PROCcheck(E%, A%, N$)
 R$ = "OK"
 IF E% <> A% THEN R$ = "FAIL!"
 IF E% <> A% THEN ?R% = 255
-PRINT R$ + ": " + N$ + ": " + STR$(A%)
+PRINT R$ + ": " + N$ + ": " + STR$(A%) + " (expected " + STR$(E%) + ")"
 ENDPROC`);
         expectArray(testMachine, [0]);
     });
