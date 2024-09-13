@@ -283,23 +283,6 @@ class Via {
                     temp |= this.t1_pb7 << 7;
                 }
 
-                const buttons = this.getJoysticks();
-
-                // clear PB4 and PB5
-                temp = temp & 0xcf; // 11001111
-
-                // AUG p418
-                // PB4 and PB5 inputs
-                // These are the inputs from the joystick FIRE buttons. They are
-                // normally at logic 1 with no button pressed and change to 0
-                // when a button is pressed
-                if (!buttons.button1) {
-                    temp |= 1 << 4;
-                }
-                if (!buttons.button2) {
-                    temp |= 1 << 5;
-                }
-
                 return temp;
             }
             case DDRA:
@@ -356,7 +339,7 @@ class Via {
     portBUpdated() {}
 
     getJoysticks() {
-        return { button1: false, button2: false };
+        return { button1: true, button2: true };
     }
 
     recalculatePortAPins() {
@@ -368,6 +351,16 @@ class Via {
 
     recalculatePortBPins() {
         this.portbpins = this.orb & this.ddrb;
+        const buttons = this.getJoysticks();
+
+        // AUG p418
+        // ### PB4 and PB5 inputs
+        // These are the inputs from the joystick FIRE buttons. They are
+        // normally at logic 1 with no button pressed and change to 0 when a
+        // button is pressed
+        if (!buttons.button1) this.portbpins |= 1 << 4;
+        if (!buttons.button2) this.portbpins |= 1 << 5;
+
         this.portbpins |= ~this.ddrb & 0xff;
         this.drivePortB();
         this.portBUpdated();
