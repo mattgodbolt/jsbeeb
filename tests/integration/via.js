@@ -547,4 +547,139 @@ PRINT ?(R%+13)
 PRINT ?(R%+14)`);
         expectArray(testMachine, [64, 64, 1, 64, 0, 1, 64, 64, 1, 64, 0, 1, 64, 0, 1]);
     });
+    it("VIA.C1", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 2
+SEI
+LDX #0
+LDY #0
+LDA #20
+STA &FE64
+LDA #0
+STA &FE65
+LDA &FE64
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT ?&FE6A
+?R% = ?&FE6A`);
+        expectArray(testMachine, [18]); // TODO check this on a real BBC
+    });
+    it("VIA.C2", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 2
+SEI
+LDA #&64
+STA &50
+LDA #&FE
+STA &51
+LDX #0
+LDY #0
+LDA #20
+STA &FE64
+LDA #0
+STA &FE65
+LDA (&50),Y
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT ?&FE6A
+?R% = ?&FE6A`);
+        expectArray(testMachine, [18]); // TODO check this on a real BBC
+    });
+    it("VIA.C3", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 2
+SEI
+LDA #&64
+STA &50
+LDA #&FE
+STA &51
+LDX #0
+LDY #0
+LDA #20
+STA &FE64
+LDA #0
+STA &FE65
+LDA (&50,X)
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT ?&FE6A
+?R% = ?&FE6A`);
+        expectArray(testMachine, [17]); // TODO check this on a real BBC
+    });
+    it("VIA.C4", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 2
+SEI
+LDX #0
+LDY #0
+LDA #20
+STA &FE64
+LDA #0
+STA &FE65
+ASL &FE64,X
+LDA &FE64
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT ?&FE6A
+?R% = ?&FE6A`);
+        expectArray(testMachine, [12]); // TODO check this on a real BBC
+    });
+    it("VIA.C5", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 2
+SEI
+LDA #&64
+STA &50
+LDA #&FE
+STA &51
+LDX #0
+LDY #0
+LDA #20
+STA &FE64
+LDA #0
+STA &FE65
+EQUB &03
+EQUB &50
+LDA &FE64
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT ?&FE6A
+?R% = ?&FE6A`);
+        expectArray(testMachine, [12]); // TODO check this on a real BBC
+    });
 });
