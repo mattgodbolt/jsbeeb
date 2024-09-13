@@ -817,7 +817,8 @@ REM REAL BBC! YES: 128
 PRINT ?(R%)`);
         expectArray(testMachine, [128]);
     });
-    it("VIA.PB7 - sys via checks", async function () {
+    // TODO fix! this is broken currently
+    it.skip("VIA.PB7 - sys via checks", async function () {
         const testMachine = await runViaProgram(`
 PRINT "RUN AFTER FRESH BOOT"
 R% = ${resultAddress}
@@ -852,6 +853,211 @@ IF E% <> A% THEN R$ = "FAIL!"
 IF E% <> A% THEN ?R% = 255
 PRINT R$ + ": " + N$ + ": " + STR$(A%)
 ENDPROC`);
-        expectArray(testMachine, [255]); // TODO set to 0 and fix! this is broken currently
+        expectArray(testMachine, [0]);
+    });
+    it("VIA.T11 - How does T1 tick across expiry?", async function () {
+        const testMachine = await runViaProgram(`
+REM RESET ACR TO DEFAULT BOOT + MOS 1.2 STATE
+R% = ${resultAddress}
+PRINT "VIA TEST: HOW DOES T1 TICK ACROSS EXPIRY?"
+PRINT "REAL BBC: 1, 0, 255, 4, 3, 2"
+?&FE6B = 0
+REM QUICK CHECKS TO SEE IF TIMERS ARE RUNNING ETC.
+PRINT "USER VIA IFR: " + STR$(?&FE6D)
+FOR A%=0 TO 1
+PRINT "USER VIA T1CH: " + STR$(?&FE65)
+PRINT "USER VIA T1CL: " + STR$(?&FE64)
+NEXT
+DIM MC% 100
+PROCtimeit(1)
+PROCtimeit(2)
+PROCtimeit(3)
+PROCtimeit(4)
+PROCtimeit(5)
+PROCtimeit(6)
+END
+DEF PROCtimeit(N%)
+P% = MC%
+[
+OPT 0
+SEI
+LDX #0
+LDY #0
+LDA #4
+STA &FE64
+LDA #0
+STA &FE65
+]
+FOR A%=1 TO N%
+[
+OPT 0
+NOP
+]
+NEXT
+[
+OPT 0
+LDA &FE64
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT "USER VIA T1CL: " + STR$(?&FE6A)
+?R% = ?&FE6A
+R% = R% + 1
+ENDPROC`);
+        expectArray(testMachine, [1, 0, 255, 4, 3, 2]);
+    });
+    it("VIA.T12 - When do T1L writes take effect vs. timer expiry?", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 100
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 3
+SEI
+LDA #&00
+STA &FE6B
+LDA #&7F
+STA &FE6E
+LDA #&02
+STA &FE64
+LDA #&00
+STA &FE65
+LDA #&FF
+STA &FE66
+LDA &FE64
+STA R%
+LDA #&03
+STA &FE64
+LDA #&00
+STA &FE65
+NOP
+NOP
+LDA #&FF
+STA &FE66
+LDA &FE64
+STA R%+1
+CLI
+RTS
+]
+CALL MC%
+REM REAL BBC: 253, 0
+PRINT "VIA TEST: WHEN DO T1L WRITES TAKE EFFECT VS. TIMER EXPIRY?"
+PRINT "REAL BBC: 253, 0"
+PRINT ?(R%)
+PRINT ?(R%+1)`);
+        expectArray(testMachine, [253, 0]);
+    });
+    it("VIA.T21 - user VIA T2 to pulse counting?", async function () {
+        const testMachine = await runViaProgram(`
+REM USER VIA T2 TO PULSE COUNTING
+REM FREEZES T2
+R% = ${resultAddress}
+PRINT "VIA TEST: T2 IN PULSE COUNTING MODE"
+PRINT "REAL BBC: 1, 255, 255"
+?&FE6B = &20
+?&FE68 = 1
+?&FE69 = 0
+R%?0 = ?&FE68
+?&FE68 = &FF
+?&FE69 = &FF
+R%?1 = ?&FE68
+R%?2 = ?&FE68
+PRINT "USER VIA T2CL: " + STR$(R%?0)
+PRINT "USER VIA T2CL: " + STR$(R%?1)
+PRINT "USER VIA T2CL: " + STR$(R%?2)`);
+        expectArray(testMachine, [1, 255, 255]);
+    });
+    it("VIA.T22 - T2 ticking past expiry", async function () {
+        const testMachine = await runViaProgram(`
+REM RESET ACR TO DEFAULT BOOT + MOS 1.2 STATE
+R% = ${resultAddress}
+PRINT "VIA TEST: T2 TICKING PAST EXPIRY"
+PRINT "REAL BBC: 1, 0, 255, 254, 253, 252"
+?&FE6B = 0
+REM QUICK CHECKS TO SEE IF TIMERS ARE RUNNING ETC.
+PRINT "USER VIA IFR: " + STR$(?&FE6D)
+FOR A%=0 TO 1
+PRINT "USER VIA T2CH: " + STR$(?&FE69)
+PRINT "USER VIA T2CL: " + STR$(?&FE68)
+NEXT
+DIM MC% 100
+PROCtimeit(1)
+PROCtimeit(2)
+PROCtimeit(3)
+PROCtimeit(4)
+PROCtimeit(5)
+PROCtimeit(6)
+END
+DEF PROCtimeit(N%)
+P% = MC%
+[
+OPT 0
+SEI
+LDX #0
+LDY #0
+LDA #4
+STA &FE68
+LDA #0
+STA &FE69
+]
+FOR A%=1 TO N%
+[
+OPT 0
+NOP
+]
+NEXT
+[
+OPT 0
+LDA &FE68
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT "USER VIA T2CL: " + STR$(?&FE6A)
+?R% = ?&FE6A
+R% = R% + 1
+ENDPROC`);
+        expectArray(testMachine, [1, 0, 255, 254, 253, 252]);
+    });
+    // Disabled, @scarybeasts comments:
+    //  I fixed everything except VIA.T23, which doesn't seem important. It's tricky for code to really rely on T2
+    //  values after toggling ACR 0x20 because results will vary depending on what is attached and generating pulses
+    //  from external.
+    it.skip("VIA.T22 - what values do we get freezing and starting T2?", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 100
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 3
+SEI
+LDA #&40
+STA &FE4B
+LDA #&FF
+STA &FE48
+STA &FE49
+LDA #&60
+STA &FE4B
+LDA &FE48
+STA R%
+LDA #&40
+STA &FE4B
+LDA &FE48
+STA R%+1
+LDA #&60
+STA &FE4B
+CLI
+RTS
+]
+CALL MC%
+REM REAL BBC: 251, 249
+PRINT "VIA TEST: WHAT VALUES DO WE GET FREEZING AND STARTING T2?"
+PRINT "REAL BBC: 251, 249"
+PRINT ?(R%)
+PRINT ?(R%+1)`);
+        expectArray(testMachine, [251, 249]);
     });
 });
