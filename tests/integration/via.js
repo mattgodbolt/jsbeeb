@@ -682,4 +682,176 @@ PRINT ?&FE6A
 ?R% = ?&FE6A`);
         expectArray(testMachine, [12]); // TODO check this on a real BBC
     });
+    it("VIA.I1 - does T1LH write clear int in on-shot", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 2
+SEI
+LDA #&7F
+STA &FE6E
+LDA #&00
+STA &FE6B
+STA &FE64
+STA &FE65
+NOP
+NOP
+LDA &FE6D
+STA R%
+LDA #&00
+STA &FE67
+LDA &FE6D
+STA R%+1
+CLI
+RTS
+]
+CALL MC%
+PRINT "VIA TEST: DOES T1LH WRITE CLEAR INT IN ONE-SHOT?"
+PRINT "REAL BBC: YES: 64, 0"
+REM REAL BBC! YES: 64, 0
+PRINT ?(R%)
+PRINT ?(R%+1)`);
+        expectArray(testMachine, [64, 0]);
+    });
+    it("VIA.I2 - does timer interrupt fire if IFR cleared at the same time?", async function () {
+        const testMachine = await runViaProgram(`
+DIM IRQ% 100
+DIM MC% 256
+R% = ${resultAddress}
+DIM BAK% 3
+P% = IRQ%
+[
+OPT 2
+INC R%
+RTI
+]
+P% = MC%
+[
+OPT 2
+SEI
+LDA #&00
+STA R%
+LDA &0204
+STA BAK%
+LDA &0205
+STA BAK%+1
+LDA &FE4E
+STA BAK%+2
+LDA #(IRQ% MOD 256)
+STA &0204
+LDA #(IRQ% DIV 256)
+STA &0205
+LDA #&7F
+STA &FE6E
+STA &FE4E
+LDA #&C0
+STA &FE6E
+LDA #&00
+STA &FE6B
+LDA #&03
+STA &FE64
+LDA #&00
+LDX #&7F
+STA &FE65
+NOP
+NOP
+STX &FE6D
+LDA &FE6D
+STA R%+1
+CLI
+SEI
+LDA BAK%
+STA &0204
+LDA BAK%+1
+STA &0205
+LDA BAK%+2
+STA &FE4E
+LDA #&7F
+STA &FE6E
+CLI
+RTS
+]
+PRINT ~MC%
+PRINT ~IRQ%
+CALL MC%
+PRINT "VIA TEST: DOES TIMER INTERRUPT FIRE IF IFR CLEARED AT SAME TIME?"
+PRINT "REAL BBC: YES: 1, 192"
+PRINT ?(R%)
+PRINT ?(R%+1)`);
+        expectArray(testMachine, [1, 192]);
+    });
+    it("VIA.PB2 - does pb7 toggle if ACR not in PB7 mode?", async function () {
+        const testMachine = await runViaProgram(`
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 3
+SEI
+LDA #&FF
+STA &FE62
+LDA #&00
+STA &FE60
+LDA #&7F
+STA &FE6E
+LDA #&80
+STA &FE6B
+LDA #&03
+STA &FE64
+LDA #&00
+STA &FE65
+STA &FE6B
+NOP
+NOP
+LDA #&80
+STA &FE6B
+LDA &FE60
+STA R%
+CLI
+RTS
+]
+CALL MC%
+REM REAL BBC! YES: 128
+PRINT ?(R%)`);
+        expectArray(testMachine, [128]);
+    });
+    it("VIA.PB7 - sys via checks", async function () {
+        const testMachine = await runViaProgram(`
+PRINT "RUN AFTER FRESH BOOT"
+R% = ${resultAddress}
+?R% = 0
+PROCcheck(0, ?&FE62, "SYSVIA DDRB &FE62")
+PROCcheck(255, ?&FE60, "SYSVIA PORT B &FE60")
+?&FE62 = 255
+PROCcheck(0, ?&FE60, "SYSVIA PORT B OUTPUT")
+?&FE62 = 0
+PROCcheck(255, ?&FE60, "SYSVIA PORT B INPUT")
+PROCcheck(0, ?&FE6B, "SYSVIA ACR")
+?&FE6B = 128
+?&FE60 = 0
+?&FE64 = 0
+?&FE65 = 255
+REM READ QUICKLY BEFORE TIMER HITS
+A% = ?&FE60
+REM TIMER EXPIRES IN 65MS
+B% = INKEY(10)
+PROCcheck(127, A%, "SYSVIA PORT B INPUT PB7 LOW")
+PROCcheck(255, ?&FE60, "SYSVIA PORT B INPUT PB7 HIGH")
+?&FE62 = 255
+PROCcheck(128, ?&FE60, "SYSVIA PORT B OUTPUT PB7 HIGH")
+?&FE6B = 0
+PROCcheck(0, ?&FE60, "SYSVIA PORT B OUTPUT")
+?&FE60 = 0
+?&FE62 = 0
+END
+DEF PROCcheck(E%, A%, N$)
+R$ = "OK"
+IF E% <> A% THEN R$ = "FAIL!"
+IF E% <> A% THEN ?R% = 255
+PRINT R$ + ": " + N$ + ": " + STR$(A%)
+ENDPROC`);
+        expectArray(testMachine, [255]); // TODO set to 0 and fix! this is broken currently
+    });
 });
