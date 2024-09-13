@@ -569,7 +569,7 @@ RTS
 CALL MC%
 PRINT ?&FE6A
 ?R% = ?&FE6A`);
-        expectArray(testMachine, [18]); // TODO check this on a real BBC
+        expectArray(testMachine, [18]); // checked on a BBC Master
     });
     it("VIA.C2", async function () {
         const testMachine = await runViaProgram(`
@@ -597,7 +597,7 @@ RTS
 CALL MC%
 PRINT ?&FE6A
 ?R% = ?&FE6A`);
-        expectArray(testMachine, [18]); // TODO check this on a real BBC
+        expectArray(testMachine, [18]); // checked on a BBC Master
     });
     it("VIA.C3", async function () {
         const testMachine = await runViaProgram(`
@@ -625,9 +625,10 @@ RTS
 CALL MC%
 PRINT ?&FE6A
 ?R% = ?&FE6A`);
-        expectArray(testMachine, [17]); // TODO check this on a real BBC
+        expectArray(testMachine, [17]); // checked on a BBC Master
     });
-    it("VIA.C4", async function () {
+    // TODO: check on a real BBC and update the `[13]` if that's not right
+    it.skip("VIA.C4", async function () {
         const testMachine = await runViaProgram(`
 DIM MC% 256
 R% = ${resultAddress}
@@ -650,7 +651,7 @@ RTS
 CALL MC%
 PRINT ?&FE6A
 ?R% = ?&FE6A`);
-        expectArray(testMachine, [12]); // TODO check this on a real BBC
+        expectArray(testMachine, [13]); // checked on a BBC Master
     });
     it("VIA.C5", async function () {
         const testMachine = await runViaProgram(`
@@ -670,7 +671,7 @@ LDA #20
 STA &FE64
 LDA #0
 STA &FE65
-EQUB &03
+EQUB &03  \\ SLO ($50, X)
 EQUB &50
 LDA &FE64
 STA &FE6A
@@ -680,7 +681,7 @@ RTS
 CALL MC%
 PRINT ?&FE6A
 ?R% = ?&FE6A`);
-        expectArray(testMachine, [12]); // TODO check this on a real BBC
+        expectArray(testMachine, [12]); // TODO check this on a real BBC (opcode difference on master)
     });
     it("VIA.I1 - does T1LH write clear int in on-shot", async function () {
         const testMachine = await runViaProgram(`
@@ -1026,7 +1027,9 @@ ENDPROC`);
     //  I fixed everything except VIA.T23, which doesn't seem important. It's tricky for code to really rely on T2
     //  values after toggling ACR 0x20 because results will vary depending on what is attached and generating pulses
     //  from external.
-    it.skip("VIA.T22 - what values do we get freezing and starting T2?", async function () {
+    // @mattgodbolt notes; the "real BBC" values agree with my BBC Master, so seems good to fix.
+    // TODO: fix this eventually
+    it.skip("VIA.T23 - what values do we get freezing and starting T2?", async function () {
         const testMachine = await runViaProgram(`
 DIM MC% 100
 R% = ${resultAddress}
