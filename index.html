@@ -442,8 +442,8 @@
           </div>
           <div class="modal-body">
             <div>
-              This is an emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>
-              Model B, a popular home computer in the UK in the 1980s.
+              This is an emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular
+              home computer in the UK in the 1980s. It emulates the BBC B &amp; Master version of the computer.
             </div>
             <div>
               The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC, one would
@@ -478,15 +478,33 @@
                   <td>
                     <div class="dbl key">*<br />:</div>
                   </td>
-                  <td>TODO</td>
-                  <td>TODO</td>
+                  <td>
+                    <div class="dbl key">"<br />'</div>
+                  </td>
+                  <td>
+                    <div class="dbl key">"<br />'</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="dbl key">CAPS<br />LOCK</div>
+                  </td>
+                  <td class="key">CAPSLOCK</td>
+                  <td>See notes</td>
                 </tr>
                 <tr>
                   <td>Debug</td>
                   <td><span class="key">Ctrl-Home</span></td>
-                  <td>TODO</td>
+                  <td><span class="key">Ctrl-Home</span></td>
                 </tr>
               </table>
+              <div>
+                Note that caps lock doesn't work well on OS X because browsers don't give proper key down and key up
+                events for that key. That means jsbeeb can't know when you've released the physical key; it just guesses
+                that you tapped the key whenever it notices the caps lock state changes. That's fine for typing but
+                means that some games that use caps lock for left or fire, don't work. Consult the main documentation
+                for details on how to map keys.
+              </div>
             </div>
           </div>
           <div class="modal-footer">
