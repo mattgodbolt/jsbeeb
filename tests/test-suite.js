@@ -7,6 +7,8 @@ const processor = fake6502();
 const IRQ_ROUTINE_START = 0xff48;
 const RTS_OPCODE = 0x60;
 const NOP_OPCODE = 0xea;
+
+// prettier-ignore
 const IRQ_ROUTINE = [
     0x48, // PHA
     0x8a, // TXA
@@ -14,19 +16,11 @@ const IRQ_ROUTINE = [
     0x98, // TYA
     0x48, // PHA
     0xba, // TSX
-    0xbd,
-    0x04,
-    0x01, // LDA $0104,X
-    0x29,
-    0x10, // AND #$10
-    0xf0,
-    0x03, // BEQ $03
-    0x6c,
-    0x16,
-    0x03, // JMP ($0316)
-    0x6c,
-    0x14,
-    0x03, // JMP ($0314)
+    0xbd, 0x04, 0x01, // LDA $0104,X
+    0x29, 0x10, // AND #$10
+    0xf0, 0x03, // BEQ $03
+    0x6c, 0x16, 0x03, // JMP ($0316)
+    0x6c, 0x14, 0x03 // JMP ($0314)
 ];
 
 async function setup(filename) {
@@ -93,8 +87,7 @@ processor.debugInstruction.add((addr) => {
             handlePrint();
             break;
         case 0xe16f:
-            handleLoad();
-            return true;
+            return handleLoad();
         case 0x8000:
         case 0xa474:
             handleError();
