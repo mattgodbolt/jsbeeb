@@ -6,3 +6,5 @@
 *.dsd
 *.hfe
 *.ssd
+
+coverage

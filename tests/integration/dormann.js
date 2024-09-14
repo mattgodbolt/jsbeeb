@@ -1,9 +1,10 @@
 "use strict";
 
 import _ from "underscore";
+import { describe, it } from "vitest";
 import * as utils from "../../utils.js";
 import { fake6502, fake65C02, fake65C12 } from "../../fake6502.js";
-import { describe, it } from "mocha";
+
 import assert from "assert";
 
 const log = false;
@@ -81,8 +82,7 @@ function logFailure(processor) {
     );
 }
 
-describe("dormann tests", function () {
-    this.timeout(10000);
+describe("dormann tests", { timeout: 10000 }, function () {
     it("should pass 6502 functional tests", async () => {
         const cpu = fake6502();
         await cpu.initialise();

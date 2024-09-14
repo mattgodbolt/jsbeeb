@@ -34,12 +34,12 @@
     "husky": "^9.1.6",
     "lint-staged": "^15.2.10",
     "mini-css-extract-plugin": "^2.9.1",
-    "mocha": "^10.7.3",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.3.3",
     "source-map-loader": "^5.0.0",
     "style-loader": "^4.0.0",
     "terser-webpack-plugin": "^5.3.10",
+    "vitest": "^2.1.1",
     "webpack": "^5.94.0",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^5.1.0"
@@ -71,19 +71,18 @@
     "lint-fix": "eslint . --fix",
     "format": "prettier --write .",
     "test-long:cpu": "node tests/test-suite.js",
-    "test:unit": "mocha tests/unit",
-    "test:integration": "mocha tests/integration",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
     "test": "npm-run-all -p test:*",
     "test-long": "npm-run-all -p test-long:*",
     "benchmark": "node app-bench.js"
   },
   "lint-staged": {
-    "*.js": "eslint --cache --fix",
+    "*.js": [
+      "vitest related --run",
+      "eslint --cache --fix",
+      "prettier --write"
+    ],
     "*.{css,md}": "prettier --write"
-  },
-  "mocha": {
-    "spec": [
-      "tests/unit/**/*.js"
-    ]
   }
 }

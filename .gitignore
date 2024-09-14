@@ -8,3 +8,5 @@
 /perf.data
 .eslintcache
 **/.DS_Store
+
+coverage

@@ -1,4 +1,4 @@
-import { describe, it } from "mocha";
+import { describe, it } from "vitest";
 import assert from "assert";
 
 import { fake65C12 } from "../../fake6502.js";
