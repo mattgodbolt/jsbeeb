@@ -1,5 +1,5 @@
-import { describe, it } from "mocha";
-import { TestMachine } from "./test-machine.js";
+import { describe, it } from "vitest";
+import { TestMachine } from "../test-machine.js";
 import assert from "assert";
 
 async function runViaProgram(source) {

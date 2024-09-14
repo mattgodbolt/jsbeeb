@@ -1,4 +1,4 @@
-import { describe, it } from "mocha";
+import { describe, it } from "vitest";
 import assert from "assert";
 
 import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, loadAdf, toSsdOrDsd } from "../../disc.js";
@@ -175,42 +175,47 @@ describe("Disc builder tests", () => {
     });
 });
 
-describe("SSD loader tests", function () {
-    const data = fs.readFileSync("discs/elite.ssd");
-    this.timeout(5000); // roundtripping elite can be slow
-    it("should load Elite", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        loadSsd(disc, data, false);
-        assert.equal(disc.tracksUsed, 80);
-    });
-    it("should roundtrip Elite", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        loadSsd(disc, data, false);
-        const ssdSaved = toSsdOrDsd(disc);
-        // // Check the first few bytes, else a diff blows things up
-        const maxDiff = 50;
-        assert.deepEqual(ssdSaved.slice(0, maxDiff), Uint8Array.prototype.slice.call(data, 0, maxDiff));
+describe(
+    "SSD loader tests",
+    {
+        timeout: 5000, // roundtripping elite can be slow
+    },
+    function () {
+        const data = fs.readFileSync("discs/elite.ssd");
+        it("should load Elite", () => {
+            const disc = new Disc(true, new DiscConfig(), "test.ssd");
+            loadSsd(disc, data, false);
+            assert.equal(disc.tracksUsed, 80);
+        });
+        it("should roundtrip Elite", () => {
+            const disc = new Disc(true, new DiscConfig(), "test.ssd");
+            loadSsd(disc, data, false);
+            const ssdSaved = toSsdOrDsd(disc);
+            // // Check the first few bytes, else a diff blows things up
+            const maxDiff = 50;
+            assert.deepEqual(ssdSaved.slice(0, maxDiff), Uint8Array.prototype.slice.call(data, 0, maxDiff));
 
-        // But also check everything else; and the padding should be all zeros.
-        assert(ssdSaved.length >= data.length);
-        for (let i = 0; i < data.length; ++i) {
-            assert.equal(ssdSaved[i], data[i]);
-        }
-        for (let i = data.length; i < ssdSaved.length; ++i) {
-            assert.equal(ssdSaved[i], 0);
-        }
-    });
-    it("should have sane tracks", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        loadSsd(disc, data, false);
-        const sectors = disc.getTrack(false, 0).findSectors();
-        assert.equal(sectors.length, 10);
-        for (const sector of sectors) {
-            assert(!sector.hasHeaderCrcError);
-            assert(!sector.hasDataCrcError);
-        }
-    });
-});
+            // But also check everything else; and the padding should be all zeros.
+            assert(ssdSaved.length >= data.length);
+            for (let i = 0; i < data.length; ++i) {
+                assert.equal(ssdSaved[i], data[i]);
+            }
+            for (let i = data.length; i < ssdSaved.length; ++i) {
+                assert.equal(ssdSaved[i], 0);
+            }
+        });
+        it("should have sane tracks", () => {
+            const disc = new Disc(true, new DiscConfig(), "test.ssd");
+            loadSsd(disc, data, false);
+            const sectors = disc.getTrack(false, 0).findSectors();
+            assert.equal(sectors.length, 10);
+            for (const sector of sectors) {
+                assert(!sector.hasHeaderCrcError);
+                assert(!sector.hasDataCrcError);
+            }
+        });
+    },
+);
 
 describe("HFE loader tests", function () {
     const data = fs.readFileSync("discs/elite.hfe");

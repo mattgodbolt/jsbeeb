@@ -1,4 +1,4 @@
-import { describe, it } from "mocha";
+import { describe, it } from "vitest";
 import assert from "assert";
 
 import { Scheduler } from "../../scheduler.js";
