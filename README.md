@@ -10,7 +10,7 @@ know some of the mappings:
 - BBC Break key is F12
 - BBC star is on " (if it doesn't work for you try shift-2)
 
-To play right now, visit [http://bbc.xania.org/](http://bbc.xania.org/). To load the default disc image (Elite in
+To play right now, visit [https://bbc.xania.org/](https://bbc.xania.org/). To load the default disc image (Elite in
 this case), press shift-F12 (which is shift-Break on the BBC).
 
 ## Getting set up to run locally
