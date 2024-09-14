@@ -65,6 +65,7 @@ let audioFilterFreq = 7000;
 let audioFilterQ = 5;
 let stationId = 101;
 let econet = null;
+const isMac = window.navigator.platform.indexOf("Mac") === 0;
 
 if (queryString) {
     if (queryString[queryString.length - 1] === "/")
@@ -444,11 +445,14 @@ function keyDown(evt) {
     } else if (code === utils.keyCodes.B && evt.ctrlKey) {
         // Ctrl-B turns on the printer, so we open a printer output
         // window in addition to passing the keypress along to the beeb.
-        processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
+        processor.sysvia.keyDown(code, evt.shiftKey);
         evt.preventDefault();
         checkPrinterWindow();
+    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+        handleMacCapsLock();
+        evt.preventDefault();
     } else {
-        processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
+        processor.sysvia.keyDown(code, evt.shiftKey);
         evt.preventDefault();
     }
 }
@@ -461,14 +465,31 @@ function keyUp(evt) {
     if (!running) return;
     if (evt.altKey) {
         const handler = emuKeyHandlers[code];
-        if (handler) {
-            handler(false, code);
-            evt.preventDefault();
-        }
+        if (handler) handler(false, code);
     } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
         processor.setReset(false);
+    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+        handleMacCapsLock();
     }
     evt.preventDefault();
+}
+
+function handleMacCapsLock() {
+    // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
+    // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
+    processor.sysvia.keyDown(utils.keyCodes.CAPSLOCK);
+    setTimeout(() => processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), 100);
+    if (!window.localStorage.getItem("warnedAboutRubbishMacs")) {
+        showError(
+            "handling caps lock on Mac OS X",
+            "Mac OS X does not generate key up events for caps lock presses. " +
+                "jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games " +
+                " that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play " +
+                "such a game, please see the documentation about remapping keys." +
+                "Close this window to continue (you won't see this error again)",
+        );
+        window.localStorage.setItem("warnedAboutRubbishMacs", true);
+    }
 }
 
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
