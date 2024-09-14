@@ -208,6 +208,11 @@ div.led {
   background-color: #911;
 }
 
+table.keymap {
+  margin-left: auto;
+  margin-right: auto;
+}
+
 table.keymap th {
   width: 5em;
 }
