@@ -13,8 +13,8 @@ export class Teletext {
         this.gfx = false;
         this.flash = this.flashOn = false;
         this.flashTime = 0;
-        this.heldChar = false;
-        this.holdChar = 0;
+        this.heldChar = 0;
+        this.holdChar = false;
         this.dataQueue = [0, 0, 0, 0];
         this.scanlineCounter = 0;
         this.levelDEW = false;
@@ -150,6 +150,8 @@ export class Teletext {
 
     handleControlCode(data) {
         this.holdOff = false;
+        const wasGfx = this.gfx;
+        const wasHoldChar = this.holdChar;
 
         switch (data) {
             case 1:
@@ -209,7 +211,7 @@ export class Teletext {
                 this.holdOff = true;
                 break;
         }
-        if (this.holdChar && this.dbl === this.oldDbl) {
+        if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
             data = this.heldChar;
             if (data >= 0x40 && data < 0x60) data = 0x20;
             this.curGlyphs = this.heldGlyphs;
@@ -217,6 +219,7 @@ export class Teletext {
             this.heldChar = 0x20;
             data = 0x20;
         }
+
         return data;
     }
 
@@ -314,8 +317,12 @@ export class Teletext {
         if (data < 0x20) {
             data = this.handleControlCode(data);
         } else if (this.gfx) {
-            this.heldChar = data;
-            this.heldGlyphs = this.curGlyphs;
+            if (data & 0x20) {
+                this.heldChar = data;
+                this.heldGlyphs = this.curGlyphs;
+            }
+        } else {
+            this.holdOff = true;
         }
 
         if (this.oldDbl) {

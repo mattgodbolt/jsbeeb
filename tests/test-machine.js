@@ -119,18 +119,36 @@ export class TestMachine {
 
         const typeChar = (ch) => {
             let shift = false;
-            if (ch === '"') {
-                ch = 50;
-                shift = true;
-            } else if (ch === "*") {
-                ch = utils.keyCodes.APOSTROPHE;
-                shift = true;
-            } else if (ch === "!") {
-                ch = utils.keyCodes.K1;
-                shift = true;
-            } else if (ch === ".") {
-                ch = utils.keyCodes.PERIOD;
-            } else ch = ch.toUpperCase().charCodeAt(0);
+            switch (ch) {
+                case '"':
+                    ch = 50;
+                    shift = true;
+                    break;
+                case "*":
+                    ch = utils.keyCodes.APOSTROPHE;
+                    shift = true;
+                    break;
+                case "!":
+                    ch = utils.keyCodes.K1;
+                    shift = true;
+                    break;
+                case ".":
+                    ch = utils.keyCodes.PERIOD;
+                    break;
+                case ";":
+                    ch = utils.keyCodes.SEMICOLON;
+                    break;
+                case ",":
+                    ch = utils.keyCodes.COMMA;
+                    break;
+                case "&":
+                    ch = utils.keyCodes.K6;
+                    shift = true;
+                    break;
+                default:
+                    ch = ch.toUpperCase().charCodeAt(0);
+                    break;
+            }
             if (shift) {
                 this.processor.sysvia.keyDown(16);
                 return this.runFor(cycles).then(() => {

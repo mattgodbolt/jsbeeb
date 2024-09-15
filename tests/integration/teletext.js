@@ -33,7 +33,7 @@ class CapturingVideo extends Video {
     }
 }
 
-async function setupTestMachine(video) {
+async function setupCeefaxTestMachine(video) {
     const testMachine = new TestMachine(null, { video: video });
     await testMachine.initialise();
     await testMachine.runUntilInput();
@@ -43,7 +43,7 @@ async function setupTestMachine(video) {
     return testMachine;
 }
 
-const rootDir = "tests/integration/ceefax";
+const rootDir = "tests/integration/teletext";
 const outputDir = `tests/integration/output`;
 
 async function compare(video, testMachine, expectedName) {
@@ -75,26 +75,39 @@ async function compare(video, testMachine, expectedName) {
 describe("Test Ceefax test page", () => {
     it("should match the Ceefax test page (no flash)", async () => {
         const video = new CapturingVideo();
-        const testMachine = await setupTestMachine(video);
+        const testMachine = await setupCeefaxTestMachine(video);
         await compare(video, testMachine, `expected_flash_0.png`);
     });
     it("should match the Ceefax test page (flash)", async () => {
         const video = new CapturingVideo();
-        const testMachine = await setupTestMachine(video);
+        const testMachine = await setupCeefaxTestMachine(video);
         await testMachine.runFor(1500000);
         await compare(video, testMachine, `expected_flash_1.png`);
     });
     it("should match the Ceefax test page after reveal (no flash)", async () => {
         const video = new CapturingVideo();
-        const testMachine = await setupTestMachine(video);
+        const testMachine = await setupCeefaxTestMachine(video);
         await testMachine.type(" ");
         await compare(video, testMachine, `expected_reveal_flash_0.png`);
     });
     it("should match the Ceefax test page after reveal (flash)", async () => {
         const video = new CapturingVideo();
-        const testMachine = await setupTestMachine(video);
+        const testMachine = await setupCeefaxTestMachine(video);
         await testMachine.type(" ");
         await testMachine.runFor(1500000);
         await compare(video, testMachine, `expected_reveal_flash_1.png`);
+    });
+});
+
+describe("Test other teletext test pages", () => {
+    it("should work with hoglet's test case", async () => {
+        const video = new CapturingVideo();
+        const testMachine = new TestMachine(null, { video: video });
+        await testMachine.initialise();
+        await testMachine.runUntilInput();
+        // https://github.com/mattgodbolt/jsbeeb/issues/316
+        await testMachine.type("VDU &91,&61,&9E,&92,&93,&94,&81,&91,&91,10,13");
+        await testMachine.runUntilInput();
+        await compare(video, testMachine, `expected_hoglet_held_char.png`);
     });
 });
