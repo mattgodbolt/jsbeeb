@@ -37,6 +37,20 @@ export class TestMachine {
         });
     }
 
+    async runUntilVblank() {
+        let hit = false;
+        if (this.processor.isMaster) throw new Error("Not yet implemented");
+        const hook = this.processor.debugInstruction.add((addr) => {
+            if (addr === 0xdd15) {
+                hit = true;
+                return true;
+            }
+        });
+        await this.runFor(10 * 1000 * 1000);
+        hook.remove();
+        assert(hit, "did not hit appropriate breakpoint in time");
+    }
+
     async runUntilInput(secs) {
         if (!secs) secs = 120;
         console.log("Running until keyboard input requested");
@@ -110,6 +124,9 @@ export class TestMachine {
                 shift = true;
             } else if (ch === "*") {
                 ch = utils.keyCodes.APOSTROPHE;
+                shift = true;
+            } else if (ch === "!") {
+                ch = utils.keyCodes.K1;
                 shift = true;
             } else if (ch === ".") {
                 ch = utils.keyCodes.PERIOD;
