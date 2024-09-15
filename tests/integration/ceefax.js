@@ -3,8 +3,7 @@ import { TestMachine } from "../test-machine.js";
 import assert from "assert";
 import { Video } from "../../video.js";
 import sharp from "sharp";
-
-const looksSame = require("looks-same");
+import pixelmatch from "pixelmatch";
 
 class CapturingVideo extends Video {
     constructor() {
@@ -53,13 +52,24 @@ async function compare(video, testMachine, expectedName) {
     const outputFile = `${outputDir}/${outputName}`;
     await captureSharp.removeAlpha().toFile(outputFile);
     const expectedFile = `${rootDir}/${expectedName}`;
-    const { equal, diffImage } = await looksSame(outputFile, expectedFile, {
-        createDiffImage: true,
-    });
     const diffFile = `${outputDir}/${outputName.replace(".png", ".diff.png")}`;
-    if (!equal) await diffImage.save(diffFile);
 
-    assert(equal, `Images do not match - expected ${expectedFile}, got ${outputFile}, diffs: ${diffFile}}`);
+    const { data: expectedData, info } = await sharp(expectedFile)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    const actualData = await sharp(outputFile).ensureAlpha().raw().toBuffer();
+    const diffData = new Uint8Array(info.width * info.height * info.channels);
+
+    const numDiffPixels = pixelmatch(expectedData, actualData, diffData, info.width, info.height, {
+        threshold: 0.1,
+    });
+    await sharp(diffData, { raw: info }).removeAlpha().toFile(diffFile);
+    assert.equal(
+        numDiffPixels,
+        0,
+        `Images do not match - expected ${expectedFile}, got ${outputFile}, diffs: ${diffFile}}`,
+    );
 }
 
 describe("Test Ceefax test page", () => {
