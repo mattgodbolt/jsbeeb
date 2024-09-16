@@ -81,7 +81,7 @@
   },
   "lint-staged": {
     "*.js": [
-      "vitest related --run",
+      "vitest related --run --no-file-parallelism",
       "eslint --cache --fix",
       "prettier --write"
     ],
