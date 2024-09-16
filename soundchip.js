@@ -180,10 +180,10 @@ export function SoundChip(onBuffer) {
         );
     };
 
-    var residual = 0;
-    var position = 0;
-    var maxBufferSize = this.bufferSize;
-    var buffer = new Float32Array(maxBufferSize);
+    let residual = 0;
+    let position = 0;
+    let maxBufferSize = this.bufferSize;
+    let buffer = new Float32Array(maxBufferSize);
 
     this.advance = (cycles) => {
         const numToGenerate = cycles * samplesPerCycle + residual;
