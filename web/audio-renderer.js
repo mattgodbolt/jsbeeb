@@ -17,7 +17,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.dropped = 0;
         this.underruns = 0;
         this.targetLatencyMs = 1000 * (2 / 50); // Two frames
-        this.startQueueSizeBytes = (this.inputSampleRate / this.targetLatencyMs) / 2;
+        this.startQueueSizeBytes = this.inputSampleRate / this.targetLatencyMs / 2;
         this.running = false;
         this.maxQueueSizeBytes = this.inputSampleRate * 0.25;
         this.port.onmessage = (event) => {
@@ -47,11 +47,10 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 
     onBuffer(time, buffer) {
-        this.queue.push({offset: 0, time, buffer});
+        this.queue.push({ offset: 0, time, buffer });
         this._queueSizeBytes += buffer.length;
         this.cleanQueue();
-        if (!this.running && this._queueSizeBytes >= this.startQueueSizeBytes)
-            this.running = true;
+        if (!this.running && this._queueSizeBytes >= this.startQueueSizeBytes) this.running = true;
     }
 
     _shift() {
@@ -60,7 +59,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 
     cleanQueue() {
-        const maxLatency = this.targetLatencyMs * 2
+        const maxLatency = this.targetLatencyMs * 2;
         while (this._queueSizeBytes > this.maxQueueSizeBytes || this._queueAge() > maxLatency) {
             this._shift();
             this.dropped++;
@@ -71,8 +70,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         if (this.running && this.queue.length) {
             const queueElement = this.queue[0];
             this._lastSample = queueElement.buffer[queueElement.offset];
-            if (++queueElement.offset === queueElement.buffer.length)
-                this._shift();
+            if (++queueElement.offset === queueElement.buffer.length) this._shift();
         } else {
             this.underruns++;
             this.running = false;
@@ -113,5 +111,5 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 }
 
-registerProcessor('sound-chip-processor', SoundChipProcessor);
+registerProcessor("sound-chip-processor", SoundChipProcessor);
 export default SoundChipProcessor;

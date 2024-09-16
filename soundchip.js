@@ -1,54 +1,53 @@
 "use strict";
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
 export function SoundChip(onBuffer) {
     this._onBuffer = onBuffer;
     // 4MHz input signal. Internal divide-by-8
-    var soundchipFreq = 4000000.0 / 8;
+    const soundchipFreq = 4000000.0 / 8;
     const sampleRate = soundchipFreq;
     this.sampleRate = sampleRate;
     this.bufferSize = 1024;
     // Square wave changes every time a counter hits zero. Thus a full wave
     // needs to be 2x counter zeros.
-    var waveDecrementPerSecond = soundchipFreq / 2;
+    const waveDecrementPerSecond = soundchipFreq / 2;
     // Each sample in the buffer represents (1/sampleRate) time, so each time
     // we generate a sample, we need to decrement the counters by this amount:
-    var sampleDecrement = waveDecrementPerSecond / sampleRate;
+    const sampleDecrement = waveDecrementPerSecond / sampleRate;
     // How many samples are generated per CPU cycle.
-    var samplesPerCycle = sampleRate / 2000000;
-    var minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
+    const samplesPerCycle = sampleRate / 2000000;
+    const minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
-    var register = [0, 0, 0, 0];
+    const register = [0, 0, 0, 0];
     this.registers = register; // for debug
-    var counter = [0, 0, 0, 0];
-    var outputBit = [false, false, false, false];
-    var volume = [0, 0, 0, 0];
-    this.volume = volume;  // for debug
-    var generators = [null, null, null, null, null];
+    const counter = [0, 0, 0, 0];
+    const outputBit = [false, false, false, false];
+    const volume = [0, 0, 0, 0];
+    this.volume = volume; // for debug
+    const generators = [null, null, null, null, null];
 
-    var volumeTable = [];
-    var f = 1.0;
-    var i;
-    for (i = 0; i < 16; ++i) {
-        volumeTable[i] = f / generators.length;  // Bakes in the per channel volume
+    const volumeTable = [];
+    let f = 1.0;
+    for (let i = 0; i < 16; ++i) {
+        volumeTable[i] = f / generators.length; // Bakes in the per channel volume
         f *= Math.pow(10, -0.1);
     }
     volumeTable[15] = 0;
 
-    var sineTableSize = 8192;
-    var sineTable = [];
-    for (i = 0; i < sineTableSize; ++i) {
-        sineTable[i] = Math.sin(2 * Math.PI * i / sineTableSize) / generators.length;
+    const sineTableSize = 8192;
+    const sineTable = [];
+    for (let i = 0; i < sineTableSize; ++i) {
+        sineTable[i] = Math.sin((2 * Math.PI * i) / sineTableSize) / generators.length;
     }
-    var sineStep = 0;
-    var sineOn = false;
-    var sineTime = 0;
+    let sineStep = 0;
+    let sineOn = false;
+    let sineTime = 0;
 
     function sineChannel(channel, out, offset, length) {
         if (!sineOn) {
             return;
         }
-        for (var i = 0; i < length; ++i) {
+        for (let i = 0; i < length; ++i) {
             out[i + offset] += sineTable[sineTime & (sineTableSize - 1)];
             sineTime += sineStep;
         }
@@ -64,27 +63,28 @@ export function SoundChip(onBuffer) {
             this.flush();
             sineOn = true;
             sineStep = (freq / sampleRate) * sineTableSize;
-        }
+        },
     };
 
     function toneChannel(channel, out, offset, length) {
-        var i;
-        var reg = register[channel], vol = volume[channel];
+        let reg = register[channel];
+        const vol = volume[channel];
         if (reg === 0) reg = 1024;
-        for (i = 0; i < length; ++i) {
+        for (let i = 0; i < length; ++i) {
             counter[channel] -= sampleDecrement;
             if (counter[channel] < 0) {
                 counter[channel] += reg;
+                if (counter[channel] < 0) counter[channel] = 0;
                 outputBit[channel] = !outputBit[channel];
             }
-            out[i + offset] += (outputBit[channel] * vol);
+            out[i + offset] += outputBit[channel] * vol;
         }
     }
 
-    var lfsr = 0;
+    let lfsr = 0;
 
     function shiftLfsrWhiteNoise() {
-        var bit = (lfsr & 1) ^ ((lfsr & (1 << 1)) >>> 1);
+        const bit = (lfsr & 1) ^ ((lfsr & (1 << 1)) >>> 1);
         lfsr = (lfsr >>> 1) | (bit << 14);
     }
 
@@ -93,7 +93,7 @@ export function SoundChip(onBuffer) {
         if (lfsr === 0) lfsr = 1 << 14;
     }
 
-    var shiftLfsr = shiftLfsrWhiteNoise;
+    let shiftLfsr = shiftLfsrWhiteNoise;
 
     function noisePoked() {
         shiftLfsr = register[3] & 4 ? shiftLfsrWhiteNoise : shiftLfsrPeriodicNoise;
@@ -115,15 +115,17 @@ export function SoundChip(onBuffer) {
     }
 
     function noiseChannel(channel, out, offset, length) {
-        var add = addFor(channel), vol = volume[channel];
-        for (var i = 0; i < length; ++i) {
+        const add = addFor(channel),
+            vol = volume[channel];
+        for (let i = 0; i < length; ++i) {
             counter[channel] -= sampleDecrement;
             if (counter[channel] < 0) {
                 counter[channel] += add;
+                if (counter[channel] < 0) counter[channel] = 0;
                 outputBit[channel] = !outputBit[channel];
                 if (outputBit[channel]) shiftLfsr();
             }
-            out[i + offset] += ((lfsr & 1) * vol);
+            out[i + offset] += (lfsr & 1) * vol;
         }
     }
 
@@ -138,43 +140,44 @@ export function SoundChip(onBuffer) {
         volume[2] = volumeTable[v2];
         volume[3] = volumeTable[v3];
         noisePoked();
-    }
+    };
 
-    var enabled = true;
+    let enabled = true;
 
     function generate(out, offset, length) {
         offset = offset | 0;
         length = length | 0;
-        var i;
-        for (i = 0; i < length; ++i) {
+        for (let i = 0; i < length; ++i) {
             out[i + offset] = 0.0;
         }
         if (!enabled) return;
-        for (i = 0; i < generators.length; ++i) {
+        for (let i = 0; i < generators.length; ++i) {
             generators[i](i, out, offset, length);
         }
     }
 
-    var scheduler = {epoch: 0};
-    var lastRunEpoch = 0;
+    let scheduler = { epoch: 0 };
+    let lastRunEpoch = 0;
 
     this.flush = () => {
-        var cyclesPending = scheduler.epoch - lastRunEpoch;
+        const cyclesPending = scheduler.epoch - lastRunEpoch;
         if (cyclesPending > 0) {
             this.advance(cyclesPending);
         }
         lastRunEpoch = scheduler.epoch;
-    }
+    };
 
-    var activeTask = null;
+    let activeTask = null;
     this.setScheduler = function (scheduler_) {
         scheduler = scheduler_;
         lastRunEpoch = scheduler.epoch;
-        activeTask = scheduler.newTask(function () {
-            if (this.active) {
-                this.poke(this.slowDataBus);
-            }
-        }.bind(this));
+        activeTask = scheduler.newTask(
+            function () {
+                if (this.active) {
+                    this.poke(this.slowDataBus);
+                }
+            }.bind(this),
+        );
     };
 
     var residual = 0;
@@ -199,26 +202,25 @@ export function SoundChip(onBuffer) {
                 position = 0;
             }
         }
-    }
+    };
 
-    var latchedRegister = 0;
+    let latchedRegister = 0;
 
     this.poke = (value) => {
         this.flush();
 
-        var command;
-        var channel;
+        let command;
         if (value & 0x80) {
-            latchedRegister = (value & 0x70);
-            command = (value & 0xF0);
+            latchedRegister = value & 0x70;
+            command = value & 0xf0;
         } else {
             command = latchedRegister;
         }
-        channel = ((command >> 5) & 0x03);
+        const channel = (command >> 5) & 0x03;
 
         if (command & 0x10) {
             // Volume setting
-            var newVolume = value & 0x0f;
+            const newVolume = value & 0x0f;
             volume[channel] = volumeTable[newVolume];
         } else if (channel === 3) {
             // For noise channel we always update the bottom bits.
@@ -231,9 +233,9 @@ export function SoundChip(onBuffer) {
             // High period bits.
             register[channel] = (register[channel] & 0x0f) | ((value & 0x3f) << 4);
         }
-    }
+    };
 
-    for (i = 0; i < 3; ++i) {
+    for (let i = 0; i < 3; ++i) {
         generators[i] = toneChannel;
     }
     generators[3] = noiseChannel;
@@ -255,7 +257,7 @@ export function SoundChip(onBuffer) {
     };
     this.reset = (hard) => {
         if (!hard) return;
-        for (var i = 0; i < 4; ++i) {
+        for (let i = 0; i < 4; ++i) {
             counter[i] = 0;
             register[i] = 0;
             volume[i] = 0; // ideally this would be volumeTable[0] to get the "boo" of "boo...beep".  But startup issues make the "boo" all clicky.
@@ -277,6 +279,13 @@ export function SoundChip(onBuffer) {
 }
 
 export function FakeSoundChip() {
-    this.reset = this.enable = this.mute = this.unmute = this.updateSlowDataBus = this.setScheduler = this.flush = utils.noop;
+    this.reset =
+        this.enable =
+        this.mute =
+        this.unmute =
+        this.updateSlowDataBus =
+        this.setScheduler =
+        this.flush =
+            utils.noop;
     this.toneGenerator = this;
 }

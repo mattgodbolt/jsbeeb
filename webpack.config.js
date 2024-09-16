@@ -1,13 +1,13 @@
 "use strict";
 
-import * as path from 'path';
+import * as path from "path";
 import CopyWebpackPlugin from "copy-webpack-plugin";
 import MiniCssExtractPlugin from "mini-css-extract-plugin";
-import OptimizeCssAssetsPlugin from "optimize-css-assets-webpack-plugin";
+import CssMinimizerPlugin from "css-minimizer-webpack-plugin";
 import TerserPlugin from "terser-webpack-plugin";
-import {CleanWebpackPlugin} from "clean-webpack-plugin";
-import HtmlWebpackPlugin from 'html-webpack-plugin';
-import {fileURLToPath} from 'url';
+import { CleanWebpackPlugin } from "clean-webpack-plugin";
+import HtmlWebpackPlugin from "html-webpack-plugin";
+import { fileURLToPath } from "url";
 
 const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 const isDev = process.env.NODE_ENV !== "production";
@@ -18,14 +18,7 @@ const outputPath = path.resolve(__dirname, "out/dist");
 function getOptimizationSettings() {
     return {
         minimize: !isDev,
-        minimizer: [
-            new OptimizeCssAssetsPlugin({
-                cssProcessorPluginOptions: {
-                    preset: ["default", {discardComments: {removeAll: true}}],
-                },
-            }),
-            new TerserPlugin(),
-        ],
+        minimizer: [new CssMinimizerPlugin(), new TerserPlugin()],
     };
 }
 
@@ -36,7 +29,7 @@ function getPlugins() {
             patterns: [
                 {
                     from: "roms/**/*",
-                    globOptions: {ignore: ["**/*.txt", "**/*README*"]},
+                    globOptions: { ignore: ["**/*.txt", "**/*README*"] },
                 },
                 {
                     from: "discs/*.[ds]sd",
@@ -50,6 +43,15 @@ function getPlugins() {
                 {
                     from: "sounds/**/*.wav",
                 },
+                {
+                    from: "teletext/*.dat",
+                },
+                {
+                    from: "music5000-worklet.js",
+                },
+                {
+                    from: "econet/*.dat",
+                },
             ],
         }),
         new MiniCssExtractPlugin({
@@ -57,7 +59,7 @@ function getPlugins() {
         }),
         new HtmlWebpackPlugin({
             title: "jsbeeb - Javascript BBC Micro emulator",
-            template: "index.html"
+            template: "index.html",
         }),
     ];
 }
@@ -77,39 +79,35 @@ export default {
     plugins: getPlugins(),
     resolve: {
         alias: {
-            "audio-worklet": path.resolve(__dirname, "web/audio-worklet.js")
+            "audio-worklet": path.resolve(__dirname, "web/audio-worklet.js"),
         },
-        fallback: { "path": false},
+        fallback: { path: false },
     },
     devServer: {
         hot: isDev,
         static: {
             publicPath: "/",
             directory: "./",
+            watch: {
+                ignored: "**/.*",
+            },
         },
     },
     optimization: getOptimizationSettings(),
     module: {
         parser: {
             javascript: {
-                worker: ["AudioWorklet from audio-worklet", "..."]
-            }
+                worker: ["AudioWorklet from audio-worklet", "..."],
+            },
         },
         rules: [
             {
                 test: /\.less$/,
-                use: [
-                    isDev ? "style-loader" : {loader: MiniCssExtractPlugin.loader},
-                    "css-loader",
-                    "less-loader",
-                ],
+                use: [isDev ? "style-loader" : { loader: MiniCssExtractPlugin.loader }, "css-loader", "less-loader"],
             },
             {
                 test: /\.css$/,
-                use: [
-                    isDev ? "style-loader" : {loader: MiniCssExtractPlugin.loader},
-                    "css-loader",
-                ],
+                use: [isDev ? "style-loader" : { loader: MiniCssExtractPlugin.loader }, "css-loader"],
             },
             {
                 test: /\.(html)$/,
@@ -117,7 +115,12 @@ export default {
             },
             {
                 test: /\.(png|svg|jpg|jpeg|gif)$/i,
-                type: 'asset',
+                type: "asset",
+            },
+            {
+                test: /\.js$/,
+                enforce: "pre",
+                use: ["source-map-loader"],
             },
         ],
     },

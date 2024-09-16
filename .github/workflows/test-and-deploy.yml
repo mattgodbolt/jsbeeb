@@ -1,117 +1,61 @@
 name: jsbeeb tests
 
-on: [ push ]
+on: [push]
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
-      - name: Use Node.js 12.x
-        uses: actions/setup-node@v1
+          submodules: recursive
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 12.x
-      - name: Get npm cache directory
-        id: npm-cache
-        run: |
-          echo "::set-output name=dir::$(npm config get cache)"
-      - uses: actions/cache@v1
-        with:
-          path: ${{ steps.npm-cache.outputs.dir }}
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          node-version: 18
+          cache: npm
       - name: npm install
         run: npm install
-      - name: lint
-        run: npm run lint
+      - name: checks
+        run: npm run ci-checks
       - name: Short tests
         run: npm test
 
   long-test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
-      - name: Use Node.js 12.x
-        uses: actions/setup-node@v1
+          submodules: "recursive"
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 12.x
-      - name: Get npm cache directory
-        id: npm-cache
-        run: |
-          echo "::set-output name=dir::$(npm config get cache)"
-      - uses: actions/cache@v1
-        with:
-          path: ${{ steps.npm-cache.outputs.dir }}
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          node-version: 18
+          cache: npm
       - name: npm install
         run: npm install
       - name: long tests
-        run: npx npm-run-all test-long:*
-
-#   electron-win-mac:
-#     needs: [build-and-test, long-test]
-#     runs-on: ${{ matrix.os }}
-#     strategy:
-#       matrix:
-#         os: [ macos-latest, windows-latest, ubuntu-20.04 ]
-#     steps:
-#       - uses: actions/checkout@v2
-#       - name: Use Node.js 12.x
-#         uses: actions/setup-node@v1
-#         with:
-#           node-version: 12.x
-#       - name: Get npm cache directory
-#         id: npm-cache
-#         run: |
-#           echo "::set-output name=dir::$(npm config get cache)"
-#       - uses: actions/cache@v1
-#         with:
-#           path: ${{ steps.npm-cache.outputs.dir }}
-#           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-#           restore-keys: |
-#             ${{ runner.os }}-node-
-#       - name: Build and deploy electron app
-#         uses: samuelmeuli/action-electron-builder@v1
-#         with:
-#           github_token: ${{ secrets.github_token }}
-#           # If the commit is tagged with a version (e.g. "v1.0.0"), release the app after building
-#           release: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: npm run test-long
 
   update-web:
     needs: [build-and-test, long-test]
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
-      - name: Use Node.js 12.x
-        uses: actions/setup-node@v1
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 12.x
-      - name: Get npm cache directory
-        id: npm-cache
-        run: |
-          echo "::set-output name=dir::$(npm config get cache)"
-      - uses: actions/cache@v1
-        with:
-          path: ${{ steps.npm-cache.outputs.dir }}
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          node-version: 18
+          cache: npm
       - name: Build distribution
         run: |
           make dist
       - uses: jakejarvis/s3-sync-action@master
         with:
-          args: --acl public-read --cache-control max-age=30 --metadata-directive REPLACE
+          args: --cache-control max-age=30 --metadata-directive REPLACE
         env:
-          AWS_S3_BUCKET: bbc.godbolt.org
+          AWS_S3_BUCKET: bbc.xania.org
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          SOURCE_DIR: 'out/dist'
+          SOURCE_DIR: "out/dist"

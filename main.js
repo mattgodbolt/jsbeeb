@@ -1,87 +1,93 @@
-import $ from 'jquery';
-import _ from 'underscore';
-import * as bootstrap from 'bootstrap';
+import $ from "jquery";
+import _ from "underscore";
+import * as bootstrap from "bootstrap";
 
-import 'bootswatch/dist/darkly/bootstrap.min.css';
-import './jsbeeb.css';
+import "bootswatch/dist/darkly/bootstrap.min.css";
+import "./jsbeeb.css";
 
-import * as utils from './utils.js';
-import {FakeVideo, Video} from './video.js';
-import {Debugger} from './debug.js';
-import {Cpu6502} from './6502.js';
-import {Cmos} from './cmos.js';
-import {StairwayToHell} from './sth.js';
-import {GamePad} from './gamepads.js';
-import * as disc from './fdc.js';
-import {starCat} from './discs/cat.js';
-import {loadTape, loadTapeFromData} from './tapes.js';
-import {GoogleDriveLoader} from './google-drive.js';
-import * as tokeniser from './basic-tokenise.js';
-import * as canvasLib from './canvas.js';
-import {Config} from './config.js';
-import {initialise as electron} from './app/electron.js';
-import {AudioHandler} from "./web/audio-handler.js";
+import * as utils from "./utils.js";
+import { FakeVideo, Video } from "./video.js";
+import { Debugger } from "./web/debug.js";
+import { Cpu6502 } from "./6502.js";
+import { Cmos } from "./cmos.js";
+import { StairwayToHell } from "./sth.js";
+import { GamePad } from "./gamepads.js";
+import * as disc from "./fdc.js";
+import { starCat } from "./discs/cat.js";
+import { loadTape, loadTapeFromData } from "./tapes.js";
+import { GoogleDriveLoader } from "./google-drive.js";
+import * as tokeniser from "./basic-tokenise.js";
+import * as canvasLib from "./canvas.js";
+import { Config } from "./config.js";
+import { initialise as electron } from "./app/electron.js";
+import { AudioHandler } from "./web/audio-handler.js";
+import { Econet } from "./econet.js";
+import { toSsdOrDsd } from "./disc.js";
 
-var processor;
-var video;
-var dbgr;
-var frames = 0;
-var frameSkip = 0;
-var syncLights;
-var discSth;
-var tapeSth;
-var running;
-var model;
-var gamepad = new GamePad();
-var availableImages;
-var discImage;
-var extraRoms = [];
-if (typeof starCat === 'function') {
+let processor;
+let video;
+let dbgr;
+let frames = 0;
+let frameSkip = 0;
+let syncLights;
+let discSth;
+let tapeSth;
+let running;
+let model;
+const gamepad = new GamePad();
+let availableImages;
+let discImage;
+const extraRoms = [];
+if (typeof starCat === "function") {
     availableImages = starCat();
 
     if (availableImages && availableImages[0]) {
         discImage = availableImages[0].file;
     }
 }
-var queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
-var secondDiscImage = null;
-var parsedQuery = {};
-var needsAutoboot = false;
-var autoType = "";
-var keyLayout = window.localStorage.keyLayout || "physical";
+let queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
+let secondDiscImage = null;
+let parsedQuery = {};
+let needsAutoboot = false;
+let autoType = "";
+let keyLayout = window.localStorage.keyLayout || "physical";
 
-var BBC = utils.BBC;
-var keyCodes = utils.keyCodes;
-var emuKeyHandlers = {};
-var cpuMultiplier = 1;
-var fastAsPossible = false;
-var fastTape = false;
-var noSeek = false;
-var pauseEmu = false;
-var stepEmuWhenPaused = false;
-var audioFilterFreq = 7000;
-var audioFilterQ = 5;
+const BBC = utils.BBC;
+const keyCodes = utils.keyCodes;
+const emuKeyHandlers = {};
+let cpuMultiplier = 1;
+let fastAsPossible = false;
+let fastTape = false;
+let noSeek = false;
+let pauseEmu = false;
+let stepEmuWhenPaused = false;
+let audioFilterFreq = 7000;
+let audioFilterQ = 5;
+let stationId = 101;
+let econet = null;
+const isMac = window.navigator.platform.indexOf("Mac") === 0;
 
 if (queryString) {
-    if (queryString[queryString.length - 1] === '/')  // workaround for shonky python web server
+    if (queryString[queryString.length - 1] === "/")
+        // workaround for shonky python web server
         queryString = queryString.substring(0, queryString.length - 1);
     queryString.split("&").forEach(function (keyval) {
-        var keyAndVal = keyval.split("=");
-        var key = decodeURIComponent(keyAndVal[0]);
-        var val = null;
+        const keyAndVal = keyval.split("=");
+        const key = decodeURIComponent(keyAndVal[0]);
+        let val = null;
         if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
         parsedQuery[key] = val;
 
         // eg KEY.CAPSLOCK=CTRL
-        var bbcKey;
+        let bbcKey;
         if (key.toUpperCase().indexOf("KEY.") === 0) {
             bbcKey = val.toUpperCase();
 
             if (BBC[bbcKey]) {
-                var nativeKey = key.substring(4).toUpperCase(); // remove KEY.
+                const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
                 if (keyCodes[nativeKey]) {
                     console.log("mapping " + nativeKey + " to " + bbcKey);
-                    utils.userKeymap.push({native: nativeKey, bbc: bbcKey});
+                    utils.userKeymap.push({ native: nativeKey, bbc: bbcKey });
                 } else {
                     console.log("unknown key: " + nativeKey);
                 }
@@ -91,7 +97,7 @@ if (queryString) {
         } else if (key.indexOf("GP.") === 0) {
             // gamepad mapping
             // eg ?GP.FIRE2=RETURN
-            var gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
+            const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
             gamepad.remap(gamepadKey, val.toUpperCase());
         } else {
             switch (key) {
@@ -130,7 +136,7 @@ if (queryString) {
                     break;
                 case "embed":
                     $(".embed-hide").hide();
-                    $("#about").append(" jsbeeb");
+                    $("body").css("background-color", "transparent");
                     break;
                 case "fasttape":
                     fastTape = true;
@@ -144,38 +150,111 @@ if (queryString) {
                 case "audiofilterq":
                     audioFilterQ = Number(val);
                     break;
+                case "stationId":
+                    stationId = Number(val);
+                    break;
             }
         }
     });
 }
 
-if (parsedQuery.frameSkip)
-    frameSkip = parseInt(parsedQuery.frameSkip);
+if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
 
-var config = new Config(
-    function (changed) {
-        parsedQuery = _.extend(parsedQuery, changed);
-        updateUrl();
-        if (changed.model) {
-            areYouSure("Changing model requires a restart of the emulator. Restart now?",
-                "Yes, restart now",
-                "No, thanks",
-                function () {
-                    window.location.reload();
-                });
-        }
-        if (changed.keyLayout) {
-            window.localStorage.keyLayout = changed.keyLayout;
-            emulationConfig.keyLayout = changed.keyLayout;
-            processor.updateKeyLayout();
-        }
-    });
+const printerPort = {
+    outputStrobe: function (level, output) {
+        if (!printerTextArea) return;
+        if (!output || level) return;
+
+        const uservia = processor.uservia;
+        // Ack the character by pulsing CA1 low.
+        uservia.setca1(false);
+        uservia.setca1(true);
+        const newChar = String.fromCharCode(uservia.ora);
+        printerTextArea.value += newChar;
+    },
+};
+
+let userPort = null;
+
+const keyswitch = true;
+if (keyswitch) {
+    let switchState = 0xff;
+
+    const switchKey = function (down, code) {
+        const bit = 1 << (code - utils.keyCodes.K1);
+        if (down) switchState &= 0xff ^ bit;
+        else switchState |= bit;
+    };
+
+    for (let idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
+        emuKeyHandlers[idx] = switchKey;
+    }
+    userPort = {
+        write: function () {},
+        read: function () {
+            return switchState;
+        },
+    };
+}
+
+const emulationConfig = {
+    keyLayout: keyLayout,
+    coProcessor: parsedQuery.coProcessor,
+    cpuMultiplier: cpuMultiplier,
+    videoCyclesBatch: parsedQuery.videoCyclesBatch,
+    extraRoms: extraRoms,
+    userPort: userPort,
+    printerPort: printerPort,
+    getGamepads: function () {
+        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
+        return navigator.getGamepads ? navigator.getGamepads() : [];
+    },
+    debugFlags: {
+        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
+        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
+    },
+};
+
+const config = new Config(function (changed) {
+    parsedQuery = _.extend(parsedQuery, changed);
+    if (
+        changed.model ||
+        changed.coProcessor !== undefined ||
+        changed.hasMusic5000 !== undefined ||
+        changed.hasTeletextAdaptor !== undefined ||
+        changed.hasEconet !== undefined
+    ) {
+        areYouSure(
+            "Changing model requires a restart of the emulator. Restart now?",
+            "Yes, restart now",
+            "No, thanks",
+            function () {
+                updateUrl();
+                window.location.reload();
+            },
+        );
+    }
+    if (changed.keyLayout) {
+        window.localStorage.keyLayout = changed.keyLayout;
+        emulationConfig.keyLayout = changed.keyLayout;
+        processor.updateKeyLayout();
+    }
+});
+
+// Perform mapping of legacy models to the new format
+config.mapLegacyModels(parsedQuery);
+
 config.setModel(parsedQuery.model || guessModelFromUrl());
 config.setKeyLayout(keyLayout);
+config.set65c02(parsedQuery.coProcessor);
+config.setEconet(parsedQuery.hasEconet);
+config.setMusic5000(parsedQuery.hasMusic5000);
+config.setTeletext(parsedQuery.hasTeletextAdaptor);
+
 model = config.model;
 
 function sbBind(div, url, onload) {
-    var img = div.find("img");
+    const img = div.find("img");
     img.hide();
     if (!url) return;
     img.attr("src", url).bind("load", function () {
@@ -185,58 +264,56 @@ function sbBind(div, url, onload) {
 }
 
 sbBind($(".sidebar.left"), parsedQuery.sbLeft, function (div, img) {
-    div.css({left: -img.width() - 5});
+    div.css({ left: -img.width() - 5 });
 });
 sbBind($(".sidebar.right"), parsedQuery.sbRight, function (div, img) {
-    div.css({right: -img.width() - 5});
+    div.css({ right: -img.width() - 5 });
 });
 sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
-    div.css({bottom: -img.height()});
+    div.css({ bottom: -img.height() });
 });
 
 if (parsedQuery.cpuMultiplier) {
     cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
     console.log("CPU multiplier set to " + cpuMultiplier);
 }
-var clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
-var MaxCyclesPerFrame = clocksPerSecond / 10;
+const clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
+const MaxCyclesPerFrame = clocksPerSecond / 10;
 
-var tryGl = true;
+let tryGl = true;
 if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
-var $screen = $('#screen');
-var canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
+const $screen = $("#screen");
+const canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
     frames++;
     if (frames < frameSkip) return;
     frames = 0;
     canvas.paint(minx, miny, maxx, maxy);
 });
-if (parsedQuery.fakeVideo !== undefined)
-    video = new FakeVideo();
+if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
 const audioStatsNode = document.getElementById("audio-stats");
 const audioHandler = new AudioHandler($("#audio-warning"), audioStatsNode, audioFilterFreq, audioFilterQ, noSeek);
-if (!parsedQuery.audioDebug)
-    audioStatsNode.style.display = 'none';
+if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
 
-var lastShiftLocation = 1;
-var lastCtrlLocation = 1;
-var lastAltLocation = 1;
+let lastShiftLocation = 1;
+let lastCtrlLocation = 1;
+let lastAltLocation = 1;
 
 dbgr = new Debugger(video);
 
-$('.initially-hidden').removeClass('initially-hidden');
+$(".initially-hidden").removeClass("initially-hidden");
 
 function keyCode(evt) {
-    var ret = evt.which || evt.charCode || evt.keyCode;
+    const ret = evt.which || evt.charCode || evt.keyCode;
 
-    var keyCodes = utils.keyCodes;
+    const keyCodes = utils.keyCodes;
 
     switch (evt.location) {
         default:
@@ -309,9 +386,9 @@ function keyCode(evt) {
 }
 
 function keyPress(evt) {
-    if (document.activeElement.id === 'paste-text') return;
+    if (document.activeElement.id === "paste-text") return;
     if (running || (!dbgr.enabled() && !pauseEmu)) return;
-    var code = keyCode(evt);
+    const code = keyCode(evt);
     if (dbgr.enabled() && code === 103 /* lower case g */) {
         dbgr.hide();
         go();
@@ -328,81 +405,100 @@ function keyPress(evt) {
             return;
         }
     }
-    var handled = dbgr.keyPress(keyCode(evt));
+    const handled = dbgr.keyPress(keyCode(evt));
     if (handled) evt.preventDefault();
 }
 
 emuKeyHandlers[utils.keyCodes.S] = function (down) {
     if (down) {
-        utils.noteEvent('keyboard', 'press', 'S');
+        utils.noteEvent("keyboard", "press", "S");
         stop(true);
     }
 };
 emuKeyHandlers[utils.keyCodes.R] = function (down) {
-    if (down)
-        window.location.reload();
+    if (down) window.location.reload();
 };
 
 function keyDown(evt) {
     audioHandler.tryResume();
-    if (document.activeElement.id === 'paste-text') return;
+    if (document.activeElement.id === "paste-text") return;
     if (!running) return;
-    var code = keyCode(evt);
+    const code = keyCode(evt);
     if (evt.altKey) {
-        var handler = emuKeyHandlers[code];
+        const handler = emuKeyHandlers[code];
         if (handler) {
             handler(true, code);
             evt.preventDefault();
         }
     } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
-        utils.noteEvent('keyboard', 'press', 'home');
+        utils.noteEvent("keyboard", "press", "home");
         stop(true);
     } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
-        utils.noteEvent('keyboard', 'press', 'insert');
+        utils.noteEvent("keyboard", "press", "insert");
         fastAsPossible = !fastAsPossible;
     } else if (code === utils.keyCodes.END && evt.ctrlKey) {
-        utils.noteEvent('keyboard', 'press', 'end');
+        utils.noteEvent("keyboard", "press", "end");
         pauseEmu = true;
         stop(false);
     } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-        utils.noteEvent('keyboard', 'press', 'break');
+        utils.noteEvent("keyboard", "press", "break");
         processor.setReset(true);
         evt.preventDefault();
     } else if (code === utils.keyCodes.B && evt.ctrlKey) {
         // Ctrl-B turns on the printer, so we open a printer output
         // window in addition to passing the keypress along to the beeb.
-        processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
+        processor.sysvia.keyDown(code, evt.shiftKey);
         evt.preventDefault();
         checkPrinterWindow();
+    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+        handleMacCapsLock();
+        evt.preventDefault();
     } else {
-        processor.sysvia.keyDown(keyCode(evt), evt.shiftKey);
+        processor.sysvia.keyDown(code, evt.shiftKey);
         evt.preventDefault();
     }
 }
 
 function keyUp(evt) {
-    if (document.activeElement.id === 'paste-text') return;
+    if (document.activeElement.id === "paste-text") return;
     // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
-    var code = keyCode(evt);
-    if (processor && processor.sysvia)
-        processor.sysvia.keyUp(code);
+    const code = keyCode(evt);
+    if (processor && processor.sysvia) processor.sysvia.keyUp(code);
     if (!running) return;
     if (evt.altKey) {
-        var handler = emuKeyHandlers[code];
-        if (handler) {
-            handler(false, code);
-            evt.preventDefault();
-        }
+        const handler = emuKeyHandlers[code];
+        if (handler) handler(false, code);
     } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
         processor.setReset(false);
+    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+        handleMacCapsLock();
     }
     evt.preventDefault();
 }
 
+function handleMacCapsLock() {
+    // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
+    // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
+    processor.sysvia.keyDown(utils.keyCodes.CAPSLOCK);
+    setTimeout(() => processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), 100);
+    if (!window.localStorage.getItem("warnedAboutRubbishMacs")) {
+        showError(
+            "handling caps lock on Mac OS X",
+            "Mac OS X does not generate key up events for caps lock presses. " +
+                "jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games " +
+                " that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play " +
+                "such a game, please see the documentation about remapping keys." +
+                "Close this window to continue (you won't see this error again)",
+        );
+        window.localStorage.setItem("warnedAboutRubbishMacs", true);
+    }
+}
+
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
+const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
 
 function loadHTMLFile(file) {
-    var reader = new FileReader();
+    const reader = new FileReader();
     reader.onload = function (e) {
         processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
         delete parsedQuery.disc;
@@ -413,33 +509,50 @@ function loadHTMLFile(file) {
     reader.readAsBinaryString(file);
 }
 
-var $pastetext = $('#paste-text');
-$pastetext.on('paste', function (event) {
-    var text = event.originalEvent.clipboardData.getData('text/plain');
+function loadSCSIFile(file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        processor.filestore.scsi = utils.stringToUint8Array(e.target.result);
+
+        processor.filestore.PC = 0x400;
+        processor.filestore.SP = 0xff;
+        processor.filestore.A = 1;
+        processor.filestore.emulationSpeed = 0;
+
+        // Reset any open receive blocks
+        processor.econet.receiveBlocks = [];
+        processor.econet.nextReceiveBlockNumber = 1;
+
+        $fsModal.hide();
+    };
+    reader.readAsBinaryString(file);
+}
+
+const $pastetext = $("#paste-text");
+$pastetext.on("paste", function (event) {
+    const text = event.originalEvent.clipboardData.getData("text/plain");
     sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
 });
-$pastetext.on('dragover', function (event) {
+$pastetext.on("dragover", function (event) {
     event.preventDefault();
     event.stopPropagation();
     event.originalEvent.dataTransfer.dropEffect = "copy";
 });
-$pastetext.on('drop', function (event) {
-    utils.noteEvent('local', 'drop');
-    var file = event.originalEvent.dataTransfer.files[0];
+$pastetext.on("drop", function (event) {
+    utils.noteEvent("local", "drop");
+    const file = event.originalEvent.dataTransfer.files[0];
     loadHTMLFile(file);
 });
 
-var $cub = $('#cub-monitor');
-$cub.on('mousemove mousedown mouseup', function (evt) {
+const $cub = $("#cub-monitor");
+$cub.on("mousemove mousedown mouseup", function (evt) {
     audioHandler.tryResume();
-    if (document.activeElement !== document.body)
-        document.activeElement.blur();
-    var cubOffset = $cub.offset();
-    var screenOffset = $screen.offset();
-    var x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
-    var y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
-    if (processor.touchScreen)
-        processor.touchScreen.onMouse(x, y, evt.buttons);
+    if (document.activeElement !== document.body) document.activeElement.blur();
+    const cubOffset = $cub.offset();
+    const screenOffset = $screen.offset();
+    const x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
+    const y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
+    if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
     evt.preventDefault();
 });
 
@@ -447,7 +560,7 @@ $(window).blur(function () {
     if (processor.sysvia) processor.sysvia.clearKeys();
 });
 
-$('#fs').click(function (event) {
+$("#fs").click(function (event) {
     $screen[0].requestFullscreen();
     event.preventDefault();
 });
@@ -455,6 +568,12 @@ $('#fs').click(function (event) {
 document.onkeydown = keyDown;
 document.onkeypress = keyPress;
 document.onkeyup = keyUp;
+
+$("#debug-pause").click(() => stop(true));
+$("#debug-play").click(() => {
+    dbgr.hide();
+    go();
+});
 
 // To lower chance of data loss, only accept drop events in the drop
 // zone in the menu bar.
@@ -468,89 +587,61 @@ document.ondrop = function (event) {
 
 window.onbeforeunload = function () {
     if (running && processor.sysvia.hasAnyKeyDown()) {
-        return "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+        return (
+            "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
+            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window."
+        );
     }
 };
 
-var cmos = new Cmos({
-    load: function () {
-        if (window.localStorage.cmosRam) {
-            return JSON.parse(window.localStorage.cmosRam);
-        }
-        return null;
-    },
-    save: function (data) {
-        window.localStorage.cmosRam = JSON.stringify(data);
-    }
-});
-
-var userPort = null;
-const keyswitch = true;
-if (keyswitch) {
-    var switchState = 0xff;
-
-    var switchKey = function (down, code) {
-        var bit = 1 << (code - utils.keyCodes.K1);
-        if (down)
-            switchState &= (0xff ^ bit);
-        else
-            switchState |= bit;
-    };
-
-    for (var idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
-        emuKeyHandlers[idx] = switchKey;
-    }
-    userPort = {
-        write: function () {
-        },
-        read: function () {
-            return switchState;
-        }
-    };
+if (model.hasEconet) {
+    econet = new Econet(stationId);
+} else {
+    $("#fsmenuitem").hide();
 }
 
-var printerWindow = null;
-var printerTextArea = null;
+const cmos = new Cmos(
+    {
+        load: function () {
+            if (window.localStorage.cmosRam) {
+                return JSON.parse(window.localStorage.cmosRam);
+            }
+            return null;
+        },
+        save: function (data) {
+            window.localStorage.cmosRam = JSON.stringify(data);
+        },
+    },
+    model.cmosOverride,
+    econet,
+);
+
+let printerWindow = null;
+let printerTextArea = null;
 
 function checkPrinterWindow() {
     if (printerWindow && !printerWindow.closed) return;
 
-    printerWindow = window.open('', '_blank', 'height=300,width=400');
-    printerWindow.document.write('<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>');
-    printerTextArea = printerWindow.document.getElementById('text');
+    printerWindow = window.open("", "_blank", "height=300,width=400");
+    printerWindow.document.write(
+        '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>',
+    );
+    printerTextArea = printerWindow.document.getElementById("text");
 
     processor.uservia.setca1(true);
 }
 
-var printerPort = {
-    outputStrobe: function (level, output) {
-        if (!printerTextArea) return;
-        if (!output || level) return;
-
-        var uservia = processor.uservia;
-        // Ack the character by pulsing CA1 low.
-        uservia.setca1(false);
-        uservia.setca1(true);
-        var newChar = String.fromCharCode(uservia.ora);
-        printerTextArea.value += newChar;
-    }
-};
-
-var emulationConfig = {
-    keyLayout: keyLayout,
-    cpuMultiplier: cpuMultiplier,
-    videoCyclesBatch: parsedQuery.videoCyclesBatch,
-    extraRoms: extraRoms,
-    userPort: userPort,
-    printerPort: printerPort,
-    getGamepads: function () {
-        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
-        return navigator.getGamepads ? navigator.getGamepads() : [];
-    }
-};
-
-processor = new Cpu6502(model, dbgr, video, audioHandler.soundChip, audioHandler.ddNoise, cmos, emulationConfig);
+processor = new Cpu6502(
+    model,
+    dbgr,
+    video,
+    audioHandler.soundChip,
+    audioHandler.ddNoise,
+    model.hasMusic5000 ? audioHandler.music5000 : null,
+    cmos,
+    emulationConfig,
+    econet,
+);
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
@@ -569,29 +660,32 @@ function sthStartLoad() {
 }
 
 function discSthClick(item) {
-    utils.noteEvent('sth', 'click', item);
+    utils.noteEvent("sth", "click", item);
     setDisc1Image("sth:" + item);
-    var needsAutoboot = parsedQuery.autoboot !== undefined;
+    const needsAutoboot = parsedQuery.autoboot !== undefined;
     if (needsAutoboot) {
         processor.reset(true);
     }
     popupLoading("Loading " + item);
-    loadDiscImage(parsedQuery.disc1).then(function (disc) {
-        processor.fdc.loadDisc(0, disc);
-    }).then(
-        function () {
-            loadingFinished();
-            if (needsAutoboot) {
-                autoboot(item);
-            }
-        },
-        function (err) {
-            loadingFinished(err);
-        });
+    loadDiscImage(parsedQuery.disc1)
+        .then(function (disc) {
+            processor.fdc.loadDisc(0, disc);
+        })
+        .then(
+            function () {
+                loadingFinished();
+                if (needsAutoboot) {
+                    autoboot(item);
+                }
+            },
+            function (err) {
+                loadingFinished(err);
+            },
+        );
 }
 
 function tapeSthClick(item) {
-    utils.noteEvent('sth', 'clickTape', item);
+    utils.noteEvent("sth", "clickTape", item);
     parsedQuery.tape = "sth:" + item;
     updateUrl();
     popupLoading("Loading " + item);
@@ -601,7 +695,8 @@ function tapeSthClick(item) {
         },
         function (err) {
             loadingFinished(err);
-        });
+        },
+    );
 }
 
 const $sthModal = new bootstrap.Modal(document.getElementById("sth"));
@@ -609,18 +704,18 @@ const $sthModal = new bootstrap.Modal(document.getElementById("sth"));
 function makeOnCat(onClick) {
     return function (cat) {
         sthClearList();
-        var sthList = $("#sth-list");
+        const sthList = $("#sth-list");
         $("#sth .loading").hide();
-        var template = sthList.find(".template");
+        const template = sthList.find(".template");
 
         function doSome(all) {
-            var MaxAtATime = 100;
-            var Delay = 30;
-            var cat = all.slice(0, MaxAtATime);
-            var remaining = all.slice(MaxAtATime);
-            var filter = $('#sth-filter').val();
+            const MaxAtATime = 100;
+            const Delay = 30;
+            const cat = all.slice(0, MaxAtATime);
+            const remaining = all.slice(MaxAtATime);
+            const filter = $("#sth-filter").val();
             $.each(cat, function (_, cat) {
-                var row = template.clone().removeClass("template").appendTo(sthList);
+                const row = template.clone().removeClass("template").appendTo(sthList);
                 row.find(".name").text(cat);
                 $(row).on("click", function () {
                     onClick(cat);
@@ -636,7 +731,7 @@ function makeOnCat(onClick) {
 }
 
 function sthOnError() {
-    $('#sth .loading').text("There was an error accessing the STH archive");
+    $("#sth .loading").text("There was an error accessing the STH archive");
     $("#sth .loading").show();
     sthClearList();
 }
@@ -644,8 +739,8 @@ function sthOnError() {
 discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
 
-$('#sth .autoboot').click(function () {
-    if ($('#sth .autoboot').prop('checked')) {
+$("#sth .autoboot").click(function () {
+    if ($("#sth .autoboot").prop("checked")) {
         parsedQuery.autoboot = "";
     } else {
         delete parsedQuery.autoboot;
@@ -654,10 +749,10 @@ $('#sth .autoboot').click(function () {
 });
 
 $(document).on("click", "a.sth", function () {
-    var type = $(this).data('id');
-    if (type === 'discs') {
+    const type = $(this).data("id");
+    if (type === "discs") {
         discSth.populate();
-    } else if (type === 'tapes') {
+    } else if (type === "tapes") {
         tapeSth.populate();
     } else {
         console.log("unknown id", type);
@@ -667,22 +762,22 @@ $(document).on("click", "a.sth", function () {
 function setSthFilter(filter) {
     filter = filter.toLowerCase();
     $("#sth-list li:not('.template')").each(function () {
-        var el = $(this);
+        const el = $(this);
         el.toggle(el.text().toLowerCase().indexOf(filter) >= 0);
     });
 }
 
-$('#sth-filter').on("change keyup", function () {
-    setSthFilter($('#sth-filter').val());
+$("#sth-filter").on("change keyup", function () {
+    setSthFilter($("#sth-filter").val());
 });
 
 function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
-    var lastChar;
-    var nextKeyMillis = 0;
+    let lastChar;
+    let nextKeyMillis = 0;
     processor.sysvia.disableKeyboard();
 
     if (checkCapsAndShiftLocks) {
-        var toggleKey = null;
+        let toggleKey = null;
         if (!processor.sysvia.capsLockLight) toggleKey = BBC.CAPSLOCK;
         else if (processor.sysvia.shiftLockLight) toggleKey = BBC.SHIFTLOCK;
         if (toggleKey) {
@@ -691,8 +786,8 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
         }
     }
 
-    var sendCharHook = processor.debugInstruction.add(function nextCharHook() {
-        var millis = processor.cycleSeconds * 1000 + processor.currentCycles / (clocksPerSecond / 1000);
+    const sendCharHook = processor.debugInstruction.add(function nextCharHook() {
+        const millis = processor.cycleSeconds * 1000 + processor.currentCycles / (clocksPerSecond / 1000);
         if (millis < nextKeyMillis) {
             return;
         }
@@ -708,8 +803,8 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
             return;
         }
 
-        var ch = keysToSend[0];
-        var debounce = lastChar === ch;
+        const ch = keysToSend[0];
+        const debounce = lastChar === ch;
         lastChar = ch;
         if (debounce) {
             lastChar = undefined;
@@ -717,7 +812,7 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
             return;
         }
 
-        var time = 50;
+        let time = 50;
         if (typeof lastChar === "number") {
             time = lastChar;
             lastChar = undefined;
@@ -733,10 +828,10 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
 }
 
 function autoboot(image) {
-    var BBC = utils.BBC;
+    const BBC = utils.BBC;
 
     console.log("Autobooting disc");
-    utils.noteEvent('init', 'autoboot', image);
+    utils.noteEvent("init", "autoboot", image);
 
     // Shift-break simulation, hold SHIFT for 1000ms.
     sendRawKeyboardToBBC([BBC.SHIFT, 1000], false);
@@ -744,48 +839,49 @@ function autoboot(image) {
 
 function autoBootType(keys) {
     console.log("Auto typing '" + keys + "'");
-    utils.noteEvent('init', 'autochain');
+    utils.noteEvent("init", "autochain");
 
-    var bbcKeys = utils.stringToBBCKeys(keys);
+    const bbcKeys = utils.stringToBBCKeys(keys);
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
 function autoChainTape() {
     console.log("Auto Chaining Tape");
-    utils.noteEvent('init', 'autochain');
+    utils.noteEvent("init", "autochain");
 
-    var bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
+    const bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
 function autoRunTape() {
     console.log("Auto Running Tape");
-    utils.noteEvent('init', 'autorun');
+    utils.noteEvent("init", "autorun");
 
-    var bbcKeys = utils.stringToBBCKeys('*TAPE\n*/\n');
+    const bbcKeys = utils.stringToBBCKeys("*TAPE\n*/\n");
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
 function autoRunBasic() {
     console.log("Auto Running basic");
-    utils.noteEvent('init', 'autorunbasic');
+    utils.noteEvent("init", "autorunbasic");
 
-    var bbcKeys = utils.stringToBBCKeys('RUN\n');
+    const bbcKeys = utils.stringToBBCKeys("RUN\n");
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
 function updateUrl() {
-    var url = window.location.origin + window.location.pathname;
-    var sep = '?';
+    let url = window.location.origin + window.location.pathname;
+    let sep = "?";
     $.each(parsedQuery, function (key, value) {
-        url += sep + encodeURIComponent(key);
-        if (value) url += "=" + encodeURIComponent(value);
-        sep = '&';
+        if (key.length > 0 && value) {
+            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+            sep = "&";
+        }
     });
     window.history.pushState(null, null, url);
 }
 
-const $errorDialog = $('#error-dialog');
+const $errorDialog = $("#error-dialog");
 const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
 
 function showError(context, error) {
@@ -795,17 +891,17 @@ function showError(context, error) {
 }
 
 function splitImage(image) {
-    var match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
-    var schema = match[2] || match[1] || "";
+    const match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
+    const schema = match[2] || match[1] || "";
     image = match[3];
-    return {image: image, schema: schema};
+    return { image: image, schema: schema };
 }
 
 function loadDiscImage(discImage) {
     if (!discImage) return Promise.resolve(null);
-    var split = splitImage(discImage);
+    const split = splitImage(discImage);
     discImage = split.image;
-    var schema = split.schema;
+    const schema = split.schema;
     if (schema[0] === "!" || schema === "local") {
         return Promise.resolve(disc.localDisc(processor.fdc, discImage));
     }
@@ -821,25 +917,30 @@ function loadDiscImage(discImage) {
         });
     }
     if (schema === "gd") {
-        var splat = discImage.match(/([^/]+)\/?(.*)/);
-        var title = "(unknown)";
+        const splat = discImage.match(/([^/]+)\/?(.*)/);
+        let title = "(unknown)";
         if (splat) {
             discImage = splat[1];
             title = splat[2];
         }
-        return gdLoad({title: title, id: discImage});
+        return gdLoad({ title: title, id: discImage });
+    }
+    if (schema === "b64data") {
+        const ssdData = atob(discImage);
+        discImage = "disk.ssd";
+        return Promise.resolve(disc.discFor(processor.fdc, discImage, ssdData));
     }
     if (schema === "data") {
-        var arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-        var unzipped = utils.unzipDiscImage(arr);
-        var discData = unzipped.data;
+        const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
+        const unzipped = utils.unzipDiscImage(arr);
+        const discData = unzipped.data;
         discImage = unzipped.name;
         return Promise.resolve(disc.discFor(processor.fdc, discImage, discData));
     }
     if (schema === "http" || schema === "https" || schema === "file") {
         return utils.loadData(schema + "://" + discImage).then(function (discData) {
             if (/\.zip/i.test(discImage)) {
-                var unzipped = utils.unzipDiscImage(discData);
+                const unzipped = utils.unzipDiscImage(discData);
                 discData = unzipped.data;
                 discImage = unzipped.name;
             }
@@ -853,25 +954,25 @@ function loadDiscImage(discImage) {
 }
 
 function loadTapeImage(tapeImage) {
-    var split = splitImage(tapeImage);
+    const split = splitImage(tapeImage);
     tapeImage = split.image;
-    var schema = split.schema;
+    const schema = split.schema;
 
-    if (schema === '|' || schema === "sth") {
+    if (schema === "|" || schema === "sth") {
         return tapeSth.fetch(tapeImage).then(function (image) {
             processor.acia.setTape(loadTapeFromData(tapeImage, image));
         });
     }
     if (schema === "data") {
-        var arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-        var unzipped = utils.unzipDiscImage(arr);
+        const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
+        const unzipped = utils.unzipDiscImage(arr);
         return Promise.resolve(processor.acia.setTape(loadTapeFromData(unzipped.name, unzipped.data)));
     }
 
     if (schema === "http" || schema === "https") {
         return utils.loadData(schema + "://" + tapeImage).then(function (tapeData) {
             if (/\.zip/i.test(tapeImage)) {
-                var unzipped = utils.unzipDiscImage(tapeData);
+                const unzipped = utils.unzipDiscImage(tapeData);
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
@@ -884,51 +985,63 @@ function loadTapeImage(tapeImage) {
     });
 }
 
-$('#disc_load').change(function (evt) {
-    utils.noteEvent('local', 'click'); // NB no filename here
-    var file = evt.target.files[0];
+$("#disc_load").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
+    utils.noteEvent("local", "click"); // NB no filename here
+    const file = evt.target.files[0];
     loadHTMLFile(file);
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$('#tape_load').change(function (evt) {
-    var file = evt.target.files[0];
-    var reader = new FileReader();
-    utils.noteEvent('local', 'clickTape'); // NB no filename here
+$("#fs_load").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
+    utils.noteEvent("local", "click"); // NB no filename here
+    const file = evt.target.files[0];
+    loadSCSIFile(file);
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
+});
+
+$("#tape_load").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
+    const file = evt.target.files[0];
+    const reader = new FileReader();
+    utils.noteEvent("local", "clickTape"); // NB no filename here
     reader.onload = function (e) {
         processor.acia.setTape(loadTapeFromData("local file", e.target.result));
         delete parsedQuery.tape;
         updateUrl();
-        $('#tapes').modal("hide");
+        $("#tapes").modal("hide");
     };
     reader.readAsBinaryString(file);
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
 function anyModalsVisible() {
     return $(".modal:visible").length !== 0;
 }
 
-var modalSavedRunning = false;
-document.addEventListener('show.bs.modal', function () {
+let modalSavedRunning = false;
+document.addEventListener("show.bs.modal", function () {
     if (!anyModalsVisible()) modalSavedRunning = running;
     if (running) stop(false);
 });
-document.addEventListener('hidden.bs.modal', function () {
+document.addEventListener("hidden.bs.modal", function () {
     if (!anyModalsVisible() && modalSavedRunning) {
         go();
     }
 });
 
-const $loadingDialog = $('#loading-dialog');
+const $loadingDialog = $("#loading-dialog");
 const $loadingDialogModal = new bootstrap.Modal($loadingDialog[0]);
 
 function popupLoading(msg) {
     $loadingDialog.find(".loading").text(msg);
-    $('#google-drive-auth').hide();
+    $("#google-drive-auth").hide();
     $loadingDialogModal.show();
 }
 
 function loadingFinished(error) {
-    $('#google-drive-auth').hide();
+    $("#google-drive-auth").hide();
     if (error) {
         $loadingDialogModal.show();
         $loadingDialog.find(".loading").text("Error: " + error);
@@ -940,24 +1053,26 @@ function loadingFinished(error) {
     }
 }
 
-var gdAuthed = false;
-var googleDrive = new GoogleDriveLoader();
+let gdAuthed = false;
+const googleDrive = new GoogleDriveLoader();
 
 function gdAuth(imm) {
-    return googleDrive.authorize(imm)
-        .then(function (authed) {
+    return googleDrive.authorize(imm).then(
+        function (authed) {
             gdAuthed = authed;
             console.log("authed =", authed);
             return authed;
-        }, function (err) {
+        },
+        function (err) {
             console.log("Error handling google auth: " + err);
-            $googleDrive.find('.loading').text("There was an error accessing your Google Drive account: " + err);
-        });
+            $googleDrive.find(".loading").text("There was an error accessing your Google Drive account: " + err);
+        },
+    );
 }
 
-var googleDriveLoadingResolve, googleDriveLoadingReject;
-$('#google-drive-auth form').on("submit", function (e) {
-    $('#google-drive-auth').hide();
+let googleDriveLoadingResolve, googleDriveLoadingReject;
+$("#google-drive-auth form").on("submit", function (e) {
+    $("#google-drive-auth").hide();
     e.preventDefault();
     gdAuth(false).then(function (authed) {
         if (authed) googleDriveLoadingResolve();
@@ -973,7 +1088,8 @@ function gdLoad(cat) {
      });
      */
     popupLoading("Loading '" + cat.title + "' from Google Drive");
-    return googleDrive.initialise()
+    return googleDrive
+        .initialise()
         .then(function (available) {
             console.log("Google Drive available =", available);
             if (!available) throw new Error("Google Drive is not available");
@@ -987,7 +1103,7 @@ function gdLoad(cat) {
                 return new Promise(function (resolve, reject) {
                     googleDriveLoadingResolve = resolve;
                     googleDriveLoadingReject = reject;
-                    $('#google-drive-auth').show();
+                    $("#google-drive-auth").show();
                 });
             }
         })
@@ -1005,16 +1121,16 @@ function gdLoad(cat) {
         });
 }
 
-$('.if-drive-available').hide();
+$(".if-drive-available").hide();
 googleDrive.initialise().then(function (available) {
     if (available) {
-        $('.if-drive-available').show();
+        $(".if-drive-available").show();
         gdAuth(true);
     }
 });
-const $googleDrive = $('#google-drive');
+const $googleDrive = $("#google-drive");
 const $googleDriveModal = new bootstrap.Modal($googleDrive[0]);
-$('#open-drive-link').on('click', function () {
+$("#open-drive-link").on("click", function () {
     if (gdAuthed) {
         $googleDriveModal.show();
     } else {
@@ -1026,18 +1142,18 @@ $('#open-drive-link').on('click', function () {
     }
     return false;
 });
-$googleDrive[0].addEventListener('show.bs.modal', function () {
+$googleDrive[0].addEventListener("show.bs.modal", function () {
     $googleDrive.find(".loading").text("Loading...").show();
     $googleDrive.find("li").not(".template").remove();
     googleDrive.cat().then(function (cat) {
-        var dbList = $googleDrive.find(".list");
+        const dbList = $googleDrive.find(".list");
         $googleDrive.find(".loading").hide();
-        var template = dbList.find(".template");
+        const template = dbList.find(".template");
         $.each(cat, function (_, cat) {
-            var row = template.clone().removeClass("template").appendTo(dbList);
+            const row = template.clone().removeClass("template").appendTo(dbList);
             row.find(".name").text(cat.title);
             $(row).on("click", function () {
-                utils.noteEvent('google-drive', 'click', cat.title);
+                utils.noteEvent("google-drive", "click", cat.title);
                 setDisc1Image("gd:" + cat.id + "/" + cat.title);
                 gdLoad(cat).then(function (ssd) {
                     processor.fdc.loadDisc(0, ssd);
@@ -1047,14 +1163,14 @@ $googleDrive[0].addEventListener('show.bs.modal', function () {
         });
     });
 });
-var discList = $('#disc-list');
-var template = discList.find(".template");
+const discList = $("#disc-list");
+const template = discList.find(".template");
 $.each(availableImages, function (i, image) {
-    var elem = template.clone().removeClass("template").appendTo(discList);
+    const elem = template.clone().removeClass("template").appendTo(discList);
     elem.find(".name").text(image.name);
     elem.find(".description").text(image.desc);
     $(elem).on("click", function () {
-        utils.noteEvent('images', 'click', image.file);
+        utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         loadDiscImage(parsedQuery.disc1).then(function (disc) {
             processor.fdc.loadDisc(0, disc);
@@ -1065,54 +1181,86 @@ $.each(availableImages, function (i, image) {
 
 $("#google-drive form").on("submit", function (e) {
     e.preventDefault();
-    var text = $("#google-drive .disc-name").val();
+    const text = $("#google-drive .disc-name").val();
     if (!text) return;
     popupLoading("Connecting to Google Drive");
     $googleDriveModal.hide();
     popupLoading("Creating '" + text + "' on Google Drive");
-    googleDrive.create(processor.fdc, text)
-        .then(function (result) {
+    googleDrive.create(processor.fdc, text).then(
+        function (result) {
             setDisc1Image("gd:" + result.fileId + "/" + text);
             processor.fdc.loadDisc(0, result.disc);
             loadingFinished();
-        }, function (error) {
+        },
+        function (error) {
             loadingFinished(error);
-        });
+        },
+    );
 });
 
-$('#hard-reset').click(function (event) {
+$("#download-drive-link").on("click", function () {
+    const a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    const disc = processor.fdc.drives[0].disc;
+    const data = toSsdOrDsd(disc);
+    let name = processor.fdc.drives[0].disc.name;
+    name = name.substring(0, name.lastIndexOf(".")) + (disc.isDoubleSided ? ".dsd" : ".ssd");
+
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = name;
+    a.click();
+    window.URL.revokeObjectURL(url);
+});
+
+$("#download-filestore-link").on("click", function () {
+    const a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    const blob = new Blob([processor.filestore.scsi], { type: "application/octet-stream" }),
+        url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = "scsi.dat";
+    a.click();
+    window.URL.revokeObjectURL(url);
+});
+
+$("#hard-reset").click(function (event) {
     processor.reset(true);
     event.preventDefault();
 });
 
-$('#soft-reset').click(function (event) {
+$("#soft-reset").click(function (event) {
     processor.reset(false);
     event.preventDefault();
 });
 
 function guessModelFromUrl() {
-    if (window.location.hostname.indexOf("bbc") === 0) return "B";
+    if (window.location.hostname.indexOf("bbc") === 0) return "B-DFS1.2";
     if (window.location.hostname.indexOf("master") === 0) return "Master";
-    return "B";
+    return "B-DFS1.2";
 }
 
-$('#tape-menu a').on("click", function (e) {
-    var type = $(e.target).attr("data-id");
+$("#tape-menu a").on("click", function (e) {
+    const type = $(e.target).attr("data-id");
     if (type === undefined) return;
 
     if (type === "rewind") {
         console.log("Rewinding tape to the start");
 
         processor.acia.rewindTape();
-
     } else {
         console.log("unknown type", type);
     }
 });
 
 function Light(name) {
-    var dom = $("#" + name);
-    var on = false;
+    const dom = $("#" + name);
+    let on = false;
     this.update = function (val) {
         if (val === on) return;
         on = val;
@@ -1120,110 +1268,133 @@ function Light(name) {
     };
 }
 
-var cassette = new Light("motorlight");
-var caps = new Light("capslight");
-var shift = new Light("shiftlight");
-var drive0 = new Light("drive0");
-var drive1 = new Light("drive1");
+const cassette = new Light("motorlight");
+const caps = new Light("capslight");
+const shift = new Light("shiftlight");
+const drive0 = new Light("drive0");
+const drive1 = new Light("drive1");
+const network = new Light("networklight");
+
 syncLights = function () {
     caps.update(processor.sysvia.capsLockLight);
     shift.update(processor.sysvia.shiftLockLight);
     drive0.update(processor.fdc.motorOn[0]);
     drive1.update(processor.fdc.motorOn[1]);
     cassette.update(processor.acia.motorOn);
+    if (model.hasEconet) {
+        network.update(processor.econet.activityLight());
+    }
 };
 
-var startPromise = Promise.all([audioHandler.initialise(), processor.initialise()])
-    .then(function () {
-        // Ideally would start the loads first. But their completion needs the FDC from the processor
-        var imageLoads = [];
-        if (discImage) imageLoads.push(loadDiscImage(discImage).then(function (disc) {
-            processor.fdc.loadDisc(0, disc);
-        }));
-        if (secondDiscImage) imageLoads.push(loadDiscImage(secondDiscImage).then(function (disc) {
-            processor.fdc.loadDisc(1, disc);
-        }));
-        if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
+const startPromise = Promise.all([audioHandler.initialise(), processor.initialise()]).then(function () {
+    // Ideally would start the loads first. But their completion needs the FDC from the processor
+    const imageLoads = [];
+    if (discImage)
+        imageLoads.push(
+            loadDiscImage(discImage).then(function (disc) {
+                processor.fdc.loadDisc(0, disc);
+            }),
+        );
+    if (secondDiscImage)
+        imageLoads.push(
+            loadDiscImage(secondDiscImage).then(function (disc) {
+                processor.fdc.loadDisc(1, disc);
+            }),
+        );
+    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
-        function insertBasic(getBasicPromise, needsRun) {
-            imageLoads.push(getBasicPromise.then(function (prog) {
-                return tokeniser.create().then(function (t) {
-                    return t.tokenise(prog);
-                });
-            }).then(function (tokenised) {
-                var idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-                var hook = processor.debugInstruction.add(function (addr) {
-                    if (addr !== idleAddr) return;
-                    var page = processor.readmem(0x18) << 8;
-                    for (var i = 0; i < tokenised.length; ++i) {
-                        processor.writemem(page + i, tokenised.charCodeAt(i));
-                    }
-                    // Set VARTOP (0x12/3) and TOP(0x02/3)
-                    var end = page + tokenised.length;
-                    var endLow = end & 0xff;
-                    var endHigh = (end >>> 8) & 0xff;
-                    processor.writemem(0x02, endLow);
-                    processor.writemem(0x03, endHigh);
-                    processor.writemem(0x12, endLow);
-                    processor.writemem(0x13, endHigh);
-                    hook.remove();
-                    if (needsRun) {
-                        autoRunBasic();
-                    }
-                });
-            }));
-        }
+    function insertBasic(getBasicPromise, needsRun) {
+        imageLoads.push(
+            getBasicPromise
+                .then(function (prog) {
+                    return tokeniser.create().then(function (t) {
+                        return t.tokenise(prog);
+                    });
+                })
+                .then(function (tokenised) {
+                    const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+                    const hook = processor.debugInstruction.add(function (addr) {
+                        if (addr !== idleAddr) return;
+                        const page = processor.readmem(0x18) << 8;
+                        for (let i = 0; i < tokenised.length; ++i) {
+                            processor.writemem(page + i, tokenised.charCodeAt(i));
+                        }
+                        // Set VARTOP (0x12/3) and TOP(0x02/3)
+                        const end = page + tokenised.length;
+                        const endLow = end & 0xff;
+                        const endHigh = (end >>> 8) & 0xff;
+                        processor.writemem(0x02, endLow);
+                        processor.writemem(0x03, endHigh);
+                        processor.writemem(0x12, endLow);
+                        processor.writemem(0x13, endHigh);
+                        hook.remove();
+                        if (needsRun) {
+                            autoRunBasic();
+                        }
+                    });
+                }),
+        );
+    }
 
-        if (parsedQuery.loadBasic) {
-            var needsRun = needsAutoboot === "run";
-            needsAutoboot = "";
-            insertBasic(new Promise(function (resolve) {
+    if (parsedQuery.loadBasic) {
+        const needsRun = needsAutoboot === "run";
+        needsAutoboot = "";
+        insertBasic(
+            new Promise(function (resolve) {
                 utils.loadData(parsedQuery.loadBasic).then(function (data) {
                     resolve(String.fromCharCode.apply(null, data));
                 });
-            }), needsRun);
-        }
+            }),
+            needsRun,
+        );
+    }
 
-        if (parsedQuery.embedBasic) {
-            insertBasic(new Promise(function (resolve) {
+    if (parsedQuery.embedBasic) {
+        insertBasic(
+            new Promise(function (resolve) {
                 resolve(parsedQuery.embedBasic);
-            }), true);
-        }
-
-        return Promise.all(imageLoads);
-    });
-
-startPromise.then(function () {
-    switch (needsAutoboot) {
-        case "boot":
-            $("#sth .autoboot").prop('checked', true);
-            autoboot(discImage);
-            break;
-        case "type":
-            autoBootType(autoType);
-            break;
-        case "chain":
-            autoChainTape();
-            break;
-        case "run":
-            autoRunTape();
-            break;
-        default:
-            $("#sth .autoboot").prop('checked', false);
-            break;
+            }),
+            true,
+        );
     }
 
-    if (parsedQuery.patch) {
-        dbgr.setPatch(parsedQuery.patch);
-    }
-
-    go();
-}, function (error) {
-    showError("initialising", error);
-    console.log(error);
+    return Promise.all(imageLoads);
 });
 
-const $ays = $('#are-you-sure');
+startPromise.then(
+    function () {
+        switch (needsAutoboot) {
+            case "boot":
+                $("#sth .autoboot").prop("checked", true);
+                autoboot(discImage);
+                break;
+            case "type":
+                autoBootType(autoType);
+                break;
+            case "chain":
+                autoChainTape();
+                break;
+            case "run":
+                autoRunTape();
+                break;
+            default:
+                $("#sth .autoboot").prop("checked", false);
+                break;
+        }
+
+        if (parsedQuery.patch) {
+            dbgr.setPatch(parsedQuery.patch);
+        }
+
+        go();
+    },
+    function (error) {
+        showError("initialising", error);
+        console.log(error);
+    },
+);
+
+const $ays = $("#are-you-sure");
 const $aysModal = new bootstrap.Modal($ays[0]);
 
 function areYouSure(message, yesText, noText, yesFunc) {
@@ -1239,28 +1410,28 @@ function areYouSure(message, yesText, noText, yesFunc) {
 
 function benchmarkCpu(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;
-    var oldFS = frameSkip;
+    const oldFS = frameSkip;
     frameSkip = 1000000;
-    var startTime = performance.now();
+    const startTime = performance.now();
     processor.execute(numCycles);
-    var endTime = performance.now();
+    const endTime = performance.now();
     frameSkip = oldFS;
-    var msTaken = endTime - startTime;
-    var virtualMhz = (numCycles / msTaken) / 1000;
+    const msTaken = endTime - startTime;
+    const virtualMhz = numCycles / msTaken / 1000;
     console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
     console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
 }
 
 function benchmarkVideo(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;
-    var oldFS = frameSkip;
+    const oldFS = frameSkip;
     frameSkip = 1000000;
-    var startTime = performance.now();
+    const startTime = performance.now();
     video.polltime(numCycles);
-    var endTime = performance.now();
+    const endTime = performance.now();
     frameSkip = oldFS;
-    var msTaken = endTime - startTime;
-    var virtualMhz = (numCycles / msTaken) / 1000;
+    const msTaken = endTime - startTime;
+    const virtualMhz = numCycles / msTaken / 1000;
     console.log("Took " + msTaken + "ms to execute " + numCycles + " video cycles");
     console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
 }
@@ -1277,13 +1448,13 @@ function profileVideo(arg) {
     console.profileEnd();
 }
 
-var last = 0;
+let last = 0;
 
 function VirtualSpeedUpdater() {
     this.cycles = 0;
     this.time = 0;
-    this.v = $('.virtualMHz');
-    this.header = $('#virtual-mhz-header');
+    this.v = $(".virtualMHz");
+    this.header = $("#virtual-mhz-header");
     this.speedy = false;
 
     this.update = function (cycles, time, speedy) {
@@ -1295,16 +1466,12 @@ function VirtualSpeedUpdater() {
     this.display = function () {
         // MRG would be nice to graph instantaneous speed to get some idea where the time goes.
         if (this.cycles) {
-            var thisMHz = this.cycles / this.time / 1000;
+            const thisMHz = this.cycles / this.time / 1000;
             this.v.text(thisMHz.toFixed(1));
             if (this.cycles >= 10 * 2 * 1000 * 1000) {
                 this.cycles = this.time = 0;
             }
-            var colour = "white";
-            if (this.speedy) {
-                colour = "red";
-            }
-            this.header.css("color", colour);
+            this.header.css("color", this.speedy ? "red" : "white");
         }
         setTimeout(this.display.bind(this), 3333);
     };
@@ -1312,7 +1479,7 @@ function VirtualSpeedUpdater() {
     this.display();
 }
 
-var virtualSpeedUpdater = new VirtualSpeedUpdater();
+const virtualSpeedUpdater = new VirtualSpeedUpdater();
 
 function draw(now) {
     if (!running) {
@@ -1324,17 +1491,18 @@ function draw(now) {
         now = window.performance.now();
     }
 
-    var motorOn = processor.acia.motorOn;
-    var speedy = fastAsPossible || (fastTape && motorOn);
-    var useTimeout = speedy || motorOn;
-    var timeout = speedy ? 0 : (1000.0 / 50);
+    const motorOn = processor.acia.motorOn;
+    const discOn = processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
+    const speedy = fastAsPossible || (fastTape && motorOn);
+    const useTimeout = speedy || motorOn || discOn;
+    const timeout = speedy ? 0 : 1000.0 / 50;
 
     // In speedy mode, we still run all the state machines accurately
     // but we paint less often because painting is the most expensive
     // part of jsbeeb at this time.
     // We need need to paint per odd number of frames so that interlace
     // modes, i.e. MODE 7, still look ok.
-    var frameSkipCount = speedy ? 9 : 0;
+    const frameSkipCount = speedy ? 9 : 0;
     video.frameSkipCount = frameSkipCount;
 
     // We use setTimeout instead of requestAnimationFrame in two cases:
@@ -1350,11 +1518,11 @@ function draw(now) {
     gamepad.update(processor.sysvia);
     syncLights();
     if (last !== 0) {
-        var cycles;
+        let cycles;
         if (!speedy) {
             // Now and last are DOMHighResTimeStamp, just a double.
-            var sinceLast = now - last;
-            cycles = sinceLast * clocksPerSecond / 1000;
+            const sinceLast = now - last;
+            cycles = (sinceLast * clocksPerSecond) / 1000;
             cycles = Math.min(cycles, MaxCyclesPerFrame);
         } else {
             cycles = clocksPerSecond / 50;
@@ -1364,11 +1532,11 @@ function draw(now) {
             if (!processor.execute(cycles)) {
                 stop(true);
             }
-            var end = performance.now();
+            const end = performance.now();
             virtualSpeedUpdater.update(cycles, end - now, speedy);
         } catch (e) {
             running = false;
-            utils.noteEvent('exception', 'thrown', e.stack);
+            utils.noteEvent("exception", "thrown", e.stack);
             dbgr.debug(processor.pc);
             throw e;
         }
@@ -1389,7 +1557,8 @@ let wasPreviouslyRunning = false;
 function handleVisibilityChange() {
     if (document.visibilityState === "hidden") {
         wasPreviouslyRunning = running;
-        if (running && !processor.acia.motorOn) {
+        const keepRunningWhenHidden = processor.acia.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
+        if (running && !keepRunningWhenHidden) {
             stop(false);
         }
     } else {
@@ -1397,14 +1566,19 @@ function handleVisibilityChange() {
             go();
         }
     }
-
 }
 
 document.addEventListener("visibilitychange", handleVisibilityChange, false);
 
+function updateDebugButtons() {
+    $("#debug-play").attr("disabled", running);
+    $("#debug-pause").attr("disabled", !running);
+}
+
 function go() {
     audioHandler.unmute();
     running = true;
+    updateDebugButtons();
     run();
 }
 
@@ -1413,23 +1587,24 @@ function stop(debug) {
     processor.stop();
     if (debug) dbgr.debug(processor.pc);
     audioHandler.mute();
+    updateDebugButtons();
 }
 
 (function () {
     const $cubMonitor = $("#cub-monitor");
     const $cubMonitorPic = $("#cub-monitor-pic");
-    const cubOrigHeight = $cubMonitorPic.attr('height');
-    const cubOrigWidth = $cubMonitorPic.attr('width');
-    const cubToScreenHeightRatio = $screen.attr('height') / cubOrigHeight;
-    const cubToScreenWidthRatio = $screen.attr('width') / cubOrigWidth;
-    const navbarHeight = $("#header-bar").height();
+    const cubOrigHeight = $cubMonitorPic.attr("height");
+    const cubOrigWidth = $cubMonitorPic.attr("width");
+    const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
+    const cubToScreenWidthRatio = $screen.attr("width") / cubOrigWidth;
     const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
     const minWidth = cubOrigWidth / 4;
     const minHeight = cubOrigHeight / 4;
-    const borderReservedSize = 100;
-    const bottomReservedSize = 100;
+    const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
+    const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
 
     function resizeTv() {
+        let navbarHeight = $("#header-bar").outerHeight();
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
         if (width / height <= desiredAspectRatio) {
@@ -1443,8 +1618,19 @@ function stop(debug) {
     }
 
     window.onresize = resizeTv;
-    resizeTv();
+    window.setTimeout(resizeTv, 1);
+    window.setTimeout(resizeTv, 500);
 })();
+
+const $infoModal = new bootstrap.Modal(document.getElementById("info"));
+const $ppTosModal = new bootstrap.Modal(document.getElementById("pp-tos"));
+
+if (Object.hasOwn(parsedQuery, "about")) {
+    $infoModal.show();
+}
+if (Object.hasOwn(parsedQuery, "pp-tos")) {
+    $ppTosModal.show();
+}
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
@@ -1458,15 +1644,28 @@ window.soundChip = audioHandler.soundChip;
 window.processor = processor;
 window.video = video;
 window.hd = function (start, end) {
-    console.log(utils.hd(function (x) {
-        return processor.readmem(x);
-    }, start, end));
+    console.log(
+        utils.hd(
+            function (x) {
+                return processor.readmem(x);
+            },
+            start,
+            end,
+        ),
+    );
 };
 window.m7dump = function () {
-    console.log(utils.hd(function (x) {
-        return processor.readmem(x) & 0x7f;
-    }, 0x7c00, 0x7fe8, {width: 40, gap: false}));
+    console.log(
+        utils.hd(
+            function (x) {
+                return processor.readmem(x) & 0x7f;
+            },
+            0x7c00,
+            0x7fe8,
+            { width: 40, gap: false },
+        ),
+    );
 };
 
 // Hooks for electron.
-electron({loadDiscImage, processor});
+electron({ loadDiscImage, processor });

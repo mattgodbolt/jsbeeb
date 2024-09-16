@@ -1,17 +1,17 @@
 "use strict";
-import * as jsunzip from './lib/jsunzip.js';
+import * as jsunzip from "./lib/jsunzip.js";
 
-export const runningInNode = typeof window === 'undefined';
+export const runningInNode = typeof window === "undefined";
 
 export function isFirefox() {
     // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
     // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
-    return typeof InstallTrigger !== 'undefined';   // Firefox 1.0+
+    return typeof InstallTrigger !== "undefined"; // Firefox 1.0+
 }
 
 export function parseAddr(s) {
-    if (s[0] === '$' || s[0] === '&') return parseInt(s.substr(1), 16);
-    if (s.indexOf("0x") === 0) return parseInt(s.substr(2), 16);
+    if (s[0] === "$" || s[0] === "&") return parseInt(s.substring(1), 16);
+    if (s.indexOf("0x") === 0) return parseInt(s.substring(2), 16);
     return parseInt(s, 16);
 }
 
@@ -126,16 +126,15 @@ export const BBC = {
 };
 
 export function stringToBBCKeys(str) {
-    var array = [];
-    var i;
-    var shiftState = false;
-    var capsLockState = true;
-    for (i = 0; i < str.length; ++i) {
-        var c = str.charCodeAt(i);
-        var charStr = str.charAt(i);
-        var bbcKey = null;
-        var needsShift = false;
-        var needsCapsLock = true;
+    const array = [];
+    let shiftState = false;
+    let capsLockState = true;
+    for (let i = 0; i < str.length; ++i) {
+        const c = str.charCodeAt(i);
+        let charStr = str.charAt(i);
+        let bbcKey = null;
+        let needsShift = false;
+        let needsCapsLock = true;
         if (c >= 65 && c <= 90) {
             // A-Z
             bbcKey = BBC[charStr];
@@ -154,88 +153,88 @@ export function stringToBBCKeys(str) {
             needsShift = true;
         } else {
             switch (charStr) {
-                case '\n':
+                case "\n":
                     bbcKey = BBC.RETURN;
                     break;
-                case '\t':
+                case "\t":
                     bbcKey = BBC.TAB;
                     break;
-                case ' ':
+                case " ":
                     bbcKey = BBC.SPACE;
                     break;
-                case '-':
+                case "-":
                     bbcKey = BBC.MINUS;
                     break;
-                case '=':
+                case "=":
                     bbcKey = BBC.MINUS;
                     needsShift = true;
                     break;
-                case '^':
+                case "^":
                     bbcKey = BBC.HAT_TILDE;
                     break;
-                case '~':
+                case "~":
                     bbcKey = BBC.HAT_TILDE;
                     needsShift = true;
                     break;
-                case '\\':
+                case "\\":
                     bbcKey = BBC.PIPE_BACKSLASH;
                     break;
-                case '|':
+                case "|":
                     bbcKey = BBC.PIPE_BACKSLASH;
                     needsShift = true;
                     break;
-                case '@':
+                case "@":
                     bbcKey = BBC.AT;
                     break;
-                case '[':
+                case "[":
                     bbcKey = BBC.LEFT_SQUARE_BRACKET;
                     break;
-                case '{':
+                case "{":
                     bbcKey = BBC.LEFT_SQUARE_BRACKET;
                     needsShift = true;
                     break;
-                case '_':
+                case "_":
                     bbcKey = BBC.UNDERSCORE_POUND;
                     break;
-                case ';':
+                case ";":
                     bbcKey = BBC.SEMICOLON_PLUS;
                     break;
-                case '+':
+                case "+":
                     bbcKey = BBC.SEMICOLON_PLUS;
                     needsShift = true;
                     break;
-                case ':':
+                case ":":
                     bbcKey = BBC.COLON_STAR;
                     break;
-                case '*':
+                case "*":
                     bbcKey = BBC.COLON_STAR;
                     needsShift = true;
                     break;
-                case ']':
+                case "]":
                     bbcKey = BBC.RIGHT_SQUARE_BRACKET;
                     break;
-                case '}':
+                case "}":
                     bbcKey = BBC.RIGHT_SQUARE_BRACKET;
                     needsShift = true;
                     break;
-                case ',':
+                case ",":
                     bbcKey = BBC.COMMA;
                     break;
-                case '<':
+                case "<":
                     bbcKey = BBC.COMMA;
                     needsShift = true;
                     break;
-                case '.':
+                case ".":
                     bbcKey = BBC.PERIOD;
                     break;
-                case '>':
+                case ">":
                     bbcKey = BBC.PERIOD;
                     needsShift = true;
                     break;
-                case '/':
+                case "/":
                     bbcKey = BBC.SLASH;
                     break;
-                case '?':
+                case "?":
                     bbcKey = BBC.SLASH;
                     needsShift = true;
                     break;
@@ -377,9 +376,8 @@ export const keyCodes = {
     ALT_LEFT: 258, // hack, jsbeeb only
     ALT_RIGHT: 259, // hack, jsbeeb only
     CTRL_LEFT: 260, // hack, jsbeeb only
-    CTRL_RIGHT: 261 // hack, jsbeeb only
+    CTRL_RIGHT: 261, // hack, jsbeeb only
 };
-
 
 function detectKeyboardLayout() {
     if (runningInNode) {
@@ -392,10 +390,10 @@ function detectKeyboardLayout() {
         if (navigator.language.toLowerCase() === "en-gb") return "UK";
         if (navigator.language.toLowerCase() === "en-us") return "US";
     }
-    return "UK";  // Default guess of UK
+    return "UK"; // Default guess of UK
 }
 
-var isUKlayout = detectKeyboardLayout() === "UK";
+const isUKlayout = detectKeyboardLayout() === "UK";
 
 if (isFirefox()) {
     keyCodes.SEMICOLON = 59;
@@ -430,7 +428,7 @@ if (!runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
 }
 
 export function getKeyMap(keyLayout) {
-    var keys2 = [];
+    const keys2 = [];
 
     // shift pressed
     keys2[true] = {};
@@ -441,14 +439,18 @@ export function getKeyMap(keyLayout) {
     // shiftDown MUST be true or false (not undefined)
     function doMap(s, colRow, shiftDown) {
         if (keys2[shiftDown][s] && keys2[shiftDown][s] !== colRow) {
-            console.log("Warning: duplicate binding for key", (shiftDown ? "<SHIFT>" : "") + s, colRow, keys2[shiftDown][s]);
+            console.log(
+                "Warning: duplicate binding for key",
+                (shiftDown ? "<SHIFT>" : "") + s,
+                colRow,
+                keys2[shiftDown][s],
+            );
         }
         keys2[shiftDown][s] = colRow;
     }
 
     // shiftDown undefined -> map both
     function map(s, colRow, shiftDown) {
-
         if ((!s && s !== 0) || !colRow) {
             console.log("error binding key", s, colRow);
         }
@@ -525,7 +527,6 @@ export function getKeyMap(keyLayout) {
     map(keyCodes.DOWN, BBC.DOWN);
 
     if (keyLayout === "natural") {
-
         // "natural" keyboard
 
         map(keyCodes.SHIFT_LEFT, BBC.SHIFT);
@@ -590,7 +591,6 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.BACKSPACE, BBC.DELETE);
 
         map(keyCodes.BACKSLASH, BBC.PIPE_BACKSLASH);
-
     } else if (keyLayout === "gaming") {
         // gaming keyboard
 
@@ -729,7 +729,7 @@ export function getKeyMap(keyLayout) {
     // user keymapping
     // do last (to override defaults)
     while (userKeymap.length > 0) {
-        var mapping = userKeymap.pop();
+        const mapping = userKeymap.pop();
         map(keyCodes[mapping.native], BBC[mapping.bbc]);
     }
 
@@ -746,12 +746,12 @@ export function hexword(value) {
 
 export function hd(reader, start, end, opts) {
     opts = opts || {};
-    var width = opts.width || 16;
-    var gap = opts.gap === undefined ? 8 : opts.gap;
-    var res = [];
-    var str = "";
-    var j = 0;
-    for (var i = start; i < end; ++i) {
+    const width = opts.width || 16;
+    const gap = opts.gap === undefined ? 8 : opts.gap;
+    const res = [];
+    let str = "";
+    let j = 0;
+    for (let i = start; i < end; ++i) {
         str += " ";
         str += hexbyte(reader(i));
         if (++j === gap) str += " ";
@@ -762,72 +762,68 @@ export function hd(reader, start, end, opts) {
         }
     }
     if (str) res.push(str);
-    var joined = "";
-    for (i = 0; i < res.length; ++i) {
+    let joined = "";
+    for (let i = 0; i < res.length; ++i) {
         joined += hexword(start + i * width) + " :" + res[i] + "\n";
     }
     return joined;
 }
 
-var signExtendTable = (function () {
-    var table = [];
-    for (var i = 0; i < 256; ++i) table[i] = i >= 128 ? i - 256 : i;
-    return table;
-})();
-
 export function signExtend(val) {
-    return signExtendTable[val | 0] | 0;
+    return val >= 128 ? val - 256 : val;
 }
 
-export function noop() {
-}
+export function noop() {}
 
 export function bench() {
-    for (var j = 0; j < 10; ++j) {
-        var res = 0;
-        var start = Date.now();
-        for (var i = 0; i < 4096 * 1024; ++i) {
+    for (let j = 0; j < 10; ++j) {
+        let res = 0;
+        const start = Date.now();
+        for (let i = 0; i < 4096 * 1024; ++i) {
             res += signExtend(i & 0xff);
         }
-        var tt = Date.now() - start;
+        const tt = Date.now() - start;
         console.log(res, tt);
     }
 }
 
 export function noteEvent(category, type, label) {
-    if (!runningInNode && window.location.origin === "https://bbc.godbolt.org") {
+    if (
+        !runningInNode &&
+        (window.location.host.endsWith(".godbolt.org") || window.location.host.endsWith(".xania.org"))
+    ) {
         // Only note events on the public site
-        /*global ga*/
-        ga('send', 'event', category, type, label);
+        /*global gtag*/
+        gtag("event", category, { type, label });
     }
-    console.log('event noted:', category, type, label);
+    console.log("event noted:", category, type, label);
 }
 
-var baseUrl = "";
+let baseUrl = "";
 
 export function setBaseUrl(url) {
     baseUrl = url;
 }
 
 export function uint8ArrayToString(array) {
-    var str = "";
-    for (var i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
+    let str = "";
+    for (let i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
     return str;
 }
 
 export function stringToUint8Array(str) {
     if (str instanceof Uint8Array) return str;
-    var len = str.length;
-    var array = new Uint8Array(len);
-    for (var i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
+    const len = str.length;
+    const array = new Uint8Array(len);
+    for (let i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
     return array;
 }
 
 function loadDataHttp(url) {
     return new Promise(function (resolve, reject) {
-        var request = new XMLHttpRequest();
+        const request = new XMLHttpRequest();
         request.open("GET", baseUrl + url, true);
-        request.overrideMimeType('text/plain; charset=x-user-defined');
+        request.overrideMimeType("text/plain; charset=x-user-defined");
         request.onload = function () {
             if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));
             if (typeof request.response !== "string") {
@@ -854,8 +850,8 @@ async function loadDataNode(url) {
         return read(url, "binary");
     } else {
         // Node
-        const fs = await import('fs');
-        if (url[0] === '/') url = "." + url;
+        const fs = await import("fs");
+        if (url[0] === "/") url = "." + url;
         return fs.readFileSync(url);
     }
 }
@@ -869,20 +865,16 @@ export function loadData(url) {
 }
 
 export function readInt32(data, offset) {
-    return (data[offset + 3] << 24)
-        | (data[offset + 2] << 16)
-        | (data[offset + 1] << 8)
-        | (data[offset + 0]);
+    return (data[offset + 3] << 24) | (data[offset + 2] << 16) | (data[offset + 1] << 8) | data[offset + 0];
 }
 
 export function readInt16(data, offset) {
-    return (data[offset + 1] << 8)
-        | (data[offset + 0]);
+    return (data[offset + 1] << 8) | data[offset + 0];
 }
 
-var tempBuf = new ArrayBuffer(4);
-var tempBuf8 = new Uint8Array(tempBuf);
-var tempBufF32 = new Float32Array(tempBuf);
+const tempBuf = new ArrayBuffer(4);
+const tempBuf8 = new Uint8Array(tempBuf);
+const tempBufF32 = new Float32Array(tempBuf);
 
 export function readFloat32(data, offset) {
     tempBuf8[0] = data[offset];
@@ -893,13 +885,13 @@ export function readFloat32(data, offset) {
 }
 
 export function ungzip(data) {
-    var tinf = new jsunzip.TINF();
+    const tinf = new jsunzip.TINF();
     tinf.init();
-    var results = [];
+    const results = [];
     while (data.length) {
         if (results.length > 1000) throw new Error("Seems like something went wrong");
         if (data[0] !== 0x1f || data[1] !== 0x8b) throw new Error("Corrupt data");
-        var dataOffset = 10;
+        let dataOffset = 10;
         if (data[3] & 0x02) dataOffset += 2; // Header CRC
         if (data[3] & 0x04) {
             dataOffset += 2 + readInt16(data, dataOffset); // FEXTRA
@@ -912,9 +904,9 @@ export function ungzip(data) {
             while (data[dataOffset] !== 0) dataOffset++; // FCOMMENT
             dataOffset++;
         }
-        var maxDecompressSize = 16384;
-        var result;
-        for (; ;) {
+        let maxDecompressSize = 16384;
+        let result;
+        for (;;) {
             // Loop around trying to decompress this block, doubling in size if we can't fit a block.
             result = tinf.uncompress(data, dataOffset, maxDecompressSize);
             if (result.status !== 0) throw "Unable to ungzip";
@@ -922,14 +914,14 @@ export function ungzip(data) {
             maxDecompressSize *= 2;
         }
         results.push(result.data.subarray(0, result.dataSize));
-        var nextOffset = result.offset + 8; // skip CRC and uncompressed length
+        const nextOffset = result.offset + 8; // skip CRC and uncompressed length
         data = data.subarray(nextOffset);
     }
-    var total = results.reduce(function (prev, cur) {
+    const total = results.reduce(function (prev, cur) {
         return prev + cur.length;
     }, 0);
-    var finalData = new Uint8Array(total);
-    var offset = 0;
+    const finalData = new Uint8Array(total);
+    let offset = 0;
     results.forEach(function (res) {
         finalData.set(res, offset);
         offset += res.length;
@@ -937,84 +929,84 @@ export function ungzip(data) {
     return finalData;
 }
 
-export function DataStream(name_, data_, dontUnzip_) {
-    var self = this;
-    self.name = name_;
-    self.pos = 0;
-    self.data = stringToUint8Array(data_);
-    if (!dontUnzip_ && self.data && self.data.length > 4 && self.data[0] === 0x1f && self.data[1] === 0x8b) {
-        console.log("Ungzipping " + name_);
-        self.data = ungzip(self.data);
+export class DataStream {
+    constructor(name, data, dontUnzip) {
+        this.name = name;
+        this.pos = 0;
+        this.data = stringToUint8Array(data);
+        if (!dontUnzip && this.data && this.data.length > 4 && this.data[0] === 0x1f && this.data[1] === 0x8b) {
+            console.log("Ungzipping " + name);
+            this.data = ungzip(this.data);
+        }
+        if (!this.data) {
+            throw new Error("No data in " + name);
+        }
+        this.end = this.data.length;
     }
-    if (!self.data) {
-        throw new Error("No data in " + name_);
+
+    bytesLeft() {
+        return this.end - this.pos;
     }
 
-    self.end = self.data.length;
+    eof() {
+        return this.bytesLeft() === 0;
+    }
 
-    self.bytesLeft = function () {
-        return self.end - self.pos;
-    };
+    advance(distance) {
+        if (this.bytesLeft() < distance) throw new RangeError("EOF in " + this.name);
+        this.pos += distance;
+        return this.pos - distance;
+    }
 
-    self.eof = function () {
-        return self.bytesLeft() === 0;
-    };
+    readFloat32(pos) {
+        if (pos === undefined) pos = this.advance(4);
+        return readFloat32(this.data, pos);
+    }
 
-    self.advance = function (distance) {
-        if (self.bytesLeft() < distance) throw new RangeError("EOF in " + self.name);
-        self.pos += distance;
-        return self.pos - distance;
-    };
+    readInt32(pos) {
+        if (pos === undefined) pos = this.advance(4);
+        return readInt32(this.data, pos);
+    }
 
-    self.readFloat32 = function (pos) {
-        if (pos === undefined) pos = self.advance(4);
-        return readFloat32(self.data, pos);
-    };
+    readInt16(pos) {
+        if (pos === undefined) pos = this.advance(2);
+        return readInt16(this.data, pos);
+    }
 
-    self.readInt32 = function (pos) {
-        if (pos === undefined) pos = self.advance(4);
-        return readInt32(self.data, pos);
-    };
+    readByte(pos) {
+        if (pos === undefined) pos = this.advance(1);
+        return this.data[pos];
+    }
 
-    self.readInt16 = function (pos) {
-        if (pos === undefined) pos = self.advance(2);
-        return readInt16(self.data, pos);
-    };
-
-    self.readByte = function (pos) {
-        if (pos === undefined) pos = self.advance(1);
-        return self.data[pos];
-    };
-
-    self.readNulString = function (pos, maxLength) {
+    readNulString(pos, maxLength) {
         if (!maxLength) maxLength = 1024;
-        var posToUse = pos === undefined ? self.pos : pos;
-        var result = "";
-        var c;
-        while ((c = self.readByte(posToUse++)) !== 0 && --maxLength) {
+        let posToUse = pos === undefined ? this.pos : pos;
+        let result = "";
+        let c;
+        while ((c = this.readByte(posToUse++)) !== 0 && --maxLength) {
             result += String.fromCharCode(c);
         }
         if (maxLength === 0) return "";
-        if (pos === undefined) self.pos = posToUse;
+        if (pos === undefined) this.pos = posToUse;
         return result;
-    };
+    }
 
-    self.substream = function (posOrLength, length) {
-        var pos;
+    substream(posOrLength, length) {
+        let pos;
         if (length === undefined) {
             length = posOrLength;
-            pos = self.advance(length);
+            pos = this.advance(length);
         } else {
             pos = posOrLength;
-            if (pos + length >= self.end) throw new RangeError("EOF in " + self.name);
+            if (pos + length >= this.end) throw new RangeError("EOF in " + this.name);
         }
-        return new DataStream(self.name + ".sub", self.data.subarray(pos, pos + length));
-    };
+        return new DataStream(this.name + ".sub", this.data.subarray(pos, pos + length));
+    }
 
-    self.seek = function (to) {
-        if (to >= self.end) throw new RangeError("Seek out of range in " + self.name);
-        self.pos = to;
-    };
+    seek(to) {
+        if (to >= this.end) throw new RangeError("Seek out of range in " + this.name);
+        this.pos = to;
+    }
 }
 
 export function makeFast32(u32) {
@@ -1025,27 +1017,28 @@ export function makeFast32(u32) {
     return new Int32Array(u32.buffer);
 }
 
-var knownDiscExtensions = {
-    'uef': true,
-    'ssd': true,
-    'dsd': true
+const knownDiscExtensions = {
+    uef: true,
+    ssd: true,
+    dsd: true,
+    adl: true,
 };
 
-var knownRomExtensions = {
-    'rom': true
+const knownRomExtensions = {
+    rom: true,
 };
 
 function unzipImage(data, knownExtensions) {
-    var unzip = new jsunzip.JSUnzip();
+    const unzip = new jsunzip.JSUnzip();
     console.log("Attempting to unzip");
-    var result = unzip.open(data);
+    const result = unzip.open(data);
     if (!result.status) {
         throw new Error("Error unzipping " + result.error);
     }
-    var uncompressed = null;
-    var loadedFile;
-    for (var f in unzip.files) {
-        var match = f.match(/.*\.([a-z]+)/i);
+    let uncompressed = null;
+    let loadedFile;
+    for (const f in unzip.files) {
+        const match = f.match(/.*\.([a-z]+)/i);
         if (!match || !knownExtensions[match[1].toLowerCase()]) {
             console.log("Skipping file", f);
             continue;
@@ -1064,7 +1057,7 @@ function unzipImage(data, knownExtensions) {
         throw new Error("Failed to uncompress file '" + loadedFile + "' - " + uncompressed.error);
     }
     console.log("Unzipped '" + loadedFile + "'");
-    return {data: uncompressed.data, name: loadedFile};
+    return { data: uncompressed.data, name: loadedFile };
 }
 
 export function unzipDiscImage(data) {
@@ -1081,59 +1074,85 @@ export function discImageSize(name) {
     // - 80 tracks.
     // - 10 sectors per track.
     // - 256 bytes per sector.
-    var isDsd = false;
-    var byteSize = 80 * 10 * 256;
+    let isDsd = false;
+    let isDoubleDensity = false;
+    let byteSize = 80 * 10 * 256;
     // DSD, aka. double-sided disc is twice the size.
-    if (name.toLowerCase().endsWith(".dsd")) {
+    let lowerName = name.toLowerCase();
+    if (lowerName.endsWith(".dsd")) {
         byteSize *= 2;
         isDsd = true;
     }
-    return {isDsd: isDsd, byteSize: byteSize};
+    if (lowerName.endsWith(".adl")) {
+        // ADFS (Large) disks are:
+        // double density, double sided, 80 track, 16 sectors per track, 256 bytes per sector (640K)
+        byteSize = 2 * 80 * 16 * 256;
+        isDsd = true;
+        isDoubleDensity = true;
+    }
+    if (lowerName.endsWith(".adf") || lowerName.endsWith(".adm")) {
+        // ADFS (Small) disks are:
+        // single density, double sided, 80 track, 16 sectors per track, 256 bytes per sector (640K)
+        byteSize = 80 * 16 * 256;
+        isDsd = false;
+        isDoubleDensity = true;
+    }
+    return { isDsd: isDsd, isDoubleDensity: isDoubleDensity, byteSize: byteSize };
 }
 
 export function setDiscName(data, name) {
-    for (var i = 0; i < 8; ++i)
-        data[i] = name.charCodeAt(i) & 0xff;
+    for (let i = 0; i < 8; ++i) data[i] = name.charCodeAt(i) & 0xff;
 }
 
 export function resizeUint8Array(array, byteSize) {
-    var newArray = new Uint8Array(byteSize);
+    const newArray = new Uint8Array(byteSize);
     newArray.set(array.subarray(0, byteSize));
     return newArray;
 }
 
-export function Fifo(capacity) {
-    this.buffer = new Uint8Array(capacity);
-    this.size = 0;
-    this.wPtr = 0;
-    this.rPtr = 0;
+export class Fifo {
+    constructor(capacity) {
+        this._buffer = new Uint8Array(capacity);
+        this._size = 0;
+        this._wPtr = 0;
+        this._rPtr = 0;
+    }
+
+    /** @returns {number} */
+    get size() {
+        return this._size;
+    }
+
+    /** @returns {boolean} */
+    get full() {
+        return this._size === this._buffer.length;
+    }
+
+    /** @returns {boolean} */
+    get empty() {
+        return this._size === 0;
+    }
+
+    clear() {
+        this._size = 0;
+        this._wPtr = 0;
+        this._rPtr = 0;
+    }
+
+    /** @type {Number} b */
+    put(b) {
+        if (this.full) return;
+        this._buffer[this._wPtr % this._buffer.length] = b;
+        this._wPtr++;
+        this._size++;
+    }
+
+    /** @returns {Number} */
+    get() {
+        if (this.empty) return;
+        const res = this._buffer[this._rPtr % this._buffer.length];
+        this._rPtr++;
+        this._size--;
+        return res;
+    }
 }
-
-Fifo.prototype.full = function () {
-    return this.size === this.buffer.length;
-};
-
-Fifo.prototype.empty = function () {
-    return this.size === 0;
-};
-
-Fifo.prototype.clear = function () {
-    this.size = 0;
-    this.wPtr = 0;
-    this.rPtr = 0;
-};
-
-Fifo.prototype.put = function (b) {
-    if (this.full()) return;
-    this.buffer[this.wPtr % this.buffer.length] = b;
-    this.wPtr++;
-    this.size++;
-};
-
-Fifo.prototype.get = function () {
-    if (this.empty()) return;
-    var res = this.buffer[this.rPtr % this.buffer.length];
-    this.rPtr++;
-    this.size--;
-    return res;
-};

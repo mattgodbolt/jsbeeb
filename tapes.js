@@ -1,165 +1,160 @@
 "use strict";
-import * as utils from './utils.js';
+import * as utils from "./utils.js";
 
-function UefTape(stream) {
-    var self = this;
+function secsToClocks(secs) {
+    return (2 * 1000 * 1000 * secs) | 0;
+}
 
-    var dummyData, state, count, curByte, numDataBits, parity;
-    var numParityBits, numStopBits, carrierBefore, carrierAfter;
+function parityOf(curByte) {
+    let parity = false;
+    while (curByte) {
+        parity = !parity;
+        curByte >>>= 1;
+    }
+    return parity;
+}
 
+const ParityN = "N".charCodeAt(0);
 
-    self.rewind = function () {
+class UefTape {
+    constructor(stream) {
+        this.stream = stream;
+        this.baseFrequency = 1200;
+        this.rewind();
 
-        dummyData = [false, false, true, false, true, false, true, false, true, true];
-        state = -1;
-        count = 0;
-        curByte = 0;
-        numDataBits = 8;
-        parity = 'N';
-        numParityBits = 0;
-        numStopBits = 1;
-        carrierBefore = 0;
-        carrierAfter = 0;
+        this.curChunk = this.readChunk();
+    }
 
-        stream.seek(10);
-        var minor = stream.readByte();
-        var major = stream.readByte();
+    rewind() {
+        this.dummyData = [false, false, true, false, true, false, true, false, true, true];
+        this.state = -1;
+        this.count = 0;
+        this.curByte = 0;
+        this.numDataBits = 8;
+        this.parity = ParityN;
+        this.numParityBits = 0;
+        this.numStopBits = 1;
+        this.carrierBefore = 0;
+        this.carrierAfter = 0;
+
+        this.stream.seek(10);
+        const minor = this.stream.readByte();
+        const major = this.stream.readByte();
         if (major !== 0x00) throw "Unsupported UEF version " + major + "." + minor;
-    };
+    }
 
-    self.rewind();
-
-    function readChunk() {
-        var chunkId = stream.readInt16();
-        var length = stream.readInt32();
+    readChunk() {
+        const chunkId = this.stream.readInt16();
+        const length = this.stream.readInt32();
         return {
             id: chunkId,
-            stream: stream.substream(length)
+            stream: this.stream.substream(length),
         };
     }
 
-    var curChunk = readChunk();
-    var baseFrequency = 1200;
-
-    function secsToClocks(secs) {
-        return (2 * 1000 * 1000 * secs) | 0;
-    }
-
-    function cycles(count) {
-        return secsToClocks(count / baseFrequency);
-    }
-
-
-    function parityOf(curByte) {
-        var parity = false;
-        while (curByte) {
-            parity = !parity;
-            curByte >>>= 1;
-        }
-        return parity;
-    }
-
-    self.poll = function (acia) {
-        if (!curChunk) return;
-        if (state === -1) {
-            if (stream.eof()) {
-                curChunk = null;
+    poll(acia) {
+        if (!this.curChunk) return;
+        if (this.state === -1) {
+            if (this.stream.eof()) {
+                this.curChunk = null;
                 return;
             }
-            curChunk = readChunk();
+            this.curChunk = this.readChunk();
         }
 
-        var gap;
-        switch (curChunk.id) {
+        let gap;
+        switch (this.curChunk.id) {
             case 0x0000:
-                console.log("Origin: " + curChunk.stream.readNulString());
+                console.log("Origin: " + this.curChunk.stream.readNulString());
                 break;
             case 0x0100:
                 acia.setTapeCarrier(false);
-                if (state === -1) {
-                    state = 0;
-                    curByte = curChunk.stream.readByte();
-                    acia.tone(baseFrequency); // Start bit
-                } else if (state < 9) {
-                    if (state === 0) {
+                if (this.state === -1) {
+                    this.state = 0;
+                    this.curByte = this.curChunk.stream.readByte();
+                    acia.tone(this.baseFrequency); // Start bit
+                } else if (this.state < 9) {
+                    if (this.state === 0) {
                         // Start bit
-                        acia.tone(baseFrequency);
+                        acia.tone(this.baseFrequency);
                     } else {
-                        acia.tone((curByte & (1 << (state - 1))) ? (2 * baseFrequency) : baseFrequency);
+                        acia.tone(this.curByte & (1 << (this.state - 1)) ? 2 * this.baseFrequency : this.baseFrequency);
                     }
-                    state++;
+                    this.state++;
                 } else {
-                    acia.receive(curByte);
-                    acia.tone(2 * baseFrequency); // Stop bit
-                    if (curChunk.stream.eof()) {
-                        state = -1;
+                    acia.receive(this.curByte);
+                    acia.tone(2 * this.baseFrequency); // Stop bit
+                    if (this.curChunk.stream.eof()) {
+                        this.state = -1;
                     } else {
-                        state = 0;
-                        curByte = curChunk.stream.readByte();
+                        this.state = 0;
+                        this.curByte = this.curChunk.stream.readByte();
                     }
                 }
-                return cycles(1);
+                return this.cycles(1);
             case 0x0104: // Defined data
                 acia.setTapeCarrier(false);
-                if (state === -1) {
-                    numDataBits = curChunk.stream.readByte();
-                    parity = curChunk.stream.readByte();
-                    numStopBits = curChunk.stream.readByte();
-                    numParityBits = parity !== 'N' ? 1 : 0;
-                    console.log("Defined data with " + numDataBits + String.fromCharCode(parity) + numStopBits);
-                    state = 0;
+                if (this.state === -1) {
+                    this.numDataBits = this.curChunk.stream.readByte();
+                    this.parity = this.curChunk.stream.readByte();
+                    this.numStopBits = this.curChunk.stream.readByte();
+                    this.numParityBits = this.parity !== ParityN ? 1 : 0;
+                    console.log(
+                        `Defined data with ${this.numDataBits}${String.fromCharCode(this.parity)}${this.numStopBits}`,
+                    );
+                    this.state = 0;
                 }
-                if (state === 0) {
-                    if (curChunk.stream.eof()) {
-                        state = -1;
+                if (this.state === 0) {
+                    if (this.curChunk.stream.eof()) {
+                        this.state = -1;
                     } else {
-                        curByte = curChunk.stream.readByte() & ((1 << numDataBits) - 1);
-                        acia.tone(baseFrequency); // Start bit
-                        state++;
+                        this.curByte = this.curChunk.stream.readByte() & ((1 << this.numDataBits) - 1);
+                        acia.tone(this.baseFrequency); // Start bit
+                        this.state++;
                     }
-                } else if (state < (1 + numDataBits)) {
-                    acia.tone((curByte & (1 << (state - 1))) ? (2 * baseFrequency) : baseFrequency);
-                    state++;
-                } else if (state < (1 + numDataBits + numParityBits)) {
-                    var bit = parityOf(curByte);
-                    if (parity === 'N') bit = !bit;
-                    acia.tone(bit ? (2 * baseFrequency) : baseFrequency);
-                    state++;
-                } else if (state < (1 + numDataBits + numParityBits + numStopBits)) {
-                    acia.tone(2 * baseFrequency); // Stop bits
-                    state++;
+                } else if (this.state < 1 + this.numDataBits) {
+                    acia.tone(this.curByte & (1 << (this.state - 1)) ? 2 * this.baseFrequency : this.baseFrequency);
+                    this.state++;
+                } else if (this.state < 1 + this.numDataBits + this.numParityBits) {
+                    let bit = parityOf(this.curByte);
+                    if (this.parity === ParityN) bit = !bit;
+                    acia.tone(bit ? 2 * this.baseFrequency : this.baseFrequency);
+                    this.state++;
+                } else if (this.state < 1 + this.numDataBits + this.numParityBits + this.numStopBits) {
+                    acia.tone(2 * this.baseFrequency); // Stop bits
+                    this.state++;
                 } else {
-                    acia.receive(curByte);
-                    state = 0;
+                    acia.receive(this.curByte);
+                    this.state = 0;
                     return 0;
                 }
-                return cycles(1);
+                return this.cycles(1);
             case 0x0111: // Carrier tone with dummy data
-                if (state === -1) {
-                    state = 0;
-                    carrierBefore = curChunk.stream.readInt16();
-                    carrierAfter = curChunk.stream.readInt16();
-                    console.log("Carrier with", carrierBefore, carrierAfter);
+                if (this.state === -1) {
+                    this.state = 0;
+                    this.carrierBefore = this.curChunk.stream.readInt16();
+                    this.carrierAfter = this.curChunk.stream.readInt16();
+                    console.log("Carrier with", this.carrierBefore, this.carrierAfter);
                 }
-                if (state === 0) {
+                if (this.state === 0) {
                     acia.setTapeCarrier(true);
-                    acia.tone(2 * baseFrequency);
-                    carrierBefore--;
-                    if (carrierBefore <= 0) state = 1;
-                } else if (state < 11) {
+                    acia.tone(2 * this.baseFrequency);
+                    this.carrierBefore--;
+                    if (this.carrierBefore <= 0) this.state = 1;
+                } else if (this.state < 11) {
                     acia.setTapeCarrier(false);
-                    acia.tone(dummyData[(state - 1)] ? baseFrequency : (2 * baseFrequency));
-                    if (state === 10) {
+                    acia.tone(this.dummyData[this.state - 1] ? this.baseFrequency : 2 * this.baseFrequency);
+                    if (this.state === 10) {
                         acia.receive(0xaa);
                     }
-                    state++;
+                    this.state++;
                 } else {
                     acia.setTapeCarrier(true);
-                    acia.tone(2 * baseFrequency);
-                    carrierAfter--;
-                    if (carrierAfter <= 0) state = -1;
+                    acia.tone(2 * this.baseFrequency);
+                    this.carrierAfter--;
+                    if (this.carrierAfter <= 0) this.state = -1;
                 }
-                return cycles(1);
+                return this.cycles(1);
             case 0x0114:
                 console.log("Ignoring security cycles");
                 break;
@@ -167,70 +162,73 @@ function UefTape(stream) {
                 console.log("Ignoring polarity change");
                 break;
             case 0x0110: // Carrier tone.
-                if (state === -1) {
-                    state = 0;
-                    count = curChunk.stream.readInt16();
+                if (this.state === -1) {
+                    this.state = 0;
+                    this.count = this.curChunk.stream.readInt16();
                 }
                 acia.setTapeCarrier(true);
-                acia.tone(2 * baseFrequency);
-                count--;
-                if (count <= 0) state = -1;
-                return cycles(1);
+                acia.tone(2 * this.baseFrequency);
+                this.count--;
+                if (this.count <= 0) this.state = -1;
+                return this.cycles(1);
             case 0x0113:
-                baseFrequency = curChunk.stream.readFloat32();
-                console.log("Frequency change ", baseFrequency);
+                this.baseFrequency = this.curChunk.stream.readFloat32();
+                console.log("Frequency change ", this.baseFrequency);
                 break;
             case 0x0112:
                 acia.setTapeCarrier(false);
-                gap = 1 / (2 * curChunk.stream.readInt16() * baseFrequency);
+                gap = 1 / (2 * this.curChunk.stream.readInt16() * this.baseFrequency);
                 console.log("Tape gap of " + gap + "s");
                 acia.tone(0);
                 return secsToClocks(gap);
             case 0x0116:
                 acia.setTapeCarrier(false);
-                gap = curChunk.stream.readFloat32();
+                gap = this.curChunk.stream.readFloat32();
                 console.log("Tape gap of " + gap + "s");
                 acia.tone(0);
                 return secsToClocks(gap);
             default:
-                console.log("Skipping unknown chunk " + utils.hexword(curChunk.id));
-                curChunk = readChunk();
+                console.log("Skipping unknown chunk " + utils.hexword(this.curChunk.id));
+                this.curChunk = this.readChunk();
                 break;
         }
-        return cycles(1);
-    };
+        return this.cycles(1);
+    }
+
+    cycles(count) {
+        return secsToClocks(count / this.baseFrequency);
+    }
 }
 
+const dividerTable = [1, 16, 64, -1];
 
-function TapefileTape(stream) {
-    var self = this;
+class TapefileTape {
+    constructor(stream) {
+        this.count = 0;
+        this.stream = stream;
+    }
 
-    self.count = 0;
-    self.stream = stream;
-
-    var dividerTable = [1, 16, 64, -1];
-
-    function rate(acia) {
-        var bitsPerByte = 9;
+    rate(acia) {
+        let bitsPerByte = 9;
         if (!(acia.cr & 0x80)) {
             bitsPerByte++; // Not totally correct if the AUG is to be believed.
         }
-        var divider = dividerTable[acia.cr & 0x03];
+        const divider = dividerTable[acia.cr & 0x03];
         // http://beebwiki.mdfs.net/index.php/Serial_ULA says the serial rate is ignored
         // for cassette mode.
-        var cpp = (2 * 1000 * 1000) / (19200 / divider);
+        const cpp = (2 * 1000 * 1000) / (19200 / divider);
         return Math.floor(bitsPerByte * cpp);
     }
 
-    self.rewind = function () {
-        stream.seek(10);
-    };
+    rewind() {
+        this.stream.seek(10);
+    }
 
-    self.poll = function (acia) {
-        if (stream.eof()) return 100000;
-        var byte = stream.readByte();
+    poll(acia) {
+        if (this.stream.eof()) return 100000;
+        let byte = this.stream.readByte();
         if (byte === 0xff) {
-            byte = stream.readByte();
+            byte = this.stream.readByte();
             if (byte === 0) {
                 acia.setTapeCarrier(false);
                 return 0;
@@ -243,12 +241,12 @@ function TapefileTape(stream) {
             }
         }
         acia.receive(byte);
-        return rate(acia);
-    };
+        return this.rate(acia);
+    }
 }
 
 export function loadTapeFromData(name, data) {
-    var stream = new utils.DataStream(name, data);
+    const stream = new utils.DataStream(name, data);
     if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
         console.log("Detected a 'tapefile' tape");
         return new TapefileTape(stream);
@@ -261,9 +259,7 @@ export function loadTapeFromData(name, data) {
     return null;
 }
 
-export function loadTape(name) {
+export async function loadTape(name) {
     console.log("Loading tape from " + name);
-    return utils.loadData(name).then(function (data) {
-        return loadTapeFromData(name, data);
-    });
+    return loadTapeFromData(name, await utils.loadData(name));
 }

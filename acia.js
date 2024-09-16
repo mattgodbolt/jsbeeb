@@ -3,64 +3,77 @@
 // http://www.playvectrex.com/designit/lecture/UP12.HTM
 // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
 // http://www.classiccmp.org/dunfield/r/6850.pdf
-export function Acia(cpu, toneGen, scheduler, rs423Handler) {
-    var self = this;
-    self.sr = 0x00;
-    self.cr = 0x00;
-    self.dr = 0x00;
-    self.rs423Handler = rs423Handler;
-    self.rs423Selected = false;
-    self.motorOn = false;
-    self.tapeCarrierCount = 0;
-    self.tapeDcdLineLevel = false;
-    self.hadDcdHigh = false;
 
-    function updateIrq() {
-        if (self.sr & self.cr & 0x80) {
-            cpu.interrupt |= 0x04;
+export class Acia {
+    constructor(cpu, toneGen, scheduler, rs423Handler) {
+        this.cpu = cpu;
+        this.toneGen = toneGen;
+        this.rs423Handler = rs423Handler;
+
+        this.sr = 0x00;
+        this.cr = 0x00;
+        this.dr = 0x00;
+
+        this.rs423Selected = false;
+        this.motorOn = false;
+        this.tapeCarrierCount = 0;
+        this.tapeDcdLineLevel = false;
+        this.hadDcdHigh = false;
+        this.serialReceiveRate = 0;
+        this.serialReceiveCyclesPerByte = 0;
+
+        this.setSerialReceive(19200);
+        this.txCompleteTask = scheduler.newTask(() => {
+            this.sr |= 0x02; // set the TDRE
+        });
+        this.runTapeTask = scheduler.newTask(() => this.runTape());
+        this.runRs423Task = scheduler.newTask(() => this.runRs423());
+    }
+
+    updateIrq() {
+        if (this.sr & this.cr & 0x80) {
+            this.cpu.interrupt |= 0x04;
         } else {
-            cpu.interrupt &= ~0x04;
+            this.cpu.interrupt &= ~0x04;
         }
     }
 
-    self.reset = function () {
+    reset() {
         // TODO: testing on a real beeb seems to suggest that reset also
         // clears CR bits (i.e. things stop working until CR is rewritten
         // with sane value). This disagrees with the datasheet.
         // CTS and DTD are based on external inputs so leave them alone.
-        self.sr &= (0x08 | 0x04);
+        this.sr &= 0x08 | 0x04;
         // Reset clears the transmit register so raise the empty bit.
-        self.sr |= 0x02;
-        self.hadDcdHigh = false;
-        updateIrq();
-    };
+        this.sr |= 0x02;
+        this.hadDcdHigh = false;
+        this.updateIrq();
+    }
 
-    self.reset();
+    tone(freq) {
+        if (!freq) this.toneGen.mute();
+        else this.toneGen.tone(freq);
+    }
 
-    self.tone = function (freq) {
-        if (!freq) toneGen.mute();
-        else toneGen.tone(freq);
-    };
-
-    self.setMotor = function (on) {
-        if (on && !self.motorOn) {
-            runTape();
-        } else if (!on && self.motorOn) {
-            toneGen.mute();
-            self.runTapeTask.cancel();
-            self.setTapeCarrier(false);
+    setMotor(on) {
+        if (on && !this.motorOn) {
+            this.runTape();
+        } else if (!on && this.motorOn) {
+            this.toneGen.mute();
+            this.runTapeTask.cancel();
+            this.setTapeCarrier(false);
         }
-        self.motorOn = on;
-    };
+        this.motorOn = on;
+    }
 
-    self.read = function (addr) {
+    read(addr) {
         if (addr & 1) {
-            self.sr &= ~0xa1;
-            self.hadDcdHigh = false;
-            updateIrq();
-            return self.dr;
+            this.sr &= ~0xa1;
+            this.hadDcdHigh = false;
+            this.updateIrq();
+            return this.dr;
         } else {
-            var result = (self.sr & 0x7f) | (self.sr & self.cr & 0x80);
+            let result = (this.sr & 0x7f) | (this.sr & this.cr & 0x80);
             // MC6850: "A low CTS indicates that there is a Clear-to-Send
             // from the modem. In the high state, the Transmit Data Register
             // Empty bit is inhibited".
@@ -73,78 +86,72 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
             // the Data Register".
             // Testing on a real machine shows that only the Data Register
             // read matters, and clears the "saw DCD high" condition.
-            if (self.hadDcdHigh) {
+            if (this.hadDcdHigh) {
                 result |= 0x04;
             }
 
             return result;
         }
-    };
+    }
 
-    self.write = function (addr, val) {
+    write(addr, val) {
         if (addr & 1) {
-            self.sr &= ~0x02;
+            this.sr &= ~0x02;
             // It's not clear how long this can take; it's when the shift register is loaded.
             // That could be straight away if not already tx-ing, but as we don't really tx,
             // be conservative here.
-            self.txCompleteTask.reschedule(2000);
-            updateIrq();
-            if (self.rs423Selected && self.rs423Handler) self.rs423Handler.onTransmit(val);
+            this.txCompleteTask.reschedule(2000);
+            this.updateIrq();
+            if (this.rs423Selected && this.rs423Handler) this.rs423Handler.onTransmit(val);
         } else {
             if ((val & 0x03) === 0x03) {
                 // According to the 6850 docs writing 3 here doesn't affect any CR bits, but
                 // just resets the device.
-                self.reset();
+                this.reset();
             } else {
-                self.cr = val;
-                self.setSerialReceive(self.serialReceiveRate);
+                this.cr = val;
+                this.setSerialReceive(this.serialReceiveRate);
             }
         }
-    };
+    }
 
-    self.selectRs423 = function (selected) {
-        self.rs423Selected = !!selected;
-        if (self.rs423Selected) {
+    selectRs423(selected) {
+        this.rs423Selected = !!selected;
+        if (this.rs423Selected) {
             // RS423 selected.
             // CTS is always high, meaning not Clear To Send. This is
             // because we don't yet emulate anything on the "other end",
             // so there is nothing to pull CTS low.
-            self.sr |= 0x08;
+            this.sr |= 0x08;
         } else {
             // Cassette selected.
             // CTS is always low, meaning actually Clear To Send.
-            self.sr &= ~0x08;
+            this.sr &= ~0x08;
         }
-        self.dcdLineUpdated();
-        self.runRs423Task.ensureScheduled(self.rs423Selected, self.serialReceiveCyclesPerByte);
-    };
+        this.dcdLineUpdated();
+        this.runRs423Task.ensureScheduled(this.rs423Selected, this.serialReceiveCyclesPerByte);
+    }
 
-    self.dcdLineUpdated = function () {
-        var level;
-        if (self.rs423Selected) {
-            // AUG: "It will always be low when the RS423 interface is
-            // selected".
-            level = false;
-        } else {
-            level = self.tapeDcdLineLevel;
-        }
+    dcdLineUpdated() {
+        // AUG: "It will always be low when the RS423 interface is selected".
+        const level = this.rs423Selected ? false : this.tapeDcdLineLevel;
 
-        if (level && !(self.sr & 0x04)) {
+        if (level && !(this.sr & 0x04)) {
             // DCD interrupts on low -> high level change.
-            self.sr |= 0x84;
-            self.hadDcdHigh = true;
-        } else if (!level && (self.sr & 0x04)) {
-            self.sr &= ~0x04;
+            this.sr |= 0x84;
+            this.hadDcdHigh = true;
+        } else if (!level && this.sr & 0x04) {
+            this.sr &= ~0x04;
         }
-        updateIrq();
-    };
+        this.updateIrq();
+    }
 
-    self.setTapeCarrier = function (level) {
+    setTapeCarrier(level) {
         if (!level) {
-            self.tapeCarrierCount = 0;
-            self.tapeDcdLineLevel = false;
+            this.tapeCarrierCount = 0;
+            this.tapeDcdLineLevel = false;
         } else {
-            self.tapeCarrierCount++;
+            this.tapeCarrierCount++;
             // The tape hardware doesn't raise DCD until the carrier tone
             // has persisted for a while. The BBC service manual opines,
             // "The DCD flag in the 6850 should change 0.1 to 0.4 seconds
@@ -154,54 +161,47 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
             // Testing on real hardware, DCD is blipped, it lowers about
             // 210us after it raises, even though the carrier tone
             // may be continuing.
-            if (self.tapeCarrierCount === 209) {
-                self.tapeDcdLineLevel = true;
-            } else {
-                self.tapeDcdLineLevel = false;
-            }
+            this.tapeDcdLineLevel = this.tapeCarrierCount === 209;
         }
-        self.dcdLineUpdated();
-    };
+        this.dcdLineUpdated();
+    }
 
-    self.receive = function (byte) {
+    receive(byte) {
         byte |= 0;
-        if (self.sr & 0x01) {
+        if (this.sr & 0x01) {
             // Overrun.
             // TODO: this doesn't match the datasheet:
             // "The Overrun does not occur in the Status Register until the
             // valid character prior to Overrun has been read."
             console.log("Serial overrun");
-            self.sr |= 0xa0;
+            this.sr |= 0xa0;
         } else {
             // If bit 7 contains parity, mask it off.
-            self.dr = byte & ((self.cr & 0x10) ? 0xff : 0x7f);
-            self.sr |= 0x81;
+            this.dr = byte & (this.cr & 0x10 ? 0xff : 0x7f);
+            this.sr |= 0x81;
         }
-        updateIrq();
-    };
+        this.updateIrq();
+    }
 
-    self.setTape = function (tape) {
-        self.tape = tape;
-    };
+    setTape(tape) {
+        this.tape = tape;
+    }
 
-    self.rewindTape = function () {
-        if (self.tape) {
+    rewindTape() {
+        if (this.tape) {
             console.log("rewinding tape");
-            self.tape.rewind();
+            this.tape.rewind();
         }
-    };
+    }
 
-    self.secondsToCycles = function (sec) {
+    secondsToCycles(sec) {
         return Math.floor(2 * 1000 * 1000 * sec) | 0;
-    };
+    }
 
-    self.serialReceiveRate = 0;
-    self.serialReceiveCyclesPerByte = 0;
-
-    self.numBitsPerByte = function () {
-        var wordLength = (self.cr & 0x10) ? 8 : 7;
-        var stopBits, parityBits;
-        switch ((self.cr >>> 2) & 7) {
+    numBitsPerByte() {
+        const wordLength = this.cr & 0x10 ? 8 : 7;
+        let stopBits, parityBits;
+        switch ((this.cr >>> 2) & 7) {
             case 0:
                 stopBits = 2;
                 parityBits = 1;
@@ -236,37 +236,26 @@ export function Acia(cpu, toneGen, scheduler, rs423Handler) {
                 break;
         }
         return wordLength + stopBits + parityBits;
-    };
+    }
 
-    self.rts = function () {
+    rts() {
         // True iff CR6 = 0 or CR5 and CR6 are both 1.
-        if ((self.cr & 0x40) === 0) return true;
-        if ((self.cr & 0x60) === 0x60) return true;
-        return false;
-    };
-
-    self.setSerialReceive = function (rate) {
-        self.serialReceiveRate = rate;
-        self.serialReceiveCyclesPerByte = self.secondsToCycles(self.numBitsPerByte() / rate);
-    };
-    self.setSerialReceive(19200);
-
-    self.txCompleteTask = scheduler.newTask(function () {
-        self.sr |= 0x02; // set the TDRE
-    });
-
-    function runTape() {
-        if (self.tape) self.runTapeTask.reschedule(self.tape.poll(self));
+        return (this.cr & 0x40) === 0 || (this.cr & 0x60) === 0x60;
     }
 
-    self.runTapeTask = scheduler.newTask(runTape);
-
-    function runRs423() {
-        if (!rs423Handler) return;
-        var rcv = self.rs423Handler.tryReceive(self.rts());
-        if (rcv >= 0) self.receive(rcv);
-        self.runRs423Task.reschedule(self.serialReceiveCyclesPerByte);
+    setSerialReceive(rate) {
+        this.serialReceiveRate = rate;
+        this.serialReceiveCyclesPerByte = this.secondsToCycles(this.numBitsPerByte() / rate);
     }
 
-    self.runRs423Task = scheduler.newTask(runRs423);
+    runTape() {
+        if (this.tape) this.runTapeTask.reschedule(this.tape.poll(this));
+    }
+
+    runRs423() {
+        if (!this.rs423Handler) return;
+        const rcv = this.rs423Handler.tryReceive(this.rts());
+        if (rcv >= 0) this.receive(rcv);
+        this.runRs423Task.reschedule(this.serialReceiveCyclesPerByte);
+    }
 }
