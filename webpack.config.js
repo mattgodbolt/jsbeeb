@@ -73,9 +73,16 @@ export default {
     output: {
         filename: isDev ? "[name].js" : `[name].[contenthash].js`,
         path: outputPath,
+        publicPath: "/",
     },
     devtool: "source-map",
     plugins: getPlugins(),
+    resolve: {
+        alias: {
+            "audio-worklet": path.resolve(__dirname, "web/audio-worklet.js"),
+        },
+        fallback: { path: false },
+    },
     devServer: {
         hot: isDev,
         static: {
@@ -88,6 +95,11 @@ export default {
     },
     optimization: getOptimizationSettings(),
     module: {
+        parser: {
+            javascript: {
+                worker: ["AudioWorklet from audio-worklet", "..."],
+            },
+        },
         rules: [
             {
                 test: /\.less$/,
