@@ -350,6 +350,7 @@ class Via {
     }
 
     recalculatePortBPins() {
+        const prevPb6 = !!(this.portbpins & 0x40);
         this.portbpins = this.orb & this.ddrb;
         const buttons = this.getJoysticks();
 
@@ -363,6 +364,21 @@ class Via {
 
         this.portbpins |= ~this.ddrb & 0xff;
         this.drivePortB();
+        if (prevPb6 && !(this.portbpins & 0x40)) {
+            // If we see a high to low transition on pb6, and we are in timer2 pulse counting mode, count a pulse.
+            if (this.acr & 0x20) {
+                this.t2c -= 2;
+                // Not clear what happens here. Docs say:
+                // "When the T2 counter reaches a count of zero, IFR5 is set and the counter continues to decrement with
+                // each pulse on PB6. To enable IFR5 for subsequent countdowns, it is necessary to reload high order T2
+                // counter."
+                if (this.t2c < 0) {
+                    this.t2c = 0xffff;
+                    this.ifr |= TIMER2INT;
+                    this.updateIFR();
+                }
+            }
+        }
         this.portBUpdated();
     }
 

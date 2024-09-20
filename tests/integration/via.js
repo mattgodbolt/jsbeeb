@@ -19,7 +19,7 @@ const resultAddress = 0x100;
 function expectArray(testMachine, array) {
     let addr = resultAddress;
     for (const expected of array) {
-        assert.equal(testMachine.readbyte(addr), expected);
+        assert.equal(testMachine.readbyte(addr), expected, `mismatch at 0x${addr.toString(16)}`);
         addr++;
     }
 }
@@ -1063,4 +1063,63 @@ PRINT ?(R%)
 PRINT ?(R%+1)`);
         expectArray(testMachine, [251, 249]);
     });
+
+    // @tom-seddon reported this one:
+    it("T.VIA.PB6 - VIA T2 doesn't count manually-induced PB6 pulses", async function () {
+        const testMachine = await runViaProgram(`
+REM DISABLE IRQS
+N%=0
+R%=${resultAddress}
+?&FE6E=&7F
+?&FE6D=&7F
+:
+REM T2 PULSE COUNTING MODE
+?&FE6B=?&FE6B OR&20
+:
+REM RESET T2
+?&FE68=100
+?&FE69=0
+:
+REM PB OUTPUTS
+:
+PROCP
+PRINT"TOGGLE IN OUTPUT MODE"
+?&FE62=0
+?&FE6F=&40
+PROCP
+?&FE62=&FF
+PROCP
+?&FE6F=&40
+PROCP
+?&FE6F=&00
+PROCP
+PRINT"TOGGLE VIA DDRB"
+?&FE62=0
+PROCP
+?&FE62=&FF
+PROCP
+?&FE62=0
+PROCP
+END
+:
+DEFPROCP:LOCALT2%
+T2%=?&FE69*256+?&FE68
+R%!N%=T2%
+N%=N%+2
+PRINT"T2=";T2%" (&";~T2%")"
+ENDPROC`);
+        // Expected output:
+        // T2=100 (&64)
+        // TOGGLE IN OUTPUT MODE
+        // T2=100 (&64)
+        // T2=99 (&63)
+        // T2=99 (&63)
+        // T2=99 (&63)
+        // TOGGLE VIA DDRB
+        // T2=99 (&63)
+        // T2=98 (&62)
+        // T2=98 (&62)
+        expectArray(testMachine, [100, 0, 100, 0, 99, 0, 99, 0, 99, 0, 99, 0, 98, 0, 98, 0]);
+    });
+    // TODO: write more pb6 pulse tests, e.g. interrupt behaviour and underflow, and run on a real bbc.
 });
