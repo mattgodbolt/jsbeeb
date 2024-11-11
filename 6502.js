@@ -1072,34 +1072,24 @@ export class Cpu6502 extends Base6502 {
         if (/\.zip/i.test(name)) {
             data = utils.unzipRomImage(data).data;
         }
-        const len = data.length;
-        if (len !== 16384 && len !== 8192) {
-            throw new Error("Broken rom file");
-        }
-        for (let i = 0; i < len; ++i) {
-            ramRomOs[offset + i] = data[i];
-        }
+        ramRomOs.set(data, offset);
     }
 
     async loadOs(os) {
         const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
         os = "roms/" + os;
-        console.log("Loading OS from " + os);
+        console.log(`Loading OS from ${os}`);
         const ramRomOs = this.ramRomOs;
         const data = await utils.loadData(os);
         const len = data.length;
-        if (len < 16384 || len & 16383) throw new Error("Broken ROM file (length=" + len + ")");
-        for (let i = 0; i < 16384; ++i) {
-            ramRomOs[this.osOffset + i] = data[i];
-        }
+        if (len < 16384 || len & 16383) throw new Error(`Broken OS ROM file (length=${len})`);
+        ramRomOs.set(data, this.osOffset);
         const numExtraBanks = (len - 16384) / 16384;
         let romIndex = 16 - numExtraBanks;
         for (let i_1 = 0; i_1 < numExtraBanks; ++i_1) {
             const srcBase = 16384 + 16384 * i_1;
             const destBase = this.romOffset + (romIndex + i_1) * 16384;
-            for (let j = 0; j < 16384; ++j) {
-                ramRomOs[destBase + j] = data[srcBase + j];
-            }
+            ramRomOs.set(data.subarray(srcBase, srcBase + 16384), destBase);
         }
         const awaiting = [];
         for (let i_2 = 0; i_2 < extraRoms.length; ++i_2) {
