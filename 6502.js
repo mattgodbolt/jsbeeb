@@ -735,12 +735,13 @@ export class Cpu6502 extends Base6502 {
     }
 
     handleEconetStationId() {
+        if (!this.econet) return 0xff;
         this.econet.econetNMIEnabled = false;
         return this.econet.stationId;
     }
 
     handleEconetNMIEnable() {
-        if (!this.econet.econetNMIEnabled) {
+        if (this.econet && !this.econet.econetNMIEnabled) {
             // was off
             this.econet.econetNMIEnabled = true;
             if (this.econet.ADLC.status1 & 128) {
