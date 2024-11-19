@@ -25,23 +25,21 @@ class ADLC {
 }
 
 export class EconetPacket {
-    constructor() {
-        if (arguments.length > 0) {
-            this.buffer = new Uint8Array(32 * 1024);
-            this.bytesInBuffer = arguments.length;
-            this.pointer = 0;
-
-            // Populate packet contents from arguments
-            for (let i = 0; i < arguments.length; i++) {
-                this.buffer[i] = arguments[i];
-            }
-        } else {
-            this.buffer = new Uint8Array(32 * 1024);
-            this.bytesInBuffer = 0;
-            this.pointer = 0;
-        }
+    constructor(...values) {
+        this.buffer = new Uint8Array(32 * 1024);
+        this.pointer = 0;
+        this.bytesInBuffer = values.length;
         this.controlFlag = 0;
         this.port = 0;
+
+        // Populate packet contents from values
+        for (let i = 0; i < values.length; i++) {
+            this.buffer[i] = values[i];
+        }
+    }
+
+    get full() {
+        return this.pointer >= this.buffer.length;
     }
 }
 
@@ -367,7 +365,7 @@ export class Econet {
                 let TXlast = false;
                 if (this.ADLC.txftl & this.powers[this.ADLC.txfptr - 1]) TXlast = true; // TxLast set
                 if (
-                    this.beebTx.pointer > 32768 || // overflow IP buffer
+                    this.beebTx.full || // overflow IP buffer
                     this.ADLC.txfptr > 4
                 ) {
                     // overflowed fifo
