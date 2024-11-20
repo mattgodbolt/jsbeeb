@@ -312,23 +312,6 @@ class Via {
                     temp |= this.t1_pb7 << 7;
                 }
 
-                const buttons = this.getJoysticks();
-
-                // clear PB4 and PB5
-                temp = temp & 0xcf; // 11001111
-
-                // AUG p418
-                // PB4 and PB5 inputs
-                // These are the inputs from the joystick FIRE buttons. They are
-                // normally at logic 1 with no button pressed and change to 0
-                // when a button is pressed
-                if (!buttons.button1) {
-                    temp |= 1 << 4;
-                }
-                if (!buttons.button2) {
-                    temp |= 1 << 5;
-                }
-
                 return temp;
             }
             case DDRA:
@@ -385,7 +368,7 @@ class Via {
     portBUpdated() {}
 
     getJoysticks() {
-        return { button1: false, button2: false };
+        return { button1: true, button2: true };
     }
 
     recalculatePortAPins() {
@@ -396,9 +379,35 @@ class Via {
     }
 
     recalculatePortBPins() {
+        const prevPb6 = !!(this.portbpins & 0x40);
         this.portbpins = this.orb & this.ddrb;
+        const buttons = this.getJoysticks();
+
+        // AUG p418
+        // ### PB4 and PB5 inputs
+        // These are the inputs from the joystick FIRE buttons. They are
+        // normally at logic 1 with no button pressed and change to 0 when a
+        // button is pressed
+        if (!buttons.button1) this.portbpins |= 1 << 4;
+        if (!buttons.button2) this.portbpins |= 1 << 5;
+
         this.portbpins |= ~this.ddrb & 0xff;
         this.drivePortB();
+        if (prevPb6 && !(this.portbpins & 0x40)) {
+            // If we see a high to low transition on pb6, and we are in timer2 pulse counting mode, count a pulse.
+            if (this.acr & 0x20) {
+                this.t2c -= 2;
+                // Not clear what happens here. Docs say:
+                // "When the T2 counter reaches a count of zero, IFR5 is set and the counter continues to decrement with
+                // each pulse on PB6. To enable IFR5 for subsequent countdowns, it is necessary to reload high order T2
+                // counter."
+                if (this.t2c < 0) {
+                    this.t2c = 0xffff;
+                    this.ifr |= TIMER2INT;
+                    this.updateIFR();
+                }
+            }
+        }
         this.portBUpdated();
     }
 

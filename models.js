@@ -2,13 +2,20 @@
 
 import { NoiseAwareWdFdc } from "./wd-fdc.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
+import * as opcodes from "./6502.opcodes.js";
+
+const CpuModel = Object.freeze({
+    MOS6502: 0,
+    CMOS65C02: 1,
+    CMOS65C12: 2,
+});
 
 class Model {
-    constructor(name, synonyms, os, nmos, isMaster, swram, fdc, tube, cmosOverride) {
+    constructor(name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
-        this.nmos = nmos;
+        this._cpuModel = cpuModel;
         this.isMaster = isMaster;
         this.Fdc = fdc;
         this.swram = swram;
@@ -16,16 +23,34 @@ class Model {
         this.tube = tube;
         this.cmosOverride = cmosOverride;
     }
+
+    get nmos() {
+        return this._cpuModel === CpuModel.MOS6502;
+    }
+
+    get opcodesFactory() {
+        switch (this._cpuModel) {
+            case CpuModel.MOS6502:
+                return opcodes.Cpu6502;
+            case CpuModel.CMOS65C02:
+                return opcodes.Cpu65c02;
+            case CpuModel.CMOS65C12:
+                return opcodes.Cpu65c12;
+        }
+        throw new Error("Unknown CPU model");
+    }
 }
 
 function pickAdfs(cmos) {
     cmos[19] = (cmos[19] & 0xf0) | 13;
     return cmos;
 }
+
 function pickAnfs(cmos) {
     cmos[19] = (cmos[19] & 0xf0) | 8;
     return cmos;
 }
+
 function pickDfs(cmos) {
     cmos[19] = (cmos[19] & 0xf0) | 9;
     return cmos;
@@ -74,7 +99,7 @@ export const allModels = [
         "BBC B with DFS 1.2",
         ["B-DFS1.2"],
         ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
-        true,
+        CpuModel.MOS6502,
         false,
         beebSwram,
         NoiseAwareIntelFdc,
@@ -83,7 +108,7 @@ export const allModels = [
         "BBC B with DFS 0.9",
         ["B-DFS0.9", "B"],
         ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
-        true,
+        CpuModel.MOS6502,
         false,
         beebSwram,
         NoiseAwareIntelFdc,
@@ -92,7 +117,7 @@ export const allModels = [
         "BBC B with 1770 (DFS)",
         ["B1770"],
         ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
-        true,
+        CpuModel.MOS6502,
         false,
         beebSwram,
         NoiseAwareWdFdc,
@@ -102,7 +127,7 @@ export const allModels = [
         "BBC B with 1770 (ADFS)",
         ["B1770A"],
         ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
-        true,
+        CpuModel.MOS6502,
         false,
         beebSwram,
         NoiseAwareWdFdc,
@@ -111,7 +136,7 @@ export const allModels = [
         "BBC Master 128 (DFS)",
         ["Master"],
         ["master/mos3.20"],
-        false,
+        CpuModel.CMOS65C12,
         true,
         masterSwram,
         NoiseAwareWdFdc,
@@ -122,7 +147,7 @@ export const allModels = [
         "BBC Master 128 (ADFS)",
         ["MasterADFS"],
         ["master/mos3.20"],
-        false,
+        CpuModel.CMOS65C12,
         true,
         masterSwram,
         NoiseAwareWdFdc,
@@ -133,14 +158,14 @@ export const allModels = [
         "BBC Master 128 (ANFS)",
         ["MasterANFS"],
         ["master/mos3.20"],
-        false,
+        CpuModel.CMOS65C12,
         true,
         masterSwram,
         NoiseAwareWdFdc,
         null,
         pickAnfs,
     ),
-    new Model("Tube65C02", [], ["tube/6502Tube.rom"], false, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
+    new Model("Tube65C02", [], ["tube/6502Tube.rom"], CpuModel.CMOS65C02, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
 ];
 
 export function findModel(name) {
@@ -155,16 +180,18 @@ export function findModel(name) {
     return null;
 }
 
-export const TEST_6502 = new Model("TEST", ["TEST"], [], true, false, beebSwram, NoiseAwareIntelFdc);
+export const TEST_6502 = new Model("TEST", ["TEST"], [], CpuModel.MOS6502, false, beebSwram, NoiseAwareIntelFdc);
 TEST_6502.isTest = true;
-export const TEST_65C12 = new Model("TEST", ["TEST"], [], false, false, masterSwram, NoiseAwareIntelFdc);
+export const TEST_65C02 = new Model("TEST", ["TEST"], [], CpuModel.CMOS65C02, false, masterSwram, NoiseAwareIntelFdc);
+TEST_65C02.isTest = true;
+export const TEST_65C12 = new Model("TEST", ["TEST"], [], CpuModel.CMOS65C12, false, masterSwram, NoiseAwareIntelFdc);
 TEST_65C12.isTest = true;
 
 export const basicOnly = new Model(
     "Basic only",
     ["Basic only"],
     ["master/mos3.20"],
-    false,
+    CpuModel.CMOS65C12,
     true,
     masterSwram,
     NoiseAwareWdFdc,

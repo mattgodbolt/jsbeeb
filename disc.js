@@ -538,8 +538,6 @@ export function loadSsd(disc, data, isDsd, onChange) {
 
     let offset = 0;
     for (let track = 0; track < SsdFormat.tracksPerDisc; ++track) {
-        if (offset >= data.length) break;
-
         for (let side = 0; side < numSides; ++side) {
             const trackBuilder = disc.buildTrack(side === 1, track);
             // Sync pattern at start of track, as the index pulse starts, aka GAP 5.

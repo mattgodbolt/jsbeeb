@@ -1,8 +1,7 @@
-import { describe, it } from "mocha";
-import { TestMachine } from "./test-machine.js";
+import { describe, it } from "vitest";
+import { TestMachine } from "../test-machine.js";
 
-describe("test Kevin Edwards' gnarly protection system", function () {
-    this.timeout(10000);
+describe("test Kevin Edwards' gnarly protection system", { timeout: 10000 }, function () {
     const doTest = async (name) => {
         const testMachine = new TestMachine();
         await testMachine.initialise();

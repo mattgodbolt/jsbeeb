@@ -1,10 +1,9 @@
-import { describe, it } from "mocha";
+import { describe, it } from "vitest";
 import assert from "assert";
 import * as utils from "../../utils.js";
-import { TestMachine } from "./test-machine.js";
+import { TestMachine } from "../test-machine.js";
 
-describe("test various NOP timings", function () {
-    this.timeout(30000);
+describe("test various NOP timings", { timeout: 30000 }, function () {
     it("should match the nops.bas code", async () => {
         const testMachine = new TestMachine("Master");
         await testMachine.initialise();

@@ -1,17 +1,16 @@
-import * as fdc from "../../fdc.js";
-import { fake6502 } from "../../fake6502.js";
-import { findModel } from "../../models.js";
-import { FakeVideo } from "../../video.js";
+import * as fdc from "../fdc.js";
+import { fake6502 } from "../fake6502.js";
+import { findModel } from "../models.js";
 import assert from "assert";
-import * as utils from "../../utils.js";
-import * as Tokeniser from "../../basic-tokenise.js";
+import * as utils from "../utils.js";
+import * as Tokeniser from "../basic-tokenise.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 
 export class TestMachine {
-    constructor(model) {
+    constructor(model, opts) {
         model = model || "B-DFS1.2";
-        this.processor = fake6502(findModel(model), { video: new FakeVideo() });
+        this.processor = fake6502(findModel(model), opts || {});
     }
 
     async initialise() {
@@ -36,6 +35,20 @@ export class TestMachine {
             };
             runAnIter();
         });
+    }
+
+    async runUntilVblank() {
+        let hit = false;
+        if (this.processor.isMaster) throw new Error("Not yet implemented");
+        const hook = this.processor.debugInstruction.add((addr) => {
+            if (addr === 0xdd15) {
+                hit = true;
+                return true;
+            }
+        });
+        await this.runFor(10 * 1000 * 1000);
+        hook.remove();
+        assert(hit, "did not hit appropriate breakpoint in time");
     }
 
     async runUntilInput(secs) {
@@ -106,15 +119,36 @@ export class TestMachine {
 
         const typeChar = (ch) => {
             let shift = false;
-            if (ch === '"') {
-                ch = 50;
-                shift = true;
-            } else if (ch === "*") {
-                ch = utils.keyCodes.APOSTROPHE;
-                shift = true;
-            } else if (ch === ".") {
-                ch = utils.keyCodes.PERIOD;
-            } else ch = ch.toUpperCase().charCodeAt(0);
+            switch (ch) {
+                case '"':
+                    ch = 50;
+                    shift = true;
+                    break;
+                case "*":
+                    ch = utils.keyCodes.APOSTROPHE;
+                    shift = true;
+                    break;
+                case "!":
+                    ch = utils.keyCodes.K1;
+                    shift = true;
+                    break;
+                case ".":
+                    ch = utils.keyCodes.PERIOD;
+                    break;
+                case ";":
+                    ch = utils.keyCodes.SEMICOLON;
+                    break;
+                case ",":
+                    ch = utils.keyCodes.COMMA;
+                    break;
+                case "&":
+                    ch = utils.keyCodes.K6;
+                    shift = true;
+                    break;
+                default:
+                    ch = ch.toUpperCase().charCodeAt(0);
+                    break;
+            }
             if (shift) {
                 this.processor.sysvia.keyDown(16);
                 return this.runFor(cycles).then(() => {
