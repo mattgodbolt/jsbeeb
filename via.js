@@ -86,7 +86,8 @@ class Via {
     }
 
     _catchUp() {
-        this._polltime(this.scheduler.epoch - this.lastPolltime);
+        const cycles = this.scheduler.epoch - this.lastPolltime;
+        if (cycles) this._polltime(cycles);
         this.lastPolltime = this.scheduler.epoch;
         this.updateNextTime();
     }
