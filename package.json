@@ -19,6 +19,7 @@
     "bootstrap": "^5.3.3",
     "bootswatch": "^5.3.3",
     "jquery": "^3.7.1",
+    "smoothie": "^1.36.1",
     "underscore": "^1.13.7"
   },
   "devDependencies": {

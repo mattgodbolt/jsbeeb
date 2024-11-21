@@ -1,10 +1,13 @@
 "use strict";
 import * as utils from "./utils.js";
 
-export function SoundChip(sampleRate) {
-    const cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here
+export function SoundChip(onBuffer) {
+    this._onBuffer = onBuffer;
     // 4MHz input signal. Internal divide-by-8
     const soundchipFreq = 4000000.0 / 8;
+    const sampleRate = soundchipFreq;
+    this.sampleRate = sampleRate;
+    this.bufferSize = 1024;
     // Square wave changes every time a counter hits zero. Thus a full wave
     // needs to be 2x counter zeros.
     const waveDecrementPerSecond = soundchipFreq / 2;
@@ -12,7 +15,7 @@ export function SoundChip(sampleRate) {
     // we generate a sample, we need to decrement the counters by this amount:
     const sampleDecrement = waveDecrementPerSecond / sampleRate;
     // How many samples are generated per CPU cycle.
-    const samplesPerCycle = sampleRate * cpuFreq;
+    const samplesPerCycle = sampleRate / 2000000;
     const minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
     const register = [0, 0, 0, 0];
@@ -52,12 +55,12 @@ export function SoundChip(sampleRate) {
     }
 
     this.toneGenerator = {
-        mute: function () {
-            catchUp();
+        mute: () => {
+            this.flush();
             sineOn = false;
         },
-        tone: function (freq) {
-            catchUp();
+        tone: (freq) => {
+            this.flush();
             sineOn = true;
             sineStep = (freq / sampleRate) * sineTableSize;
         },
@@ -127,7 +130,7 @@ export function SoundChip(sampleRate) {
     }
 
     this.debugPokeAll = (c0, v0, c1, v1, c2, v2, c3, v3) => {
-        catchUp();
+        this.flush();
         this.registers[0] = c0 & 0xffffff;
         this.registers[1] = c1 & 0xffffff;
         this.registers[2] = c2 & 0xffffff;
@@ -156,13 +159,13 @@ export function SoundChip(sampleRate) {
     let scheduler = { epoch: 0 };
     let lastRunEpoch = 0;
 
-    function catchUp() {
+    this.flush = () => {
         const cyclesPending = scheduler.epoch - lastRunEpoch;
         if (cyclesPending > 0) {
-            advance(cyclesPending);
+            this.advance(cyclesPending);
         }
         lastRunEpoch = scheduler.epoch;
-    }
+    };
 
     let activeTask = null;
     this.setScheduler = function (scheduler_) {
@@ -171,7 +174,7 @@ export function SoundChip(sampleRate) {
         activeTask = scheduler.newTask(
             function () {
                 if (this.active) {
-                    poke(this.slowDataBus);
+                    this.poke(this.slowDataBus);
                 }
             }.bind(this),
         );
@@ -179,47 +182,32 @@ export function SoundChip(sampleRate) {
 
     let residual = 0;
     let position = 0;
-    const maxBufferSize = 4096;
-    let buffer;
-    if (typeof Float64Array !== "undefined") {
-        buffer = new Float64Array(maxBufferSize);
-    } else {
-        buffer = new Float32Array(maxBufferSize);
-    }
+    let maxBufferSize = this.bufferSize;
+    let buffer = new Float32Array(maxBufferSize);
 
-    function render(out, offset, length) {
-        catchUp();
-        const fromBuffer = position > length ? length : position;
-        for (let i = 0; i < fromBuffer; ++i) {
-            out[offset + i] = buffer[i];
-        }
-        offset += fromBuffer;
-        length -= fromBuffer;
-        for (let i = fromBuffer; i < position; ++i) {
-            buffer[i - fromBuffer] = buffer[i];
-        }
-        position -= fromBuffer;
-        if (length !== 0) {
-            generate(out, offset, length);
-        }
-    }
+    this.advance = (cycles) => {
+        const numToGenerate = cycles * samplesPerCycle + residual;
+        let rounded = numToGenerate | 0;
+        residual = numToGenerate - rounded;
+        while (rounded > 0) {
+            const leftInBuffer = maxBufferSize - position;
+            const numSamplesToGenerate = Math.min(rounded, leftInBuffer);
+            generate(buffer, position, numSamplesToGenerate);
+            position += numSamplesToGenerate;
+            rounded -= numSamplesToGenerate;
 
-    function advance(time) {
-        const num = time * samplesPerCycle + residual;
-        let rounded = num | 0;
-        residual = num - rounded;
-        if (position + rounded >= maxBufferSize) {
-            rounded = maxBufferSize - position;
+            if (position === maxBufferSize) {
+                this._onBuffer(buffer);
+                buffer = new Float32Array(maxBufferSize);
+                position = 0;
+            }
         }
-        if (rounded === 0) return;
-        generate(buffer, position, rounded);
-        position += rounded;
-    }
+    };
 
     let latchedRegister = 0;
 
-    function poke(value) {
-        catchUp();
+    this.poke = (value) => {
+        this.flush();
 
         let command;
         if (value & 0x80) {
@@ -245,7 +233,7 @@ export function SoundChip(sampleRate) {
             // High period bits.
             register[channel] = (register[channel] & 0x0f) | ((value & 0x3f) << 4);
         }
-    }
+    };
 
     for (let i = 0; i < 3; ++i) {
         generators[i] = toneChannel;
@@ -253,7 +241,6 @@ export function SoundChip(sampleRate) {
     generators[3] = noiseChannel;
     generators[4] = sineChannel;
 
-    this.render = render;
     this.active = false;
     this.slowDataBus = 0;
     this.updateSlowDataBus = function (slowDataBus, active) {
@@ -268,7 +255,7 @@ export function SoundChip(sampleRate) {
             activeTask.ensureScheduled(true, minCyclesWELow);
         }
     };
-    this.reset = function (hard) {
+    this.reset = (hard) => {
         if (!hard) return;
         for (let i = 0; i < 4; ++i) {
             counter[i] = 0;
@@ -276,9 +263,10 @@ export function SoundChip(sampleRate) {
             volume[i] = 0; // ideally this would be volumeTable[0] to get the "boo" of "boo...beep".  But startup issues make the "boo" all clicky.
         }
         noisePoked();
-        advance(100000);
+        this.advance(100000);
         this.setScheduler(scheduler);
     };
+    // TODO mute/unmute probably should be handled in audiohandler.js
     this.enable = function (e) {
         enabled = e;
     };
@@ -295,9 +283,9 @@ export function FakeSoundChip() {
         this.enable =
         this.mute =
         this.unmute =
-        this.render =
         this.updateSlowDataBus =
         this.setScheduler =
+        this.flush =
             utils.noop;
     this.toneGenerator = this;
 }
