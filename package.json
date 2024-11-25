@@ -67,11 +67,12 @@
   "scripts": {
     "start": "webpack serve",
     "build": "webpack --node-env production",
-    "prepare": "husky install",
+    "prepare": "husky",
     "ci-checks": "eslint .",
     "lint": "eslint .",
     "lint-fix": "eslint . --fix",
     "format": "prettier --write .",
+    "pre-commit": "lint-staged",
     "test-long:cpu": "node tests/test-suite.js",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
