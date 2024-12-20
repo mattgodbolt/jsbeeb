@@ -1,9 +1,9 @@
-import * as fdc from "../fdc.js";
-import { fake6502 } from "../fake6502.js";
-import { findModel } from "../models.js";
+import * as fdc from "../src/fdc.js";
+import { fake6502 } from "../src/fake6502.js";
+import { findModel } from "../src/models.js";
 import assert from "assert";
-import * as utils from "../utils.js";
-import * as Tokeniser from "../basic-tokenise.js";
+import * as utils from "../src/utils.js";
+import * as Tokeniser from "../src/basic-tokenise.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 

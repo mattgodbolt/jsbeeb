@@ -1,6 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "assert";
-import * as utils from "../../utils.js";
+import * as utils from "../../src/utils.js";
 import { TestMachine } from "../test-machine.js";
 
 describe("test various NOP timings", { timeout: 30000 }, function () {

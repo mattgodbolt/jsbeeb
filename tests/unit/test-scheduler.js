@@ -1,6 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "assert";
-import { Scheduler } from "../../scheduler.js";
+import { Scheduler } from "../../src/scheduler.js";
 
 describe("Scheduler tests", function () {
     "use strict";

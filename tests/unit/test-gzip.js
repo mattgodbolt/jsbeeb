@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "assert";
 import * as fs from "fs";
-import * as utils from "../../utils.js";
+import * as utils from "../../src/utils.js";
 
 import { dirname } from "path";
 import { fileURLToPath } from "url";
