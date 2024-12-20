@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import { TestMachine } from "../test-machine.js";
 import assert from "assert";
-import { Video } from "../../video.js";
+import { Video } from "../../src/video.js";
 import sharp from "sharp";
 import pixelmatch from "pixelmatch";
 

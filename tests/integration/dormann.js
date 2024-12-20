@@ -2,8 +2,8 @@
 
 import _ from "underscore";
 import { describe, it } from "vitest";
-import * as utils from "../../utils.js";
-import { fake6502, fake65C02, fake65C12 } from "../../fake6502.js";
+import * as utils from "../../src/utils.js";
+import { fake6502, fake65C02, fake65C12 } from "../../src/fake6502.js";
 
 import assert from "assert";
 

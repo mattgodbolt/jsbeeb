@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "assert";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, loadAdf, toSsdOrDsd } from "../../disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
 import * as fs from "node:fs";
 
 describe("IBM disc format tests", function () {
@@ -181,7 +181,7 @@ describe(
         timeout: 5000, // roundtripping elite can be slow
     },
     function () {
-        const data = fs.readFileSync("discs/elite.ssd");
+        const data = fs.readFileSync("public/discs/elite.ssd");
         it("should load Elite", () => {
             const disc = new Disc(true, new DiscConfig(), "test.ssd");
             loadSsd(disc, data, false);
@@ -218,7 +218,7 @@ describe(
 );
 
 describe("HFE loader tests", function () {
-    const data = fs.readFileSync("discs/elite.hfe");
+    const data = fs.readFileSync("public/discs/elite.hfe");
     it("should load Elite", () => {
         const disc = new Disc(true, new DiscConfig(), "test.hfe");
         loadHfe(disc, data);

@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "assert";
 
-import { Fifo } from "../../utils.js";
+import { Fifo } from "../../src/utils.js";
 
 describe("FIFO tests", function () {
     "use strict";

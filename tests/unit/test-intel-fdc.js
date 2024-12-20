@@ -1,9 +1,9 @@
 import { describe, it } from "vitest";
 import assert from "assert";
 
-import { Scheduler } from "../../scheduler.js";
-import { IntelFdc } from "../../intel-fdc.js";
-import { fake6502 } from "../../fake6502.js";
+import { Scheduler } from "../../src/scheduler.js";
+import { IntelFdc } from "../../src/intel-fdc.js";
+import { fake6502 } from "../../src/fake6502.js";
 
 class FakeDrive {
     constructor() {
