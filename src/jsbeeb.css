@@ -166,19 +166,19 @@ div.led {
 }
 
 .red.led {
-  background-image: url(images/red-off-16.png);
+  background-image: url(/images/red-off-16.png);
 }
 
 .red.led.on {
-  background-image: url(images/red-on-16.png);
+  background-image: url(/images/red-on-16.png);
 }
 
 .yellow.led {
-  background-image: url(images/yellow-off-16.png);
+  background-image: url(/images/yellow-off-16.png);
 }
 
 .yellow.led.on {
-  background-image: url(images/yellow-on-16.png);
+  background-image: url(/images/yellow-on-16.png);
 }
 
 #pages {
