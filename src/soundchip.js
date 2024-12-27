@@ -1,105 +1,124 @@
-"use strict";
-import * as utils from "./utils.js";
+export class SoundChip {
+    constructor(sampleRate) {
+        this.cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here
+        // 4MHz input signal. Internal divide-by-8
+        this.soundchipFreq = 4000000.0 / 8;
+        // Square wave changes every time a counter hits zero. Thus a full wave
+        // needs to be 2x counter zeros.
+        this.waveDecrementPerSecond = this.soundchipFreq / 2;
+        // Each sample in the buffer represents (1/sampleRate) time, so each time
+        // we generate a sample, we need to decrement the counters by this amount:
+        this.sampleDecrement = this.waveDecrementPerSecond / sampleRate;
+        // How many samples are generated per CPU cycle.
+        this.samplesPerCycle = sampleRate * this.cpuFreq;
+        this.minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
-export function SoundChip(sampleRate) {
-    const cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here
-    // 4MHz input signal. Internal divide-by-8
-    const soundchipFreq = 4000000.0 / 8;
-    // Square wave changes every time a counter hits zero. Thus a full wave
-    // needs to be 2x counter zeros.
-    const waveDecrementPerSecond = soundchipFreq / 2;
-    // Each sample in the buffer represents (1/sampleRate) time, so each time
-    // we generate a sample, we need to decrement the counters by this amount:
-    const sampleDecrement = waveDecrementPerSecond / sampleRate;
-    // How many samples are generated per CPU cycle.
-    const samplesPerCycle = sampleRate * cpuFreq;
-    const minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
+        this.registers = [0, 0, 0, 0];
+        this.counter = [0, 0, 0, 0];
+        this.outputBit = [false, false, false, false];
+        this.volume = [0, 0, 0, 0];
+        this.generators = [];
+        for (let i = 0; i < 3; ++i) {
+            this.generators[i] = this.toneChannel.bind(this);
+        }
+        this.generators[3] = this.noiseChannel.bind(this);
+        this.generators[4] = this.sineChannel.bind(this);
 
-    const register = [0, 0, 0, 0];
-    this.registers = register; // for debug
-    const counter = [0, 0, 0, 0];
-    const outputBit = [false, false, false, false];
-    const volume = [0, 0, 0, 0];
-    this.volume = volume; // for debug
-    const generators = [null, null, null, null, null];
+        this.volumeTable = [];
+        let f = 1.0;
+        for (let i = 0; i < 16; ++i) {
+            this.volumeTable[i] = f / this.generators.length; // Bakes in the per channel volume
+            f *= Math.pow(10, -0.1);
+        }
+        this.volumeTable[15] = 0;
 
-    const volumeTable = [];
-    let f = 1.0;
-    for (let i = 0; i < 16; ++i) {
-        volumeTable[i] = f / generators.length; // Bakes in the per channel volume
-        f *= Math.pow(10, -0.1);
+        this.sineTableSize = 8192;
+        this.sineTable = [];
+        for (let i = 0; i < this.sineTableSize; ++i) {
+            this.sineTable[i] = Math.sin((2 * Math.PI * i) / this.sineTableSize) / this.generators.length;
+        }
+        this.sineStep = 0;
+        this.sineOn = false;
+        this.sineTime = 0;
+
+        this.lfsr = 0;
+        this.shiftLfsr = this.shiftLfsrWhiteNoise.bind(this);
+
+        this.enabled = true;
+        this.scheduler = { epoch: 0 };
+        this.lastRunEpoch = 0;
+        this.activeTask = null;
+
+        this.residual = 0;
+        this.position = 0;
+        this.maxBufferSize = 4096;
+        this.buffer =
+            typeof Float64Array !== "undefined"
+                ? new Float64Array(this.maxBufferSize)
+                : new Float32Array(this.maxBufferSize);
+
+        this.latchedRegister = 0;
+        this.slowDataBus = 0;
+        this.active = false;
+
+        this.toneGenerator = {
+            mute: () => {
+                this.catchUp();
+                this.sineOn = false;
+            },
+            tone: (freq) => {
+                this.catchUp();
+                this.sineOn = true;
+                this.sineStep = (freq / sampleRate) * this.sineTableSize;
+            },
+        };
     }
-    volumeTable[15] = 0;
 
-    const sineTableSize = 8192;
-    const sineTable = [];
-    for (let i = 0; i < sineTableSize; ++i) {
-        sineTable[i] = Math.sin((2 * Math.PI * i) / sineTableSize) / generators.length;
-    }
-    let sineStep = 0;
-    let sineOn = false;
-    let sineTime = 0;
-
-    function sineChannel(channel, out, offset, length) {
-        if (!sineOn) {
+    sineChannel(channel, out, offset, length) {
+        if (!this.sineOn) {
             return;
         }
         for (let i = 0; i < length; ++i) {
-            out[i + offset] += sineTable[sineTime & (sineTableSize - 1)];
-            sineTime += sineStep;
+            out[i + offset] += this.sineTable[this.sineTime & (this.sineTableSize - 1)];
+            this.sineTime += this.sineStep;
         }
-        while (sineTime > sineTableSize) sineTime -= sineTableSize;
+        while (this.sineTime > this.sineTableSize) this.sineTime -= this.sineTableSize;
     }
 
-    this.toneGenerator = {
-        mute: function () {
-            catchUp();
-            sineOn = false;
-        },
-        tone: function (freq) {
-            catchUp();
-            sineOn = true;
-            sineStep = (freq / sampleRate) * sineTableSize;
-        },
-    };
-
-    function toneChannel(channel, out, offset, length) {
-        let reg = register[channel];
-        const vol = volume[channel];
+    toneChannel(channel, out, offset, length) {
+        let reg = this.registers[channel];
+        const vol = this.volume[channel];
         if (reg === 0) reg = 1024;
         for (let i = 0; i < length; ++i) {
-            counter[channel] -= sampleDecrement;
-            if (counter[channel] < 0) {
-                counter[channel] += reg;
-                if (counter[channel] < 0) counter[channel] = 0;
-                outputBit[channel] = !outputBit[channel];
+            this.counter[channel] -= this.sampleDecrement;
+            if (this.counter[channel] < 0) {
+                this.counter[channel] += reg;
+                if (this.counter[channel] < 0) this.counter[channel] = 0;
+                this.outputBit[channel] = !this.outputBit[channel];
             }
-            out[i + offset] += outputBit[channel] * vol;
+            out[i + offset] += this.outputBit[channel] * vol;
         }
     }
 
-    let lfsr = 0;
-
-    function shiftLfsrWhiteNoise() {
-        const bit = (lfsr & 1) ^ ((lfsr & (1 << 1)) >>> 1);
-        lfsr = (lfsr >>> 1) | (bit << 14);
+    shiftLfsrWhiteNoise() {
+        const bit = (this.lfsr & 1) ^ ((this.lfsr & (1 << 1)) >>> 1);
+        this.lfsr = (this.lfsr >>> 1) | (bit << 14);
     }
 
-    function shiftLfsrPeriodicNoise() {
-        lfsr >>= 1;
-        if (lfsr === 0) lfsr = 1 << 14;
+    shiftLfsrPeriodicNoise() {
+        this.lfsr >>= 1;
+        if (this.lfsr === 0) this.lfsr = 1 << 14;
     }
 
-    let shiftLfsr = shiftLfsrWhiteNoise;
-
-    function noisePoked() {
-        shiftLfsr = register[3] & 4 ? shiftLfsrWhiteNoise : shiftLfsrPeriodicNoise;
-        lfsr = 1 << 14;
+    noisePoked() {
+        this.shiftLfsr =
+            this.registers[3] & 4 ? this.shiftLfsrWhiteNoise.bind(this) : this.shiftLfsrPeriodicNoise.bind(this);
+        this.lfsr = 1 << 14;
     }
 
-    function addFor(channel) {
+    addFor(channel) {
         channel = channel | 0;
-        switch (register[channel] & 3) {
+        switch (this.registers[channel] & 3) {
             case 0:
                 return 0x10;
             case 1:
@@ -107,156 +126,129 @@ export function SoundChip(sampleRate) {
             case 2:
                 return 0x40;
             case 3:
-                return register[channel - 1];
+                return this.registers[channel - 1];
         }
     }
 
-    function noiseChannel(channel, out, offset, length) {
-        const add = addFor(channel),
-            vol = volume[channel];
+    noiseChannel(channel, out, offset, length) {
+        const add = this.addFor(channel),
+            vol = this.volume[channel];
         for (let i = 0; i < length; ++i) {
-            counter[channel] -= sampleDecrement;
-            if (counter[channel] < 0) {
-                counter[channel] += add;
-                if (counter[channel] < 0) counter[channel] = 0;
-                outputBit[channel] = !outputBit[channel];
-                if (outputBit[channel]) shiftLfsr();
+            this.counter[channel] -= this.sampleDecrement;
+            if (this.counter[channel] < 0) {
+                this.counter[channel] += add;
+                if (this.counter[channel] < 0) this.counter[channel] = 0;
+                this.outputBit[channel] = !this.outputBit[channel];
+                if (this.outputBit[channel]) this.shiftLfsr();
             }
-            out[i + offset] += (lfsr & 1) * vol;
+            out[i + offset] += (this.lfsr & 1) * vol;
         }
     }
 
-    this.debugPokeAll = (c0, v0, c1, v1, c2, v2, c3, v3) => {
-        catchUp();
+    debugPokeAll(c0, v0, c1, v1, c2, v2, c3, v3) {
+        this.catchUp();
         this.registers[0] = c0 & 0xffffff;
         this.registers[1] = c1 & 0xffffff;
         this.registers[2] = c2 & 0xffffff;
         this.registers[3] = c3 & 0xffffff;
-        volume[0] = volumeTable[v0];
-        volume[1] = volumeTable[v1];
-        volume[2] = volumeTable[v2];
-        volume[3] = volumeTable[v3];
-        noisePoked();
-    };
+        this.volume[0] = this.volumeTable[v0];
+        this.volume[1] = this.volumeTable[v1];
+        this.volume[2] = this.volumeTable[v2];
+        this.volume[3] = this.volumeTable[v3];
+        this.noisePoked();
+    }
 
-    let enabled = true;
-
-    function generate(out, offset, length) {
+    generate(out, offset, length) {
         offset = offset | 0;
         length = length | 0;
         for (let i = 0; i < length; ++i) {
             out[i + offset] = 0.0;
         }
-        if (!enabled) return;
-        for (let i = 0; i < generators.length; ++i) {
-            generators[i](i, out, offset, length);
+        if (!this.enabled) return;
+        for (let i = 0; i < this.generators.length; ++i) {
+            this.generators[i](i, out, offset, length);
         }
     }
 
-    let scheduler = { epoch: 0 };
-    let lastRunEpoch = 0;
-
-    function catchUp() {
-        const cyclesPending = scheduler.epoch - lastRunEpoch;
+    catchUp() {
+        const cyclesPending = this.scheduler.epoch - this.lastRunEpoch;
         if (cyclesPending > 0) {
-            advance(cyclesPending);
+            this.advance(cyclesPending);
         }
-        lastRunEpoch = scheduler.epoch;
+        this.lastRunEpoch = this.scheduler.epoch;
     }
 
-    let activeTask = null;
-    this.setScheduler = function (scheduler_) {
-        scheduler = scheduler_;
-        lastRunEpoch = scheduler.epoch;
-        activeTask = scheduler.newTask(
+    setScheduler(scheduler_) {
+        this.scheduler = scheduler_;
+        this.lastRunEpoch = this.scheduler.epoch;
+        this.activeTask = this.scheduler.newTask(
             function () {
                 if (this.active) {
-                    poke(this.slowDataBus);
+                    this.poke(this.slowDataBus);
                 }
             }.bind(this),
         );
-    };
-
-    let residual = 0;
-    let position = 0;
-    const maxBufferSize = 4096;
-    let buffer;
-    if (typeof Float64Array !== "undefined") {
-        buffer = new Float64Array(maxBufferSize);
-    } else {
-        buffer = new Float32Array(maxBufferSize);
     }
 
-    function render(out, offset, length) {
-        catchUp();
-        const fromBuffer = position > length ? length : position;
+    render(out, offset, length) {
+        this.catchUp();
+        const fromBuffer = this.position > length ? length : this.position;
         for (let i = 0; i < fromBuffer; ++i) {
-            out[offset + i] = buffer[i];
+            out[offset + i] = this.buffer[i];
         }
         offset += fromBuffer;
         length -= fromBuffer;
-        for (let i = fromBuffer; i < position; ++i) {
-            buffer[i - fromBuffer] = buffer[i];
+        for (let i = fromBuffer; i < this.position; ++i) {
+            this.buffer[i - fromBuffer] = this.buffer[i];
         }
-        position -= fromBuffer;
+        this.position -= fromBuffer;
         if (length !== 0) {
-            generate(out, offset, length);
+            this.generate(out, offset, length);
         }
     }
 
-    function advance(time) {
-        const num = time * samplesPerCycle + residual;
+    advance(time) {
+        const num = time * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
-        residual = num - rounded;
-        if (position + rounded >= maxBufferSize) {
-            rounded = maxBufferSize - position;
+        this.residual = num - rounded;
+        if (this.position + rounded >= this.maxBufferSize) {
+            rounded = this.maxBufferSize - this.position;
         }
         if (rounded === 0) return;
-        generate(buffer, position, rounded);
-        position += rounded;
+        this.generate(this.buffer, this.position, rounded);
+        this.position += rounded;
     }
 
-    let latchedRegister = 0;
-
-    function poke(value) {
-        catchUp();
+    poke(value) {
+        this.catchUp();
 
         let command;
         if (value & 0x80) {
-            latchedRegister = value & 0x70;
+            this.latchedRegister = value & 0x70;
             command = value & 0xf0;
         } else {
-            command = latchedRegister;
+            command = this.latchedRegister;
         }
         const channel = (command >> 5) & 0x03;
 
         if (command & 0x10) {
             // Volume setting
             const newVolume = value & 0x0f;
-            volume[channel] = volumeTable[newVolume];
+            this.volume[channel] = this.volumeTable[newVolume];
         } else if (channel === 3) {
             // For noise channel we always update the bottom bits.
-            register[channel] = value & 0x0f;
-            noisePoked();
+            this.registers[channel] = value & 0x0f;
+            this.noisePoked();
         } else if (command & 0x80) {
             // Low period bits.
-            register[channel] = (register[channel] & ~0x0f) | (value & 0x0f);
+            this.registers[channel] = (this.registers[channel] & ~0x0f) | (value & 0x0f);
         } else {
             // High period bits.
-            register[channel] = (register[channel] & 0x0f) | ((value & 0x3f) << 4);
+            this.registers[channel] = (this.registers[channel] & 0x0f) | ((value & 0x3f) << 4);
         }
     }
 
-    for (let i = 0; i < 3; ++i) {
-        generators[i] = toneChannel;
-    }
-    generators[3] = noiseChannel;
-    generators[4] = sineChannel;
-
-    this.render = render;
-    this.active = false;
-    this.slowDataBus = 0;
-    this.updateSlowDataBus = function (slowDataBus, active) {
+    updateSlowDataBus(slowDataBus, active) {
         this.slowDataBus = slowDataBus;
         this.active = active;
         // TODO: this probably isn't modeled correctly. Currently the
@@ -265,39 +257,54 @@ export function SoundChip(sampleRate) {
         // In reality, the sound chip likely pulls data off the bus at a
         // fixed point in its cycle, iff WE is active.
         if (active) {
-            activeTask.ensureScheduled(true, minCyclesWELow);
+            this.activeTask.ensureScheduled(true, this.minCyclesWELow);
         }
-    };
-    this.reset = function (hard) {
+    }
+
+    reset(hard) {
         if (!hard) return;
         for (let i = 0; i < 4; ++i) {
-            counter[i] = 0;
-            register[i] = 0;
-            volume[i] = volumeTable[8]; // Real hardware would be volumeTable[0] but that's really quite loud and surprising...
+            this.counter[i] = 0;
+            this.registers[i] = 0;
+            this.volume[i] = this.volumeTable[8]; // Real hardware would be volumeTable[0] but that's really quite loud and surprising...
         }
-        noisePoked();
-        advance(100000);
-        this.setScheduler(scheduler);
-    };
-    this.enable = function (e) {
-        enabled = e;
-    };
-    this.mute = function () {
-        enabled = false;
-    };
-    this.unmute = function () {
-        enabled = true;
-    };
+        this.noisePoked();
+        this.advance(100000);
+        this.setScheduler(this.scheduler);
+    }
+
+    enable(e) {
+        this.enabled = e;
+    }
+
+    mute() {
+        this.enabled = false;
+    }
+
+    unmute() {
+        this.enabled = true;
+    }
 }
 
-export function FakeSoundChip() {
-    this.reset =
-        this.enable =
-        this.mute =
-        this.unmute =
-        this.render =
-        this.updateSlowDataBus =
-        this.setScheduler =
-            utils.noop;
-    this.toneGenerator = this;
+export class FakeSoundChip {
+    reset() {}
+
+    enable() {}
+
+    mute() {}
+
+    unmute() {}
+
+    render() {}
+
+    updateSlowDataBus() {}
+
+    setScheduler() {}
+
+    constructor() {
+        this.toneGenerator = {
+            mute: () => {},
+            tone: () => {},
+        };
+    }
 }
