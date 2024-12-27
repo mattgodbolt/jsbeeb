@@ -7,7 +7,9 @@ describe("ensure git submodules are present", function () {
         try {
             fs.accessSync("tests/6502_65C02_functional_tests/README.md");
         } catch {
-            assert.fail("Functional tests submodule missing. Ensure git submodules are fetched.");
+            assert.fail(
+                "Functional tests submodule missing. Ensure git submodules are fetched (git submodule update --init).",
+            );
         }
     });
 
@@ -15,7 +17,9 @@ describe("ensure git submodules are present", function () {
         try {
             fs.accessSync("tests/integration/dp111_6502Timing/README.md");
         } catch {
-            assert.fail("Timing tests submodule missing. Ensure git submodules are fetched.");
+            assert.fail(
+                "Timing tests submodule missing. Ensure git submodules are fetched  (git submodule update --init).",
+            );
         }
     });
 });
