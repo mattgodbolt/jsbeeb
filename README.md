@@ -54,7 +54,7 @@ case), press shift-F12 (which is shift-Break on the BBC).
    ```sh
    npm start
    ```
-4. Visit `http://localhost:8080/` in your browser.
+4. Visit `http://localhost:5173/` in your browser.
 
 jsbeeb uses Node.js and vite to afford simple and standard web development tooling and third-party library access
 without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the
