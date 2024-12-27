@@ -273,7 +273,7 @@ export function SoundChip(sampleRate) {
         for (let i = 0; i < 4; ++i) {
             counter[i] = 0;
             register[i] = 0;
-            volume[i] = 0; // ideally this would be volumeTable[0] to get the "boo" of "boo...beep".  But startup issues make the "boo" all clicky.
+            volume[i] = volumeTable[8]; // Real hardware would be volumeTable[0] but that's really quite loud and surprising...
         }
         noisePoked();
         advance(100000);
