@@ -32,10 +32,12 @@ export class SoundChip {
         }
         this.volumeTable[15] = 0;
 
-        this.sineTableSize = 8192;
-        this.sineTable = [];
-        for (let i = 0; i < this.sineTableSize; ++i) {
-            this.sineTable[i] = Math.sin((2 * Math.PI * i) / this.sineTableSize) / this.generators.length;
+        const floatType = typeof Float64Array !== "undefined" ? Float64Array : Float32Array;
+
+        this.sineTable = new floatType(8192);
+
+        for (let i = 0; i < this.sineTable.length; ++i) {
+            this.sineTable[i] = Math.sin((2 * Math.PI * i) / this.sineTable.length) / this.generators.length;
         }
         this.sineStep = 0;
         this.sineOn = false;
@@ -52,10 +54,7 @@ export class SoundChip {
         this.residual = 0;
         this.position = 0;
         this.maxBufferSize = 4096;
-        this.buffer =
-            typeof Float64Array !== "undefined"
-                ? new Float64Array(this.maxBufferSize)
-                : new Float32Array(this.maxBufferSize);
+        this.buffer = new floatType(this.maxBufferSize);
 
         this.latchedRegister = 0;
         this.slowDataBus = 0;
@@ -69,7 +68,7 @@ export class SoundChip {
             tone: (freq) => {
                 this.catchUp();
                 this.sineOn = true;
-                this.sineStep = (freq / sampleRate) * this.sineTableSize;
+                this.sineStep = (freq / sampleRate) * this.sineTable.length;
             },
         };
     }
@@ -79,10 +78,10 @@ export class SoundChip {
             return;
         }
         for (let i = 0; i < length; ++i) {
-            out[i + offset] += this.sineTable[this.sineTime & (this.sineTableSize - 1)];
+            out[i + offset] += this.sineTable[this.sineTime & (this.sineTable.length - 1)];
             this.sineTime += this.sineStep;
         }
-        while (this.sineTime > this.sineTableSize) this.sineTime -= this.sineTableSize;
+        while (this.sineTime > this.sineTable.length) this.sineTime -= this.sineTable.length;
     }
 
     toneChannel(channel, out, offset, length) {
