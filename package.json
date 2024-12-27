@@ -31,7 +31,7 @@
     "pixelmatch": "^6.0.0",
     "prettier": "^3.4.2",
     "sharp": "^0.33.5",
-    "vite": "^6.0.1",
+    "vite": "^6.0.6",
     "vitest": "^2.1.8"
   },
   "license": "GPL-3.0-or-later",
