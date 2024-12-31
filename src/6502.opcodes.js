@@ -32,12 +32,12 @@ function pull(reg) {
     if (reg === "p") {
         return ["cpu.p.setFromByte(cpu.pull());"];
     }
-    return ["cpu." + reg + " = cpu.p.setzn(cpu.pull());"];
+    return [`cpu.${reg} = cpu.p.setzn(cpu.pull());`];
 }
 
 function push(reg) {
     if (reg === "p") return "cpu.push(cpu.p.asByte());";
-    return "cpu.push(cpu." + reg + ");";
+    return `cpu.push(cpu.${reg});`;
 }
 
 class InstructionGen {
@@ -76,27 +76,27 @@ class InstructionGen {
     readOp(addr, reg, spurious) {
         this.cycle++;
         let op;
-        if (reg) op = reg + " = cpu.readmem(" + addr + ");";
-        else op = "cpu.readmem(" + addr + ");";
+        if (reg) op = `${reg} = cpu.readmem(${addr});`;
+        else op = `cpu.readmem(${addr});`;
         if (spurious) op += " // spurious";
         this.append(this.cycle, op, true, addr);
     }
 
     writeOp(addr, reg, spurious) {
         this.cycle++;
-        let op = "cpu.writemem(" + addr + ", " + reg + ");";
+        let op = `cpu.writemem(${addr}, ${reg});`;
         if (spurious) op += " // spurious";
         this.append(this.cycle, op, true, addr);
     }
 
     zpReadOp(addr, reg) {
         this.cycle++;
-        this.append(this.cycle, reg + " = cpu.readmemZpStack(" + addr + ");", false);
+        this.append(this.cycle, `${reg} = cpu.readmemZpStack(${addr});`, false);
     }
 
     zpWriteOp(addr, reg) {
         this.cycle++;
-        this.append(this.cycle, "cpu.writememZpStack(" + addr + ", " + reg + ");", true);
+        this.append(this.cycle, `cpu.writememZpStack(${addr}, ${reg});`, true);
     }
 
     render(startCycle) {
@@ -124,9 +124,9 @@ class InstructionGen {
             }
             if (toSkip && this.ops[i].exact) {
                 if (this.ops[i].addr) {
-                    out.push("cpu.polltimeAddr(" + toSkip + ", " + this.ops[i].addr + ");");
+                    out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[i].addr});`);
                 } else {
-                    out.push("cpu.polltime(" + toSkip + ");");
+                    out.push(`cpu.polltime(${toSkip});`);
                 }
                 toSkip = 0;
             }
@@ -135,9 +135,9 @@ class InstructionGen {
         }
         if (toSkip) {
             if (this.ops[this.cycle] && this.ops[this.cycle].addr) {
-                out.push("cpu.polltimeAddr(" + toSkip + ", " + this.ops[this.cycle].addr + ");");
+                out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[this.cycle].addr});`);
             } else {
-                out.push("cpu.polltime(" + toSkip + ");");
+                out.push(`cpu.polltime(${toSkip});`);
             }
         }
         if (this.ops[this.cycle]) out = out.concat(this.ops[this.cycle].op);
@@ -173,7 +173,7 @@ class SplitInstruction {
     render() {
         return this.preamble
             .renderInternal()
-            .concat("if (" + this.condition + ") {")
+            .concat(`if (${this.condition}) {`)
             .concat(this.indent(this.ifTrue.render(this.preamble.cycle)))
             .concat("} else {")
             .concat(this.indent(this.ifFalse.render(this.preamble.cycle)))
@@ -1009,8 +1009,8 @@ class Disassemble6502 {
         const index = param.match(/(.*),([xy])$/);
         if (index) {
             param = index[1];
-            suffix = "," + index[2].toUpperCase();
-            suffix2 = " + " + index[2].toUpperCase();
+            suffix = `,${index[2].toUpperCase()}`;
+            suffix2 = ` + ${index[2].toUpperCase()}`;
         }
         switch (param) {
             case "imm":
@@ -1097,7 +1097,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
                     ig.append("const addr = cpu.getb() | 0;");
                 } else {
                     ig.tick(3);
-                    ig.append("const addr = (cpu.getb() + cpu." + arg[3] + ") & 0xff;");
+                    ig.append(`const addr = (cpu.getb() + cpu.${arg[3]}) & 0xff;`);
                 }
                 if (op.read) {
                     ig.zpReadOp("addr", "REG");
@@ -1124,7 +1124,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
             case "abs,x":
             case "abs,y":
                 ig.append("const addr = cpu.getw() | 0;");
-                ig.append("let addrWithCarry = (addr + cpu." + arg[4] + ") & 0xffff;");
+                ig.append(`let addrWithCarry = (addr + cpu.${arg[4]}) & 0xffff;`);
                 ig.append("const addrNonCarry = (addr & 0xff00) | (addrWithCarry & 0xff);");
                 ig.tick(3);
                 ig = ig.split("addrWithCarry !== addrNonCarry");
@@ -1289,13 +1289,16 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
         const opcode = opcodes[opcodeNum];
         return (
             indent +
-            ['"use strict";', "// " + utils.hexbyte(opcodeNum) + " - " + opcode + "\n"]
-                .concat(
-                    opcode
-                        ? getInstruction(opcode, !!needsReg)
-                        : ["this.invalidOpcode(cpu, 0x" + utils.hexbyte(opcodeNum) + ");"],
-                )
-                .join("\n" + indent)
+            [
+                '"use strict";',
+                `// ${utils.hexbyte(opcodeNum)} - ${opcode}
+`,
+            ].concat(
+                opcode
+                    ? getInstruction(opcode, !!needsReg)
+                    : [`this.invalidOpcode(cpu, 0x${utils.hexbyte(opcodeNum)});`],
+            ).join(`
+${indent}`)
         );
     }
 

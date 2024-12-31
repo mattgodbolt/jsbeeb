@@ -1,4 +1,4 @@
-import * as utils from "../../utils.js";
+import * as utils from "../../src/utils.js";
 import { describe, it } from "vitest";
 import { TestMachine } from "../test-machine.js";
 import assert from "assert";

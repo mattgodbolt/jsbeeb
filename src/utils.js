@@ -852,6 +852,7 @@ async function loadDataNode(url) {
         // Node
         const fs = await import("fs");
         if (url[0] === "/") url = "." + url;
+        if (fs.existsSync("public/" + url)) return fs.readFileSync("public/" + url);
         return fs.readFileSync(url);
     }
 }

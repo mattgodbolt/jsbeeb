@@ -2,7 +2,7 @@
 
 # jsbeeb - JavaScript BBC Micro Emulator
 
-[![jsbeeb](images/jsbeeb-example.png)](https://bbc.xania.org/)
+[![jsbeeb](public/images/jsbeeb-example.png)](https://bbc.xania.org/)
 
 A BBC Micro emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B (with sideways RAM)
 and a 128K BBC Master, along with a number of different peripherals.
@@ -54,9 +54,9 @@ case), press shift-F12 (which is shift-Break on the BBC).
    ```sh
    npm start
    ```
-4. Visit `http://localhost:8080/` in your browser.
+4. Visit `http://localhost:5173/` in your browser.
 
-jsbeeb uses Node.js and webpack to afford simple and standard web development tooling and third-party library access
+jsbeeb uses Node.js and vite to afford simple and standard web development tooling and third-party library access
 without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the
 site to make it smaller and faster to load when it's deployed to [https://bbc.xania.org](https://bbc.xania.org).
 

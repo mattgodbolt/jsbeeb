@@ -1,7 +1,7 @@
 "use strict";
 
-import * as utils from "../utils.js";
-import { fake6502 } from "../fake6502.js";
+import * as utils from "../src/utils.js";
+import { fake6502 } from "../src/fake6502.js";
 
 const processor = fake6502();
 const IRQ_ROUTINE_START = 0xff48;

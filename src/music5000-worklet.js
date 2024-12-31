@@ -1,5 +1,4 @@
 const BUFFER_SIZE = 65536;
-
 registerProcessor(
     "music5000",
     class extends AudioWorkletProcessor {

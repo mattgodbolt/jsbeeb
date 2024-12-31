@@ -1,6 +1,6 @@
 import { describe, it } from "vitest";
 import assert from "assert";
-import * as Tokeniser from "../../basic-tokenise.js";
+import * as Tokeniser from "../../src/basic-tokenise.js";
 const tokeniser = Tokeniser.create();
 
 describe("Tokeniser", function () {

@@ -1514,7 +1514,7 @@ function draw(now) {
         window.requestAnimationFrame(draw);
     }
 
-    audioHandler.soundChip.flush();
+    audioHandler.soundChip.catchUp();
     gamepad.update(processor.sysvia);
     syncLights();
     if (last !== 0) {

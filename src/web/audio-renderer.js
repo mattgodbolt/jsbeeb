@@ -1,5 +1,4 @@
-// Imports don't work here as the importScripts magic that webpack does doesn't work.
-// Else I'd use https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js
+// TODO look into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API).
 /*global sampleRate, currentTime*/
 
 const lowPassFilterFreq = sampleRate / 2;
@@ -112,4 +111,3 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor("sound-chip-processor", SoundChipProcessor);
-export default SoundChipProcessor;
