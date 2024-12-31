@@ -1,5 +1,4 @@
-// TODO look into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API).
-/*global sampleRate, currentTime*/
+/*global sampleRate, currentTime */
 
 const lowPassFilterFreq = sampleRate / 2;
 const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
@@ -82,6 +81,8 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.cleanQueue();
         if (this.queue.length === 0) return true;
 
+        // I looked into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API),
+        // but we fiddle the sample rate here to catch up with the target latency, which is harder to do with that API.
         const outByMs = this._queueAge() - this.targetLatencyMs;
         const maxAdjust = this.inputSampleRate * 0.01;
         const adjustment = Math.min(maxAdjust, Math.max(-maxAdjust, outByMs * 100));
