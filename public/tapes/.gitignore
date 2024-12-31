@@ -1,0 +1,4 @@
+*.uef
+*.tape
+
+coverage

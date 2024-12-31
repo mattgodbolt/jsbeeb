@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Debug a running dev server",
+      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands&model=MasterADFS&disc=CodenameDroid-ADFS_E.adf",
+      "webRoot": "${workspaceFolder}",
+      "sourceMaps": true,
+      "trace": true
+    }
+  ]
+}

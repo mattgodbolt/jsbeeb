@@ -21,13 +21,9 @@ HASH := $(shell git rev-parse HEAD)
 dist: npm
 	npm run build
 
-.PHONY: upload
-upload: dist
-	aws s3 sync out/dist/ s3://bbc.godbolt.org/$(BRANCH) --cache-control max-age=30 --metadata-directive REPLACE
-
 .PHONY: clean
 clean:
-	@rm -rf out
+	@rm -rf dist out
 
 .PHONY: spotless
 spotless: clean

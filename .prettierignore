@@ -1,4 +1,4 @@
-out
+dist
 tests/6502_65C02_functional_tests
 tests/integration/dp111_6502Timing
 package-lock.json

@@ -1,7 +1,7 @@
-import { describe, it } from "mocha";
+import { describe, it } from "vitest";
 import assert from "assert";
 
-import { combineQuery, joinQuery, parseQuery } from "../../../web/query-string.js";
+import { combineQuery, joinQuery, parseQuery } from "../../../src/web/query-string.js";
 
 describe("Query parser tests", () => {
     it("should join queries", () => {
@@ -70,13 +70,13 @@ describe("Query combiner tests", () => {
     it("should combine simple strings", () => {
         assert.equal(
             combineQuery({ a: "a", b: "b", somethingLong: "somethingLong" }),
-            "a=a&b=b&somethingLong=somethingLong"
+            "a=a&b=b&somethingLong=somethingLong",
         );
     });
     it("should escape strings", () => {
         assert.equal(
             combineQuery({ horrid: "this & that", "bad key": "value" }),
-            "horrid=this%20%26%20that&bad%20key=value"
+            "horrid=this%20%26%20that&bad%20key=value",
         );
     });
     it("should honour types", () => {
@@ -102,9 +102,9 @@ describe("Query combiner tests", () => {
                     amNotHere: false,
                     array: ["one", "two", "three", "a space"],
                 },
-                types
+                types,
             ),
-            "string=stringy&int=123&float=123.456&boolean1=true&boolean2=false&boolean3=true&amIHere&array=one&array=two&array=three&array=a%20space"
+            "string=stringy&int=123&float=123.456&boolean1=true&boolean2=false&boolean3=true&amIHere&array=one&array=two&array=three&array=a%20space",
         );
     });
 });

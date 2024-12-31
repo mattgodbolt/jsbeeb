@@ -1,9 +1,8 @@
-import { describe, it } from "mocha";
-import { TestMachine } from "./test-machine.js";
+import { describe, it } from "vitest";
+import { TestMachine } from "../test-machine.js";
 import assert from "assert";
 
-describe("test dp111's timing tests", function () {
-    this.timeout(10000);
+describe("test dp111's timing tests", { timeout: 10000 }, function () {
     const doTest = async (disc, machine) => {
         const testMachine = new TestMachine(machine);
         await testMachine.initialise();
