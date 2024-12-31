@@ -1,7 +1,7 @@
-import { describe, it } from "mocha";
+import { describe, it } from "vitest";
 import assert from "assert";
 
-import { fake65C12 } from "../../fake6502.js";
+import { fake65C12 } from "../../src/fake6502.js";
 
 const cpu = fake65C12();
 

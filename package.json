@@ -12,7 +12,7 @@
     "node": "20"
   },
   "type": "module",
-  "main": "./app/app.js",
+  "main": "./src/app/app.js",
   "dependencies": {
     "@popperjs/core": "^2.11.8",
     "argparse": "^2.0.1",
@@ -22,27 +22,17 @@
     "underscore": "^1.13.7"
   },
   "devDependencies": {
-    "clean-webpack-plugin": "^4.0.0",
-    "copy-webpack-plugin": "^12.0.2",
-    "css-loader": "^7.1.2",
-    "css-minimizer-webpack-plugin": "^7.0.0",
-    "eslint": "^9.9.0",
+    "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.2.1",
-    "html-loader": "^5.1.0",
-    "html-webpack-plugin": "^5.6.0",
-    "husky": "^9.1.4",
-    "lint-staged": "^15.2.8",
-    "mini-css-extract-plugin": "^2.9.0",
-    "mocha": "^10.7.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.3.0",
     "npm-run-all": "^4.1.5",
-    "prettier": "^3.3.3",
-    "source-map-loader": "^5.0.0",
-    "style-loader": "^4.0.0",
-    "terser-webpack-plugin": "^5.3.10",
-    "webpack": "^5.93.0",
-    "webpack-cli": "^5.1.4",
-    "webpack-dev-server": "^5.0.4"
+    "pixelmatch": "^6.0.0",
+    "prettier": "^3.4.2",
+    "sharp": "^0.33.5",
+    "vite": "^6.0.6",
+    "vitest": "^2.1.8"
   },
   "license": "GPL-3.0-or-later",
   "build": {
@@ -63,28 +53,28 @@
     }
   },
   "scripts": {
-    "start": "webpack serve",
-    "build": "webpack --node-env production",
-    "prepare": "husky install",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "husky",
     "ci-checks": "eslint .",
     "lint": "eslint .",
     "lint-fix": "eslint . --fix",
     "format": "prettier --write .",
+    "pre-commit": "lint-staged",
     "test-long:cpu": "node tests/test-suite.js",
-    "test:unit": "mocha tests/unit",
-    "test:integration": "mocha tests/integration",
-    "test:dormann": "node tests/test-dormann.js",
-    "test": "npm-run-all -p test:*",
-    "test-long": "npm-run-all -p test-long:*",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test": "npm-run-all test:*",
+    "test-long": "npm-run-all test-long:*",
     "benchmark": "node app-bench.js"
   },
   "lint-staged": {
-    "*.js": "eslint --cache --fix",
-    "*.{css,md}": "prettier --write"
-  },
-  "mocha": {
-    "spec": [
-      "tests/unit/**/*.js"
-    ]
+    "*.js": [
+      "vitest related --run --no-file-parallelism",
+      "eslint --cache --fix",
+      "prettier --write"
+    ],
+    "*.{css,md,html}": "prettier --write"
   }
 }

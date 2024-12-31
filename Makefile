@@ -23,7 +23,7 @@ dist: npm
 
 .PHONY: clean
 clean:
-	@rm -rf out
+	@rm -rf dist out
 
 .PHONY: spotless
 spotless: clean

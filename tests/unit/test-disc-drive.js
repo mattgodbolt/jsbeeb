@@ -1,9 +1,9 @@
-import { describe, it } from "mocha";
+import { describe, it } from "vitest";
 import assert from "assert";
 
-import { Disc, IbmDiscFormat } from "../../disc.js";
-import { DiscDrive } from "../../disc-drive.js";
-import { Scheduler } from "../../scheduler.js";
+import { Disc, IbmDiscFormat } from "../../src/disc.js";
+import { DiscDrive } from "../../src/disc-drive.js";
+import { Scheduler } from "../../src/scheduler.js";
 
 describe("Disc drive tests", function () {
     it("starts empty", () => {

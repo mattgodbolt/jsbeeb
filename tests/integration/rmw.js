@@ -1,6 +1,6 @@
-import * as utils from "../../utils.js";
-import { describe, it } from "mocha";
-import { TestMachine } from "./test-machine.js";
+import * as utils from "../../src/utils.js";
+import { describe, it } from "vitest";
+import { TestMachine } from "../test-machine.js";
 import assert from "assert";
 
 describe("test read-modify-write behaviour", function () {
