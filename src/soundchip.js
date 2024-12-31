@@ -1,10 +1,29 @@
+const FloatType = typeof Float64Array !== "undefined" ? Float64Array : Float32Array;
+
+const volumeTable = new FloatType(16);
+(() => {
+    let f = 1.0;
+    for (let i = 0; i < 15; ++i) {
+        volumeTable[i] = f / 4; // Bakes in the per channel volume
+        f *= Math.pow(10, -0.1);
+    }
+    volumeTable[15] = 0;
+})();
+
+function makeSineTable(attenuation) {
+    const sineTable = new FloatType(8192);
+    for (let i = 0; i < sineTable.length; ++i) {
+        sineTable[i] = Math.sin((2 * Math.PI * i) / sineTable.length) * attenuation;
+    }
+    return sineTable;
+}
+
 export class SoundChip {
     constructor(sampleRate) {
         this.cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here
         // 4MHz input signal. Internal divide-by-8
         this.soundchipFreq = 4000000.0 / 8;
-        // Square wave changes every time a counter hits zero. Thus a full wave
-        // needs to be 2x counter zeros.
+        // Square wave changes every time a counter hits zero: A full wave needs to be 2x counter zeros.
         this.waveDecrementPerSecond = this.soundchipFreq / 2;
         // Each sample in the buffer represents (1/sampleRate) time, so each time
         // we generate a sample, we need to decrement the counters by this amount:
@@ -13,32 +32,19 @@ export class SoundChip {
         this.samplesPerCycle = sampleRate * this.cpuFreq;
         this.minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
-        this.registers = [0, 0, 0, 0];
-        this.counter = [0, 0, 0, 0];
+        this.registers = new Uint16Array(4);
+        this.counter = new FloatType(4);
         this.outputBit = [false, false, false, false];
-        this.volume = [0, 0, 0, 0];
-        this.generators = [];
-        for (let i = 0; i < 3; ++i) {
-            this.generators[i] = this.toneChannel.bind(this);
-        }
-        this.generators[3] = this.noiseChannel.bind(this);
-        this.generators[4] = this.sineChannel.bind(this);
+        this.volume = new FloatType(4);
+        this.generators = [
+            this.toneChannel.bind(this),
+            this.toneChannel.bind(this),
+            this.toneChannel.bind(this),
+            this.noiseChannel.bind(this),
+            this.sineChannel.bind(this),
+        ];
 
-        this.volumeTable = [];
-        let f = 1.0;
-        for (let i = 0; i < 16; ++i) {
-            this.volumeTable[i] = f / this.generators.length; // Bakes in the per channel volume
-            f *= Math.pow(10, -0.1);
-        }
-        this.volumeTable[15] = 0;
-
-        const floatType = typeof Float64Array !== "undefined" ? Float64Array : Float32Array;
-
-        this.sineTable = new floatType(8192);
-
-        for (let i = 0; i < this.sineTable.length; ++i) {
-            this.sineTable[i] = Math.sin((2 * Math.PI * i) / this.sineTable.length) / this.generators.length;
-        }
+        this.sineTable = makeSineTable(1 / this.generators.length);
         this.sineStep = 0;
         this.sineOn = false;
         this.sineTime = 0;
@@ -53,8 +59,7 @@ export class SoundChip {
 
         this.residual = 0;
         this.position = 0;
-        this.maxBufferSize = 4096;
-        this.buffer = new floatType(this.maxBufferSize);
+        this.buffer = new FloatType(4096);
 
         this.latchedRegister = 0;
         this.slowDataBus = 0;
@@ -74,9 +79,8 @@ export class SoundChip {
     }
 
     sineChannel(channel, out, offset, length) {
-        if (!this.sineOn) {
-            return;
-        }
+        if (!this.sineOn) return;
+
         for (let i = 0; i < length; ++i) {
             out[i + offset] += this.sineTable[this.sineTime & (this.sineTable.length - 1)];
             this.sineTime += this.sineStep;
@@ -84,17 +88,23 @@ export class SoundChip {
         while (this.sineTime > this.sineTable.length) this.sineTime -= this.sineTable.length;
     }
 
+    _doChannelStep(channel, addAmount) {
+        const newValue = this.counter[channel] - this.sampleDecrement;
+        if (newValue < 0) {
+            this.counter[channel] = Math.max(0, newValue + addAmount);
+            this.outputBit[channel] = !this.outputBit[channel];
+            return this.outputBit[channel];
+        } else {
+            this.counter[channel] = newValue;
+            return false;
+        }
+    }
+
     toneChannel(channel, out, offset, length) {
-        let reg = this.registers[channel];
+        const reg = this.registers[channel] === 0 ? 1024 : this.registers[channel];
         const vol = this.volume[channel];
-        if (reg === 0) reg = 1024;
         for (let i = 0; i < length; ++i) {
-            this.counter[channel] -= this.sampleDecrement;
-            if (this.counter[channel] < 0) {
-                this.counter[channel] += reg;
-                if (this.counter[channel] < 0) this.counter[channel] = 0;
-                this.outputBit[channel] = !this.outputBit[channel];
-            }
+            this._doChannelStep(channel, reg);
             out[i + offset] += this.outputBit[channel] * vol;
         }
     }
@@ -133,13 +143,7 @@ export class SoundChip {
         const add = this.addFor(channel),
             vol = this.volume[channel];
         for (let i = 0; i < length; ++i) {
-            this.counter[channel] -= this.sampleDecrement;
-            if (this.counter[channel] < 0) {
-                this.counter[channel] += add;
-                if (this.counter[channel] < 0) this.counter[channel] = 0;
-                this.outputBit[channel] = !this.outputBit[channel];
-                if (this.outputBit[channel]) this.shiftLfsr();
-            }
+            if (this._doChannelStep(channel, add)) this.shiftLfsr();
             out[i + offset] += (this.lfsr & 1) * vol;
         }
     }
@@ -150,10 +154,10 @@ export class SoundChip {
         this.registers[1] = c1 & 0xffffff;
         this.registers[2] = c2 & 0xffffff;
         this.registers[3] = c3 & 0xffffff;
-        this.volume[0] = this.volumeTable[v0];
-        this.volume[1] = this.volumeTable[v1];
-        this.volume[2] = this.volumeTable[v2];
-        this.volume[3] = this.volumeTable[v3];
+        this.volume[0] = volumeTable[v0];
+        this.volume[1] = volumeTable[v1];
+        this.volume[2] = volumeTable[v2];
+        this.volume[3] = volumeTable[v3];
         this.noisePoked();
     }
 
@@ -171,22 +175,16 @@ export class SoundChip {
 
     catchUp() {
         const cyclesPending = this.scheduler.epoch - this.lastRunEpoch;
-        if (cyclesPending > 0) {
-            this.advance(cyclesPending);
-        }
+        if (cyclesPending > 0) this.advance(cyclesPending);
         this.lastRunEpoch = this.scheduler.epoch;
     }
 
     setScheduler(scheduler_) {
         this.scheduler = scheduler_;
         this.lastRunEpoch = this.scheduler.epoch;
-        this.activeTask = this.scheduler.newTask(
-            function () {
-                if (this.active) {
-                    this.poke(this.slowDataBus);
-                }
-            }.bind(this),
-        );
+        this.activeTask = this.scheduler.newTask(() => {
+            if (this.active) this.poke(this.slowDataBus);
+        });
     }
 
     render(out, offset, length) {
@@ -210,8 +208,8 @@ export class SoundChip {
         const num = time * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
         this.residual = num - rounded;
-        if (this.position + rounded >= this.maxBufferSize) {
-            rounded = this.maxBufferSize - this.position;
+        if (this.position + rounded >= this.buffer.length) {
+            rounded = this.buffer.length - this.position;
         }
         if (rounded === 0) return;
         this.generate(this.buffer, this.position, rounded);
@@ -233,7 +231,7 @@ export class SoundChip {
         if (command & 0x10) {
             // Volume setting
             const newVolume = value & 0x0f;
-            this.volume[channel] = this.volumeTable[newVolume];
+            this.volume[channel] = volumeTable[newVolume];
         } else if (channel === 3) {
             // For noise channel we always update the bottom bits.
             this.registers[channel] = value & 0x0f;
@@ -250,11 +248,9 @@ export class SoundChip {
     updateSlowDataBus(slowDataBus, active) {
         this.slowDataBus = slowDataBus;
         this.active = active;
-        // TODO: this probably isn't modeled correctly. Currently the
-        // sound chip "notices" a new data bus value some fixed number of
-        // cycles after WE (write enable) is triggered.
-        // In reality, the sound chip likely pulls data off the bus at a
-        // fixed point in its cycle, iff WE is active.
+        // TODO: this probably isn't modeled correctly. Currently the sound chip "notices" a new data bus value some
+        // fixed number of cycles after WE (write enable) is triggered. In reality, the sound chip likely pulls data off
+        // the bus at a fixed point in its cycle, iff WE is active.
         if (active) {
             this.activeTask.ensureScheduled(true, this.minCyclesWELow);
         }
@@ -265,7 +261,8 @@ export class SoundChip {
         for (let i = 0; i < 4; ++i) {
             this.counter[i] = 0;
             this.registers[i] = 0;
-            this.volume[i] = this.volumeTable[8]; // Real hardware would be volumeTable[0] but that's really quite loud and surprising...
+            // Real hardware would be volumeTable[0] but that's really quite loud and surprising...
+            this.volume[i] = volumeTable[8];
         }
         this.noisePoked();
         this.advance(100000);
