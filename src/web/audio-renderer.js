@@ -15,11 +15,12 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._queueSizeBytes = 0;
         this.dropped = 0;
         this.underruns = 0;
-        this.targetLatencyMs = 1000 * (2 / 50); // Two frames
+        this.targetLatencyMs = 1000 * (1 / 50); // One frame
         this.startQueueSizeBytes = this.inputSampleRate / this.targetLatencyMs / 2;
         this.running = false;
         this.maxQueueSizeBytes = this.inputSampleRate * 0.25;
         this.port.onmessage = (event) => {
+            // TODO: even better than this, send over register settings/catch up and run the audio work _here_
             this.onBuffer(event.data.time, event.data.buffer);
         };
         this.nextStats = 0;
