@@ -2,7 +2,7 @@
 
 # jsbeeb - JavaScript BBC Micro Emulator
 
-[![jsbeeb](images/jsbeeb-example.png)](https://bbc.xania.org/)
+[![jsbeeb](public/images/jsbeeb-example.png)](https://bbc.xania.org/)
 
 A BBC Micro emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B (with sideways RAM)
 and a 128K BBC Master, along with a number of different peripherals.
