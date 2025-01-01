@@ -15,16 +15,18 @@ const boundary = "-------314159265358979323846";
 const delimiter = `\r\n--${boundary}\r\n`;
 const close_delim = `\r\n--${boundary}--`;
 
+const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+
 export class GoogleDriveLoader {
     constructor() {
-        this.gapi = null;
         this.authorized = false;
         this.parentFolderId = undefined;
+        this.driveClient = undefined;
     }
 
     async initialise() {
         console.log("Creating GAPI");
-        this.gapi = await this._loadScript("https://apis.google.com/js/api.js", () => window.gapi);
+        const gapi = await this._loadScript("https://apis.google.com/js/api.js", () => window.gapi);
         console.log("Got GAPI, creating token client");
         this.tokenClient = await this._loadScript("https://accounts.google.com/gsi/client", () => {
             return window.google.accounts.oauth2.initTokenClient({
@@ -36,10 +38,11 @@ export class GoogleDriveLoader {
         });
         console.log("Token client created, loading client");
 
-        await this.gapi.load("client", async () => {
+        await gapi.load("client", async () => {
             console.log("Client loaded; initialising GAPI");
-            await this.gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+            await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
             console.log("GAPI initialised");
+            this.driveClient = gapi.client.drive;
         });
         console.log("Google Drive: available");
         return true;
@@ -74,18 +77,18 @@ export class GoogleDriveLoader {
     }
 
     async listFiles() {
-        let response = await this.gapi.client.drive.files.list({ q: `mimeType = '${MIME_TYPE}'` });
+        let response = await this.driveClient.files.list({ q: `mimeType = '${MIME_TYPE}' and trashed = false` });
         let result = response.result.files;
         while (response.result.nextPageToken) {
-            response = await this.gapi.client.drive.files.list({ pageToken: response.result.nextPageToken });
+            response = await this.driveClient.files.list({ pageToken: response.result.nextPageToken });
             result = result.concat(response.result.files);
         }
         return result;
     }
 
     async _findOrCreateParentFolder() {
-        const list = await this.gapi.client.drive.files.list({
-            q: `name = '${PARENT_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        const list = await this.driveClient.files.list({
+            q: `name = '${PARENT_FOLDER_NAME}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
             corpora: "user",
         });
         if (list.result.files.length === 1) {
@@ -93,8 +96,8 @@ export class GoogleDriveLoader {
             return list.result.files[0].id;
         }
         console.log(`Creating parent folder ${PARENT_FOLDER_NAME}`);
-        const file = await this.gapi.client.drive.files.create({
-            resource: { name: PARENT_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" },
+        const file = await this.driveClient.files.create({
+            resource: { name: PARENT_FOLDER_NAME, mimeType: FOLDER_MIME_TYPE },
             fields: "id",
         });
         console.log("Folder Id:", file.result.id);
@@ -109,7 +112,11 @@ export class GoogleDriveLoader {
         if (!idOrNone) metadata.parents = [this.parentFolderId];
 
         const base64Data = btoa(utils.uint8ArrayToString(data));
-        const multipartRequestBody = `${delimiter}Content-Type: application/json\r\n\r\n${JSON.stringify(metadata)}${delimiter}Content-Type: ${MIME_TYPE}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Data}${close_delim}`;
+        const multipartRequestBody =
+            `${delimiter}Content-Type: application/json\r\n\r\n` +
+            `${JSON.stringify(metadata)}${delimiter}` +
+            `Content-Type: ${MIME_TYPE}\r\nContent-Transfer-Encoding: base64\r\n\r\n` +
+            `${base64Data}${close_delim}`;
 
         return this.gapi.client.request({
             path: `/upload/drive/v3/files${idOrNone ? `/${idOrNone}` : ""}`,
@@ -148,8 +155,8 @@ export class GoogleDriveLoader {
     }
 
     async load(fdc, fileId) {
-        const meta = (await this.gapi.client.drive.files.get({ fileId, fields: FILE_FIELDS })).result;
-        const data = (await this.gapi.client.drive.files.get({ fileId, alt: "media" })).body;
+        const meta = (await this.driveClient.files.get({ fileId, fields: FILE_FIELDS })).result;
+        const data = (await this.driveClient.files.get({ fileId, alt: "media" })).body;
         return this.makeDisc(fdc, data, meta);
     }
 }
