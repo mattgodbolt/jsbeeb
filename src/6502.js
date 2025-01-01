@@ -577,6 +577,8 @@ export class Cpu6502 extends Base6502 {
         this.debugger = dbgr;
 
         this.video = video_;
+        this.crtc = this.video.crtc;
+        this.ula = this.video.ula;
         this.soundChip = soundChip_;
         this.music5000 = music5000_;
         this.ddNoise = ddNoise_;
@@ -615,6 +617,24 @@ export class Cpu6502 extends Base6502 {
         this.debugInstruction = new DebugHook(this, "_debugInstruction");
         this.debugRead = new DebugHook(this, "_debugRead");
         this.debugWrite = new DebugHook(this, "_debugWrite");
+
+        this.scheduler = new Scheduler();
+        this.sysvia = new via.SysVia(
+            this,
+            this.scheduler,
+            this.video,
+            this.soundChip,
+            this.cmos,
+            this.model.isMaster,
+            this.config.keyLayout,
+            this.config.getGamepads,
+        );
+        this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
+        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
+        this.serial = new Serial(this.acia);
+        this.adconverter = new Adc(this.sysvia, this.scheduler);
+        this.soundChip.setScheduler(this.scheduler);
+        this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
     }
 
     getPrevPc(index) {
@@ -1141,32 +1161,19 @@ export class Cpu6502 extends Base6502 {
                 }
             }
             this.videoDisplayPage = 0;
-            this.scheduler = new Scheduler();
-            this.soundChip.setScheduler(this.scheduler);
-            this.sysvia = new via.SysVia(
-                this,
-                this.scheduler,
-                this.video,
-                this.soundChip,
-                this.cmos,
-                this.model.isMaster,
-                this.config.keyLayout,
-                this.config.getGamepads,
-            );
-            this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
             if (this.config.printerPort) this.uservia.ca2changecallback = this.config.printerPort.outputStrobe;
-            this.touchScreen = new TouchScreen(this.scheduler);
-            this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
-            this.serial = new Serial(this.acia);
+
+            this.sysvia.reset();
+            this.uservia.reset();
+            this.acia.reset();
+            this.serial.reset();
             this.ddNoise.spinDown();
-            this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
-            this.crtc = this.video.crtc;
-            this.ula = this.video.ula;
-            this.adconverter = new Adc(this.sysvia, this.scheduler);
+            this.fdc.powerOnReset();
+            this.adconverter.reset();
+
+            this.touchScreen = new TouchScreen(this.scheduler);
             if (this.model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
             if (this.econet) this.filestore = new Filestore(this, this.econet);
-            this.sysvia.reset(hard);
-            this.uservia.reset(hard);
         } else {
             this.fdc.reset();
         }
