@@ -5,7 +5,6 @@ import * as utils from "./utils.js";
 import { discFor } from "./fdc.js";
 
 const MIME_TYPE = "application/vnd.jsbeeb.disc-image";
-const API_KEY = "AIzaSyAJOcuUV8x6qFL_ID3DmnH4dZ8VuAExTaU";
 const CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
@@ -59,7 +58,6 @@ export class GoogleDriveLoader {
         await this.gapi.load("client", async () => {
             console.log("Client loaded; initialising GAPI");
             await this.gapi.client.init({
-                apiKey: API_KEY,
                 discoveryDocs: [DISCOVERY_DOC],
             });
             console.log("GAPI initialised");
