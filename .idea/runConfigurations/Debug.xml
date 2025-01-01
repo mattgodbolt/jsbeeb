@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Debug" type="JavascriptDebugType" uri="http://localhost:8080?logFdcCommands&amp;model=MasterADFS&amp;disc=CodenameDroid-ADFS_E.adf" useFirstLineBreakpoints="true">
+  <configuration default="false" name="Debug" type="JavascriptDebugType" uri="http://localhost:5173/" useFirstLineBreakpoints="true">
     <method v="2" />
   </configuration>
 </component>
