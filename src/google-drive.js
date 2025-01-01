@@ -49,6 +49,7 @@ export class GoogleDriveLoader {
     }
 
     _loadScript(src, onload) {
+        // https://github.com/google/google-api-javascript-client/issues/319
         return new Promise((resolve) => {
             const script = document.createElement("script");
             script.src = src;
