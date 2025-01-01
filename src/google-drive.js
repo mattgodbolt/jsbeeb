@@ -12,11 +12,8 @@ const FILE_FIELDS = "id,name,capabilities";
 const PARENT_FOLDER_NAME = "jsbeeb disc images";
 
 const boundary = "-------314159265358979323846";
-const delimiter = `\r
---${boundary}\r
-`;
-const close_delim = `\r
---${boundary}--`;
+const delimiter = `\r\n--${boundary}\r\n`;
+const close_delim = `\r\n--${boundary}--`;
 
 export class GoogleDriveLoader {
     constructor() {
@@ -27,43 +24,34 @@ export class GoogleDriveLoader {
 
     async initialise() {
         console.log("Creating GAPI");
-        this.gapi = await new Promise((resolve) => {
-            // https://github.com/google/google-api-javascript-client/issues/319
-            const gapiScript = document.createElement("script");
-            gapiScript.src = "https://apis.google.com/js/api.js";
-            gapiScript.onload = function onGapiLoad() {
-                resolve(window.gapi);
-            };
-            document.body.appendChild(gapiScript);
-        });
+        this.gapi = await this._loadScript("https://apis.google.com/js/api.js", () => window.gapi);
         console.log("Got GAPI, creating token client");
-        this.tokenClient = await new Promise((resolve) => {
-            // https://github.com/google/google-api-javascript-client/issues/319
-            const gsiScript = document.createElement("script");
-            gsiScript.src = "https://accounts.google.com/gsi/client";
-            gsiScript.onload = function onGsiLoad() {
-                resolve(
-                    window.google.accounts.oauth2.initTokenClient({
-                        client_id: CLIENT_ID,
-                        scope: SCOPES,
-                        error_callback: "", // defined later
-                        callback: "", // defined later
-                    }),
-                );
-            };
-            document.body.appendChild(gsiScript);
+        this.tokenClient = await this._loadScript("https://accounts.google.com/gsi/client", () => {
+            return window.google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                error_callback: "", // defined later
+                callback: "", // defined later
+            });
         });
         console.log("Token client created, loading client");
 
         await this.gapi.load("client", async () => {
             console.log("Client loaded; initialising GAPI");
-            await this.gapi.client.init({
-                discoveryDocs: [DISCOVERY_DOC],
-            });
+            await this.gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
             console.log("GAPI initialised");
         });
         console.log("Google Drive: available");
         return true;
+    }
+
+    _loadScript(src, onload) {
+        return new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src = src;
+            script.onload = () => resolve(onload());
+            document.body.appendChild(script);
+        });
     }
 
     authorize(imm) {
@@ -86,21 +74,16 @@ export class GoogleDriveLoader {
     }
 
     async listFiles() {
-        let response = await this.gapi.client.drive.files.list({
-            q: `mimeType = '${MIME_TYPE}'`,
-        });
+        let response = await this.gapi.client.drive.files.list({ q: `mimeType = '${MIME_TYPE}'` });
         let result = response.result.files;
         while (response.result.nextPageToken) {
-            response = await this.gapi.client.drive.files.list({
-                pageToken: response.result.nextPageToken,
-            });
+            response = await this.gapi.client.drive.files.list({ pageToken: response.result.nextPageToken });
             result = result.concat(response.result.files);
         }
         return result;
     }
 
     async _findOrCreateParentFolder() {
-        // Not sure why this doesn't find Matt's pre-existing "jsbeeb disc images" folder, but this will have to do.
         const list = await this.gapi.client.drive.files.list({
             q: `name = '${PARENT_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
             corpora: "user",
@@ -111,10 +94,7 @@ export class GoogleDriveLoader {
         }
         console.log(`Creating parent folder ${PARENT_FOLDER_NAME}`);
         const file = await this.gapi.client.drive.files.create({
-            resource: {
-                name: PARENT_FOLDER_NAME,
-                mimeType: "application/vnd.google-apps.folder",
-            },
+            resource: { name: PARENT_FOLDER_NAME, mimeType: "application/vnd.google-apps.folder" },
             fields: "id",
         });
         console.log("Folder Id:", file.result.id);
@@ -125,30 +105,17 @@ export class GoogleDriveLoader {
         if (this.parentFolderId === undefined) {
             this.parentFolderId = await this._findOrCreateParentFolder();
         }
-        const metadata = {
-            name,
-            parents: [this.parentFolderId],
-            mimeType: MIME_TYPE,
-        };
+        const metadata = { name, mimeType: MIME_TYPE };
+        if (!idOrNone) metadata.parents = [this.parentFolderId];
 
-        // Note to self we can't upload data using create()
-        // https://stackoverflow.com/questions/34905363/create-file-with-google-drive-api-v3-javascript
-        const str = utils.uint8ArrayToString(data);
-        const base64Data = btoa(str);
-        const multipartRequestBody = `${delimiter}Content-Type: application/json\r
-\r
-${JSON.stringify(metadata)}${delimiter}Content-Type: ${MIME_TYPE}\r
-Content-Transfer-Encoding: base64\r
-\r
-${base64Data}${close_delim}`;
+        const base64Data = btoa(utils.uint8ArrayToString(data));
+        const multipartRequestBody = `${delimiter}Content-Type: application/json\r\n\r\n${JSON.stringify(metadata)}${delimiter}Content-Type: ${MIME_TYPE}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Data}${close_delim}`;
 
         return this.gapi.client.request({
             path: `/upload/drive/v3/files${idOrNone ? `/${idOrNone}` : ""}`,
             method: idOrNone ? "PATCH" : "POST",
             params: { uploadType: "multipart", newRevision: false, fields: FILE_FIELDS },
-            headers: {
-                "Content-Type": `multipart/mixed; boundary="${boundary}"`,
-            },
+            headers: { "Content-Type": `multipart/mixed; boundary="${boundary}"` },
             body: multipartRequestBody,
         });
     }
@@ -181,8 +148,8 @@ ${base64Data}${close_delim}`;
     }
 
     async load(fdc, fileId) {
-        const meta = (await this.gapi.client.drive.files.get({ fileId: fileId, fields: FILE_FIELDS })).result;
-        const data = (await this.gapi.client.drive.files.get({ fileId: fileId, alt: "media" })).body;
+        const meta = (await this.gapi.client.drive.files.get({ fileId, fields: FILE_FIELDS })).result;
+        const data = (await this.gapi.client.drive.files.get({ fileId, alt: "media" })).body;
         return this.makeDisc(fdc, data, meta);
     }
 }
