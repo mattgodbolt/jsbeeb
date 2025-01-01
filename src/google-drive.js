@@ -1,169 +1,153 @@
 "use strict";
+
 import _ from "underscore";
 import * as utils from "./utils.js";
 import { discFor } from "./fdc.js";
 
-export function GoogleDriveLoader() {
-    const self = this;
-    const MIME_TYPE = "application/vnd.jsbeeb.disc-image";
-    const CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com";
-    const SCOPES = "https://www.googleapis.com/auth/drive.file";
-    let gapi = null;
+const MIME_TYPE = "application/vnd.jsbeeb.disc-image";
+const CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com";
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
+const DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
+const FILE_FIELDS = "id,name,capabilities";
+const PARENT_FOLDER_NAME = "jsbeeb disc images";
 
-    self.initialise = function () {
-        return new Promise(function (resolve) {
-            // https://github.com/google/google-api-javascript-client/issues/319
-            const gapiScript = document.createElement("script");
-            gapiScript.src = "https://apis.google.com/js/client.js?onload=__onGapiLoad__";
-            window.__onGapiLoad__ = function onGapiLoad() {
-                gapi = window.gapi;
-                gapi.client.load("drive", "v2", function () {
-                    console.log("Google Drive: available");
-                    resolve(true);
-                });
-            };
-            document.body.appendChild(gapiScript);
+const boundary = "-------314159265358979323846";
+const delimiter = `\r\n--${boundary}\r\n`;
+const close_delim = `\r\n--${boundary}--`;
+
+const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+
+export class GoogleDriveLoader {
+    constructor() {
+        this.authorized = false;
+        this.parentFolderId = undefined;
+        this.driveClient = undefined;
+    }
+
+    async initialise() {
+        console.log("Creating GAPI");
+        const gapi = await this._loadScript("https://apis.google.com/js/api.js", () => window.gapi);
+        console.log("Got GAPI, creating token client");
+        this.tokenClient = await this._loadScript("https://accounts.google.com/gsi/client", () => {
+            return window.google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                error_callback: "", // defined later
+                callback: "", // defined later
+            });
         });
-    };
+        console.log("Token client created, loading client");
 
-    self.authorize = function (immediate) {
-        return new Promise(function (resolve, reject) {
-            console.log("Authorizing", immediate);
-            gapi.auth.authorize(
-                {
-                    client_id: CLIENT_ID,
-                    scope: SCOPES,
-                    immediate: immediate,
-                },
-                function (authResult) {
-                    if (authResult && !authResult.error) {
-                        console.log("Google Drive: authorized");
-                        resolve(true);
-                    } else if (authResult && authResult.error && !immediate) {
-                        reject(new Error(authResult.error));
-                    } else {
-                        console.log("Google Drive: Need to auth");
-                        resolve(false);
-                    }
-                },
-            );
+        await gapi.load("client", async () => {
+            console.log("Client loaded; initialising GAPI");
+            await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+            console.log("GAPI initialised");
+            this.driveClient = gapi.client.drive;
         });
-    };
+        console.log("Google Drive: available");
+        return true;
+    }
 
-    const boundary = "-------314159265358979323846";
-    const delimiter = "\r\n--" + boundary + "\r\n";
-    const close_delim = "\r\n--" + boundary + "--";
-
-    function listFiles() {
-        return new Promise(function (resolve) {
-            const retrievePageOfFiles = function (request, result) {
-                request.execute(function (resp) {
-                    result = result.concat(resp.items);
-                    const nextPageToken = resp.nextPageToken;
-                    if (nextPageToken) {
-                        request = gapi.client.drive.files.list({
-                            pageToken: nextPageToken,
-                        });
-                        retrievePageOfFiles(request, result);
-                    } else {
-                        resolve(result);
-                    }
-                });
-            };
-            retrievePageOfFiles(
-                gapi.client.drive.files.list({
-                    q: "mimeType = '" + MIME_TYPE + "'",
-                }),
-                [],
-            );
+    _loadScript(src, onload) {
+        // https://github.com/google/google-api-javascript-client/issues/319
+        return new Promise((resolve) => {
+            const script = document.createElement("script");
+            script.src = src;
+            script.onload = () => resolve(onload());
+            document.body.appendChild(script);
         });
     }
 
-    function saveFile(name, data, idOrNone) {
-        const metadata = {
-            title: name,
-            parents: ["jsbeeb disc images"], // TODO: parents doesn't work; also should probably prevent overwriting this on every save
-            mimeType: MIME_TYPE,
-        };
+    authorize(imm) {
+        if (this.authorized) return true;
+        if (imm) return false;
+        return new Promise((resolve, reject) => {
+            console.log("Authorizing...");
+            this.tokenClient.callback = (resp) => {
+                if (resp.error !== undefined) reject(resp);
+                console.log("Authorized OK");
+                this.authorized = true;
+                resolve(true);
+            };
+            this.tokenClient.error_callback = (resp) => {
+                console.log(`Token client failure: ${resp.type}; failed to authorize`);
+                reject(new Error(`Token client failure: ${resp.type}; failed to authorize`));
+            };
+            this.tokenClient.requestAccessToken({ select_account: false });
+        });
+    }
 
-        const str = utils.uint8ArrayToString(data);
-        const base64Data = btoa(str);
+    async listFiles() {
+        let response = await this.driveClient.files.list({ q: `mimeType = '${MIME_TYPE}' and trashed = false` });
+        let result = response.result.files;
+        while (response.result.nextPageToken) {
+            response = await this.driveClient.files.list({ pageToken: response.result.nextPageToken });
+            result = result.concat(response.result.files);
+        }
+        return result;
+    }
+
+    async _findOrCreateParentFolder() {
+        const list = await this.driveClient.files.list({
+            q: `name = '${PARENT_FOLDER_NAME}' and mimeType = '${FOLDER_MIME_TYPE}' and trashed = false`,
+            corpora: "user",
+        });
+        if (list.result.files.length === 1) {
+            console.log("Found existing parent folder");
+            return list.result.files[0].id;
+        }
+        console.log(`Creating parent folder ${PARENT_FOLDER_NAME}`);
+        const file = await this.driveClient.files.create({
+            resource: { name: PARENT_FOLDER_NAME, mimeType: FOLDER_MIME_TYPE },
+            fields: "id",
+        });
+        console.log("Folder Id:", file.result.id);
+        return file.result.id;
+    }
+
+    async saveFile(name, data, idOrNone) {
+        if (this.parentFolderId === undefined) {
+            this.parentFolderId = await this._findOrCreateParentFolder();
+        }
+        const metadata = { name, mimeType: MIME_TYPE };
+        if (!idOrNone) metadata.parents = [this.parentFolderId];
+
+        const base64Data = btoa(utils.uint8ArrayToString(data));
         const multipartRequestBody =
-            delimiter +
-            "Content-Type: application/json\r\n\r\n" +
-            JSON.stringify(metadata) +
-            delimiter +
-            "Content-Type: " +
-            MIME_TYPE +
-            "\r\n" +
-            "Content-Transfer-Encoding: base64\r\n" +
-            "\r\n" +
-            base64Data +
-            close_delim;
+            `${delimiter}Content-Type: application/json\r\n\r\n` +
+            `${JSON.stringify(metadata)}${delimiter}` +
+            `Content-Type: ${MIME_TYPE}\r\nContent-Transfer-Encoding: base64\r\n\r\n` +
+            `${base64Data}${close_delim}`;
 
-        return gapi.client.request({
-            path: "/upload/drive/v2/files" + (idOrNone ? "/" + idOrNone : ""),
-            method: idOrNone ? "PUT" : "POST",
-            params: { uploadType: "multipart", newRevision: false },
-            headers: {
-                "Content-Type": 'multipart/mixed; boundary="' + boundary + '"',
-            },
+        return this.gapi.client.request({
+            path: `/upload/drive/v3/files${idOrNone ? `/${idOrNone}` : ""}`,
+            method: idOrNone ? "PATCH" : "POST",
+            params: { uploadType: "multipart", newRevision: false, fields: FILE_FIELDS },
+            headers: { "Content-Type": `multipart/mixed; boundary="${boundary}"` },
             body: multipartRequestBody,
         });
     }
 
-    function loadMetadata(fileId) {
-        return gapi.client.drive.files.get({ fileId: fileId });
-    }
-
-    self.create = function (fdc, name) {
-        console.log("Google Drive: creating disc image: '" + name + "'");
+    async create(fdc, name) {
+        console.log(`Google Drive: creating disc image: '${name}'`);
         const byteSize = utils.discImageSize(name).byteSize;
         const data = new Uint8Array(byteSize);
         utils.setDiscName(data, name);
-        return saveFile(name, data).then(function (response) {
-            const meta = response.result;
-            return { fileId: meta.id, disc: makeDisc(fdc, data, meta) };
-        });
-    };
-
-    function downloadFile(file) {
-        if (file.downloadUrl) {
-            return new Promise(function (resolve, reject) {
-                const accessToken = gapi.auth.getToken().access_token;
-                const xhr = new XMLHttpRequest();
-                xhr.open("GET", file.downloadUrl, true);
-                xhr.setRequestHeader("Authorization", "Bearer " + accessToken);
-                xhr.overrideMimeType("text/plain; charset=x-user-defined");
-
-                xhr.onload = function () {
-                    if (xhr.status !== 200) {
-                        reject(new Error("Unable to load '" + file.title + "', http code " + xhr.status));
-                    } else if (typeof xhr.response !== "string") {
-                        resolve(xhr.response);
-                    } else {
-                        resolve(utils.stringToUint8Array(xhr.response));
-                    }
-                };
-                xhr.onerror = function () {
-                    reject(new Error("Error sending request for " + file));
-                };
-                xhr.send();
-            });
-        } else {
-            return Promise.resolve(null);
-        }
+        const response = await this.saveFile(name, data);
+        const meta = response.result;
+        return { fileId: meta.id, disc: this.makeDisc(fdc, data, meta) };
     }
 
-    function makeDisc(fdc, data, meta) {
+    makeDisc(fdc, data, meta) {
         let flusher = null;
-        const name = meta.title;
-        if (meta.editable) {
+        const name = meta.name;
+        const id = meta.id;
+        if (meta.capabilities.canEdit) {
             console.log("Making editable disc");
-            flusher = _.debounce(function () {
-                saveFile(this.name, this.data, meta.id).then(function () {
-                    console.log("Saved ok");
-                });
+            flusher = _.debounce(async (changedData) => {
+                console.log("Data changed...");
+                await this.saveFile(name, changedData, id);
+                console.log("Saved ok");
             }, 200);
         } else {
             console.log("Making read-only disc");
@@ -171,17 +155,9 @@ export function GoogleDriveLoader() {
         return discFor(fdc, name, data, flusher);
     }
 
-    self.load = function (fdc, fileId) {
-        let meta = false;
-        return loadMetadata(fileId)
-            .then(function (response) {
-                meta = response.result;
-                return downloadFile(response.result);
-            })
-            .then(function (data) {
-                return makeDisc(fdc, data, meta);
-            });
-    };
-
-    self.cat = listFiles;
+    async load(fdc, fileId) {
+        const meta = (await this.driveClient.files.get({ fileId, fields: FILE_FIELDS })).result;
+        const data = (await this.driveClient.files.get({ fileId, alt: "media" })).body;
+        return this.makeDisc(fdc, data, meta);
+    }
 }

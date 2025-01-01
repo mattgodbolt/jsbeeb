@@ -918,12 +918,12 @@ function loadDiscImage(discImage) {
     }
     if (schema === "gd") {
         const splat = discImage.match(/([^/]+)\/?(.*)/);
-        let title = "(unknown)";
+        let name = "(unknown)";
         if (splat) {
             discImage = splat[1];
-            title = splat[2];
+            name = splat[2];
         }
-        return gdLoad({ title: title, id: discImage });
+        return gdLoad({ name, id: discImage });
     }
     if (schema === "b64data") {
         const ssdData = atob(discImage);
@@ -1053,21 +1053,15 @@ function loadingFinished(error) {
     }
 }
 
-let gdAuthed = false;
 const googleDrive = new GoogleDriveLoader();
 
-function gdAuth(imm) {
-    return googleDrive.authorize(imm).then(
-        function (authed) {
-            gdAuthed = authed;
-            console.log("authed =", authed);
-            return authed;
-        },
-        function (err) {
-            console.log("Error handling google auth: " + err);
-            $googleDrive.find(".loading").text("There was an error accessing your Google Drive account: " + err);
-        },
-    );
+async function gdAuth(imm) {
+    try {
+        return await googleDrive.authorize(imm);
+    } catch (err) {
+        console.log("Error handling google auth: " + err);
+        $googleDrive.find(".loading").text("There was an error accessing your Google Drive account: " + err);
+    }
 }
 
 let googleDriveLoadingResolve, googleDriveLoadingReject;
@@ -1087,7 +1081,7 @@ function gdLoad(cat) {
      return confirm("Do you really want to close?");
      });
      */
-    popupLoading("Loading '" + cat.title + "' from Google Drive");
+    popupLoading("Loading '" + cat.name + "' from Google Drive");
     return googleDrive
         .initialise()
         .then(function (available) {
@@ -1125,41 +1119,36 @@ $(".if-drive-available").hide();
 googleDrive.initialise().then(function (available) {
     if (available) {
         $(".if-drive-available").show();
-        gdAuth(true);
+        gdAuth(true).then();
     }
 });
 const $googleDrive = $("#google-drive");
 const $googleDriveModal = new bootstrap.Modal($googleDrive[0]);
 $("#open-drive-link").on("click", function () {
-    if (gdAuthed) {
-        $googleDriveModal.show();
-    } else {
-        gdAuth(false).then(function (authed) {
-            if (authed) {
-                $googleDriveModal.hide();
-            }
-        });
-    }
+    gdAuth(false).then(function (authed) {
+        if (authed) {
+            $googleDriveModal.show();
+        }
+    });
     return false;
 });
-$googleDrive[0].addEventListener("show.bs.modal", function () {
+$googleDrive[0].addEventListener("show.bs.modal", async function () {
     $googleDrive.find(".loading").text("Loading...").show();
     $googleDrive.find("li").not(".template").remove();
-    googleDrive.cat().then(function (cat) {
-        const dbList = $googleDrive.find(".list");
-        $googleDrive.find(".loading").hide();
-        const template = dbList.find(".template");
-        $.each(cat, function (_, cat) {
-            const row = template.clone().removeClass("template").appendTo(dbList);
-            row.find(".name").text(cat.title);
-            $(row).on("click", function () {
-                utils.noteEvent("google-drive", "click", cat.title);
-                setDisc1Image("gd:" + cat.id + "/" + cat.title);
-                gdLoad(cat).then(function (ssd) {
-                    processor.fdc.loadDisc(0, ssd);
-                });
-                $googleDriveModal.hide();
+    const cat = await googleDrive.listFiles();
+    const dbList = $googleDrive.find(".list");
+    $googleDrive.find(".loading").hide();
+    const template = dbList.find(".template");
+    $.each(cat, function (_, cat) {
+        const row = template.clone().removeClass("template").appendTo(dbList);
+        row.find(".name").text(cat.name);
+        $(row).on("click", function () {
+            utils.noteEvent("google-drive", "click", cat.name);
+            setDisc1Image(`gd:${cat.id}/${cat.name}`);
+            gdLoad(cat).then(function (ssd) {
+                processor.fdc.loadDisc(0, ssd);
             });
+            $googleDriveModal.hide();
         });
     });
 });
@@ -1193,7 +1182,8 @@ $("#google-drive form").on("submit", function (e) {
             loadingFinished();
         },
         function (error) {
-            loadingFinished(error);
+            console.log(`Error in creating: ${error} | ${JSON.stringify(error)}`);
+            loadingFinished(`Create failed: ${error}`);
         },
     );
 });
