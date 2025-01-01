@@ -1183,7 +1183,7 @@ export class Cpu6502 extends Base6502 {
         this.halted = false;
         this.music5000PageSel = 0;
         this.video.reset(this, this.sysvia, hard);
-        if (hard) this.soundChip.reset(hard);
+        this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
         if (this.music5000) this.music5000.reset(hard);
         if (hard && this.econet) {

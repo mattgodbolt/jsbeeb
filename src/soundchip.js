@@ -272,8 +272,7 @@ export class SoundChip {
             this.volume[i] = volumeTable[8];
         }
         this.noisePoked();
-        this.advance(100000);
-        this.setScheduler(this.scheduler);
+        this.lastRunEpoch = this.scheduler.epoch;
     }
 
     enable(e) {
