@@ -9,6 +9,12 @@ export class Adc {
         this.high = 0x00;
     }
 
+    reset() {
+        this.status = 0x40;
+        this.low = 0x00;
+        this.high = 0x00;
+    }
+
     read(addr) {
         switch (addr & 3) {
             case 0:
