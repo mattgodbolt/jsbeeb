@@ -10,6 +10,7 @@ const CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleuser
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 const DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest";
 const FILE_FIELDS = "id,name,capabilities";
+const PARENT_FOLDER_NAME = "jsbeeb disc images";
 
 const boundary = "-------314159265358979323846";
 const delimiter = `\r
@@ -22,6 +23,7 @@ export class GoogleDriveLoader {
     constructor() {
         this.gapi = null;
         this.authorized = false;
+        this.parentFolderId = undefined;
     }
 
     async initialise() {
@@ -77,7 +79,6 @@ export class GoogleDriveLoader {
                 this.authorized = true;
                 resolve(true);
             };
-            window.moo = this.tokenClient; // DO NOT CHECK IN
             this.tokenClient.error_callback = (resp) => {
                 console.log(`Token client failure: ${resp.type}; failed to authorize`);
                 reject(new Error(`Token client failure: ${resp.type}; failed to authorize`));
@@ -100,13 +101,40 @@ export class GoogleDriveLoader {
         return result;
     }
 
-    saveFile(name, data, idOrNone) {
+    async _findOrCreateParentFolder() {
+        // Not sure why this doesn't find Matt's pre-existing "jsbeeb disc images" folder, but this will have to do.
+        const list = await this.gapi.client.drive.files.list({
+            q: `name = '${PARENT_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            corpora: "user",
+        });
+        if (list.result.files.length === 1) {
+            console.log("Found existing parent folder");
+            return list.result.files[0].id;
+        }
+        console.log(`Creating parent folder ${PARENT_FOLDER_NAME}`);
+        const file = await this.gapi.client.drive.files.create({
+            resource: {
+                name: PARENT_FOLDER_NAME,
+                mimeType: "application/vnd.google-apps.folder",
+            },
+            fields: "id",
+        });
+        console.log("Folder Id:", file.result.id);
+        return file.result.id;
+    }
+
+    async saveFile(name, data, idOrNone) {
+        if (this.parentFolderId === undefined) {
+            this.parentFolderId = await this._findOrCreateParentFolder();
+        }
         const metadata = {
             name,
-            // parents: ["jsbeeb disc images"], // TODO: parents doesn't work, need folder ID maybe?
+            parents: [this.parentFolderId],
             mimeType: MIME_TYPE,
         };
 
+        // Note to self we can't upload data using create()
+        // https://stackoverflow.com/questions/34905363/create-file-with-google-drive-api-v3-javascript
         const str = utils.uint8ArrayToString(data);
         const base64Data = btoa(str);
         const multipartRequestBody = `${delimiter}Content-Type: application/json\r

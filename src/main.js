@@ -1180,7 +1180,8 @@ $("#google-drive form").on("submit", function (e) {
             loadingFinished();
         },
         function (error) {
-            loadingFinished(JSON.stringify(error));
+            console.log(`Error in creating: ${error} | ${JSON.stringify(error)}`);
+            loadingFinished(`Create failed: ${error}`);
         },
     );
 });
