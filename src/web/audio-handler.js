@@ -80,12 +80,12 @@ export class AudioHandler {
     async _setup(audioFilterFreq, audioFilterQ) {
         await this.audioContext.audioWorklet.addModule(rendererUrl);
         if (audioFilterFreq !== 0) {
-            this.soundChip.filterNode = this.audioContext.createBiquadFilter();
-            this.soundChip.filterNode.type = "lowpass";
-            this.soundChip.filterNode.frequency.value = audioFilterFreq;
-            this.soundChip.filterNode.Q.value = audioFilterQ;
-            this._audioDestination = this.soundChip.filterNode;
-            this.soundChip.filterNode.connect(this.audioContext.destination);
+            const filterNode = this.audioContext.createBiquadFilter();
+            filterNode.type = "lowpass";
+            filterNode.frequency.value = audioFilterFreq;
+            filterNode.Q.value = audioFilterQ;
+            this._audioDestination = filterNode;
+            filterNode.connect(this.audioContext.destination);
         } else {
             this._audioDestination = this.audioContext.destination;
         }
@@ -111,8 +111,7 @@ export class AudioHandler {
         if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer }, [buffer.buffer]);
     }
 
-    // Recent browsers, particularly Safari and Chrome, require a user
-    // interaction in order to enable sound playback.
+    // Recent browsers, particularly Safari and Chrome, require a user interaction in order to enable sound playback.
     async tryResume() {
         if (this.audioContext) await this.audioContext.resume();
         if (this.audioContextM5000) await this.audioContextM5000.resume();
