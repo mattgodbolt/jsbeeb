@@ -1,6 +1,4 @@
-const FloatType = typeof Float64Array !== "undefined" ? Float64Array : Float32Array;
-
-const volumeTable = new FloatType(16);
+const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
     for (let i = 0; i < 15; ++i) {
@@ -11,7 +9,7 @@ const volumeTable = new FloatType(16);
 })();
 
 function makeSineTable(attenuation) {
-    const sineTable = new FloatType(8192);
+    const sineTable = new Float32Array(8192);
     for (let i = 0; i < sineTable.length; ++i) {
         sineTable[i] = Math.sin((2 * Math.PI * i) / sineTable.length) * attenuation;
     }
@@ -19,23 +17,24 @@ function makeSineTable(attenuation) {
 }
 
 export class SoundChip {
-    constructor(sampleRate) {
-        this.cpuFreq = 1 / (2 * 1000 * 1000); // TODO hacky here
+    constructor(onBuffer) {
+        this._onBuffer = onBuffer;
         // 4MHz input signal. Internal divide-by-8
         this.soundchipFreq = 4000000.0 / 8;
+        const sampleRate = this.soundchipFreq;
         // Square wave changes every time a counter hits zero: A full wave needs to be 2x counter zeros.
         this.waveDecrementPerSecond = this.soundchipFreq / 2;
         // Each sample in the buffer represents (1/sampleRate) time, so each time
         // we generate a sample, we need to decrement the counters by this amount:
         this.sampleDecrement = this.waveDecrementPerSecond / sampleRate;
         // How many samples are generated per CPU cycle.
-        this.samplesPerCycle = sampleRate * this.cpuFreq;
+        this.samplesPerCycle = sampleRate / 2000000;
         this.minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
         this.registers = new Uint16Array(4);
-        this.counter = new FloatType(4);
+        this.counter = new Float32Array(4);
         this.outputBit = [false, false, false, false];
-        this.volume = new FloatType(4);
+        this.volume = new Float32Array(4);
         this.generators = [
             this.toneChannel.bind(this),
             this.toneChannel.bind(this),
@@ -59,7 +58,7 @@ export class SoundChip {
 
         this.residual = 0;
         this.position = 0;
-        this.buffer = new FloatType(4096);
+        this.buffer = new Float32Array(512);
 
         this.latchedRegister = 0;
         this.slowDataBus = 0;
@@ -204,16 +203,24 @@ export class SoundChip {
         }
     }
 
-    advance(time) {
-        const num = time * this.samplesPerCycle + this.residual;
+    advance(cycles) {
+        const num = cycles * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
         this.residual = num - rounded;
-        if (this.position + rounded >= this.buffer.length) {
-            rounded = this.buffer.length - this.position;
+        const bufferLength = this.buffer.length;
+        while (rounded > 0) {
+            const leftInBuffer = bufferLength - this.position;
+            const numSamplesToGenerate = Math.min(rounded, leftInBuffer);
+            this.generate(this.buffer, this.position, numSamplesToGenerate);
+            this.position += numSamplesToGenerate;
+            rounded -= numSamplesToGenerate;
+
+            if (this.position === bufferLength) {
+                this._onBuffer(this.buffer);
+                this.buffer = new Float32Array(bufferLength);
+                this.position = 0;
+            }
         }
-        if (rounded === 0) return;
-        this.generate(this.buffer, this.position, rounded);
-        this.position += rounded;
     }
 
     poke(value) {

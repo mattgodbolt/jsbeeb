@@ -294,7 +294,9 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
-const audioHandler = new AudioHandler($("#audio-warning"), audioFilterFreq, audioFilterQ, noSeek);
+const audioStatsNode = document.getElementById("audio-stats");
+const audioHandler = new AudioHandler($("#audio-warning"), audioStatsNode, audioFilterFreq, audioFilterQ, noSeek);
+if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
@@ -1502,6 +1504,7 @@ function draw(now) {
         window.requestAnimationFrame(draw);
     }
 
+    audioHandler.soundChip.catchUp();
     gamepad.update(processor.sysvia);
     syncLights();
     if (last !== 0) {

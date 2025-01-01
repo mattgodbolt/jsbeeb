@@ -90,6 +90,7 @@ site to make it smaller and faster to load when it's deployed to [https://bbc.xa
   Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom`
   file assumed to be within.
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
+- `audioDebug=true` turns on some audio debug graphs.
 
 ## Patches
 

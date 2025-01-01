@@ -1,11 +1,25 @@
+import rendererUrl from "./audio-renderer.js?url";
+import music500WorkletUrl from "../music5000-worklet.js?url";
+import { SmoothieChart, TimeSeries } from "smoothie";
 import { FakeSoundChip, SoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
 
 export class AudioHandler {
-    constructor(warningNode, audioFilterFreq, audioFilterQ, noSeek) {
+    constructor(warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek) {
         this.warningNode = warningNode;
-
+        this.warningNode.toggle(false);
+        this.chart = new SmoothieChart({
+            tooltip: true,
+            labels: { precision: 0 },
+            yRangeFunction: (range) => {
+                return { min: 0, max: range.max };
+            },
+        });
+        this.stats = {};
+        this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
+        this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
+        this.chart.streamTo(statsNode, 100);
         /*global webkitAudioContext*/
         this.audioContext =
             typeof AudioContext !== "undefined"
@@ -13,15 +27,26 @@ export class AudioHandler {
                 : typeof webkitAudioContext !== "undefined"
                   ? new webkitAudioContext()
                   : null;
-        if (this.audioContext) {
+        this._jsAudioNode = null;
+        if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
-            // TODO: try and remove the dependency on this being created first? maybe? like, why should the soundchip
-            //  care what renderer we have? Perhaps we can pick a sample rate and then use playback speed of the
-            //  js audio node to match real time with the output.
-            this.soundChip = new SoundChip(this.audioContext.sampleRate);
+            this.soundChip = new SoundChip((buffer, time) => this._onBuffer(buffer, time));
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext);
-            this._setup(audioFilterFreq, audioFilterQ);
+            this._setup(audioFilterFreq, audioFilterQ).then();
         } else {
+            if (this.audioContext && !this.audioContext.audioWorklet) {
+                this.audioContext = null;
+                console.log("Unable to initialise audio: no audio worklet API");
+                this.warningNode.toggle(true);
+                const localhost = new URL(window.location);
+                localhost.hostname = "localhost";
+                this.warningNode.html(
+                    `No audio worklet API was found - there will be no audio. 
+                    If you are running a local jsbeeb, you must either use a host of
+                    <a href="${localhost}">localhost</a>, 
+                    or serve the content over <em>https</em>.`,
+                );
+            }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
         }
@@ -41,7 +66,7 @@ export class AudioHandler {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
             this.music5000 = new Music5000((buffer) => this._onBufferMusic5000(buffer));
 
-            this.audioContextM5000.audioWorklet.addModule("./music5000-worklet.js").then(() => {
+            this.audioContextM5000.audioWorklet.addModule(music500WorkletUrl).then(() => {
                 this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, "music5000", {
                     outputChannelCount: [2],
                 });
@@ -52,30 +77,41 @@ export class AudioHandler {
         }
     }
 
-    _setup(audioFilterFreq, audioFilterQ) {
-        // NB must be assigned to some kind of object else it seems to get GC'd by Safari...
-        // TODO consider using a newer API. AudioWorkletNode? Harder to do two-way conversations there. Maybe needs
-        //  a AudioBufferSourceNode and pingponging between buffers?
-        this._jsAudioNode = this.audioContext.createScriptProcessor(2048, 0, 1);
-        this._jsAudioNode.onaudioprocess = (event) => {
-            const outBuffer = event.outputBuffer;
-            const chan = outBuffer.getChannelData(0);
-            this.soundChip.render(chan, 0, chan.length);
-        };
-
+    async _setup(audioFilterFreq, audioFilterQ) {
+        await this.audioContext.audioWorklet.addModule(rendererUrl);
         if (audioFilterFreq !== 0) {
-            this.soundChip.filterNode = this.audioContext.createBiquadFilter();
-            this.soundChip.filterNode.type = "lowpass";
-            this.soundChip.filterNode.frequency.value = audioFilterFreq;
-            this.soundChip.filterNode.Q.value = audioFilterQ;
-            this._jsAudioNode.connect(this.soundChip.filterNode);
-            this.soundChip.filterNode.connect(this.audioContext.destination);
+            const filterNode = this.audioContext.createBiquadFilter();
+            filterNode.type = "lowpass";
+            filterNode.frequency.value = audioFilterFreq;
+            filterNode.Q.value = audioFilterQ;
+            this._audioDestination = filterNode;
+            filterNode.connect(this.audioContext.destination);
         } else {
-            this.soundChip._jsAudioNode.connect(this.audioContext.destination);
+            this._audioDestination = this.audioContext.destination;
         }
+
+        this._jsAudioNode = new AudioWorkletNode(this.audioContext, "sound-chip-processor");
+        this._jsAudioNode.connect(this._audioDestination);
+        this._jsAudioNode.port.onmessage = (event) => {
+            const now = Date.now();
+            for (const stat of Object.keys(event.data)) {
+                if (this.stats[stat]) this.stats[stat].append(now, event.data[stat]);
+            }
+        };
     }
-    // Recent browsers, particularly Safari and Chrome, require a user
-    // interaction in order to enable sound playback.
+
+    _addStat(stat, info) {
+        const timeSeries = new TimeSeries();
+        this.stats[stat] = timeSeries;
+        info.tooltipLabel = stat;
+        this.chart.addTimeSeries(timeSeries, info);
+    }
+
+    _onBuffer(buffer) {
+        if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer }, [buffer.buffer]);
+    }
+
+    // Recent browsers, particularly Safari and Chrome, require a user interaction in order to enable sound playback.
     async tryResume() {
         if (this.audioContext) await this.audioContext.resume();
         if (this.audioContextM5000) await this.audioContextM5000.resume();
