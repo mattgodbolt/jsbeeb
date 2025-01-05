@@ -138,6 +138,9 @@ export class TestMachine {
                 case ";":
                     ch = utils.keyCodes.SEMICOLON;
                     break;
+                case ":":
+                    ch = utils.keyCodes.APOSTROPHE;
+                    break;
                 case ",":
                     ch = utils.keyCodes.COMMA;
                     break;

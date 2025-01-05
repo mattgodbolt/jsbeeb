@@ -5,7 +5,6 @@ import { makeFast32 } from "./utils.js";
 export class Teletext {
     constructor() {
         this.prevCol = 0;
-        this.holdOff = false;
         this.col = 7;
         this.bg = 0;
         this.sep = false;
@@ -149,7 +148,6 @@ export class Teletext {
     }
 
     handleControlCode(data) {
-        this.holdOff = false;
         const wasGfx = this.gfx;
         const wasHoldChar = this.holdChar;
 
@@ -208,7 +206,7 @@ export class Teletext {
                 this.holdChar = true;
                 break;
             case 31:
-                this.holdOff = true;
+                this.holdChar = false;
                 break;
         }
         if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
@@ -322,7 +320,7 @@ export class Teletext {
                 this.heldGlyphs = this.curGlyphs;
             }
         } else {
-            this.holdOff = true;
+            this.heldChar = 32;
         }
 
         if (this.oldDbl) {
@@ -345,11 +343,6 @@ export class Teletext {
                 buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
                 chardef >>>= 2;
             }
-        }
-
-        if (this.holdOff) {
-            this.holdChar = false;
-            this.heldChar = 32;
         }
     }
 }
