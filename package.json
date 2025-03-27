@@ -8,6 +8,7 @@
   "description": "Emulate a BBC Micro",
   "repository": "git@github.com:mattgodbolt/jsbeeb.git",
   "version": "0.0.7",
+  "//": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
     "node": "20"
   },
