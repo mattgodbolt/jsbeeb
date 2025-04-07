@@ -2,14 +2,14 @@
 import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
 
-const VDISPENABLE = 1 << 0,
-    HDISPENABLE = 1 << 1,
-    SKEWDISPENABLE = 1 << 2,
-    SCANLINEDISPENABLE = 1 << 3,
-    USERDISPENABLE = 1 << 4,
-    FRAMESKIPENABLE = 1 << 5,
-    EVERYTHINGENABLED =
-        VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
+export const VDISPENABLE = 1 << 0;
+export const HDISPENABLE = 1 << 1;
+export const SKEWDISPENABLE = 1 << 2;
+export const SCANLINEDISPENABLE = 1 << 3;
+export const USERDISPENABLE = 1 << 4;
+export const FRAMESKIPENABLE = 1 << 5;
+export const EVERYTHINGENABLED =
+    VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
 ////////////////////
 // ULA interface
