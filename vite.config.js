@@ -9,5 +9,20 @@ export default {
     },
     test: {
         include: [...configDefaults.include, "tests/unit/**/*.js", "tests/integration/**/*.js"],
+        coverage: {
+            provider: "v8",
+            reporter: ["text", "html", "lcov"],
+            include: [
+                "src/**/*.js", // Only include project source files
+            ],
+            exclude: [
+                "tests/**",
+                "node_modules/**",
+                "src/lib/**", // Third-party libraries
+                "**/*.config.js",
+                "src/app/**", // App-specific code
+            ],
+            all: false, // Only track imported files, not all files
+        },
     },
 };

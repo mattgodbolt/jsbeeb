@@ -24,6 +24,7 @@
     "underscore": "^1.13.7"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.1.1",
     "eslint": "^9.24.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
@@ -69,6 +70,9 @@
     "test:integration": "vitest run tests/integration --silent",
     "test": "npm-run-all test:*",
     "test-long": "npm-run-all test-long:*",
+    "test:coverage": "vitest run tests/unit --coverage",
+    "test:coverage:utils": "vitest run tests/unit/test-utils.js --coverage --coverage.reportsDirectory=coverage --coverage.include=src/utils.js",
+    "test:coverage:all": "vitest run --coverage",
     "benchmark": "node app-bench.js"
   },
   "lint-staged": {

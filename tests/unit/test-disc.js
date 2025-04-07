@@ -178,7 +178,7 @@ describe("Disc builder tests", () => {
 describe(
     "SSD loader tests",
     {
-        timeout: 5000, // roundtripping elite can be slow
+        timeout: 60000, // roundtripping elite can be slow
     },
     function () {
         const data = fs.readFileSync("public/discs/elite.ssd");
