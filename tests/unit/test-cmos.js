@@ -2,239 +2,265 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Cmos } from "../../src/cmos.js";
 
 describe("CMOS", () => {
-    let cmos;
-    // Create a more elegant mock for persistence using vi.fn()
+    // Mock persistence
     const mockPersistence = {
         load: vi.fn().mockReturnValue(null),
         save: vi.fn(),
     };
 
-    // Fixed test date: 2023-04-15T12:34:56
+    // Test date (2023-04-15T12:34:56)
     const TEST_DATE = new Date(2023, 3, 15, 12, 34, 56);
 
+    // CMOS register addresses (from BBC Micro documentation)
+    const CMOS_ADDR = {
+        SECONDS: 0,
+        MINUTES: 2,
+        HOURS: 4,
+        DAY_OF_WEEK: 6,
+        DAY_OF_MONTH: 7,
+        MONTH: 8,
+        YEAR: 9,
+        // Non-RTC addresses for testing
+        CONFIG_1: 12,
+        CONFIG_2: 13,
+    };
+
+    // Constants from the hardware implementation
+    const PORT_B_ENABLE = 0x40; // Bit 6 of port B
+    const PORT_B_ADDR_SEL = 0x80; // Bit 7 of port B
+    const IC32_READ = 2; // Bit 1 of IC32
+    const IC32_DATA_SEL = 4; // Bit 2 of IC32
+
+    let cmos;
+
     beforeEach(() => {
-        // Use Vitest's fake timers - more elegant way to mock Date
+        // Use fake timers for consistent date/time testing
         vi.useFakeTimers();
-        // Set the system time to our test date
         vi.setSystemTime(TEST_DATE);
 
-        // Create a fresh CMOS instance before each test
+        // Create a fresh CMOS instance for each test
         cmos = new Cmos(mockPersistence);
-
-        // Set up the standard test configuration for most tests
-        cmos.enabled = true;
-        cmos.addressSelect = false;
-        cmos.dataSelect = true;
-        cmos.isRead = true;
     });
 
     afterEach(() => {
-        // Restore real timers (cleaner than manually tracking original Date.now)
         vi.useRealTimers();
         vi.resetAllMocks();
     });
 
     describe("Initialization", () => {
-        it("should initialize with default CMOS values when no persistence data", () => {
-            expect(cmos.store).toBeDefined();
-            expect(cmos.store.length).toBeGreaterThan(0);
-            expect(mockPersistence.save).toHaveBeenCalledWith(cmos.store);
+        it("should initialize with persistence and save default values", () => {
+            expect(mockPersistence.save).toHaveBeenCalled();
         });
 
-        it("should use persistence data when available", () => {
-            const customStore = new Array(48).fill(0x42);
-            mockPersistence.load.mockReturnValueOnce(customStore);
+        it("should use custom persistence data if available", () => {
+            const customData = Array(48).fill(0x42);
+            mockPersistence.load.mockReturnValueOnce(customData);
 
             const customCmos = new Cmos(mockPersistence);
-            expect(customCmos.store).toBe(customStore);
+
+            // Reading from a non-RTC location should return our custom data
+            // First enable CMOS and set it up for reading
+            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_1, 0);
+            customCmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_1, 0);
+            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+
+            expect(customCmos.read()).toBe(0x42);
         });
 
         it("should apply CMOS override when provided", () => {
             const cmosOverride = (store) => {
                 const newStore = [...store];
-                newStore[10] = 0x42;
+                newStore[CMOS_ADDR.CONFIG_1] = 0x42;
                 return newStore;
             };
 
             const customCmos = new Cmos(mockPersistence, cmosOverride);
-            expect(customCmos.store[10]).toBe(0x42);
+
+            // Reading from the overridden location should return our custom value
+            // First enable CMOS and set it up for reading
+            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_1, 0);
+            customCmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_1, 0);
+            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+
+            expect(customCmos.read()).toBe(0x42);
         });
 
         it("should apply econet settings when provided", () => {
             const econet = { stationId: 0x42 };
             const customCmos = new Cmos(mockPersistence, null, econet);
 
-            expect(customCmos.store[0xe]).toBe(0x42);
-            expect(customCmos.store[0xf]).toBe(254);
+            // First read econet station ID (at address 0x0E)
+            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 0x0e, 0);
+            customCmos.writeControl(PORT_B_ENABLE, 0x0e, 0);
+            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+
+            expect(customCmos.read()).toBe(0x42);
+
+            // Then read FS ID (at address 0x0F)
+            customCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 0x0f, 0);
+            customCmos.writeControl(PORT_B_ENABLE, 0x0f, 0);
+            customCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+
+            expect(customCmos.read()).toBe(254);
         });
     });
 
-    describe("BCD Conversion", () => {
-        it("should test BCD conversion functions", () => {
-            // We'll test BCD conversion directly rather than through the read/write operations
-            // Since we're testing implementation details, let's recreate the functions from the source
+    describe("Reading and Writing non-RTC data", () => {
+        it("should return 0xFF when CMOS is disabled", () => {
+            // Don't enable CMOS (no PORT_B_ENABLE bit)
+            expect(cmos.read()).toBe(0xff);
+        });
 
-            // Recreate the toBcd function from the source
+        it("should write and read from CMOS memory locations", () => {
+            // Set address to CONFIG_1 (addr 12)
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_1, 0);
+            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_1, 0);
+
+            // Write value 0x42 to CONFIG_1
+            cmos.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
+            cmos.writeControl(PORT_B_ENABLE, 0x42, 0);
+
+            // Read it back
+            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+            expect(cmos.read()).toBe(0x42);
+
+            // Check persistence was called
+            expect(mockPersistence.save).toHaveBeenCalled();
+        });
+
+        it("should only read when properly configured", () => {
+            // Set address to CONFIG_2 (different than other tests)
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_2, 0);
+            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_2, 0);
+
+            // Write a known test value
+            cmos.writeControl(PORT_B_ENABLE, 0x42, IC32_DATA_SEL);
+            cmos.writeControl(PORT_B_ENABLE, 0x42, 0);
+
+            // Without setting the read mode, should return 0xFF
+            expect(cmos.read()).toBe(0xff);
+
+            // With address select high, should return 0xFF
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 0, IC32_READ);
+            expect(cmos.read()).toBe(0xff);
+
+            // With data select low, should return 0xFF
+            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ);
+            expect(cmos.read()).toBe(0xff);
+
+            // Make sure we're still pointing at the right address
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.CONFIG_2, 0);
+            cmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.CONFIG_2, 0);
+
+            // With everything set correctly, should return the value
+            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+            expect(cmos.read()).toBe(0x42);
+        });
+    });
+
+    describe("Reading RTC values", () => {
+        // Helper function to read a specific RTC register
+        function readRtcRegister(register) {
+            // Set address
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
+            cmos.writeControl(PORT_B_ENABLE, register, 0);
+
+            // Configure for reading
+            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+
+            return cmos.read();
+        }
+
+        it("should read current time from RTC registers", () => {
+            // Helper function for BCD conversion (same as in cmos.js)
             function toBcd(value) {
                 return parseInt(value.toString(10), 16);
             }
 
-            // Recreate the fromBcd function from the source
-            function fromBcd(value) {
-                return parseInt(value.toString(16), 10);
-            }
+            // Test all RTC components
+            expect(readRtcRegister(CMOS_ADDR.SECONDS)).toBe(toBcd(TEST_DATE.getSeconds()));
+            expect(readRtcRegister(CMOS_ADDR.MINUTES)).toBe(toBcd(TEST_DATE.getMinutes()));
+            expect(readRtcRegister(CMOS_ADDR.HOURS)).toBe(toBcd(TEST_DATE.getHours()));
+            expect(readRtcRegister(CMOS_ADDR.DAY_OF_WEEK)).toBe(toBcd(TEST_DATE.getDay() + 1));
+            expect(readRtcRegister(CMOS_ADDR.DAY_OF_MONTH)).toBe(toBcd(TEST_DATE.getDate()));
+            expect(readRtcRegister(CMOS_ADDR.MONTH)).toBe(toBcd(TEST_DATE.getMonth() + 1));
+        });
+    });
 
-            // Test toBcd with various values
+    describe("Setting RTC values", () => {
+        // Helper to read a specific RTC register
+        function readRtcRegister(register) {
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
+            cmos.writeControl(PORT_B_ENABLE, register, 0);
+            cmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+            return cmos.read();
+        }
+
+        // Helper to write to a specific RTC register
+        function writeRtcRegister(register, value) {
+            cmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, register, 0);
+            cmos.writeControl(PORT_B_ENABLE, register, 0);
+            cmos.writeControl(PORT_B_ENABLE, value, IC32_DATA_SEL);
+            cmos.writeControl(PORT_B_ENABLE, value, 0);
+        }
+
+        it("should update RTC values when written", () => {
+            // Set hours to 10
+            writeRtcRegister(CMOS_ADDR.HOURS, 0x10);
+
+            // Advance time slightly to ensure changes take effect
+            vi.advanceTimersByTime(100);
+
+            // Read back hours
+            expect(readRtcRegister(CMOS_ADDR.HOURS)).toBe(0x10);
+
+            // Set minutes to 45
+            writeRtcRegister(CMOS_ADDR.MINUTES, 0x45);
+
+            // Advance time slightly
+            vi.advanceTimersByTime(100);
+
+            // Read back minutes
+            expect(readRtcRegister(CMOS_ADDR.MINUTES)).toBe(0x45);
+        });
+    });
+
+    describe("BCD Conversion Logic", () => {
+        it("should correctly convert between decimal and BCD", () => {
+            // Helper functions for BCD conversion (same as in cmos.js)
+            const toBcd = (value) => parseInt(value.toString(10), 16);
+            const fromBcd = (value) => parseInt(value.toString(16), 10);
+
+            // Test toBcd conversion
             expect(toBcd(0)).toBe(0x00);
             expect(toBcd(9)).toBe(0x09);
             expect(toBcd(10)).toBe(0x10);
             expect(toBcd(42)).toBe(0x42);
             expect(toBcd(99)).toBe(0x99);
 
-            // Test fromBcd with various values
+            // Test fromBcd conversion
             expect(fromBcd(0x00)).toBe(0);
             expect(fromBcd(0x09)).toBe(9);
             expect(fromBcd(0x10)).toBe(10);
             expect(fromBcd(0x42)).toBe(42);
             expect(fromBcd(0x99)).toBe(99);
 
-            // Test round trips
+            // Test round-trips
             for (let i = 0; i < 100; i++) {
                 expect(fromBcd(toBcd(i))).toBe(i);
             }
         });
-    });
 
-    describe("CMOS read operations", () => {
-        it("should return 0xFF when CMOS is disabled", () => {
-            cmos.enabled = false;
-            expect(cmos.read()).toBe(0xff);
-        });
+        it("should handle year century threshold correctly", () => {
+            const fromBcd = (value) => parseInt(value.toString(16), 10);
 
-        it("should read time components from RTC", () => {
-            // Helper function to convert decimal to BCD format (same as in cmos.js)
-            function toBcd(value) {
-                return parseInt(value.toString(10), 16);
-            }
-
-            // Now test each time component
-            cmos.cmosAddr = 0;
-            expect(cmos.read()).toBe(toBcd(TEST_DATE.getSeconds())); // Seconds
-
-            cmos.cmosAddr = 2;
-            expect(cmos.read()).toBe(toBcd(TEST_DATE.getMinutes())); // Minutes
-
-            cmos.cmosAddr = 4;
-            expect(cmos.read()).toBe(toBcd(TEST_DATE.getHours())); // Hours
-
-            cmos.cmosAddr = 6;
-            expect(cmos.read()).toBe(toBcd(TEST_DATE.getDay() + 1)); // Day of week
-
-            cmos.cmosAddr = 7;
-            expect(cmos.read()).toBe(toBcd(TEST_DATE.getDate())); // Day of month
-
-            cmos.cmosAddr = 8;
-            expect(cmos.read()).toBe(toBcd(TEST_DATE.getMonth() + 1)); // Month
-
-            // Skip the year test as it's more complex due to how the full year gets
-            // converted and returned in the actual implementation
-            // We've already tested the century boundary logic separately
-        });
-
-        it("should read values from CMOS store", () => {
-            cmos.enabled = true;
-            cmos.addressSelect = false;
-            cmos.dataSelect = true;
-            cmos.isRead = true;
-
-            // Set a known value
-            cmos.store[15] = 0x42;
-            cmos.cmosAddr = 15;
-
-            expect(cmos.read()).toBe(0x42);
-        });
-
-        it("should return 0xFF when not in read mode", () => {
-            cmos.enabled = true;
-            cmos.addressSelect = false;
-            cmos.dataSelect = true;
-            cmos.isRead = false;
-            cmos.cmosAddr = 15;
-
-            expect(cmos.read()).toBe(0xff);
-        });
-    });
-
-    describe("CMOS write operations", () => {
-        it("should set address when addressSelect transitions from high to low", () => {
-            cmos.enabled = true;
-
-            // First high
-            cmos.writeControl(0x40 | 0x80, 0x20, 0);
-            // Then low with address 0x20
-            cmos.writeControl(0x40, 0x20, 0);
-
-            expect(cmos.cmosAddr).toBe(0x20);
-        });
-
-        it("should write to CMOS store when dataSelect transitions from high to low", () => {
-            cmos.enabled = true;
-            cmos.cmosAddr = 0x20; // Non-RTC location
-            cmos.addressSelect = false;
-            cmos.dataSelect = true;
-
-            // Transition dataSelect to low
-            cmos.writeControl(0x40, 0x42, 0);
-
-            expect(cmos.store[0x20]).toBe(0x42);
-            expect(mockPersistence.save).toHaveBeenCalled();
-        });
-
-        it("should update date when writing to RTC locations", () => {
-            cmos.cmosAddr = 4; // Hours
-
-            // Set up for write
-            cmos.dataSelect = true;
-            cmos.isRead = false;
-
-            // Transition dataSelect to low with value 0x10 (10 hours)
-            cmos.writeControl(0x40, 0x10, 0);
-
-            // Advance time slightly to ensure the time offset is applied
-            vi.advanceTimersByTime(1000); // Advance 1 second
-
-            // Set up for read
-            cmos.dataSelect = true;
-            cmos.isRead = true;
-
-            // Read back the new hours
-            expect(cmos.read()).toBe(0x10);
-        });
-
-        it("should handle century boundary correctly", () => {
-            // We'll examine the 80/20 split behavior but test it differently
-
-            // Recreate the critical functions from the source
-            function fromBcd(value) {
-                return parseInt(value.toString(16), 10);
-            }
-
-            // Test the exact condition from the source (line 131):
-            // const yearBase = fromBcd(portApins) > 80 ? 1900 : 2000;
-
-            // For 80-99, yearBase should be 1900
-            expect(fromBcd(0x80)).toBe(80);
-            // Check if the boundary is handled correctly
-            // Since 80 is equal to 80 (not > 80), we need to test carefully
+            // Years 80-99 should use 1900 as base
             expect(fromBcd(0x80) >= 80 ? 1900 : 2000).toBe(1900);
-            expect(fromBcd(0x81) > 80 ? 1900 : 2000).toBe(1900);
-            expect(fromBcd(0x99) > 80 ? 1900 : 2000).toBe(1900);
+            expect(fromBcd(0x99) >= 80 ? 1900 : 2000).toBe(1900);
 
-            // For 00-79, yearBase should be 2000
-            expect(fromBcd(0x00)).toBe(0);
-            expect(fromBcd(0x00) > 80 ? 1900 : 2000).toBe(2000);
-            expect(fromBcd(0x23) > 80 ? 1900 : 2000).toBe(2000);
-            expect(fromBcd(0x79) > 80 ? 1900 : 2000).toBe(2000);
+            // Years 00-79 should use 2000 as base
+            expect(fromBcd(0x00) >= 80 ? 1900 : 2000).toBe(2000);
+            expect(fromBcd(0x79) >= 80 ? 1900 : 2000).toBe(2000);
         });
     });
 });
