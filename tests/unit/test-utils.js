@@ -255,8 +255,8 @@ describe("Utils tests", function () {
     });
 
     describe("Keyboard mapping", function () {
-        it("maps simple strings to BBC keys correctly", function () {
-            const { stringToBBCKeys, BBC } = require("../../src/utils.js");
+        it("maps simple strings to BBC keys correctly", async function () {
+            const { stringToBBCKeys, BBC } = await import("../../src/utils.js");
 
             // Test special characters
             const keys1 = stringToBBCKeys("\n\t ");

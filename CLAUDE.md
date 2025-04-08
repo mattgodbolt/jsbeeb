@@ -50,3 +50,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Pre-commit Hooks**:
   - The project uses lint-staged with ESLint
   - Watch for unused variables and ensure proper error handling
+
+### Git Workflow
+
+- When creating branches with Claude, use the `claude/` prefix (e.g., `claude/fix-esm-import-error`)
