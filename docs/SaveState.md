@@ -220,6 +220,28 @@ emulator.deleteState(name) => void     // Delete a state
 emulator.rewind(seconds) => void       // Rewind emulation
 ```
 
+## Testing Strategy
+
+The save state implementation is accompanied by a comprehensive testing strategy to ensure reliability and correctness:
+
+### Unit Testing
+
+- **SaveState Class**: Tests for serialization, deserialization, typed array handling, and nested object structures
+- **TimeTravel Class**: Tests for buffer management, state rotation, and timing behavior
+- **SaveStateStorage Class**: Tests for localStorage integration, error handling, and state management
+- **Component Integration**: Tests for each component's save/load state methods
+
+### Integration Testing
+
+- Tests for complete emulator state saving and restoration
+- Tests for state compatibility across different emulator configurations
+- Performance testing for large state sizes
+
+### Format Compatibility Testing
+
+- Tests for importing/exporting B-EM format states
+- Tests for format version handling and backwards compatibility
+
 ## Conclusion
 
-This save state implementation will significantly enhance the usability of jsbeeb by allowing users to save their progress and resume sessions later. The rewind feature will provide a valuable tool for debugging and exploration. The implementation will be done in phases, with careful attention to component state preservation, storage efficiency, and user experience.
+This save state implementation will significantly enhance the usability of jsbeeb by allowing users to save their progress and resume sessions later. The rewind feature will provide a valuable tool for debugging and exploration. The implementation will be done in phases, with careful attention to component state preservation, storage efficiency, and user experience, all backed by comprehensive testing.
