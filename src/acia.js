@@ -258,4 +258,57 @@ export class Acia {
         if (rcv >= 0) this.receive(rcv);
         this.runRs423Task.reschedule(this.serialReceiveCyclesPerByte);
     }
+
+    /**
+     * Save ACIA state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            sr: this.sr,
+            cr: this.cr,
+            dr: this.dr,
+            rs423Selected: this.rs423Selected,
+            motorOn: this.motorOn,
+            tapeCarrierCount: this.tapeCarrierCount,
+            tapeDcdLineLevel: this.tapeDcdLineLevel,
+            hadDcdHigh: this.hadDcdHigh,
+            serialReceiveRate: this.serialReceiveRate,
+            serialReceiveCyclesPerByte: this.serialReceiveCyclesPerByte,
+            // Save scheduled tasks
+            txCompleteTask: this.txCompleteTask.saveState(),
+            runTapeTask: this.runTapeTask.saveState(),
+            runRs423Task: this.runRs423Task.saveState(),
+        };
+
+        saveState.addComponent("acia", state);
+    }
+
+    /**
+     * Load ACIA state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("acia");
+        if (!state) return;
+
+        this.sr = state.sr;
+        this.cr = state.cr;
+        this.dr = state.dr;
+        this.rs423Selected = state.rs423Selected;
+        this.motorOn = state.motorOn;
+        this.tapeCarrierCount = state.tapeCarrierCount;
+        this.tapeDcdLineLevel = state.tapeDcdLineLevel;
+        this.hadDcdHigh = state.hadDcdHigh;
+        this.serialReceiveRate = state.serialReceiveRate;
+        this.serialReceiveCyclesPerByte = state.serialReceiveCyclesPerByte;
+
+        // Restore scheduled tasks
+        this.txCompleteTask.loadState(state.txCompleteTask);
+        this.runTapeTask.loadState(state.runTapeTask);
+        this.runRs423Task.loadState(state.runRs423Task);
+
+        // Update IRQ status
+        this.updateIrq();
+    }
 }

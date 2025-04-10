@@ -138,4 +138,42 @@ export class Cmos {
             }
         }
     }
+
+    /**
+     * Save CMOS state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            store: Array.from(this.store),
+            enabled: this.enabled,
+            isRead: this.isRead,
+            addressSelect: this.addressSelect,
+            dataSelect: this.dataSelect,
+            cmosAddr: this.cmosAddr,
+            timeOffset: timeOffset,
+        };
+
+        saveState.addComponent("cmos", state);
+    }
+
+    /**
+     * Load CMOS state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("cmos");
+        if (!state) return;
+
+        this.store = state.store.slice();
+        this.enabled = state.enabled;
+        this.isRead = state.isRead;
+        this.addressSelect = state.addressSelect;
+        this.dataSelect = state.dataSelect;
+        this.cmosAddr = state.cmosAddr;
+        timeOffset = state.timeOffset;
+
+        // Save to persistence if available
+        this.save();
+    }
 }

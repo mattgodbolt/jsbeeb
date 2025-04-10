@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Cmos } from "../../src/cmos.js";
+import { SaveState } from "../../src/savestate.js";
 
 describe("CMOS", () => {
     // Mock persistence
@@ -261,6 +262,42 @@ describe("CMOS", () => {
             // Years 00-79 should use 2000 as base
             expect(fromBcd(0x00) >= 80 ? 1900 : 2000).toBe(2000);
             expect(fromBcd(0x79) >= 80 ? 1900 : 2000).toBe(2000);
+        });
+    });
+
+    describe("Save State", () => {
+        it("should properly save and restore state", () => {
+            // Setup
+            const saveState = new SaveState();
+
+            // Set some specific values in CMOS
+            cmos.store[0] = 0x42;
+            cmos.store[10] = 0x55;
+            cmos.store[15] = 0x33;
+            cmos.enabled = true;
+            cmos.isRead = true;
+            cmos.addressSelect = true;
+            cmos.dataSelect = true;
+            cmos.cmosAddr = 0x10;
+
+            // Save state
+            cmos.saveState(saveState);
+
+            // Create a new CMOS instance with default state
+            const newCmos = new Cmos(null);
+
+            // Load the saved state
+            newCmos.loadState(saveState);
+
+            // Verify state was properly restored
+            expect(newCmos.store[0]).toBe(0x42);
+            expect(newCmos.store[10]).toBe(0x55);
+            expect(newCmos.store[15]).toBe(0x33);
+            expect(newCmos.enabled).toBe(true);
+            expect(newCmos.isRead).toBe(true);
+            expect(newCmos.addressSelect).toBe(true);
+            expect(newCmos.dataSelect).toBe(true);
+            expect(newCmos.cmosAddr).toBe(0x10);
         });
     });
 });

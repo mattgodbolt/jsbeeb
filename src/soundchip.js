@@ -286,6 +286,60 @@ export class SoundChip {
     unmute() {
         this.enabled = true;
     }
+
+    /**
+     * Save SoundChip state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            registers: Array.from(this.registers),
+            counter: Array.from(this.counter),
+            outputBit: Array.from(this.outputBit),
+            volume: Array.from(this.volume),
+            sineStep: this.sineStep,
+            sineOn: this.sineOn,
+            sineTime: this.sineTime,
+            lfsr: this.lfsr,
+            enabled: this.enabled,
+            residual: this.residual,
+            position: this.position,
+            latchedRegister: this.latchedRegister,
+            slowDataBus: this.slowDataBus,
+            active: this.active,
+        };
+
+        saveState.addComponent("soundchip", state);
+    }
+
+    /**
+     * Load SoundChip state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("soundchip");
+        if (!state) return;
+
+        this.registers.set(state.registers);
+        this.counter.set(state.counter);
+        for (let i = 0; i < state.outputBit.length; i++) {
+            this.outputBit[i] = state.outputBit[i];
+        }
+        this.volume.set(state.volume);
+        this.sineStep = state.sineStep;
+        this.sineOn = state.sineOn;
+        this.sineTime = state.sineTime;
+        this.lfsr = state.lfsr;
+        this.enabled = state.enabled;
+        this.residual = state.residual;
+        this.position = state.position;
+        this.latchedRegister = state.latchedRegister;
+        this.slowDataBus = state.slowDataBus;
+        this.active = state.active;
+
+        // Reset buffer
+        this.buffer = new Float32Array(512);
+    }
 }
 
 export class FakeSoundChip {
