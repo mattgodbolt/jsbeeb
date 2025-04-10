@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
+import { SaveState } from "../../src/savestate.js";
 
 // Setup the video with imported constants
 describe("Video", () => {
@@ -283,6 +284,146 @@ describe("Video", () => {
 
             // Verify render was not called
             expect(mockTeletext.render).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("SaveState functionality", () => {
+        let saveState;
+
+        beforeEach(() => {
+            saveState = new SaveState();
+
+            // Set some distinctive values in the video object
+            video.frameCount = 42;
+            video.oddClock = true;
+            video.ulaMode = 2;
+            video.teletextMode = true;
+            video.cursorPos = 0x3456;
+
+            // Set some CRTC registers
+            video.regs[0] = 63;
+            video.regs[1] = 40;
+            video.regs[2] = 50;
+            video.regs[3] = 0x8c;
+            video.regs[4] = 38;
+            video.regs[5] = 0;
+            video.regs[6] = 32;
+            video.regs[7] = 34;
+
+            // Set some palette entries
+            for (let i = 0; i < 16; i++) {
+                video.actualPal[i] = i;
+            }
+            video.ulactrl = 1; // Enable flash
+
+            // Add teletext saveState functionality to the mock
+            mockTeletext.saveState = vi.fn();
+            mockTeletext.loadState = vi.fn();
+        });
+
+        it("should save video state correctly", () => {
+            // Save the state
+            video.saveState(saveState);
+
+            // Verify that the state contains the video component
+            const storedState = saveState.getComponent("video");
+            expect(storedState).toBeDefined();
+
+            // Check that some key properties were saved
+            expect(storedState.frameCount).toBe(42);
+            expect(storedState.oddClock).toBe(true);
+            expect(storedState.ulaMode).toBe(2);
+            expect(storedState.teletextMode).toBe(true);
+            expect(storedState.cursorPos).toBe(0x3456);
+
+            // Check that CRTC registers were saved
+            expect(storedState.regs).toEqual(video.regs);
+
+            // Check that ULA state was saved
+            expect(storedState.ulactrl).toBe(1);
+            expect(storedState.actualPal).toEqual(video.actualPal);
+
+            // Verify that teletext.saveState was called
+            expect(mockTeletext.saveState).toHaveBeenCalledWith(saveState);
+        });
+
+        it("should load video state correctly", () => {
+            // Save the state first
+            video.saveState(saveState);
+
+            // Create a new video instance
+            const newFb32 = new Uint32Array(1024 * 768);
+            const newPaintExt = vi.fn();
+            const newVideo = new Video(false, newFb32, newPaintExt);
+
+            // Replace its teletext with a mock
+            newVideo.teletext = {
+                saveState: vi.fn(),
+                loadState: vi.fn(),
+            };
+
+            // Load the state
+            newVideo.loadState(saveState);
+
+            // Verify that key properties were restored
+            expect(newVideo.frameCount).toBe(42);
+            expect(newVideo.oddClock).toBe(true);
+            expect(newVideo.ulaMode).toBe(2);
+            expect(newVideo.teletextMode).toBe(true);
+            expect(newVideo.cursorPos).toBe(0x3456);
+
+            // Check that CRTC registers were restored
+            expect(newVideo.regs).toEqual(video.regs);
+
+            // Check that ULA state was restored
+            expect(newVideo.ulactrl).toBe(1);
+            expect(newVideo.actualPal).toEqual(video.actualPal);
+
+            // Verify that teletext.loadState was called
+            expect(newVideo.teletext.loadState).toHaveBeenCalledWith(saveState);
+        });
+
+        it("should regenerate ULA palette from actualPal on load", () => {
+            // Save the state first
+            video.saveState(saveState);
+
+            // Create a new video instance
+            const newFb32 = new Uint32Array(1024 * 768);
+            const newPaintExt = vi.fn();
+            const newVideo = new Video(false, newFb32, newPaintExt);
+
+            // Replace its teletext with a mock
+            newVideo.teletext = {
+                saveState: vi.fn(),
+                loadState: vi.fn(),
+            };
+
+            // Spy on ulaPal before loading
+            const originalUlaPal = [...newVideo.ulaPal];
+
+            // Load the state
+            newVideo.loadState(saveState);
+
+            // Verify that ULA palette was regenerated (should be different from original)
+            // At least one value should be different since we set specific values
+            let atLeastOneDifferent = false;
+            for (let i = 0; i < 16; i++) {
+                if (newVideo.ulaPal[i] !== originalUlaPal[i]) {
+                    atLeastOneDifferent = true;
+                    break;
+                }
+            }
+            expect(atLeastOneDifferent).toBe(true);
+
+            // Verify palette matches what we would expect based on the loaded state
+            for (let i = 0; i < 16; i++) {
+                // With ulactrl = 1 (flash enabled), colors with bit 3 set are inverted
+                const actualPalValue = i; // We set actualPal[i] = i in beforeEach
+                const flashEnabled = !!(newVideo.ulactrl & 1);
+                let ulaCol = actualPalValue & 7;
+                if (!(flashEnabled && actualPalValue & 8)) ulaCol ^= 7;
+                expect(newVideo.ulaPal[i]).toBe(newVideo.collook[ulaCol]);
+            }
         });
     });
 });

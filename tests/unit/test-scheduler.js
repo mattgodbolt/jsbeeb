@@ -1,6 +1,7 @@
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import assert from "assert";
 import { Scheduler } from "../../src/scheduler.js";
+import { SaveState } from "../../src/savestate.js";
 
 describe("Scheduler tests", function () {
     "use strict";
@@ -187,5 +188,42 @@ describe("Scheduler tests", function () {
             s.polltime(3);
         }
         assert.deepStrictEqual(called, [12356, 13356, 14356, 114356, 115356]);
+    });
+
+    describe("SaveState functionality", function () {
+        it("should save and restore scheduler epoch", function () {
+            // Set up scheduler with a specific epoch
+            const scheduler = new Scheduler();
+            scheduler.epoch = 12345;
+
+            // Create a save state
+            const saveState = new SaveState();
+            scheduler.saveState(saveState);
+
+            // Create a new scheduler and restore the state
+            const newScheduler = new Scheduler();
+            newScheduler.loadState(saveState);
+
+            // Verify the epoch was restored correctly
+            expect(newScheduler.epoch).toBe(12345);
+        });
+
+        it("should preserve scheduler epoch when calling polltime after load", function () {
+            // Set up scheduler
+            const scheduler = new Scheduler();
+            scheduler.epoch = 5000;
+
+            // Create a save state
+            const saveState = new SaveState();
+            scheduler.saveState(saveState);
+
+            // Create a new scheduler, restore, and advance
+            const newScheduler = new Scheduler();
+            newScheduler.loadState(saveState);
+            newScheduler.polltime(500);
+
+            // Verify the epoch was increased correctly
+            expect(newScheduler.epoch).toBe(5500);
+        });
     });
 });
