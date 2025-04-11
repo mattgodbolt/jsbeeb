@@ -515,7 +515,11 @@ export class Via {
      */
     loadState(saveState, name) {
         const state = saveState.getComponent(`via_${name}`);
-        if (!state) return;
+        if (!state) {
+            throw new Error(
+                `Via: No state found for ${name} in saveState. This is a fatal error: this savestate was created before savestate support was fully implemented and cannot be loaded.`,
+            );
+        }
 
         this.ora = state.ora;
         this.orb = state.orb;
@@ -777,29 +781,79 @@ export class SysVia extends Via {
 
         // Load SysVia-specific state
         const state = saveState.getComponent("sysvia_ext");
-        if (!state) return;
+        if (!state) {
+            throw new Error(
+                "SysVia: No extended state found in saveState. This is a fatal error: this savestate was created before savestate support was fully implemented and cannot be loaded.",
+            );
+        }
 
-        this.IC32 = state.IC32;
-        this.capsLockLight = state.capsLockLight;
-        this.shiftLockLight = state.shiftLockLight;
+        console.log("SysVia: Loading extended state");
 
-        // Restore keyboard state
+        // Load IC32 state
+        if (state.IC32 !== undefined) {
+            this.IC32 = state.IC32;
+            console.log("SysVia: Loaded IC32 =", this.IC32.toString(16));
+        } else {
+            console.log("SysVia: No IC32 in saved state, using current value");
+        }
+
+        // Load LED states
+        this.capsLockLight = state.capsLockLight !== undefined ? state.capsLockLight : false;
+        this.shiftLockLight = state.shiftLockLight !== undefined ? state.shiftLockLight : false;
+        console.log("SysVia: Loaded LED states - capsLock:", this.capsLockLight, "shiftLock:", this.shiftLockLight);
+
+        // Always ensure keyboard is enabled first - very important for B-Em snapshots
+        this.enableKeyboard();
+        console.log("SysVia: Enabled keyboard for clean state");
+
+        // Then restore keyboard state if available
         if (state.keys) {
-            for (let i = 0; i < state.keys.length; i++) {
-                if (i < this.keys.length && state.keys[i]) {
-                    for (let j = 0; j < state.keys[i].length; j++) {
-                        if (j < this.keys[i].length) {
-                            this.keys[i][j] = state.keys[i][j];
+            // Clear keys first to avoid any stuck keys
+            this.clearKeys();
+            console.log("SysVia: Cleared keyboard state before loading");
+
+            try {
+                // Copy key state carefully
+                for (let i = 0; i < state.keys.length; i++) {
+                    if (i < this.keys.length && state.keys[i]) {
+                        for (let j = 0; j < state.keys[i].length; j++) {
+                            if (j < this.keys[i].length) {
+                                this.keys[i][j] = state.keys[i][j];
+                            }
                         }
                     }
                 }
+                console.log("SysVia: Loaded keyboard matrix state");
+            } catch (error) {
+                console.error("SysVia: Error loading keyboard state:", error);
+                // On error, clear keys again to be safe
+                this.clearKeys();
             }
+        } else {
+            console.log("SysVia: No keyboard state in saved state, keys have been cleared");
         }
 
-        this.keyboardEnabled = state.keyboardEnabled;
+        // Set keyboard enabled state
+        if (state.keyboardEnabled !== undefined) {
+            this.keyboardEnabled = state.keyboardEnabled;
+        } else {
+            // Default to enabled if not specified in saved state
+            this.keyboardEnabled = true;
+        }
+
+        // Always ensure keyboard is actually enabled regardless of saved state
+        // This is critical for B-Em snapshots which may not have this information
+        if (!this.keyboardEnabled) {
+            console.log("SysVia: Forcing keyboard enabled state to true for compatibility");
+            this.keyboardEnabled = true;
+        }
+
+        console.log("SysVia: Loaded state, keyboard enabled:", this.keyboardEnabled);
 
         // Refresh derived state
         this.updateKeys();
+
+        // Update screen state based on IC32
         this.video.setScreenAdd((this.IC32 & 16 ? 2 : 0) | (this.IC32 & 32 ? 1 : 0));
     }
 }

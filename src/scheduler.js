@@ -117,6 +117,11 @@ export class Scheduler {
         const state = saveState.getComponent("scheduler");
         if (!state) return;
 
+        // Cancel all scheduled tasks as they will be rescheduled by their components
+        while (this.scheduled) {
+            this.scheduled.cancel();
+        }
+
         // Restore scheduler epoch
         this.epoch = state.epoch;
 

@@ -290,7 +290,11 @@ export class Acia {
      */
     loadState(saveState) {
         const state = saveState.getComponent("acia");
-        if (!state) return;
+        if (!state) {
+            throw new Error(
+                "ACIA: No state found in saveState. This is a fatal error: this savestate was created before savestate support was fully implemented and cannot be loaded.",
+            );
+        }
 
         this.sr = state.sr;
         this.cr = state.cr;

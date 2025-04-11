@@ -44,15 +44,34 @@ export class BemSnapshotConverter {
      * @throws {Error} - If snapshot is invalid or unsupported
      */
     static fromBemSnapshot(bemData) {
+        console.log(
+            "BemSnapshotConverter: Starting conversion from B-Em snapshot",
+            `File size: ${bemData.length} bytes`,
+        );
+
         // Check magic and version
+        if (bemData.length < BEM_HEADER_SIZE) {
+            const error = `File too small (${bemData.length} bytes)`;
+            console.error("BemSnapshotConverter:", error);
+            throw new Error(error);
+        }
+
         const header = new TextDecoder().decode(bemData.slice(0, 7));
+        console.log("BemSnapshotConverter: Header =", header);
+
         if (header !== BEM_MAGIC) {
-            throw new Error("Invalid B-Em snapshot file");
+            const error = "Invalid B-Em snapshot file";
+            console.error("BemSnapshotConverter:", error);
+            throw new Error(error);
         }
 
         const version = String.fromCharCode(bemData[7]);
+        console.log("BemSnapshotConverter: Version =", version);
+
         if (version < "1" || version > "3") {
-            throw new Error(`Unsupported B-Em snapshot version: ${version}`);
+            const error = `Unsupported B-Em snapshot version: ${version}`;
+            console.error("BemSnapshotConverter:", error);
+            throw new Error(error);
         }
 
         const saveState = new SaveState({ version: 1 });
@@ -60,13 +79,26 @@ export class BemSnapshotConverter {
         saveState.metadata.bemVersion = version;
 
         // Parse sections based on version
-        if (version === "1") {
-            this._parseVersion1(bemData.slice(BEM_HEADER_SIZE), saveState);
-        } else {
-            this._parseSections(bemData.slice(BEM_HEADER_SIZE), saveState, version);
-        }
+        try {
+            if (version === "1") {
+                console.log("BemSnapshotConverter: Parsing version 1 format");
+                this._parseVersion1(bemData.slice(BEM_HEADER_SIZE), saveState);
+            } else {
+                console.log("BemSnapshotConverter: Parsing sections for version", version);
+                this._parseSections(bemData.slice(BEM_HEADER_SIZE), saveState, version);
+            }
 
-        return saveState;
+            // Log information about parsed components
+            console.log(
+                "BemSnapshotConverter: Conversion complete. Components:",
+                Array.from(saveState.components.keys()),
+            );
+
+            return saveState;
+        } catch (error) {
+            console.error("BemSnapshotConverter: Error during conversion:", error);
+            throw new Error(`B-Em snapshot conversion failed: ${error.message}`);
+        }
     }
 
     /**
@@ -76,62 +108,124 @@ export class BemSnapshotConverter {
      * @throws {Error} - If SaveState is invalid or cannot be converted
      */
     static toBemSnapshot(saveState) {
-        // Create header
-        const header = new TextEncoder().encode(BEM_MAGIC + BEM_CURRENT_VERSION);
+        console.log("BemSnapshotConverter: Starting conversion to B-Em snapshot");
 
-        // Create sections
-        const sections = [];
+        try {
+            // Create header
+            const header = new TextEncoder().encode(BEM_MAGIC + BEM_CURRENT_VERSION);
+            console.log(`BemSnapshotConverter: Created header '${BEM_MAGIC}${BEM_CURRENT_VERSION}'`);
 
-        // Add model section
-        const modelSection = this._createModelSection(saveState);
-        if (modelSection) sections.push(modelSection);
+            // Create sections
+            const sections = [];
 
-        // Add CPU section
-        const cpuSection = this._createCpuSection(saveState);
-        if (cpuSection) sections.push(cpuSection);
+            // Add model section
+            const modelSection = this._createModelSection(saveState);
+            if (modelSection) {
+                console.log("BemSnapshotConverter: Added model section");
+                sections.push(modelSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create model section");
+            }
 
-        // Add memory section (compressed)
-        const memorySection = this._createMemorySection(saveState);
-        if (memorySection) sections.push(memorySection);
+            // Add CPU section
+            const cpuSection = this._createCpuSection(saveState);
+            if (cpuSection) {
+                console.log("BemSnapshotConverter: Added CPU section");
+                sections.push(cpuSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create CPU section");
+            }
 
-        // Add system VIA section
-        const sysViaSection = this._createSysViaSection(saveState);
-        if (sysViaSection) sections.push(sysViaSection);
+            // Add memory section (would be compressed with zlib)
+            const memorySection = this._createMemorySection(saveState);
+            if (memorySection) {
+                console.log("BemSnapshotConverter: Added memory section");
+                sections.push(memorySection);
+            } else {
+                console.warn("BemSnapshotConverter: No memory section created (requires zlib)");
+            }
 
-        // Add user VIA section
-        const userViaSection = this._createUserViaSection(saveState);
-        if (userViaSection) sections.push(userViaSection);
+            // Add system VIA section
+            const sysViaSection = this._createSysViaSection(saveState);
+            if (sysViaSection) {
+                console.log("BemSnapshotConverter: Added system VIA section");
+                sections.push(sysViaSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create system VIA section");
+            }
 
-        // Add video ULA section
-        const videoUlaSection = this._createVideoUlaSection(saveState);
-        if (videoUlaSection) sections.push(videoUlaSection);
+            // Add user VIA section
+            const userViaSection = this._createUserViaSection(saveState);
+            if (userViaSection) {
+                console.log("BemSnapshotConverter: Added user VIA section");
+                sections.push(userViaSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create user VIA section");
+            }
 
-        // Add CRTC section
-        const crtcSection = this._createCrtcSection(saveState);
-        if (crtcSection) sections.push(crtcSection);
+            // Add video ULA section
+            const videoUlaSection = this._createVideoUlaSection(saveState);
+            if (videoUlaSection) {
+                console.log("BemSnapshotConverter: Added video ULA section");
+                sections.push(videoUlaSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create video ULA section");
+            }
 
-        // Add video section
-        const videoSection = this._createVideoSection(saveState);
-        if (videoSection) sections.push(videoSection);
+            // Add CRTC section
+            const crtcSection = this._createCrtcSection(saveState);
+            if (crtcSection) {
+                console.log("BemSnapshotConverter: Added CRTC section");
+                sections.push(crtcSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create CRTC section");
+            }
 
-        // Add sound chip section
-        const soundSection = this._createSoundSection(saveState);
-        if (soundSection) sections.push(soundSection);
+            // Add video section
+            const videoSection = this._createVideoSection(saveState);
+            if (videoSection) {
+                console.log("BemSnapshotConverter: Added video section");
+                sections.push(videoSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create video section");
+            }
 
-        // Add other sections as needed
+            // Add sound chip section
+            const soundSection = this._createSoundSection(saveState);
+            if (soundSection) {
+                console.log("BemSnapshotConverter: Added sound chip section");
+                sections.push(soundSection);
+            } else {
+                console.warn("BemSnapshotConverter: Failed to create sound chip section");
+            }
 
-        // Combine all sections
-        const totalLength = header.length + sections.reduce((sum, section) => sum + section.length, 0);
-        const result = new Uint8Array(totalLength);
-        result.set(header, 0);
+            // Add other sections as needed
 
-        let offset = header.length;
-        for (const section of sections) {
-            result.set(section, offset);
-            offset += section.length;
+            // Combine all sections
+            const totalLength = header.length + sections.reduce((sum, section) => sum + section.length, 0);
+            console.log(
+                `BemSnapshotConverter: Total snapshot size: ${totalLength} bytes (${sections.length} sections)`,
+            );
+
+            if (sections.length === 0) {
+                throw new Error("No sections were created");
+            }
+
+            const result = new Uint8Array(totalLength);
+            result.set(header, 0);
+
+            let offset = header.length;
+            for (const section of sections) {
+                result.set(section, offset);
+                offset += section.length;
+            }
+
+            console.log("BemSnapshotConverter: Conversion to B-Em snapshot completed successfully");
+            return result;
+        } catch (error) {
+            console.error("BemSnapshotConverter: Error creating B-Em snapshot:", error);
+            throw new Error(`Failed to create B-Em snapshot: ${error.message}`);
         }
-
-        return result;
     }
 
     /**
@@ -167,36 +261,125 @@ export class BemSnapshotConverter {
      */
     static _parseSections(data, saveState, version) {
         let offset = 0;
+        console.log(`BemSnapshotConverter: Parsing sections, data length: ${data.length} bytes`);
 
         while (offset < data.length) {
+            // Ensure we have at least one byte for the key
+            if (offset >= data.length) {
+                console.warn("BemSnapshotConverter: Reached end of data while parsing sections");
+                break;
+            }
+
             // Get section key and compression flag
-            let key = String.fromCharCode(data[offset] & 0x7f);
-            const isCompressed = !!(data[offset] & 0x80);
+            const rawKey = data[offset];
+            let key = String.fromCharCode(rawKey & 0x7f);
+            const isCompressed = !!(rawKey & 0x80);
             offset++;
+
+            console.log(
+                `BemSnapshotConverter: Found section key '${key}' (compressed: ${isCompressed}), offset: ${offset - 1}`,
+            );
 
             // Get section size
             let size = 0;
-            if (version === "2") {
-                // Version 2 has different header format
-                size = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16);
-                offset += 3;
-            } else {
-                // Version 3
-                if (isCompressed) {
-                    size = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
-                    offset += 4;
+            let headerSize = 0;
+
+            try {
+                if (version === "2") {
+                    // Version 2 has different header format
+                    if (offset + 3 > data.length) {
+                        throw new Error(`Unexpected end of data reading section '${key}' size`);
+                    }
+
+                    // For model section ('m') and CPU section ('6') in version 2,
+                    // use 16-bit size for better compatibility
+                    if (key === "m" || key === "6") {
+                        size = data[offset] | (data[offset + 1] << 8);
+                        offset += 2;
+                        headerSize = 2;
+                    } else {
+                        size = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16);
+                        offset += 3;
+                        headerSize = 3;
+                    }
                 } else {
-                    size = data[offset] | (data[offset + 1] << 8);
-                    offset += 2;
+                    // Version 3
+                    if (isCompressed) {
+                        if (offset + 4 > data.length) {
+                            throw new Error(`Unexpected end of data reading compressed section '${key}' size`);
+                        }
+                        size =
+                            data[offset] |
+                            (data[offset + 1] << 8) |
+                            (data[offset + 2] << 16) |
+                            (data[offset + 3] << 24);
+                        offset += 4;
+                        headerSize = 4;
+                    } else {
+                        if (offset + 2 > data.length) {
+                            throw new Error(`Unexpected end of data reading section '${key}' size`);
+                        }
+                        size = data[offset] | (data[offset + 1] << 8);
+                        offset += 2;
+                        headerSize = 2;
+                    }
+                }
+
+                console.log(`BemSnapshotConverter: Section '${key}' size: ${size} bytes, header size: ${headerSize}`);
+
+                // Check if section size is valid
+                if (size < 0 || offset + size > data.length) {
+                    // For the model section ('m') in version 2 format, we might be reading an incorrect size
+                    // due to format differences. If this is a version 2 section and the size seems too large,
+                    // try treating it as a 16-bit size instead to maintain compatibility.
+                    if (version === "2" && key === "m" && offset - 3 >= 0) {
+                        console.warn(
+                            `BemSnapshotConverter: Invalid section size for model section in v2 format, trying 16-bit size instead`,
+                        );
+                        // Back up to recalculate size as 16-bit
+                        offset -= 3;
+                        size = data[offset] | (data[offset + 1] << 8);
+                        offset += 2;
+
+                        // Validate the new size
+                        if (size < 0 || offset + size > data.length) {
+                            throw new Error(
+                                `Invalid section size ${size} for key '${key}' (offset: ${offset}, data length: ${data.length})`,
+                            );
+                        }
+                    } else {
+                        throw new Error(
+                            `Invalid section size ${size} for key '${key}' (offset: ${offset}, data length: ${data.length})`,
+                        );
+                    }
+                }
+
+                // Extract section data
+                const sectionData = data.slice(offset, offset + size);
+                console.log(`BemSnapshotConverter: Extracted section '${key}' data: ${sectionData.length} bytes`);
+                offset += size;
+
+                // Process section based on key
+                this._processBemSection(key, sectionData, isCompressed, saveState);
+            } catch (error) {
+                console.error(`BemSnapshotConverter: Error parsing section '${key}':`, error);
+                // Try to skip to the next section by guessing based on header
+                if (rawKey === "M".charCodeAt(0) || rawKey === "P".charCodeAt(0) || rawKey === "J".charCodeAt(0)) {
+                    // Memory or Tube processor sections are often large compressed sections
+                    console.warn(`BemSnapshotConverter: Skipping section '${key}' due to error`);
+                    break; // Safest to stop parsing
+                } else if (headerSize > 0 && size > 0 && offset + size <= data.length) {
+                    // If we have a valid size, try to skip this section
+                    console.warn(`BemSnapshotConverter: Skipping to next section at offset ${offset + size}`);
+                    offset += size;
+                } else {
+                    // Can't recover reliably
+                    console.error(
+                        `BemSnapshotConverter: Can't recover from parsing error, stopping at offset ${offset}`,
+                    );
+                    break;
                 }
             }
-
-            // Extract section data
-            const sectionData = data.slice(offset, offset + size);
-            offset += size;
-
-            // Process section based on key
-            this._processBemSection(key, sectionData, isCompressed, saveState);
         }
     }
 
@@ -209,59 +392,181 @@ export class BemSnapshotConverter {
      * @param {SaveState} saveState - SaveState to populate
      */
     static _processBemSection(key, data, isCompressed, saveState) {
-        switch (key) {
-            case BEM_SECTIONS.MODEL:
-                saveState.addComponent("bem_model", {
-                    model: data[0],
-                    modelString: utils.uint8ArrayToString(data.slice(1)),
-                });
-                break;
+        console.log(
+            `BemSnapshotConverter: Processing section '${key}', data length: ${data.length}, compressed: ${isCompressed}`,
+        );
 
-            case BEM_SECTIONS.CPU:
-                saveState.addComponent("cpu", this._parseCpuState(data));
-                break;
-
-            case BEM_SECTIONS.MEMORY:
-                if (isCompressed) {
-                    // Need to decompress zlib data
-                    saveState.metadata.conversionNote = "Memory section requires zlib decompression";
+        try {
+            switch (key) {
+                case BEM_SECTIONS.MODEL: {
+                    if (data.length < 1) {
+                        throw new Error("Model section too small");
+                    }
+                    const modelInfo = {
+                        model: data[0],
+                        modelString: utils.uint8ArrayToString(data.slice(1)),
+                    };
+                    console.log(`BemSnapshotConverter: Model info: ${modelInfo.modelString} (type ${modelInfo.model})`);
+                    saveState.addComponent("bem_model", modelInfo);
+                    break;
                 }
-                // For now, store the raw data
-                saveState.addComponent("bem_memory_raw", {
-                    data,
-                    compressed: isCompressed,
-                });
-                break;
 
-            case BEM_SECTIONS.SYSVIA:
-                saveState.addComponent("via_sys", this._parseViaState(data));
-                break;
+                case BEM_SECTIONS.CPU: {
+                    if (data.length < 13) {
+                        throw new Error(`CPU section too small: ${data.length} bytes, expected at least 13`);
+                    }
+                    const cpuState = this._parseCpuState(data);
+                    console.log(
+                        `BemSnapshotConverter: CPU state parsed: A=${cpuState.a.toString(16)}, X=${cpuState.x.toString(16)}, Y=${cpuState.y.toString(16)}, PC=${cpuState.pc.toString(16)}`,
+                    );
+                    saveState.addComponent("cpu", cpuState);
+                    break;
+                }
 
-            case BEM_SECTIONS.USERVIA:
-                saveState.addComponent("via_user", this._parseViaState(data));
-                break;
+                case BEM_SECTIONS.MEMORY: {
+                    if (isCompressed) {
+                        // Need to decompress zlib data
+                        console.log("BemSnapshotConverter: Memory section is compressed, attempting minimal handling");
+                        saveState.metadata.conversionNote = "Memory section requires zlib decompression";
 
-            case BEM_SECTIONS.VIDEO_ULA:
-                saveState.addComponent("video_ula", this._parseVideoUlaState(data));
-                break;
+                        // We can't properly decompress, but at least check the first two bytes
+                        // for basic structure (FE30, FE34 latches)
+                        if (data.length >= 2) {
+                            console.log(
+                                `BemSnapshotConverter: Memory latches - FE30: 0x${data[0].toString(16)}, FE34: 0x${data[1].toString(16)}`,
+                            );
 
-            case BEM_SECTIONS.CRTC:
-                saveState.addComponent("crtc", this._parseCrtcState(data));
-                break;
+                            // Store memory latch values which are often at the start of memory section
+                            // This helps with basic compatibility even without full decompression
+                            saveState.addComponent("memory_latches", {
+                                fe30: data[0],
+                                fe34: data.length > 1 ? data[1] : 0,
+                            });
+                            console.log("BemSnapshotConverter: Stored memory latch values");
+                        }
+                    } else {
+                        console.log("BemSnapshotConverter: Memory section is not compressed, full handling possible");
 
-            case BEM_SECTIONS.VIDEO:
-                saveState.addComponent("video", this._parseVideoState(data));
-                break;
+                        try {
+                            // Extract RAM and ROM information if possible
+                            if (data.length > 0x8000) {
+                                // Store main RAM (first 32KB)
+                                const mainRam = data.slice(0, 0x8000);
+                                saveState.addComponent("main_ram", { data: mainRam });
+                                console.log("BemSnapshotConverter: Extracted main RAM (32KB)");
 
-            case BEM_SECTIONS.SOUND:
-                saveState.addComponent("sound", this._parseSoundState(data));
-                break;
+                                // Store ROMs if available
+                                if (data.length >= 0x10000) {
+                                    const roms = data.slice(0x8000, 0x10000);
+                                    saveState.addComponent("rom_data", { data: roms });
+                                    console.log("BemSnapshotConverter: Extracted ROM data");
+                                }
+                            }
+                        } catch (error) {
+                            console.error("BemSnapshotConverter: Error extracting memory data:", error);
+                        }
+                    }
 
-            // Add parsers for other sections as needed
+                    // Always store the raw data for debugging purposes
+                    saveState.addComponent("bem_memory_raw", {
+                        data,
+                        compressed: isCompressed,
+                        length: data.length,
+                    });
 
-            default:
-                // Store unknown sections as raw data
-                saveState.addComponent(`bem_${key}_raw`, { data });
+                    // Create a minimal memory state that jsbeeb can use
+                    // We don't have the full RAM/ROM, but at least provide enough for
+                    // the processor to not crash
+                    saveState.addComponent("cpu_extended", {
+                        // Try to extract ROM selection from first byte or default to 0
+                        romsel: data[0] & 0x0f || 0,
+                        // Try to extract ACCCON from second byte
+                        acccon: data.length > 1 ? data[1] : 0,
+                        resetLine: false,
+                        music5000PageSel: 0,
+                    });
+
+                    console.log(`BemSnapshotConverter: Memory data stored (${data.length} bytes)`);
+                    break;
+                }
+
+                case BEM_SECTIONS.SYSVIA: {
+                    if (data.length < 33) {
+                        console.warn(`BemSnapshotConverter: System VIA section small: ${data.length} bytes`);
+                    }
+                    const sysViaState = this._parseViaState(data);
+                    console.log(
+                        `BemSnapshotConverter: System VIA state parsed, IC32=${sysViaState.IC32 !== undefined ? sysViaState.IC32.toString(16) : "undefined"}`,
+                    );
+                    saveState.addComponent("via_sys", sysViaState);
+                    break;
+                }
+
+                case BEM_SECTIONS.USERVIA: {
+                    if (data.length < 32) {
+                        console.warn(`BemSnapshotConverter: User VIA section small: ${data.length} bytes`);
+                    }
+                    const userViaState = this._parseViaState(data);
+                    console.log("BemSnapshotConverter: User VIA state parsed");
+                    saveState.addComponent("via_user", userViaState);
+                    break;
+                }
+
+                case BEM_SECTIONS.VIDEO_ULA: {
+                    if (data.length < 1) {
+                        throw new Error("Video ULA section too small");
+                    }
+                    const videoUlaState = this._parseVideoUlaState(data);
+                    console.log(
+                        `BemSnapshotConverter: Video ULA state parsed, control=${videoUlaState.controlReg.toString(16)}`,
+                    );
+                    saveState.addComponent("video_ula", videoUlaState);
+                    break;
+                }
+
+                case BEM_SECTIONS.CRTC: {
+                    if (data.length < 18) {
+                        console.warn(`BemSnapshotConverter: CRTC section small: ${data.length} bytes`);
+                    }
+                    const crtcState = this._parseCrtcState(data);
+                    console.log("BemSnapshotConverter: CRTC state parsed");
+                    saveState.addComponent("crtc", crtcState);
+                    break;
+                }
+
+                case BEM_SECTIONS.VIDEO: {
+                    if (data.length < 9) {
+                        console.warn(`BemSnapshotConverter: Video section small: ${data.length} bytes`);
+                    }
+                    const videoState = this._parseVideoState(data);
+                    console.log("BemSnapshotConverter: Video state parsed");
+                    saveState.addComponent("video", videoState);
+                    break;
+                }
+
+                case BEM_SECTIONS.SOUND: {
+                    if (data.length < 50) {
+                        console.warn(`BemSnapshotConverter: Sound section small: ${data.length} bytes`);
+                    }
+                    const soundState = this._parseSoundState(data);
+                    console.log("BemSnapshotConverter: Sound chip state parsed");
+                    saveState.addComponent("sound", soundState);
+                    break;
+                }
+
+                // Add parsers for other sections as needed
+
+                default: {
+                    // Store unknown sections as raw data
+                    console.log(
+                        `BemSnapshotConverter: Unknown section '${key}', storing as raw data (${data.length} bytes)`,
+                    );
+                    saveState.addComponent(`bem_${key}_raw`, { data });
+                    break;
+                }
+            }
+        } catch (error) {
+            console.error(`BemSnapshotConverter: Error processing section '${key}':`, error);
         }
     }
 

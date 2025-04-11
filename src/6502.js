@@ -751,18 +751,26 @@ export class Cpu6502 extends Base6502 {
         // Save scheduler state
         this.scheduler.saveState(saveState);
 
-        // Save peripheral states
-        // TODO: Implement saveState in these components
+        // Save peripheral states - CRITICAL for task scheduling
+        // These must be saved to ensure they can be properly restored during loading
+
+        // System VIA handles keyboard and other essential I/O
+        this.sysvia.saveState(saveState);
+
+        // User VIA for user port peripherals
+        this.uservia.saveState(saveState);
+
+        // ACIA for cassette and serial I/O
+        this.acia.saveState(saveState);
+
+        // Video component
+        this.video.saveState(saveState);
+
+        // TODO: Implement saveState for these components
         // this.tube.saveState(saveState);
-        // this.sysvia.saveState(saveState);
-        // this.uservia.saveState(saveState);
-        // this.acia.saveState(saveState);
         // this.serial.saveState(saveState);
         // this.adconverter.saveState(saveState);
         // this.soundChip.saveState(saveState);
-
-        // Video component is already implemented
-        this.video.saveState(saveState);
 
         // TODO: Implement saveState in these components
         // this.fdc.saveState(saveState);
@@ -774,65 +782,87 @@ export class Cpu6502 extends Base6502 {
     /**
      * Load CPU state
      * @param {SaveState} saveState The SaveState to load from
+     * @throws {Error} If peripheral components can't be properly loaded
      */
     loadState(saveState) {
-        // Call the base class method to load CPU core state
-        super.loadState(saveState);
+        try {
+            // Call the base class method to load CPU core state
+            super.loadState(saveState);
 
-        // Load CPU specific state
-        const state = saveState.getComponent("cpu_extended");
-        if (!state) return;
+            // Load CPU specific state
+            const state = saveState.getComponent("cpu_extended");
+            if (!state) {
+                throw new Error(
+                    "CPU: No extended state found in saveState. This is a fatal error: this savestate was created before savestate support was fully implemented and cannot be loaded.",
+                );
+            }
 
-        // Memory configuration
-        this.memStatOffsetByIFetchBank = state.memStatOffsetByIFetchBank;
-        this.memStatOffset = state.memStatOffset;
-        this.memStat.set(state.memStat);
+            // Memory configuration
+            this.memStatOffsetByIFetchBank = state.memStatOffsetByIFetchBank;
+            this.memStatOffset = state.memStatOffset;
+            this.memStat.set(state.memStat);
 
-        // memLook is a Int32Array
-        for (let i = 0; i < state.memLook.length; i++) {
-            this.memLook[i] = state.memLook[i];
+            // memLook is a Int32Array
+            for (let i = 0; i < state.memLook.length; i++) {
+                this.memLook[i] = state.memLook[i];
+            }
+
+            // RAM state
+            this.ramRomOs.set(state.ram, 0); // Copy RAM
+
+            // Hardware registers
+            this.romsel = state.romsel;
+            this.acccon = state.acccon;
+            this.resetLine = state.resetLine;
+            this.music5000PageSel = state.music5000PageSel;
+
+            // Timing state
+            this.peripheralCycles = state.peripheralCycles;
+            this.videoCycles = state.videoCycles;
+            this.cycleSeconds = state.cycleSeconds;
+            this.currentCycles = state.currentCycles;
+            this.targetCycles = state.targetCycles;
+
+            // Video display state
+            this.videoDisplayPage = state.videoDisplayPage;
+
+            // Load scheduler state first - this will clear all tasks
+            this.scheduler.loadState(saveState);
+
+            // Load peripheral states - CRITICAL for task scheduling
+            // These must be loaded in the correct order as some peripherals
+            // depend on others being initialized first
+
+            // System VIA handles keyboard and other essential I/O
+            // This will throw an error if VIA state isn't present
+            this.sysvia.loadState(saveState);
+
+            // User VIA for user port peripherals
+            // This will throw an error if VIA state isn't present
+            this.uservia.loadState(saveState);
+
+            // ACIA for cassette and serial I/O
+            // This will throw an error if ACIA state isn't present
+            this.acia.loadState(saveState);
+
+            // Video component
+            this.video.loadState(saveState);
+
+            // TODO: These peripherals need their loadState methods implemented/called:
+            // this.tube.loadState(saveState);
+            // this.serial.loadState(saveState);
+            // this.adconverter.loadState(saveState);
+            // this.soundChip.loadState(saveState);
+            // this.fdc.loadState(saveState);
+            // if (this.music5000) this.music5000.loadState(saveState);
+            // if (this.econet) this.econet.loadState(saveState);
+            // if (this.cmos) this.cmos.loadState(saveState);
+        } catch (error) {
+            // Make sure any errors during loading are propagated up
+            // to inform the user that this savestate cannot be loaded
+            console.error("Fatal error loading savestate:", error.message);
+            throw error;
         }
-
-        // RAM state
-        this.ramRomOs.set(state.ram, 0); // Copy RAM
-
-        // Hardware registers
-        this.romsel = state.romsel;
-        this.acccon = state.acccon;
-        this.resetLine = state.resetLine;
-        this.music5000PageSel = state.music5000PageSel;
-
-        // Timing state
-        this.peripheralCycles = state.peripheralCycles;
-        this.videoCycles = state.videoCycles;
-        this.cycleSeconds = state.cycleSeconds;
-        this.currentCycles = state.currentCycles;
-        this.targetCycles = state.targetCycles;
-
-        // Video display state
-        this.videoDisplayPage = state.videoDisplayPage;
-
-        // Load scheduler state
-        this.scheduler.loadState(saveState);
-
-        // Load peripheral states
-        // TODO: Implement loadState in these components
-        // this.tube.loadState(saveState);
-        // this.sysvia.loadState(saveState);
-        // this.uservia.loadState(saveState);
-        // this.acia.loadState(saveState);
-        // this.serial.loadState(saveState);
-        // this.adconverter.loadState(saveState);
-        // this.soundChip.loadState(saveState);
-
-        // Video component is already implemented
-        this.video.loadState(saveState);
-
-        // TODO: Implement loadState in these components
-        // this.fdc.loadState(saveState);
-        // if (this.music5000) this.music5000.loadState(saveState);
-        // if (this.econet) this.econet.loadState(saveState);
-        // if (this.cmos) this.cmos.loadState(saveState);
     }
 
     getPrevPc(index) {

@@ -31,6 +31,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Error Handling**: Use try/catch with explicit error messages
 - **Naming**: camelCase for variables and functions, PascalCase for classes
 - **Imports**: Group by source (internal/external) with proper separation
+- **Function Existence Checks**:
+  - Never use `typeof x === 'function'` to check if methods exist
+  - Either directly call the method or add a stub implementation
+  - For optional components, use explicit object existence check (`if (this.component)`)
+  - Use TODOs to mark methods that need future implementation
 
 ## Project-Specific Knowledge
 
@@ -77,3 +82,5 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - TimeTravel class provides rewind buffer functionality
 - SaveStateStorage handles browser local storage integration
 - Tests cover each component's ability to save and restore its state
+- The load order of components is important - scheduler should be loaded before peripherals
+- VIA and ACIA state is critical for proper task scheduling after loading

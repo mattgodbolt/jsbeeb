@@ -225,5 +225,52 @@ describe("Scheduler tests", function () {
             // Verify the epoch was increased correctly
             expect(newScheduler.epoch).toBe(5500);
         });
+
+        it("should clear all tasks when loadState is called", function () {
+            // Create a scheduler
+            const scheduler = new Scheduler();
+
+            // Create a saveState object
+            const saveState = {
+                components: {},
+                addComponent: function (name, state) {
+                    this.components[name] = state;
+                },
+                getComponent: function (name) {
+                    return this.components[name];
+                },
+            };
+
+            // Save initial scheduler state
+            scheduler.saveState(saveState);
+
+            // Add multiple tasks
+            const task1 = scheduler.newTask(() => {});
+            const task2 = scheduler.newTask(() => {});
+            const task3 = scheduler.newTask(() => {});
+
+            // Schedule all tasks
+            task1.schedule(100);
+            task2.schedule(200);
+            task3.schedule(300);
+
+            // Verify all tasks are scheduled
+            expect(scheduler.scheduled).not.toBeNull();
+            expect(task1.scheduled()).toBe(true);
+            expect(task2.scheduled()).toBe(true);
+            expect(task3.scheduled()).toBe(true);
+
+            // Load the scheduler state
+            scheduler.loadState(saveState);
+
+            // Verify all tasks have been cleared
+            expect(scheduler.scheduled).toBeNull();
+            expect(task1.scheduled()).toBe(false);
+            expect(task2.scheduled()).toBe(false);
+            expect(task3.scheduled()).toBe(false);
+
+            // Verify headroom is now MaxHeadroom
+            expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
+        });
     });
 });
