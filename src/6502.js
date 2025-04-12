@@ -774,6 +774,7 @@ export class Cpu6502 extends Base6502 {
         // Call saveState for additional components if they exist
         if (this.fdc) this.fdc.saveState(saveState);
         if (this.music5000) this.music5000.saveState(saveState);
+        if (this.tube) this.tube.saveState(saveState);
         // if (this.econet) this.econet.saveState(saveState);
         if (this.cmos) this.cmos.saveState(saveState);
         if (this.model.hasTeletextAdaptor) this.teletextAdaptor.saveState(saveState);
@@ -856,6 +857,7 @@ export class Cpu6502 extends Base6502 {
 
             // Load state for additional components if they exist
             if (this.music5000) this.music5000.loadState(saveState);
+            if (this.tube) this.tube.loadState(saveState);
             // if (this.econet) this.econet.loadState(saveState);
             if (this.cmos) this.cmos.loadState(saveState);
             if (this.model.hasTeletextAdaptor) this.teletextAdaptor.loadState(saveState);
