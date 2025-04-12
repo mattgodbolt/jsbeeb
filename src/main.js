@@ -1662,4 +1662,4 @@ window.m7dump = function () {
 electron({ loadDiscImage, processor });
 
 // Initialize the Snapshot UI
-new SnapshotUI(processor, video, audioHandler.soundChip, processor.sysvia, processor.uservia, processor.crtc);
+new SnapshotUI(processor);

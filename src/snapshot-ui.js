@@ -12,19 +12,9 @@ export class SnapshotUI {
     /**
      * Create a new SnapshotUI
      * @param {Object} processor - The 6502 processor instance
-     * @param {Object} video - The video component
-     * @param {Object} soundChip - The sound chip component
-     * @param {Object} sysVia - The system VIA
-     * @param {Object} userVia - The user VIA
-     * @param {Object} crtc - The CRTC component
      */
-    constructor(processor, video, soundChip, sysVia, userVia, crtc) {
+    constructor(processor) {
         this.processor = processor;
-        this.video = video;
-        this.soundChip = soundChip;
-        this.sysVia = sysVia;
-        this.userVia = userVia;
-        this.crtc = crtc;
 
         // Create storage for save states
         this.saveStateStorage = new SaveStateStorage();
@@ -101,6 +91,8 @@ export class SnapshotUI {
             const saveState = new SaveState();
 
             // Have the processor save its state
+            // The processor's saveState method will handle all components including the FDC
+            // We don't need to manually call saveState on individual components here
             this.processor.saveState(saveState);
 
             // Use a timestamp as the save name
