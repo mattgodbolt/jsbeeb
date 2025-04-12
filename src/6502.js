@@ -769,10 +769,10 @@ export class Cpu6502 extends Base6502 {
         // Call saveState for additional peripheral components
         if (this.serial) this.serial.saveState(saveState);
         if (this.adconverter) this.adconverter.saveState(saveState);
-        // this.soundChip.saveState(saveState);
+        if (this.soundChip) this.soundChip.saveState(saveState);
 
         // Call saveState for additional components if they exist
-        // this.fdc.saveState(saveState);
+        if (this.fdc) this.fdc.saveState(saveState);
         if (this.music5000) this.music5000.saveState(saveState);
         // if (this.econet) this.econet.saveState(saveState);
         if (this.cmos) this.cmos.saveState(saveState);
@@ -851,8 +851,8 @@ export class Cpu6502 extends Base6502 {
             // Load additional peripheral components
             if (this.serial) this.serial.loadState(saveState);
             if (this.adconverter) this.adconverter.loadState(saveState);
-            // this.soundChip.loadState(saveState);
-            // this.fdc.loadState(saveState);
+            if (this.soundChip) this.soundChip.loadState(saveState);
+            if (this.fdc) this.fdc.loadState(saveState);
 
             // Load state for additional components if they exist
             if (this.music5000) this.music5000.loadState(saveState);
