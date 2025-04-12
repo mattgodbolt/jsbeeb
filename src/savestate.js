@@ -7,10 +7,11 @@
 export class SaveState {
     /**
      * Create a new SaveState object
+     * @param {Object} model - The machine model
      * @param {Object} options - Options for the save state
      * @param {number} options.version - Version of the save state format
      */
-    constructor(options = {}) {
+    constructor(model, options = {}) {
         this.version = options.version || 1;
         this.timestamp = Date.now();
         this.components = new Map();
@@ -18,6 +19,32 @@ export class SaveState {
             jsbeeb: "1.0", // Will be filled with actual version
             format: "jsbeeb-native",
         };
+        
+        // Store model information
+        this.modelInfo = {
+            name: model.name,
+            synonyms: model.synonyms,
+            cpuModel: model._cpuModel,
+            isMaster: model.isMaster,
+            hasTeletextAdaptor: model.hasTeletextAdaptor,
+            hasMusic5000: model.hasMusic5000,
+            hasEconet: model.hasEconet,
+            swram: Array.from(model.swram),
+            fdcType: model.Fdc ? model.Fdc.name : null,
+            os: Array.from(model.os),
+            tube: model.tube ? {
+                name: model.tube.name,
+                os: model.tube.os
+            } : null
+        };
+    }
+    
+    /**
+     * Get model information from the save state
+     * @returns {Object} Model information
+     */
+    getModelInfo() {
+        return this.modelInfo;
     }
 
     /**
@@ -49,6 +76,7 @@ export class SaveState {
             version: this.version,
             timestamp: this.timestamp,
             metadata: this.metadata,
+            modelInfo: this.modelInfo,
             components: Object.fromEntries(this.components),
         };
 
@@ -85,9 +113,21 @@ export class SaveState {
             return value;
         });
 
-        const state = new SaveState({ version: parsed.version });
+        // Create a placeholder model for deserialization
+        // The real model will be constructed by ModelManager based on modelInfo
+        const placeholderModel = {
+            name: "Deserialized",
+            synonyms: [],
+            _cpuModel: 0,
+            isMaster: false,
+            swram: [],
+            os: []
+        };
+        
+        const state = new SaveState(placeholderModel, { version: parsed.version });
         state.timestamp = parsed.timestamp;
         state.metadata = parsed.metadata;
+        state.modelInfo = parsed.modelInfo; // Override with the saved model info
 
         // Convert from object to Map
         for (const [key, value] of Object.entries(parsed.components)) {

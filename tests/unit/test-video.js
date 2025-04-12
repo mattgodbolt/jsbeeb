@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 // Setup the video with imported constants
 describe("Video", () => {
@@ -291,7 +292,8 @@ describe("Video", () => {
         let saveState;
 
         beforeEach(() => {
-            saveState = new SaveState();
+            const mockModel = createMockModel();
+            saveState = new SaveState(mockModel);
 
             // Set some distinctive values in the video object
             video.frameCount = 42;

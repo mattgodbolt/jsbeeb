@@ -5,6 +5,7 @@ import { Disc, IbmDiscFormat } from "../../src/disc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Disc drive tests", function () {
     it("starts empty", () => {
@@ -89,7 +90,8 @@ describe("Disc drive tests", function () {
         // Setup
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
-        const saveState = new SaveState();
+        const mockModel = createMockModel();
+        const saveState = new SaveState(mockModel);
 
         // Set specific state values
         drive._is40Track = true;

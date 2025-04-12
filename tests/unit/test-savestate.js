@@ -2,6 +2,24 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { SaveState, TimeTravel, SaveStateStorage } from "../../src/savestate.js";
+import { Model, CpuModel } from "../../src/models.js";
+import { NoiseAwareIntelFdc } from "../../src/intel-fdc.js";
+import { NoiseAwareWdFdc } from "../../src/wd-fdc.js";
+
+// Helper function to create a mock model for testing
+export function createMockModel(options = {}) {
+    return new Model(
+        options.name || "Test Model",
+        options.synonyms || ["TestSynonym"],
+        options.os || ["os.rom", "BASIC.ROM"],
+        options.cpuModel || CpuModel.MOS6502,
+        options.isMaster || false,
+        options.swram || new Array(16).fill(false),
+        options.fdc || NoiseAwareIntelFdc,
+        options.tube || null,
+        options.cmos || null
+    );
+}
 
 // Mock localStorage for testing
 let mockLocalStorage = {};
@@ -43,9 +61,23 @@ const sampleSoundState = {
 
 describe("SaveState", () => {
     let saveState;
+    let mockModel;
 
     beforeEach(() => {
-        saveState = new SaveState();
+        // Create a minimal mock Model for testing
+        mockModel = new Model(
+            "Test Model",
+            ["TestSynonym"],
+            ["os.rom", "BASIC.ROM"],
+            CpuModel.MOS6502,
+            false, // Not Master
+            new Array(16).fill(false), // SWRAM config
+            NoiseAwareIntelFdc,
+            null, // No tube
+            null  // No CMOS override
+        );
+        
+        saveState = new SaveState(mockModel);
     });
 
     it("should create a SaveState with default values", () => {
@@ -197,12 +229,16 @@ describe("SaveState", () => {
 describe("TimeTravel", () => {
     let timeTravel;
     let currentTime;
+    let mockModel;
 
     beforeEach(() => {
         timeTravel = new TimeTravel({
             bufferSize: 5,
             captureInterval: 1000,
         });
+
+        // Create a mock model for testing
+        mockModel = createMockModel();
 
         // Mock date for consistent testing
         currentTime = 0;
@@ -221,10 +257,10 @@ describe("TimeTravel", () => {
     });
 
     it("should add states to the buffer", () => {
-        const state1 = new SaveState();
+        const state1 = new SaveState(mockModel);
         state1.addComponent("cpu", { ...sampleCpuState, cycles: 1000 });
 
-        const state2 = new SaveState();
+        const state2 = new SaveState(mockModel);
         state2.addComponent("cpu", { ...sampleCpuState, cycles: 2000 });
 
         timeTravel.addState(state1);
@@ -237,7 +273,7 @@ describe("TimeTravel", () => {
     it("should maintain a circular buffer of states", () => {
         // Fill the buffer and then some
         for (let i = 0; i < 7; i++) {
-            const state = new SaveState();
+            const state = new SaveState(mockModel);
             state.addComponent("cpu", { ...sampleCpuState, cycles: i * 1000 });
             timeTravel.addState(state);
         }
@@ -287,7 +323,7 @@ describe("TimeTravel", () => {
     it("should clear all states", () => {
         // Add some states
         for (let i = 0; i < 3; i++) {
-            const state = new SaveState();
+            const state = new SaveState(mockModel);
             state.addComponent("cpu", { ...sampleCpuState, cycles: i * 1000 });
             timeTravel.addState(state);
         }
@@ -304,6 +340,7 @@ describe("TimeTravel", () => {
 
 describe("SaveStateStorage", () => {
     let storage;
+    let mockModel;
 
     beforeEach(() => {
         // Mock localStorage
@@ -322,6 +359,19 @@ describe("SaveStateStorage", () => {
             writable: true,
         });
 
+        // Create a minimal mock Model for testing
+        mockModel = new Model(
+            "Test Model",
+            ["TestSynonym"],
+            ["os.rom", "BASIC.ROM"],
+            CpuModel.MOS6502,
+            false, // Not Master
+            new Array(16).fill(false), // SWRAM config
+            NoiseAwareIntelFdc,
+            null, // No tube
+            null  // No CMOS override
+        );
+
         storage = new SaveStateStorage({ prefix: "test_" });
     });
 
@@ -330,7 +380,7 @@ describe("SaveStateStorage", () => {
     });
 
     it("should save a state to localStorage", () => {
-        const state = new SaveState();
+        const state = new SaveState(mockModel);
         state.addComponent("cpu", sampleCpuState);
 
         const result = storage.saveToLocalStorage("slot1", state);
@@ -344,7 +394,7 @@ describe("SaveStateStorage", () => {
 
     it("should load a state from localStorage", () => {
         // Save a state first
-        const state = new SaveState();
+        const state = new SaveState(mockModel);
         state.addComponent("cpu", sampleCpuState);
         storage.saveToLocalStorage("slot1", state);
 
@@ -368,7 +418,7 @@ describe("SaveStateStorage", () => {
 
     it("should delete a state from localStorage", () => {
         // Save a state first
-        const state = new SaveState();
+        const state = new SaveState(mockModel);
         storage.saveToLocalStorage("slot1", state);
 
         // Delete it
@@ -383,7 +433,7 @@ describe("SaveStateStorage", () => {
 
     it("should get the list of saved states", () => {
         // Save a few states
-        const state = new SaveState();
+        const state = new SaveState(mockModel);
         storage.saveToLocalStorage("slot1", state);
         storage.saveToLocalStorage("slot2", state);
         storage.saveToLocalStorage("slot3", state);
@@ -400,9 +450,111 @@ describe("SaveStateStorage", () => {
             throw new Error("Storage full");
         });
 
-        const state = new SaveState();
+        // Create a minimal model for the SaveState constructor
+        const minimalModel = new Model(
+            "Test Model", [], [], CpuModel.MOS6502, false, [], null
+        );
+        
+        const state = new SaveState(minimalModel);
         const result = storage.saveToLocalStorage("error", state);
 
         expect(result).toBe(false);
+    });
+});
+
+describe("SaveState Model Information", () => {
+    let mockModel;
+    let saveState;
+
+    beforeEach(() => {
+        // Create a mock Model instance for testing
+        mockModel = new Model(
+            "Test Model",
+            ["TestSynonym1", "TestSynonym2"],
+            ["os.rom", "BASIC.ROM"],
+            CpuModel.MOS6502,
+            false, // Not Master
+            new Array(16).fill(false), // SWRAM config
+            NoiseAwareIntelFdc,
+            null, // No tube
+            null  // No CMOS override
+        );
+        
+        // Add additional properties that might be present in real models
+        mockModel.hasTeletextAdaptor = false;
+        mockModel.hasMusic5000 = true;
+        mockModel.hasEconet = false;
+        
+        // Create SaveState with the mock model
+        saveState = new SaveState(mockModel);
+    });
+
+    it("should store model information in SaveState", () => {
+        // Get model info from SaveState
+        const modelInfo = saveState.getModelInfo();
+        
+        // Verify model properties were correctly saved
+        expect(modelInfo).toBeDefined();
+        expect(modelInfo.name).toBe("Test Model");
+        expect(modelInfo.synonyms).toEqual(["TestSynonym1", "TestSynonym2"]);
+        expect(modelInfo.cpuModel).toBe(CpuModel.MOS6502);
+        expect(modelInfo.isMaster).toBe(false);
+        expect(modelInfo.hasMusic5000).toBe(true);
+        expect(modelInfo.hasTeletextAdaptor).toBe(false);
+        expect(Array.isArray(modelInfo.swram)).toBe(true);
+        expect(modelInfo.fdcType).toBe("NoiseAwareIntelFdc");
+    });
+
+    it("should include model information in serialized state", () => {
+        // Serialize the state
+        const serialized = saveState.serialize();
+        const parsed = JSON.parse(serialized);
+        
+        // Verify model info is included in serialized data
+        expect(parsed.modelInfo).toBeDefined();
+        expect(parsed.modelInfo.name).toBe("Test Model");
+        expect(parsed.modelInfo.cpuModel).toBe(CpuModel.MOS6502);
+        expect(parsed.modelInfo.fdcType).toBe("NoiseAwareIntelFdc");
+    });
+
+    it("should preserve model information through serialize/deserialize", () => {
+        // Serialize the state
+        const serialized = saveState.serialize();
+        
+        // Deserialize back to a SaveState
+        const deserializedState = SaveState.deserialize(serialized);
+        
+        // Verify model info is preserved
+        const modelInfo = deserializedState.getModelInfo();
+        expect(modelInfo).toBeDefined();
+        expect(modelInfo.name).toBe("Test Model");
+        expect(modelInfo.synonyms).toEqual(["TestSynonym1", "TestSynonym2"]);
+        expect(modelInfo.cpuModel).toBe(CpuModel.MOS6502);
+        expect(modelInfo.isMaster).toBe(false);
+        expect(modelInfo.hasMusic5000).toBe(true);
+        expect(modelInfo.hasTeletextAdaptor).toBe(false);
+    });
+
+    it("should handle FDC type correctly for different models", () => {
+        // Create a Master model which uses WD FDC
+        const masterModel = new Model(
+            "Test Master",
+            ["TestMaster"],
+            ["master/mos3.20"],
+            CpuModel.CMOS65C12,
+            true, // Is Master
+            new Array(16).fill(false), // SWRAM config
+            NoiseAwareWdFdc,
+            null, // No tube
+            null  // No CMOS override
+        );
+        
+        // Create SaveState with the Master model
+        const masterSaveState = new SaveState(masterModel);
+        
+        // Verify FDC type is correct
+        const modelInfo = masterSaveState.getModelInfo();
+        expect(modelInfo.fdcType).toBe("NoiseAwareWdFdc");
+        expect(modelInfo.isMaster).toBe(true);
     });
 });

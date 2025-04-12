@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { SoundChip } from "../../src/soundchip.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("SoundChip", () => {
     let soundChip;
@@ -45,7 +46,8 @@ describe("SoundChip", () => {
     describe("Save State", () => {
         it("should properly save and restore state", () => {
             // Setup
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set some specific state values
             soundChip.registers[0] = 0x42;

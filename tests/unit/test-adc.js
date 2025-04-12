@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Adc } from "../../src/adc.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("ADC", () => {
     // Mock dependencies
@@ -353,8 +354,9 @@ describe("ADC", () => {
         });
 
         it("should save state correctly", () => {
-            // Create a SaveState
-            const saveState = new SaveState();
+            // Create a SaveState with a mock model
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Call saveState
             adc.saveState(saveState);
@@ -370,7 +372,8 @@ describe("ADC", () => {
 
         it("should load state correctly", () => {
             // Create a SaveState with test data
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             saveState.addComponent("adc", {
                 status: 0x33,
                 low: 0x66,
@@ -393,7 +396,8 @@ describe("ADC", () => {
 
         it("should skip rescheduling if scheduledTime is <= 0", () => {
             // Create a SaveState with test data and no scheduled task
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             saveState.addComponent("adc", {
                 status: 0x33,
                 low: 0x66,
@@ -411,7 +415,8 @@ describe("ADC", () => {
 
         it("should do nothing if component is not in SaveState", () => {
             // Create a SaveState with no ADC component
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Call loadState
             adc.loadState(saveState);

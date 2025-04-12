@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Music5000 } from "../../src/music5000.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Music5000", () => {
     let music5000;
@@ -34,7 +35,8 @@ describe("Music5000", () => {
             music5000.position = 10;
 
             // Create a SaveState
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Call saveState
             music5000.saveState(saveState);
@@ -59,7 +61,8 @@ describe("Music5000", () => {
     describe("loadState", () => {
         it("should load all state from the SaveState object", () => {
             // Create a SaveState
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Create test data
             const testWaveRam = new Uint8Array(2048);
@@ -108,7 +111,8 @@ describe("Music5000", () => {
 
         it("should do nothing if the component is not in the SaveState", () => {
             // Create a SaveState with no music5000 component
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set initial state to check it doesn't change
             music5000.waveRam[0] = 0x42;

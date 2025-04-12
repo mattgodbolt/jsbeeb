@@ -3,6 +3,7 @@
 import { BemSnapshotConverter } from "./bem-snapshot.js";
 import { SaveState } from "./savestate.js";
 import { SaveStateStorage } from "./savestate.js";
+import { ModelManager } from "./models-manager.js";
 import * as bootstrap from "bootstrap";
 
 /**
@@ -87,8 +88,8 @@ export class SnapshotUI {
      */
     saveState() {
         try {
-            // Create a new save state
-            const saveState = new SaveState();
+            // Create a new save state with the current model
+            const saveState = new SaveState(this.processor.model);
 
             // Have the processor save its state
             // The processor's saveState method will handle all components including the FDC
@@ -215,6 +216,15 @@ export class SnapshotUI {
                 return;
             }
 
+            // Get model info from the save state
+            const modelInfo = saveState.getModelInfo();
+            if (modelInfo) {
+                console.log("Saved state model:", modelInfo.name);
+                // TODO: Model reconfiguration required here
+                // This will require refactoring to allow the UI to reconfigure the emulator
+                // Currently we're assuming the current processor model is compatible with the saved state
+            }
+
             // Ensure keyboard is enabled before loading state
             this.processor.sysvia.enableKeyboard();
 
@@ -304,6 +314,10 @@ export class SnapshotUI {
                 if (modelInfo) {
                     console.log(`B-Em snapshot model: ${modelInfo.modelString || "Unknown"}`);
                     this.showMessage(`B-Em snapshot model: ${modelInfo.modelString || "Unknown"}`, "info");
+                    
+                    // TODO: Model reconfiguration required here
+                    // This will require refactoring to allow the UI to reconfigure the emulator
+                    // Currently we're assuming the current processor model is compatible with the B-Em snapshot
                 }
 
                 // If we have memory latches, log them for debugging

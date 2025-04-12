@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { WdFdc } from "../../src/wd-fdc.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 import { Scheduler } from "../../src/scheduler.js";
 
 describe("WdFdc", () => {
@@ -72,7 +73,8 @@ describe("WdFdc", () => {
     describe("Save State", () => {
         it("should properly save and restore state", () => {
             // Setup
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set specific state values
             fdc._controlRegister = 0x42;

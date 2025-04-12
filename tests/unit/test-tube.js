@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Tube } from "../../src/tube.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Tube", () => {
     let tube;
@@ -36,7 +37,8 @@ describe("Tube", () => {
             tube.hostToParasiteData[2][1] = 0xee;
 
             // Save state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             tube.saveState(saveState);
 
             // Create a new tube with default state
@@ -73,7 +75,8 @@ describe("Tube", () => {
 
         it("should handle loading when state component is missing", () => {
             // Create a SaveState without any tube state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set up a tube with some non-default state
             tube.internalStatusRegister = 0x42;
@@ -99,7 +102,8 @@ describe("Tube", () => {
             expect(hostCpu.interrupt & 8).toBeTruthy();
 
             // Save state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             tube.saveState(saveState);
 
             // Create a new tube with default state

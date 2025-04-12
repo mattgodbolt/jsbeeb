@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Teletext } from "../../src/teletext.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Teletext Tests", () => {
     let teletext;
@@ -35,7 +36,8 @@ describe("Teletext Tests", () => {
             teletext.levelRA0 = true;
 
             // Create a SaveState and save teletext state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             teletext.saveState(saveState);
 
             // Create a new teletext instance
@@ -78,7 +80,8 @@ describe("Teletext Tests", () => {
             teletext.heldGlyphs = teletext.normalGlyphs;
 
             // Create a save state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             teletext.saveState(saveState);
 
             // Create a new teletext and restore
@@ -95,7 +98,8 @@ describe("Teletext Tests", () => {
             // Don't modify teletext state, use defaults
 
             // Create a save state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             teletext.saveState(saveState);
 
             // Create a new teletext and restore

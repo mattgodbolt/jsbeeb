@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Acia } from "../../src/acia.js";
 import { SaveState } from "../../src/savestate.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Acia", () => {
     let acia;
@@ -61,8 +62,9 @@ describe("Acia", () => {
 
     describe("Save State", () => {
         it("should properly save and restore state", () => {
-            // Setup
-            const saveState = new SaveState();
+            // Setup with a mock model
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set some specific state values
             acia.sr = 0x42;

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Serial } from "../../src/serial.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Serial", () => {
     // Create mock for the ACIA dependency
@@ -163,7 +164,8 @@ describe("Serial", () => {
 
         it("should save state correctly", () => {
             // Create a SaveState
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Call saveState
             serial.saveState(saveState);
@@ -178,7 +180,8 @@ describe("Serial", () => {
 
         it("should load state correctly", () => {
             // Create a SaveState with test data
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             saveState.addComponent("serial", {
                 reg: 0x86,
                 transmitRate: 6,
@@ -204,7 +207,8 @@ describe("Serial", () => {
 
         it("should do nothing if the component is not in the SaveState", () => {
             // Create a SaveState with no serial component
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Call loadState
             serial.loadState(saveState);

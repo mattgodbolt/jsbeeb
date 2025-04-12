@@ -3,6 +3,7 @@
 import * as utils from "./utils.js";
 import { Flags } from "./6502.js";
 import { SaveState } from "./savestate.js";
+import { Model, CpuModel } from "./models.js";
 
 /**
  * B-Em Snapshot format constants
@@ -74,7 +75,20 @@ export class BemSnapshotConverter {
             throw new Error(error);
         }
 
-        const saveState = new SaveState({ version: 1 });
+        // Create a minimal model for the save state
+        const minimalModel = new Model(
+            "B-Em Converted",
+            [],
+            ["os.rom", "BASIC.ROM"],
+            CpuModel.MOS6502,
+            false,
+            new Array(16).fill(false),
+            null,
+            null,
+            null,
+        );
+
+        const saveState = new SaveState(minimalModel, { version: 1 });
         saveState.metadata.format = "bem-converted";
         saveState.metadata.bemVersion = version;
 

@@ -4,13 +4,13 @@ import { NoiseAwareWdFdc } from "./wd-fdc.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 import * as opcodes from "./6502.opcodes.js";
 
-const CpuModel = Object.freeze({
+export const CpuModel = Object.freeze({
     MOS6502: 0,
     CMOS65C02: 1,
     CMOS65C12: 2,
 });
 
-class Model {
+export class Model {
     constructor(name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride) {
         this.name = name;
         this.synonyms = synonyms;

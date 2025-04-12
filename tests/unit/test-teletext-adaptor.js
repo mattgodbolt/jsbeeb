@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("TeletextAdaptor", () => {
     // Constants
@@ -378,7 +379,8 @@ describe("TeletextAdaptor", () => {
             teletext.frameBuffer[5][10] = 0xbb;
 
             // Create a SaveState
-            saveState = new SaveState();
+            const mockModel = createMockModel();
+            saveState = new SaveState(mockModel);
         });
 
         it("should save state correctly", () => {
@@ -506,7 +508,8 @@ describe("TeletextAdaptor", () => {
 
         it("should do nothing if component is not in SaveState", () => {
             // Create SaveState with no teletext_adaptor component
-            const emptyState = new SaveState();
+            const mockModel = createMockModel();
+            const emptyState = new SaveState(mockModel);
 
             // Save initial values to compare later
             const origStatus = teletext.teletextStatus;

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import assert from "assert";
 import { Scheduler } from "../../src/scheduler.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Scheduler tests", function () {
     "use strict";
@@ -197,7 +198,8 @@ describe("Scheduler tests", function () {
             scheduler.epoch = 12345;
 
             // Create a save state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             scheduler.saveState(saveState);
 
             // Create a new scheduler and restore the state
@@ -214,7 +216,8 @@ describe("Scheduler tests", function () {
             scheduler.epoch = 5000;
 
             // Create a save state
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             scheduler.saveState(saveState);
 
             // Create a new scheduler, restore, and advance

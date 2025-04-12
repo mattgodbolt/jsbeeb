@@ -9,18 +9,21 @@ This document outlines the design and implementation plan for adding save state 
 - Implement a rewind (time travel) feature using a ring buffer of states
 - Provide compatibility with other BBC Micro emulator save state formats
 - Ensure the implementation is efficient in terms of storage size and performance
+- **Support cross-model state restoration** (e.g., loading a BBC B state into a Master)
 
 ## Architecture
 
-The save state system will be built around a central `SaveState` class that coordinates saving and loading state from all emulator components. Each component will implement methods to save and restore its state.
+The save state system will be built around a central `SaveState` class that coordinates saving and loading state from all emulator components. Each component will implement methods to save and restore its state. The system will also store machine model information to ensure correct restoration across different machine configurations.
 
 ### Core Components
 
 1. **SaveState Class**: Manages the overall state serialization and deserialization
 2. **Component State Interface**: Standard methods for components to save/restore state
-3. **Serialization Module**: Handles converting state to/from storable formats
-4. **Storage Interface**: Manages saving to localStorage, files, etc.
-5. **Time Machine**: Implements the rewind functionality using a ring buffer
+3. **Model Information**: Captures the machine configuration (BBC B, Master, etc.) and peripheral setup
+4. **Serialization Module**: Handles converting state to/from storable formats
+5. **Storage Interface**: Manages saving to localStorage, files, etc.
+6. **Time Machine**: Implements the rewind functionality using a ring buffer
+7. **Model Restoration Manager**: Handles reconfiguring the machine when loading states from different models
 
 ## Component State Implementation
 
@@ -33,6 +36,15 @@ Each component will need to implement methods to save and restore its state:
 - Interrupt and NMI state
 - Memory access state
 - CPU timing information
+
+### Machine Model State
+
+- BBC Micro model type (B, B+, Master 128, etc.)
+- CPU type (6502, 65C02, 65C12)
+- FDC type (Intel 8271, WD 1770, etc.)
+- Memory configuration (shadow RAM, etc.)
+- ROM selection and mapping
+- Peripheral configuration (available hardware)
 
 ### Memory State
 
@@ -79,8 +91,9 @@ Each component will need to implement methods to save and restore its state:
 The save state will be serialized in a structured format with:
 
 1. **Header**: Version, timestamp, metadata
-2. **Component Blocks**: Serialized state for each component
-3. **Binary Data**: Efficient storage for large arrays (RAM, etc.)
+2. **Model Information**: BBC Micro model and configuration details
+3. **Component Blocks**: Serialized state for each component
+4. **Binary Data**: Efficient storage for large arrays (RAM, etc.)
 
 Two serialization formats will be supported:
 
@@ -202,12 +215,22 @@ class SaveState {
   toJSON() { ... }              // Convert to JSON for debugging
   toFile() { ... }              // Export to file
   static fromFile(file) { ... } // Import from file
+  
+  // Model handling
+  getModelInfo() { ... }        // Get the stored model information
+  addModelInfo(model) { ... }   // Store model information
 }
 
 // Component interface
 class Component {
   saveState(state) { ... }      // Save component state
   loadState(state) { ... }      // Restore component state
+}
+
+// Model management interface
+class ModelManager {
+  static getModelFromSaveState(state) { ... } // Extract model info
+  static configureForModel(model) { ... }     // Reconfigure emulator
 }
 
 // User-facing API
@@ -218,6 +241,7 @@ emulator.loadStateFromSlot(name) => void // Load from named slot
 emulator.getStateList() => string[]    // List available states
 emulator.deleteState(name) => void     // Delete a state
 emulator.rewind(seconds) => void       // Rewind emulation
+emulator.getModelInfo() => Object      // Get current machine model info
 ```
 
 ## Testing Strategy
@@ -242,6 +266,31 @@ The save state implementation is accompanied by a comprehensive testing strategy
 - Tests for importing/exporting B-EM format states
 - Tests for format version handling and backwards compatibility
 
+### Cross-Model Testing
+
+- Tests for saving state on one model and loading on another
+- Tests for proper model detection and reconfiguration
+- Tests for handling peripheral differences between models
+
+## Model-Aware State Loading Process
+
+When loading a save state, the system will follow these steps:
+
+1. **Extract Model Information**: Read the model information from the save state
+2. **Reconfigure Emulator**: Reconfigure the emulator to match the saved model:
+   - Set machine type (B, B+, Master 128, etc.)
+   - Adjust CPU type (6502/65C02/65C12)
+   - Set up memory layout (standard/shadow RAM)
+   - Configure appropriate peripherals (Intel/WD FDC, etc.)
+3. **Load Component States**: Load component states in the correct order:
+   - First load scheduler state
+   - Then load CPU core state
+   - Load memory state
+   - Load peripheral states in dependency order
+4. **Post-Load Validation**: Verify critical state was restored properly
+
+This approach ensures that save states can be safely loaded regardless of the current emulator configuration.
+
 ## Conclusion
 
-This save state implementation will significantly enhance the usability of jsbeeb by allowing users to save their progress and resume sessions later. The rewind feature will provide a valuable tool for debugging and exploration. The implementation will be done in phases, with careful attention to component state preservation, storage efficiency, and user experience, all backed by comprehensive testing.
+This save state implementation will significantly enhance the usability of jsbeeb by allowing users to save their progress and resume sessions later. The model-aware design ensures that users can load states across different BBC Micro configurations without compatibility issues. The rewind feature will provide a valuable tool for debugging and exploration. The implementation will be done in phases, with careful attention to component state preservation, model compatibility, storage efficiency, and user experience, all backed by comprehensive testing.

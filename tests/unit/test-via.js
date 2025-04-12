@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Via, SysVia } from "../../src/via.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 import { Scheduler } from "../../src/scheduler.js";
 
 describe("Via", () => {
@@ -44,7 +45,8 @@ describe("Via", () => {
     describe("Save State", () => {
         it("should properly save and restore state", () => {
             // Setup
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set some specific state values
             via.ora = 0x42;
@@ -114,7 +116,8 @@ describe("SysVia", () => {
     describe("Save State", () => {
         it("should properly save and restore SysVia specific state", () => {
             // Setup
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set some specific state values
             sysVia.IC32 = 0x42;

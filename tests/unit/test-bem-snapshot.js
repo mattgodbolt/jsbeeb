@@ -3,6 +3,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { BemSnapshotConverter } from "../../src/bem-snapshot.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 import fs from "fs";
 import { Flags } from "../../src/6502.js";
 
@@ -111,7 +112,8 @@ describe("BemSnapshotConverter", () => {
 
         beforeEach(() => {
             // Create a mock SaveState with enough data to generate a B-Em snapshot
-            mockSaveState = new SaveState();
+            const mockModel = createMockModel();
+            mockSaveState = new SaveState(mockModel);
 
             // Add CPU state
             const cpuState = {
@@ -255,7 +257,8 @@ describe("BemSnapshotConverter", () => {
     describe("CPU state conversion", () => {
         it("should correctly convert status flags between formats", () => {
             // Create a SaveState with specific CPU flags
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
             const flags = new Flags();
             flags.n = true;
             flags.v = false;

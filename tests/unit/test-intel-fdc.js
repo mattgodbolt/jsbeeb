@@ -5,6 +5,7 @@ import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 class FakeDrive {
     constructor() {
@@ -121,7 +122,8 @@ describe("Intel 8271 tests", function () {
             const fakeDrive0 = new FakeDrive();
             const fakeDrive1 = new FakeDrive();
             const fdc = new IntelFdc(fakeCpu, scheduler, [fakeDrive0, fakeDrive1]);
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set some initial state
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);
@@ -174,7 +176,8 @@ describe("Intel 8271 tests", function () {
             const scheduler = new Scheduler();
             const fakeDrive = new FakeDrive();
             const fdc = new IntelFdc(fakeCpu, scheduler, [fakeDrive]);
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Start a seek command to set the controller in a busy state
             sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);

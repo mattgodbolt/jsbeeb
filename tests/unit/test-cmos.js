@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Cmos } from "../../src/cmos.js";
 import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("CMOS", () => {
     // Mock persistence
@@ -268,7 +269,8 @@ describe("CMOS", () => {
     describe("Save State", () => {
         it("should properly save and restore state", () => {
             // Setup
-            const saveState = new SaveState();
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
 
             // Set some specific values in CMOS
             cmos.store[0] = 0x42;
