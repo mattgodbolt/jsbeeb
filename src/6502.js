@@ -766,17 +766,17 @@ export class Cpu6502 extends Base6502 {
         // Video component
         this.video.saveState(saveState);
 
-        // TODO: Implement saveState for these components
-        // this.tube.saveState(saveState);
-        // this.serial.saveState(saveState);
-        // this.adconverter.saveState(saveState);
+        // Call saveState for additional peripheral components
+        if (this.serial) this.serial.saveState(saveState);
+        if (this.adconverter) this.adconverter.saveState(saveState);
         // this.soundChip.saveState(saveState);
 
-        // TODO: Implement saveState in these components
+        // Call saveState for additional components if they exist
         // this.fdc.saveState(saveState);
-        // if (this.music5000) this.music5000.saveState(saveState);
+        if (this.music5000) this.music5000.saveState(saveState);
         // if (this.econet) this.econet.saveState(saveState);
-        // if (this.cmos) this.cmos.saveState(saveState);
+        if (this.cmos) this.cmos.saveState(saveState);
+        if (this.model.hasTeletextAdaptor) this.teletextAdaptor.saveState(saveState);
     }
 
     /**
@@ -848,15 +848,17 @@ export class Cpu6502 extends Base6502 {
             // Video component
             this.video.loadState(saveState);
 
-            // TODO: These peripherals need their loadState methods implemented/called:
-            // this.tube.loadState(saveState);
-            // this.serial.loadState(saveState);
-            // this.adconverter.loadState(saveState);
+            // Load additional peripheral components
+            if (this.serial) this.serial.loadState(saveState);
+            if (this.adconverter) this.adconverter.loadState(saveState);
             // this.soundChip.loadState(saveState);
             // this.fdc.loadState(saveState);
-            // if (this.music5000) this.music5000.loadState(saveState);
+
+            // Load state for additional components if they exist
+            if (this.music5000) this.music5000.loadState(saveState);
             // if (this.econet) this.econet.loadState(saveState);
-            // if (this.cmos) this.cmos.loadState(saveState);
+            if (this.cmos) this.cmos.loadState(saveState);
+            if (this.model.hasTeletextAdaptor) this.teletextAdaptor.loadState(saveState);
         } catch (error) {
             // Make sure any errors during loading are propagated up
             // to inform the user that this savestate cannot be loaded

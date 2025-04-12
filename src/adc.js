@@ -82,4 +82,41 @@ export class Adc {
         this.high = (val >>> 8) & 0xff;
         this.sysvia.setcb1(false);
     }
+
+    /**
+     * Save ADC state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            status: this.status,
+            low: this.low,
+            high: this.high,
+            // Save the scheduled task time if it exists
+            scheduledTime: this.task.when - this.task.scheduler.currentTime,
+        };
+
+        saveState.addComponent("adc", state);
+    }
+
+    /**
+     * Load ADC state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("adc");
+        if (!state) return;
+
+        this.status = state.status;
+        this.low = state.low;
+        this.high = state.high;
+
+        // Cancel any existing task
+        this.task.cancel();
+
+        // Reschedule the task if it was scheduled
+        if (state.scheduledTime > 0) {
+            this.task.schedule(state.scheduledTime);
+        }
+    }
 }

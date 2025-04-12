@@ -73,6 +73,48 @@ export class Music5000 {
         };
     }
 
+    /**
+     * Save Music5000 state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            waveRam: this.waveRam,
+            phaseRam: this.phaseRam,
+            cycleCount: this.cycleCount,
+            curCh: this.curCh,
+            activeRegSet: this.activeRegSet,
+            sampleLeft: this.sampleLeft,
+            sampleRight: this.sampleRight,
+            position: this.position,
+            D2ATable: this.D2ATable,
+        };
+
+        saveState.addComponent("music5000", state);
+    }
+
+    /**
+     * Load Music5000 state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("music5000");
+        if (!state) return;
+
+        this.waveRam = state.waveRam;
+        this.phaseRam = state.phaseRam;
+        this.cycleCount = state.cycleCount;
+        this.curCh = state.curCh;
+        this.activeRegSet = state.activeRegSet;
+        this.sampleLeft = state.sampleLeft;
+        this.sampleRight = state.sampleRight;
+        this.position = state.position;
+        this.D2ATable = state.D2ATable;
+
+        // Re-initialize the sample buffer to prevent audio glitches
+        this.sampleBuffer = new Float64Array(AUDIO_BUFFER_SIZE);
+    }
+
     reset(hard) {
         if (hard) {
             console.log("Music 5000: initialisation");

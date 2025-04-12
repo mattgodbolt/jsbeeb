@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Adc } from "../../src/adc.js";
+import { SaveState } from "../../src/savestate.js";
 
 describe("ADC", () => {
     // Mock dependencies
@@ -9,10 +10,13 @@ describe("ADC", () => {
     };
 
     const mockScheduler = {
+        currentTime: 1000,
         newTask: vi.fn().mockImplementation((callback) => ({
             schedule: vi.fn(),
             cancel: vi.fn(),
             callback,
+            scheduler: { currentTime: 1000 },
+            when: 0,
         })),
     };
 
@@ -325,6 +329,101 @@ describe("ADC", () => {
             const expectedStatus = (0x00 & 0x0f) | 0x40 | ((expectedValue >>> 10) & 0x03);
 
             expect(adc.status).toBe(expectedStatus);
+        });
+    });
+
+    describe("SaveState", () => {
+        beforeEach(() => {
+            // Set up mock task with scheduler and when properties
+            mockTask = {
+                schedule: vi.fn(),
+                cancel: vi.fn(),
+                scheduler: { currentTime: 1000 },
+                when: 1500, // 500ms in the future from currentTime
+            };
+            mockScheduler.newTask.mockReturnValue(mockTask);
+
+            // Create a fresh ADC instance
+            adc = new Adc(mockSysvia, mockScheduler);
+
+            // Set state for testing
+            adc.status = 0x42;
+            adc.low = 0x55;
+            adc.high = 0xaa;
+        });
+
+        it("should save state correctly", () => {
+            // Create a SaveState
+            const saveState = new SaveState();
+
+            // Call saveState
+            adc.saveState(saveState);
+
+            // Verify state was saved correctly
+            const state = saveState.getComponent("adc");
+            expect(state).toBeDefined();
+            expect(state.status).toBe(0x42);
+            expect(state.low).toBe(0x55);
+            expect(state.high).toBe(0xaa);
+            expect(state.scheduledTime).toBe(500); // 1500 - 1000 = 500ms
+        });
+
+        it("should load state correctly", () => {
+            // Create a SaveState with test data
+            const saveState = new SaveState();
+            saveState.addComponent("adc", {
+                status: 0x33,
+                low: 0x66,
+                high: 0x99,
+                scheduledTime: 800,
+            });
+
+            // Call loadState
+            adc.loadState(saveState);
+
+            // Verify state was loaded correctly
+            expect(adc.status).toBe(0x33);
+            expect(adc.low).toBe(0x66);
+            expect(adc.high).toBe(0x99);
+
+            // Verify task was cancelled and rescheduled
+            expect(mockTask.cancel).toHaveBeenCalled();
+            expect(mockTask.schedule).toHaveBeenCalledWith(800);
+        });
+
+        it("should skip rescheduling if scheduledTime is <= 0", () => {
+            // Create a SaveState with test data and no scheduled task
+            const saveState = new SaveState();
+            saveState.addComponent("adc", {
+                status: 0x33,
+                low: 0x66,
+                high: 0x99,
+                scheduledTime: 0,
+            });
+
+            // Call loadState
+            adc.loadState(saveState);
+
+            // Verify task was cancelled but not rescheduled
+            expect(mockTask.cancel).toHaveBeenCalled();
+            expect(mockTask.schedule).not.toHaveBeenCalled();
+        });
+
+        it("should do nothing if component is not in SaveState", () => {
+            // Create a SaveState with no ADC component
+            const saveState = new SaveState();
+
+            // Call loadState
+            adc.loadState(saveState);
+
+            // Verify state was not changed
+            expect(adc.status).toBe(0x42);
+            expect(adc.low).toBe(0x55);
+            expect(adc.high).toBe(0xaa);
+
+            // Verify task was not touched
+            expect(mockTask.cancel).not.toHaveBeenCalled();
+            expect(mockTask.schedule).not.toHaveBeenCalled();
         });
     });
 });

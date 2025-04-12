@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
+import { SaveState } from "../../src/savestate.js";
 
 describe("TeletextAdaptor", () => {
     // Constants
@@ -354,6 +355,172 @@ describe("TeletextAdaptor", () => {
 
             // Check poll count was set to negative value
             expect(teletext.pollCount).toBeLessThan(0);
+        });
+    });
+
+    describe("SaveState", () => {
+        let saveState;
+
+        beforeEach(() => {
+            // Set up a known state
+            teletext.teletextStatus = 0x42;
+            teletext.teletextInts = true;
+            teletext.teletextEnable = true;
+            teletext.channel = 2;
+            teletext.currentFrame = 10;
+            teletext.totalFrames = 20;
+            teletext.rowPtr = 5;
+            teletext.colPtr = 8;
+            teletext.pollCount = 12345;
+
+            // Set some values in frameBuffer
+            teletext.frameBuffer[1][2] = 0xaa;
+            teletext.frameBuffer[5][10] = 0xbb;
+
+            // Create a SaveState
+            saveState = new SaveState();
+        });
+
+        it("should save state correctly", () => {
+            // Call saveState
+            teletext.saveState(saveState);
+
+            // Verify that the component state was saved
+            const state = saveState.getComponent("teletext_adaptor");
+            expect(state).toBeDefined();
+
+            // Verify all properties were saved correctly
+            expect(state.teletextStatus).toBe(0x42);
+            expect(state.teletextInts).toBe(true);
+            expect(state.teletextEnable).toBe(true);
+            expect(state.channel).toBe(2);
+            expect(state.currentFrame).toBe(10);
+            expect(state.totalFrames).toBe(20);
+            expect(state.rowPtr).toBe(5);
+            expect(state.colPtr).toBe(8);
+            expect(state.pollCount).toBe(12345);
+
+            // Verify frameBuffer was flattened correctly
+            expect(state.flatFrameBuffer).toBeDefined();
+            expect(state.flatFrameBuffer.length).toBe(16 * 64); // 16 rows * 64 cols
+
+            // Calculate expected indexes in flat array
+            const idx1 = 1 * 64 + 2; // Row 1, Col 2
+            const idx2 = 5 * 64 + 10; // Row 5, Col 10
+
+            // Check specific values were saved correctly
+            expect(state.flatFrameBuffer[idx1]).toBe(0xaa);
+            expect(state.flatFrameBuffer[idx2]).toBe(0xbb);
+        });
+
+        it("should load state correctly", () => {
+            // First create a different state for testing
+            teletext.teletextStatus = 0x11;
+            teletext.teletextInts = false;
+            teletext.teletextEnable = false;
+            teletext.channel = 1;
+            teletext.currentFrame = 5;
+            teletext.totalFrames = 15;
+            teletext.rowPtr = 2;
+            teletext.colPtr = 3;
+            teletext.pollCount = 6789;
+
+            // Clear frameBuffer
+            for (let i = 0; i < 16; i++) {
+                for (let j = 0; j < 64; j++) {
+                    teletext.frameBuffer[i][j] = 0;
+                }
+            }
+
+            // Create a flatFrameBuffer with test values
+            const flatFrameBuffer = new Array(16 * 64).fill(0);
+            flatFrameBuffer[3 * 64 + 4] = 0xcc; // Row 3, Col 4
+            flatFrameBuffer[7 * 64 + 12] = 0xdd; // Row 7, Col 12
+
+            // Add the component state to the SaveState
+            saveState.addComponent("teletext_adaptor", {
+                teletextStatus: 0x42,
+                teletextInts: true,
+                teletextEnable: true,
+                channel: 2,
+                currentFrame: 10,
+                totalFrames: 20,
+                rowPtr: 5,
+                colPtr: 8,
+                pollCount: 12345,
+                flatFrameBuffer: flatFrameBuffer,
+            });
+
+            // Reset the loadChannelStream spy
+            teletext.loadChannelStream.mockClear();
+
+            // Call loadState
+            teletext.loadState(saveState);
+
+            // Verify all properties were loaded correctly
+            expect(teletext.teletextStatus).toBe(0x42);
+            expect(teletext.teletextInts).toBe(true);
+            expect(teletext.teletextEnable).toBe(true);
+            expect(teletext.channel).toBe(2);
+            expect(teletext.currentFrame).toBe(10);
+            expect(teletext.totalFrames).toBe(20);
+            expect(teletext.rowPtr).toBe(5);
+            expect(teletext.colPtr).toBe(8);
+            expect(teletext.pollCount).toBe(12345);
+
+            // Check specific values in frameBuffer
+            expect(teletext.frameBuffer[3][4]).toBe(0xcc);
+            expect(teletext.frameBuffer[7][12]).toBe(0xdd);
+
+            // Verify loadChannelStream was called
+            expect(teletext.loadChannelStream).toHaveBeenCalledWith(2);
+        });
+
+        it("should not call loadChannelStream if teletextEnable is false", () => {
+            // Set up state with teletext disabled
+            saveState.addComponent("teletext_adaptor", {
+                teletextStatus: 0x42,
+                teletextInts: true,
+                teletextEnable: false, // Disabled
+                channel: 2,
+                currentFrame: 10,
+                totalFrames: 20,
+                rowPtr: 5,
+                colPtr: 8,
+                pollCount: 12345,
+                flatFrameBuffer: [],
+            });
+
+            // Reset the loadChannelStream spy
+            teletext.loadChannelStream.mockClear();
+
+            // Call loadState
+            teletext.loadState(saveState);
+
+            // Verify teletextEnable was set correctly
+            expect(teletext.teletextEnable).toBe(false);
+
+            // Verify loadChannelStream was NOT called
+            expect(teletext.loadChannelStream).not.toHaveBeenCalled();
+        });
+
+        it("should do nothing if component is not in SaveState", () => {
+            // Create SaveState with no teletext_adaptor component
+            const emptyState = new SaveState();
+
+            // Save initial values to compare later
+            const origStatus = teletext.teletextStatus;
+            const origChannel = teletext.channel;
+
+            // Call loadState
+            teletext.loadState(emptyState);
+
+            // Verify values haven't changed
+            expect(teletext.teletextStatus).toBe(origStatus);
+            expect(teletext.channel).toBe(origChannel);
+
+            // Verify loadChannelStream was NOT called
+            expect(teletext.loadChannelStream).not.toHaveBeenCalled();
         });
     });
 });

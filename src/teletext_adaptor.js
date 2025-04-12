@@ -50,6 +50,69 @@ export class TeletextAdaptor {
         this.pollCount = 0;
     }
 
+    /**
+     * Save TeletextAdaptor state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        // Convert frameBuffer to a flat array for easier storage
+        const flatFrameBuffer = [];
+        for (let i = 0; i < 16; i++) {
+            for (let j = 0; j < 64; j++) {
+                flatFrameBuffer.push(this.frameBuffer[i][j]);
+            }
+        }
+
+        const state = {
+            teletextStatus: this.teletextStatus,
+            teletextInts: this.teletextInts,
+            teletextEnable: this.teletextEnable,
+            channel: this.channel,
+            currentFrame: this.currentFrame,
+            totalFrames: this.totalFrames,
+            rowPtr: this.rowPtr,
+            colPtr: this.colPtr,
+            flatFrameBuffer: flatFrameBuffer,
+            pollCount: this.pollCount,
+        };
+
+        saveState.addComponent("teletext_adaptor", state);
+    }
+
+    /**
+     * Load TeletextAdaptor state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("teletext_adaptor");
+        if (!state) return;
+
+        this.teletextStatus = state.teletextStatus;
+        this.teletextInts = state.teletextInts;
+        this.teletextEnable = state.teletextEnable;
+        this.channel = state.channel;
+        this.currentFrame = state.currentFrame;
+        this.totalFrames = state.totalFrames;
+        this.rowPtr = state.rowPtr;
+        this.colPtr = state.colPtr;
+        this.pollCount = state.pollCount;
+
+        // Restore the frame buffer from the flat array
+        if (state.flatFrameBuffer) {
+            let idx = 0;
+            for (let i = 0; i < 16; i++) {
+                for (let j = 0; j < 64; j++) {
+                    this.frameBuffer[i][j] = state.flatFrameBuffer[idx++];
+                }
+            }
+        }
+
+        // Make sure we have the right channel data loaded
+        if (this.teletextEnable) {
+            this.loadChannelStream(this.channel);
+        }
+    }
+
     reset(hard) {
         if (hard) {
             console.log("Teletext adaptor: initialisation");
