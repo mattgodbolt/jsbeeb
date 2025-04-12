@@ -1686,6 +1686,115 @@ export class IntelFdc {
     get drives() {
         return this._drives;
     }
+
+    /**
+     * Save FDC state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            // Register state
+            regs: Array.from(this._regs),
+            status: this._status,
+            isResultReady: this._isResultReady,
+
+            // Drive and MMIO state
+            mmioData: this._mmioData,
+            mmioClocks: this._mmioClocks,
+            driveOut: this._driveOut,
+
+            // Callbacks and timers
+            paramCallback: this._paramCallback,
+            indexPulseCallback: this._indexPulseCallback,
+            timerState: this._timerState,
+            callContext: this._callContext,
+            didSeekStep: this._didSeekStep,
+
+            // Shift register state
+            shiftRegister: this._shiftRegister,
+            numShifts: this._numShifts,
+
+            // Disc controller state
+            state: this._state,
+            stateCount: this._stateCount,
+            stateIsIndexPulse: this._stateIsIndexPulse,
+            crc: this._crc,
+            onDiscCrc: this._onDiscCrc,
+
+            // Current drive reference index
+            currentDriveId: this._currentDrive ? this._drives.indexOf(this._currentDrive) : -1,
+        };
+
+        saveState.addComponent("intel_fdc", state);
+
+        // Save drive states
+        for (let i = 0; i < this._drives.length; i++) {
+            if (this._drives[i]) {
+                this._drives[i].saveState(saveState, `intel_drive${i}`);
+            }
+        }
+    }
+
+    /**
+     * Load FDC state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("intel_fdc");
+        if (!state) return;
+
+        // Register state
+        this._regs = new Uint8Array(state.regs);
+        this._status = state.status;
+        this._isResultReady = state.isResultReady;
+
+        // Drive and MMIO state
+        this._mmioData = state.mmioData;
+        this._mmioClocks = state.mmioClocks;
+        this._driveOut = state.driveOut;
+
+        // Callbacks and timers
+        this._paramCallback = state.paramCallback;
+        this._indexPulseCallback = state.indexPulseCallback;
+        this._timerState = state.timerState;
+        this._callContext = state.callContext;
+        this._didSeekStep = state.didSeekStep;
+
+        // Shift register state
+        this._shiftRegister = state.shiftRegister;
+        this._numShifts = state.numShifts;
+
+        // Disc controller state
+        this._state = state.state;
+        this._stateCount = state.stateCount;
+        this._stateIsIndexPulse = state.stateIsIndexPulse;
+        this._crc = state.crc;
+        this._onDiscCrc = state.onDiscCrc;
+
+        // Load drive states
+        for (let i = 0; i < this._drives.length; i++) {
+            if (this._drives[i]) {
+                this._drives[i].loadState(saveState, `intel_drive${i}`);
+            }
+        }
+
+        // Restore current drive reference
+        if (state.currentDriveId >= 0 && state.currentDriveId < this._drives.length) {
+            this._currentDrive = this._drives[state.currentDriveId];
+        } else {
+            this._currentDrive = null;
+        }
+
+        // Restore timer if needed
+        if (this._timerState !== TimerState.none) {
+            this._timerTask.ensureScheduled(true, 1); // Schedule with a minimal delay
+        } else {
+            this._timerTask.cancel();
+        }
+
+        // Update NMI state
+        this._updateNmi();
+    }
 }
 
 export class NoiseAwareIntelFdc extends IntelFdc {
