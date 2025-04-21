@@ -1,5 +1,5 @@
 import rendererUrl from "./audio-renderer.js?url";
-import music500WorkletUrl from "../music5000-worklet.js?url";
+import music5000WorkletUrl from "../music5000-worklet.js?url";
 import { SmoothieChart, TimeSeries } from "smoothie";
 import { FakeSoundChip, SoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
@@ -66,7 +66,7 @@ export class AudioHandler {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
             this.music5000 = new Music5000((buffer) => this._onBufferMusic5000(buffer));
 
-            this.audioContextM5000.audioWorklet.addModule(music500WorkletUrl).then(() => {
+            this.audioContextM5000.audioWorklet.addModule(music5000WorkletUrl).then(() => {
                 this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, "music5000", {
                     outputChannelCount: [2],
                 });
