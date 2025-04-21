@@ -1,9 +1,12 @@
-import rendererUrl from "./audio-renderer.js?url";
-import music5000WorkletUrl from "../music5000-worklet.js?url";
 import { SmoothieChart, TimeSeries } from "smoothie";
 import { FakeSoundChip, SoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
+
+// Using this approach means when jsbeeb is embedded in other projects, vite doesn't have a fit.
+// See https://github.com/vitejs/vite/discussions/6459
+const rendererUrl = new URL("./audio-renderer.js", import.meta.url).href;
+const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
 
 export class AudioHandler {
     constructor(warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek) {
