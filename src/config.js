@@ -15,6 +15,9 @@ export class Config {
             this.setTeletext(this.model.hasTeletextAdaptor);
             this.setMusic5000(this.model.hasMusic5000);
             this.setEconet(this.model.hasEconet);
+
+            // ATOM
+            this.setNoiseKiller(this.model.hasNoiseKiller);
         });
 
         $configuration.addEventListener("hide.bs.modal", () => onClose(this.changed));
@@ -45,6 +48,18 @@ export class Config {
             this.changed.keyLayout = keyLayout;
             this.setKeyLayout(keyLayout);
         });
+
+        // ATOM
+        $("#hasNoiseKiller").on("click", () => {
+            this.changed.hasNoiseKiller = $("#hasNoiseKiller").prop("checked");
+        });
+    }
+
+    // ATOM
+    setNoiseKiller(enabled) {
+        enabled = !!enabled;
+        $("#hasNoiseKiller").prop("checked", enabled);
+        this.model.hasNoiseKiller = enabled;
     }
 
     setModel(modelName) {

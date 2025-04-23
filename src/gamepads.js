@@ -3,6 +3,9 @@ import * as utils from "./utils.js";
 
 const BBC = utils.BBC;
 
+//ATOM
+const ATOM = utils.ATOM;
+
 export class GamePad {
     constructor() {
         this.gamepad0 = null;
@@ -27,6 +30,26 @@ export class GamePad {
 
         // Gamepad joysticks
         this.gamepadAxisMapping = [[], [], [], []];
+    }
+
+    isAtom(mapToAtom) {
+        //mmcdefaults
+
+        // 3-key pressed    left
+        // G-key pressed    right
+        // Q-key pressed    up
+        // =-key pressed    down
+        // rightarrow-key pressed   fire
+
+        this.gamepadMapping[14] = ATOM.K3;
+        this.gamepadMapping[15] = ATOM.G;
+        this.gamepadMapping[13] = ATOM.MINUS_EQUALS;
+        this.gamepadMapping[12] = ATOM.Q;
+
+        // often <Return> = "Fire"
+        this.gamepadMapping[0] = ATOM.RIGHT;
+        // "start" (often <Space> to start game)
+        this.gamepadMapping[9] = ATOM.SPACE;
     }
 
     /*
@@ -245,7 +268,7 @@ export class GamePad {
 
             for (let i = 0; i < 16; i++) {
                 if (this.gamepad0.buttons[i]) {
-                    const button = this.gamepad0.buttons[i];
+                    var button = this.gamepad0.buttons[i];
 
                     if (button.pressed !== this.gamepadButtons[i]) {
                         // different to last time

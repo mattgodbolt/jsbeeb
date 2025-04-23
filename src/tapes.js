@@ -2,6 +2,8 @@
 import * as utils from "./utils.js";
 
 function secsToClocks(secs) {
+    // ATOM
+    //    self.cpuSpeed * secs
     return (2 * 1000 * 1000 * secs) | 0;
 }
 
@@ -16,6 +18,12 @@ function parityOf(curByte) {
 
 const ParityN = "N".charCodeAt(0);
 
+// ATOM
+const bit0pattern = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1];
+const bit1pattern = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1];
+// FOR 0:  a 0 needs sending for 2*208us then 1 for 2*208ms - 4 times
+// FOR 1:  a 0 needs sending for 208ms then 1 for 208us - 8 times
+
 class UefTape {
     constructor(stream) {
         this.stream = stream;
@@ -23,6 +31,11 @@ class UefTape {
         this.rewind();
 
         this.curChunk = this.readChunk();
+
+        //ACORN ATOM
+        this.baudMultiplier = 1;
+        this.shortWave = 0;
+        this.wavebits = [];
     }
 
     rewind() {
@@ -54,6 +67,22 @@ class UefTape {
 
     poll(acia) {
         if (!this.curChunk) return;
+
+        // ATOM
+        var isAtom = acia.processor === undefined ? false : acia.processor.model.isAtom;
+        self.cpuSpeed = isAtom ? 1 * 1000 * 1000 : 2 * 1000 * 1000;
+
+        if (isAtom) {
+            if (this.wavebits.length > 0) {
+                // console.log("SEND (0x"+self.lastChunkId.toString(16)+") at ["+wavebits+"]" + self.processor.cycleSeconds + "seconds, " + self.processor.currentCycles + "cycles ("+t+") } ");
+                const wbit = this.wavebits.shift();
+                acia.receiveBit(wbit);
+                return cycles(1.0 / 15.5136); // to create 3340 cycles between bits
+            } else {
+                // console.log("NEXT (0x"+self.lastChunkId.toString(16)+") at " + self.processor.cycleSeconds + "seconds, " + self.processor.currentCycles + "cycles ("+t+") } ");
+            }
+        }
+
         if (this.state === -1) {
             if (this.stream.eof()) {
                 this.curChunk = null;
@@ -77,8 +106,15 @@ class UefTape {
                     if (this.state === 0) {
                         // Start bit
                         acia.tone(this.baseFrequency);
+                        // ATOM
+                        if (isAtom) this.wavebits = Array.from(bit0pattern);
                     } else {
                         acia.tone(this.curByte & (1 << (this.state - 1)) ? 2 * this.baseFrequency : this.baseFrequency);
+                        // ATOM
+                        if (isAtom) {
+                            const bit = this.curByte & (1 << (this.state - 1));
+                            this.wavebits = Array.from(bit ? bit1pattern : bit0pattern);
+                        }
                     }
                     this.state++;
                 } else {
@@ -90,7 +126,11 @@ class UefTape {
                         this.state = 0;
                         this.curByte = this.curChunk.stream.readByte();
                     }
+                    // ATOM
+                    if (isAtom) this.wavebits = Array.from(bit1pattern);
                 }
+                // ATOM
+                if (isAtom) return 0;
                 return this.cycles(1);
             case 0x0104: // Defined data
                 acia.setTapeCarrier(false);
@@ -99,6 +139,12 @@ class UefTape {
                     this.parity = this.curChunk.stream.readByte();
                     this.numStopBits = this.curChunk.stream.readByte();
                     this.numParityBits = this.parity !== ParityN ? 1 : 0;
+                    // ATOM
+                    if (isAtom && this.numStopBits & 0x80) {
+                        // negative
+                        this.numStopBits = Math.abs(this.numStopBits - 256);
+                        this.shortWave = 1;
+                    }
                     console.log(
                         `Defined data with ${this.numDataBits}${String.fromCharCode(this.parity)}${this.numStopBits}`,
                     );
@@ -111,21 +157,46 @@ class UefTape {
                         this.curByte = this.curChunk.stream.readByte() & ((1 << this.numDataBits) - 1);
                         acia.tone(this.baseFrequency); // Start bit
                         this.state++;
+                        // ATOM
+                        if (isAtom) this.wavebits = Array.from(bit0pattern);
                     }
                 } else if (this.state < 1 + this.numDataBits) {
                     acia.tone(this.curByte & (1 << (this.state - 1)) ? 2 * this.baseFrequency : this.baseFrequency);
                     this.state++;
+                    // ATOM
+                    if (isAtom) {
+                        let bit = curByte & (1 << (state - 1));
+                        this.wavebits = Array.from(bit ? bit1pattern : bit0pattern);
+                    }
                 } else if (this.state < 1 + this.numDataBits + this.numParityBits) {
                     let bit = parityOf(this.curByte);
                     if (this.parity === ParityN) bit = !bit;
                     acia.tone(bit ? 2 * this.baseFrequency : this.baseFrequency);
                     this.state++;
+                    // ATOM
+                    if (isAtom) {
+                        this.wavebits = Array.from(bit ? bit1pattern : bit0pattern);
+                    }
                 } else if (this.state < 1 + this.numDataBits + this.numParityBits + this.numStopBits) {
                     acia.tone(2 * this.baseFrequency); // Stop bits
                     this.state++;
+                    // ATOM
+                    if (isAtom) this.wavebits = Array.from(bit1pattern);
+                } /* NEW ATOM */ else if (
+                    this.state <
+                    1 + this.numDataBits + this.numParityBits + this.numStopBits + this.shortWave
+                ) {
+                    acia.tone(2 * baseFrequency); // Extra short wave - one cycle bits
+                    state++;
+                    // ATOM
+                    if (isAtom) this.wavebits = Array.from(bit1pattern);
                 } else {
                     acia.receive(this.curByte);
                     this.state = 0;
+                    return 0;
+                }
+                // ATOM
+                if (isAtom) {
                     return 0;
                 }
                 return this.cycles(1);
@@ -165,11 +236,18 @@ class UefTape {
                 if (this.state === -1) {
                     this.state = 0;
                     this.count = this.curChunk.stream.readInt16();
+                    // ATOM
+                    if (isAtom) this.count /= 16;
                 }
                 acia.setTapeCarrier(true);
                 acia.tone(2 * this.baseFrequency);
                 this.count--;
                 if (this.count <= 0) this.state = -1;
+                // ATOM
+                if (isAtom) {
+                    this.wavebits = Array.from(bit1pattern);
+                    return 0;
+                }
                 return this.cycles(1);
             case 0x0113:
                 this.baseFrequency = this.curChunk.stream.readFloat32();
@@ -180,13 +258,23 @@ class UefTape {
                 gap = 1 / (2 * this.curChunk.stream.readInt16() * this.baseFrequency);
                 console.log("Tape gap of " + gap + "s");
                 acia.tone(0);
+                // ATOM
+                if (isAtom) this.wavebits = Array.from(bit0pattern);
                 return secsToClocks(gap);
             case 0x0116:
                 acia.setTapeCarrier(false);
                 gap = this.curChunk.stream.readFloat32();
                 console.log("Tape gap of " + gap + "s");
                 acia.tone(0);
+                // ATOM
+                if (isAtom) this.wavebits = Array.from(bit0pattern);
                 return secsToClocks(gap);
+            case 0x0117:
+                // ATOM ?
+                const baud = this.curChunk.stream.readInt16();
+                if (baud === 300) this.baudMultiplier = 4;
+                console.log("Baud rate of " + baud);
+                break;
             default:
                 console.log("Skipping unknown chunk " + utils.hexword(this.curChunk.id));
                 this.curChunk = this.readChunk();

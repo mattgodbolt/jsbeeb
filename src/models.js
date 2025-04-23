@@ -10,6 +10,8 @@ const CpuModel = Object.freeze({
     CMOS65C12: 2,
 });
 
+// ATOM: useFDC and isATOM to be moved
+
 class Model {
     constructor(name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride) {
         this.name = name;
@@ -166,6 +168,42 @@ export const allModels = [
         pickAnfs,
     ),
     new Model("Tube65C02", [], ["tube/6502Tube.rom"], CpuModel.CMOS65C02, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
+
+    new Model(
+        "Acorn Atom (MMC)",
+        ["Atom"],
+        ["atom/Atom_Kernel_E.rom", "atom/ATMMC3E.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        CpuModel.MOS6502,
+        false,
+        beebSwram,
+        NoiseAwareIntelFdc, // not used
+    ),
+    new Model(
+        "Acorn Atom (Tape)",
+        ["Atom-Tape"],
+        ["atom/Atom_Kernel.rom", "", "", "atom/Atom_Basic.rom"],
+        false,
+        beebSwram,
+        NoiseAwareIntelFdc, // not used
+    ),
+    new Model(
+        "Acorn Atom (Tape with FP)",
+        ["Atom-Tape-FP"],
+        ["atom/Atom_Kernel.rom", "", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        CpuModel.MOS6502,
+        false,
+        beebSwram,
+        NoiseAwareIntelFdc, // not used
+    ),
+    new Model(
+        "Acorn Atom (DOS)",
+        ["Atom-DOS"],
+        ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        CpuModel.MOS6502,
+        false,
+        beebSwram,
+        NoiseAwareIntelFdc,
+    ),
 ];
 
 export function findModel(name) {

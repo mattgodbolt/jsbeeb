@@ -15,12 +15,13 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="author" content="Matt Godbolt" />
-    <meta name="description" content="A Javascript BBC Micro emulator" />
+    <meta name="author" content="Andrew Hague" />
+    <meta name="description" content="A Javascript BBC Micro emulator (incl. Acorn Atom)" />
     <meta
       http-equiv="Content-Security-Policy"
       content="script-src 'self' 'unsafe-inline' 'unsafe-eval' *.google-analytics.com *.google.com;"
     />
-    <title>jsbeeb - Javascript BBC Micro emulator</title>
+    <title>jsbeeb - Javascript BBC Micro emulator (incl. Acorn Atom)</title>
     <link rel="shortcut icon" href="/favicon.ico" />
     <script type="module" src="/src/main.js"></script>
   </head>
@@ -103,6 +104,8 @@
                     >From STH archive</a
                   >
                 </li>
+                <li id="playcas"><a data-id="play" class="dropdown-item">Play ATOM cassette</a></li>
+                <li id="stopcas"><a data-id="stop" class="dropdown-item">Stop ATOM cassette</a></li>
                 <li><a data-id="rewind" class="dropdown-item">Rewind cassette</a></li>
                 <li>
                   <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#tapes">
@@ -111,6 +114,40 @@
                 </li>
               </ul>
             </li>
+
+            <li class="nav-item dropdown embed-hide">
+              <a
+                href="#"
+                class="nav-link dropdown-toggle"
+                id="navbarAtomMMC"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                >SDCards (for MMC)</a
+              >
+              <ul class="dropdown-menu dropdown-menu-dark" id="acornatom-sdcard-menu" aria-labelledby="navbarAtomMMC">
+                <li>
+                  <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#sdcards">
+                    From local file
+                  </a>
+                </li>
+              </ul>
+            </li>
+            <!-- 
+          <li class="nav-item dropdown embed-hide">
+            <a href="#" class="nav-link dropdown-toggle" id="navbarAtomCassettes" role="button"
+               data-bs-toggle="dropdown" aria-expanded="false">Atom Cassettes</a>
+               <ul class="dropdown-menu dropdown-menu-dark" id="acornatom-tape-menu" aria-labelledby="navbarAtomCassettes">
+                <li><a data-id="rewind" class="dropdown-item">Rewind cassette</a></li>
+                <li>
+                    <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#atom-tapes">
+                        From local file
+                    </a>
+                </li>
+                </ul>
+        </li>
+ -->
+
             <li class="nav-item dropdown embed-hide">
               <a
                 href="#"
@@ -148,6 +185,15 @@
                 <li>
                   <a href="http://xania.org/MattGodbolt" class="dropdown-item" rel="author" target="_blank">
                     About the Author</a
+                  >
+                </li>
+
+                <li>
+                  <a href="mailto:andrew@commandercoder.com" class="dropdown-item">Contact the Author (Acorn Atom)</a>
+                </li>
+                <li>
+                  <a href="http://commandercoder.com/" class="dropdown-item" rel="author" target="_blank">
+                    About the Author (Acorn Atom)</a
                   >
                 </li>
                 <li>
@@ -213,302 +259,413 @@
           <div class="sidebar right"><img src="images/placeholder.png" alt="" /></div>
           <div class="sidebar bottom"><img src="images/placeholder.png" alt="" /></div>
         </div>
-      </div>
-      <canvas id="audio-stats" width="400" height="100"></canvas>
-      <div id="leds">
-        <table>
-          <thead>
-            <tr>
-              <th>cassette<br />motor</th>
-              <th>caps<br />lock</th>
-              <th>shift<br />lock</th>
-              <th>drive<br />0/2</th>
-              <th>drive<br />1/3</th>
-              <th>econet<br />tx/rx</th>
-              <th id="virtual-mhz-header">virtual<br />MHz</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div class="red led" id="motorlight"></div>
-              </td>
-              <td>
-                <div class="red led" id="capslight"></div>
-              </td>
-              <td>
-                <div class="red led" id="shiftlight"></div>
-              </td>
-              <td>
-                <div class="yellow led" id="drive0"></div>
-              </td>
-              <td>
-                <div class="yellow led" id="drive1"></div>
-              </td>
-              <td>
-                <div class="yellow led" id="networklight"></div>
-              </td>
-              <td>
-                <div class="virtualMHz"></div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="crtc_debug" class="initially-hidden">
-        <div class="crtc_state">
-          <h6 class="dbg">6845 state</h6>
+        <div id="nec-tv" aria-hidden="true">
+          <img id="nec-tv-pic" width="1023" height="668" src="images/80s-nec-tv.png" alt="A fake NEC television" />
+          <div class="sidebar left"><img /></div>
+          <canvas id="nec-tv-screen" width="1024" height="625"></canvas>
+          <div class="sidebar right"><img /></div>
+          <div class="sidebar bottom"><img /></div>
+        </div>
+        <canvas id="audio-stats" width="400" height="100"></canvas>
+        <div id="leds">
           <table>
+            <thead>
+              <tr>
+                <th>cassette<br />motor</th>
+                <th>caps<br />lock</th>
+                <th>shift<br />lock</th>
+                <th>drive<br />0/2</th>
+                <th>drive<br />1/3</th>
+                <th>econet<br />tx/rx</th>
+                <th id="virtual-mhz-header">virtual<br />MHz</th>
+              </tr>
+            </thead>
             <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
+              <tr>
+                <td>
+                  <div class="red led" id="motorlight"></div>
+                </td>
+                <td>
+                  <div class="red led" id="capslight"></div>
+                </td>
+                <td>
+                  <div class="red led" id="shiftlight"></div>
+                </td>
+                <td>
+                  <div class="yellow led" id="drive0"></div>
+                </td>
+                <td>
+                  <div class="yellow led" id="drive1"></div>
+                </td>
+                <td>
+                  <div class="yellow led" id="networklight"></div>
+                </td>
+                <td>
+                  <div class="virtualMHz"></div>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="crtc_regs">
-          <h6 class="dbg">6845 regs</h6>
-          <table>
-            <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div id="debug" class="initially-hidden">
-        <div class="debug-container">
-          <form id="goto-mem-addr-form" role="form">
-            <div class="input-group input-group-sm">
-              <span accesskey="m" class="input-group-text" id="mem_addr_text">
-                <span class="accesskey">M</span>em addr:
-              </span>
-              <input
-                type="text"
-                class="form-control form-control-sm goto-addr"
-                placeholder="$0000"
-                aria-label="Memory address"
-                aria-describedby="mem_addr_text"
-              />
-            </div>
-          </form>
-          <div id="memory">
-            <div class="template">
-              <span class="dis_addr">0000</span
-              ><span class="mem_bytes"
-                ><span>11</span> <span>22</span> <span>33</span> <span>44</span> <span>55</span> <span>66</span>
-                <span>77</span> <span>88</span></span
-              ><span class="mem_asc"
-                ><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span
-                ><span>A</span></span
-              >
-            </div>
+        <div id="crtc_debug" class="initially-hidden">
+          <div class="crtc_state">
+            <h6 class="dbg">6845 state</h6>
+            <table>
+              <tbody>
+                <tr class="template">
+                  <th><span class="register"></span>:</th>
+                  <td class="value"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="crtc_regs">
+            <h6 class="dbg">6845 regs</h6>
+            <table>
+              <tbody>
+                <tr class="template">
+                  <th><span class="register"></span>:</th>
+                  <td class="value"></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-        <div class="debug-container">
-          <form role="form" id="goto-dis-addr-form">
-            <div class="input-group input-group-sm">
-              <span accesskey="a" class="input-group-text" id="dis_addr_text"
-                ><span class="accesskey">A</span>ddr:</span
-              >
-              <input
-                type="text"
-                class="form-control form-control-sm goto-addr"
-                placeholder="$0000"
-                aria-label="Disassembly address"
-                aria-describedby="dis_addr_text"
-              />
-            </div>
-          </form>
-          <div id="disassembly">
-            <div class="template dis_elem">
-              <span class="bp_gutter"></span><span class="dis_addr">0000</span><span class="instr_bytes">11 22 33</span
-              ><span class="instr_asc">ABC</span><span class="disassembly">LDA (&amp;70), X</span>
+        <div id="debug" class="initially-hidden">
+          <div class="debug-container">
+            <form id="goto-mem-addr-form" role="form">
+              <div class="input-group input-group-sm">
+                <span accesskey="m" class="input-group-text" id="mem_addr_text">
+                  <span class="accesskey">M</span>em addr:
+                </span>
+                <input
+                  type="text"
+                  class="form-control form-control-sm goto-addr"
+                  placeholder="$0000"
+                  aria-label="Memory address"
+                  aria-describedby="mem_addr_text"
+                />
+              </div>
+            </form>
+            <div id="memory">
+              <div class="template">
+                <span class="dis_addr">0000</span
+                ><span class="mem_bytes"
+                  ><span>11</span> <span>22</span> <span>33</span> <span>44</span> <span>55</span> <span>66</span>
+                  <span>77</span> <span>88</span></span
+                ><span class="mem_asc"
+                  ><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span><span>A</span
+                  ><span>A</span></span
+                >
+              </div>
             </div>
           </div>
-        </div>
-        <div id="registers">
-          <div>
-            <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span
-            ><span class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span
-            ><span class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
+          <div class="debug-container">
+            <form role="form" id="goto-dis-addr-form">
+              <div class="input-group input-group-sm">
+                <span accesskey="a" class="input-group-text" id="dis_addr_text"
+                  ><span class="accesskey">A</span>ddr:</span
+                >
+                <input
+                  type="text"
+                  class="form-control form-control-sm goto-addr"
+                  placeholder="$0000"
+                  aria-label="Disassembly address"
+                  aria-describedby="dis_addr_text"
+                />
+              </div>
+            </form>
+            <div id="disassembly">
+              <div class="template dis_elem">
+                <span class="bp_gutter"></span><span class="dis_addr">0000</span
+                ><span class="instr_bytes">11 22 33</span><span class="instr_asc">ABC</span
+                ><span class="disassembly">LDA (&amp;70), X</span>
+              </div>
+            </div>
           </div>
-          <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
-          <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
-          <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
-          <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
-          <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
+          <div id="registers">
+            <div>
+              <span class="flag" id="cpu6502_flag_c">C</span><span class="flag" id="cpu6502_flag_z">Z</span
+              ><span class="flag" id="cpu6502_flag_i">I</span><span class="flag" id="cpu6502_flag_d">D</span
+              ><span class="flag" id="cpu6502_flag_v">V</span><span class="flag" id="cpu6502_flag_n">N</span>
+            </div>
+            <div><span class="register">A</span>: <span id="cpu6502_a">00</span></div>
+            <div><span class="register">X</span>: <span id="cpu6502_x">00</span></div>
+            <div><span class="register">Y</span>: <span id="cpu6502_y">00</span></div>
+            <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
+            <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
+          </div>
+        </div>
+        <div id="hardware_debug" class="initially-hidden">
+          <div class="via_regs" id="sysvia">
+            <h6 class="dbg">System VIA</h6>
+            <table>
+              <tbody>
+                <tr class="template">
+                  <th><span class="register"></span>:</th>
+                  <td class="value"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="via_regs" id="uservia">
+            <h6 class="dbg">User VIA</h6>
+            <table>
+              <tbody>
+                <tr class="template">
+                  <th><span class="register"></span>:</th>
+                  <td class="value"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div id="hardware_debug" class="initially-hidden">
-        <div class="via_regs" id="sysvia">
-          <h6 class="dbg">System VIA</h6>
-          <table>
-            <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="via_regs" id="uservia">
-          <h6 class="dbg">User VIA</h6>
-          <table>
-            <tbody>
-              <tr class="template">
-                <th><span class="register"></span>:</th>
-                <td class="value"></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
 
-    <div class="modal fade" id="info" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="infoModalLabel">About jsbeeb</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div>
-              By <a href="https://xania.org/">Matt Godbolt</a>. Based on Sarah Walker's
-              <a href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to her for open sourcing her code. Big
-              thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by default is the
-              amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it
-              available).
+      <div class="modal fade" id="info" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="infoModalLabel">About jsbeeb</h5>
+              <button
+                type="button"
+                class="btn-close btn-close-white"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              ></button>
             </div>
-            <div>
-              Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome or Firefox.
+            <div class="modal-body">
+              <div>
+                By <a href="https://xania.org/">Matt Godbolt</a>. Based on Sarah Walker's
+                <a href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to her for open sourcing her code.
+                Big thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by default is the
+                amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it
+                available).
+              </div>
+              <div>
+                Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome or
+                Firefox.
+              </div>
+              <div>
+                Cycle-accurate emulation greatly helped by the fantastic
+                <a href="http://www.visual6502.org/">Visual 6502</a> Project. Consider donating to them if you enjoy
+                this stuff as much as I do!
+              </div>
+              <div>
+                I f you're looking for more information on the BBC or to find like-minded people to chat about the
+                hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>.
+              </div>
+
+              <div>
+                The Acorn Atom emulator is by <a href="http://commandercoder.com/">Andrew Hague</a> and makes heavy use
+                of the 6502 emulator in jsbeeb. Many thanks to David Banks for open sourcing the
+                <a href="http://acornatom.co.uk/">Atomulator</a> emulator. Also thanks to the Acorn Atom source on
+                <a href="https://github.com/mamedev/mame">Mame</a> and
+                <a href="http://phils-place.co.uk/HTeMuLator/atom/">Phil's Place</a> for unwittingly helping me with
+                jsatom. The MMC loaded by default is the amazing
+                <a href="https://github.com/hoglet67/AtomSoftwareArchive">Acorn Atom Software Archive</a> created by
+                David Banks.
+              </div>
+              <div>Source for Acorn Atom is on <a href="https://github.com/commandercoder/jsatom">GitHub</a>.</div>
             </div>
-            <div>
-              Cycle-accurate emulation greatly helped by the fantastic
-              <a href="http://www.visual6502.org/">Visual 6502</a> Project. Consider donating to them if you enjoy this
-              stuff as much as I do!
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
-            <div>
-              I f you're looking for more information on the BBC or to find like-minded people to chat about the
-              hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>.
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="modal fade" id="pp-tos" tabindex="-1" aria-labelledby="ppModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="ppModalLabel">Privacy Policy &amp; Terms of Service</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div>
-              jsbeeb uses cookies for simple analytics. Those analytics are used to track usage and improve user
-              experience. If you'd like to run a local copy of jsbeeb instead, the source is on
-              <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. There's no server logs or information kept on
-              the jsbeeb servers, we just serve up this HTML from an AWS bucket.
+      <div class="modal fade" id="pp-tos" tabindex="-1" aria-labelledby="ppModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="ppModalLabel">Privacy Policy &amp; Terms of Service</h5>
+              <button
+                type="button"
+                class="btn-close btn-close-white"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              ></button>
             </div>
-            <div>
-              No personal information is kept. If you choose to access Google Drive for disc storage, only the minimal
-              information needed to log in and access your own discs is kept in cookies. That information is never
-              shared with the jsbeeb developers.
+            <div class="modal-body">
+              <div>
+                jsbeeb uses cookies for simple analytics. Those analytics are used to track usage and improve user
+                experience. If you'd like to run a local copy of jsbeeb instead, the source is on
+                <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. There's no server logs or information kept
+                on the jsbeeb servers, we just serve up this HTML from an AWS bucket.
+              </div>
+              <div>
+                No personal information is kept. If you choose to access Google Drive for disc storage, only the minimal
+                information needed to log in and access your own discs is kept in cookies. That information is never
+                shared with the jsbeeb developers.
+              </div>
+              <div>
+                Use of jsbeeb is at your own risk. Reasonable efforts are used to keep the site up to date and working.
+                You may use jsbeeb for whatever lawful purpose you wish.
+              </div>
             </div>
-            <div>
-              Use of jsbeeb is at your own risk. Reasonable efforts are used to keep the site up to date and working.
-              You may use jsbeeb for whatever lawful purpose you wish.
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="modal fade" id="help" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="helpModalLabel">Help</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div>
-              This is an emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular
-              home computer in the UK in the 1980s. It emulates the BBC B &amp; Master version of the computer.
+      <div class="modal fade" id="help" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="helpModalLabel">Help</h5>
+              <button
+                type="button"
+                class="btn-close btn-close-white"
+                data-bs-dismiss="modal"
+                aria-label="Close"
+              ></button>
             </div>
-            <div>
-              The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC, one would
-              press <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The keyboard of the BBC is
-              slightly different from a modern PC, notably in the placement of the symbol characters. Also, the current
-              keyboard layout is optimized for a US keyboard; I am working on improving this situation.
+            <div class="modal-body">
+              <div>
+                This is an emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular
+                home computer in the UK in the 1980s. It emulates the BBC B &amp; Master version of the computer.
+              </div>
+              <div>
+                The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC, one
+                would press <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The keyboard of the BBC
+                is slightly different from a modern PC, notably in the placement of the symbol characters. Also, the
+                current keyboard layout is optimized for a US keyboard; I am working on improving this situation.
+              </div>
+              <div>
+                It also includes an emulator for its predecessor, the
+                <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a>.
+              </div>
+              <div>
+                <h5>Handy key mappings</h5>
+                <table class="keymap">
+                  <tr>
+                    <th>BBC</th>
+                    <th>PC</th>
+                    <th>OSX</th>
+                  </tr>
+                  <tr>
+                    <td><span class="function key">F0</span></td>
+                    <td><span class="key">F10</span></td>
+                    <td><span class="key">F10</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="key">BREAK</span></td>
+                    <td><span class="key">F12</span></td>
+                    <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
+                  </tr>
+                  <tr>
+                    <td><span class="key">COPY</span></td>
+                    <td><span class="key">End</span></td>
+                    <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="dbl key">*<br />:</div>
+                    </td>
+                    <td>
+                      <div class="dbl key">"<br />'</div>
+                    </td>
+                    <td>
+                      <div class="dbl key">"<br />'</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="dbl key">CAPS<br />LOCK</div>
+                    </td>
+                    <td class="key">CAPSLOCK</td>
+                    <td>See notes</td>
+                  </tr>
+                  <tr>
+                    <td>Debug</td>
+                    <td><span class="key">Ctrl-Home</span></td>
+                    <td><span class="key">Ctrl-Home</span></td>
+                  </tr>
+                </table>
+                <div>
+                  Note that caps lock doesn't work well on OS X because browsers don't give proper key down and key up
+                  events for that key. That means jsbeeb can't know when you've released the physical key; it just
+                  guesses that you tapped the key whenever it notices the caps lock state changes. That's fine for
+                  typing but means that some games that use caps lock for left or fire, don't work. Consult the main
+                  documentation for details on how to map keys.
+                </div>
+              </div>
             </div>
+
+            <!-- ATOM -->
             <div>
-              <h5>Handy key mappings</h5>
+              <div>
+                For the Acorn Atom, the default SDCard is the Acorn Atom Software Archive. This also requires a modified
+                Atom OS rom and it will automatically boot. To avoid booting press <span class="key">SHIFT</span> and
+                <span class="key">BREAK</span>. To disable MMC support altogether press
+                <span class="key">CTRL</span> and <span class="key">BREAK</span>. Like the BBC, the keyboard of the
+                Acorn Atom is slightly different from a modern PC.
+              </div>
+
+              <h5>Handy Acorn Atom key mappings</h5>
+              <b>NOTE:</b> The <span class="key">SHIFT</span> and <span class="key">CTRL</span> key are exchanged on the
+              Acorn Atom natural layout.
               <table class="keymap">
                 <tr>
-                  <th>BBC</th>
+                  <th>ATOM</th>
                   <th>PC</th>
                   <th>OSX</th>
                 </tr>
                 <tr>
-                  <td><span class="function key">F0</span></td>
-                  <td><span class="key">F10</span></td>
-                  <td><span class="key">F10</span></td>
-                </tr>
-                <tr>
                   <td><span class="key">BREAK</span></td>
                   <td><span class="key">F12</span></td>
-                  <td><span class="key">Right &#8984;</span> + <span class="key">F12</span></td>
+                  <td><span class="key">F12</span></td>
                 </tr>
                 <tr>
                   <td><span class="key">COPY</span></td>
-                  <td><span class="key">End</span></td>
-                  <td><span class="key">Right &#8984;</span> + <span class="key">F11</span></td>
+                  <td><span class="key">TAB</span></td>
+                  <td><span class="key">TAB</span></td>
+                </tr>
+                <tr>
+                  <td><span class="key">REPT</span></td>
+                  <td><span class="key">RIGHT_SHIFT</span></td>
+                  <td><span class="key">RIGHT_SHIFT</span></td>
+                </tr>
+                <tr>
+                  <td><span class="key">LOCK</span></td>
+                  <td><span class="key">F1</span></td>
+                  <td><span class="key">F1</span></td>
+                </tr>
+                <tr>
+                  <td><span class="key">CTRL</span></td>
+                  <td><span class="key">LEFT_SHIFT</span></td>
+                  <td><span class="key">LEFT_SHIFT</span></td>
+                </tr>
+                <tr>
+                  <td><span class="key">SHIFT</span></td>
+                  <td><span class="key">CTRL</span></td>
+                  <td><span class="key">CTRL</span></td>
                 </tr>
                 <tr>
                   <td>
                     <div class="dbl key">*<br />:</div>
                   </td>
                   <td>
-                    <div class="dbl key">"<br />'</div>
+                    <div class="dbl key">+<br />=</div>
                   </td>
                   <td>
-                    <div class="dbl key">"<br />'</div>
+                    <div class="dbl key">+<br />=</div>
                   </td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="dbl key">CAPS<br />LOCK</div>
-                  </td>
-                  <td class="key">CAPSLOCK</td>
-                  <td>See notes</td>
                 </tr>
                 <tr>
                   <td>Debug</td>
                   <td><span class="key">Ctrl-Home</span></td>
-                  <td><span class="key">Ctrl-Home</span></td>
+                  <td><span class="key">TODO</span></td>
                 </tr>
               </table>
-              <div>
-                Note that caps lock doesn't work well on OS X because browsers don't give proper key down and key up
-                events for that key. That means jsbeeb can't know when you've released the physical key; it just guesses
-                that you tapped the key whenever it notices the caps lock state changes. That's fine for typing but
-                means that some games that use caps lock for left or fire, don't work. Consult the main documentation
-                for details on how to map keys.
-              </div>
             </div>
           </div>
+
+          <!-- /ATOM -->
+
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
@@ -595,6 +752,57 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="atom-tapes" tabindex="-1" aria-labelledby="atom-tapesModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+            <h4 class="modal-title">Load cassette image</h4>
+          </div>
+          <div class="modal-body">
+            To load a custom cassette image, get a UEF file and load it below.
+            <p>To load cassette tapes into the Acorn Atom, chose <b>model=atom-tape</b> in the URL</p>
+            <div class="tape">
+              <label
+                >Load local UEF file: <input type="file" id="tape_load_atom" accept=".uef,application/binary"
+              /></label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="sdcards" tabindex="-1" aria-labelledby="sdcardsModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+            <h4 class="modal-title">Load SDcard (MMC) image</h4>
+          </div>
+          <div class="modal-body">
+            <ul id="sdcard-list">
+              <li class="template">
+                <a href="#"><span class="name"></span></a> - <span class="description"></span>
+              </li>
+            </ul>
+            To load a custom sdcard image, get a zip and load it below. Search the web, or check somewhere like
+            <a href="https://github.com/hoglet67/AtomSoftwareArchive">here</a> for these.
+            <div class="sdcard">
+              <label
+                >Load local ZIP file: <input type="file" id="sdcard_load" accept=".zip,application/binary"
+              /></label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
           </div>
         </div>
       </div>
@@ -787,6 +995,18 @@
                   <li>
                     <a href="#" class="dropdown-item" data-target="MasterANFS">BBC Master 128 (ANFS)</a>
                   </li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="Atom">Acorn Atom (MMC)</a>
+                  </li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="Atom-DOS">Acorn Atom (DOS)</a>
+                  </li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="Atom-Tape">Acorn Atom</a>
+                  </li>
+                  <li>
+                    <a href="#" class="dropdown-item" data-target="Atom-Tape-FP">Acorn Atom (with FP)</a>
+                  </li>
                 </ul>
               </div>
             </div>
@@ -845,6 +1065,10 @@
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="hasEconet" name="hasEconet" />
                     <label class="form-check-label" for="hasEconet">Econet with file server</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="hasNoiseKiller" name="hasNoiseKiller" />
+                    <label class="form-check-label" for="hasNoiseKiller">Atom NoiseKiller</label>
                   </div>
                 </div>
               </div>
