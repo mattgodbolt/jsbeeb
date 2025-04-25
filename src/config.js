@@ -18,6 +18,7 @@ export class Config {
 
             // ATOM
             this.setNoiseKiller(this.model.hasNoiseKiller);
+            this.setModelMenus(this.model.name);
         });
 
         $configuration.addEventListener("hide.bs.modal", () => onClose(this.changed));
@@ -60,6 +61,18 @@ export class Config {
         enabled = !!enabled;
         $("#hasNoiseKiller").prop("checked", enabled);
         this.model.hasNoiseKiller = enabled;
+    }
+
+    // ATOM
+    setModelMenus(modelname) {
+        // set BBC and ATOM stuff
+        let atom = modelname.includes("Atom");
+
+        $("#65c02").prop("disabled", atom);
+        $("#hasTeletextAdaptor").prop("disabled", atom);
+        $("#hasMusic5000").prop("disabled", atom);
+        $("#hasEconet").prop("disabled", atom);
+        $("#hasNoiseKiller").prop("disabled", !atom);
     }
 
     setModel(modelName) {

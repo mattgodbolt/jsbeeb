@@ -26,6 +26,9 @@ import { toSsdOrDsd } from "./disc.js";
 
 // ATOM
 import { Video6847 } from "./6847.js";
+import * as utils_atom from "./utils_atom.js";
+import * as mmc from "./mmc.js";
+var mmcImage = "mmc/SDcard.zip";
 
 let processor;
 let video;
@@ -38,8 +41,6 @@ let tapeSth;
 let running;
 let model;
 
-import * as mmc from "./mmc.js"; // Acorn Atom
-var mmcImage = "mmc/SDcard.zip";
 const gamepad = new GamePad();
 let availableImages;
 let discImage;
@@ -267,7 +268,7 @@ model = config.model;
 model.isAtom = model.synonyms[0] === "Atom";
 if (model.isAtom) {
     discImage = "atom/disk0725.dsk"; // Graphics demos
-    gamepad.isAtom(true);
+    utils_atom.remapGamepad(gamepad);
 }
 
 function sbBind(div, url, onload) {
@@ -341,7 +342,7 @@ if (model.isAtom) {
     $("#owlet").show();
 }
 function keyCode(evt) {
-    const ret = evt.which || evt.charCode || evt.keyCode;
+    const ret = evt.which || evt.key || evt.code;
 
     const keyCodes = utils.keyCodes;
 
@@ -582,8 +583,9 @@ function loadMMCZIPfile(file) {
 const $pastetext = $("#paste-text");
 $pastetext.on("paste", function (event) {
     const text = event.originalEvent.clipboardData.getData("text/plain");
+    // ATOM
     if (processor.model.isAtom) {
-        sendRawKeyboardToATOM(utils.stringToATOMKeys(text));
+        sendRawKeyboardToBBC(utils_atom.stringToATOMKeys(text), false);
     } else {
         sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
     }
@@ -601,12 +603,12 @@ $pastetext.on("drop", function (event) {
 
 var $cub = $("#cub-monitor");
 // ATOM
-const $nec = $("#nec-tv");
+var $nec = $("#nec-tv");
 $nec.hide();
 if (model.isAtom) {
     $cub.hide();
-    $nec.show();
     $cub = $nec;
+    $cub.show();
 }
 
 $cub.on("mousemove mousedown mouseup", function (evt) {
@@ -835,10 +837,12 @@ $("#sth-filter").on("change keyup", function () {
     setSthFilter($("#sth-filter").val());
 });
 
+// send to BBC or ATOM
 function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
     let lastChar;
     let nextKeyMillis = 0;
     let ia = processor.sysvia;
+    // ATOM
     if (model.isAtom) ia = processor.atomppia;
     ia.disableKeyboard();
 
@@ -864,6 +868,7 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
         if (lastChar && lastChar !== utils.BBC.SHIFT) {
             ia.keyToggleRaw(lastChar);
 
+            // ATOM
             if (model.isAtom) {
                 //debounce every key on atom
                 lastChar = undefined;
@@ -1135,6 +1140,7 @@ var tapeload = function (evt) {
     reader.readAsBinaryString(file);
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 };
+$("#tape_load").on("change", tapeload);
 
 function anyModalsVisible() {
     return $(".modal:visible").length !== 0;

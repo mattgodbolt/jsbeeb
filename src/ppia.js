@@ -1,5 +1,5 @@
 "use strict";
-import * as utils from "./utils.js";
+import * as utils_atom from "./utils_atom.js";
 
 const PORTA = 0x0,
     PORTB = 0x1,
@@ -362,7 +362,7 @@ export class AtomPPIA extends PPIA {
     }
 
     setKeyLayoutAtom(map) {
-        this.keycodeToRowCol = utils.getKeyMapAtom(map);
+        this.keycodeToRowCol = utils_atom.getKeyMapAtom(map);
     }
 
     clearKeys() {
@@ -376,12 +376,12 @@ export class AtomPPIA extends PPIA {
 
     disableKeyboard() {
         this.keyboardEnabled = false;
-        clearKeys();
+        this.clearKeys();
     }
 
     enableKeyboard() {
         this.keyboardEnabled = true;
-        clearKeys();
+        this.clearKeys();
     }
 
     set(key, val, shiftDown) {
@@ -391,8 +391,11 @@ export class AtomPPIA extends PPIA {
 
         var colrow = this.keycodeToRowCol[!!shiftDown][key];
         if (!colrow) {
-            console.log("Unknown keycode: " + key);
-            console.log("Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode");
+            console.log("Unknown code or key: " + key);
+
+            console.log(
+                "Please check here: https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.code or https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.key",
+            );
             return;
         }
 
@@ -444,7 +447,12 @@ export class AtomPPIA extends PPIA {
     updateKeys() {}
 
     polltime(cycles) {
-        // soundChip.updateSpeaker(!!this.speaker, this.processor.currentCycles, this.processor.cycleSeconds, cycles);
+        this.cpu.soundChip.updateSpeaker(
+            !!this.speaker,
+            this.processor.currentCycles,
+            this.processor.cycleSeconds,
+            cycles,
+        );
     }
 
     portAUpdated() {
@@ -473,8 +481,8 @@ export class AtomPPIA extends PPIA {
 
     // set by TAPE
     tone(freq) {
-        if (!freq) soundChip.toneGenerator.mute();
-        else soundChip.toneGenerator.tone(freq);
+        if (!freq) this.cpu.soundChip.toneGenerator.mute();
+        else this.cpu.soundChip.toneGenerator.tone(freq);
     }
 
     // set by TAPE
@@ -550,7 +558,7 @@ export class AtomPPIA extends PPIA {
         // }
 
         // console.log("]- 0x" + _byte.toString(16).padStart(2, "0") + " : " + String.fromCharCode(_byte));
-        updateIrq();
+        this.updateIrq();
     }
 
     setTape(tape) {
@@ -609,7 +617,7 @@ export class AtomPPIA extends PPIA {
         if (this.tape) {
             console.log("stopping tape");
 
-            soundChip.toneGenerator.mute();
+            this.cpu.soundChip.toneGenerator.mute();
             this.runTapeTask.cancel();
             this.setTapeCarrier(false);
 
