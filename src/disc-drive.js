@@ -247,4 +247,55 @@ export class DiscDrive extends EventTarget {
     _checkTrackNeedsWrite() {
         if (this.disc) this.disc.flushWrites();
     }
+
+    /**
+     * Save DiscDrive state
+     * @param {SaveState} saveState The SaveState to save to
+     * @param {string} name The drive identifier for the saved state
+     */
+    saveState(saveState, name) {
+        const state = {
+            is40Track: this._is40Track,
+            track: this._track,
+            isSideUpper: this._isSideUpper,
+            headPosition: this._headPosition,
+            pulsePosition: this._pulsePosition,
+            in32usMode: this._in32usMode,
+            spinning: this._spinning,
+            // Disc is referenced separately and not saved here
+            // Timer is recreated during load
+        };
+
+        saveState.addComponent(`drive_${name}`, state);
+    }
+
+    /**
+     * Load DiscDrive state
+     * @param {SaveState} saveState The SaveState to load from
+     * @param {string} name The drive identifier for the saved state
+     */
+    loadState(saveState, name) {
+        const state = saveState.getComponent(`drive_${name}`);
+        if (!state) return;
+
+        this._is40Track = state.is40Track;
+        this._track = state.track;
+        this._isSideUpper = state.isSideUpper;
+        this._headPosition = state.headPosition;
+        this._pulsePosition = state.pulsePosition;
+        this._in32usMode = state.in32usMode;
+
+        // Restore spinning state
+        const wasSpinning = this._spinning;
+        this._spinning = state.spinning;
+
+        // Manage timer based on spinning state
+        if (this._spinning && !wasSpinning) {
+            this._timer.reschedule(this.positionTime);
+            this.dispatchEvent(new Event("startSpinning"));
+        } else if (!this._spinning && wasSpinning) {
+            this._timer.cancel();
+            this.dispatchEvent(new Event("stopSpinning"));
+        }
+    }
 }

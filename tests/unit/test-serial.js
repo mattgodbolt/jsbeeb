@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Serial } from "../../src/serial.js";
+import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Serial", () => {
     // Create mock for the ACIA dependency
@@ -149,6 +151,77 @@ describe("Serial", () => {
 
             serial.write(0xff, 0x4c);
             expect(serial.reg).toBe(0x4c);
+        });
+    });
+
+    describe("SaveState", () => {
+        beforeEach(() => {
+            // Set up a known state
+            serial.reg = 0x42;
+            serial.transmitRate = 2;
+            serial.receiveRate = 5;
+        });
+
+        it("should save state correctly", () => {
+            // Create a SaveState
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
+
+            // Call saveState
+            serial.saveState(saveState);
+
+            // Verify state was saved correctly
+            const state = saveState.getComponent("serial");
+            expect(state).toBeDefined();
+            expect(state.reg).toBe(0x42);
+            expect(state.transmitRate).toBe(2);
+            expect(state.receiveRate).toBe(5);
+        });
+
+        it("should load state correctly", () => {
+            // Create a SaveState with test data
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
+            saveState.addComponent("serial", {
+                reg: 0x86,
+                transmitRate: 6,
+                receiveRate: 1,
+            });
+
+            // Reset mocks to check they get called
+            vi.resetAllMocks();
+
+            // Call loadState
+            serial.loadState(saveState);
+
+            // Verify state was loaded correctly
+            expect(serial.reg).toBe(0x86);
+            expect(serial.transmitRate).toBe(6);
+            expect(serial.receiveRate).toBe(1);
+
+            // Verify hardware state was updated through write()
+            expect(mockAcia.setSerialReceive).toHaveBeenCalledWith(baudRateTable[1]);
+            expect(mockAcia.setMotor).toHaveBeenCalledWith(true); // Bit 7 of 0x86 is set
+            expect(mockAcia.selectRs423).toHaveBeenCalledWith(false); // Bit 6 of 0x86 is not set
+        });
+
+        it("should do nothing if the component is not in the SaveState", () => {
+            // Create a SaveState with no serial component
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
+
+            // Call loadState
+            serial.loadState(saveState);
+
+            // Verify state was not changed
+            expect(serial.reg).toBe(0x42);
+            expect(serial.transmitRate).toBe(2);
+            expect(serial.receiveRate).toBe(5);
+
+            // Verify no hardware updates occurred
+            expect(mockAcia.setSerialReceive).not.toHaveBeenCalled();
+            expect(mockAcia.setMotor).not.toHaveBeenCalled();
+            expect(mockAcia.selectRs423).not.toHaveBeenCalled();
         });
     });
 });

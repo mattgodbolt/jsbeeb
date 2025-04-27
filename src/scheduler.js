@@ -95,6 +95,38 @@ export class Scheduler {
     newTask(onExpire) {
         return new ScheduledTask(this, onExpire);
     }
+
+    /**
+     * Save scheduler state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            epoch: this.epoch,
+            // Tasks are saved by their respective components
+        };
+
+        saveState.addComponent("scheduler", state);
+    }
+
+    /**
+     * Load scheduler state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("scheduler");
+        if (!state) return;
+
+        // Cancel all scheduled tasks as they will be rescheduled by their components
+        while (this.scheduled) {
+            this.scheduled.cancel();
+        }
+
+        // Restore scheduler epoch
+        this.epoch = state.epoch;
+
+        // Individual tasks will be rescheduled by their respective components
+    }
 }
 
 class ScheduledTask {
@@ -143,6 +175,40 @@ class ScheduledTask {
             if (!this.scheduled()) this.schedule(delay);
         } else {
             this.cancel();
+        }
+    }
+
+    /**
+     * Gets the remaining time until this task expires
+     * @returns {number} Cycles remaining until expiry, or -1 if not scheduled
+     */
+    getRemainingTime() {
+        if (!this.scheduled()) return -1;
+        return this.expireEpoch - this.scheduler.epoch;
+    }
+
+    /**
+     * Creates a serializable state object for this task
+     * @returns {Object|null} State object with timing information, or null if not scheduled
+     */
+    saveState() {
+        if (!this.scheduled()) return null;
+
+        return {
+            scheduled: true,
+            remainingTime: this.getRemainingTime(),
+        };
+    }
+
+    /**
+     * Loads task state and schedules if needed
+     * @param {Object|null} state State object with timing information
+     */
+    loadState(state) {
+        this.cancel();
+
+        if (state && state.scheduled) {
+            this.schedule(state.remainingTime);
         }
     }
 }

@@ -1312,6 +1312,154 @@ export class WdFdc {
     get drives() {
         return this._drives;
     }
+
+    /**
+     * Save FDC state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            // Register state
+            controlRegister: this._controlRegister,
+            statusRegister: this._statusRegister,
+            trackRegister: this._trackRegister,
+            sectorRegister: this._sectorRegister,
+            dataRegister: this._dataRegister,
+
+            // Interrupt and DRQ state
+            isIntRq: this._isIntRq,
+            isDrq: this._isDrq,
+            doRaiseIntRq: this._doRaiseIntRq,
+
+            // Drive state
+            currentDriveId: this._currentDrive ? this._drives.indexOf(this._currentDrive) : -1,
+            isIndexPulse: this._isIndexPulse,
+            isInterruptOnIndexPulse: this._isInterruptOnIndexPulse,
+            isWriteTrackCrcSecondByte: this._isWriteTrackCrcSecondByte,
+
+            // Command state
+            command: this._command,
+            commandType: this._commandType,
+            isCommandSettle: this._isCommandSettle,
+            isCommandWrite: this._isCommandWrite,
+            isCommandVerify: this._isCommandVerify,
+            isCommandMulti: this._isCommandMulti,
+            isCommandDeleted: this._isCommandDeleted,
+            commandStepRateMs: this._commandStepRateMs,
+
+            // Controller state management
+            state: this._state,
+            timerState: this._timerState,
+            stateCount: this._stateCount,
+            indexPulseCount: this._indexPulseCount,
+
+            // Data processing state
+            markDetector: this._markDetector,
+            dataShifter: this._dataShifter,
+            dataShiftCount: this._dataShiftCount,
+            deliverData: this._deliverData,
+            deliverIsMarker: this._deliverIsMarker,
+            crc: this._crc,
+            onDiscTrack: this._onDiscTrack,
+            onDiscSector: this._onDiscSector,
+            onDiscLength: this._onDiscLength,
+            onDiscCrc: this._onDiscCrc,
+            lastMfmBit: this._lastMfmBit,
+
+            // Configuration state
+            isMaster: this._isMaster,
+            is1772: this._is1772,
+            isOpus: this._isOpus,
+        };
+
+        saveState.addComponent("wdfdc", state);
+
+        // Save drive states (only state, not the actual discs which are referenced separately)
+        for (let i = 0; i < this._drives.length; i++) {
+            if (this._drives[i]) {
+                this._drives[i].saveState(saveState, `drive${i}`);
+            }
+        }
+    }
+
+    /**
+     * Load FDC state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("wdfdc");
+        if (!state) return;
+
+        // Register state
+        this._controlRegister = state.controlRegister;
+        this._statusRegister = state.statusRegister;
+        this._trackRegister = state.trackRegister;
+        this._sectorRegister = state.sectorRegister;
+        this._dataRegister = state.dataRegister;
+
+        // Interrupt and DRQ state
+        this._isIntRq = state.isIntRq;
+        this._isDrq = state.isDrq;
+        this._doRaiseIntRq = state.doRaiseIntRq;
+
+        // Command state
+        this._command = state.command;
+        this._commandType = state.commandType;
+        this._isCommandSettle = state.isCommandSettle;
+        this._isCommandWrite = state.isCommandWrite;
+        this._isCommandVerify = state.isCommandVerify;
+        this._isCommandMulti = state.isCommandMulti;
+        this._isCommandDeleted = state.isCommandDeleted;
+        this._commandStepRateMs = state.commandStepRateMs;
+
+        // Controller state management
+        this._state = state.state;
+        this._timerState = state.timerState;
+        this._stateCount = state.stateCount;
+        this._indexPulseCount = state.indexPulseCount;
+
+        // Data processing state
+        this._markDetector = state.markDetector;
+        this._dataShifter = state.dataShifter;
+        this._dataShiftCount = state.dataShiftCount;
+        this._deliverData = state.deliverData;
+        this._deliverIsMarker = state.deliverIsMarker;
+        this._crc = state.crc;
+        this._onDiscTrack = state.onDiscTrack;
+        this._onDiscSector = state.onDiscSector;
+        this._onDiscLength = state.onDiscLength;
+        this._onDiscCrc = state.onDiscCrc;
+        this._lastMfmBit = state.lastMfmBit;
+
+        // Restore index pulse and track CRC state
+        this._isIndexPulse = state.isIndexPulse;
+        this._isInterruptOnIndexPulse = state.isInterruptOnIndexPulse;
+        this._isWriteTrackCrcSecondByte = state.isWriteTrackCrcSecondByte;
+
+        // Load drive states
+        for (let i = 0; i < this._drives.length; i++) {
+            if (this._drives[i]) {
+                this._drives[i].loadState(saveState, `drive${i}`);
+            }
+        }
+
+        // Restore current drive reference
+        if (state.currentDriveId >= 0 && state.currentDriveId < this._drives.length) {
+            this._currentDrive = this._drives[state.currentDriveId];
+        } else {
+            this._currentDrive = null;
+        }
+
+        // Restore timer if needed
+        if (this._state === State.timerWait) {
+            this._timerTask.ensureScheduled(true, this._stateCount);
+        } else {
+            this._timerTask.cancel();
+        }
+
+        // Update CPU flags
+        this._updateNmi();
+    }
 }
 
 export class NoiseAwareWdFdc extends WdFdc {

@@ -246,6 +246,175 @@ export class Video {
         this.paint();
     }
 
+    /**
+     * Save video state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            // CRTC registers
+            regs: this.regs,
+
+            // ULA state
+            ulactrl: this.ulactrl,
+            pixelsPerChar: this.pixelsPerChar,
+            halfClock: this.halfClock,
+            ulaMode: this.ulaMode,
+            teletextMode: this.teletextMode,
+            displayEnableSkew: this.displayEnableSkew,
+            actualPal: this.actualPal,
+
+            // Display state
+            dispEnabled: this.dispEnabled,
+
+            // Rendering position/timing
+            bitmapX: this.bitmapX,
+            bitmapY: this.bitmapY,
+            oddClock: this.oddClock,
+            frameCount: this.frameCount,
+
+            // Sync state
+            doEvenFrameLogic: this.doEvenFrameLogic,
+            isEvenRender: this.isEvenRender,
+            lastRenderWasEven: this.lastRenderWasEven,
+            firstScanline: this.firstScanline,
+            inHSync: this.inHSync,
+            inVSync: this.inVSync,
+            hadVSyncThisRow: this.hadVSyncThisRow,
+
+            // Latches and counters
+            checkVertAdjust: this.checkVertAdjust,
+            endOfMainLatched: this.endOfMainLatched,
+            endOfVertAdjustLatched: this.endOfVertAdjustLatched,
+            endOfFrameLatched: this.endOfFrameLatched,
+            inVertAdjust: this.inVertAdjust,
+            inDummyRaster: this.inDummyRaster,
+
+            // Pulse state
+            hpulseWidth: this.hpulseWidth,
+            vpulseWidth: this.vpulseWidth,
+            hpulseCounter: this.hpulseCounter,
+            vpulseCounter: this.vpulseCounter,
+
+            // Screen counters and address
+            horizCounter: this.horizCounter,
+            vertCounter: this.vertCounter,
+            scanlineCounter: this.scanlineCounter,
+            vertAdjustCounter: this.vertAdjustCounter,
+            addr: this.addr,
+            lineStartAddr: this.lineStartAddr,
+            nextLineStartAddr: this.nextLineStartAddr,
+
+            // Cursor state
+            cursorOn: this.cursorOn,
+            cursorOff: this.cursorOff,
+            cursorOnThisFrame: this.cursorOnThisFrame,
+            cursorDrawIndex: this.cursorDrawIndex,
+            cursorPos: this.cursorPos,
+
+            // Interlace and rendering settings
+            interlacedSyncAndVideo: this.interlacedSyncAndVideo,
+            doubledScanlines: this.doubledScanlines,
+            frameSkipCount: this.frameSkipCount,
+            screenAdd: this.screenAdd,
+        };
+
+        saveState.addComponent("video", state);
+
+        // Save teletext state
+        this.teletext.saveState(saveState);
+    }
+
+    /**
+     * Load video state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("video");
+        if (!state) return;
+
+        // CRTC registers
+        this.regs.set(state.regs);
+
+        // ULA state
+        this.ulactrl = state.ulactrl;
+        this.pixelsPerChar = state.pixelsPerChar;
+        this.halfClock = state.halfClock;
+        this.ulaMode = state.ulaMode;
+        this.teletextMode = state.teletextMode;
+        this.displayEnableSkew = state.displayEnableSkew;
+        this.actualPal.set(state.actualPal);
+
+        // Regenerate ULA palette from actualPal
+        for (let i = 0; i < 16; i++) {
+            const flashEnabled = !!(this.ulactrl & 1);
+            let ulaCol = this.actualPal[i] & 7;
+            if (!(flashEnabled && this.actualPal[i] & 8)) ulaCol ^= 7;
+            this.ulaPal[i] = this.collook[ulaCol];
+        }
+
+        // Display state
+        this.dispEnabled = state.dispEnabled;
+
+        // Rendering position/timing
+        this.bitmapX = state.bitmapX;
+        this.bitmapY = state.bitmapY;
+        this.oddClock = state.oddClock;
+        this.frameCount = state.frameCount;
+
+        // Sync state
+        this.doEvenFrameLogic = state.doEvenFrameLogic;
+        this.isEvenRender = state.isEvenRender;
+        this.lastRenderWasEven = state.lastRenderWasEven;
+        this.firstScanline = state.firstScanline;
+        this.inHSync = state.inHSync;
+        this.inVSync = state.inVSync;
+        this.hadVSyncThisRow = state.hadVSyncThisRow;
+
+        // Latches and counters
+        this.checkVertAdjust = state.checkVertAdjust;
+        this.endOfMainLatched = state.endOfMainLatched;
+        this.endOfVertAdjustLatched = state.endOfVertAdjustLatched;
+        this.endOfFrameLatched = state.endOfFrameLatched;
+        this.inVertAdjust = state.inVertAdjust;
+        this.inDummyRaster = state.inDummyRaster;
+
+        // Pulse state
+        this.hpulseWidth = state.hpulseWidth;
+        this.vpulseWidth = state.vpulseWidth;
+        this.hpulseCounter = state.hpulseCounter;
+        this.vpulseCounter = state.vpulseCounter;
+
+        // Screen counters and address
+        this.horizCounter = state.horizCounter;
+        this.vertCounter = state.vertCounter;
+        this.scanlineCounter = state.scanlineCounter;
+        this.vertAdjustCounter = state.vertAdjustCounter;
+        this.addr = state.addr;
+        this.lineStartAddr = state.lineStartAddr;
+        this.nextLineStartAddr = state.nextLineStartAddr;
+
+        // Cursor state
+        this.cursorOn = state.cursorOn;
+        this.cursorOff = state.cursorOff;
+        this.cursorOnThisFrame = state.cursorOnThisFrame;
+        this.cursorDrawIndex = state.cursorDrawIndex;
+        this.cursorPos = state.cursorPos;
+
+        // Interlace and rendering settings
+        this.interlacedSyncAndVideo = state.interlacedSyncAndVideo;
+        this.doubledScanlines = state.doubledScanlines;
+        this.frameSkipCount = state.frameSkipCount;
+        this.screenAdd = state.screenAdd;
+
+        // Load teletext state
+        this.teletext.loadState(saveState);
+
+        // Redraw screen after loading state
+        this.clearPaintBuffer();
+        this.paint();
+    }
+
     reset(cpu, via) {
         this.cpu = cpu;
         this.sysvia = via;

@@ -16,7 +16,7 @@ function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
 }
 
-class Flags {
+export class Flags {
     constructor() {
         this._byte = 0x30;
     }
@@ -98,6 +98,22 @@ class Flags {
     setFromByte(byte) {
         this._byte = byte | 0x30;
     }
+
+    /**
+     * Save the flags state
+     * @returns {number} The flags byte value
+     */
+    saveState() {
+        return this._byte;
+    }
+
+    /**
+     * Load flags state
+     * @param {number} byte The flags byte value
+     */
+    loadState(byte) {
+        this._byte = byte;
+    }
 }
 
 class Base6502 {
@@ -147,6 +163,59 @@ class Base6502 {
                 }
             };
         }
+    }
+
+    /**
+     * Save CPU state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            // Register state
+            a: this.a,
+            x: this.x,
+            y: this.y,
+            s: this.s,
+            pc: this.pc,
+            p: this.p.saveState(),
+
+            // Interrupt state
+            interrupt: this.interrupt,
+            nmiLevel: this._nmiLevel,
+            nmiEdge: this._nmiEdge,
+
+            // Other CPU state
+            takeInt: this.takeInt,
+            halted: this.halted,
+        };
+
+        saveState.addComponent("cpu", state);
+    }
+
+    /**
+     * Load CPU state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("cpu");
+        if (!state) return;
+
+        // Register state
+        this.a = state.a;
+        this.x = state.x;
+        this.y = state.y;
+        this.s = state.s;
+        this.pc = state.pc;
+        this.p.loadState(state.p);
+
+        // Interrupt state
+        this.interrupt = state.interrupt;
+        this._nmiLevel = state.nmiLevel;
+        this._nmiEdge = state.nmiEdge;
+
+        // Other CPU state
+        this.takeInt = state.takeInt;
+        this.halted = state.halted;
     }
 
     incpc() {
@@ -635,6 +704,169 @@ export class Cpu6502 extends Base6502 {
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.soundChip.setScheduler(this.scheduler);
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
+    }
+
+    /**
+     * Save CPU state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        // Call the base class method to save CPU core state
+        super.saveState(saveState);
+
+        // Save CPU specific state
+        const state = {
+            // Memory state
+            memStatOffsetByIFetchBank: this.memStatOffsetByIFetchBank,
+            memStatOffset: this.memStatOffset,
+            memStat: this.memStat,
+            memLook: this.memLook,
+
+            // RAM state - only save relevant portions
+            ram: this.ramRomOs.slice(0, 128 * 1024), // Main RAM (128K)
+
+            // Hardware registers
+            romsel: this.romsel,
+            acccon: this.acccon,
+            resetLine: this.resetLine,
+            music5000PageSel: this.music5000PageSel,
+
+            // Timing state
+            peripheralCycles: this.peripheralCycles,
+            videoCycles: this.videoCycles,
+            cycleSeconds: this.cycleSeconds,
+            currentCycles: this.currentCycles,
+            targetCycles: this.targetCycles,
+
+            // Video display state
+            videoDisplayPage: this.videoDisplayPage,
+
+            // Debug state not needed for regular save states
+            // oldPcArray, oldAArray, oldXArray, oldYArray, oldPcIndex
+        };
+
+        // Add to the saveState
+        saveState.addComponent("cpu_extended", state);
+
+        // Save scheduler state
+        this.scheduler.saveState(saveState);
+
+        // Save peripheral states - CRITICAL for task scheduling
+        // These must be saved to ensure they can be properly restored during loading
+
+        // System VIA handles keyboard and other essential I/O
+        this.sysvia.saveState(saveState);
+
+        // User VIA for user port peripherals
+        this.uservia.saveState(saveState);
+
+        // ACIA for cassette and serial I/O
+        this.acia.saveState(saveState);
+
+        // Video component
+        this.video.saveState(saveState);
+
+        // Call saveState for additional peripheral components
+        if (this.serial) this.serial.saveState(saveState);
+        if (this.adconverter) this.adconverter.saveState(saveState);
+        if (this.soundChip) this.soundChip.saveState(saveState);
+
+        // Call saveState for additional components if they exist
+        if (this.fdc) this.fdc.saveState(saveState);
+        if (this.music5000) this.music5000.saveState(saveState);
+        if (this.tube) this.tube.saveState(saveState);
+        // if (this.econet) this.econet.saveState(saveState);
+        if (this.cmos) this.cmos.saveState(saveState);
+        if (this.model.hasTeletextAdaptor) this.teletextAdaptor.saveState(saveState);
+    }
+
+    /**
+     * Load CPU state
+     * @param {SaveState} saveState The SaveState to load from
+     * @throws {Error} If peripheral components can't be properly loaded
+     */
+    loadState(saveState) {
+        try {
+            // Call the base class method to load CPU core state
+            super.loadState(saveState);
+
+            // Load CPU specific state
+            const state = saveState.getComponent("cpu_extended");
+            if (!state) {
+                throw new Error(
+                    "CPU: No extended state found in saveState. This is a fatal error: this savestate was created before savestate support was fully implemented and cannot be loaded.",
+                );
+            }
+
+            // Memory configuration
+            this.memStatOffsetByIFetchBank = state.memStatOffsetByIFetchBank;
+            this.memStatOffset = state.memStatOffset;
+            this.memStat.set(state.memStat);
+
+            // memLook is a Int32Array
+            for (let i = 0; i < state.memLook.length; i++) {
+                this.memLook[i] = state.memLook[i];
+            }
+
+            // RAM state
+            this.ramRomOs.set(state.ram, 0); // Copy RAM
+
+            // Hardware registers
+            this.romsel = state.romsel;
+            this.acccon = state.acccon;
+            this.resetLine = state.resetLine;
+            this.music5000PageSel = state.music5000PageSel;
+
+            // Timing state
+            this.peripheralCycles = state.peripheralCycles;
+            this.videoCycles = state.videoCycles;
+            this.cycleSeconds = state.cycleSeconds;
+            this.currentCycles = state.currentCycles;
+            this.targetCycles = state.targetCycles;
+
+            // Video display state
+            this.videoDisplayPage = state.videoDisplayPage;
+
+            // Load scheduler state first - this will clear all tasks
+            this.scheduler.loadState(saveState);
+
+            // Load peripheral states - CRITICAL for task scheduling
+            // These must be loaded in the correct order as some peripherals
+            // depend on others being initialized first
+
+            // System VIA handles keyboard and other essential I/O
+            // This will throw an error if VIA state isn't present
+            this.sysvia.loadState(saveState);
+
+            // User VIA for user port peripherals
+            // This will throw an error if VIA state isn't present
+            this.uservia.loadState(saveState);
+
+            // ACIA for cassette and serial I/O
+            // This will throw an error if ACIA state isn't present
+            this.acia.loadState(saveState);
+
+            // Video component
+            this.video.loadState(saveState);
+
+            // Load additional peripheral components
+            if (this.serial) this.serial.loadState(saveState);
+            if (this.adconverter) this.adconverter.loadState(saveState);
+            if (this.soundChip) this.soundChip.loadState(saveState);
+            if (this.fdc) this.fdc.loadState(saveState);
+
+            // Load state for additional components if they exist
+            if (this.music5000) this.music5000.loadState(saveState);
+            if (this.tube) this.tube.loadState(saveState);
+            // if (this.econet) this.econet.loadState(saveState);
+            if (this.cmos) this.cmos.loadState(saveState);
+            if (this.model.hasTeletextAdaptor) this.teletextAdaptor.loadState(saveState);
+        } catch (error) {
+            // Make sure any errors during loading are propagated up
+            // to inform the user that this savestate cannot be loaded
+            console.error("Fatal error loading savestate:", error.message);
+            throw error;
+        }
     }
 
     getPrevPc(index) {

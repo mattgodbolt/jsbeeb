@@ -32,6 +32,92 @@ export class Teletext {
         this.init();
     }
 
+    /**
+     * Save teletext state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            prevCol: this.prevCol,
+            col: this.col,
+            bg: this.bg,
+            sep: this.sep,
+            dbl: this.dbl,
+            oldDbl: this.oldDbl,
+            secondHalfOfDouble: this.secondHalfOfDouble,
+            wasDbl: this.wasDbl,
+            gfx: this.gfx,
+            flash: this.flash,
+            flashOn: this.flashOn,
+            flashTime: this.flashTime,
+            heldChar: this.heldChar,
+            holdChar: this.holdChar,
+            dataQueue: this.dataQueue.slice(0), // Create a copy
+            scanlineCounter: this.scanlineCounter,
+            levelDEW: this.levelDEW,
+            levelDISPTMG: this.levelDISPTMG,
+            levelRA0: this.levelRA0,
+
+            // Store which glyphs arrays are currently in use
+            // (we don't need to store the actual glyph data as they're regenerated)
+            nextGlyphsIsNormal: this.nextGlyphs === this.normalGlyphs,
+            nextGlyphsIsGraphics: this.nextGlyphs === this.graphicsGlyphs,
+            nextGlyphsIsSeparated: this.nextGlyphs === this.separatedGlyphs,
+
+            curGlyphsIsNormal: this.curGlyphs === this.normalGlyphs,
+            curGlyphsIsGraphics: this.curGlyphs === this.graphicsGlyphs,
+            curGlyphsIsSeparated: this.curGlyphs === this.separatedGlyphs,
+
+            heldGlyphsIsNormal: this.heldGlyphs === this.normalGlyphs,
+            heldGlyphsIsGraphics: this.heldGlyphs === this.graphicsGlyphs,
+            heldGlyphsIsSeparated: this.heldGlyphs === this.separatedGlyphs,
+        };
+
+        saveState.addComponent("teletext", state);
+    }
+
+    /**
+     * Load teletext state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("teletext");
+        if (!state) return;
+
+        this.prevCol = state.prevCol;
+        this.col = state.col;
+        this.bg = state.bg;
+        this.sep = state.sep;
+        this.dbl = state.dbl;
+        this.oldDbl = state.oldDbl;
+        this.secondHalfOfDouble = state.secondHalfOfDouble;
+        this.wasDbl = state.wasDbl;
+        this.gfx = state.gfx;
+        this.flash = state.flash;
+        this.flashOn = state.flashOn;
+        this.flashTime = state.flashTime;
+        this.heldChar = state.heldChar;
+        this.holdChar = state.holdChar;
+        this.dataQueue = state.dataQueue.slice(0);
+        this.scanlineCounter = state.scanlineCounter;
+        this.levelDEW = state.levelDEW;
+        this.levelDISPTMG = state.levelDISPTMG;
+        this.levelRA0 = state.levelRA0;
+
+        // Restore glyph pointers
+        if (state.nextGlyphsIsNormal) this.nextGlyphs = this.normalGlyphs;
+        else if (state.nextGlyphsIsGraphics) this.nextGlyphs = this.graphicsGlyphs;
+        else if (state.nextGlyphsIsSeparated) this.nextGlyphs = this.separatedGlyphs;
+
+        if (state.curGlyphsIsNormal) this.curGlyphs = this.normalGlyphs;
+        else if (state.curGlyphsIsGraphics) this.curGlyphs = this.graphicsGlyphs;
+        else if (state.curGlyphsIsSeparated) this.curGlyphs = this.separatedGlyphs;
+
+        if (state.heldGlyphsIsNormal) this.heldGlyphs = this.normalGlyphs;
+        else if (state.heldGlyphsIsGraphics) this.heldGlyphs = this.graphicsGlyphs;
+        else if (state.heldGlyphsIsSeparated) this.heldGlyphs = this.separatedGlyphs;
+    }
+
     init() {
         const charData = makeChars();
 

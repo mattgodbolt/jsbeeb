@@ -56,6 +56,80 @@ export class Tube {
         this.hostToParasiteFifoByteCount3 = 0;
         this.debug = false;
     }
+
+    /**
+     * Save Tube state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        const state = {
+            // Tube controller state
+            internalStatusRegister: this.internalStatusRegister,
+            hostStatus: Array.from(this.hostStatus),
+            parasiteStatus: Array.from(this.parasiteStatus),
+
+            // FIFO counters
+            parasiteToHostFifoByteCount1: this.parasiteToHostFifoByteCount1,
+            parasiteToHostFifoByteCount3: this.parasiteToHostFifoByteCount3,
+            hostToParasiteFifoByteCount3: this.hostToParasiteFifoByteCount3,
+
+            // Parasite to host data buffers
+            parasiteToHostData: [
+                Array.from(this.parasiteToHostData[0]),
+                Array.from(this.parasiteToHostData[1]),
+                Array.from(this.parasiteToHostData[2]),
+                Array.from(this.parasiteToHostData[3]),
+            ],
+
+            // Host to parasite data buffers
+            hostToParasiteData: [
+                Array.from(this.hostToParasiteData[0]),
+                Array.from(this.hostToParasiteData[1]),
+                Array.from(this.hostToParasiteData[2]),
+                Array.from(this.hostToParasiteData[3]),
+            ],
+
+            // Debug flag
+            debug: this.debug,
+        };
+
+        saveState.addComponent("tube", state);
+    }
+
+    /**
+     * Load Tube state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        const state = saveState.getComponent("tube");
+        if (!state) return;
+
+        // Tube controller state
+        this.internalStatusRegister = state.internalStatusRegister;
+        this.hostStatus.set(state.hostStatus);
+        this.parasiteStatus.set(state.parasiteStatus);
+
+        // FIFO counters
+        this.parasiteToHostFifoByteCount1 = state.parasiteToHostFifoByteCount1;
+        this.parasiteToHostFifoByteCount3 = state.parasiteToHostFifoByteCount3;
+        this.hostToParasiteFifoByteCount3 = state.hostToParasiteFifoByteCount3;
+
+        // Parasite to host data buffers
+        for (let i = 0; i < 4; i++) {
+            this.parasiteToHostData[i].set(state.parasiteToHostData[i]);
+        }
+
+        // Host to parasite data buffers
+        for (let i = 0; i < 4; i++) {
+            this.hostToParasiteData[i].set(state.hostToParasiteData[i]);
+        }
+
+        // Debug flag
+        this.debug = state.debug;
+
+        // Update interrupt state based on restored values
+        this.updateInterrupts();
+    }
     reset(updateInternalStatusRegister = true) {
         if (updateInternalStatusRegister) {
             this.internalStatusRegister = 0;

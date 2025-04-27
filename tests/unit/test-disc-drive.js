@@ -1,9 +1,11 @@
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import assert from "assert";
 
 import { Disc, IbmDiscFormat } from "../../src/disc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Disc drive tests", function () {
     it("starts empty", () => {
@@ -82,5 +84,38 @@ describe("Disc drive tests", function () {
             previousIndex = drive.indexPulse;
         }
         assert.equal(risingEdges, (rpm / 60) * testSeconds);
+    });
+
+    it("should properly save and restore state", () => {
+        // Setup
+        const scheduler = new Scheduler();
+        const drive = new DiscDrive(0, scheduler);
+        const mockModel = createMockModel();
+        const saveState = new SaveState(mockModel);
+
+        // Set specific state values
+        drive._is40Track = true;
+        drive._track = 42;
+        drive._isSideUpper = true;
+        drive._headPosition = 1234;
+        drive._pulsePosition = 16;
+        drive._in32usMode = true;
+
+        // Save state
+        drive.saveState(saveState, "drive0");
+
+        // Create a new drive with default state
+        const newDrive = new DiscDrive(0, scheduler);
+
+        // Load the saved state
+        newDrive.loadState(saveState, "drive0");
+
+        // Verify state was properly restored
+        expect(newDrive._is40Track).toBe(true);
+        expect(newDrive._track).toBe(42);
+        expect(newDrive._isSideUpper).toBe(true);
+        expect(newDrive._headPosition).toBe(1234);
+        expect(newDrive._pulsePosition).toBe(16);
+        expect(newDrive._in32usMode).toBe(true);
     });
 });

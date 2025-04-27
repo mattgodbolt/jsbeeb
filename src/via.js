@@ -24,7 +24,7 @@ const ORB = 0x0,
     INT_CB1 = 0x10,
     INT_CB2 = 0x08;
 
-class Via {
+export class Via {
     constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
         this.irq = irq;
@@ -467,6 +467,94 @@ class Via {
             this.updateIFR();
         }
     }
+
+    /**
+     * Save VIA state
+     * @param {SaveState} saveState The SaveState to save to
+     * @param {string} name The name of this VIA instance
+     */
+    saveState(saveState, name) {
+        const state = {
+            ora: this.ora,
+            orb: this.orb,
+            ira: this.ira,
+            irb: this.irb,
+            ddra: this.ddra,
+            ddrb: this.ddrb,
+            sr: this.sr,
+            t1l: this.t1l,
+            t2l: this.t2l,
+            t1c: this.t1c,
+            t2c: this.t2c,
+            acr: this.acr,
+            pcr: this.pcr,
+            ifr: this.ifr,
+            ier: this.ier,
+            t1hit: this.t1hit,
+            t2hit: this.t2hit,
+            portapins: this.portapins,
+            portbpins: this.portbpins,
+            ca1: this.ca1,
+            ca2: this.ca2,
+            cb1: this.cb1,
+            cb2: this.cb2,
+            justhit: this.justhit,
+            t1_pb7: this.t1_pb7,
+            lastPolltime: this.lastPolltime,
+            // Task is handled separately
+            task: this.task.saveState(),
+        };
+
+        saveState.addComponent(`via_${name}`, state);
+    }
+
+    /**
+     * Load VIA state
+     * @param {SaveState} saveState The SaveState to load from
+     * @param {string} name The name of this VIA instance
+     */
+    loadState(saveState, name) {
+        const state = saveState.getComponent(`via_${name}`);
+        if (!state) {
+            throw new Error(
+                `Via: No state found for ${name} in saveState. This is a fatal error: this savestate was created before savestate support was fully implemented and cannot be loaded.`,
+            );
+        }
+
+        this.ora = state.ora;
+        this.orb = state.orb;
+        this.ira = state.ira;
+        this.irb = state.irb;
+        this.ddra = state.ddra;
+        this.ddrb = state.ddrb;
+        this.sr = state.sr;
+        this.t1l = state.t1l;
+        this.t2l = state.t2l;
+        this.t1c = state.t1c;
+        this.t2c = state.t2c;
+        this.acr = state.acr;
+        this.pcr = state.pcr;
+        this.ifr = state.ifr;
+        this.ier = state.ier;
+        this.t1hit = state.t1hit;
+        this.t2hit = state.t2hit;
+        this.portapins = state.portapins;
+        this.portbpins = state.portbpins;
+        this.ca1 = state.ca1;
+        this.ca2 = state.ca2;
+        this.cb1 = state.cb1;
+        this.cb2 = state.cb2;
+        this.justhit = state.justhit;
+        this.t1_pb7 = state.t1_pb7;
+        this.lastPolltime = state.lastPolltime;
+
+        // Restore task state
+        this.task.loadState(state.task);
+
+        // Update IRQ and next task time
+        this.updateIFR();
+        this.updateNextTime();
+    }
 }
 
 export class SysVia extends Via {
@@ -662,6 +750,112 @@ export class SysVia extends Via {
 
         return { button1: button1, button2: button2 };
     }
+
+    /**
+     * Save SysVia state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        // Save base VIA state
+        super.saveState(saveState, "sys");
+
+        // Save SysVia-specific state
+        const state = {
+            IC32: this.IC32,
+            capsLockLight: this.capsLockLight,
+            shiftLockLight: this.shiftLockLight,
+            keys: Array.from(this.keys, (row) => Array.from(row)),
+            keyboardEnabled: this.keyboardEnabled,
+        };
+
+        saveState.addComponent("sysvia_ext", state);
+    }
+
+    /**
+     * Load SysVia state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        // Load base VIA state
+        super.loadState(saveState, "sys");
+
+        // Load SysVia-specific state
+        const state = saveState.getComponent("sysvia_ext");
+        if (!state) {
+            throw new Error(
+                "SysVia: No extended state found in saveState. This is a fatal error: this savestate was created before savestate support was fully implemented and cannot be loaded.",
+            );
+        }
+
+        console.log("SysVia: Loading extended state");
+
+        // Load IC32 state
+        if (state.IC32 !== undefined) {
+            this.IC32 = state.IC32;
+            console.log("SysVia: Loaded IC32 =", this.IC32.toString(16));
+        } else {
+            console.log("SysVia: No IC32 in saved state, using current value");
+        }
+
+        // Load LED states
+        this.capsLockLight = state.capsLockLight !== undefined ? state.capsLockLight : false;
+        this.shiftLockLight = state.shiftLockLight !== undefined ? state.shiftLockLight : false;
+        console.log("SysVia: Loaded LED states - capsLock:", this.capsLockLight, "shiftLock:", this.shiftLockLight);
+
+        // Always ensure keyboard is enabled first - very important for B-Em snapshots
+        this.enableKeyboard();
+        console.log("SysVia: Enabled keyboard for clean state");
+
+        // Then restore keyboard state if available
+        if (state.keys) {
+            // Clear keys first to avoid any stuck keys
+            this.clearKeys();
+            console.log("SysVia: Cleared keyboard state before loading");
+
+            try {
+                // Copy key state carefully
+                for (let i = 0; i < state.keys.length; i++) {
+                    if (i < this.keys.length && state.keys[i]) {
+                        for (let j = 0; j < state.keys[i].length; j++) {
+                            if (j < this.keys[i].length) {
+                                this.keys[i][j] = state.keys[i][j];
+                            }
+                        }
+                    }
+                }
+                console.log("SysVia: Loaded keyboard matrix state");
+            } catch (error) {
+                console.error("SysVia: Error loading keyboard state:", error);
+                // On error, clear keys again to be safe
+                this.clearKeys();
+            }
+        } else {
+            console.log("SysVia: No keyboard state in saved state, keys have been cleared");
+        }
+
+        // Set keyboard enabled state
+        if (state.keyboardEnabled !== undefined) {
+            this.keyboardEnabled = state.keyboardEnabled;
+        } else {
+            // Default to enabled if not specified in saved state
+            this.keyboardEnabled = true;
+        }
+
+        // Always ensure keyboard is actually enabled regardless of saved state
+        // This is critical for B-Em snapshots which may not have this information
+        if (!this.keyboardEnabled) {
+            console.log("SysVia: Forcing keyboard enabled state to true for compatibility");
+            this.keyboardEnabled = true;
+        }
+
+        console.log("SysVia: Loaded state, keyboard enabled:", this.keyboardEnabled);
+
+        // Refresh derived state
+        this.updateKeys();
+
+        // Update screen state based on IC32
+        this.video.setScreenAdd((this.IC32 & 16 ? 2 : 0) | (this.IC32 & 32 ? 1 : 0));
+    }
 }
 
 export class UserVia extends Via {
@@ -678,5 +872,29 @@ export class UserVia extends Via {
 
     drivePortB() {
         this.portbpins &= this.userPortPeripheral.read();
+    }
+
+    /**
+     * Save UserVia state
+     * @param {SaveState} saveState The SaveState to save to
+     */
+    saveState(saveState) {
+        // Save base VIA state
+        super.saveState(saveState, "user");
+
+        // No additional state specific to UserVia needs to be saved
+        // as userPortPeripheral handles its own state
+    }
+
+    /**
+     * Load UserVia state
+     * @param {SaveState} saveState The SaveState to load from
+     */
+    loadState(saveState) {
+        // Load base VIA state
+        super.loadState(saveState, "user");
+
+        // Update peripheral after loading state
+        this.portBUpdated();
     }
 }

@@ -1,6 +1,8 @@
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import assert from "assert";
 import { Scheduler } from "../../src/scheduler.js";
+import { SaveState } from "../../src/savestate.js";
+import { createMockModel } from "./test-savestate.js";
 
 describe("Scheduler tests", function () {
     "use strict";
@@ -187,5 +189,91 @@ describe("Scheduler tests", function () {
             s.polltime(3);
         }
         assert.deepStrictEqual(called, [12356, 13356, 14356, 114356, 115356]);
+    });
+
+    describe("SaveState functionality", function () {
+        it("should save and restore scheduler epoch", function () {
+            // Set up scheduler with a specific epoch
+            const scheduler = new Scheduler();
+            scheduler.epoch = 12345;
+
+            // Create a save state
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
+            scheduler.saveState(saveState);
+
+            // Create a new scheduler and restore the state
+            const newScheduler = new Scheduler();
+            newScheduler.loadState(saveState);
+
+            // Verify the epoch was restored correctly
+            expect(newScheduler.epoch).toBe(12345);
+        });
+
+        it("should preserve scheduler epoch when calling polltime after load", function () {
+            // Set up scheduler
+            const scheduler = new Scheduler();
+            scheduler.epoch = 5000;
+
+            // Create a save state
+            const mockModel = createMockModel();
+            const saveState = new SaveState(mockModel);
+            scheduler.saveState(saveState);
+
+            // Create a new scheduler, restore, and advance
+            const newScheduler = new Scheduler();
+            newScheduler.loadState(saveState);
+            newScheduler.polltime(500);
+
+            // Verify the epoch was increased correctly
+            expect(newScheduler.epoch).toBe(5500);
+        });
+
+        it("should clear all tasks when loadState is called", function () {
+            // Create a scheduler
+            const scheduler = new Scheduler();
+
+            // Create a saveState object
+            const saveState = {
+                components: {},
+                addComponent: function (name, state) {
+                    this.components[name] = state;
+                },
+                getComponent: function (name) {
+                    return this.components[name];
+                },
+            };
+
+            // Save initial scheduler state
+            scheduler.saveState(saveState);
+
+            // Add multiple tasks
+            const task1 = scheduler.newTask(() => {});
+            const task2 = scheduler.newTask(() => {});
+            const task3 = scheduler.newTask(() => {});
+
+            // Schedule all tasks
+            task1.schedule(100);
+            task2.schedule(200);
+            task3.schedule(300);
+
+            // Verify all tasks are scheduled
+            expect(scheduler.scheduled).not.toBeNull();
+            expect(task1.scheduled()).toBe(true);
+            expect(task2.scheduled()).toBe(true);
+            expect(task3.scheduled()).toBe(true);
+
+            // Load the scheduler state
+            scheduler.loadState(saveState);
+
+            // Verify all tasks have been cleared
+            expect(scheduler.scheduled).toBeNull();
+            expect(task1.scheduled()).toBe(false);
+            expect(task2.scheduled()).toBe(false);
+            expect(task3.scheduled()).toBe(false);
+
+            // Verify headroom is now MaxHeadroom
+            expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
+        });
     });
 });

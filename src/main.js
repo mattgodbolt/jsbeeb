@@ -23,6 +23,7 @@ import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
+import { SnapshotUI } from "./snapshot-ui.js";
 
 let processor;
 let video;
@@ -1659,3 +1660,6 @@ window.m7dump = function () {
 
 // Hooks for electron.
 electron({ loadDiscImage, processor });
+
+// Initialize the Snapshot UI
+new SnapshotUI(processor);
