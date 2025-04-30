@@ -23,6 +23,15 @@ import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
+import {
+    parseQueryString,
+    processKeyboardParams,
+    processAutobootParams,
+    guessModelFromHostname,
+    parseMediaParams,
+    buildUrlFromParams,
+    ParamTypes,
+} from "./url-params.js";
 
 let processor;
 let video;
@@ -45,11 +54,46 @@ if (typeof starCat === "function") {
         discImage = availableImages[0].file;
     }
 }
-let queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
+// Build the query string from the URL
+const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
-let parsedQuery = {};
-let needsAutoboot = false;
-let autoType = "";
+
+// Define parameter types
+const paramTypes = {
+    // Array parameters
+    rom: ParamTypes.ARRAY,
+
+    // Boolean parameters
+    embed: ParamTypes.BOOL,
+    fasttape: ParamTypes.BOOL,
+    noseek: ParamTypes.BOOL,
+    debug: ParamTypes.BOOL,
+    verbose: ParamTypes.BOOL,
+    autoboot: ParamTypes.BOOL,
+    autochain: ParamTypes.BOOL,
+    autorun: ParamTypes.BOOL,
+
+    // Numeric parameters
+    speed: ParamTypes.INT,
+    stationId: ParamTypes.INT,
+    frameSkip: ParamTypes.INT,
+    audiofilterfreq: ParamTypes.FLOAT,
+    audiofilterq: ParamTypes.FLOAT,
+    cpuMultiplier: ParamTypes.FLOAT,
+
+    // String parameters (these are the default but listed for clarity)
+    model: ParamTypes.STRING,
+    disc: ParamTypes.STRING,
+    disc1: ParamTypes.STRING,
+    disc2: ParamTypes.STRING,
+    tape: ParamTypes.STRING,
+    keyLayout: ParamTypes.STRING,
+    autotype: ParamTypes.STRING,
+};
+
+// Parse the query string with parameter types
+let parsedQuery = parseQueryString(queryString, paramTypes);
+let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
 const BBC = utils.BBC;
@@ -67,98 +111,37 @@ let stationId = 101;
 let econet = null;
 const isMac = window.navigator.platform.indexOf("Mac") === 0;
 
-if (queryString) {
-    if (queryString[queryString.length - 1] === "/")
-        // workaround for shonky python web server
-        queryString = queryString.substring(0, queryString.length - 1);
-    queryString.split("&").forEach(function (keyval) {
-        const keyAndVal = keyval.split("=");
-        const key = decodeURIComponent(keyAndVal[0]);
-        let val = null;
-        if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
-        parsedQuery[key] = val;
+// Parse disc and tape images from query parameters
+const { discImage: queryDiscImage, secondDiscImage: querySecondDisc } = parseMediaParams(parsedQuery);
 
-        // eg KEY.CAPSLOCK=CTRL
-        let bbcKey;
-        if (key.toUpperCase().indexOf("KEY.") === 0) {
-            bbcKey = val.toUpperCase();
+// Only assign if values are provided
+if (queryDiscImage) discImage = queryDiscImage;
+if (querySecondDisc) secondDiscImage = querySecondDisc;
 
-            if (BBC[bbcKey]) {
-                const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
-                if (keyCodes[nativeKey]) {
-                    console.log("mapping " + nativeKey + " to " + bbcKey);
-                    utils.userKeymap.push({ native: nativeKey, bbc: bbcKey });
-                } else {
-                    console.log("unknown key: " + nativeKey);
-                }
-            } else {
-                console.log("unknown BBC key: " + val);
-            }
-        } else if (key.indexOf("GP.") === 0) {
-            // gamepad mapping
-            // eg ?GP.FIRE2=RETURN
-            const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
-            gamepad.remap(gamepadKey, val.toUpperCase());
-        } else {
-            switch (key) {
-                case "LEFT":
-                case "RIGHT":
-                case "UP":
-                case "DOWN":
-                case "FIRE":
-                    gamepad.remap(key, val.toUpperCase());
-                    break;
-                case "autoboot":
-                    needsAutoboot = "boot";
-                    break;
-                case "autochain":
-                    needsAutoboot = "chain";
-                    break;
-                case "autorun":
-                    needsAutoboot = "run";
-                    break;
-                case "autotype":
-                    needsAutoboot = "type";
-                    autoType = val;
-                    break;
-                case "keyLayout":
-                    keyLayout = (val + "").toLowerCase();
-                    break;
-                case "disc":
-                case "disc1":
-                    discImage = val;
-                    break;
-                case "rom":
-                    extraRoms.push(val);
-                    break;
-                case "disc2":
-                    secondDiscImage = val;
-                    break;
-                case "embed":
-                    $(".embed-hide").hide();
-                    $("body").css("background-color", "transparent");
-                    break;
-                case "fasttape":
-                    fastTape = true;
-                    break;
-                case "noseek":
-                    noSeek = true;
-                    break;
-                case "audiofilterfreq":
-                    audioFilterFreq = Number(val);
-                    break;
-                case "audiofilterq":
-                    audioFilterQ = Number(val);
-                    break;
-                case "stationId":
-                    stationId = Number(val);
-                    break;
-            }
-        }
+// Process keyboard mappings
+parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
+
+// Handle specific query parameters
+if (Array.isArray(parsedQuery.rom)) {
+    parsedQuery.rom.forEach((romPath) => {
+        if (romPath) extraRoms.push(romPath);
     });
 }
+if (parsedQuery.keyLayout) {
+    keyLayout = (parsedQuery.keyLayout + "").toLowerCase();
+}
+if (parsedQuery.embed) {
+    $(".embed-hide").hide();
+    $("body").css("background-color", "transparent");
+}
 
-if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
+fastTape = !!parsedQuery.fasttape;
+noSeek = !!parsedQuery.noseek;
+
+if (parsedQuery.audiofilterfreq !== undefined) audioFilterFreq = parsedQuery.audiofilterfreq;
+if (parsedQuery.audiofilterq !== undefined) audioFilterQ = parsedQuery.audiofilterq;
+if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
+if (parsedQuery.frameSkip !== undefined) frameSkip = parsedQuery.frameSkip;
 
 const printerPort = {
     outputStrobe: function (level, output) {
@@ -244,7 +227,7 @@ const config = new Config(function (changed) {
 // Perform mapping of legacy models to the new format
 config.mapLegacyModels(parsedQuery);
 
-config.setModel(parsedQuery.model || guessModelFromUrl());
+config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
 config.setEconet(parsedQuery.hasEconet);
@@ -273,8 +256,9 @@ sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
     div.css({ bottom: -img.height() });
 });
 
-if (parsedQuery.cpuMultiplier) {
-    cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
+// cpuMultiplier is now a float parameter, no need for conversion
+if (parsedQuery.cpuMultiplier !== null && parsedQuery.cpuMultiplier !== undefined) {
+    cpuMultiplier = parsedQuery.cpuMultiplier;
     console.log("CPU multiplier set to " + cpuMultiplier);
 }
 const clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
@@ -871,14 +855,8 @@ function autoRunBasic() {
 }
 
 function updateUrl() {
-    let url = window.location.origin + window.location.pathname;
-    let sep = "?";
-    $.each(parsedQuery, function (key, value) {
-        if (key.length > 0 && value) {
-            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
-            sep = "&";
-        }
-    });
+    const baseUrl = window.location.origin + window.location.pathname;
+    const url = buildUrlFromParams(baseUrl, parsedQuery, paramTypes);
     window.history.pushState(null, null, url);
 }
 
@@ -1231,12 +1209,6 @@ $("#soft-reset").click(function (event) {
     processor.reset(false);
     event.preventDefault();
 });
-
-function guessModelFromUrl() {
-    if (window.location.hostname.indexOf("bbc") === 0) return "B-DFS1.2";
-    if (window.location.hostname.indexOf("master") === 0) return "Master";
-    return "B-DFS1.2";
-}
 
 $("#tape-menu a").on("click", function (e) {
     const type = $(e.target).attr("data-id");
