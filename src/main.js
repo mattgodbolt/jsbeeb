@@ -1286,9 +1286,8 @@ function draw(now) {
             dbgr.debug(processor.pc);
             throw e;
         }
-        if (keyboard.stepEmuWhenPaused) {
+        if (keyboard.postFrameShouldPause()) {
             stop(false);
-            keyboard.stepEmuWhenPaused = false;
         }
     }
     last = now;

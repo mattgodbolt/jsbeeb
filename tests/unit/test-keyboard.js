@@ -236,4 +236,48 @@ describe("Keyboard", () => {
         expect(mockSysvia.disableKeyboard).toHaveBeenCalled();
         expect(mockProcessor.debugInstruction.add).toHaveBeenCalled();
     });
+
+    test("postFrameShouldPause should handle single step", () => {
+        // Initially should not pause
+        expect(keyboard.postFrameShouldPause()).toBe(false);
+
+        // Set step to true
+        keyboard.stepEmuWhenPaused = true;
+
+        // Should pause and reset flag
+        expect(keyboard.postFrameShouldPause()).toBe(true);
+
+        // Flag should be reset
+        expect(keyboard.stepEmuWhenPaused).toBe(false);
+
+        // Subsequent call should not pause
+        expect(keyboard.postFrameShouldPause()).toBe(false);
+    });
+
+    test("requestStep should set the step flag", () => {
+        expect(keyboard.stepEmuWhenPaused).toBe(false);
+        keyboard.requestStep();
+        expect(keyboard.stepEmuWhenPaused).toBe(true);
+    });
+
+    test("pauseEmulation should set pause flag and call stopCallback", () => {
+        const stopCallback = vi.fn();
+        keyboard.stopCallback = stopCallback;
+
+        keyboard.pauseEmulation();
+
+        expect(keyboard.pauseEmu).toBe(true);
+        expect(stopCallback).toHaveBeenCalledWith(false);
+    });
+
+    test("resumeEmulation should clear pause flag and call goCallback", () => {
+        const goCallback = vi.fn();
+        keyboard.goCallback = goCallback;
+        keyboard.pauseEmu = true;
+
+        keyboard.resumeEmulation();
+
+        expect(keyboard.pauseEmu).toBe(false);
+        expect(goCallback).toHaveBeenCalled();
+    });
 });

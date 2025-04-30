@@ -183,11 +183,10 @@ export class Keyboard {
 
         if (this.pauseEmu) {
             if (code === 103 /* lower case g */) {
-                this.pauseEmu = false;
-                if (this.goCallback) this.goCallback();
+                this.resumeEmulation();
                 return;
             } else if (code === 110 /* lower case n */) {
-                this.stepEmuWhenPaused = true;
+                this.requestStep();
                 if (this.goCallback) this.goCallback();
                 return;
             }
@@ -224,8 +223,7 @@ export class Keyboard {
             if (this.fastAsPossibleCallback) this.fastAsPossibleCallback();
         } else if (code === utils.keyCodes.END && evt.ctrlKey) {
             utils.noteEvent("keyboard", "press", "end");
-            this.pauseEmu = true;
-            if (this.stopCallback) this.stopCallback(false);
+            this.pauseEmulation();
         } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
             utils.noteEvent("keyboard", "press", "break");
             this.processor.setReset(true);
@@ -366,5 +364,40 @@ export class Keyboard {
         if (this.processor && this.processor.sysvia) {
             this.processor.sysvia.clearKeys();
         }
+    }
+
+    /**
+     * Called after each frame to determine if emulation should pause
+     * @returns {boolean} - True if emulation should pause
+     */
+    postFrameShouldPause() {
+        if (this.stepEmuWhenPaused) {
+            this.stepEmuWhenPaused = false;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Request a single step of the emulator
+     */
+    requestStep() {
+        this.stepEmuWhenPaused = true;
+    }
+
+    /**
+     * Pause the emulator
+     */
+    pauseEmulation() {
+        this.pauseEmu = true;
+        if (this.stopCallback) this.stopCallback(false);
+    }
+
+    /**
+     * Resume the emulator
+     */
+    resumeEmulation() {
+        this.pauseEmu = false;
+        if (this.goCallback) this.goCallback();
     }
 }
