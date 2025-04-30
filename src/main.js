@@ -690,7 +690,8 @@ function tapeSthClick(item) {
     updateUrl();
     popupLoading("Loading " + item);
     loadTapeImage(parsedQuery.tape).then(
-        function () {
+        function (tape) {
+            processor.acia.setTape(tape);
             loadingFinished();
         },
         function (err) {
@@ -925,10 +926,9 @@ async function loadDiscImage(discImage) {
             }
             return gdLoad({ name, id: discImage });
         }
-        case "b64data": {
-            const ssdData = atob(discImage);
-            return disc.discFor(processor.fdc, "disk.ssd", ssdData);
-        }
+        case "b64data":
+            return disc.discFor(processor.fdc, "disk.ssd", atob(discImage));
+
         case "data": {
             const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
             const { name, data } = utils.unzipDiscImage(arr);
@@ -948,10 +948,8 @@ async function loadDiscImage(discImage) {
             }
             return disc.discFor(processor.fdc, discImage, discData);
         }
-        default: {
-            const discData = disc.load("discs/" + discImage);
-            return disc.discFor(processor.fdc, discImage, discData);
-        }
+        default:
+            return disc.discFor(processor.fdc, discImage, await disc.load("discs/" + discImage));
     }
 }
 
@@ -962,17 +960,13 @@ async function loadTapeImage(tapeImage) {
 
     switch (schema) {
         case "|":
-        case "sth": {
-            const image = await tapeSth.fetch(tapeImage);
-            processor.acia.setTape(loadTapeFromData(tapeImage, image));
-            return;
-        }
+        case "sth":
+            return loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
 
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
             const { name, data } = utils.unzipDiscImage(arr);
-            processor.acia.setTape(loadTapeFromData(name, data));
-            return;
+            return loadTapeFromData(name, data);
         }
 
         case "http":
@@ -986,15 +980,11 @@ async function loadTapeImage(tapeImage) {
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
-            processor.acia.setTape(loadTapeFromData(tapeImage, tapeData));
-            return;
+            return loadTapeFromData(tapeImage, tapeData);
         }
 
-        default: {
-            const tape = await loadTape("tapes/" + tapeImage);
-            processor.acia.setTape(tape);
-            return;
-        }
+        default:
+            return await loadTape("tapes/" + tapeImage);
     }
 }
 
@@ -1304,7 +1294,7 @@ const startPromise = Promise.all([audioHandler.initialise(), processor.initialis
                 processor.fdc.loadDisc(1, disc);
             }),
         );
-    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
+    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape).then((tape) => processor.acia.setTape(tape)));
 
     function insertBasic(getBasicPromise, needsRun) {
         imageLoads.push(
