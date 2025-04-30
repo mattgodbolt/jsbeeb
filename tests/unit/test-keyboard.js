@@ -233,9 +233,9 @@ describe("Keyboard", () => {
         expect(mockSysvia.setKeyLayout).toHaveBeenCalledWith("gaming");
     });
 
-    test("registerKeyHandler should add a handler for a key", () => {
+    test("registerKeyHandler should add a handler for a key with Alt modifier", () => {
         const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(utils.keyCodes.Q, mockHandler);
+        keyboard.registerKeyHandler(utils.keyCodes.Q, mockHandler, { alt: true, ctrl: false });
 
         const event = {
             which: utils.keyCodes.Q,
@@ -250,6 +250,25 @@ describe("Keyboard", () => {
         keyboard.keyDown(event);
 
         expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.Q);
+    });
+
+    test("registerKeyHandler should add a handler for a key with Ctrl modifier", () => {
+        const mockHandler = vi.fn();
+        keyboard.registerKeyHandler(utils.keyCodes.E, mockHandler, { alt: false, ctrl: true });
+
+        const event = {
+            which: utils.keyCodes.E,
+            location: 0,
+            preventDefault: vi.fn(),
+            ctrlKey: true,
+            altKey: false,
+            shiftKey: false,
+        };
+
+        keyboard.setRunning(true);
+        keyboard.keyDown(event);
+
+        expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.E);
     });
 
     test("sendRawKeyboardToBBC should setup the keyboard input", () => {

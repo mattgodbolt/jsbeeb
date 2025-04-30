@@ -443,13 +443,73 @@ keyboard = new Keyboard({
     keyLayout,
     stopCallback: stop,
     showError,
-    checkPrinterWindow,
-    fastAsPossibleCallback: () => {
-        fastAsPossible = !fastAsPossible;
-    },
     goCallback: go,
     dbgr,
 });
+
+// Register default key handlers
+keyboard.registerKeyHandler(
+    utils.keyCodes.S,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "S");
+            stop(true);
+        }
+    },
+    { alt: true, ctrl: false },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.R,
+    (down) => {
+        if (down) window.location.reload();
+    },
+    { alt: true, ctrl: false },
+);
+
+// Register Ctrl key handlers
+keyboard.registerKeyHandler(
+    utils.keyCodes.HOME,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "home");
+            stop(true);
+        }
+    },
+    { alt: false, ctrl: true },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.INSERT,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "insert");
+            fastAsPossible = !fastAsPossible;
+        }
+    },
+    { alt: false, ctrl: true },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.END,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "end");
+            keyboard.pauseEmulation();
+        }
+    },
+    { alt: false, ctrl: true },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.B,
+    (down) => {
+        if (down) {
+            checkPrinterWindow();
+        }
+    },
+    { alt: false, ctrl: true },
+);
 
 // Setup key handlers
 document.onkeydown = (evt) => keyboard.keyDown(evt);

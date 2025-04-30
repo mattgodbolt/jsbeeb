@@ -19,9 +19,7 @@ export class Keyboard {
             keyLayout = "physical",
             stopCallback,
             goCallback,
-            checkPrinterWindow,
             showError,
-            fastAsPossibleCallback,
             dbgr,
         } = config;
 
@@ -34,9 +32,7 @@ export class Keyboard {
         // Callbacks
         this.stopCallback = stopCallback;
         this.goCallback = goCallback;
-        this.checkPrinterWindow = checkPrinterWindow;
         this.showError = showError;
-        this.fastAsPossibleCallback = fastAsPossibleCallback;
 
         // State
         this.emuKeyHandlers = {};
@@ -49,28 +45,6 @@ export class Keyboard {
         this.lastShiftLocation = 1;
         this.lastCtrlLocation = 1;
         this.lastAltLocation = 1;
-
-        // Setup default key handlers
-        this._setupDefaultKeyHandlers();
-    }
-
-    /**
-     * Set up the default key handlers for special emulator functions
-     * @private
-     */
-    _setupDefaultKeyHandlers() {
-        const keyCodes = utils.keyCodes;
-
-        this.emuKeyHandlers[keyCodes.S] = (down) => {
-            if (down) {
-                utils.noteEvent("keyboard", "press", "S");
-                this.stopCallback(true);
-            }
-        };
-
-        this.emuKeyHandlers[keyCodes.R] = (down) => {
-            if (down) window.location.reload();
-        };
     }
 
     /**
@@ -134,12 +108,22 @@ export class Keyboard {
     }
 
     /**
-     * Registers a handler for a specific key
+     * Registers a handler for a specific key with optional modifiers
      * @param {number} keyCode - The key code to handle
      * @param {Function} handler - The handler function
+     * @param {Object} [options] - Options for this handler
+     * @param {boolean} [options.alt=true] - Whether this handler requires the Alt key
+     * @param {boolean} [options.ctrl=false] - Whether this handler requires the Ctrl key
      */
-    registerKeyHandler(keyCode, handler) {
-        this.emuKeyHandlers[keyCode] = handler;
+    registerKeyHandler(keyCode, handler, options = { alt: true, ctrl: false }) {
+        // Generate a unique key that includes modifiers
+        const handlerKey = `${options.alt ? "alt:" : ""}${options.ctrl ? "ctrl:" : ""}${keyCode}`;
+        this.emuKeyHandlers[handlerKey] = {
+            handler,
+            alt: !!options.alt,
+            ctrl: !!options.ctrl,
+            keyCode,
+        };
     }
 
     /**
@@ -167,6 +151,24 @@ export class Keyboard {
      */
     isTextInputActive() {
         return this.document.activeElement && this.document.activeElement.id === "paste-text";
+    }
+
+    /**
+     * Find a matching key handler for the given key event
+     * @param {number} keyCode - The key code
+     * @param {boolean} altKey - Whether Alt is pressed
+     * @param {boolean} ctrlKey - Whether Ctrl is pressed
+     * @returns {Object|null} The handler object or null if none found
+     * @private
+     */
+    _findKeyHandler(keyCode, altKey, ctrlKey) {
+        // Try to find a handler with exact modifier match first
+        const exactModKey = `${altKey ? "alt:" : ""}${ctrlKey ? "ctrl:" : ""}${keyCode}`;
+        if (this.emuKeyHandlers[exactModKey]) {
+            return this.emuKeyHandlers[exactModKey];
+        }
+
+        return null;
     }
 
     /**
@@ -223,46 +225,41 @@ export class Keyboard {
         if (!this.running) return;
 
         const code = this.keyCode(evt);
+        evt.preventDefault();
 
-        // Handle special key combinations
-        if (evt.altKey) {
-            // Alt key combinations trigger custom handlers
-            const handler = this.emuKeyHandlers[code];
-            if (handler) {
-                handler(true, code);
-                evt.preventDefault();
-            }
-        } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
-            // Ctrl+Home: Stop emulation
-            utils.noteEvent("keyboard", "press", "home");
-            this.stopCallback(true);
-        } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
-            // Ctrl+Insert: Run as fast as possible
-            utils.noteEvent("keyboard", "press", "insert");
-            this.fastAsPossibleCallback();
-        } else if (code === utils.keyCodes.END && evt.ctrlKey) {
-            // Ctrl+End: Pause emulation
-            utils.noteEvent("keyboard", "press", "end");
-            this.pauseEmulation();
-        } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
+        // Special handling cases that we always want to keep within keyboard.js
+        const isSpecialHandled = this._handleSpecialKeys(code);
+        if (isSpecialHandled) return;
+
+        // Always pass the key to the BBC Micro (unless it was a special key)
+        this.processor.sysvia.keyDown(code, evt.shiftKey);
+
+        // Check for registered handlers
+        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        if (handler) {
+            handler.handler(true, code);
+        }
+    }
+
+    /**
+     * Handle special keys that must remain in keyboard.js
+     * @param {number} code - The key code
+     * @returns {boolean} True if the key was handled specially
+     * @private
+     */
+    _handleSpecialKeys(code) {
+        if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
             // F12/Break: Reset processor
             utils.noteEvent("keyboard", "press", "break");
             this.processor.setReset(true);
-            evt.preventDefault();
-        } else if (code === utils.keyCodes.B && evt.ctrlKey) {
-            // Ctrl+B: Open printer window and pass key to the BBC
-            this.processor.sysvia.keyDown(code, evt.shiftKey);
-            evt.preventDefault();
-            this.checkPrinterWindow();
+            return true;
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
             // Special CapsLock handling for Mac
             this.handleMacCapsLock();
-            evt.preventDefault();
-        } else {
-            // Pass all other keys to the BBC
-            this.processor.sysvia.keyDown(code, evt.shiftKey);
-            evt.preventDefault();
+            return true;
         }
+
+        return false;
     }
 
     /**
@@ -280,19 +277,24 @@ export class Keyboard {
         // No further special handling needed if not running
         if (!this.running) return;
 
-        // Handle special key combinations
-        if (evt.altKey) {
-            const handler = this.emuKeyHandlers[code];
-            if (handler) handler(false, code);
-        } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
+        evt.preventDefault();
+
+        // Handle special key cases
+        if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
             // Release reset on F12/Break key up
             this.processor.setReset(false);
+            return;
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
             // Special CapsLock handling for Mac
             this.handleMacCapsLock();
+            return;
         }
 
-        evt.preventDefault();
+        // Check for registered handlers
+        const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
+        if (handler) {
+            handler.handler(false, code);
+        }
     }
 
     /**
