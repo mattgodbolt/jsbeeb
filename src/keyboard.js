@@ -1,39 +1,54 @@
 "use strict";
 import * as utils from "./utils.js";
 
-// Stores modifier key states between events
-let lastShiftLocation = 1;
-let lastCtrlLocation = 1;
-let lastAltLocation = 1;
-const isMac =
-    typeof window !== "undefined" &&
-    window.navigator &&
-    window.navigator.platform &&
-    window.navigator.platform.indexOf("Mac") === 0;
+const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 
 /**
  * Keyboard class that handles all keyboard related functionality
  */
 export class Keyboard {
     /**
-     * Create a new Keyboard instance
-     * @param {Object} config - Configuration object
+     * Create a new Keyboard instance with specified configuration
+     * @param {Object} config - The configuration object
      */
     constructor(config) {
-        this.processor = config.processor;
-        this.audioHandler = config.audioHandler;
-        this.document = config.document;
+        const {
+            processor,
+            audioHandler,
+            document,
+            keyLayout = "physical",
+            stopCallback,
+            goCallback,
+            checkPrinterWindow,
+            showError,
+            fastAsPossibleCallback,
+            dbgr,
+        } = config;
+
+        // Core components
+        this.processor = processor;
+        this.audioHandler = audioHandler;
+        this.document = document;
+        this.dbgr = dbgr;
+
+        // Callbacks
+        this.stopCallback = stopCallback;
+        this.goCallback = goCallback;
+        this.checkPrinterWindow = checkPrinterWindow;
+        this.showError = showError;
+        this.fastAsPossibleCallback = fastAsPossibleCallback;
+
+        // State
         this.emuKeyHandlers = {};
         this.running = false;
         this.pauseEmu = false;
         this.stepEmuWhenPaused = false;
-        this.keyLayout = config.keyLayout || "physical";
-        this.stopCallback = config.stopCallback;
-        this.goCallback = config.goCallback;
-        this.checkPrinterWindow = config.checkPrinterWindow;
-        this.showError = config.showError;
-        this.fastAsPossibleCallback = config.fastAsPossibleCallback;
-        this.dbgr = config.dbgr;
+        this.keyLayout = keyLayout;
+
+        // Modifier key states
+        this.lastShiftLocation = 1;
+        this.lastCtrlLocation = 1;
+        this.lastAltLocation = 1;
 
         // Setup default key handlers
         this._setupDefaultKeyHandlers();
@@ -49,7 +64,7 @@ export class Keyboard {
         this.emuKeyHandlers[keyCodes.S] = (down) => {
             if (down) {
                 utils.noteEvent("keyboard", "press", "S");
-                if (this.stopCallback) this.stopCallback(true);
+                this.stopCallback(true);
             }
         };
 
@@ -72,54 +87,36 @@ export class Keyboard {
                 // keyUp events seem to pass location = 0 (Chrome)
                 switch (ret) {
                     case keyCodes.SHIFT:
-                        if (lastShiftLocation === 1) {
-                            return keyCodes.SHIFT_LEFT;
-                        } else {
-                            return keyCodes.SHIFT_RIGHT;
-                        }
-
+                        return this.lastShiftLocation === 1 ? keyCodes.SHIFT_LEFT : keyCodes.SHIFT_RIGHT;
                     case keyCodes.ALT:
-                        if (lastAltLocation === 1) {
-                            return keyCodes.ALT_LEFT;
-                        } else {
-                            return keyCodes.ALT_RIGHT;
-                        }
-
+                        return this.lastAltLocation === 1 ? keyCodes.ALT_LEFT : keyCodes.ALT_RIGHT;
                     case keyCodes.CTRL:
-                        if (lastCtrlLocation === 1) {
-                            return keyCodes.CTRL_LEFT;
-                        } else {
-                            return keyCodes.CTRL_RIGHT;
-                        }
+                        return this.lastCtrlLocation === 1 ? keyCodes.CTRL_LEFT : keyCodes.CTRL_RIGHT;
                 }
                 break;
             case 1:
                 switch (ret) {
                     case keyCodes.SHIFT:
-                        lastShiftLocation = 1;
+                        this.lastShiftLocation = 1;
                         return keyCodes.SHIFT_LEFT;
-
                     case keyCodes.ALT:
-                        lastAltLocation = 1;
+                        this.lastAltLocation = 1;
                         return keyCodes.ALT_LEFT;
-
                     case keyCodes.CTRL:
-                        lastCtrlLocation = 1;
+                        this.lastCtrlLocation = 1;
                         return keyCodes.CTRL_LEFT;
                 }
                 break;
             case 2:
                 switch (ret) {
                     case keyCodes.SHIFT:
-                        lastShiftLocation = 2;
+                        this.lastShiftLocation = 2;
                         return keyCodes.SHIFT_RIGHT;
-
                     case keyCodes.ALT:
-                        lastAltLocation = 2;
+                        this.lastAltLocation = 2;
                         return keyCodes.ALT_RIGHT;
-
                     case keyCodes.CTRL:
-                        lastCtrlLocation = 2;
+                        this.lastCtrlLocation = 2;
                         return keyCodes.CTRL_RIGHT;
                 }
                 break;
@@ -127,7 +124,6 @@ export class Keyboard {
                 switch (ret) {
                     case keyCodes.ENTER:
                         return utils.keyCodes.NUMPADENTER;
-
                     case keyCodes.DELETE:
                         return utils.keyCodes.NUMPAD_DECIMAL_POINT;
                 }
@@ -166,32 +162,48 @@ export class Keyboard {
     }
 
     /**
+     * Helper method to check if text input is active and we should ignore keyboard events
+     * @returns {boolean} True if text input is active
+     */
+    isTextInputActive() {
+        return this.document.activeElement && this.document.activeElement.id === "paste-text";
+    }
+
+    /**
      * Handles a key press event
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyPress(evt) {
-        if (this.document.activeElement && this.document.activeElement.id === "paste-text") return;
+        // Common key constants
+        const LOWERCASE_G = 103;
+        const LOWERCASE_N = 110;
+
+        // Early returns for common scenarios
+        if (this.isTextInputActive()) return;
         if (this.running || (!this.dbgr.enabled() && !this.pauseEmu)) return;
 
         const code = this.keyCode(evt);
 
-        if (this.dbgr.enabled() && code === 103 /* lower case g */) {
+        // Handle debugger 'g' key press
+        if (this.dbgr.enabled() && code === LOWERCASE_G) {
             this.dbgr.hide();
-            if (this.goCallback) this.goCallback();
+            this.goCallback();
             return;
         }
 
+        // Handle pause/step control keys
         if (this.pauseEmu) {
-            if (code === 103 /* lower case g */) {
+            if (code === LOWERCASE_G) {
                 this.resumeEmulation();
                 return;
-            } else if (code === 110 /* lower case n */) {
+            } else if (code === LOWERCASE_N) {
                 this.requestStep();
-                if (this.goCallback) this.goCallback();
+                this.goCallback();
                 return;
             }
         }
 
+        // Pass any other keys to the debugger if it's enabled
         if (this.dbgr.enabled()) {
             const handled = this.dbgr.keyPress(this.keyCode(evt));
             if (handled) evt.preventDefault();
@@ -203,41 +215,51 @@ export class Keyboard {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyDown(evt) {
-        if (this.audioHandler) this.audioHandler.tryResume();
-        if (this.document.activeElement && this.document.activeElement.id === "paste-text") return;
+        // Resume audio first (browsers often require user interaction to enable audio)
+        this.audioHandler.tryResume();
+
+        // Early returns for common scenarios
+        if (this.isTextInputActive()) return;
         if (!this.running) return;
 
         const code = this.keyCode(evt);
 
+        // Handle special key combinations
         if (evt.altKey) {
+            // Alt key combinations trigger custom handlers
             const handler = this.emuKeyHandlers[code];
             if (handler) {
                 handler(true, code);
                 evt.preventDefault();
             }
         } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
+            // Ctrl+Home: Stop emulation
             utils.noteEvent("keyboard", "press", "home");
-            if (this.stopCallback) this.stopCallback(true);
+            this.stopCallback(true);
         } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
+            // Ctrl+Insert: Run as fast as possible
             utils.noteEvent("keyboard", "press", "insert");
-            if (this.fastAsPossibleCallback) this.fastAsPossibleCallback();
+            this.fastAsPossibleCallback();
         } else if (code === utils.keyCodes.END && evt.ctrlKey) {
+            // Ctrl+End: Pause emulation
             utils.noteEvent("keyboard", "press", "end");
             this.pauseEmulation();
         } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
+            // F12/Break: Reset processor
             utils.noteEvent("keyboard", "press", "break");
             this.processor.setReset(true);
             evt.preventDefault();
         } else if (code === utils.keyCodes.B && evt.ctrlKey) {
-            // Ctrl-B turns on the printer, so we open a printer output
-            // window in addition to passing the keypress along to the beeb.
+            // Ctrl+B: Open printer window and pass key to the BBC
             this.processor.sysvia.keyDown(code, evt.shiftKey);
             evt.preventDefault();
-            if (this.checkPrinterWindow) this.checkPrinterWindow();
+            this.checkPrinterWindow();
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+            // Special CapsLock handling for Mac
             this.handleMacCapsLock();
             evt.preventDefault();
         } else {
+            // Pass all other keys to the BBC
             this.processor.sysvia.keyDown(code, evt.shiftKey);
             evt.preventDefault();
         }
@@ -248,18 +270,25 @@ export class Keyboard {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyUp(evt) {
-        if (this.document.activeElement && this.document.activeElement.id === "paste-text") return;
-        // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
+        // Early return for text input
+        if (this.isTextInputActive()) return;
+
+        // Always let the key ups come through to avoid sticky keys in the debugger
         const code = this.keyCode(evt);
-        if (this.processor && this.processor.sysvia) this.processor.sysvia.keyUp(code);
+        this.processor.sysvia.keyUp(code);
+
+        // No further special handling needed if not running
         if (!this.running) return;
 
+        // Handle special key combinations
         if (evt.altKey) {
             const handler = this.emuKeyHandlers[code];
             if (handler) handler(false, code);
         } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
+            // Release reset on F12/Break key up
             this.processor.setReset(false);
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+            // Special CapsLock handling for Mac
             this.handleMacCapsLock();
         }
 
@@ -267,27 +296,27 @@ export class Keyboard {
     }
 
     /**
-     * Special handling for Mac's Caps Lock key
+     * Special handling for Mac's Caps Lock key behavior
      */
     handleMacCapsLock() {
+        const CAPS_LOCK_DELAY = 100;
+
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
         this.processor.sysvia.keyDown(utils.keyCodes.CAPSLOCK);
 
         // Simulate a key release after a short delay
-        setTimeout(() => this.processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), 100);
+        setTimeout(() => this.processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (isMac && window.localStorage && !window.localStorage.getItem("warnedAboutRubbishMacs")) {
-            if (this.showError) {
-                this.showError(
-                    "handling caps lock on Mac OS X",
-                    "Mac OS X does not generate key up events for caps lock presses. " +
-                        "jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games " +
-                        " that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play " +
-                        "such a game, please see the documentation about remapping keys." +
-                        "Close this window to continue (you won't see this error again)",
-                );
-            }
+            this.showError(
+                "handling caps lock on Mac OS X",
+                `Mac OS X does not generate key up events for caps lock presses. 
+                jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games 
+                that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play 
+                such a game, please see the documentation about remapping keys.
+                Close this window to continue (you won't see this error again)`,
+            );
             window.localStorage.setItem("warnedAboutRubbishMacs", true);
         }
     }
@@ -301,7 +330,7 @@ export class Keyboard {
         let lastChar;
         let nextKeyMillis = 0;
         this.processor.sysvia.disableKeyboard();
-        const clocksPerSecond = (this.processor.cpuMultiplier * 2 * 1000 * 1000) | 0;
+        const clocksPerSecond = Math.floor(this.processor.cpuMultiplier * 2000000);
 
         if (checkCapsAndShiftLocks) {
             let toggleKey = null;
@@ -313,57 +342,52 @@ export class Keyboard {
             }
         }
 
-        const sendCharHook = this.processor.debugInstruction.add(
-            function nextCharHook() {
-                const millis =
-                    this.processor.cycleSeconds * 1000 + this.processor.currentCycles / (clocksPerSecond / 1000);
-                if (millis < nextKeyMillis) {
-                    return;
-                }
+        const sendCharHook = this.processor.debugInstruction.add(() => {
+            const millis = this.processor.cycleSeconds * 1000 + this.processor.currentCycles / (clocksPerSecond / 1000);
+            if (millis < nextKeyMillis) {
+                return;
+            }
 
-                if (lastChar && lastChar !== utils.BBC.SHIFT) {
-                    this.processor.sysvia.keyToggleRaw(lastChar);
-                }
+            if (lastChar && lastChar !== utils.BBC.SHIFT) {
+                this.processor.sysvia.keyToggleRaw(lastChar);
+            }
 
-                if (keysToSend.length === 0) {
-                    // Finished
-                    this.processor.sysvia.enableKeyboard();
-                    sendCharHook.remove();
-                    return;
-                }
+            if (keysToSend.length === 0) {
+                // Finished
+                this.processor.sysvia.enableKeyboard();
+                sendCharHook.remove();
+                return;
+            }
 
-                const ch = keysToSend[0];
-                const debounce = lastChar === ch;
-                lastChar = ch;
-                if (debounce) {
-                    lastChar = undefined;
-                    nextKeyMillis = millis + 30;
-                    return;
-                }
+            const ch = keysToSend[0];
+            const debounce = lastChar === ch;
+            lastChar = ch;
+            if (debounce) {
+                lastChar = undefined;
+                nextKeyMillis = millis + 30;
+                return;
+            }
 
-                let time = 50;
-                if (typeof lastChar === "number") {
-                    time = lastChar;
-                    lastChar = undefined;
-                } else {
-                    this.processor.sysvia.keyToggleRaw(lastChar);
-                }
+            let time = 50;
+            if (typeof lastChar === "number") {
+                time = lastChar;
+                lastChar = undefined;
+            } else {
+                this.processor.sysvia.keyToggleRaw(lastChar);
+            }
 
-                // remove first character
-                keysToSend.shift();
+            // remove first character
+            keysToSend.shift();
 
-                nextKeyMillis = millis + time;
-            }.bind(this),
-        );
+            nextKeyMillis = millis + time;
+        });
     }
 
     /**
      * Clears all pressed keys
      */
     clearKeys() {
-        if (this.processor && this.processor.sysvia) {
-            this.processor.sysvia.clearKeys();
-        }
+        this.processor.sysvia.clearKeys();
     }
 
     /**
@@ -390,7 +414,7 @@ export class Keyboard {
      */
     pauseEmulation() {
         this.pauseEmu = true;
-        if (this.stopCallback) this.stopCallback(false);
+        this.stopCallback(false);
     }
 
     /**
@@ -398,6 +422,6 @@ export class Keyboard {
      */
     resumeEmulation() {
         this.pauseEmu = false;
-        if (this.goCallback) this.goCallback();
+        this.goCallback();
     }
 }

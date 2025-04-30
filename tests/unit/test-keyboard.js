@@ -96,6 +96,28 @@ describe("Keyboard", () => {
         expect(keyboard.keyCode(normalEvent)).toBe(utils.keyCodes.A);
     });
 
+    test("keyCode should remember last modifier key locations", () => {
+        // First, set modifier locations to known values
+        keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 1 });
+        keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 1 });
+        keyboard.keyCode({ which: utils.keyCodes.ALT, location: 1 });
+
+        // When location = 0 (like in keyUp events), should return based on last location
+        expect(keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 0 })).toBe(utils.keyCodes.SHIFT_LEFT);
+        expect(keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 0 })).toBe(utils.keyCodes.CTRL_LEFT);
+        expect(keyboard.keyCode({ which: utils.keyCodes.ALT, location: 0 })).toBe(utils.keyCodes.ALT_LEFT);
+
+        // Change the locations to right side
+        keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 2 });
+        keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 2 });
+        keyboard.keyCode({ which: utils.keyCodes.ALT, location: 2 });
+
+        // Should now use the updated locations
+        expect(keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 0 })).toBe(utils.keyCodes.SHIFT_RIGHT);
+        expect(keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 0 })).toBe(utils.keyCodes.CTRL_RIGHT);
+        expect(keyboard.keyCode({ which: utils.keyCodes.ALT, location: 0 })).toBe(utils.keyCodes.ALT_RIGHT);
+    });
+
     test("keyDown should handle normal key press", () => {
         const event = {
             which: utils.keyCodes.A,
