@@ -3,19 +3,48 @@
  */
 
 /**
+ * Check if a value is defined (not null and not undefined)
+ * @param {*} value - The value to check
+ * @returns {boolean} True if the value is neither null nor undefined
+ */
+function isDefined(value) {
+    return value !== null && value !== undefined;
+}
+
+/**
+ * @typedef {'string'|'array'|'int'|'float'|'bool'} ParamType
+ */
+
+/**
+ * Parameter type enum to avoid string literals
+ * @enum {string}
+ */
+export const ParamTypes = {
+    /** String parameter (default) */
+    STRING: "string",
+    /** Array parameter (for parameters that can appear multiple times) */
+    ARRAY: "array",
+    /** Integer parameter */
+    INT: "int",
+    /** Float parameter */
+    FLOAT: "float",
+    /** Boolean parameter (true if present, regardless of value) */
+    BOOL: "bool",
+};
+
+/**
  * Parse a query string into an object
  * @param {string} queryString - The query string to parse
- * @param {string[]} [arrayParams=[]] - List of parameter names that should be treated as arrays
+ * @param {Object.<string, ParamType>} [paramTypes={}] - A map of parameter names to their types
  * @returns {Object} Object containing parsed query parameters
  */
-export function parseQueryString(queryString, arrayParams = []) {
+export function parseQueryString(queryString, paramTypes = {}) {
     if (!queryString) return {};
 
     // workaround for shonky python web server
     const cleanQueryString = queryString.endsWith("/") ? queryString.substring(0, queryString.length - 1) : queryString;
 
     const parsedQuery = {};
-    const arrayParamsSet = new Set(arrayParams);
 
     cleanQueryString.split("&").forEach(function (keyval) {
         if (!keyval) return;
@@ -25,14 +54,34 @@ export function parseQueryString(queryString, arrayParams = []) {
         let val = null;
         if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
 
-        // If this parameter should be treated as an array
-        if (arrayParamsSet.has(key)) {
-            if (!parsedQuery[key]) {
-                parsedQuery[key] = [];
-            }
-            parsedQuery[key].push(val);
-        } else {
-            parsedQuery[key] = val;
+        const paramType = paramTypes[key] || ParamTypes.STRING;
+
+        switch (paramType) {
+            case ParamTypes.ARRAY:
+                if (!parsedQuery[key]) {
+                    parsedQuery[key] = [];
+                }
+                parsedQuery[key].push(val);
+                break;
+            case ParamTypes.INT:
+                if (val !== undefined) {
+                    const parsed = parseInt(val, 10);
+                    parsedQuery[key] = isNaN(parsed) ? 0 : parsed;
+                }
+                break;
+            case ParamTypes.FLOAT:
+                if (val !== undefined) {
+                    const parsed = parseFloat(val);
+                    parsedQuery[key] = isNaN(parsed) ? 0 : parsed;
+                }
+                break;
+            case ParamTypes.BOOL:
+                parsedQuery[key] = true; // Presence of parameter means true
+                break;
+            case ParamTypes.STRING:
+            default:
+                parsedQuery[key] = val;
+                break;
         }
     });
 
@@ -43,28 +92,47 @@ export function parseQueryString(queryString, arrayParams = []) {
  * Build a URL string from base URL and query parameters
  * @param {string} baseUrl - The base URL (without query string)
  * @param {Object} parsedQuery - Object containing query parameters
+ * @param {Object.<string, ParamType>} [paramTypes={}] - Object mapping parameter names to their types
  * @returns {string} The complete URL with query parameters
  */
-export function buildUrlFromParams(baseUrl, parsedQuery) {
+export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
     let url = baseUrl;
     let sep = "?";
 
     Object.entries(parsedQuery).forEach(([key, value]) => {
         if (key.length === 0) return;
 
-        // Handle array parameters
-        if (Array.isArray(value)) {
-            value.forEach((val) => {
-                if (val !== null && val !== undefined) {
-                    url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(val);
+        const paramType = paramTypes[key] || (Array.isArray(value) ? ParamTypes.ARRAY : ParamTypes.STRING);
+
+        switch (paramType) {
+            case ParamTypes.ARRAY:
+                // Handle array parameters
+                if (Array.isArray(value)) {
+                    value.forEach((val) => {
+                        if (isDefined(val)) {
+                            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(val);
+                            sep = "&";
+                        }
+                    });
+                }
+                break;
+            case ParamTypes.BOOL:
+                // For boolean params, only add the key without value if true
+                if (value === true) {
+                    url += sep + encodeURIComponent(key);
                     sep = "&";
                 }
-            });
-        }
-        // Handle regular parameters
-        else if (value) {
-            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
-            sep = "&";
+                break;
+            case ParamTypes.INT:
+            case ParamTypes.FLOAT:
+            case ParamTypes.STRING:
+            default:
+                // Include the parameter if it has a value (including zero)
+                if (isDefined(value) && value !== "") {
+                    url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
+                    sep = "&";
+                }
+                break;
         }
     });
 
@@ -129,23 +197,17 @@ export function processAutobootParams(parsedQuery) {
     let needsAutoboot = false;
     let autoType = "";
 
-    Object.entries(parsedQuery).forEach(([key, val]) => {
-        switch (key) {
-            case "autoboot":
-                needsAutoboot = "boot";
-                break;
-            case "autochain":
-                needsAutoboot = "chain";
-                break;
-            case "autorun":
-                needsAutoboot = "run";
-                break;
-            case "autotype":
-                needsAutoboot = "type";
-                autoType = val;
-                break;
-        }
-    });
+    // Handle both new boolean values and legacy string values for backward compatibility
+    if (parsedQuery.autoboot === true || isDefined(parsedQuery.autoboot)) {
+        needsAutoboot = "boot";
+    } else if (parsedQuery.autochain === true || isDefined(parsedQuery.autochain)) {
+        needsAutoboot = "chain";
+    } else if (parsedQuery.autorun === true || isDefined(parsedQuery.autorun)) {
+        needsAutoboot = "run";
+    } else if (isDefined(parsedQuery.autotype)) {
+        needsAutoboot = "type";
+        autoType = parsedQuery.autotype;
+    }
 
     return { needsAutoboot, autoType };
 }

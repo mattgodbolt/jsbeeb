@@ -30,6 +30,7 @@ import {
     guessModelFromUrl as guessModelFromUrlHelper,
     parseMediaParams,
     buildUrlFromParams,
+    ParamTypes,
 } from "./url-params.js";
 
 let processor;
@@ -56,8 +57,42 @@ if (typeof starCat === "function") {
 // Build the query string from the URL
 const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
-// Parse the query string, treating 'rom' as an array parameter
-let parsedQuery = parseQueryString(queryString, ["rom"]);
+
+// Define parameter types
+const paramTypes = {
+    // Array parameters
+    rom: ParamTypes.ARRAY,
+
+    // Boolean parameters
+    embed: ParamTypes.BOOL,
+    fasttape: ParamTypes.BOOL,
+    noseek: ParamTypes.BOOL,
+    debug: ParamTypes.BOOL,
+    verbose: ParamTypes.BOOL,
+    autoboot: ParamTypes.BOOL,
+    autochain: ParamTypes.BOOL,
+    autorun: ParamTypes.BOOL,
+
+    // Numeric parameters
+    speed: ParamTypes.INT,
+    stationId: ParamTypes.INT,
+    frameSkip: ParamTypes.INT,
+    audiofilterfreq: ParamTypes.FLOAT,
+    audiofilterq: ParamTypes.FLOAT,
+    cpuMultiplier: ParamTypes.FLOAT,
+
+    // String parameters (these are the default but listed for clarity)
+    model: ParamTypes.STRING,
+    disc: ParamTypes.STRING,
+    disc1: ParamTypes.STRING,
+    disc2: ParamTypes.STRING,
+    tape: ParamTypes.STRING,
+    keyLayout: ParamTypes.STRING,
+    autotype: ParamTypes.STRING,
+};
+
+// Parse the query string with parameter types
+let parsedQuery = parseQueryString(queryString, paramTypes);
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
@@ -92,42 +127,21 @@ if (Array.isArray(parsedQuery.rom)) {
         if (romPath) extraRoms.push(romPath);
     });
 }
-
-// Key layout
 if (parsedQuery.keyLayout) {
     keyLayout = (parsedQuery.keyLayout + "").toLowerCase();
 }
-
-// Embed mode
-if (parsedQuery.embed !== undefined) {
+if (parsedQuery.embed) {
     $(".embed-hide").hide();
     $("body").css("background-color", "transparent");
 }
 
-// Tape and seek settings
-if (parsedQuery.fasttape !== undefined) {
-    fastTape = true;
-}
+fastTape = !!parsedQuery.fasttape;
+noSeek = !!parsedQuery.noseek;
 
-if (parsedQuery.noseek !== undefined) {
-    noSeek = true;
-}
-
-// Audio filter settings
-if (parsedQuery.audiofilterfreq) {
-    audioFilterFreq = Number(parsedQuery.audiofilterfreq);
-}
-
-if (parsedQuery.audiofilterq) {
-    audioFilterQ = Number(parsedQuery.audiofilterq);
-}
-
-// Network settings
-if (parsedQuery.stationId) {
-    stationId = Number(parsedQuery.stationId);
-}
-
-if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
+if (parsedQuery.audiofilterfreq !== undefined) audioFilterFreq = parsedQuery.audiofilterfreq;
+if (parsedQuery.audiofilterq !== undefined) audioFilterQ = parsedQuery.audiofilterq;
+if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
+if (parsedQuery.frameSkip !== undefined) frameSkip = parsedQuery.frameSkip;
 
 const printerPort = {
     outputStrobe: function (level, output) {
@@ -242,8 +256,9 @@ sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
     div.css({ bottom: -img.height() });
 });
 
-if (parsedQuery.cpuMultiplier) {
-    cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
+// cpuMultiplier is now a float parameter, no need for conversion
+if (parsedQuery.cpuMultiplier !== null && parsedQuery.cpuMultiplier !== undefined) {
+    cpuMultiplier = parsedQuery.cpuMultiplier;
     console.log("CPU multiplier set to " + cpuMultiplier);
 }
 const clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
@@ -841,7 +856,7 @@ function autoRunBasic() {
 
 function updateUrl() {
     const baseUrl = window.location.origin + window.location.pathname;
-    const url = buildUrlFromParams(baseUrl, parsedQuery);
+    const url = buildUrlFromParams(baseUrl, parsedQuery, paramTypes);
     window.history.pushState(null, null, url);
 }
 
