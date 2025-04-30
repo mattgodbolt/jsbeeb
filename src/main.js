@@ -23,6 +23,7 @@ import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
+import { Keyboard } from "./keyboard.js";
 import {
     parseQueryString,
     processKeyboardParams,
@@ -103,13 +104,10 @@ let cpuMultiplier = 1;
 let fastAsPossible = false;
 let fastTape = false;
 let noSeek = false;
-let pauseEmu = false;
-let stepEmuWhenPaused = false;
 let audioFilterFreq = 7000;
 let audioFilterQ = 5;
 let stationId = 101;
 let econet = null;
-const isMac = window.navigator.platform.indexOf("Mac") === 0;
 
 // Parse disc and tape images from query parameters
 const { discImage: queryDiscImage, secondDiscImage: querySecondDisc } = parseMediaParams(parsedQuery);
@@ -220,7 +218,7 @@ const config = new Config(function (changed) {
     if (changed.keyLayout) {
         window.localStorage.keyLayout = changed.keyLayout;
         emulationConfig.keyLayout = changed.keyLayout;
-        processor.updateKeyLayout();
+        keyboard.setKeyLayout(changed.keyLayout);
     }
 });
 
@@ -286,197 +284,9 @@ if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
 
-let lastShiftLocation = 1;
-let lastCtrlLocation = 1;
-let lastAltLocation = 1;
-
 dbgr = new Debugger(video);
 
 $(".initially-hidden").removeClass("initially-hidden");
-
-function keyCode(evt) {
-    const ret = evt.which || evt.charCode || evt.keyCode;
-
-    const keyCodes = utils.keyCodes;
-
-    switch (evt.location) {
-        default:
-            // keyUp events seem to pass location = 0 (Chrome)
-            switch (ret) {
-                case keyCodes.SHIFT:
-                    if (lastShiftLocation === 1) {
-                        return keyCodes.SHIFT_LEFT;
-                    } else {
-                        return keyCodes.SHIFT_RIGHT;
-                    }
-
-                case keyCodes.ALT:
-                    if (lastAltLocation === 1) {
-                        return keyCodes.ALT_LEFT;
-                    } else {
-                        return keyCodes.ALT_RIGHT;
-                    }
-
-                case keyCodes.CTRL:
-                    if (lastCtrlLocation === 1) {
-                        return keyCodes.CTRL_LEFT;
-                    } else {
-                        return keyCodes.CTRL_RIGHT;
-                    }
-            }
-            break;
-        case 1:
-            switch (ret) {
-                case keyCodes.SHIFT:
-                    lastShiftLocation = 1;
-                    return keyCodes.SHIFT_LEFT;
-
-                case keyCodes.ALT:
-                    lastAltLocation = 1;
-                    return keyCodes.ALT_LEFT;
-
-                case keyCodes.CTRL:
-                    lastCtrlLocation = 1;
-                    return keyCodes.CTRL_LEFT;
-            }
-            break;
-        case 2:
-            switch (ret) {
-                case keyCodes.SHIFT:
-                    lastShiftLocation = 2;
-                    return keyCodes.SHIFT_RIGHT;
-
-                case keyCodes.ALT:
-                    lastAltLocation = 2;
-                    return keyCodes.ALT_RIGHT;
-
-                case keyCodes.CTRL:
-                    lastCtrlLocation = 2;
-                    return keyCodes.CTRL_RIGHT;
-            }
-            break;
-        case 3: // numpad
-            switch (ret) {
-                case keyCodes.ENTER:
-                    return utils.keyCodes.NUMPADENTER;
-
-                case keyCodes.DELETE:
-                    return utils.keyCodes.NUMPAD_DECIMAL_POINT;
-            }
-            break;
-    }
-
-    return ret;
-}
-
-function keyPress(evt) {
-    if (document.activeElement.id === "paste-text") return;
-    if (running || (!dbgr.enabled() && !pauseEmu)) return;
-    const code = keyCode(evt);
-    if (dbgr.enabled() && code === 103 /* lower case g */) {
-        dbgr.hide();
-        go();
-        return;
-    }
-    if (pauseEmu) {
-        if (code === 103 /* lower case g */) {
-            pauseEmu = false;
-            go();
-            return;
-        } else if (code === 110 /* lower case n */) {
-            stepEmuWhenPaused = true;
-            go();
-            return;
-        }
-    }
-    const handled = dbgr.keyPress(keyCode(evt));
-    if (handled) evt.preventDefault();
-}
-
-emuKeyHandlers[utils.keyCodes.S] = function (down) {
-    if (down) {
-        utils.noteEvent("keyboard", "press", "S");
-        stop(true);
-    }
-};
-emuKeyHandlers[utils.keyCodes.R] = function (down) {
-    if (down) window.location.reload();
-};
-
-function keyDown(evt) {
-    audioHandler.tryResume();
-    if (document.activeElement.id === "paste-text") return;
-    if (!running) return;
-    const code = keyCode(evt);
-    if (evt.altKey) {
-        const handler = emuKeyHandlers[code];
-        if (handler) {
-            handler(true, code);
-            evt.preventDefault();
-        }
-    } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
-        utils.noteEvent("keyboard", "press", "home");
-        stop(true);
-    } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
-        utils.noteEvent("keyboard", "press", "insert");
-        fastAsPossible = !fastAsPossible;
-    } else if (code === utils.keyCodes.END && evt.ctrlKey) {
-        utils.noteEvent("keyboard", "press", "end");
-        pauseEmu = true;
-        stop(false);
-    } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-        utils.noteEvent("keyboard", "press", "break");
-        processor.setReset(true);
-        evt.preventDefault();
-    } else if (code === utils.keyCodes.B && evt.ctrlKey) {
-        // Ctrl-B turns on the printer, so we open a printer output
-        // window in addition to passing the keypress along to the beeb.
-        processor.sysvia.keyDown(code, evt.shiftKey);
-        evt.preventDefault();
-        checkPrinterWindow();
-    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
-        handleMacCapsLock();
-        evt.preventDefault();
-    } else {
-        processor.sysvia.keyDown(code, evt.shiftKey);
-        evt.preventDefault();
-    }
-}
-
-function keyUp(evt) {
-    if (document.activeElement.id === "paste-text") return;
-    // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
-    const code = keyCode(evt);
-    if (processor && processor.sysvia) processor.sysvia.keyUp(code);
-    if (!running) return;
-    if (evt.altKey) {
-        const handler = emuKeyHandlers[code];
-        if (handler) handler(false, code);
-    } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-        processor.setReset(false);
-    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
-        handleMacCapsLock();
-    }
-    evt.preventDefault();
-}
-
-function handleMacCapsLock() {
-    // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
-    // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
-    processor.sysvia.keyDown(utils.keyCodes.CAPSLOCK);
-    setTimeout(() => processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), 100);
-    if (!window.localStorage.getItem("warnedAboutRubbishMacs")) {
-        showError(
-            "handling caps lock on Mac OS X",
-            "Mac OS X does not generate key up events for caps lock presses. " +
-                "jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games " +
-                " that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play " +
-                "such a game, please see the documentation about remapping keys." +
-                "Close this window to continue (you won't see this error again)",
-        );
-        window.localStorage.setItem("warnedAboutRubbishMacs", true);
-    }
-}
 
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
 const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
@@ -541,7 +351,7 @@ $cub.on("mousemove mousedown mouseup", function (evt) {
 });
 
 $(window).blur(function () {
-    if (processor.sysvia) processor.sysvia.clearKeys();
+    keyboard.clearKeys();
 });
 
 $("#fs").click(function (event) {
@@ -549,9 +359,7 @@ $("#fs").click(function (event) {
     event.preventDefault();
 });
 
-document.onkeydown = keyDown;
-document.onkeypress = keyPress;
-document.onkeyup = keyUp;
+let keyboard; // This will be initialized after the processor is created
 
 $("#debug-pause").click(() => stop(true));
 $("#debug-play").click(() => {
@@ -626,6 +434,27 @@ processor = new Cpu6502(
     emulationConfig,
     econet,
 );
+
+// Initialize keyboard now that processor exists
+keyboard = new Keyboard({
+    processor,
+    audioHandler,
+    document,
+    keyLayout,
+    stopCallback: stop,
+    showError,
+    checkPrinterWindow,
+    fastAsPossibleCallback: () => {
+        fastAsPossible = !fastAsPossible;
+    },
+    goCallback: go,
+    dbgr,
+});
+
+// Setup key handlers
+document.onkeydown = (evt) => keyboard.keyDown(evt);
+document.onkeypress = (evt) => keyboard.keyPress(evt);
+document.onkeyup = (evt) => keyboard.keyUp(evt);
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
@@ -757,59 +586,11 @@ $("#sth-filter").on("change keyup", function () {
 });
 
 function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
-    let lastChar;
-    let nextKeyMillis = 0;
-    processor.sysvia.disableKeyboard();
-
-    if (checkCapsAndShiftLocks) {
-        let toggleKey = null;
-        if (!processor.sysvia.capsLockLight) toggleKey = BBC.CAPSLOCK;
-        else if (processor.sysvia.shiftLockLight) toggleKey = BBC.SHIFTLOCK;
-        if (toggleKey) {
-            keysToSend.unshift(toggleKey);
-            keysToSend.push(toggleKey);
-        }
+    if (keyboard) {
+        keyboard.sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks);
+    } else {
+        console.warn("Tried to send keys before keyboard was initialized");
     }
-
-    const sendCharHook = processor.debugInstruction.add(function nextCharHook() {
-        const millis = processor.cycleSeconds * 1000 + processor.currentCycles / (clocksPerSecond / 1000);
-        if (millis < nextKeyMillis) {
-            return;
-        }
-
-        if (lastChar && lastChar !== utils.BBC.SHIFT) {
-            processor.sysvia.keyToggleRaw(lastChar);
-        }
-
-        if (keysToSend.length === 0) {
-            // Finished
-            processor.sysvia.enableKeyboard();
-            sendCharHook.remove();
-            return;
-        }
-
-        const ch = keysToSend[0];
-        const debounce = lastChar === ch;
-        lastChar = ch;
-        if (debounce) {
-            lastChar = undefined;
-            nextKeyMillis = millis + 30;
-            return;
-        }
-
-        let time = 50;
-        if (typeof lastChar === "number") {
-            time = lastChar;
-            lastChar = undefined;
-        } else {
-            processor.sysvia.keyToggleRaw(lastChar);
-        }
-
-        // remove first character
-        keysToSend.shift();
-
-        nextKeyMillis = millis + time;
-    });
 }
 
 function autoboot(image) {
@@ -1505,9 +1286,9 @@ function draw(now) {
             dbgr.debug(processor.pc);
             throw e;
         }
-        if (stepEmuWhenPaused) {
+        if (keyboard.stepEmuWhenPaused) {
             stop(false);
-            stepEmuWhenPaused = false;
+            keyboard.stepEmuWhenPaused = false;
         }
     }
     last = now;
@@ -1543,12 +1324,14 @@ function updateDebugButtons() {
 function go() {
     audioHandler.unmute();
     running = true;
+    keyboard.setRunning(true);
     updateDebugButtons();
     run();
 }
 
 function stop(debug) {
     running = false;
+    keyboard.setRunning(false);
     processor.stop();
     if (debug) dbgr.debug(processor.pc);
     audioHandler.mute();
