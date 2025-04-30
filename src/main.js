@@ -971,7 +971,8 @@ async function loadTapeImage(tapeImage) {
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
             const { name, data } = utils.unzipDiscImage(arr);
-            return processor.acia.setTape(loadTapeFromData(name, data));
+            processor.acia.setTape(loadTapeFromData(name, data));
+            return;
         }
 
         case "http":
