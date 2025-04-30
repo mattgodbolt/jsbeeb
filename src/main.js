@@ -23,6 +23,14 @@ import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
+import {
+    parseQueryString,
+    updateUrl as updateUrlState,
+    processKeyboardParams,
+    processAutobootParams,
+    guessModelFromUrl as guessModelFromUrlHelper,
+    parseMediaParams,
+} from "./url-params.js";
 
 let processor;
 let video;
@@ -45,11 +53,9 @@ if (typeof starCat === "function") {
         discImage = availableImages[0].file;
     }
 }
-let queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
-let parsedQuery = {};
-let needsAutoboot = false;
-let autoType = "";
+let parsedQuery = parseQueryString();
+let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
 const BBC = utils.BBC;
@@ -67,96 +73,48 @@ let stationId = 101;
 let econet = null;
 const isMac = window.navigator.platform.indexOf("Mac") === 0;
 
-if (queryString) {
-    if (queryString[queryString.length - 1] === "/")
-        // workaround for shonky python web server
-        queryString = queryString.substring(0, queryString.length - 1);
-    queryString.split("&").forEach(function (keyval) {
-        const keyAndVal = keyval.split("=");
-        const key = decodeURIComponent(keyAndVal[0]);
-        let val = null;
-        if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
-        parsedQuery[key] = val;
+// Parse disc and tape images from query parameters
+const { discImage: queryDiscImage, secondDiscImage: querySecondDisc } = parseMediaParams(parsedQuery);
 
-        // eg KEY.CAPSLOCK=CTRL
-        let bbcKey;
-        if (key.toUpperCase().indexOf("KEY.") === 0) {
-            bbcKey = val.toUpperCase();
+// Only assign if values are provided
+if (queryDiscImage) discImage = queryDiscImage;
+if (querySecondDisc) secondDiscImage = querySecondDisc;
 
-            if (BBC[bbcKey]) {
-                const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
-                if (keyCodes[nativeKey]) {
-                    console.log("mapping " + nativeKey + " to " + bbcKey);
-                    utils.userKeymap.push({ native: nativeKey, bbc: bbcKey });
-                } else {
-                    console.log("unknown key: " + nativeKey);
-                }
-            } else {
-                console.log("unknown BBC key: " + val);
-            }
-        } else if (key.indexOf("GP.") === 0) {
-            // gamepad mapping
-            // eg ?GP.FIRE2=RETURN
-            const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
-            gamepad.remap(gamepadKey, val.toUpperCase());
-        } else {
-            switch (key) {
-                case "LEFT":
-                case "RIGHT":
-                case "UP":
-                case "DOWN":
-                case "FIRE":
-                    gamepad.remap(key, val.toUpperCase());
-                    break;
-                case "autoboot":
-                    needsAutoboot = "boot";
-                    break;
-                case "autochain":
-                    needsAutoboot = "chain";
-                    break;
-                case "autorun":
-                    needsAutoboot = "run";
-                    break;
-                case "autotype":
-                    needsAutoboot = "type";
-                    autoType = val;
-                    break;
-                case "keyLayout":
-                    keyLayout = (val + "").toLowerCase();
-                    break;
-                case "disc":
-                case "disc1":
-                    discImage = val;
-                    break;
-                case "rom":
-                    extraRoms.push(val);
-                    break;
-                case "disc2":
-                    secondDiscImage = val;
-                    break;
-                case "embed":
-                    $(".embed-hide").hide();
-                    $("body").css("background-color", "transparent");
-                    break;
-                case "fasttape":
-                    fastTape = true;
-                    break;
-                case "noseek":
-                    noSeek = true;
-                    break;
-                case "audiofilterfreq":
-                    audioFilterFreq = Number(val);
-                    break;
-                case "audiofilterq":
-                    audioFilterQ = Number(val);
-                    break;
-                case "stationId":
-                    stationId = Number(val);
-                    break;
-            }
-        }
-    });
-}
+// Process keyboard mappings
+parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
+
+// Handle other query parameters
+Object.entries(parsedQuery).forEach(([key, val]) => {
+    if (!val) return;
+
+    switch (key) {
+        case "keyLayout":
+            keyLayout = (val + "").toLowerCase();
+            break;
+        case "rom":
+            extraRoms.push(val);
+            break;
+        case "embed":
+            $(".embed-hide").hide();
+            $("body").css("background-color", "transparent");
+            break;
+        case "fasttape":
+            fastTape = true;
+            break;
+        case "noseek":
+            noSeek = true;
+            break;
+        case "audiofilterfreq":
+            audioFilterFreq = Number(val);
+            break;
+        case "audiofilterq":
+            audioFilterQ = Number(val);
+            break;
+        case "stationId":
+            stationId = Number(val);
+            break;
+    }
+});
 
 if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
 
@@ -871,15 +829,8 @@ function autoRunBasic() {
 }
 
 function updateUrl() {
-    let url = window.location.origin + window.location.pathname;
-    let sep = "?";
-    $.each(parsedQuery, function (key, value) {
-        if (key.length > 0 && value) {
-            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
-            sep = "&";
-        }
-    });
-    window.history.pushState(null, null, url);
+    // Call the imported function
+    updateUrlState(parsedQuery);
 }
 
 const $errorDialog = $("#error-dialog");
@@ -1233,9 +1184,7 @@ $("#soft-reset").click(function (event) {
 });
 
 function guessModelFromUrl() {
-    if (window.location.hostname.indexOf("bbc") === 0) return "B-DFS1.2";
-    if (window.location.hostname.indexOf("master") === 0) return "Master";
-    return "B-DFS1.2";
+    return guessModelFromUrlHelper();
 }
 
 $("#tape-menu a").on("click", function (e) {

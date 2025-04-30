@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build and Test Commands
 
-- `npm start` - Start development server
+- `npm start` - Start development server (IMPORTANT: Never run this command directly; ask the user to start the server as needed)
 - `npm run build` - Build production version
 - `npm run lint` - Run ESLint
 - `npm run lint-fix` - Run ESLint with auto-fix
