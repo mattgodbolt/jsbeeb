@@ -690,7 +690,8 @@ function tapeSthClick(item) {
     updateUrl();
     popupLoading("Loading " + item);
     loadTapeImage(parsedQuery.tape).then(
-        function () {
+        function (tape) {
+            processor.acia.setTape(tape);
             loadingFinished();
         },
         function (err) {
@@ -897,13 +898,13 @@ function splitImage(image) {
     return { image: image, schema: schema };
 }
 
-function loadDiscImage(discImage) {
+async function loadDiscImage(discImage) {
     if (!discImage) return Promise.resolve(null);
     const split = splitImage(discImage);
     discImage = split.image;
     const schema = split.schema;
     if (schema[0] === "!" || schema === "local") {
-        return Promise.resolve(disc.localDisc(processor.fdc, discImage));
+        return disc.localDisc(processor.fdc, discImage);
     }
     // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
     // Consider:
@@ -911,78 +912,80 @@ function loadDiscImage(discImage) {
     //   to load the modified disc on load.
     // * popping up a message that notes the disc has changed, and offers a way to make a local image
     // * Dialog box (ugh) saying "is this ok?"
-    if (schema === "|" || schema === "sth") {
-        return discSth.fetch(discImage).then(function (discData) {
-            return disc.discFor(processor.fdc, discImage, discData);
-        });
-    }
-    if (schema === "gd") {
-        const splat = discImage.match(/([^/]+)\/?(.*)/);
-        let name = "(unknown)";
-        if (splat) {
-            discImage = splat[1];
-            name = splat[2];
+    switch (schema) {
+        case "|":
+        case "sth":
+            return disc.discFor(processor.fdc, discImage, await discSth.fetch(discImage));
+
+        case "gd": {
+            const splat = discImage.match(/([^/]+)\/?(.*)/);
+            let name = "(unknown)";
+            if (splat) {
+                discImage = splat[1];
+                name = splat[2];
+            }
+            return gdLoad({ name, id: discImage });
         }
-        return gdLoad({ name, id: discImage });
-    }
-    if (schema === "b64data") {
-        const ssdData = atob(discImage);
-        discImage = "disk.ssd";
-        return Promise.resolve(disc.discFor(processor.fdc, discImage, ssdData));
-    }
-    if (schema === "data") {
-        const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-        const unzipped = utils.unzipDiscImage(arr);
-        const discData = unzipped.data;
-        discImage = unzipped.name;
-        return Promise.resolve(disc.discFor(processor.fdc, discImage, discData));
-    }
-    if (schema === "http" || schema === "https" || schema === "file") {
-        return utils.loadData(schema + "://" + discImage).then(function (discData) {
+        case "b64data":
+            return disc.discFor(processor.fdc, "disk.ssd", atob(discImage));
+
+        case "data": {
+            const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
+            const { name, data } = utils.unzipDiscImage(arr);
+            return disc.discFor(processor.fdc, name, data);
+        }
+        case "http":
+        case "https":
+        case "file": {
+            const asUrl = `${schema}://${discImage}`;
+            // url may end in query params etc, which can upset the DSD/SSD etc detection on the extension.
+            discImage = new URL(asUrl).pathname;
+            let discData = await utils.loadData(asUrl);
             if (/\.zip/i.test(discImage)) {
                 const unzipped = utils.unzipDiscImage(discData);
                 discData = unzipped.data;
                 discImage = unzipped.name;
             }
             return disc.discFor(processor.fdc, discImage, discData);
-        });
+        }
+        default:
+            return disc.discFor(processor.fdc, discImage, await disc.load("discs/" + discImage));
     }
-
-    return disc.load("discs/" + discImage).then(function (discData) {
-        return disc.discFor(processor.fdc, discImage, discData);
-    });
 }
 
-function loadTapeImage(tapeImage) {
+async function loadTapeImage(tapeImage) {
     const split = splitImage(tapeImage);
     tapeImage = split.image;
     const schema = split.schema;
 
-    if (schema === "|" || schema === "sth") {
-        return tapeSth.fetch(tapeImage).then(function (image) {
-            processor.acia.setTape(loadTapeFromData(tapeImage, image));
-        });
-    }
-    if (schema === "data") {
-        const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-        const unzipped = utils.unzipDiscImage(arr);
-        return Promise.resolve(processor.acia.setTape(loadTapeFromData(unzipped.name, unzipped.data)));
-    }
+    switch (schema) {
+        case "|":
+        case "sth":
+            return loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
 
-    if (schema === "http" || schema === "https") {
-        return utils.loadData(schema + "://" + tapeImage).then(function (tapeData) {
+        case "data": {
+            const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
+            const { name, data } = utils.unzipDiscImage(arr);
+            return loadTapeFromData(name, data);
+        }
+
+        case "http":
+        case "https": {
+            const asUrl = `${schema}://${tapeImage}`;
+            // url may end in query params etc, which can upset file handling
+            tapeImage = new URL(asUrl).pathname;
+            let tapeData = await utils.loadData(asUrl);
             if (/\.zip/i.test(tapeImage)) {
                 const unzipped = utils.unzipDiscImage(tapeData);
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
-            processor.acia.setTape(loadTapeFromData(tapeImage, tapeData));
-        });
-    }
+            return loadTapeFromData(tapeImage, tapeData);
+        }
 
-    return loadTape("tapes/" + tapeImage).then(function (tape) {
-        processor.acia.setTape(tape);
-    });
+        default:
+            return await loadTape("tapes/" + tapeImage);
+    }
 }
 
 $("#disc_load").on("change", function (evt) {
@@ -1291,7 +1294,7 @@ const startPromise = Promise.all([audioHandler.initialise(), processor.initialis
                 processor.fdc.loadDisc(1, disc);
             }),
         );
-    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
+    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape).then((tape) => processor.acia.setTape(tape)));
 
     function insertBasic(getBasicPromise, needsRun) {
         imageLoads.push(
