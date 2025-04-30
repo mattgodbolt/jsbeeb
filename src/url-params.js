@@ -95,6 +95,22 @@ export function parseQueryString(queryString, paramTypes = {}) {
  * @param {Object.<string, ParamType>} [paramTypes={}] - Object mapping parameter names to their types
  * @returns {string} The complete URL with query parameters
  */
+/**
+ * Append a parameter to the URL
+ * @param {string} url - Current URL
+ * @param {string} sep - Current separator (? or &)
+ * @param {string} key - Parameter key
+ * @param {string} [value] - Parameter value (optional for boolean parameters)
+ * @returns {Object} Updated URL and separator
+ */
+function appendParam(url, sep, key, value = undefined) {
+    url += sep + encodeURIComponent(key);
+    if (value !== undefined) {
+        url += "=" + encodeURIComponent(value);
+    }
+    return { url, sep: "&" };
+}
+
 export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
     let url = baseUrl;
     let sep = "?";
@@ -102,16 +118,18 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
     Object.entries(parsedQuery).forEach(([key, value]) => {
         if (key.length === 0) return;
 
-        const paramType = paramTypes[key] || (Array.isArray(value) ? ParamTypes.ARRAY : ParamTypes.STRING);
+        // Default to STRING unless explicitly specified
+        const paramType = paramTypes[key] || ParamTypes.STRING;
 
         switch (paramType) {
             case ParamTypes.ARRAY:
-                // Handle array parameters
-                if (Array.isArray(value)) {
+                // Handle array parameters - each item becomes a separate parameter
+                if (Array.isArray(value) && value.length > 0) {
                     value.forEach((val) => {
                         if (isDefined(val)) {
-                            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(val);
-                            sep = "&";
+                            const result = appendParam(url, sep, key, val);
+                            url = result.url;
+                            sep = result.sep;
                         }
                     });
                 }
@@ -119,8 +137,9 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
             case ParamTypes.BOOL:
                 // For boolean params, only add the key without value if true
                 if (value === true) {
-                    url += sep + encodeURIComponent(key);
-                    sep = "&";
+                    const result = appendParam(url, sep, key);
+                    url = result.url;
+                    sep = result.sep;
                 }
                 break;
             case ParamTypes.INT:
@@ -129,8 +148,9 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
             default:
                 // Include the parameter if it has a value (including zero)
                 if (isDefined(value) && value !== "") {
-                    url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
-                    sep = "&";
+                    const result = appendParam(url, sep, key, value);
+                    url = result.url;
+                    sep = result.sep;
                 }
                 break;
         }
@@ -197,12 +217,11 @@ export function processAutobootParams(parsedQuery) {
     let needsAutoboot = false;
     let autoType = "";
 
-    // Handle both new boolean values and legacy string values for backward compatibility
-    if (parsedQuery.autoboot === true || isDefined(parsedQuery.autoboot)) {
+    if (isDefined(parsedQuery.autoboot)) {
         needsAutoboot = "boot";
-    } else if (parsedQuery.autochain === true || isDefined(parsedQuery.autochain)) {
+    } else if (isDefined(parsedQuery.autochain)) {
         needsAutoboot = "chain";
-    } else if (parsedQuery.autorun === true || isDefined(parsedQuery.autorun)) {
+    } else if (isDefined(parsedQuery.autorun)) {
         needsAutoboot = "run";
     } else if (isDefined(parsedQuery.autotype)) {
         needsAutoboot = "type";
@@ -214,11 +233,12 @@ export function processAutobootParams(parsedQuery) {
 
 /**
  * Guess the appropriate model based on the hostname
- * @returns {string} hostname of the current page
+ * @param {string} hostname - The hostname to check
+ * @returns {string} Model identifier
  */
 export function guessModelFromHostname(hostname) {
-    if (hostname.indexOf("bbc") === 0) return "B-DFS1.2";
-    if (hostname.indexOf("master") === 0) return "Master";
+    if (hostname.startsWith("bbc")) return "B-DFS1.2";
+    if (hostname.startsWith("master")) return "Master";
     return "B-DFS1.2";
 }
 
@@ -228,9 +248,8 @@ export function guessModelFromHostname(hostname) {
  * @returns {Object} Object containing disc and tape information
  */
 export function parseMediaParams(parsedQuery) {
-    const discImage = parsedQuery.disc || parsedQuery.disc1;
-    const secondDiscImage = parsedQuery.disc2;
-    const tapeImage = parsedQuery.tape;
+    const { disc, disc1, disc2, tape } = parsedQuery;
+    const discImage = disc || disc1;
 
-    return { discImage, secondDiscImage, tapeImage };
+    return { discImage, secondDiscImage: disc2, tapeImage: tape };
 }

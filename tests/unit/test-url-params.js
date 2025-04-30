@@ -151,7 +151,7 @@ describe("URL Parameters", () => {
                 model: "B",
                 rom: ["os.rom", "basic.rom", "dfs.rom"],
             };
-            expect(buildUrlFromParams(baseUrl, params)).toBe(
+            expect(buildUrlFromParams(baseUrl, params, { rom: ParamTypes.ARRAY })).toBe(
                 "http://localhost:8080/index.html?model=B&rom=os.rom&rom=basic.rom&rom=dfs.rom",
             );
         });
@@ -163,7 +163,9 @@ describe("URL Parameters", () => {
                 debug: null,
                 rom: [],
             };
-            expect(buildUrlFromParams(baseUrl, params)).toBe("http://localhost:8080/index.html?model=B");
+            expect(buildUrlFromParams(baseUrl, params, { rom: ParamTypes.ARRAY })).toBe(
+                "http://localhost:8080/index.html?model=B",
+            );
         });
 
         it("should handle mixed parameter types", () => {
@@ -172,7 +174,7 @@ describe("URL Parameters", () => {
                 disc: "test.ssd",
                 rom: ["os.rom", "basic.rom"],
             };
-            expect(buildUrlFromParams(baseUrl, params)).toBe(
+            expect(buildUrlFromParams(baseUrl, params, { rom: ParamTypes.ARRAY })).toBe(
                 "http://localhost:8080/index.html?model=B&disc=test.ssd&rom=os.rom&rom=basic.rom",
             );
         });
@@ -372,33 +374,25 @@ describe("URL Parameters", () => {
             expect(buildUrlFromParams(baseUrl, params)).toBe(expected);
         });
 
-        it("should infer parameter type from value", () => {
+        it("should handle explicit parameter types", () => {
             const params = {
                 name: "jsbeeb",
                 roms: ["os.rom", "basic.rom"],
                 debug: true,
             };
 
-            // Without explicit type information
-            expect(buildUrlFromParams(baseUrl, params)).toBe(
+            // With ARRAY type for roms - we should get separate parameters
+            expect(buildUrlFromParams(baseUrl, params, { roms: ParamTypes.ARRAY })).toBe(
                 "http://localhost:8080/index.html?name=jsbeeb&roms=os.rom&roms=basic.rom&debug=true",
             );
 
-            // With explicit type information
-            const result = buildUrlFromParams(baseUrl, params, {
-                name: ParamTypes.ARRAY, // This won't have an effect since name isn't an array
-                roms: ParamTypes.STRING, // This will flatten the array to a string
-                debug: ParamTypes.BOOL, // This will output just the key name
-            });
-
-            // Just check that the URL contains the right parts in some form
-            expect(result).toContain("http://localhost:8080/index.html?");
-            expect(result).toContain("debug");
-            expect(result).toContain("roms=");
-            // Check it doesn't have separate roms parameters
-            expect(result).not.toMatch(/roms=.*&roms=/);
-            // Name could be handled differently based on implementation
-            // so we don't test it specifically
+            // With BOOL type for debug and ARRAY type for roms
+            expect(
+                buildUrlFromParams(baseUrl, params, {
+                    debug: ParamTypes.BOOL,
+                    roms: ParamTypes.ARRAY,
+                }),
+            ).toBe("http://localhost:8080/index.html?name=jsbeeb&roms=os.rom&roms=basic.rom&debug");
         });
     });
 });
