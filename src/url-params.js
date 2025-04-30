@@ -3,45 +3,72 @@
  */
 
 /**
- * Parse the query string from the URL
+ * Parse a query string into an object
+ * @param {string} queryString - The query string to parse
+ * @param {string[]} [arrayParams=[]] - List of parameter names that should be treated as arrays
  * @returns {Object} Object containing parsed query parameters
  */
-export function parseQueryString() {
-    const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
-
+export function parseQueryString(queryString, arrayParams = []) {
     if (!queryString) return {};
 
     // workaround for shonky python web server
     const cleanQueryString = queryString.endsWith("/") ? queryString.substring(0, queryString.length - 1) : queryString;
 
     const parsedQuery = {};
+    const arrayParamsSet = new Set(arrayParams);
 
     cleanQueryString.split("&").forEach(function (keyval) {
+        if (!keyval) return;
+
         const keyAndVal = keyval.split("=");
         const key = decodeURIComponent(keyAndVal[0]);
         let val = null;
         if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
 
-        parsedQuery[key] = val;
+        // If this parameter should be treated as an array
+        if (arrayParamsSet.has(key)) {
+            if (!parsedQuery[key]) {
+                parsedQuery[key] = [];
+            }
+            parsedQuery[key].push(val);
+        } else {
+            parsedQuery[key] = val;
+        }
     });
 
     return parsedQuery;
 }
 
 /**
- * Update the URL based on the current query parameters
- * @param {Object} parsedQuery - Object containing query parameters to use in the URL
+ * Build a URL string from base URL and query parameters
+ * @param {string} baseUrl - The base URL (without query string)
+ * @param {Object} parsedQuery - Object containing query parameters
+ * @returns {string} The complete URL with query parameters
  */
-export function updateUrl(parsedQuery) {
-    let url = window.location.origin + window.location.pathname;
+export function buildUrlFromParams(baseUrl, parsedQuery) {
+    let url = baseUrl;
     let sep = "?";
+
     Object.entries(parsedQuery).forEach(([key, value]) => {
-        if (key.length > 0 && value) {
+        if (key.length === 0) return;
+
+        // Handle array parameters
+        if (Array.isArray(value)) {
+            value.forEach((val) => {
+                if (val !== null && val !== undefined) {
+                    url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(val);
+                    sep = "&";
+                }
+            });
+        }
+        // Handle regular parameters
+        else if (value) {
             url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
             sep = "&";
         }
     });
-    window.history.pushState(null, null, url);
+
+    return url;
 }
 
 /**

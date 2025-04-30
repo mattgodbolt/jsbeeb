@@ -25,11 +25,11 @@ import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
 import {
     parseQueryString,
-    updateUrl as updateUrlState,
     processKeyboardParams,
     processAutobootParams,
     guessModelFromUrl as guessModelFromUrlHelper,
     parseMediaParams,
+    buildUrlFromParams,
 } from "./url-params.js";
 
 let processor;
@@ -53,8 +53,11 @@ if (typeof starCat === "function") {
         discImage = availableImages[0].file;
     }
 }
+// Build the query string from the URL
+const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
-let parsedQuery = parseQueryString();
+// Parse the query string, treating 'rom' as an array parameter
+let parsedQuery = parseQueryString(queryString, ["rom"]);
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
@@ -83,38 +86,46 @@ if (querySecondDisc) secondDiscImage = querySecondDisc;
 // Process keyboard mappings
 parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
 
-// Handle other query parameters
-Object.entries(parsedQuery).forEach(([key, val]) => {
-    if (!val) return;
+// Handle specific query parameters
+if (Array.isArray(parsedQuery.rom)) {
+    parsedQuery.rom.forEach((romPath) => {
+        if (romPath) extraRoms.push(romPath);
+    });
+}
 
-    switch (key) {
-        case "keyLayout":
-            keyLayout = (val + "").toLowerCase();
-            break;
-        case "rom":
-            extraRoms.push(val);
-            break;
-        case "embed":
-            $(".embed-hide").hide();
-            $("body").css("background-color", "transparent");
-            break;
-        case "fasttape":
-            fastTape = true;
-            break;
-        case "noseek":
-            noSeek = true;
-            break;
-        case "audiofilterfreq":
-            audioFilterFreq = Number(val);
-            break;
-        case "audiofilterq":
-            audioFilterQ = Number(val);
-            break;
-        case "stationId":
-            stationId = Number(val);
-            break;
-    }
-});
+// Key layout
+if (parsedQuery.keyLayout) {
+    keyLayout = (parsedQuery.keyLayout + "").toLowerCase();
+}
+
+// Embed mode
+if (parsedQuery.embed !== undefined) {
+    $(".embed-hide").hide();
+    $("body").css("background-color", "transparent");
+}
+
+// Tape and seek settings
+if (parsedQuery.fasttape !== undefined) {
+    fastTape = true;
+}
+
+if (parsedQuery.noseek !== undefined) {
+    noSeek = true;
+}
+
+// Audio filter settings
+if (parsedQuery.audiofilterfreq) {
+    audioFilterFreq = Number(parsedQuery.audiofilterfreq);
+}
+
+if (parsedQuery.audiofilterq) {
+    audioFilterQ = Number(parsedQuery.audiofilterq);
+}
+
+// Network settings
+if (parsedQuery.stationId) {
+    stationId = Number(parsedQuery.stationId);
+}
 
 if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
 
@@ -187,7 +198,7 @@ const config = new Config(function (changed) {
             "Yes, restart now",
             "No, thanks",
             function () {
-                updateUrl();
+                updateBrowserUrl();
                 window.location.reload();
             },
         );
@@ -461,7 +472,7 @@ function loadHTMLFile(file) {
         processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
         delete parsedQuery.disc;
         delete parsedQuery.disc1;
-        updateUrl();
+        updateBrowserUrl();
         $discsModal.hide();
     };
     reader.readAsBinaryString(file);
@@ -604,7 +615,7 @@ processor = new Cpu6502(
 function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
-    updateUrl();
+    updateBrowserUrl();
 }
 
 function sthClearList() {
@@ -645,7 +656,7 @@ function discSthClick(item) {
 function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
     parsedQuery.tape = "sth:" + item;
-    updateUrl();
+    updateBrowserUrl();
     popupLoading("Loading " + item);
     loadTapeImage(parsedQuery.tape).then(
         function (tape) {
@@ -704,7 +715,7 @@ $("#sth .autoboot").click(function () {
     } else {
         delete parsedQuery.autoboot;
     }
-    updateUrl();
+    updateBrowserUrl();
 });
 
 $(document).on("click", "a.sth", function () {
@@ -828,9 +839,10 @@ function autoRunBasic() {
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
-function updateUrl() {
-    // Call the imported function
-    updateUrlState(parsedQuery);
+function updateBrowserUrl() {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const url = buildUrlFromParams(baseUrl, parsedQuery);
+    window.history.pushState(null, null, url);
 }
 
 const $errorDialog = $("#error-dialog");
@@ -963,7 +975,7 @@ $("#tape_load").on("change", function (evt) {
     reader.onload = function (e) {
         processor.acia.setTape(loadTapeFromData("local file", e.target.result));
         delete parsedQuery.tape;
-        updateUrl();
+        updateBrowserUrl();
         $("#tapes").modal("hide");
     };
     reader.readAsBinaryString(file);
