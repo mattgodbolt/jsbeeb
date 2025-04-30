@@ -198,7 +198,7 @@ const config = new Config(function (changed) {
             "Yes, restart now",
             "No, thanks",
             function () {
-                updateBrowserUrl();
+                updateUrl();
                 window.location.reload();
             },
         );
@@ -472,7 +472,7 @@ function loadHTMLFile(file) {
         processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
         delete parsedQuery.disc;
         delete parsedQuery.disc1;
-        updateBrowserUrl();
+        updateUrl();
         $discsModal.hide();
     };
     reader.readAsBinaryString(file);
@@ -615,7 +615,7 @@ processor = new Cpu6502(
 function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
-    updateBrowserUrl();
+    updateUrl();
 }
 
 function sthClearList() {
@@ -656,7 +656,7 @@ function discSthClick(item) {
 function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
     parsedQuery.tape = "sth:" + item;
-    updateBrowserUrl();
+    updateUrl();
     popupLoading("Loading " + item);
     loadTapeImage(parsedQuery.tape).then(
         function (tape) {
@@ -715,7 +715,7 @@ $("#sth .autoboot").click(function () {
     } else {
         delete parsedQuery.autoboot;
     }
-    updateBrowserUrl();
+    updateUrl();
 });
 
 $(document).on("click", "a.sth", function () {
@@ -839,7 +839,7 @@ function autoRunBasic() {
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
-function updateBrowserUrl() {
+function updateUrl() {
     const baseUrl = window.location.origin + window.location.pathname;
     const url = buildUrlFromParams(baseUrl, parsedQuery);
     window.history.pushState(null, null, url);
@@ -975,7 +975,7 @@ $("#tape_load").on("change", function (evt) {
     reader.onload = function (e) {
         processor.acia.setTape(loadTapeFromData("local file", e.target.result));
         delete parsedQuery.tape;
-        updateBrowserUrl();
+        updateUrl();
         $("#tapes").modal("hide");
     };
     reader.readAsBinaryString(file);
