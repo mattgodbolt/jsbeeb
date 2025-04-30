@@ -27,7 +27,7 @@ import {
     parseQueryString,
     processKeyboardParams,
     processAutobootParams,
-    guessModelFromUrl as guessModelFromUrlHelper,
+    guessModelFromHostname,
     parseMediaParams,
     buildUrlFromParams,
     ParamTypes,
@@ -227,7 +227,7 @@ const config = new Config(function (changed) {
 // Perform mapping of legacy models to the new format
 config.mapLegacyModels(parsedQuery);
 
-config.setModel(parsedQuery.model || guessModelFromUrl());
+config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
 config.setEconet(parsedQuery.hasEconet);
@@ -1209,10 +1209,6 @@ $("#soft-reset").click(function (event) {
     processor.reset(false);
     event.preventDefault();
 });
-
-function guessModelFromUrl() {
-    return guessModelFromUrlHelper();
-}
 
 $("#tape-menu a").on("click", function (e) {
     const type = $(e.target).attr("data-id");

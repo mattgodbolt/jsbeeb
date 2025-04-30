@@ -213,12 +213,12 @@ export function processAutobootParams(parsedQuery) {
 }
 
 /**
- * Guess the appropriate model based on the URL
- * @returns {string} Model identifier
+ * Guess the appropriate model based on the hostname
+ * @returns {string} hostname of the current page
  */
-export function guessModelFromUrl() {
-    if (window.location.hostname.indexOf("bbc") === 0) return "B-DFS1.2";
-    if (window.location.hostname.indexOf("master") === 0) return "Master";
+export function guessModelFromHostname(hostname) {
+    if (hostname.indexOf("bbc") === 0) return "B-DFS1.2";
+    if (hostname.indexOf("master") === 0) return "Master";
     return "B-DFS1.2";
 }
 
