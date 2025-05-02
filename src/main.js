@@ -36,7 +36,7 @@ import {
 
 let processor;
 let video;
-let dbgr;
+const dbgr = new Debugger();
 let frames = 0;
 let frameSkip = 0;
 let syncLights;
@@ -290,8 +290,6 @@ if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
-
-dbgr = new Debugger();
 
 $(".initially-hidden").removeClass("initially-hidden");
 
