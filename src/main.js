@@ -13,7 +13,6 @@ import { Cmos } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
-import { starCat } from "./discs/cat.js";
 import { loadTape, loadTapeFromData } from "./tapes.js";
 import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
@@ -45,16 +44,26 @@ let tapeSth;
 let running;
 let model;
 const gamepad = new GamePad();
-let availableImages;
-let discImage;
+const availableImages = [
+    {
+        name: "Elite",
+        desc: "An 8-bit classic. Hit F10 to launch from the space station, then use <, >, S, X and A to fly around.",
+        file: "elite.ssd",
+    },
+    {
+        name: "Welcome",
+        desc: "The disc supplied with BBC Disc systems to demonstrate some of the features of the system.",
+        file: "Welcome.ssd",
+    },
+    {
+        name: "Music 5000",
+        desc: "The Music 5000 system disk and demo songs.",
+        file: "5000mstr36008.ssd",
+    },
+];
+let discImage = availableImages[0].file;
 const extraRoms = [];
-if (typeof starCat === "function") {
-    availableImages = starCat();
 
-    if (availableImages && availableImages[0]) {
-        discImage = availableImages[0].file;
-    }
-}
 // Build the query string from the URL
 const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
