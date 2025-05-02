@@ -140,6 +140,7 @@ export class Debugger {
     setupCrtc(node, video) {
         if (!video) return noop;
         const updates = [];
+        node.find("tr:not(.template)").remove();
 
         const regNode = node.find(".crtc_regs");
 
@@ -213,6 +214,7 @@ export class Debugger {
             "portbpins",
             "IC32",
         ];
+        node.find("tr:not(.template)").remove();
         for (const elem of regs) {
             if (via[elem] === undefined) continue;
             const row = node.find(".template").clone().removeClass("template").appendTo(node);
