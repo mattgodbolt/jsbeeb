@@ -33,6 +33,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Naming**: camelCase for variables and functions, PascalCase for classes
 - **Imports**: Group by source (internal/external) with proper separation
 
+## Test Organization
+
+- **Test Consolidation**: All tests for a specific component should be consolidated in a single test file.
+  For example, all tests for `emulator.js` should be in `test-emulator.js` - do not create separate test files
+  for different aspects of the same component.
+- **Test Structure**: Use nested describe blocks to organize tests by component features
+- **Test Isolation**: When mocking components in tests, use `vi.spyOn()` with `vi.restoreAllMocks()` in
+  `afterEach` hooks rather than global `vi.mock()` to prevent memory leaks and test pollution
+- **Memory Management**: Avoid global mocks that can leak between tests and accumulate memory usage over time
+- **Test philosophy**
+  - Mock as little as possible: Try and rephrase code not to require it.
+  - Try not to rely on internal state: don't manipulate objects' inner state in tests
+
 ## Project-Specific Knowledge
 
 - **Never commit code unless asked**: Very often we'll work on code and iterate. After you think it's complete, let me
