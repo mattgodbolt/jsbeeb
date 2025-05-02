@@ -284,7 +284,7 @@ if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
 
-dbgr = new Debugger(video);
+dbgr = new Debugger();
 
 $(".initially-hidden").removeClass("initially-hidden");
 

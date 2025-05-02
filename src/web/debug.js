@@ -79,8 +79,7 @@ class MemoryView {
 }
 
 export class Debugger {
-    constructor(video) {
-        this.video = video;
+    constructor() {
         this.patchInstructions = new Map();
         this._enabled = false;
         this.disass = $("#disassembly");
@@ -305,7 +304,7 @@ export class Debugger {
         this.sysvia();
         this.uservia();
         this.crtc();
-        this.video.debugPaint();
+        this.cpu.video.debugPaint();
     }
 
     enable(e) {
