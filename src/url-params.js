@@ -12,7 +12,7 @@ function isDefined(value) {
 }
 
 /**
- * @typedef {'string'|'array'|'int'|'float'|'bool'} ParamType
+ * @typedef {"string"|"array"|"int"|"float"|"bool"} ParamType
  */
 
 /**
@@ -76,7 +76,8 @@ export function parseQueryString(queryString, paramTypes = {}) {
                 }
                 break;
             case ParamTypes.BOOL:
-                parsedQuery[key] = true; // Presence of parameter means true
+                // Only the exact 'false' string is treated as false.
+                parsedQuery[key] = val !== "false";
                 break;
             case ParamTypes.STRING:
             default:

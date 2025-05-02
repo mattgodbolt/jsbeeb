@@ -73,6 +73,14 @@ const paramTypes = {
     autoboot: ParamTypes.BOOL,
     autochain: ParamTypes.BOOL,
     autorun: ParamTypes.BOOL,
+    hasMusic5000: ParamTypes.BOOL,
+    hasTeletextAdaptor: ParamTypes.BOOL,
+    hasEconet: ParamTypes.BOOL,
+    glEnabled: ParamTypes.BOOL,
+    fakeVideo: ParamTypes.BOOL,
+    logFdcCommands: ParamTypes.BOOL,
+    logFdcStateChanges: ParamTypes.BOOL,
+    coProcessor: ParamTypes.BOOL,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -254,8 +262,7 @@ sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
     div.css({ bottom: -img.height() });
 });
 
-// cpuMultiplier is now a float parameter, no need for conversion
-if (parsedQuery.cpuMultiplier !== null && parsedQuery.cpuMultiplier !== undefined) {
+if (parsedQuery.cpuMultiplier !== undefined) {
     cpuMultiplier = parsedQuery.cpuMultiplier;
     console.log("CPU multiplier set to " + cpuMultiplier);
 }

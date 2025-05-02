@@ -108,12 +108,12 @@ describe("URL Parameters", () => {
         });
 
         it("should parse parameter types - bool", () => {
-            const qs = "debug&verbose=false&noseek";
+            const qs = "debug&verbose=false&noseek=true";
             expect(
                 parseQueryString(qs, { debug: ParamTypes.BOOL, verbose: ParamTypes.BOOL, noseek: ParamTypes.BOOL }),
             ).toEqual({
                 debug: true,
-                verbose: true, // Even "false" string makes this true since it's the presence that matters
+                verbose: false,
                 noseek: true,
             });
         });
