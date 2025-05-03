@@ -309,14 +309,18 @@ const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
  * Helper function to read a file as binary string
  * @param {File} file - The file to read
  * @param {Function} onLoad - Callback for when file is loaded
- * @returns {Promise} - Promise that resolves when file is loaded and processed
+ * @returns {Promise} - Promise that resolves when file is loaded and processed, or rejects on error
  */
 function readFileAsBinaryString(file, onLoad) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
             onLoad(e);
             resolve();
+        };
+        reader.onerror = (e) => {
+            console.error(`Error reading file ${file.name}:`, e);
+            reject(new Error(`Failed to read file ${file.name}`));
         };
         reader.readAsBinaryString(file);
     });
@@ -577,6 +581,7 @@ async function discSthClick(item) {
             autoboot(item);
         }
     } catch (err) {
+        console.error("Error loading disc image:", err);
         loadingFinished(err);
     }
 }
@@ -592,6 +597,7 @@ async function tapeSthClick(item) {
         processor.acia.setTape(tape);
         loadingFinished();
     } catch (err) {
+        console.error("Error loading tape image:", err);
         loadingFinished(err);
     }
 }
@@ -947,7 +953,7 @@ async function gdLoad(cat) {
         loadingFinished();
         return ssd;
     } catch (error) {
-        console.log("Google Drive loading error:", error);
+        console.error("Google Drive loading error:", error);
         loadingFinished(error);
     }
 }
@@ -1020,7 +1026,7 @@ $("#google-drive form").on("submit", async function (e) {
         processor.fdc.loadDisc(0, result.disc);
         loadingFinished();
     } catch (error) {
-        console.log(`Error in creating: ${error} | ${JSON.stringify(error)}`);
+        console.error(`Error creating Google Drive disc: ${error}`, error);
         loadingFinished(`Create failed: ${error}`);
     }
 });
@@ -1221,8 +1227,8 @@ startPromise
         go();
     })
     .catch((error) => {
+        console.error("Error initializing emulator:", error);
         showError("initialising", error);
-        console.log(error);
     });
 
 const $ays = $("#are-you-sure");
