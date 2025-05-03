@@ -305,40 +305,47 @@ $(".initially-hidden").removeClass("initially-hidden");
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
 const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
 
-function loadHTMLFile(file) {
+/**
+ * Helper function to read a file as binary string
+ * @param {File} file - The file to read
+ * @param {Function} onLoad - Callback for when file is loaded
+ * @returns {Promise} - Promise that resolves when file is loaded and processed
+ */
+function readFileAsBinaryString(file, onLoad) {
     return new Promise((resolve) => {
         const reader = new FileReader();
-        reader.onload = function (e) {
-            processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
-            delete parsedQuery.disc;
-            delete parsedQuery.disc1;
-            updateUrl();
-            $discsModal.hide();
+        reader.onload = (e) => {
+            onLoad(e);
             resolve();
         };
         reader.readAsBinaryString(file);
     });
 }
 
+function loadHTMLFile(file) {
+    return readFileAsBinaryString(file, (e) => {
+        processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
+        delete parsedQuery.disc;
+        delete parsedQuery.disc1;
+        updateUrl();
+        $discsModal.hide();
+    });
+}
+
 function loadSCSIFile(file) {
-    return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-            processor.filestore.scsi = utils.stringToUint8Array(e.target.result);
+    return readFileAsBinaryString(file, (e) => {
+        processor.filestore.scsi = utils.stringToUint8Array(e.target.result);
 
-            processor.filestore.PC = 0x400;
-            processor.filestore.SP = 0xff;
-            processor.filestore.A = 1;
-            processor.filestore.emulationSpeed = 0;
+        processor.filestore.PC = 0x400;
+        processor.filestore.SP = 0xff;
+        processor.filestore.A = 1;
+        processor.filestore.emulationSpeed = 0;
 
-            // Reset any open receive blocks
-            processor.econet.receiveBlocks = [];
-            processor.econet.nextReceiveBlockNumber = 1;
+        // Reset any open receive blocks
+        processor.econet.receiveBlocks = [];
+        processor.econet.nextReceiveBlockNumber = 1;
 
-            $fsModal.hide();
-            resolve();
-        };
-        reader.readAsBinaryString(file);
+        $fsModal.hide();
     });
 }
 
@@ -844,16 +851,12 @@ $("#tape_load").on("change", async function (evt) {
     const file = evt.target.files[0];
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
-    const fileData = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.readAsBinaryString(file);
+    await readFileAsBinaryString(file, (e) => {
+        processor.acia.setTape(loadTapeFromData("local file", e.target.result));
+        delete parsedQuery.tape;
+        updateUrl();
+        $("#tapes").modal("hide");
     });
-
-    processor.acia.setTape(loadTapeFromData("local file", fileData));
-    delete parsedQuery.tape;
-    updateUrl();
-    $("#tapes").modal("hide");
 
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
@@ -1138,34 +1141,36 @@ const startPromise = (async () => {
     }
 
     async function insertBasic(getBasicPromise, needsRun) {
-        imageLoads.push(
-            (async () => {
-                const prog = await getBasicPromise;
-                const t = await tokeniser.create();
-                const tokenised = await t.tokenise(prog);
+        const basicLoadPromise = (async () => {
+            const prog = await getBasicPromise;
+            const t = await tokeniser.create();
+            const tokenised = await t.tokenise(prog);
 
-                const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-                const hook = processor.debugInstruction.add(function (addr) {
-                    if (addr !== idleAddr) return;
-                    const page = processor.readmem(0x18) << 8;
-                    for (let i = 0; i < tokenised.length; ++i) {
-                        processor.writemem(page + i, tokenised.charCodeAt(i));
-                    }
-                    // Set VARTOP (0x12/3) and TOP(0x02/3)
-                    const end = page + tokenised.length;
-                    const endLow = end & 0xff;
-                    const endHigh = (end >>> 8) & 0xff;
-                    processor.writemem(0x02, endLow);
-                    processor.writemem(0x03, endHigh);
-                    processor.writemem(0x12, endLow);
-                    processor.writemem(0x13, endHigh);
-                    hook.remove();
-                    if (needsRun) {
-                        autoRunBasic();
-                    }
-                });
-            })(),
-        );
+            const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+            const hook = processor.debugInstruction.add(function (addr) {
+                if (addr !== idleAddr) return;
+                const page = processor.readmem(0x18) << 8;
+                for (let i = 0; i < tokenised.length; ++i) {
+                    processor.writemem(page + i, tokenised.charCodeAt(i));
+                }
+                // Set VARTOP (0x12/3) and TOP(0x02/3)
+                const end = page + tokenised.length;
+                const endLow = end & 0xff;
+                const endHigh = (end >>> 8) & 0xff;
+                processor.writemem(0x02, endLow);
+                processor.writemem(0x03, endHigh);
+                processor.writemem(0x12, endLow);
+                processor.writemem(0x13, endHigh);
+                hook.remove();
+                if (needsRun) {
+                    autoRunBasic();
+                }
+            });
+            return tokenised; // Explicitly return the result
+        })();
+
+        imageLoads.push(basicLoadPromise);
+        return basicLoadPromise; // Return promise for caller to await if needed
     }
 
     if (parsedQuery.loadBasic) {
