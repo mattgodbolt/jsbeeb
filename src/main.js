@@ -24,13 +24,13 @@ import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
 import { Keyboard } from "./keyboard.js";
 import {
-    parseQueryString,
-    processKeyboardParams,
-    processAutobootParams,
-    guessModelFromHostname,
-    parseMediaParams,
     buildUrlFromParams,
+    guessModelFromHostname,
     ParamTypes,
+    parseMediaParams,
+    parseQueryString,
+    processAutobootParams,
+    processKeyboardParams,
 } from "./url-params.js";
 
 let processor;
@@ -367,7 +367,7 @@ $pastetext.on("drop", async function (event) {
 
 const $cub = $("#cub-monitor");
 $cub.on("mousemove mousedown mouseup", function (evt) {
-    audioHandler.tryResume();
+    audioHandler.tryResume().then(() => {});
     if (document.activeElement !== document.body) document.activeElement.blur();
     const cubOffset = $cub.offset();
     const screenOffset = $screen.offset();
@@ -388,8 +388,10 @@ $("#fs").click(function (event) {
 
 let keyboard; // This will be initialized after the processor is created
 
-$("#debug-pause").click(() => stop(true));
-$("#debug-play").click(() => {
+const $debugPause = $("#debug-pause");
+const $debugPlay = $("#debug-play");
+$debugPause.click(() => stop(true));
+$debugPlay.click(() => {
     dbgr.hide();
     go();
 });
@@ -550,12 +552,13 @@ function setDisc1Image(name) {
 }
 
 function sthClearList() {
-    $("#sth-list li:not('.template')").remove();
+    $("#sth-list li:not(.template)").remove();
 }
 
 function sthStartLoad() {
-    $("#sth .loading").text("Loading catalog from STH archive");
-    $("#sth .loading").show();
+    const $sth = $("#sth .loading");
+    $sth.text("Loading catalog from STH archive");
+    $sth.show();
     sthClearList();
 }
 
@@ -630,16 +633,18 @@ function makeOnCat(onClick) {
 }
 
 function sthOnError() {
-    $("#sth .loading").text("There was an error accessing the STH archive");
-    $("#sth .loading").show();
+    const $sthLoading = $("#sth .loading");
+    $sthLoading.text("There was an error accessing the STH archive");
+    $sthLoading.show();
     sthClearList();
 }
 
 discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
 
-$("#sth .autoboot").click(function () {
-    if ($("#sth .autoboot").prop("checked")) {
+const $sthAutoboot = $("#sth .autoboot");
+$sthAutoboot.click(function () {
+    if ($sthAutoboot.prop("checked")) {
         parsedQuery.autoboot = "";
     } else {
         delete parsedQuery.autoboot;
@@ -660,7 +665,7 @@ $(document).on("click", "a.sth", function () {
 
 function setSthFilter(filter) {
     filter = filter.toLowerCase();
-    $("#sth-list li:not('.template')").each(function () {
+    $("#sth-list li:not(.template)").each(function () {
         const el = $(this);
         el.toggle(el.text().toLowerCase().indexOf(filter) >= 0);
     });
@@ -1198,7 +1203,7 @@ startPromise
     .then(() => {
         switch (needsAutoboot) {
             case "boot":
-                $("#sth .autoboot").prop("checked", true);
+                $sthAutoboot.prop("checked", true);
                 autoboot(discImage);
                 break;
             case "type":
@@ -1211,7 +1216,7 @@ startPromise
                 autoRunTape();
                 break;
             default:
-                $("#sth .autoboot").prop("checked", false);
+                $sthAutoboot.prop("checked", false);
                 break;
         }
 
@@ -1334,8 +1339,7 @@ function draw(now) {
     // part of jsbeeb at this time.
     // We need need to paint per odd number of frames so that interlace
     // modes, i.e. MODE 7, still look ok.
-    const frameSkipCount = speedy ? 9 : 0;
-    video.frameSkipCount = frameSkipCount;
+    video.frameSkipCount = speedy ? 9 : 0;
 
     // We use setTimeout instead of requestAnimationFrame in two cases:
     // a) We're trying to run as fast as possible.
@@ -1402,8 +1406,8 @@ function handleVisibilityChange() {
 document.addEventListener("visibilitychange", handleVisibilityChange, false);
 
 function updateDebugButtons() {
-    $("#debug-play").attr("disabled", running);
-    $("#debug-pause").attr("disabled", !running);
+    $debugPlay.attr("disabled", running);
+    $debugPause.attr("disabled", !running);
 }
 
 function go() {
