@@ -22,6 +22,8 @@ class Model {
         this.isTest = false;
         this.tube = tube;
         this.cmosOverride = cmosOverride;
+        this.hasEconet = false;
+        this.hasMusic5000 = false;
     }
 
     get nmos() {
