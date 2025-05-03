@@ -305,35 +305,48 @@ $(".initially-hidden").removeClass("initially-hidden");
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
 const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
 
-function loadHTMLFile(file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
-        delete parsedQuery.disc;
-        delete parsedQuery.disc1;
-        updateUrl();
-        $discsModal.hide();
-    };
-    reader.readAsBinaryString(file);
+/**
+ * Helper function to read a file as binary string
+ * @param {File} file - The file to read
+ * @returns {Promise<string>} - Promise that resolves with the binary string content of the file, or rejects on error
+ */
+function readFileAsBinaryString(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            resolve(e.target.result);
+        };
+        reader.onerror = (e) => {
+            console.error(`Error reading file ${file.name}:`, e);
+            reject(new Error(`Failed to read file ${file.name}`));
+        };
+        reader.readAsBinaryString(file);
+    });
 }
 
-function loadSCSIFile(file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        processor.filestore.scsi = utils.stringToUint8Array(e.target.result);
+async function loadHTMLFile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, binaryData));
+    delete parsedQuery.disc;
+    delete parsedQuery.disc1;
+    updateUrl();
+    $discsModal.hide();
+}
 
-        processor.filestore.PC = 0x400;
-        processor.filestore.SP = 0xff;
-        processor.filestore.A = 1;
-        processor.filestore.emulationSpeed = 0;
+async function loadSCSIFile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    processor.filestore.scsi = utils.stringToUint8Array(binaryData);
 
-        // Reset any open receive blocks
-        processor.econet.receiveBlocks = [];
-        processor.econet.nextReceiveBlockNumber = 1;
+    processor.filestore.PC = 0x400;
+    processor.filestore.SP = 0xff;
+    processor.filestore.A = 1;
+    processor.filestore.emulationSpeed = 0;
 
-        $fsModal.hide();
-    };
-    reader.readAsBinaryString(file);
+    // Reset any open receive blocks
+    processor.econet.receiveBlocks = [];
+    processor.econet.nextReceiveBlockNumber = 1;
+
+    $fsModal.hide();
 }
 
 const $pastetext = $("#paste-text");
@@ -346,10 +359,10 @@ $pastetext.on("dragover", function (event) {
     event.stopPropagation();
     event.originalEvent.dataTransfer.dropEffect = "copy";
 });
-$pastetext.on("drop", function (event) {
+$pastetext.on("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.originalEvent.dataTransfer.files[0];
-    loadHTMLFile(file);
+    await loadHTMLFile(file);
 });
 
 const $cub = $("#cub-monitor");
@@ -546,45 +559,43 @@ function sthStartLoad() {
     sthClearList();
 }
 
-function discSthClick(item) {
+async function discSthClick(item) {
     utils.noteEvent("sth", "click", item);
     setDisc1Image("sth:" + item);
     const needsAutoboot = parsedQuery.autoboot !== undefined;
     if (needsAutoboot) {
         processor.reset(true);
     }
+
     popupLoading("Loading " + item);
-    loadDiscImage(parsedQuery.disc1)
-        .then(function (disc) {
-            processor.fdc.loadDisc(0, disc);
-        })
-        .then(
-            function () {
-                loadingFinished();
-                if (needsAutoboot) {
-                    autoboot(item);
-                }
-            },
-            function (err) {
-                loadingFinished(err);
-            },
-        );
+    try {
+        const disc = await loadDiscImage(parsedQuery.disc1);
+        processor.fdc.loadDisc(0, disc);
+        loadingFinished();
+
+        if (needsAutoboot) {
+            autoboot(item);
+        }
+    } catch (err) {
+        console.error("Error loading disc image:", err);
+        loadingFinished(err);
+    }
 }
 
-function tapeSthClick(item) {
+async function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
     parsedQuery.tape = "sth:" + item;
     updateUrl();
+
     popupLoading("Loading " + item);
-    loadTapeImage(parsedQuery.tape).then(
-        function (tape) {
-            processor.acia.setTape(tape);
-            loadingFinished();
-        },
-        function (err) {
-            loadingFinished(err);
-        },
-    );
+    try {
+        const tape = await loadTapeImage(parsedQuery.tape);
+        processor.acia.setTape(tape);
+        loadingFinished();
+    } catch (err) {
+        console.error("Error loading tape image:", err);
+        loadingFinished(err);
+    }
 }
 
 const $sthModal = new bootstrap.Modal(document.getElementById("sth"));
@@ -732,7 +743,7 @@ function splitImage(image) {
 }
 
 async function loadDiscImage(discImage) {
-    if (!discImage) return Promise.resolve(null);
+    if (!discImage) return null;
     const split = splitImage(discImage);
     discImage = split.image;
     const schema = split.schema;
@@ -821,34 +832,33 @@ async function loadTapeImage(tapeImage) {
     }
 }
 
-$("#disc_load").on("change", function (evt) {
+$("#disc_load").on("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    loadHTMLFile(file);
+    await loadHTMLFile(file);
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$("#fs_load").on("change", function (evt) {
+$("#fs_load").on("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    loadSCSIFile(file);
+    await loadSCSIFile(file);
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$("#tape_load").on("change", function (evt) {
+$("#tape_load").on("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     const file = evt.target.files[0];
-    const reader = new FileReader();
     utils.noteEvent("local", "clickTape"); // NB no filename here
-    reader.onload = function (e) {
-        processor.acia.setTape(loadTapeFromData("local file", e.target.result));
-        delete parsedQuery.tape;
-        updateUrl();
-        $("#tapes").modal("hide");
-    };
-    reader.readAsBinaryString(file);
+
+    const binaryData = await readFileAsBinaryString(file);
+    processor.acia.setTape(loadTapeFromData("local file", binaryData));
+    delete parsedQuery.tape;
+    updateUrl();
+    $("#tapes").modal("hide");
+
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
@@ -901,16 +911,15 @@ async function gdAuth(imm) {
 }
 
 let googleDriveLoadingResolve, googleDriveLoadingReject;
-$("#google-drive-auth form").on("submit", function (e) {
+$("#google-drive-auth form").on("submit", async function (e) {
     $("#google-drive-auth").hide();
     e.preventDefault();
-    gdAuth(false).then(function (authed) {
-        if (authed) googleDriveLoadingResolve();
-        else googleDriveLoadingReject(new Error("Unable to authorize Google Drive"));
-    });
+    const authed = await gdAuth(false);
+    if (authed) googleDriveLoadingResolve();
+    else googleDriveLoadingReject(new Error("Unable to authorize Google Drive"));
 });
 
-function gdLoad(cat) {
+async function gdLoad(cat) {
     // TODO: have a onclose flush event, handle errors
     /*
      $(window).bind("beforeunload", function() {
@@ -918,54 +927,47 @@ function gdLoad(cat) {
      });
      */
     popupLoading("Loading '" + cat.name + "' from Google Drive");
-    return googleDrive
-        .initialise()
-        .then(function (available) {
-            console.log("Google Drive available =", available);
-            if (!available) throw new Error("Google Drive is not available");
-            return gdAuth(true);
-        })
-        .then(function (authed) {
-            console.log("Google Drive authed=", authed);
-            if (authed) {
-                return true;
-            } else {
-                return new Promise(function (resolve, reject) {
-                    googleDriveLoadingResolve = resolve;
-                    googleDriveLoadingReject = reject;
-                    $("#google-drive-auth").show();
-                });
-            }
-        })
-        .then(function () {
-            return googleDrive.load(processor.fdc, cat.id);
-        })
-        .then(function (ssd) {
-            console.log("Google Drive loading finished");
-            loadingFinished();
-            return ssd;
-        })
-        .catch(function (error) {
-            console.log("Google Drive loading error:", error);
-            loadingFinished(error);
-        });
+    try {
+        const available = await googleDrive.initialise();
+        console.log("Google Drive available =", available);
+        if (!available) throw new Error("Google Drive is not available");
+
+        const authed = await gdAuth(true);
+        console.log("Google Drive authed=", authed);
+
+        if (!authed) {
+            await new Promise(function (resolve, reject) {
+                googleDriveLoadingResolve = resolve;
+                googleDriveLoadingReject = reject;
+                $("#google-drive-auth").show();
+            });
+        }
+
+        const ssd = await googleDrive.load(processor.fdc, cat.id);
+        console.log("Google Drive loading finished");
+        loadingFinished();
+        return ssd;
+    } catch (error) {
+        console.error("Google Drive loading error:", error);
+        loadingFinished(error);
+    }
 }
 
 $(".if-drive-available").hide();
-googleDrive.initialise().then(function (available) {
+(async () => {
+    const available = await googleDrive.initialise();
     if (available) {
         $(".if-drive-available").show();
-        gdAuth(true).then();
+        await gdAuth(true);
     }
-});
+})();
 const $googleDrive = $("#google-drive");
 const $googleDriveModal = new bootstrap.Modal($googleDrive[0]);
-$("#open-drive-link").on("click", function () {
-    gdAuth(false).then(function (authed) {
-        if (authed) {
-            $googleDriveModal.show();
-        }
-    });
+$("#open-drive-link").on("click", async function () {
+    const authed = await gdAuth(false);
+    if (authed) {
+        $googleDriveModal.show();
+    }
     return false;
 });
 $googleDrive[0].addEventListener("show.bs.modal", async function () {
@@ -1004,24 +1006,24 @@ $.each(availableImages, function (i, image) {
     });
 });
 
-$("#google-drive form").on("submit", function (e) {
+$("#google-drive form").on("submit", async function (e) {
     e.preventDefault();
     const text = $("#google-drive .disc-name").val();
     if (!text) return;
+
     popupLoading("Connecting to Google Drive");
     $googleDriveModal.hide();
     popupLoading("Creating '" + text + "' on Google Drive");
-    googleDrive.create(processor.fdc, text).then(
-        function (result) {
-            setDisc1Image("gd:" + result.fileId + "/" + text);
-            processor.fdc.loadDisc(0, result.disc);
-            loadingFinished();
-        },
-        function (error) {
-            console.log(`Error in creating: ${error} | ${JSON.stringify(error)}`);
-            loadingFinished(`Create failed: ${error}`);
-        },
-    );
+
+    try {
+        const result = await googleDrive.create(processor.fdc, text);
+        setDisc1Image("gd:" + result.fileId + "/" + text);
+        processor.fdc.loadDisc(0, result.disc);
+        loadingFinished();
+    } catch (error) {
+        console.error(`Error creating Google Drive disc: ${error}`, error);
+        loadingFinished(`Create failed: ${error}`);
+    }
 });
 
 $("#download-drive-link").on("click", function () {
@@ -1106,83 +1108,94 @@ syncLights = function () {
     }
 };
 
-const startPromise = Promise.all([audioHandler.initialise(), processor.initialise()]).then(function () {
+const startPromise = (async () => {
+    await Promise.all([audioHandler.initialise(), processor.initialise()]);
+
     // Ideally would start the loads first. But their completion needs the FDC from the processor
     const imageLoads = [];
-    if (discImage)
-        imageLoads.push(
-            loadDiscImage(discImage).then(function (disc) {
-                processor.fdc.loadDisc(0, disc);
-            }),
-        );
-    if (secondDiscImage)
-        imageLoads.push(
-            loadDiscImage(secondDiscImage).then(function (disc) {
-                processor.fdc.loadDisc(1, disc);
-            }),
-        );
-    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape).then((tape) => processor.acia.setTape(tape)));
 
-    function insertBasic(getBasicPromise, needsRun) {
+    if (discImage) {
         imageLoads.push(
-            getBasicPromise
-                .then(function (prog) {
-                    return tokeniser.create().then(function (t) {
-                        return t.tokenise(prog);
-                    });
-                })
-                .then(function (tokenised) {
-                    const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-                    const hook = processor.debugInstruction.add(function (addr) {
-                        if (addr !== idleAddr) return;
-                        const page = processor.readmem(0x18) << 8;
-                        for (let i = 0; i < tokenised.length; ++i) {
-                            processor.writemem(page + i, tokenised.charCodeAt(i));
-                        }
-                        // Set VARTOP (0x12/3) and TOP(0x02/3)
-                        const end = page + tokenised.length;
-                        const endLow = end & 0xff;
-                        const endHigh = (end >>> 8) & 0xff;
-                        processor.writemem(0x02, endLow);
-                        processor.writemem(0x03, endHigh);
-                        processor.writemem(0x12, endLow);
-                        processor.writemem(0x13, endHigh);
-                        hook.remove();
-                        if (needsRun) {
-                            autoRunBasic();
-                        }
-                    });
-                }),
+            (async () => {
+                const disc = await loadDiscImage(discImage);
+                processor.fdc.loadDisc(0, disc);
+            })(),
         );
+    }
+
+    if (secondDiscImage) {
+        imageLoads.push(
+            (async () => {
+                const disc = await loadDiscImage(secondDiscImage);
+                processor.fdc.loadDisc(1, disc);
+            })(),
+        );
+    }
+
+    if (parsedQuery.tape) {
+        imageLoads.push(
+            (async () => {
+                const tape = await loadTapeImage(parsedQuery.tape);
+                processor.acia.setTape(tape);
+            })(),
+        );
+    }
+
+    async function insertBasic(getBasicPromise, needsRun) {
+        const basicLoadPromise = (async () => {
+            const prog = await getBasicPromise;
+            const t = await tokeniser.create();
+            const tokenised = await t.tokenise(prog);
+
+            const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+            const hook = processor.debugInstruction.add(function (addr) {
+                if (addr !== idleAddr) return;
+                const page = processor.readmem(0x18) << 8;
+                for (let i = 0; i < tokenised.length; ++i) {
+                    processor.writemem(page + i, tokenised.charCodeAt(i));
+                }
+                // Set VARTOP (0x12/3) and TOP(0x02/3)
+                const end = page + tokenised.length;
+                const endLow = end & 0xff;
+                const endHigh = (end >>> 8) & 0xff;
+                processor.writemem(0x02, endLow);
+                processor.writemem(0x03, endHigh);
+                processor.writemem(0x12, endLow);
+                processor.writemem(0x13, endHigh);
+                hook.remove();
+                if (needsRun) {
+                    autoRunBasic();
+                }
+            });
+            return tokenised; // Explicitly return the result
+        })();
+
+        imageLoads.push(basicLoadPromise);
+        return basicLoadPromise; // Return promise for caller to await if needed
     }
 
     if (parsedQuery.loadBasic) {
         const needsRun = needsAutoboot === "run";
         needsAutoboot = "";
-        insertBasic(
-            new Promise(function (resolve) {
-                utils.loadData(parsedQuery.loadBasic).then(function (data) {
-                    resolve(String.fromCharCode.apply(null, data));
-                });
-            }),
+
+        await insertBasic(
+            (async () => {
+                const data = await utils.loadData(parsedQuery.loadBasic);
+                return String.fromCharCode.apply(null, data);
+            })(),
             needsRun,
         );
     }
 
     if (parsedQuery.embedBasic) {
-        insertBasic(
-            new Promise(function (resolve) {
-                resolve(parsedQuery.embedBasic);
-            }),
-            true,
-        );
+        await insertBasic(Promise.resolve(parsedQuery.embedBasic), true);
     }
 
     return Promise.all(imageLoads);
-});
+})();
 
-startPromise.then(
-    function () {
+startPromise
+    .then(() => {
         switch (needsAutoboot) {
             case "boot":
                 $("#sth .autoboot").prop("checked", true);
@@ -1207,12 +1220,11 @@ startPromise.then(
         }
 
         go();
-    },
-    function (error) {
+    })
+    .catch((error) => {
+        console.error("Error initializing emulator:", error);
         showError("initialising", error);
-        console.log(error);
-    },
-);
+    });
 
 const $ays = $("#are-you-sure");
 const $aysModal = new bootstrap.Modal($ays[0]);
