@@ -308,15 +308,13 @@ const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
 /**
  * Helper function to read a file as binary string
  * @param {File} file - The file to read
- * @param {Function} onLoad - Callback for when file is loaded
- * @returns {Promise} - Promise that resolves when file is loaded and processed, or rejects on error
+ * @returns {Promise<string>} - Promise that resolves with the binary string content of the file, or rejects on error
  */
-function readFileAsBinaryString(file, onLoad) {
+function readFileAsBinaryString(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
-            onLoad(e);
-            resolve();
+            resolve(e.target.result);
         };
         reader.onerror = (e) => {
             console.error(`Error reading file ${file.name}:`, e);
@@ -326,31 +324,29 @@ function readFileAsBinaryString(file, onLoad) {
     });
 }
 
-function loadHTMLFile(file) {
-    return readFileAsBinaryString(file, (e) => {
-        processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
-        delete parsedQuery.disc;
-        delete parsedQuery.disc1;
-        updateUrl();
-        $discsModal.hide();
-    });
+async function loadHTMLFile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, binaryData));
+    delete parsedQuery.disc;
+    delete parsedQuery.disc1;
+    updateUrl();
+    $discsModal.hide();
 }
 
-function loadSCSIFile(file) {
-    return readFileAsBinaryString(file, (e) => {
-        processor.filestore.scsi = utils.stringToUint8Array(e.target.result);
+async function loadSCSIFile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    processor.filestore.scsi = utils.stringToUint8Array(binaryData);
 
-        processor.filestore.PC = 0x400;
-        processor.filestore.SP = 0xff;
-        processor.filestore.A = 1;
-        processor.filestore.emulationSpeed = 0;
+    processor.filestore.PC = 0x400;
+    processor.filestore.SP = 0xff;
+    processor.filestore.A = 1;
+    processor.filestore.emulationSpeed = 0;
 
-        // Reset any open receive blocks
-        processor.econet.receiveBlocks = [];
-        processor.econet.nextReceiveBlockNumber = 1;
+    // Reset any open receive blocks
+    processor.econet.receiveBlocks = [];
+    processor.econet.nextReceiveBlockNumber = 1;
 
-        $fsModal.hide();
-    });
+    $fsModal.hide();
 }
 
 const $pastetext = $("#paste-text");
@@ -363,10 +359,10 @@ $pastetext.on("dragover", function (event) {
     event.stopPropagation();
     event.originalEvent.dataTransfer.dropEffect = "copy";
 });
-$pastetext.on("drop", function (event) {
+$pastetext.on("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.originalEvent.dataTransfer.files[0];
-    loadHTMLFile(file);
+    await loadHTMLFile(file);
 });
 
 const $cub = $("#cub-monitor");
@@ -857,12 +853,11 @@ $("#tape_load").on("change", async function (evt) {
     const file = evt.target.files[0];
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
-    await readFileAsBinaryString(file, (e) => {
-        processor.acia.setTape(loadTapeFromData("local file", e.target.result));
-        delete parsedQuery.tape;
-        updateUrl();
-        $("#tapes").modal("hide");
-    });
+    const binaryData = await readFileAsBinaryString(file);
+    processor.acia.setTape(loadTapeFromData("local file", binaryData));
+    delete parsedQuery.tape;
+    updateUrl();
+    $("#tapes").modal("hide");
 
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
