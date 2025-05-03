@@ -4,18 +4,29 @@ import * as utils from "./utils.js";
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 
 /**
+ * @typedef {Object} KeyboardConfig
+ * @property {Object} processor - The processor instance
+ * @property {Object} audioHandler - The audio handler instance
+ * @property {Function} inputEnabledFunction - A function to check if input is enabled
+ * @property {string} [keyLayout="physical"] - The keyboard layout
+ * @property {Function} stopCallback - Callback to stop the emulator
+ * @property {Function} goCallback - Callback to resume the emulator
+ * @property {Function} showError - Function to display errors
+ * @property {Debugger} dbgr - The debugger instance
+ */
+/**
  * Keyboard class that handles all keyboard related functionality
  */
 export class Keyboard {
     /**
      * Create a new Keyboard instance with specified configuration
-     * @param {Object} config - The configuration object
+     * @param {KeyboardConfig} config - The configuration object
      */
     constructor(config) {
         const {
             processor,
             audioHandler,
-            document,
+            inputEnabledFunction,
             keyLayout = "physical",
             stopCallback,
             goCallback,
@@ -26,7 +37,7 @@ export class Keyboard {
         // Core components
         this.processor = processor;
         this.audioHandler = audioHandler;
-        this.document = document;
+        this.inputEnabledFunction = inputEnabledFunction;
         this.dbgr = dbgr;
 
         // Callbacks
@@ -146,14 +157,6 @@ export class Keyboard {
     }
 
     /**
-     * Helper method to check if text input is active and we should ignore keyboard events
-     * @returns {boolean} True if text input is active
-     */
-    isTextInputActive() {
-        return this.document.activeElement && this.document.activeElement.id === "paste-text";
-    }
-
-    /**
      * Find a matching key handler for the given key event
      * @param {number} keyCode - The key code
      * @param {boolean} altKey - Whether Alt is pressed
@@ -181,7 +184,7 @@ export class Keyboard {
         const LOWERCASE_N = 110;
 
         // Early returns for common scenarios
-        if (this.isTextInputActive()) return;
+        if (this.inputEnabledFunction()) return;
         if (this.running || (!this.dbgr.enabled() && !this.pauseEmu)) return;
 
         const code = this.keyCode(evt);
@@ -221,7 +224,7 @@ export class Keyboard {
         this.audioHandler.tryResume();
 
         // Early returns for common scenarios
-        if (this.isTextInputActive()) return;
+        if (this.inputEnabledFunction()) return;
         if (!this.running) return;
 
         const code = this.keyCode(evt);
@@ -268,7 +271,7 @@ export class Keyboard {
      */
     keyUp(evt) {
         // Early return for text input
-        if (this.isTextInputActive()) return;
+        if (this.inputEnabledFunction()) return;
 
         // Always let the key ups come through to avoid sticky keys in the debugger
         const code = this.keyCode(evt);
@@ -319,7 +322,7 @@ export class Keyboard {
                 such a game, please see the documentation about remapping keys.
                 Close this window to continue (you won't see this error again)`,
             );
-            window.localStorage.setItem("warnedAboutRubbishMacs", true);
+            window.localStorage.setItem("warnedAboutRubbishMacs", "true");
         }
     }
 

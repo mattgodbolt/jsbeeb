@@ -7,7 +7,7 @@ describe("Keyboard", () => {
     let mockProcessor;
     let mockSysvia;
     let mockAudioHandler;
-    let mockDocument;
+    let mockInputEnabledFunction;
 
     beforeEach(() => {
         mockSysvia = {
@@ -39,16 +39,12 @@ describe("Keyboard", () => {
             tryResume: vi.fn(),
         };
 
-        mockDocument = {
-            activeElement: {
-                id: "not-paste-text",
-            },
-        };
+        mockInputEnabledFunction = vi.fn().mockReturnValue(false);
 
         keyboard = new Keyboard({
             processor: mockProcessor,
             audioHandler: mockAudioHandler,
-            document: mockDocument,
+            inputEnabledFunction: mockInputEnabledFunction,
             keyLayout: "physical",
             dbgr: {
                 enabled: vi.fn().mockReturnValue(false),
@@ -153,7 +149,7 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
-    test("keyDown should not handle keys when paste-text is active", () => {
+    test("keyDown should not handle keys when input is enabled", () => {
         const event = {
             which: utils.keyCodes.A,
             location: 0,
@@ -163,17 +159,15 @@ describe("Keyboard", () => {
             shiftKey: false,
         };
 
-        // Change the active element
-        mockDocument.activeElement.id = "paste-text";
+        // Set input enabled to true
+        mockInputEnabledFunction.mockReturnValueOnce(true);
 
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
         expect(mockAudioHandler.tryResume).toHaveBeenCalled();
+        expect(mockInputEnabledFunction).toHaveBeenCalled();
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-
-        // Reset for other tests
-        mockDocument.activeElement.id = "not-paste-text";
     });
 
     test("keyDown should handle F12/BREAK", () => {
@@ -208,6 +202,25 @@ describe("Keyboard", () => {
         expect(event.preventDefault).toHaveBeenCalled();
     });
 
+    test("keyUp should not proceed when input is enabled", () => {
+        const event = {
+            which: utils.keyCodes.A,
+            location: 0,
+            preventDefault: vi.fn(),
+            altKey: false,
+        };
+
+        // Set input enabled to true
+        mockInputEnabledFunction.mockReturnValueOnce(true);
+
+        keyboard.setRunning(true);
+        keyboard.keyUp(event);
+
+        expect(mockInputEnabledFunction).toHaveBeenCalled();
+        expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+        expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+
     test("keyUp should handle F12/BREAK", () => {
         const event = {
             which: utils.keyCodes.F12,
@@ -231,6 +244,40 @@ describe("Keyboard", () => {
     test("setKeyLayout should update config and call processor to update layout", () => {
         keyboard.setKeyLayout("gaming");
         expect(mockSysvia.setKeyLayout).toHaveBeenCalledWith("gaming");
+    });
+
+    test("keyPress should not proceed when input is enabled", () => {
+        const event = {
+            which: 103, // lowercase g key
+            location: 0,
+            preventDefault: vi.fn(),
+        };
+
+        // Set input enabled to true
+        mockInputEnabledFunction.mockReturnValueOnce(true);
+
+        keyboard.keyPress(event);
+
+        expect(mockInputEnabledFunction).toHaveBeenCalled();
+        // Nothing should happen if inputEnabled returns true
+        expect(keyboard.goCallback).not.toBeDefined();
+    });
+
+    test("keyPress should call goCallback when lowercase g pressed in pause mode", () => {
+        const event = {
+            which: 103, // lowercase g key
+            location: 0,
+            preventDefault: vi.fn(),
+        };
+
+        const mockGoCallback = vi.fn();
+        keyboard.goCallback = mockGoCallback;
+        keyboard.pauseEmu = true;
+
+        keyboard.keyPress(event);
+
+        expect(mockGoCallback).toHaveBeenCalled();
+        expect(keyboard.pauseEmu).toBe(false);
     });
 
     test("registerKeyHandler should add a handler for a key with Alt modifier", () => {

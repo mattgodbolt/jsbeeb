@@ -468,7 +468,7 @@ processor = new Cpu6502(
 keyboard = new Keyboard({
     processor,
     audioHandler,
-    document,
+    inputEnabledFunction: () => document.activeElement && document.activeElement.id === "paste-text",
     keyLayout,
     stopCallback: stop,
     showError,
