@@ -166,6 +166,7 @@ export class Keyboard extends EventEmitter {
         const LOWERCASE_N = 110;
 
         // Early returns for common scenarios
+        // Check if input is enabled. If inputEnabledFunction returns true, keyboard events should not be processed.
         if (this.inputEnabledFunction()) return;
         if (this.running || (!this.dbgr.enabled() && !this.pauseEmu)) return;
 
