@@ -467,13 +467,16 @@ processor = new Cpu6502(
 // Initialize keyboard now that processor exists
 keyboard = new Keyboard({
     processor,
-    audioHandler,
-    document,
+    inputEnabledFunction: () => document.activeElement && document.activeElement.id === "paste-text",
     keyLayout,
-    stopCallback: stop,
-    showError,
-    goCallback: go,
     dbgr,
+});
+keyboard.on("showError", ({ context, error }) => showError(context, error));
+keyboard.on("pause", () => stop(false));
+keyboard.on("resume", () => go());
+keyboard.on("break", (pressed) => {
+    // F12/Break: Reset processor
+    if (pressed) utils.noteEvent("keyboard", "press", "break");
 });
 
 // Register default key handlers
@@ -541,7 +544,10 @@ keyboard.registerKeyHandler(
 );
 
 // Setup key handlers
-document.onkeydown = (evt) => keyboard.keyDown(evt);
+document.onkeydown = (evt) => {
+    audioHandler.tryResume();
+    keyboard.keyDown(evt);
+};
 document.onkeypress = (evt) => keyboard.keyPress(evt);
 document.onkeyup = (evt) => keyboard.keyUp(evt);
 

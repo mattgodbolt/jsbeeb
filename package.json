@@ -19,6 +19,7 @@
     "argparse": "^2.0.1",
     "bootstrap": "^5.3.5",
     "bootswatch": "^5.3.5",
+    "event-emitter-es6": "^1.1.5",
     "jquery": "^3.7.1",
     "smoothie": "^1.36.1",
     "underscore": "^1.13.7"

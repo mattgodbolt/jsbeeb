@@ -1,38 +1,33 @@
 "use strict";
 import * as utils from "./utils.js";
+import EventEmitter from "event-emitter-es6";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 
 /**
+ * @typedef {Object} KeyboardConfig
+ * @property {Object} processor - The processor instance
+ * @property {Function} inputEnabledFunction - A function to check if input is enabled
+ * @property {string} [keyLayout="physical"] - The keyboard layout
+ * @property {Debugger} dbgr - The debugger instance
+ */
+
+/**
  * Keyboard class that handles all keyboard related functionality
  */
-export class Keyboard {
+export class Keyboard extends EventEmitter {
     /**
      * Create a new Keyboard instance with specified configuration
-     * @param {Object} config - The configuration object
+     * @param {KeyboardConfig} config - The configuration object
      */
     constructor(config) {
-        const {
-            processor,
-            audioHandler,
-            document,
-            keyLayout = "physical",
-            stopCallback,
-            goCallback,
-            showError,
-            dbgr,
-        } = config;
+        super();
+        const { processor, inputEnabledFunction, keyLayout = "physical", dbgr } = config;
 
         // Core components
         this.processor = processor;
-        this.audioHandler = audioHandler;
-        this.document = document;
+        this.inputEnabledFunction = inputEnabledFunction;
         this.dbgr = dbgr;
-
-        // Callbacks
-        this.stopCallback = stopCallback;
-        this.goCallback = goCallback;
-        this.showError = showError;
 
         // State
         this.emuKeyHandlers = {};
@@ -132,9 +127,7 @@ export class Keyboard {
      */
     setKeyLayout(layout) {
         this.keyLayout = layout;
-        if (this.processor && this.processor.sysvia) {
-            this.processor.sysvia.setKeyLayout(layout);
-        }
+        this.processor.sysvia.setKeyLayout(layout);
     }
 
     /**
@@ -143,14 +136,6 @@ export class Keyboard {
      */
     setRunning(isRunning) {
         this.running = isRunning;
-    }
-
-    /**
-     * Helper method to check if text input is active and we should ignore keyboard events
-     * @returns {boolean} True if text input is active
-     */
-    isTextInputActive() {
-        return this.document.activeElement && this.document.activeElement.id === "paste-text";
     }
 
     /**
@@ -181,7 +166,8 @@ export class Keyboard {
         const LOWERCASE_N = 110;
 
         // Early returns for common scenarios
-        if (this.isTextInputActive()) return;
+        // Check if input is enabled. If inputEnabledFunction returns true, keyboard events should not be processed.
+        if (this.inputEnabledFunction()) return;
         if (this.running || (!this.dbgr.enabled() && !this.pauseEmu)) return;
 
         const code = this.keyCode(evt);
@@ -189,7 +175,7 @@ export class Keyboard {
         // Handle debugger 'g' key press
         if (this.dbgr.enabled() && code === LOWERCASE_G) {
             this.dbgr.hide();
-            this.goCallback();
+            this.emit("resume");
             return;
         }
 
@@ -200,7 +186,7 @@ export class Keyboard {
                 return;
             } else if (code === LOWERCASE_N) {
                 this.requestStep();
-                this.goCallback();
+                this.emit("resume");
                 return;
             }
         }
@@ -217,11 +203,8 @@ export class Keyboard {
      * @param {KeyboardEvent} evt - The keyboard event
      */
     keyDown(evt) {
-        // Resume audio first (browsers often require user interaction to enable audio)
-        this.audioHandler.tryResume();
-
         // Early returns for common scenarios
-        if (this.isTextInputActive()) return;
+        if (this.inputEnabledFunction()) return;
         if (!this.running) return;
 
         const code = this.keyCode(evt);
@@ -249,8 +232,7 @@ export class Keyboard {
      */
     _handleSpecialKeys(code) {
         if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-            // F12/Break: Reset processor
-            utils.noteEvent("keyboard", "press", "break");
+            this.emit("break", true);
             this.processor.setReset(true);
             return true;
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
@@ -268,7 +250,7 @@ export class Keyboard {
      */
     keyUp(evt) {
         // Early return for text input
-        if (this.isTextInputActive()) return;
+        if (this.inputEnabledFunction()) return;
 
         // Always let the key ups come through to avoid sticky keys in the debugger
         const code = this.keyCode(evt);
@@ -281,7 +263,7 @@ export class Keyboard {
 
         // Handle special key cases
         if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-            // Release reset on F12/Break key up
+            this.emit("break", false);
             this.processor.setReset(false);
             return;
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
@@ -311,15 +293,15 @@ export class Keyboard {
         setTimeout(() => this.processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (isMac && window.localStorage && !window.localStorage.getItem("warnedAboutRubbishMacs")) {
-            this.showError(
-                "handling caps lock on Mac OS X",
-                `Mac OS X does not generate key up events for caps lock presses. 
+            this.emit("showError", {
+                context: "handling caps lock on Mac OS X",
+                error: `Mac OS X does not generate key up events for caps lock presses. 
                 jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games 
                 that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play 
                 such a game, please see the documentation about remapping keys.
                 Close this window to continue (you won't see this error again)`,
-            );
-            window.localStorage.setItem("warnedAboutRubbishMacs", true);
+            });
+            window.localStorage.setItem("warnedAboutRubbishMacs", "true");
         }
     }
 
@@ -416,7 +398,7 @@ export class Keyboard {
      */
     pauseEmulation() {
         this.pauseEmu = true;
-        this.stopCallback(false);
+        this.emit("pause");
     }
 
     /**
@@ -424,6 +406,6 @@ export class Keyboard {
      */
     resumeEmulation() {
         this.pauseEmu = false;
-        this.goCallback();
+        this.emit("resume");
     }
 }

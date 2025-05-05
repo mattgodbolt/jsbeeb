@@ -6,8 +6,23 @@ describe("Keyboard", () => {
     let keyboard;
     let mockProcessor;
     let mockSysvia;
-    let mockAudioHandler;
-    let mockDocument;
+    let mockInputEnabledFunction;
+
+    // Helper function to create an async event tester
+    const waitForEvent = (eventName) => {
+        return new Promise((resolve) => {
+            keyboard.on(eventName, (...args) => {
+                resolve(args);
+            });
+        });
+    };
+
+    // Helper to trigger an event and wait for the result
+    const triggerAndWaitForEvent = async (eventName, action) => {
+        const eventPromise = waitForEvent(eventName);
+        action();
+        return await eventPromise;
+    };
 
     beforeEach(() => {
         mockSysvia = {
@@ -35,20 +50,11 @@ describe("Keyboard", () => {
             currentCycles: 0,
         };
 
-        mockAudioHandler = {
-            tryResume: vi.fn(),
-        };
-
-        mockDocument = {
-            activeElement: {
-                id: "not-paste-text",
-            },
-        };
+        mockInputEnabledFunction = vi.fn().mockReturnValue(false);
 
         keyboard = new Keyboard({
             processor: mockProcessor,
-            audioHandler: mockAudioHandler,
-            document: mockDocument,
+            inputEnabledFunction: mockInputEnabledFunction,
             keyLayout: "physical",
             dbgr: {
                 enabled: vi.fn().mockReturnValue(false),
@@ -131,7 +137,6 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
-        expect(mockAudioHandler.tryResume).toHaveBeenCalled();
         expect(mockSysvia.keyDown).toHaveBeenCalledWith(utils.keyCodes.A, false);
         expect(event.preventDefault).toHaveBeenCalled();
     });
@@ -149,11 +154,10 @@ describe("Keyboard", () => {
         keyboard.setRunning(false);
         keyboard.keyDown(event);
 
-        expect(mockAudioHandler.tryResume).toHaveBeenCalled();
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
-    test("keyDown should not handle keys when paste-text is active", () => {
+    test("keyDown should not handle keys when input is enabled", () => {
         const event = {
             which: utils.keyCodes.A,
             location: 0,
@@ -163,20 +167,17 @@ describe("Keyboard", () => {
             shiftKey: false,
         };
 
-        // Change the active element
-        mockDocument.activeElement.id = "paste-text";
+        // Set input enabled to true
+        mockInputEnabledFunction.mockReturnValueOnce(true);
 
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
-        expect(mockAudioHandler.tryResume).toHaveBeenCalled();
+        expect(mockInputEnabledFunction).toHaveBeenCalled();
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
-
-        // Reset for other tests
-        mockDocument.activeElement.id = "not-paste-text";
     });
 
-    test("keyDown should handle F12/BREAK", () => {
+    test("keyDown should handle F12/BREAK and emit break event", async () => {
         const event = {
             which: utils.keyCodes.F12,
             location: 0,
@@ -187,10 +188,14 @@ describe("Keyboard", () => {
         };
 
         keyboard.setRunning(true);
-        keyboard.keyDown(event);
+
+        const [breakState] = await triggerAndWaitForEvent("break", () => {
+            keyboard.keyDown(event);
+        });
 
         expect(mockProcessor.setReset).toHaveBeenCalledWith(true);
         expect(event.preventDefault).toHaveBeenCalled();
+        expect(breakState).toBe(true);
     });
 
     test("keyUp should call sysvia.keyUp", () => {
@@ -208,7 +213,26 @@ describe("Keyboard", () => {
         expect(event.preventDefault).toHaveBeenCalled();
     });
 
-    test("keyUp should handle F12/BREAK", () => {
+    test("keyUp should not proceed when input is enabled", () => {
+        const event = {
+            which: utils.keyCodes.A,
+            location: 0,
+            preventDefault: vi.fn(),
+            altKey: false,
+        };
+
+        // Set input enabled to true
+        mockInputEnabledFunction.mockReturnValueOnce(true);
+
+        keyboard.setRunning(true);
+        keyboard.keyUp(event);
+
+        expect(mockInputEnabledFunction).toHaveBeenCalled();
+        expect(mockSysvia.keyUp).not.toHaveBeenCalled();
+        expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+
+    test("keyUp should handle F12/BREAK and emit break event", async () => {
         const event = {
             which: utils.keyCodes.F12,
             location: 0,
@@ -217,10 +241,14 @@ describe("Keyboard", () => {
         };
 
         keyboard.setRunning(true);
-        keyboard.keyUp(event);
+
+        const [breakState] = await triggerAndWaitForEvent("break", () => {
+            keyboard.keyUp(event);
+        });
 
         expect(mockProcessor.setReset).toHaveBeenCalledWith(false);
         expect(event.preventDefault).toHaveBeenCalled();
+        expect(breakState).toBe(false);
     });
 
     test("clearKeys should call sysvia.clearKeys", () => {
@@ -231,6 +259,65 @@ describe("Keyboard", () => {
     test("setKeyLayout should update config and call processor to update layout", () => {
         keyboard.setKeyLayout("gaming");
         expect(mockSysvia.setKeyLayout).toHaveBeenCalledWith("gaming");
+    });
+
+    test("keyPress should not proceed when input is enabled", () => {
+        const event = {
+            which: 103, // lowercase g key
+            location: 0,
+            preventDefault: vi.fn(),
+        };
+
+        // Set input enabled to true
+        mockInputEnabledFunction.mockReturnValueOnce(true);
+
+        // Add a resume event listener to check it's not called
+        const resumeListener = vi.fn();
+        keyboard.on("resume", resumeListener);
+
+        keyboard.keyPress(event);
+
+        expect(mockInputEnabledFunction).toHaveBeenCalled();
+        // No events should be emitted when input is enabled
+        expect(resumeListener).not.toHaveBeenCalled();
+    });
+
+    test("keyPress should emit resume event when lowercase g pressed in pause mode", async () => {
+        const event = {
+            which: 103, // lowercase g key
+            location: 0,
+            preventDefault: vi.fn(),
+        };
+
+        keyboard.pauseEmu = true;
+
+        const eventPromise = waitForEvent("resume");
+        keyboard.keyPress(event);
+        await eventPromise;
+
+        expect(keyboard.pauseEmu).toBe(false);
+    });
+
+    test("keyPress should handle debugger g key and emit resume event", async () => {
+        const event = {
+            which: 103, // lowercase g key
+            location: 0,
+            preventDefault: vi.fn(),
+        };
+
+        // Mock debugger enabled
+        const mockDbgr = {
+            enabled: vi.fn().mockReturnValue(true),
+            keyPress: vi.fn(),
+            hide: vi.fn(),
+        };
+        keyboard.dbgr = mockDbgr;
+
+        const eventPromise = waitForEvent("resume");
+        keyboard.keyPress(event);
+        await eventPromise;
+
+        expect(mockDbgr.hide).toHaveBeenCalled();
     });
 
     test("registerKeyHandler should add a handler for a key with Alt modifier", () => {
@@ -301,24 +388,23 @@ describe("Keyboard", () => {
         expect(keyboard.stepEmuWhenPaused).toBe(true);
     });
 
-    test("pauseEmulation should set pause flag and call stopCallback", () => {
-        const stopCallback = vi.fn();
-        keyboard.stopCallback = stopCallback;
-
+    test("pauseEmulation should set pause flag and emit pause event", async () => {
+        const eventPromise = waitForEvent("pause");
         keyboard.pauseEmulation();
+        await eventPromise;
 
         expect(keyboard.pauseEmu).toBe(true);
-        expect(stopCallback).toHaveBeenCalledWith(false);
     });
 
-    test("resumeEmulation should clear pause flag and call goCallback", () => {
-        const goCallback = vi.fn();
-        keyboard.goCallback = goCallback;
+    test("resumeEmulation should clear pause flag and emit resume event", async () => {
         keyboard.pauseEmu = true;
 
+        const eventPromise = waitForEvent("resume");
         keyboard.resumeEmulation();
+        await eventPromise;
 
         expect(keyboard.pauseEmu).toBe(false);
-        expect(goCallback).toHaveBeenCalled();
     });
+
+    // We don't test Mac-specific code as it requires global mocking
 });
