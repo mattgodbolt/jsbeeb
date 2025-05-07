@@ -646,7 +646,7 @@ export class Cpu6502 extends Base6502 {
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
 
         // ATOM
-        if (model.isAtom) {
+        if (this.model.isAtom) {
             this.atomppia = new atom_ppia.AtomPPIA(this, this.config.keyLayout, this.scheduler);
             this.atommc = atom_mmc.AtomMMC2(/*this*/);
         }
@@ -1423,7 +1423,7 @@ export class Cpu6502 extends Base6502 {
         this.sysvia.setKeyLayout(this.config.keyLayout);
 
         // ATOM
-        if (this.model.isAtom) this.atomppia.setKeyLayoutAtom(config.keyLayout);
+        if (this.model.isAtom) this.atomppia.setKeyLayoutAtom(this.config.keyLayout);
     }
 
     polltimeAddr(cycles, addr) {

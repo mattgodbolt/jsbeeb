@@ -122,10 +122,6 @@ class PPIA {
         this.recalculatePortCPins();
     }
 
-    // polltime(cycles) {
-    //     cycles |= 0;
-
-    // }
     /*
  Port C - #B002
         Output bits:      Function:
@@ -446,14 +442,7 @@ export class AtomPPIA extends PPIA {
 
     updateKeys() {}
 
-    polltime(cycles) {
-        this.cpu.soundChip.updateSpeaker(
-            !!this.speaker,
-            this.processor.currentCycles,
-            this.processor.cycleSeconds,
-            cycles,
-        );
-    }
+    polltime() {}
 
     portAUpdated() {
         this.updateKeys();
@@ -462,7 +451,11 @@ export class AtomPPIA extends PPIA {
     portBUpdated() {}
 
     portCUpdated() {
-        this.speaker = (this.portcpins & 0x04) >>> 2;
+        this.cpu.soundChip.speakerGenerator.pushBit(
+            (this.portcpins & 0x04) >>> 2,
+            self.processor.currentCycles,
+            self.processor.cycleSeconds,
+        );
     }
 
     drivePortA() {

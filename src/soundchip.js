@@ -79,6 +79,20 @@ export class SoundChip {
         };
 
         // ATOM
+        this.isAtom = false; // set to true for the ATOM
+        // this.speakerGenerator with mute and pushbit to push bits to the speaker which
+        // will play all the time and play the bits in packets to the speaker
+        this.speakerGenerator = {
+            mute: () => {
+                this.catchUp();
+                this.speakerReset();
+            },
+            pushBit: (bit, cycles, seconds) => {
+                this.catchUp();
+                this.updateSpeaker(bit, cycles, seconds);
+            },
+        };
+
         this.cpuFreq = 1 / 1000000; // 1MHZ atom
         this.speakerBufferSize = 8192;
         this.speakerBuffer = [];
@@ -190,6 +204,17 @@ export class SoundChip {
         }
         if (!this.enabled) return;
         for (let i = 0; i < this.generators.length; ++i) {
+            // ATOM
+            if (this.isAtom) {
+                // no need to generate these channels on ATOM
+                // BBC only
+                if (i < 4) continue;
+            } else {
+                // no need to generate this channel on BBC
+                // ATOM only
+                if (i == 5) continue;
+            }
+            // NOTE: channel 4 is sine channel which can be used by both
             this.generators[i](i, out, offset, length);
         }
     }
@@ -313,132 +338,80 @@ export class SoundChip {
     }
 
     // ATOM
+    // Atom Speaker - pushBit will be called by the CPU via the PPIA to set a 0 to the physical speaker output
+    // but the PPIA port A bit is usually set to 1 giving no sound. Only a change in the value causes the speaker to
+    // buzz.
+
+    // The 'soundchip' is scheduled to send data to the browser audiohandler at sampleRate.
+    // speakerChannel will fill the out buffer with data from the speakerBuffer
+    // the speakerbuffer is filled with the data via updateSpeaker
+
+    // so cpu -> ppia -> updatespeaker > speakerbuffer -> speakerchannel -> out
+
+    // ATOM
     speakerReset() {
-        for (let i = 0; i < this.speakerBufferSize; ++i) {
-            this.speakerBuffer[i] = 0.0;
-        }
-
-        this.speakerTime = 0;
-        this.bufferPos = this.speakerBufferSize >> 1; // start buffer half way through buffer and speakertime at the beginning
-
-        this.lastSecond = 0;
-        this.lastMicroCycle = 0;
-        this.outstandingCycles = 0;
-
-        this.numSamplesAdded = 0;
+        this.bitChange = []; // FIFO queue
+        this.currentSpeakerBit = 0.0; // most recent bit to be copied into out
     }
 
     // ATOM
     speakerChannel(channel, out, offset, length) {
-        // soundchip _reset_ will advance the buffer 100000 cycles (or 4410 samples)
-        //  which is rounded to buffer size of 4096
-        //
+        // channel not used
+        // out is the buffer to fill (total buffer is no more than 512 samples in size)
+        // offset is the position in the out buffer to start filling
+        // length is the number of samples to fill
 
-        // the catchup() in updateSpeaker() will cause this to be called every time a sample can
-        // be played, but it just buffers up the result and doesn't play it.
-        // a real 'render' is when the length is about 2048 or higher
+        // this.scheduler.epoch is the number of cycles since the last update
+        let fromTime = this.scheduler.epoch - length;
+        let bitIndex = 0;
 
-        // speakerBuffer contains the data from the CPU
-        // the start of that data is speakerTime and it wraps around
-        // the buffer is unlikely to fill since the speakerBufferSize is 4 times bigger than
-        // the average length that is grabbed by this function
-        // NOTE: bufferPos is the position that the CPU is copying data into this buffer
-        // NOTE: numSamplesAdded is the number of samples that were added since this function last was called
-
-        // this function must copy the data from speakerBuffer into out, starting at offset until length
-        // it doesn't need to wrap the out as it will be larger than offset+length (I think)
-
-        // if (length !== numSamplesAdded)
-        //     console.log("offset+length (" + offset + "+" + length + ") = " + (offset + length) + ", speakerTime " + speakerTime + ", numSamplesAdded " + numSamplesAdded + ", bufferPos " + bufferPos);
-
-        // this is the last bit that was copied into out
-        let lastbit = this.speakerBuffer[this.speakerTime];
-
-        // fill the out buffer with length samples
-        // it will use data from the speakerBuffer until it runs out; and then it will repeat the
-        // last bit until the out buffer is full
+        // start filling the out buffer with bits from the bitChange queue
         for (let i = 0; i < length; ++i) {
-            // got a real sample, so grab it.  If not, just keep using the last correct value
-            if (i < this.numSamplesAdded)
-                lastbit = this.speakerBuffer[(this.speakerTime + i) & (this.speakerBufferSize - 1)];
+            // need some bits in the queue or just stick with the current bit value
+            // i will be incrementing through the cycles so it will eventuall be greater than
+            // the last bitChange cycle
+            // when this happens, make the current bit that in the queue
+            // NOTE: using bitIndex and splice to avoid using 'shift' which is O(n)
+            while (bitIndex < this.bitChange.length && this.bitChange[bitIndex].cycles <= fromTime + i) {
+                this.currentSpeakerBit = this.bitChange[bitIndex].bit;
+                bitIndex++;
+            }
 
-            out[i + offset] += lastbit;
+            out[i + offset] += this.currentSpeakerBit;
         }
 
-        this.speakerTime += this.numSamplesAdded;
-
-        while (this.speakerTime >= this.speakerBufferSize) this.speakerTime -= this.speakerBufferSize;
-        this.numSamplesAdded = 0;
+        // Remove processed bits from the queue
+        if (bitIndex > 0) {
+            this.bitChange.splice(0, bitIndex);
+        }
     }
 
     // ATOM
-    // fill the buffer with the last value
-    // polled from the PPIA on the ATOM
-    updateSpeaker(value, microCycle, seconds, cycles) {
-        // value - true for 1, false for 0
+    // record changes in the value in a FIFO queue
+    // bit changed from the PPIA on the ATOM
+    updateSpeaker(value, microCycle, seconds) {
+        // value is usually 1, it is flipped between 1 and 0 when a sound is required
 
-        // calculate the number of buffer values to fill
-        let deltaSeconds = seconds - this.lastSecond;
-        let deltaCycles = microCycle - this.lastMicroCycle;
+        // cycles is the number of cycles since the last update
+        const cycles = microCycle + seconds / this.cpuFreq;
 
-        // deltaSeconds is seconds since last last update
-        // deltaCycles is microcycles since last update
+        const newbit = value ? 1.0 : 0.0;
 
-        let totalCycles = this.outstandingCycles + deltaCycles + deltaSeconds / this.cpuFreq;
-
-        if (totalCycles === cycles) console.log("updatespeaker cycles same");
-
-        //convert totalCycles to totalSamples at samplerate
-        let totalSamples = (totalCycles * this.samplesPerCycle) | 0;
-
-        if (totalSamples === 0) this.outstandingCycles = totalCycles;
-        else this.outstandingCycles = totalCycles - 1 / this.samplesPerCycle;
-
-        let lastbit = this.speakerBuffer[this.bufferPos];
-
-        if (totalSamples >= this.speakerBufferSize) {
-            console.log(
-                "speaker buffer too small " + this.bufferPos + " " + totalSamples + " >= " + this.speakerBufferSize,
-            );
-            // clear out the buffer with zeros
-            this.outstandingCycles = 0;
-            this.bufferPos = 0;
-        } else {
-            // fill the buffer with the last value that was set
-            for (var i = 0; i < totalSamples; ++i) {
-                this.speakerBuffer[this.bufferPos & (this.speakerBufferSize - 1)] = lastbit;
-                this.bufferPos++;
-            }
-            while (this.bufferPos >= this.speakerBufferSize) this.bufferPos -= this.speakerBufferSize;
-            this.numSamplesAdded += totalSamples;
-        }
-        let newbit = value ? 1.0 : 0.0;
-
-        // record the current value
-        this.speakerBuffer[this.bufferPos] = newbit;
-
-        // // testAudio
-        // samplesSinceLastValueChange+=totalSamples;
-        // if ( lastbit !== newbit ) {
-        //     // samples since last change is only half a cycle so multiply by 2
-        //     console.log("updateSpeaker frequency: " + sampleRate / (samplesSinceLastValueChange * 2) + "hz");
-        //     samplesSinceLastValueChange=0;
-        // }
+        // create a FIFO queue and push on the newbit, and totalCycles
+        this.bitChange.push({ bit: newbit, cycles: cycles });
 
         // running this program (from Atomic Theory and Practice) page 26
         // section 4.6.1 Labels - a to z
         // shows that the frequencies and sounds are right
         /*
-    10 REM 322 Hz
-    20 P=#B002
-    30 FOR Z=0 TO 10000000 STEP 4;?P=Z;N.
-    40 END
-    RUN
-    */
+        10 REM 322 Hz
+        20 P=#B002
+        30 FOR Z=0 TO 10000000 STEP 4;?P=Z;N.
+        40 END
+        RUN
+        */
 
-        // start the next update from this point
-        this.lastSecond = seconds;
-        this.lastMicroCycle = microCycle;
+        // can also run the SYNTHESISER program from the ATOM MMC
     }
 }
 
@@ -464,172 +437,3 @@ export class FakeSoundChip {
         };
     }
 }
-
-//     // poke() triggered by the emulator to latch relevant data
-//     // on Acorn Atom this is really just using the 'catchup' regularly.
-
-//     //Acorn Atom
-//     generators[5] = speakerChannel;
-
-//     var speakerBufferSize = 8192;
-//     var speakerBuffer = [];
-//     for (i = 0; i < speakerBufferSize; ++i) {
-//         speakerBuffer[i] = 0.0;
-//     }
-
-//     var speakerTime = 0;
-//     var bufferPos = speakerBufferSize >> 1; // start buffer half way through buffer and speakertime at the beginning
-//     // // test audio
-//     // var samplesSinceLastValueChange = 0;
-
-//     var lastSecond = 0;
-//     var lastMicroCycle = 0;
-//     var outstandingCycles = 0;
-
-//     var numSamplesAdded = 0;
-
-//     function speakerReset() {
-//         for (i = 0; i < speakerBufferSize; ++i) {
-//             speakerBuffer[i] = 0.0;
-//         }
-
-//         speakerTime = 0;
-//         bufferPos = speakerBufferSize >> 1; // start buffer half way through buffer and speakertime at the beginning
-
-//         lastSecond = 0;
-//         lastMicroCycle = 0;
-//         outstandingCycles = 0;
-
-//         numSamplesAdded = 0;
-//     }
-
-//     // called by the generator to pump samples to the output
-//     function speakerChannel(channel, out, offset, length) {
-//         // soundchip _reset_ will advance the buffer 100000 cycles (or 4410 samples)
-//         //  which is rounded to buffer size of 4096
-//         //
-
-//         // the catchup() in updateSpeaker() will cause this to be called every time a sample can
-//         // be played, but it just buffers up the result and doesn't play it.
-//         // a real 'render' is when the length is about 2048 or higher
-
-//         // speakerBuffer contains the data from the CPU
-//         // the start of that data is speakerTime and it wraps around
-//         // the buffer is unlikely to fill since the speakerBufferSize is 4 times bigger than
-//         // the average length that is grabbed by this function
-//         // NOTE: bufferPos is the position that the CPU is copying data into this buffer
-//         // NOTE: numSamplesAdded is the number of samples that were added since this function last was called
-
-//         // this function must copy the data from speakerBuffer into out, starting at offset until length
-//         // it doesn't need to wrap the out as it will be larger than offset+length (I think)
-
-//         // if (length !== numSamplesAdded)
-//         //     console.log("offset+length (" + offset + "+" + length + ") = " + (offset + length) + ", speakerTime " + speakerTime + ", numSamplesAdded " + numSamplesAdded + ", bufferPos " + bufferPos);
-
-//         // this is the last bit that was copied into out
-//         var lastbit = speakerBuffer[speakerTime];
-
-//         // fill the out buffer with length samples
-//         // it will use data from the speakerBuffer until it runs out; and then it will repeat the
-//         // last bit until the out buffer is full
-//         for (var i = 0; i < length; ++i) {
-//             // got a real sample, so grab it.  If not, just keep using the last correct value
-//             if (i < numSamplesAdded) lastbit = speakerBuffer[(speakerTime + i) & (speakerBufferSize - 1)];
-
-//             out[i + offset] += lastbit;
-//         }
-
-//         speakerTime += numSamplesAdded;
-
-//         while (speakerTime >= speakerBufferSize) speakerTime -= speakerBufferSize;
-//         numSamplesAdded = 0;
-//     }
-
-//     // fill the buffer with the last value
-//     this.updateSpeaker = function (value, microCycle, seconds, cycles) {
-//         // value - true for 1, false for 0
-
-//         // calculate the number of buffer values to fill
-//         var deltaSeconds = seconds - lastSecond;
-//         var deltaCycles = microCycle - lastMicroCycle;
-
-//         // deltaSeconds is seconds since last last update
-//         // deltaCycles is microcycles since last update
-
-//         var totalCycles = outstandingCycles + deltaCycles + deltaSeconds / cpuFreq;
-
-//         if (totalCycles === cycles) console.log("updatespeaker cycles same");
-
-//         //convert totalCycles to totalSamples at samplerate
-//         var totalSamples = (totalCycles * samplesPerCycle) | 0;
-
-//         if (totalSamples === 0) outstandingCycles = totalCycles;
-//         else outstandingCycles = totalCycles - 1 / samplesPerCycle;
-
-//         var lastbit = speakerBuffer[bufferPos];
-
-//         if (totalSamples >= speakerBufferSize) {
-//             console.log("speaker buffer too small " + bufferPos + " " + totalSamples + " >= " + speakerBufferSize);
-//             // clear out the buffer with zeros
-//             outstandingCycles = 0;
-//             bufferPos = 0;
-//         } else {
-//             // fill the buffer with the last value that was set
-//             for (var i = 0; i < totalSamples; ++i) {
-//                 speakerBuffer[bufferPos & (speakerBufferSize - 1)] = lastbit;
-//                 bufferPos++;
-//             }
-//             while (bufferPos >= speakerBufferSize) bufferPos -= speakerBufferSize;
-//             numSamplesAdded += totalSamples;
-//         }
-//         var newbit = value ? 1.0 : 0.0;
-
-//         // record the current value
-//         speakerBuffer[bufferPos] = newbit;
-
-//         // // testAudio
-//         // samplesSinceLastValueChange+=totalSamples;
-//         // if ( lastbit !== newbit ) {
-//         //     // samples since last change is only half a cycle so multiply by 2
-//         //     console.log("updateSpeaker frequency: " + sampleRate / (samplesSinceLastValueChange * 2) + "hz");
-//         //     samplesSinceLastValueChange=0;
-//         // }
-
-//         // running this program (from Atomic Theory and Practice) page 26
-//         // section 4.6.1 Labels - a to z
-//         // shows that the frequencies and sounds are right
-//         /*
-// 10 REM 322 Hz
-// 20 P=#B002
-// 30 FOR Z=0 TO 10000000 STEP 4;?P=Z;N.
-// 40 END
-// RUN
-// */
-
-//         // start the next update from this point
-//         lastSecond = seconds;
-//         lastMicroCycle = microCycle;
-//     };
-
-//     this.reset = function (hard) {
-//         if (!hard) return;
-//         for (var i = 0; i < 4; ++i) {
-//             counter[i] = 0;
-//             register[i] = 0;
-//             volume[i] = 0; // ideally this would be volumeTable[0] to get the "boo" of "boo...beep".  But startup issues make the "boo" all clicky.
-//         }
-//         noisePoked();
-//         advance(100000);
-//         this.setScheduler(scheduler);
-//         speakerReset(); // ACORN ATOM
-//     };
-//     this.enable = function (e) {
-//         enabled = e;
-//     };
-//     this.mute = function () {
-//         enabled = false;
-//     };
-//     this.unmute = function () {
-//         enabled = true;
-//     };
-// }

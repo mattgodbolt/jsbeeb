@@ -77,7 +77,7 @@ class UefTape {
                 // console.log("SEND (0x"+self.lastChunkId.toString(16)+") at ["+wavebits+"]" + self.processor.cycleSeconds + "seconds, " + self.processor.currentCycles + "cycles ("+t+") } ");
                 const wbit = this.wavebits.shift();
                 acia.receiveBit(wbit);
-                return cycles(1.0 / 15.5136); // to create 3340 cycles between bits
+                return this.cycles(1.0 / 15.5136); // to create 3340 cycles between bits
             } else {
                 // console.log("NEXT (0x"+self.lastChunkId.toString(16)+") at " + self.processor.cycleSeconds + "seconds, " + self.processor.currentCycles + "cycles ("+t+") } ");
             }
@@ -165,7 +165,7 @@ class UefTape {
                     this.state++;
                     // ATOM
                     if (isAtom) {
-                        let bit = curByte & (1 << (state - 1));
+                        let bit = this.curByte & (1 << (this.state - 1));
                         this.wavebits = Array.from(bit ? bit1pattern : bit0pattern);
                     }
                 } else if (this.state < 1 + this.numDataBits + this.numParityBits) {
@@ -186,8 +186,8 @@ class UefTape {
                     this.state <
                     1 + this.numDataBits + this.numParityBits + this.numStopBits + this.shortWave
                 ) {
-                    acia.tone(2 * baseFrequency); // Extra short wave - one cycle bits
-                    state++;
+                    acia.tone(2 * this.baseFrequency); // Extra short wave - one cycle bits
+                    this.state++;
                     // ATOM
                     if (isAtom) this.wavebits = Array.from(bit1pattern);
                 } else {
@@ -271,9 +271,11 @@ class UefTape {
                 return secsToClocks(gap);
             case 0x0117:
                 // ATOM ?
-                const baud = this.curChunk.stream.readInt16();
-                if (baud === 300) this.baudMultiplier = 4;
-                console.log("Baud rate of " + baud);
+                {
+                    const baud = this.curChunk.stream.readInt16();
+                    if (baud === 300) this.baudMultiplier = 4;
+                    console.log("Baud rate of " + baud);
+                }
                 break;
             default:
                 console.log("Skipping unknown chunk " + utils.hexword(this.curChunk.id));

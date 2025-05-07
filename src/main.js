@@ -265,6 +265,8 @@ config.setNoiseKiller(parsedQuery.hasNoiseKiller);
 
 model = config.model;
 
+// ATOM
+// adding isAtom to model, and thus processor.model
 model.isAtom = model.synonyms[0] === "Atom";
 if (model.isAtom) {
     discImage = "atom/disk0725.dsk"; // Graphics demos
@@ -320,6 +322,7 @@ if (model.isAtom) {
 const audioStatsNode = document.getElementById("audio-stats");
 const audioHandler = new AudioHandler($("#audio-warning"), audioStatsNode, audioFilterFreq, audioFilterQ, noSeek);
 audioHandler.soundChip.setCPUSpeed(cpuSpeed);
+audioHandler.soundChip.isAtom = model.isAtom;
 
 if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // Firefox will report that audio is suspended even when it will
@@ -584,7 +587,7 @@ const $pastetext = $("#paste-text");
 $pastetext.on("paste", function (event) {
     const text = event.originalEvent.clipboardData.getData("text/plain");
     // ATOM
-    if (processor.model.isAtom) {
+    if (model.isAtom) {
         sendRawKeyboardToBBC(utils_atom.stringToATOMKeys(text), false);
     } else {
         sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
@@ -1075,7 +1078,7 @@ function loadTapeImage(tapeImage) {
 
     return loadTape("tapes/" + tapeImage).then(function (tape) {
         // ATOM
-        if (processor.model.isAtom) {
+        if (model.isAtom) {
             processor.atomppia.setTape(tape);
         } else {
             processor.acia.setTape(tape);
@@ -1127,7 +1130,7 @@ var tapeload = function (evt) {
     var reader = new FileReader();
     utils.noteEvent("local", "clickTape"); // NB no filename here
     reader.onload = function (e) {
-        if (processor.model.isAtom) {
+        if (model.isAtom) {
             processor.atomppia.setTape(loadTapeFromData("local file", e.target.result));
         } else {
             processor.acia.setTape(loadTapeFromData("local file", e.target.result));
@@ -1439,7 +1442,7 @@ const startPromise = Promise.all([audioHandler.initialise(), processor.initialis
 
     // ATOM
     // AcornAtom - not (Tape) version
-    if (processor.model.isAtom) {
+    if (model.isAtom) {
         processor.atommc.attachGamepad(gamepad);
         if (!processor.model.name.includes("(MMC)")) mmcImage = null;
         if (!processor.model.useFdc) discImage = null;
@@ -1756,8 +1759,8 @@ function stop(debug) {
 
 (function () {
     // ATOM
-    const $cubMonitor = processor.model.isAtom ? $("#nec-tv") : $("#cub-monitor");
-    const $cubMonitorPic = processor.model.isAtom ? $("#nec-tv-pic") : $("#cub-monitor-pic");
+    const $cubMonitor = model.isAtom ? $("#nec-tv") : $("#cub-monitor");
+    const $cubMonitorPic = model.isAtom ? $("#nec-tv-pic") : $("#cub-monitor-pic");
     const cubOrigHeight = $cubMonitorPic.attr("height");
     const cubOrigWidth = $cubMonitorPic.attr("width");
     const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
@@ -1780,7 +1783,7 @@ function stop(debug) {
         $cubMonitor.height(height).width(width);
         $cubMonitorPic.height(height).width(width);
         //ATOM
-        if (processor.model.isAtom) width = 0.8 * width; // atom screen, slightly narrower because of speaker grill on the NEC-TV
+        if (model.isAtom) width = 0.8 * width; // atom screen, slightly narrower because of speaker grill on the NEC-TV
         $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
     }
 
