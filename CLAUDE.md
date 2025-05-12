@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build and Test Commands
 
-- `npm start` - Start development server
+- `npm start` - Start development server (IMPORTANT: Never run this command directly; ask the user to start the server
+  as needed)
 - `npm run build` - Build production version
 - `npm run lint` - Run ESLint
 - `npm run lint-fix` - Run ESLint with auto-fix
@@ -32,15 +33,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Naming**: camelCase for variables and functions, PascalCase for classes
 - **Imports**: Group by source (internal/external) with proper separation
 
+## Test Organization
+
+- **Test Consolidation**: All tests for a specific component should be consolidated in a single test file.
+  For example, all tests for `emulator.js` should be in `test-emulator.js` - do not create separate test files
+  for different aspects of the same component.
+- **Test Structure**: Use nested describe blocks to organize tests by component features
+- **Test Isolation**: When mocking components in tests, use `vi.spyOn()` with `vi.restoreAllMocks()` in
+  `afterEach` hooks rather than global `vi.mock()` to prevent memory leaks and test pollution
+- **Memory Management**: Avoid global mocks that can leak between tests and accumulate memory usage over time
+- **Test philosophy**
+  - Mock as little as possible: Try and rephrase code not to require it.
+  - Try not to rely on internal state: don't manipulate objects' inner state in tests
+
 ## Project-Specific Knowledge
+
+- **Never commit code unless asked**: Very often we'll work on code and iterate. After you think it's complete, let me
+  check it before you commit.
 
 ### Code Architecture
 
-- **Video Rendering**: `Video` class in video.js handles all rendering
+- **General Principles**:
+  - Follow the existing code style and structure
+  - Use `const` and `let` instead of `var`
+  - Avoid global variables; use module scope
+  - Use arrow functions for callbacks
+  - Prefer template literals over string concatenation
+  - Use destructuring for objects and arrays when appropriate
+  - Use async/await for asynchronous code instead of callbacks or promises
+  - Minimise special case handling - prefer explicit over implicit behaviour
+  - Consider adding tests first before implementing features
+- **When simplifying existing code**
 
-  - Scanlines are processed by the `polltime` method
-  - `blitFb` renders individual character blocks
-  - End of scanlines is handled in `endOfScanline` method
+  - Prefer helper functions for repetitive operations (like the `appendParam` function)
+  - Remove unnecessary type checking where types are expected to be correct
+  - Replace complex conditionals with more readable alternatives when possible
+  - Ensure simplifications don't break existing behavior or assumptions
+  - Try and modernise the code to use ES6+ features where possible
+
+- Prefer helper functions for repetitive operations (like the `appendParam` function)
+- Remove unnecessary type checking where types are expected to be correct
+- Replace complex conditionals with more readable alternatives when possible
+- Ensure simplifications don't break existing behavior or assumptions
 
 - **Important Constants**:
 

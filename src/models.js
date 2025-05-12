@@ -10,8 +10,6 @@ const CpuModel = Object.freeze({
     CMOS65C12: 2,
 });
 
-// ATOM: useFDC and isATOM to be moved
-
 class Model {
     constructor(name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride) {
         this.name = name;
@@ -24,6 +22,9 @@ class Model {
         this.isTest = false;
         this.tube = tube;
         this.cmosOverride = cmosOverride;
+        this.hasEconet = false;
+        this.hasMusic5000 = false;
+        this.isAtom = false;
     }
 
     get nmos() {
@@ -170,7 +171,7 @@ export const allModels = [
     new Model("Tube65C02", [], ["tube/6502Tube.rom"], CpuModel.CMOS65C02, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
 
     new Model(
-        "Acorn Atom (MMC)",
+        "Acorn Atom (MMC)", // (MMC) used to distinguish from Atom (DOS)
         ["Atom"],
         ["atom/Atom_Kernel_E.rom", "atom/ATMMC3E.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
         CpuModel.MOS6502,
@@ -182,6 +183,7 @@ export const allModels = [
         "Acorn Atom (Tape)",
         ["Atom-Tape"],
         ["atom/Atom_Kernel.rom", "", "", "atom/Atom_Basic.rom"],
+        CpuModel.MOS6502,
         false,
         beebSwram,
         NoiseAwareIntelFdc, // not used

@@ -1337,11 +1337,11 @@ export class Cpu6502 extends Base6502 {
                     for (let i = 0xb0; i < 0xc0; ++i) this.memStat[i] = this.memStat[256 + i] = 0; //0xb000 to 0xbfff  : 0 means DEVICE/PERIPHERAL/IO
                     for (let i = 0xc0; i < 0x100; ++i) this.memStat[i] = this.memStat[256 + i] = 2; // 0xC000 onwards : 2 means ROM
 
-                    // if (model.useFdc) {
-                    //     // FDC is reserved between 0a00 - 0a80  (0aff in this emulator)
-                    //     i = 0x0a;
-                    //     this.memStat[i] = this.memStat[256 + i] = 0; // 0 means DEVICE/PERIPHERAL/IO
-                    // }
+                    if (this.model.useFdc) {
+                        // FDC is reserved between 0a00 - 0a80  (0aff in this emulator)
+                        let i = 0x0a;
+                        this.memStat[i] = this.memStat[256 + i] = 0; // 0 means DEVICE/PERIPHERAL/IO
+                    }
                 } else {
                     for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
                 }

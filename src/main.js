@@ -13,7 +13,6 @@ import { Cmos } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
-import { starCat } from "./discs/cat.js";
 import { loadTape, loadTapeFromData } from "./tapes.js";
 import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
@@ -23,6 +22,16 @@ import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
+import { Keyboard } from "./keyboard.js";
+import {
+    buildUrlFromParams,
+    guessModelFromHostname,
+    ParamTypes,
+    parseMediaParams,
+    parseQueryString,
+    processAutobootParams,
+    processKeyboardParams,
+} from "./url-params.js";
 
 // ATOM
 import { Video6847 } from "./6847.js";
@@ -32,7 +41,7 @@ var mmcImage = "mmc/SDcard.zip";
 
 let processor;
 let video;
-let dbgr;
+const dbgr = new Debugger();
 let frames = 0;
 let frameSkip = 0;
 let syncLights;
@@ -42,21 +51,76 @@ let running;
 let model;
 
 const gamepad = new GamePad();
-let availableImages;
-let discImage;
+const availableImages = [
+    {
+        name: "Elite",
+        desc: "An 8-bit classic. Hit F10 to launch from the space station, then use <, >, S, X and A to fly around.",
+        file: "elite.ssd",
+    },
+    {
+        name: "Welcome",
+        desc: "The disc supplied with BBC Disc systems to demonstrate some of the features of the system.",
+        file: "Welcome.ssd",
+    },
+    {
+        name: "Music 5000",
+        desc: "The Music 5000 system disk and demo songs.",
+        file: "5000mstr36008.ssd",
+    },
+];
+let discImage = availableImages[0].file;
 const extraRoms = [];
-if (typeof starCat === "function") {
-    availableImages = starCat();
 
-    if (availableImages && availableImages[0]) {
-        discImage = availableImages[0].file;
-    }
-}
-let queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
+// Build the query string from the URL
+const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
-let parsedQuery = {};
-let needsAutoboot = false;
-let autoType = "";
+
+// Define parameter types
+const paramTypes = {
+    // Array parameters
+    rom: ParamTypes.ARRAY,
+
+    // Boolean parameters
+    embed: ParamTypes.BOOL,
+    fasttape: ParamTypes.BOOL,
+    noseek: ParamTypes.BOOL,
+    debug: ParamTypes.BOOL,
+    verbose: ParamTypes.BOOL,
+    autoboot: ParamTypes.BOOL,
+    autochain: ParamTypes.BOOL,
+    autorun: ParamTypes.BOOL,
+    hasMusic5000: ParamTypes.BOOL,
+    hasTeletextAdaptor: ParamTypes.BOOL,
+    hasEconet: ParamTypes.BOOL,
+    glEnabled: ParamTypes.BOOL,
+    fakeVideo: ParamTypes.BOOL,
+    logFdcCommands: ParamTypes.BOOL,
+    logFdcStateChanges: ParamTypes.BOOL,
+    coProcessor: ParamTypes.BOOL,
+
+    // Numeric parameters
+    speed: ParamTypes.INT,
+    stationId: ParamTypes.INT,
+    frameSkip: ParamTypes.INT,
+    audiofilterfreq: ParamTypes.FLOAT,
+    audiofilterq: ParamTypes.FLOAT,
+    cpuMultiplier: ParamTypes.FLOAT,
+
+    // String parameters (these are the default but listed for clarity)
+    model: ParamTypes.STRING,
+    disc: ParamTypes.STRING,
+    disc1: ParamTypes.STRING,
+    disc2: ParamTypes.STRING,
+    tape: ParamTypes.STRING,
+    keyLayout: ParamTypes.STRING,
+    autotype: ParamTypes.STRING,
+    // ATOM
+    mmc: ParamTypes.STRING,
+};
+
+// Parse the query string with parameter types
+let parsedQuery = parseQueryString(queryString, paramTypes);
+let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
 const BBC = utils.BBC;
@@ -66,109 +130,48 @@ let cpuMultiplier = 1;
 let fastAsPossible = false;
 let fastTape = false;
 let noSeek = false;
-let pauseEmu = false;
-let stepEmuWhenPaused = false;
 let audioFilterFreq = 7000;
 let audioFilterQ = 5;
 let stationId = 101;
 let econet = null;
-const isMac = window.navigator.platform.indexOf("Mac") === 0;
 
-if (queryString) {
-    if (queryString[queryString.length - 1] === "/")
-        // workaround for shonky python web server
-        queryString = queryString.substring(0, queryString.length - 1);
-    queryString.split("&").forEach(function (keyval) {
-        const keyAndVal = keyval.split("=");
-        const key = decodeURIComponent(keyAndVal[0]);
-        let val = null;
-        if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
-        parsedQuery[key] = val;
+// Parse disc and tape images from query parameters (and MMC for ATOM)
+const {
+    discImage: queryDiscImage,
+    secondDiscImage: querySecondDisc,
+    mmcImage: queryMMCImage,
+} = parseMediaParams(parsedQuery);
 
-        // eg KEY.CAPSLOCK=CTRL
-        let bbcKey;
-        if (key.toUpperCase().indexOf("KEY.") === 0) {
-            bbcKey = val.toUpperCase();
+// Only assign if values are provided
+if (queryDiscImage) discImage = queryDiscImage;
+if (querySecondDisc) secondDiscImage = querySecondDisc;
+//ATOM
+if (queryMMCImage) mmcImage = queryMMCImage;
 
-            if (BBC[bbcKey]) {
-                const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
-                if (keyCodes[nativeKey]) {
-                    console.log("mapping " + nativeKey + " to " + bbcKey);
-                    utils.userKeymap.push({ native: nativeKey, bbc: bbcKey });
-                } else {
-                    console.log("unknown key: " + nativeKey);
-                }
-            } else {
-                console.log("unknown BBC key: " + val);
-            }
-        } else if (key.indexOf("GP.") === 0) {
-            // gamepad mapping
-            // eg ?GP.FIRE2=RETURN
-            const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
-            gamepad.remap(gamepadKey, val.toUpperCase());
-        } else {
-            switch (key) {
-                case "LEFT":
-                case "RIGHT":
-                case "UP":
-                case "DOWN":
-                case "FIRE":
-                    gamepad.remap(key, val.toUpperCase());
-                    break;
-                case "autoboot":
-                    needsAutoboot = "boot";
-                    break;
-                case "autochain":
-                    needsAutoboot = "chain";
-                    break;
-                case "autorun":
-                    needsAutoboot = "run";
-                    break;
-                case "autotype":
-                    needsAutoboot = "type";
-                    autoType = val;
-                    break;
-                case "keyLayout":
-                    keyLayout = (val + "").toLowerCase();
-                    break;
-                case "disc":
-                case "disc1":
-                    discImage = val;
-                    break;
-                case "rom":
-                    extraRoms.push(val);
-                    break;
-                case "disc2":
-                    secondDiscImage = val;
-                    break;
-                case "embed":
-                    $(".embed-hide").hide();
-                    $("body").css("background-color", "transparent");
-                    break;
-                case "fasttape":
-                    fastTape = true;
-                    break;
-                case "noseek":
-                    noSeek = true;
-                    break;
-                case "audiofilterfreq":
-                    audioFilterFreq = Number(val);
-                    break;
-                case "audiofilterq":
-                    audioFilterQ = Number(val);
-                    break;
-                case "stationId":
-                    stationId = Number(val);
-                    break;
-                case "mmc": // Acorn Atom
-                    mmcImage = val;
-                    break;
-            }
-        }
+// Process keyboard mappings
+parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
+
+// Handle specific query parameters
+if (Array.isArray(parsedQuery.rom)) {
+    parsedQuery.rom.forEach((romPath) => {
+        if (romPath) extraRoms.push(romPath);
     });
 }
+if (parsedQuery.keyLayout) {
+    keyLayout = (parsedQuery.keyLayout + "").toLowerCase();
+}
+if (parsedQuery.embed) {
+    $(".embed-hide").hide();
+    $("body").css("background-color", "transparent");
+}
 
-if (parsedQuery.frameSkip) frameSkip = parseInt(parsedQuery.frameSkip);
+fastTape = !!parsedQuery.fasttape;
+noSeek = !!parsedQuery.noseek;
+
+if (parsedQuery.audiofilterfreq !== undefined) audioFilterFreq = parsedQuery.audiofilterfreq;
+if (parsedQuery.audiofilterq !== undefined) audioFilterQ = parsedQuery.audiofilterq;
+if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
+if (parsedQuery.frameSkip !== undefined) frameSkip = parsedQuery.frameSkip;
 
 const printerPort = {
     outputStrobe: function (level, output) {
@@ -248,14 +251,14 @@ const config = new Config(function (changed) {
     if (changed.keyLayout) {
         window.localStorage.keyLayout = changed.keyLayout;
         emulationConfig.keyLayout = changed.keyLayout;
-        processor.updateKeyLayout();
+        keyboard.setKeyLayout(changed.keyLayout);
     }
 });
 
 // Perform mapping of legacy models to the new format
 config.mapLegacyModels(parsedQuery);
 
-config.setModel(parsedQuery.model || guessModelFromUrl());
+config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
 config.setEconet(parsedQuery.hasEconet);
@@ -267,12 +270,21 @@ model = config.model;
 
 // ATOM
 // adding isAtom to model, and thus processor.model
-model.isAtom = model.synonyms[0] === "Atom";
+model.isAtom = model.synonyms[0].slice(0, 4) === "Atom";
 if (model.isAtom) {
+    model.useMMC = model.name.includes("(MMC)");
+    model.useFdc = model.name.includes("(DOS)");
+
     discImage = "atom/disk0725.dsk"; // Graphics demos
     utils_atom.remapGamepad(gamepad);
 }
-
+// Acorn Atom menus
+if (model.isAtom) {
+    $("#owlet").hide();
+} else {
+    $("#navbarAtomMMC").hide();
+    $("#owlet").show();
+}
 function sbBind(div, url, onload) {
     const img = div.find("img");
     img.hide();
@@ -293,8 +305,8 @@ sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
     div.css({ bottom: -img.height() });
 });
 
-if (parsedQuery.cpuMultiplier) {
-    cpuMultiplier = parseFloat(parsedQuery.cpuMultiplier);
+if (parsedQuery.cpuMultiplier !== undefined) {
+    cpuMultiplier = parsedQuery.cpuMultiplier;
     console.log("CPU multiplier set to " + cpuMultiplier);
 }
 const cpuSpeed = model.isAtom ? 1 * 1000 * 1000 : 2 * 1000 * 1000;
@@ -330,257 +342,61 @@ if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
 
-let lastShiftLocation = 1;
-let lastCtrlLocation = 1;
-let lastAltLocation = 1;
-
-dbgr = new Debugger(video);
-
 $(".initially-hidden").removeClass("initially-hidden");
-// Acorn Atom menus
-if (model.isAtom) {
-    $("#owlet").hide();
-} else {
-    $("#navbarAtomMMC").hide();
-    $("#owlet").show();
-}
-function keyCode(evt) {
-    const ret = evt.which || evt.key || evt.code;
-
-    const keyCodes = utils.keyCodes;
-
-    switch (evt.location) {
-        default:
-            // keyUp events seem to pass location = 0 (Chrome)
-            switch (ret) {
-                case keyCodes.SHIFT:
-                    if (lastShiftLocation === 1) {
-                        return keyCodes.SHIFT_LEFT;
-                    } else {
-                        return keyCodes.SHIFT_RIGHT;
-                    }
-
-                case keyCodes.ALT:
-                    if (lastAltLocation === 1) {
-                        return keyCodes.ALT_LEFT;
-                    } else {
-                        return keyCodes.ALT_RIGHT;
-                    }
-
-                case keyCodes.CTRL:
-                    if (lastCtrlLocation === 1) {
-                        return keyCodes.CTRL_LEFT;
-                    } else {
-                        return keyCodes.CTRL_RIGHT;
-                    }
-            }
-            break;
-        case 1:
-            switch (ret) {
-                case keyCodes.SHIFT:
-                    lastShiftLocation = 1;
-                    return keyCodes.SHIFT_LEFT;
-
-                case keyCodes.ALT:
-                    lastAltLocation = 1;
-                    return keyCodes.ALT_LEFT;
-
-                case keyCodes.CTRL:
-                    lastCtrlLocation = 1;
-                    return keyCodes.CTRL_LEFT;
-            }
-            break;
-        case 2:
-            switch (ret) {
-                case keyCodes.SHIFT:
-                    lastShiftLocation = 2;
-                    return keyCodes.SHIFT_RIGHT;
-
-                case keyCodes.ALT:
-                    lastAltLocation = 2;
-                    return keyCodes.ALT_RIGHT;
-
-                case keyCodes.CTRL:
-                    lastCtrlLocation = 2;
-                    return keyCodes.CTRL_RIGHT;
-            }
-            break;
-        case 3: // numpad
-            switch (ret) {
-                case keyCodes.ENTER:
-                    return utils.keyCodes.NUMPADENTER;
-
-                case keyCodes.DELETE:
-                    return utils.keyCodes.NUMPAD_DECIMAL_POINT;
-            }
-            break;
-    }
-
-    return ret;
-}
-
-function keyPress(evt) {
-    if (document.activeElement.id === "paste-text") return;
-    if (running || (!dbgr.enabled() && !pauseEmu)) return;
-    const code = keyCode(evt);
-    if (dbgr.enabled() && code === 103 /* lower case g */) {
-        dbgr.hide();
-        go();
-        return;
-    }
-    if (pauseEmu) {
-        if (code === 103 /* lower case g */) {
-            pauseEmu = false;
-            go();
-            return;
-        } else if (code === 110 /* lower case n */) {
-            stepEmuWhenPaused = true;
-            go();
-            return;
-        }
-    }
-    const handled = dbgr.keyPress(keyCode(evt));
-    if (handled) evt.preventDefault();
-}
-
-emuKeyHandlers[utils.keyCodes.S] = function (down) {
-    if (down) {
-        utils.noteEvent("keyboard", "press", "S");
-        stop(true);
-    }
-};
-emuKeyHandlers[utils.keyCodes.R] = function (down) {
-    if (down) window.location.reload();
-};
-
-function keyDown(evt) {
-    audioHandler.tryResume();
-    if (document.activeElement.id === "paste-text") return;
-    if (!running) return;
-    const code = keyCode(evt);
-    if (evt.altKey) {
-        const handler = emuKeyHandlers[code];
-        if (handler) {
-            handler(true, code);
-            evt.preventDefault();
-        }
-    } else if (code === utils.keyCodes.HOME && evt.ctrlKey) {
-        utils.noteEvent("keyboard", "press", "home");
-        stop(true);
-    } else if (code === utils.keyCodes.INSERT && evt.ctrlKey) {
-        utils.noteEvent("keyboard", "press", "insert");
-        fastAsPossible = !fastAsPossible;
-    } else if (code === utils.keyCodes.END && evt.ctrlKey) {
-        utils.noteEvent("keyboard", "press", "end");
-        pauseEmu = true;
-        stop(false);
-    } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-        utils.noteEvent("keyboard", "press", "break");
-        processor.setReset(true);
-        evt.preventDefault();
-    } else if (code === utils.keyCodes.B && evt.ctrlKey) {
-        // Ctrl-B turns on the printer, so we open a printer output
-        // window in addition to passing the keypress along to the beeb.
-        processor.sysvia.keyDown(code, evt.shiftKey);
-        evt.preventDefault();
-        checkPrinterWindow();
-    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
-        handleMacCapsLock();
-        evt.preventDefault();
-    } else {
-        // ATOM
-        if (model.isAtom) {
-            processor.atomppia.keyDown(code, evt.shiftKey);
-        } else {
-            processor.sysvia.keyDown(code, evt.shiftKey);
-        }
-        evt.preventDefault();
-    }
-}
-
-function keyUp(evt) {
-    if (document.activeElement.id === "paste-text") return;
-    // Always let the key ups come through. That way we don't cause sticky keys in the debugger.
-    const code = keyCode(evt);
-    if (model.isAtom) {
-        if (processor && processor.atomppia) processor.atomppia.keyUp(code);
-    } else {
-        if (processor && processor.sysvia) processor.sysvia.keyUp(code);
-    }
-    if (!running) return;
-    if (evt.altKey) {
-        const handler = emuKeyHandlers[code];
-        if (handler) handler(false, code);
-    } else if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-        processor.setReset(false);
-    } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
-        handleMacCapsLock();
-    }
-    evt.preventDefault();
-}
-
-function handleMacCapsLock() {
-    // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
-    // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
-    processor.sysvia.keyDown(utils.keyCodes.CAPSLOCK);
-    setTimeout(() => processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), 100);
-    if (!window.localStorage.getItem("warnedAboutRubbishMacs")) {
-        showError(
-            "handling caps lock on Mac OS X",
-            "Mac OS X does not generate key up events for caps lock presses. " +
-                "jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games " +
-                " that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play " +
-                "such a game, please see the documentation about remapping keys." +
-                "Close this window to continue (you won't see this error again)",
-        );
-        window.localStorage.setItem("warnedAboutRubbishMacs", true);
-    }
-}
 
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
 const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
 
-function loadHTMLFile(file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, e.target.result));
-        delete parsedQuery.disc;
-        delete parsedQuery.disc1;
-        updateUrl();
-        $discsModal.hide();
-    };
-    reader.readAsBinaryString(file);
+/**
+ * Helper function to read a file as binary string
+ * @param {File} file - The file to read
+ * @returns {Promise<string>} - Promise that resolves with the binary string content of the file, or rejects on error
+ */
+function readFileAsBinaryString(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            resolve(e.target.result);
+        };
+        reader.onerror = (e) => {
+            console.error(`Error reading file ${file.name}:`, e);
+            reject(new Error(`Failed to read file ${file.name}`));
+        };
+        reader.readAsBinaryString(file);
+    });
 }
 
-function loadSCSIFile(file) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-        processor.filestore.scsi = utils.stringToUint8Array(e.target.result);
-
-        processor.filestore.PC = 0x400;
-        processor.filestore.SP = 0xff;
-        processor.filestore.A = 1;
-        processor.filestore.emulationSpeed = 0;
-
-        // Reset any open receive blocks
-        processor.econet.receiveBlocks = [];
-        processor.econet.nextReceiveBlockNumber = 1;
-
-        $fsModal.hide();
-    };
-    reader.readAsBinaryString(file);
+async function loadHTMLFile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, binaryData));
+    delete parsedQuery.disc;
+    delete parsedQuery.disc1;
+    updateUrl();
+    $discsModal.hide();
 }
 
-function loadMMCZIPfile(file) {
-    var reader = new FileReader();
-    reader.onload = function (e) {
-        var buffer = new Uint8Array(e.target.result);
-        processor.atommc.SetMMCData(mmc.extractSDFiles(buffer));
-        delete parsedQuery.mmc;
-        updateUrl();
-        $("#sdcards").modal("hide");
-    };
-    reader.readAsArrayBuffer(file);
+async function loadSCSIFile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    processor.filestore.scsi = utils.stringToUint8Array(binaryData);
+
+    processor.filestore.PC = 0x400;
+    processor.filestore.SP = 0xff;
+    processor.filestore.A = 1;
+    processor.filestore.emulationSpeed = 0;
+
+    // Reset any open receive blocks
+    processor.econet.receiveBlocks = [];
+    processor.econet.nextReceiveBlockNumber = 1;
+
+    $fsModal.hide();
+}
+
+async function loadMMCZIPfile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    processor.atommc.SetMMCData(mmc.extractSDFiles(binaryData));
+    delete parsedQuery.mmc;
+    updateUrl();
+    $("#sdcards").modal("hide");
 }
 
 const $pastetext = $("#paste-text");
@@ -598,10 +414,10 @@ $pastetext.on("dragover", function (event) {
     event.stopPropagation();
     event.originalEvent.dataTransfer.dropEffect = "copy";
 });
-$pastetext.on("drop", function (event) {
+$pastetext.on("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.originalEvent.dataTransfer.files[0];
-    loadHTMLFile(file);
+    await loadHTMLFile(file);
 });
 
 var $cub = $("#cub-monitor");
@@ -615,7 +431,7 @@ if (model.isAtom) {
 }
 
 $cub.on("mousemove mousedown mouseup", function (evt) {
-    audioHandler.tryResume();
+    audioHandler.tryResume().then(() => {});
     if (document.activeElement !== document.body) document.activeElement.blur();
     const cubOffset = $cub.offset();
     const screenOffset = $screen.offset();
@@ -626,7 +442,7 @@ $cub.on("mousemove mousedown mouseup", function (evt) {
 });
 
 $(window).blur(function () {
-    if (processor.sysvia) processor.sysvia.clearKeys();
+    keyboard.clearKeys();
 });
 
 $("#fs").click(function (event) {
@@ -634,12 +450,12 @@ $("#fs").click(function (event) {
     event.preventDefault();
 });
 
-document.onkeydown = keyDown;
-document.onkeypress = keyPress;
-document.onkeyup = keyUp;
+let keyboard; // This will be initialized after the processor is created
 
-$("#debug-pause").click(() => stop(true));
-$("#debug-play").click(() => {
+const $debugPause = $("#debug-pause");
+const $debugPlay = $("#debug-play");
+$debugPause.click(() => stop(true));
+$debugPlay.click(() => {
     dbgr.hide();
     go();
 });
@@ -712,6 +528,93 @@ processor = new Cpu6502(
     econet,
 );
 
+// Initialize keyboard now that processor exists
+keyboard = new Keyboard({
+    processor,
+    inputEnabledFunction: () => document.activeElement && document.activeElement.id === "paste-text",
+    keyLayout,
+    dbgr,
+});
+keyboard.on("showError", ({ context, error }) => showError(context, error));
+keyboard.on("pause", () => stop(false));
+keyboard.on("resume", () => go());
+keyboard.on("break", (pressed) => {
+    // F12/Break: Reset processor
+    if (pressed) utils.noteEvent("keyboard", "press", "break");
+});
+
+// Register default key handlers
+keyboard.registerKeyHandler(
+    utils.keyCodes.S,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "S");
+            stop(true);
+        }
+    },
+    { alt: true, ctrl: false },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.R,
+    (down) => {
+        if (down) window.location.reload();
+    },
+    { alt: true, ctrl: false },
+);
+
+// Register Ctrl key handlers
+keyboard.registerKeyHandler(
+    utils.keyCodes.HOME,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "home");
+            stop(true);
+        }
+    },
+    { alt: false, ctrl: true },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.INSERT,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "insert");
+            fastAsPossible = !fastAsPossible;
+        }
+    },
+    { alt: false, ctrl: true },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.END,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "end");
+            keyboard.pauseEmulation();
+        }
+    },
+    { alt: false, ctrl: true },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.B,
+    (down) => {
+        if (down) {
+            checkPrinterWindow();
+        }
+    },
+    { alt: false, ctrl: true },
+);
+
+// Setup key handlers
+document.onkeydown = (evt) => {
+    audioHandler.tryResume();
+    keyboard.keyDown(evt);
+};
+document.onkeypress = (evt) => keyboard.keyPress(evt);
+document.onkeyup = (evt) => keyboard.keyUp(evt);
+
 function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
@@ -719,53 +622,53 @@ function setDisc1Image(name) {
 }
 
 function sthClearList() {
-    $("#sth-list li:not('.template')").remove();
+    $("#sth-list li:not(.template)").remove();
 }
 
 function sthStartLoad() {
-    $("#sth .loading").text("Loading catalog from STH archive");
-    $("#sth .loading").show();
+    const $sth = $("#sth .loading");
+    $sth.text("Loading catalog from STH archive");
+    $sth.show();
     sthClearList();
 }
 
-function discSthClick(item) {
+async function discSthClick(item) {
     utils.noteEvent("sth", "click", item);
     setDisc1Image("sth:" + item);
     const needsAutoboot = parsedQuery.autoboot !== undefined;
     if (needsAutoboot) {
         processor.reset(true);
     }
+
     popupLoading("Loading " + item);
-    loadDiscImage(parsedQuery.disc1)
-        .then(function (disc) {
-            processor.fdc.loadDisc(0, disc);
-        })
-        .then(
-            function () {
-                loadingFinished();
-                if (needsAutoboot) {
-                    autoboot(item);
-                }
-            },
-            function (err) {
-                loadingFinished(err);
-            },
-        );
+    try {
+        const disc = await loadDiscImage(parsedQuery.disc1);
+        processor.fdc.loadDisc(0, disc);
+        loadingFinished();
+
+        if (needsAutoboot) {
+            autoboot(item);
+        }
+    } catch (err) {
+        console.error("Error loading disc image:", err);
+        loadingFinished(err);
+    }
 }
 
-function tapeSthClick(item) {
+async function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
     parsedQuery.tape = "sth:" + item;
     updateUrl();
+
     popupLoading("Loading " + item);
-    loadTapeImage(parsedQuery.tape).then(
-        function () {
-            loadingFinished();
-        },
-        function (err) {
-            loadingFinished(err);
-        },
-    );
+    try {
+        const tape = await loadTapeImage(parsedQuery.tape);
+        processor.acia.setTape(tape);
+        loadingFinished();
+    } catch (err) {
+        console.error("Error loading tape image:", err);
+        loadingFinished(err);
+    }
 }
 
 const $sthModal = new bootstrap.Modal(document.getElementById("sth"));
@@ -800,16 +703,18 @@ function makeOnCat(onClick) {
 }
 
 function sthOnError() {
-    $("#sth .loading").text("There was an error accessing the STH archive");
-    $("#sth .loading").show();
+    const $sthLoading = $("#sth .loading");
+    $sthLoading.text("There was an error accessing the STH archive");
+    $sthLoading.show();
     sthClearList();
 }
 
 discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
 
-$("#sth .autoboot").click(function () {
-    if ($("#sth .autoboot").prop("checked")) {
+const $sthAutoboot = $("#sth .autoboot");
+$sthAutoboot.click(function () {
+    if ($sthAutoboot.prop("checked")) {
         parsedQuery.autoboot = "";
     } else {
         delete parsedQuery.autoboot;
@@ -830,7 +735,7 @@ $(document).on("click", "a.sth", function () {
 
 function setSthFilter(filter) {
     filter = filter.toLowerCase();
-    $("#sth-list li:not('.template')").each(function () {
+    $("#sth-list li:not(.template)").each(function () {
         const el = $(this);
         el.toggle(el.text().toLowerCase().indexOf(filter) >= 0);
     });
@@ -842,73 +747,11 @@ $("#sth-filter").on("change keyup", function () {
 
 // send to BBC or ATOM
 function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
-    let lastChar;
-    let nextKeyMillis = 0;
-    let ia = processor.sysvia;
-    // ATOM
-    if (model.isAtom) ia = processor.atomppia;
-    ia.disableKeyboard();
-
-    if (checkCapsAndShiftLocks) {
-        let toggleKey = null;
-        if (!ia.capsLockLight) toggleKey = BBC.CAPSLOCK;
-        else if (ia.shiftLockLight) toggleKey = BBC.SHIFTLOCK;
-        if (toggleKey) {
-            keysToSend.unshift(toggleKey);
-            keysToSend.push(toggleKey);
-        }
+    if (keyboard) {
+        keyboard.sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks);
+    } else {
+        console.warn("Tried to send keys before keyboard was initialized");
     }
-
-    const sendCharHook = processor.debugInstruction.add(function nextCharHook() {
-        const millis = processor.cycleSeconds * 1000 + processor.currentCycles / (clocksPerSecond / 1000);
-        if (millis < nextKeyMillis) {
-            return;
-        }
-
-        // ATOM debounce time
-        const debounceTime = model.isAtom ? 200 : 30;
-
-        if (lastChar && lastChar !== utils.BBC.SHIFT) {
-            ia.keyToggleRaw(lastChar);
-
-            // ATOM
-            if (model.isAtom) {
-                //debounce every key on atom
-                lastChar = undefined;
-                nextKeyMillis = millis + debounceTime;
-                return;
-            }
-        }
-
-        if (keysToSend.length === 0) {
-            // Finished
-            ia.enableKeyboard();
-            sendCharHook.remove();
-            return;
-        }
-
-        const ch = keysToSend[0];
-        const debounce = lastChar === ch;
-        lastChar = ch;
-        if (debounce) {
-            lastChar = undefined;
-            nextKeyMillis = millis + debounceTime;
-            return;
-        }
-
-        let time = 50;
-        if (typeof lastChar === "number") {
-            time = lastChar;
-            lastChar = undefined;
-        } else {
-            ia.keyToggleRaw(lastChar);
-        }
-
-        // remove first character
-        keysToSend.shift();
-
-        nextKeyMillis = millis + time;
-    });
 }
 
 function autoboot(image) {
@@ -959,14 +802,8 @@ function autoRunBasic() {
 }
 
 function updateUrl() {
-    let url = window.location.origin + window.location.pathname;
-    let sep = "?";
-    $.each(parsedQuery, function (key, value) {
-        if (key.length > 0 && value) {
-            url += sep + encodeURIComponent(key) + "=" + encodeURIComponent(value);
-            sep = "&";
-        }
-    });
+    const baseUrl = window.location.origin + window.location.pathname;
+    const url = buildUrlFromParams(baseUrl, parsedQuery, paramTypes);
     window.history.pushState(null, null, url);
 }
 
@@ -986,13 +823,13 @@ function splitImage(image) {
     return { image: image, schema: schema };
 }
 
-function loadDiscImage(discImage) {
-    if (!discImage) return Promise.resolve(null);
+async function loadDiscImage(discImage) {
+    if (!discImage) return null;
     const split = splitImage(discImage);
     discImage = split.image;
     const schema = split.schema;
     if (schema[0] === "!" || schema === "local") {
-        return Promise.resolve(disc.localDisc(processor.fdc, discImage));
+        return disc.localDisc(processor.fdc, discImage);
     }
     // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
     // Consider:
@@ -1000,46 +837,45 @@ function loadDiscImage(discImage) {
     //   to load the modified disc on load.
     // * popping up a message that notes the disc has changed, and offers a way to make a local image
     // * Dialog box (ugh) saying "is this ok?"
-    if (schema === "|" || schema === "sth") {
-        return discSth.fetch(discImage).then(function (discData) {
-            return disc.discFor(processor.fdc, discImage, discData);
-        });
-    }
-    if (schema === "gd") {
-        const splat = discImage.match(/([^/]+)\/?(.*)/);
-        let name = "(unknown)";
-        if (splat) {
-            discImage = splat[1];
-            name = splat[2];
+    switch (schema) {
+        case "|":
+        case "sth":
+            return disc.discFor(processor.fdc, discImage, await discSth.fetch(discImage));
+
+        case "gd": {
+            const splat = discImage.match(/([^/]+)\/?(.*)/);
+            let name = "(unknown)";
+            if (splat) {
+                discImage = splat[1];
+                name = splat[2];
+            }
+            return gdLoad({ name, id: discImage });
         }
-        return gdLoad({ name, id: discImage });
-    }
-    if (schema === "b64data") {
-        const ssdData = atob(discImage);
-        discImage = "disk.ssd";
-        return Promise.resolve(disc.discFor(processor.fdc, discImage, ssdData));
-    }
-    if (schema === "data") {
-        const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-        const unzipped = utils.unzipDiscImage(arr);
-        const discData = unzipped.data;
-        discImage = unzipped.name;
-        return Promise.resolve(disc.discFor(processor.fdc, discImage, discData));
-    }
-    if (schema === "http" || schema === "https" || schema === "file") {
-        return utils.loadData(schema + "://" + discImage).then(function (discData) {
+        case "b64data":
+            return disc.discFor(processor.fdc, "disk.ssd", atob(discImage));
+
+        case "data": {
+            const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
+            const { name, data } = utils.unzipDiscImage(arr);
+            return disc.discFor(processor.fdc, name, data);
+        }
+        case "http":
+        case "https":
+        case "file": {
+            const asUrl = `${schema}://${discImage}`;
+            // url may end in query params etc, which can upset the DSD/SSD etc detection on the extension.
+            discImage = new URL(asUrl).pathname;
+            let discData = await utils.loadData(asUrl);
             if (/\.zip/i.test(discImage)) {
                 const unzipped = utils.unzipDiscImage(discData);
                 discData = unzipped.data;
                 discImage = unzipped.name;
             }
             return disc.discFor(processor.fdc, discImage, discData);
-        });
+        }
+        default:
+            return disc.discFor(processor.fdc, discImage, await disc.load("discs/" + discImage));
     }
-
-    return disc.load("discs/" + discImage).then(function (discData) {
-        return disc.discFor(processor.fdc, discImage, discData);
-    });
 }
 
 function loadMMCImage(SDimage) {
@@ -1049,71 +885,68 @@ function loadMMCImage(SDimage) {
     return mmc.LoadSD(SDimage);
 }
 
-function loadTapeImage(tapeImage) {
+async function loadTapeImage(tapeImage) {
     const split = splitImage(tapeImage);
     tapeImage = split.image;
     const schema = split.schema;
 
-    if (schema === "|" || schema === "sth") {
-        return tapeSth.fetch(tapeImage).then(function (image) {
-            processor.acia.setTape(loadTapeFromData(tapeImage, image));
-        });
-    }
-    if (schema === "data") {
-        const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-        const unzipped = utils.unzipDiscImage(arr);
-        return Promise.resolve(processor.acia.setTape(loadTapeFromData(unzipped.name, unzipped.data)));
-    }
+    switch (schema) {
+        case "|":
+        case "sth":
+            return loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
 
-    if (schema === "http" || schema === "https") {
-        return utils.loadData(schema + "://" + tapeImage).then(function (tapeData) {
+        case "data": {
+            const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
+            const { name, data } = utils.unzipDiscImage(arr);
+            return loadTapeFromData(name, data);
+        }
+
+        case "http":
+        case "https": {
+            const asUrl = `${schema}://${tapeImage}`;
+            // url may end in query params etc, which can upset file handling
+            tapeImage = new URL(asUrl).pathname;
+            let tapeData = await utils.loadData(asUrl);
             if (/\.zip/i.test(tapeImage)) {
                 const unzipped = utils.unzipDiscImage(tapeData);
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
-            processor.acia.setTape(loadTapeFromData(tapeImage, tapeData));
-        });
-    }
-
-    return loadTape("tapes/" + tapeImage).then(function (tape) {
-        // ATOM
-        if (model.isAtom) {
-            processor.atomppia.setTape(tape);
-        } else {
-            processor.acia.setTape(tape);
+            return loadTapeFromData(tapeImage, tapeData);
         }
-    });
+
+        default:
+            return await loadTape("tapes/" + tapeImage);
+    }
 }
 
-$("#disc_load").on("change", function (evt) {
+$("#disc_load").on("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    loadHTMLFile(file);
+    await loadHTMLFile(file);
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$("#fs_load").on("change", function (evt) {
+$("#fs_load").on("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    loadSCSIFile(file);
+    await loadSCSIFile(file);
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$("#tape_load").on("change", function (evt) {
+$("#tape_load").on("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     const file = evt.target.files[0];
-    const reader = new FileReader();
     utils.noteEvent("local", "clickTape"); // NB no filename here
-    reader.onload = function (e) {
-        processor.acia.setTape(loadTapeFromData("local file", e.target.result));
-        delete parsedQuery.tape;
-        updateUrl();
-        $("#tapes").modal("hide");
-    };
-    reader.readAsBinaryString(file);
+
+    const binaryData = await readFileAsBinaryString(file);
+    processor.acia.setTape(loadTapeFromData("local file", binaryData));
+    delete parsedQuery.tape;
+    updateUrl();
+    $("#tapes").modal("hide");
+
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
@@ -1194,16 +1027,15 @@ async function gdAuth(imm) {
 }
 
 let googleDriveLoadingResolve, googleDriveLoadingReject;
-$("#google-drive-auth form").on("submit", function (e) {
+$("#google-drive-auth form").on("submit", async function (e) {
     $("#google-drive-auth").hide();
     e.preventDefault();
-    gdAuth(false).then(function (authed) {
-        if (authed) googleDriveLoadingResolve();
-        else googleDriveLoadingReject(new Error("Unable to authorize Google Drive"));
-    });
+    const authed = await gdAuth(false);
+    if (authed) googleDriveLoadingResolve();
+    else googleDriveLoadingReject(new Error("Unable to authorize Google Drive"));
 });
 
-function gdLoad(cat) {
+async function gdLoad(cat) {
     // TODO: have a onclose flush event, handle errors
     /*
      $(window).bind("beforeunload", function() {
@@ -1211,54 +1043,47 @@ function gdLoad(cat) {
      });
      */
     popupLoading("Loading '" + cat.name + "' from Google Drive");
-    return googleDrive
-        .initialise()
-        .then(function (available) {
-            console.log("Google Drive available =", available);
-            if (!available) throw new Error("Google Drive is not available");
-            return gdAuth(true);
-        })
-        .then(function (authed) {
-            console.log("Google Drive authed=", authed);
-            if (authed) {
-                return true;
-            } else {
-                return new Promise(function (resolve, reject) {
-                    googleDriveLoadingResolve = resolve;
-                    googleDriveLoadingReject = reject;
-                    $("#google-drive-auth").show();
-                });
-            }
-        })
-        .then(function () {
-            return googleDrive.load(processor.fdc, cat.id);
-        })
-        .then(function (ssd) {
-            console.log("Google Drive loading finished");
-            loadingFinished();
-            return ssd;
-        })
-        .catch(function (error) {
-            console.log("Google Drive loading error:", error);
-            loadingFinished(error);
-        });
+    try {
+        const available = await googleDrive.initialise();
+        console.log("Google Drive available =", available);
+        if (!available) throw new Error("Google Drive is not available");
+
+        const authed = await gdAuth(true);
+        console.log("Google Drive authed=", authed);
+
+        if (!authed) {
+            await new Promise(function (resolve, reject) {
+                googleDriveLoadingResolve = resolve;
+                googleDriveLoadingReject = reject;
+                $("#google-drive-auth").show();
+            });
+        }
+
+        const ssd = await googleDrive.load(processor.fdc, cat.id);
+        console.log("Google Drive loading finished");
+        loadingFinished();
+        return ssd;
+    } catch (error) {
+        console.error("Google Drive loading error:", error);
+        loadingFinished(error);
+    }
 }
 
 $(".if-drive-available").hide();
-googleDrive.initialise().then(function (available) {
+(async () => {
+    const available = await googleDrive.initialise();
     if (available) {
         $(".if-drive-available").show();
-        gdAuth(true).then();
+        await gdAuth(true);
     }
-});
+})();
 const $googleDrive = $("#google-drive");
 const $googleDriveModal = new bootstrap.Modal($googleDrive[0]);
-$("#open-drive-link").on("click", function () {
-    gdAuth(false).then(function (authed) {
-        if (authed) {
-            $googleDriveModal.show();
-        }
-    });
+$("#open-drive-link").on("click", async function () {
+    const authed = await gdAuth(false);
+    if (authed) {
+        $googleDriveModal.show();
+    }
     return false;
 });
 $googleDrive[0].addEventListener("show.bs.modal", async function () {
@@ -1297,24 +1122,24 @@ $.each(availableImages, function (i, image) {
     });
 });
 
-$("#google-drive form").on("submit", function (e) {
+$("#google-drive form").on("submit", async function (e) {
     e.preventDefault();
     const text = $("#google-drive .disc-name").val();
     if (!text) return;
+
     popupLoading("Connecting to Google Drive");
     $googleDriveModal.hide();
     popupLoading("Creating '" + text + "' on Google Drive");
-    googleDrive.create(processor.fdc, text).then(
-        function (result) {
-            setDisc1Image("gd:" + result.fileId + "/" + text);
-            processor.fdc.loadDisc(0, result.disc);
-            loadingFinished();
-        },
-        function (error) {
-            console.log(`Error in creating: ${error} | ${JSON.stringify(error)}`);
-            loadingFinished(`Create failed: ${error}`);
-        },
-    );
+
+    try {
+        const result = await googleDrive.create(processor.fdc, text);
+        setDisc1Image("gd:" + result.fileId + "/" + text);
+        processor.fdc.loadDisc(0, result.disc);
+        loadingFinished();
+    } catch (error) {
+        console.error(`Error creating Google Drive disc: ${error}`, error);
+        loadingFinished(`Create failed: ${error}`);
+    }
 });
 
 $("#download-drive-link").on("click", function () {
@@ -1357,14 +1182,6 @@ $("#soft-reset").click(function (event) {
     processor.reset(false);
     event.preventDefault();
 });
-
-function guessModelFromUrl() {
-    if (window.location.hostname.indexOf("bbc") === 0) return "B-DFS1.2";
-    if (window.location.hostname.indexOf("master") === 0) return "Master";
-    // ATOM
-    if (window.location.hostname.indexOf("atom") === 0) return "Atom";
-    return "B-DFS1.2";
-}
 
 // ATOM
 if (model.isAtom) {
@@ -1436,101 +1253,113 @@ syncLights = function () {
     }
 };
 
-const startPromise = Promise.all([audioHandler.initialise(), processor.initialise()]).then(function () {
+const startPromise = (async () => {
+    await Promise.all([audioHandler.initialise(), processor.initialise()]);
+
     // Ideally would start the loads first. But their completion needs the FDC from the processor
     const imageLoads = [];
 
     // ATOM
     // AcornAtom - not (Tape) version
-    if (model.isAtom) {
+    if (processor.model.isAtom) {
         processor.atommc.attachGamepad(gamepad);
-        if (!processor.model.name.includes("(MMC)")) mmcImage = null;
+        if (!processor.model.useMMC) mmcImage = null;
         if (!processor.model.useFdc) discImage = null;
 
         if (mmcImage)
             imageLoads.push(
-                loadMMCImage(mmcImage).then(function (sdcard) {
+                (async () => {
+                    const sdcard = await loadMMCImage(mmcImage);
                     processor.atommc.SetMMCData(sdcard);
-                }),
+                })(),
             );
     }
-    if (discImage)
-        imageLoads.push(
-            loadDiscImage(discImage).then(function (disc) {
-                processor.fdc.loadDisc(0, disc);
-            }),
-        );
-    if (secondDiscImage)
-        imageLoads.push(
-            loadDiscImage(secondDiscImage).then(function (disc) {
-                processor.fdc.loadDisc(1, disc);
-            }),
-        );
-    if (parsedQuery.tape) imageLoads.push(loadTapeImage(parsedQuery.tape));
 
-    function insertBasic(getBasicPromise, needsRun) {
+    if (discImage) {
         imageLoads.push(
-            getBasicPromise
-                .then(function (prog) {
-                    return tokeniser.create().then(function (t) {
-                        return t.tokenise(prog);
-                    });
-                })
-                .then(function (tokenised) {
-                    const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-                    const hook = processor.debugInstruction.add(function (addr) {
-                        if (addr !== idleAddr) return;
-                        const page = processor.readmem(0x18) << 8;
-                        for (let i = 0; i < tokenised.length; ++i) {
-                            processor.writemem(page + i, tokenised.charCodeAt(i));
-                        }
-                        // Set VARTOP (0x12/3) and TOP(0x02/3)
-                        const end = page + tokenised.length;
-                        const endLow = end & 0xff;
-                        const endHigh = (end >>> 8) & 0xff;
-                        processor.writemem(0x02, endLow);
-                        processor.writemem(0x03, endHigh);
-                        processor.writemem(0x12, endLow);
-                        processor.writemem(0x13, endHigh);
-                        hook.remove();
-                        if (needsRun) {
-                            autoRunBasic();
-                        }
-                    });
-                }),
+            (async () => {
+                const disc = await loadDiscImage(discImage);
+                processor.fdc.loadDisc(0, disc);
+            })(),
         );
+    }
+
+    if (secondDiscImage) {
+        imageLoads.push(
+            (async () => {
+                const disc = await loadDiscImage(secondDiscImage);
+                processor.fdc.loadDisc(1, disc);
+            })(),
+        );
+    }
+
+    if (parsedQuery.tape) {
+        imageLoads.push(
+            (async () => {
+                const tape = await loadTapeImage(parsedQuery.tape);
+                processor.acia.setTape(tape);
+            })(),
+        );
+    }
+
+    async function insertBasic(getBasicPromise, needsRun) {
+        const basicLoadPromise = (async () => {
+            const prog = await getBasicPromise;
+            const t = await tokeniser.create();
+            const tokenised = await t.tokenise(prog);
+
+            const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+            const hook = processor.debugInstruction.add(function (addr) {
+                if (addr !== idleAddr) return;
+                const page = processor.readmem(0x18) << 8;
+                for (let i = 0; i < tokenised.length; ++i) {
+                    processor.writemem(page + i, tokenised.charCodeAt(i));
+                }
+                // Set VARTOP (0x12/3) and TOP(0x02/3)
+                const end = page + tokenised.length;
+                const endLow = end & 0xff;
+                const endHigh = (end >>> 8) & 0xff;
+                processor.writemem(0x02, endLow);
+                processor.writemem(0x03, endHigh);
+                processor.writemem(0x12, endLow);
+                processor.writemem(0x13, endHigh);
+                hook.remove();
+                if (needsRun) {
+                    autoRunBasic();
+                }
+            });
+            return tokenised; // Explicitly return the result
+        })();
+
+        imageLoads.push(basicLoadPromise);
+        return basicLoadPromise; // Return promise for caller to await if needed
     }
 
     if (parsedQuery.loadBasic) {
         const needsRun = needsAutoboot === "run";
         needsAutoboot = "";
-        insertBasic(
-            new Promise(function (resolve) {
-                utils.loadData(parsedQuery.loadBasic).then(function (data) {
-                    resolve(String.fromCharCode.apply(null, data));
-                });
-            }),
+
+        await insertBasic(
+            (async () => {
+                const data = await utils.loadData(parsedQuery.loadBasic);
+                return String.fromCharCode.apply(null, data);
+            })(),
             needsRun,
         );
     }
 
     if (parsedQuery.embedBasic) {
-        insertBasic(
-            new Promise(function (resolve) {
-                resolve(parsedQuery.embedBasic);
-            }),
-            true,
-        );
+        await insertBasic(Promise.resolve(parsedQuery.embedBasic), true);
     }
 
     return Promise.all(imageLoads);
-});
+})();
 
-startPromise.then(
-    function () {
+startPromise
+    .then(() => {
         switch (needsAutoboot) {
             case "boot":
-                $("#sth .autoboot").prop("checked", true);
+                $sthAutoboot.prop("checked", true);
                 autoboot(discImage);
                 break;
             case "type":
@@ -1543,7 +1372,7 @@ startPromise.then(
                 autoRunTape();
                 break;
             default:
-                $("#sth .autoboot").prop("checked", false);
+                $sthAutoboot.prop("checked", false);
                 break;
         }
 
@@ -1552,12 +1381,11 @@ startPromise.then(
         }
 
         go();
-    },
-    function (error) {
+    })
+    .catch((error) => {
+        console.error("Error initializing emulator:", error);
         showError("initialising", error);
-        console.log(error);
-    },
-);
+    });
 
 const $ays = $("#are-you-sure");
 const $aysModal = new bootstrap.Modal($ays[0]);
@@ -1667,8 +1495,7 @@ function draw(now) {
     // part of jsbeeb at this time.
     // We need need to paint per odd number of frames so that interlace
     // modes, i.e. MODE 7, still look ok.
-    const frameSkipCount = speedy ? 9 : 0;
-    video.frameSkipCount = frameSkipCount;
+    video.frameSkipCount = speedy ? 9 : 0;
 
     // We use setTimeout instead of requestAnimationFrame in two cases:
     // a) We're trying to run as fast as possible.
@@ -1707,9 +1534,8 @@ function draw(now) {
             dbgr.debug(processor.pc);
             throw e;
         }
-        if (stepEmuWhenPaused) {
+        if (keyboard.postFrameShouldPause()) {
             stop(false);
-            stepEmuWhenPaused = false;
         }
     }
     last = now;
@@ -1738,19 +1564,21 @@ function handleVisibilityChange() {
 document.addEventListener("visibilitychange", handleVisibilityChange, false);
 
 function updateDebugButtons() {
-    $("#debug-play").attr("disabled", running);
-    $("#debug-pause").attr("disabled", !running);
+    $debugPlay.attr("disabled", running);
+    $debugPause.attr("disabled", !running);
 }
 
 function go() {
     audioHandler.unmute();
     running = true;
+    keyboard.setRunning(true);
     updateDebugButtons();
     run();
 }
 
 function stop(debug) {
     running = false;
+    keyboard.setRunning(false);
     processor.stop();
     if (debug) dbgr.debug(processor.pc);
     audioHandler.mute();
