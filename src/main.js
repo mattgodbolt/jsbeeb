@@ -324,6 +324,14 @@ function readFileAsBinaryString(file) {
     });
 }
 
+function replaceOrAddExtension(name, newExt) {
+    const lastDot = name.lastIndexOf(".");
+    if (lastDot === -1) {
+        return name + newExt;
+    }
+    return name.substring(0, lastDot) + newExt;
+}
+
 async function loadHTMLFile(file) {
     const binaryData = await readFileAsBinaryString(file);
     processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, binaryData));
@@ -1030,7 +1038,7 @@ $("#google-drive form").on("submit", async function (e) {
     if ($("#google-drive .create-from-existing").prop("checked")) {
         const disc = processor.fdc.drives[0].disc;
         data = toSsdOrDsd(disc);
-        name = name.substring(0, name.lastIndexOf(".")) + (disc.isDoubleSided ? ".dsd" : ".ssd");
+        name = replaceOrAddExtension(name, disc.isDoubleSided ? ".dsd" : ".ssd");
         console.log(`Saving existing disc: ${name}`);
     } else {
         const byteSize = utils.discImageSize(name).byteSize;
@@ -1058,7 +1066,7 @@ $("#download-drive-link").on("click", function () {
     const disc = processor.fdc.drives[0].disc;
     const data = toSsdOrDsd(disc);
     let name = processor.fdc.drives[0].disc.name;
-    name = name.substring(0, name.lastIndexOf(".")) + (disc.isDoubleSided ? ".dsd" : ".ssd");
+    name = replaceOrAddExtension(name, disc.isDoubleSided ? ".dsd" : ".ssd");
 
     const blob = new Blob([data], { type: "application/octet-stream" });
     const url = window.URL.createObjectURL(blob);
