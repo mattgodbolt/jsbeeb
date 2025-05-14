@@ -32,6 +32,7 @@ import {
     processAutobootParams,
     processKeyboardParams,
 } from "./url-params.js";
+import { BusType, GreaseWeazle, WebSerialTransport } from "./greaseweazle";
 
 let processor;
 let video;
@@ -1533,3 +1534,35 @@ window.m7dump = function () {
 
 // Hooks for electron.
 electron({ loadDiscImage, processor });
+
+async function weasel() {
+    // Create transport
+    const transport = new WebSerialTransport();
+    await transport.requestPort();
+
+    // Create GreaseWeazle instance
+    const gw = new GreaseWeazle(transport);
+    window.gw = gw; // TODO not this
+
+    // Connect and initialize
+    await gw.connect();
+
+    // Select drive
+    await gw.selectDrive(0);
+    await gw.setBusType(BusType.IBMPC);
+    await gw.setMotor(0, true);
+
+    // Read track
+    await gw.seek(0, 0);
+    const fluxData = await gw.readFlux(3);
+
+    // Write track
+    await gw.writeFlux(fluxData.fluxList);
+
+    // Cleanup
+    await gw.setMotor(0, false);
+    await gw.deselectDrive();
+    await gw.disconnect();
+}
+
+window.weasel = weasel;
