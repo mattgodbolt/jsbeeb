@@ -1019,16 +1019,29 @@ $.each(availableImages, function (i, image) {
 
 $("#google-drive form").on("submit", async function (e) {
     e.preventDefault();
-    const text = $("#google-drive .disc-name").val();
-    if (!text) return;
+    let name = $("#google-drive .disc-name").val();
+    if (!name) return;
 
     popupLoading("Connecting to Google Drive");
     $googleDriveModal.hide();
-    popupLoading("Creating '" + text + "' on Google Drive");
+    popupLoading("Creating '" + name + "' on Google Drive");
+
+    let data;
+    if ($("#google-drive .create-from-existing").prop("checked")) {
+        const disc = processor.fdc.drives[0].disc;
+        data = toSsdOrDsd(disc);
+        name = name.substring(0, name.lastIndexOf(".")) + (disc.isDoubleSided ? ".dsd" : ".ssd");
+        console.log(`Saving existing disc: ${name}`);
+    } else {
+        const byteSize = utils.discImageSize(name).byteSize;
+        data = new Uint8Array(byteSize);
+        utils.setDiscName(data, name);
+        console.log(`Creating blank: ${name}`);
+    }
 
     try {
-        const result = await googleDrive.create(processor.fdc, text);
-        setDisc1Image("gd:" + result.fileId + "/" + text);
+        const result = await googleDrive.create(processor.fdc, name, data);
+        setDisc1Image("gd:" + result.fileId + "/" + name);
         processor.fdc.loadDisc(0, result.disc);
         loadingFinished();
     } catch (error) {

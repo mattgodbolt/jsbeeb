@@ -128,11 +128,8 @@ export class GoogleDriveLoader {
         });
     }
 
-    async create(fdc, name) {
+    async create(fdc, name, data) {
         console.log(`Google Drive: creating disc image: '${name}'`);
-        const byteSize = utils.discImageSize(name).byteSize;
-        const data = new Uint8Array(byteSize);
-        utils.setDiscName(data, name);
         const response = await this.saveFile(name, data);
         const meta = response.result;
         return { fileId: meta.id, disc: this.makeDisc(fdc, data, meta) };
