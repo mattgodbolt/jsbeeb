@@ -12,7 +12,127 @@ class StepEvent extends Event {
     }
 }
 
-export class DiscDrive extends EventTarget {
+/**
+ * Abstract base class defining the interface for disc drives.
+ * All disc drive implementations must extend this class.
+ */
+export class BaseDiscDrive extends EventTarget {
+    /** @returns {Disc|undefined} */
+    get disc() {
+        throw new Error("Not implemented: disc getter");
+    }
+
+    /** @returns {number} */
+    get track() {
+        throw new Error("Not implemented: track getter");
+    }
+
+    /** @returns {number} */
+    get headPosition() {
+        throw new Error("Not implemented: headPosition getter");
+    }
+
+    /** @returns {boolean} */
+    get indexPulse() {
+        throw new Error("Not implemented: indexPulse getter");
+    }
+
+    /** @returns {boolean} */
+    get spinning() {
+        throw new Error("Not implemented: spinning getter");
+    }
+
+    /** @returns {boolean} */
+    get writeProtect() {
+        throw new Error("Not implemented: writeProtect getter");
+    }
+
+    /** @returns {number} */
+    get trackLength() {
+        throw new Error("Not implemented: trackLength getter");
+    }
+
+    /** @returns {number} */
+    get positionFraction() {
+        throw new Error("Not implemented: positionFraction getter");
+    }
+
+    /** @returns {number} */
+    get positionTime() {
+        throw new Error("Not implemented: positionTime getter");
+    }
+
+    /**
+     * @param {Disc|undefined} disc
+     */
+    setDisc() {
+        throw new Error("Not implemented: setDisc");
+    }
+
+    /**
+     * @param {function(number, number): void} callback
+     */
+    setPulsesCallback() {
+        throw new Error("Not implemented: setPulsesCallback");
+    }
+
+    startSpinning() {
+        throw new Error("Not implemented: startSpinning");
+    }
+
+    stopSpinning() {
+        throw new Error("Not implemented: stopSpinning");
+    }
+
+    /**
+     * @param {boolean} isSideUpper
+     */
+    selectSide() {
+        throw new Error("Not implemented: selectSide");
+    }
+
+    /**
+     * @param {number} delta
+     */
+    seekOneTrack() {
+        throw new Error("Not implemented: seekOneTrack");
+    }
+
+    /**
+     * @param {number} newTrack
+     */
+    notifySeek() {
+        throw new Error("Not implemented: notifySeek");
+    }
+
+    /**
+     * @param {number} delta
+     */
+    notifySeekAmount() {
+        throw new Error("Not implemented: notifySeekAmount");
+    }
+
+    /**
+     * @param {boolean} isDoubleDensity
+     */
+    set32usMode() {
+        throw new Error("Not implemented: set32usMode");
+    }
+
+    /**
+     * @param {number} pulses
+     */
+    writePulses() {
+        throw new Error("Not implemented: writePulses");
+    }
+
+    /** @returns {number} */
+    getQuasiRandomPulses() {
+        throw new Error("Not implemented: getQuasiRandomPulses");
+    }
+}
+
+export class DiscDrive extends BaseDiscDrive {
     static get TicksPerRevolution() {
         // 300 rpm
         return 400000;
