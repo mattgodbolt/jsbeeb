@@ -1,0 +1,191 @@
+import { describe, it } from "vitest";
+import assert from "assert";
+
+import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, toHfe } from "../../src/disc.js";
+
+describe("HFE export tests", function () {
+    it("should export a simple single-sided disc", { timeout: 10000 }, () => {
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        const sectorData = new Uint8Array(256);
+        sectorData.fill(0xA5);
+        
+        // Create a simple FM track
+        const builder = disc.buildTrack(false, 0);
+        builder
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.idMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmByte(0) // track
+            .appendFmByte(0)
+            .appendFmByte(0) // sector
+            .appendFmByte(1)
+            .appendCrc(false)
+            .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap2FFs)
+            .appendRepeatFmByte(0x00, IbmDiscFormat.stdSync00s)
+            .resetCrc()
+            .appendFmDataAndClocks(IbmDiscFormat.dataMarkDataPattern, IbmDiscFormat.markClockPattern)
+            .appendFmChunk(sectorData)
+            .appendCrc(false)
+            .fillFmByte(0xff);
+            
+        const hfeData = toHfe(disc);
+        
+        // Verify HFE header
+        const header = new TextDecoder("ascii").decode(hfeData.slice(0, 8));
+        assert.equal(header, "HXCHFEV3");
+        assert.equal(hfeData[8], 0); // Revision
+        assert.equal(hfeData[9], 1); // Number of tracks
+        assert.equal(hfeData[10], 1); // Number of sides
+        assert.equal(hfeData[11], 2); // ISOIBM_FM_MFM_ENCODING
+    });
+    
+    it("should export and reload the same disc", { timeout: 10000 }, () => {
+        // Create a disc with FM data
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        const data = new Uint8Array(10240); // 10 sectors worth
+        for (let i = 0; i < data.length; i++) {
+            data[i] = i & 0xff;
+        }
+        loadSsd(disc, data, false);
+        
+        // Export to HFE
+        const hfeData = toHfe(disc);
+        
+        // Debug HFE header and LUT
+        const dataView = new DataView(hfeData.buffer);
+        const lutOffset = dataView.getUint16(18, true) * 512;
+        console.log(`HFE size: ${hfeData.length}, LUT offset: ${lutOffset}`);
+        const track0Offset = dataView.getUint16(lutOffset, true) * 512;
+        const track0Length = dataView.getUint16(lutOffset + 2, true);
+        console.log(`Track 0 offset: ${track0Offset}, length: ${track0Length}`);
+        console.log(`Track 0 expected bytes: ${disc.getTrack(false, 0).length * 4}`);
+        console.log(`bufLen per side: ${track0Length >> 1}`);
+        
+        // Reload from HFE
+        const disc2 = new Disc(true, new DiscConfig(), "test2.hfe");
+        loadHfe(disc2, hfeData);
+        
+        // Compare track data
+        assert.equal(disc.tracksUsed, disc2.tracksUsed);
+        for (let trackNum = 0; trackNum < disc.tracksUsed; trackNum++) {
+            const track1 = disc.getTrack(false, trackNum);
+            const track2 = disc2.getTrack(false, trackNum);
+            
+            // Debug output
+            if (trackNum === 0) {
+                console.log(`Track 0 original length: ${track1.length}, loaded length: ${track2.length}`);
+                console.log(`Bytes per side: ${track1.length * 4}`);
+                
+                // Compare first few words
+                console.log("First 4 original words:");
+                for (let i = 0; i < 4; i++) {
+                    console.log(`  [${i}]: 0x${track1.pulses2Us[i].toString(16).padStart(8, '0')}`);
+                }
+                console.log("First 4 loaded words:");
+                for (let i = 0; i < 4; i++) {
+                    console.log(`  [${i}]: 0x${track2.pulses2Us[i].toString(16).padStart(8, '0')}`);
+                }
+            }
+            
+            // The tracks should have identical length
+            assert.equal(track1.length, track2.length, `Track ${trackNum} length mismatch`);
+            
+            // Find sectors and compare
+            const sectors1 = track1.findSectors();
+            const sectors2 = track2.findSectors();
+            
+            // Debug sector finding
+            if (trackNum === 0) {
+                console.log(`Original sectors: ${sectors1.length}, loaded sectors: ${sectors2.length}`);
+                console.log("Original sectors:");
+                for (let s = 0; s < sectors1.length; s++) {
+                    console.log(`  Sector ${s}: idOffset=${sectors1[s].idPosBitOffset}, dataOffset=${sectors1[s].dataPosBitOffset}`);
+                }
+                console.log("Loaded sectors:");
+                for (let s = 0; s < sectors2.length; s++) {
+                    console.log(`  Sector ${s}: idOffset=${sectors2[s].idPosBitOffset}, dataOffset=${sectors2[s].dataPosBitOffset}`);
+                }
+            }
+            
+            assert.equal(sectors1.length, sectors2.length);
+            
+            for (let i = 0; i < sectors1.length; i++) {
+                assert.equal(sectors1[i].sectorNumber, sectors2[i].sectorNumber);
+                assert.equal(sectors1[i].trackNumber, sectors2[i].trackNumber);
+                // Compare sector data if available
+                if (sectors1[i].sectorData && sectors2[i].sectorData) {
+                    assert.deepEqual(sectors1[i].sectorData, sectors2[i].sectorData);
+                }
+            }
+        }
+    });
+    
+    it("should export a double-sided disc", { timeout: 10000 }, () => {
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        const data = new Uint8Array(10240); // 10 sectors worth
+        data.fill(0xBB);
+        loadSsd(disc, data, true); // Load as DSD (double-sided)
+        
+        const hfeData = toHfe(disc);
+        
+        // Verify HFE header
+        const header = new TextDecoder("ascii").decode(hfeData.slice(0, 8));
+        assert.equal(header, "HXCHFEV3");
+        assert.equal(hfeData[10], 2); // Number of sides
+        
+        // Reload and verify
+        const disc2 = new Disc(true, new DiscConfig(), "test2.hfe");
+        loadHfe(disc2, hfeData);
+        
+        assert(disc2.isDoubleSided);
+        assert.equal(disc.tracksUsed, disc2.tracksUsed);
+    });
+
+    it("should properly handle MFM data", { timeout: 10000 }, () => {
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        const sectorData = new Uint8Array(256);
+        for (let i = 0; i < sectorData.length; i++) {
+            sectorData[i] = (i * 0x11) & 0xff;
+        }
+        
+        // Create an MFM track
+        const builder = disc.buildTrack(false, 0);
+        builder
+            .appendRepeatMfmByte(0x4e, 60)
+            .appendRepeatMfmByte(0x00, 12)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmByte(IbmDiscFormat.idMarkDataPattern)
+            .appendMfmByte(0) // track
+            .appendMfmByte(0)
+            .appendMfmByte(0) // sector
+            .appendMfmByte(1)
+            .appendCrc(true)
+            .appendRepeatMfmByte(0x4e, 22)
+            .appendRepeatMfmByte(0x00, 12)
+            .resetCrc()
+            .appendMfm3xA1Sync()
+            .appendMfmByte(IbmDiscFormat.dataMarkDataPattern)
+            .appendMfmChunk(sectorData)
+            .appendCrc(true)
+            .appendRepeatMfmByte(0x4e, 24)
+            .fillMfmByte(0x4e);
+            
+        const hfeData = toHfe(disc);
+        
+        // Reload and verify
+        const disc2 = new Disc(true, new DiscConfig(), "test2.hfe");
+        loadHfe(disc2, hfeData);
+        
+        const sectors = disc2.getTrack(false, 0).findSectors();
+        assert.equal(sectors.length, 1);
+        assert(sectors[0].isMfm);
+        console.log(`Sector data length: expected ${sectorData.length}, got ${sectors[0].sectorData.length}`);
+        console.log(`First few bytes expected: ${Array.from(sectorData.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+        console.log(`First few bytes got: ${Array.from(sectors[0].sectorData.slice(0, 10)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+        console.log(`Last few bytes expected: ${Array.from(sectorData.slice(-10)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+        console.log(`Last few bytes got: ${Array.from(sectors[0].sectorData.slice(-10)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+        assert.deepEqual(sectors[0].sectorData, sectorData);
+    });
+});

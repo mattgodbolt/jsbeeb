@@ -357,7 +357,7 @@ class Sector {
         const { data: sectorData, iffyPulses } = dataReader.read(sectorSize + 2);
         crc = IbmDiscFormat.crcAddBytes(crc, sectorData.slice(0, sectorSize));
         const dataCrc = (sectorData[sectorSize] << 8) | sectorData[sectorSize + 1];
-        return { crcOk: dataCrc === crc, sectorData, iffyPulses };
+        return { crcOk: dataCrc === crc, sectorData: sectorData.slice(0, sectorSize), iffyPulses };
     }
 
     static toSectorSize(size) {
@@ -706,6 +706,123 @@ export function toSsdOrDsd(disc) {
         }
     }
     return result.slice(0, offset);
+}
+
+/**
+ * Convert disc to HFE v3 format
+ * @returns {Uint8Array}
+ * @param {Disc} disc
+ */
+export function toHfe(disc) {
+    const numSides = disc.isDoubleSided ? 2 : 1;
+    const numTracks = disc.tracksUsed;
+    
+    // Calculate track data size for each track
+    // From C code: 4 bytes per 32-bit word, 3 "header" HFEv3 bytes, 2 sides
+    // Note: IbmDiscFormat.bytesPerTrack is already in 32-bit words (3125), not bytes
+    const hfeTrackLen = ((IbmDiscFormat.bytesPerTrack * 4) + 3) * 2;
+    const hfeOffsetDelta = Math.floor(hfeTrackLen / 512) + 1;
+    
+    // Build header
+    const header = new Uint8Array(512);
+    header.fill(0xff);
+    
+    // Write HFE v3 signature
+    const encoder = new TextEncoder();
+    header.set(encoder.encode("HXCHFEV3"), 0);
+    header[8] = 0;  // Revision 0
+    header[9] = numTracks;
+    header[10] = numSides;
+    header[11] = 2;  // IBM FM/MFM encoding
+    header[12] = 0xfa;  // 250kbit
+    header[13] = 0;  // RPM (unused)
+    header[14] = 0;
+    header[15] = 0;
+    header[16] = 7;  // Mode: Shugart DD
+    header[17] = 0xff;  // Unused
+    header[18] = 1;  // LUT offset at block 1 (512 bytes)
+    header[19] = 0;
+    header[20] = 0xff;  // Write allowed
+    header[21] = 0xff;  // Single step
+    header[22] = 0xff;  // No alternate track options
+    header[23] = 0xff;
+    header[24] = 0xff;
+    header[25] = 0xff;
+    
+    // Build LUT (Lookup Table) for track offsets
+    const lut = new Uint8Array(512);
+    const lutDataView = new DataView(lut.buffer);
+    let hfeOffset = 2;  // Start at block 2 (after header and LUT)
+    
+    for (let trackNum = 0; trackNum < numTracks; trackNum++) {
+        const index = trackNum * 4;
+        lutDataView.setUint16(index, hfeOffset, true);  // Offset in 512-byte blocks
+        lutDataView.setUint16(index + 2, hfeTrackLen, true);  // Length in bytes
+        hfeOffset += hfeOffsetDelta;
+    }
+    
+    // Calculate total file size
+    const headerSize = 512;
+    const lutSize = 512;
+    const totalSize = headerSize + lutSize + (hfeOffsetDelta * 512 * numTracks);
+    const hfeData = new Uint8Array(totalSize);
+    
+    // Write header
+    hfeData.set(header, 0);
+    // Write LUT
+    hfeData.set(lut, 512);
+    
+    // Write track data
+    let trackOffset = 1024;  // Start after header and LUT
+    for (let trackNum = 0; trackNum < numTracks; trackNum++) {
+        // Process each side separately
+        for (let side = 0; side < numSides; side++) {
+            const track = disc.getTrack(side === 1, trackNum);
+            const pulses = track.pulses2Us;
+            
+            // Build track buffer for this side only
+            const trackBuffer = new Uint8Array((IbmDiscFormat.bytesPerTrack * 4) + 3);
+            let bufferIndex = 0;
+            
+            // Add HFE v3 header bytes
+            trackBuffer[bufferIndex++] = hfeByteFlip(HfeV3OpcodeSetIndex);
+            trackBuffer[bufferIndex++] = hfeByteFlip(HfeV3OpcodeSetBitrate);
+            trackBuffer[bufferIndex++] = hfeByteFlip(72);  // 72 = 250kbit
+            
+            // Encode track data
+            for (let pulseIndex = 0; pulseIndex < track.length; pulseIndex++) {
+                const pulsesWord = pulses[pulseIndex];
+                
+                // Convert to 4 bytes and flip bits
+                for (let bytePos = 3; bytePos >= 0; bytePos--) {
+                    const byte = (pulsesWord >>> (bytePos * 8)) & 0xff;
+                    trackBuffer[bufferIndex++] = hfeByteFlip(byte);
+                }
+            }
+            
+            // Write track data in 256-byte chunks, interleaved according to HFE format
+            let writePos = trackOffset + (side === 1 ? 256 : 0);
+            let iByte = 0;
+            
+            while (iByte < bufferIndex) {
+                const chunkLen = Math.min(256, bufferIndex - iByte);
+                const chunk = new Uint8Array(256);
+                
+                if (chunkLen > 0) {
+                    chunk.set(trackBuffer.slice(iByte, iByte + chunkLen));
+                }
+                
+                hfeData.set(chunk, writePos);
+                writePos += 512;
+                iByte += chunkLen;
+            }
+        }
+        
+        // Move to the next track after processing all sides
+        trackOffset += hfeOffsetDelta * 512;
+    }
+    
+    return hfeData;
 }
 
 const HfeHeaderV1 = "HXCPICFE";
