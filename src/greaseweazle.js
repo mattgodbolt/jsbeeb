@@ -5,6 +5,8 @@
  * It uses a pluggable transport architecture to support WebSerial, WebUSB, or mock transports.
  */
 
+import { Track, TrackBuilder, IbmDiscFormat } from "./disc.js";
+
 // Command codes
 const Cmd = {
     GetInfo: 0,
@@ -458,8 +460,7 @@ class GreaseWeazle {
     async readFlux(revolutions = 3, ticks = 0, retries = 5) {
         this.log(`Reading flux data (revs=${revolutions}, ticks=${ticks})...`);
 
-        let retry = 0;
-        while (retry <= retries) {
+        for (let attempt = 0; attempt <= retries; attempt++) {
             try {
                 // Send ReadFlux command
                 const cmd = new Uint8Array(8);
@@ -483,11 +484,14 @@ class GreaseWeazle {
 
                 return decoded;
             } catch (error) {
-                if (error instanceof CmdError && error.code === Ack.FluxOverflow && retry < retries) {
-                    retry++;
-                    this.log(`Flux overflow, retry ${retry}/${retries}`);
+                // Only retry on flux overflow, and only if we have attempts left
+                const shouldRetry = error instanceof CmdError && error.code === Ack.FluxOverflow && attempt < retries;
+
+                if (shouldRetry) {
+                    this.log(`Flux overflow, retry ${attempt + 1}/${retries}`);
                     continue;
                 }
+
                 throw error;
             }
         }
@@ -741,6 +745,69 @@ class GreaseWeazle {
         this.log(`Pin ${pin} is ${level ? "HIGH" : "LOW"}`);
         return level;
     }
+}
+
+/**
+ * Convert flux data to a Track object
+ * @param {object} fluxData - Output from readFlux with { fluxList, indexList }
+ * @param {number} sampleFreq - Sample frequency in Hz
+ * @param {boolean} isMfm - Whether this is MFM data (true) or FM data (false)
+ * @param {boolean} upper - Whether this is upper side (default: false)
+ * @param {number} trackNum - Track number (default: 0)
+ * @returns {Track} Track object with pulses2Us data
+ */
+export function fluxToTrack(fluxData, sampleFreq, isMfm = true, upper = false, trackNum = 0) {
+    const { fluxList, indexList } = fluxData;
+
+    if (indexList.length < 2) {
+        throw new Error("Need at least 2 index pulses to extract one revolution");
+    }
+
+    // Find flux transitions for one complete revolution (between first two index pulses)
+    const startTicks = indexList[0];
+    const endTicks = indexList[1];
+
+    // Extract flux transitions within this revolution
+    const revolutionFlux = [];
+    let currentTicks = 0;
+
+    for (const fluxTicks of fluxList) {
+        currentTicks += fluxTicks;
+        if (currentTicks >= startTicks && currentTicks < endTicks) {
+            revolutionFlux.push(fluxTicks);
+        } else if (currentTicks >= endTicks) {
+            // Add partial flux up to end of revolution
+            const partial = fluxTicks - (currentTicks - endTicks);
+            if (partial > 0) {
+                revolutionFlux.push(partial);
+            }
+            break;
+        }
+    }
+
+    // Convert flux deltas from ticks to microseconds
+    const ticksToUs = 1e6 / sampleFreq;
+    const fluxDeltas = revolutionFlux.map((ticks) => ticks * ticksToUs);
+
+    // Create a pulses array
+    const pulses2Us = new Uint32Array(IbmDiscFormat.bytesPerTrack);
+
+    // Create a temporary Track object that TrackBuilder expects
+    const tempTrack = {
+        pulses2Us: pulses2Us,
+        length: IbmDiscFormat.bytesPerTrack,
+        description: `Track ${trackNum} ${upper ? "upper" : "lower"} (GreaseWeazle flux)`,
+    };
+
+    // Use TrackBuilder to populate the track with flux data
+    const builder = new TrackBuilder(tempTrack);
+    builder.buildFromPulses(fluxDeltas, isMfm);
+
+    // Create and return a proper Track instance
+    const track = new Track(upper, trackNum, 0, pulses2Us, tempTrack.description);
+    track.length = tempTrack.length; // Update length from builder
+
+    return track;
 }
 
 // Export classes and constants

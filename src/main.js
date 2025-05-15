@@ -32,7 +32,7 @@ import {
     processAutobootParams,
     processKeyboardParams,
 } from "./url-params.js";
-import { BusType, GreaseWeazle, WebSerialTransport } from "./greaseweazle";
+import { BusType, fluxToTrack, GreaseWeazle, WebSerialTransport } from "./greaseweazle";
 
 let processor;
 let video;
@@ -1556,6 +1556,8 @@ async function weasel() {
     await gw.seek(0, 0);
     const fluxData = await gw.readFlux(3);
     window.fluxData = fluxData; // TODO not this
+
+    window.track = fluxToTrack(fluxData, gw.firmwareInfo.sampleFreq, true, false, 0);
 
     // // Write track
     // await gw.writeFlux(fluxData.fluxList);

@@ -27,7 +27,7 @@ class Crc32Builder {
     }
 }
 */
-class TrackBuilder {
+export class TrackBuilder {
     /**
      * @param {Track} track
      */
@@ -369,17 +369,24 @@ class Sector {
     }
 }
 
-class Track {
-    constructor(upper, trackNum, initialByte) {
+export class Track {
+    constructor(upper, trackNum, initialByte, customPulses = null, customDescription = null) {
         this.length = IbmDiscFormat.bytesPerTrack;
         this.upper = upper;
         this.trackNum = trackNum;
-        this.pulses2Us = new Uint32Array(256 * 13);
-        this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 24));
+
+        if (customPulses) {
+            this.pulses2Us = customPulses;
+        } else {
+            this.pulses2Us = new Uint32Array(256 * 13);
+            this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 24));
+        }
+
+        this._customDescription = customDescription;
     }
 
     get description() {
-        return `Track ${this.trackNum} ${this.upper ? "upper" : "lower"}`;
+        return this._customDescription || `Track ${this.trackNum} ${this.upper ? "upper" : "lower"}`;
     }
 
     /**
