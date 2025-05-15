@@ -100,6 +100,10 @@ class Transport {
     async changeBaudRate(_baudRate) {
         throw new Error("Transport.changeBaudRate() must be implemented");
     }
+
+    async readAvailable(_maxBytes) {
+        throw new Error("Transport.readAvailable() must be implemented");
+    }
 }
 
 /**
@@ -212,6 +216,37 @@ class WebSerialTransport extends Transport {
         await this.close();
         await this.open(baudRate);
     }
+
+    async readAvailable(maxBytes) {
+        if (!this.reader) {
+            throw new Error("Port not open");
+        }
+
+        // First check if we have buffered data
+        if (this.buffer.length > 0) {
+            const bytesToReturn = Math.min(maxBytes, this.buffer.length);
+            const result = this.buffer.subarray(0, bytesToReturn);
+            this.buffer = this.buffer.subarray(bytesToReturn);
+            return result;
+        }
+
+        // No buffered data, do a single read from the port
+        const { value, done } = await this.reader.read();
+        if (done) {
+            throw new Error("Stream closed while reading");
+        }
+
+        // Return up to maxBytes
+        const bytesToReturn = Math.min(maxBytes, value.length);
+        const result = value.subarray(0, bytesToReturn);
+
+        // Buffer any excess
+        if (value.length > bytesToReturn) {
+            this._appendToBuffer(value.subarray(bytesToReturn));
+        }
+
+        return result;
+    }
 }
 
 /**
@@ -313,7 +348,7 @@ class GreaseWeazle {
      * Format command for logging
      */
     formatCommand(cmd) {
-        const cmdName = Object.keys(Cmd).find((key) => Cmd[key] === cmd[0]) || "Unknown";
+        const cmdName = Object.keys(Cmd).find((key) => Cmd[key] === cmd[0]) ?? "Unknown";
         return `${cmdName} (0x${cmd[0].toString(16).padStart(2, "0")})`;
     }
 
@@ -436,10 +471,10 @@ class GreaseWeazle {
 
                 await this.sendCommand(cmd);
 
-                // Read flux data stream
+                // Read flux data stream until terminating 0 byte
                 const fluxData = await this.readFluxStream();
 
-                // Get flux status
+                // Check flux status - this raises exception on error
                 await this.getFluxStatus();
 
                 // Decode flux data
@@ -459,55 +494,44 @@ class GreaseWeazle {
     }
 
     /**
-     * Read flux data stream
+     * Read flux data stream until we find the terminating 0 byte
      */
     async readFluxStream() {
         const chunks = [];
-        let totalLength = 0;
+        const chunkSize = 512;
+        const maxSize = 1024 * 1024; // 1MB safety limit
 
         while (true) {
-            const chunk = await this.transport.read(1);
-            chunks.push(chunk);
-            totalLength++;
+            const chunk = await this.transport.readAvailable(chunkSize);
 
-            if (chunk[0] === 0) {
-                // End of stream
+            // Look for terminator
+            const endIndex = chunk.indexOf(0);
+            if (endIndex !== -1) {
+                // Found terminator - keep data up to and including it
+                chunks.push(chunk.subarray(0, endIndex + 1));
                 break;
             }
 
-            // Read any available data
-            try {
-                const available = await this.transport.read(1024);
-                chunks.push(available);
-                totalLength += available.length;
+            chunks.push(chunk);
 
-                // Check for end of stream
-                for (let i = 0; i < available.length; i++) {
-                    if (available[i] === 0) {
-                        // Trim to actual length
-                        totalLength = totalLength - available.length + i + 1;
-                        chunks[chunks.length - 1] = available.subarray(0, i + 1);
-                        break;
-                    }
-                }
-
-                if (available[available.length - 1] === 0) {
-                    break;
-                }
-            } catch (ignoreErr) {
-                // No more data available immediately
+            // Safety check
+            const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            if (totalLength > maxSize) {
+                throw new Error(`Flux stream too large (>${maxSize} bytes)`);
             }
         }
 
-        // Combine chunks
-        const fluxData = new Uint8Array(totalLength);
+        // Combine chunks efficiently
+        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+        const result = new Uint8Array(totalLength);
         let offset = 0;
         for (const chunk of chunks) {
-            fluxData.set(chunk, offset);
+            result.set(chunk, offset);
             offset += chunk.length;
         }
 
-        return fluxData;
+        this.log(`Read flux stream of ${totalLength} bytes`);
+        return result;
     }
 
     /**

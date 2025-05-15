@@ -1548,16 +1548,17 @@ async function weasel() {
     await gw.connect();
 
     // Select drive
+    await gw.setBusType(BusType.Shugart);
     await gw.selectDrive(0);
-    await gw.setBusType(BusType.IBMPC);
     await gw.setMotor(0, true);
 
     // Read track
     await gw.seek(0, 0);
     const fluxData = await gw.readFlux(3);
+    window.fluxData = fluxData; // TODO not this
 
-    // Write track
-    await gw.writeFlux(fluxData.fluxList);
+    // // Write track
+    // await gw.writeFlux(fluxData.fluxList);
 
     // Cleanup
     await gw.setMotor(0, false);

@@ -2,6 +2,8 @@
 
 This document describes the USB protocol used by GreaseWeasel to communicate with the floppy disk controller hardware.
 
+**Note:** This documentation is derived from the GreaseWeasel source code available at https://github.com/keirf/greaseweazle
+
 ## Overview
 
 GreaseWeasel uses a USB serial connection to send commands and receive responses. The protocol uses binary messages with specific command codes and data structures.
@@ -142,9 +144,18 @@ Request format:
 - `ticks`: Number of sample ticks to read (0 for index-based)
 - `revolutions`: Number of index pulses + 1 (0 for tick-based)
 
-Response: Flux data stream (see Flux Data Format below)
+Response: Standard command echo and result code (2 bytes), followed by flux data
 
-After ReadFlux, always call GetFluxStatus to check for errors.
+**Protocol Flow:**
+
+1. Send ReadFlux command
+2. Read command echo and result code (2 bytes)
+3. Read flux data stream (terminated by 0x00 byte)
+4. Send GetFluxStatus command
+5. Read GetFluxStatus response (2 bytes)
+
+The flux data stream starts immediately after the ReadFlux response.
+GetFluxStatus must be called after reading the flux data to check for errors.
 
 ### WriteFlux (8)
 
@@ -160,9 +171,16 @@ With hard sectors:
 [0x08] [0x08] [cue_at_index (uint8_t)] [terminate_at_index (uint8_t)] [hard_sector_ticks (uint32_t)]
 ```
 
-Followed by encoded flux data stream.
+Response: Standard command echo and result code (2 bytes)
 
-After WriteFlux, send a single byte to sync, then call GetFluxStatus to check for errors.
+**Protocol Flow for WriteFlux:**
+
+1. Send WriteFlux command
+2. Read command echo and result code
+3. Send encoded flux data stream (terminated with 0x00)
+4. Read sync byte
+5. Send GetFluxStatus command
+6. Read GetFluxStatus response to check for errors
 
 ### GetFluxStatus (9)
 
@@ -326,9 +344,12 @@ All timing values are in units of sample ticks. The sample frequency (in Hz) is 
 3. Turn on motor
 4. Seek to desired cylinder
 5. Select head
-6. ReadFlux command
-7. GetFluxStatus to check for errors
-8. Decode flux stream
+6. Send ReadFlux command
+7. Read command echo and result code
+8. Read flux data stream until 0x00 terminator
+9. Send GetFluxStatus command
+10. Read GetFluxStatus response
+11. Decode flux stream
 
 ### Write Track
 
