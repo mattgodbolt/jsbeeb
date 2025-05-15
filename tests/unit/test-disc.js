@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "assert";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, loadAdf, toSsdOrDsd, toHfe } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
 import * as fs from "node:fs";
 
 describe("IBM disc format tests", function () {
