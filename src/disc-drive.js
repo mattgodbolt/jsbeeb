@@ -63,16 +63,18 @@ export class BaseDiscDrive extends EventTarget {
     }
 
     /**
-     * @param {Disc|undefined} disc
+     * @param {Disc|undefined} _disc
      */
-    setDisc() {
+    // eslint-disable-next-line no-unused-vars
+    setDisc(_disc) {
         throw new Error("Not implemented: setDisc");
     }
 
     /**
-     * @param {function(number, number): void} callback
+     * @param {function(number, number): void} _callback
      */
-    setPulsesCallback() {
+    // eslint-disable-next-line no-unused-vars
+    setPulsesCallback(_callback) {
         throw new Error("Not implemented: setPulsesCallback");
     }
 
@@ -85,44 +87,50 @@ export class BaseDiscDrive extends EventTarget {
     }
 
     /**
-     * @param {boolean} isSideUpper
+     * @param {boolean} _isSideUpper
      */
-    selectSide() {
+    // eslint-disable-next-line no-unused-vars
+    selectSide(_isSideUpper) {
         throw new Error("Not implemented: selectSide");
     }
 
     /**
-     * @param {number} delta
+     * @param {number} _delta
      */
-    seekOneTrack() {
+    // eslint-disable-next-line no-unused-vars
+    seekOneTrack(_delta) {
         throw new Error("Not implemented: seekOneTrack");
     }
 
     /**
-     * @param {number} newTrack
+     * @param {number} _newTrack
      */
-    notifySeek() {
+    // eslint-disable-next-line no-unused-vars
+    notifySeek(_newTrack) {
         throw new Error("Not implemented: notifySeek");
     }
 
     /**
-     * @param {number} delta
+     * @param {number} _delta
      */
-    notifySeekAmount() {
+    // eslint-disable-next-line no-unused-vars
+    notifySeekAmount(_delta) {
         throw new Error("Not implemented: notifySeekAmount");
     }
 
     /**
-     * @param {boolean} isDoubleDensity
+     * @param {boolean} _isDoubleDensity
      */
-    set32usMode() {
+    // eslint-disable-next-line no-unused-vars
+    set32usMode(_isDoubleDensity) {
         throw new Error("Not implemented: set32usMode");
     }
 
     /**
-     * @param {number} pulses
+     * @param {number} _pulses
      */
-    writePulses() {
+    // eslint-disable-next-line no-unused-vars
+    writePulses(_pulses) {
         throw new Error("Not implemented: writePulses");
     }
 
