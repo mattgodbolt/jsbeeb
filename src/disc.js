@@ -357,6 +357,7 @@ class Sector {
         const { data: sectorData, iffyPulses } = dataReader.read(sectorSize + 2);
         crc = IbmDiscFormat.crcAddBytes(crc, sectorData.slice(0, sectorSize));
         const dataCrc = (sectorData[sectorSize] << 8) | sectorData[sectorSize + 1];
+        // Slice to remove the appended CRC bytes, ensuring only valid data is returned
         return { crcOk: dataCrc === crc, sectorData: sectorData.slice(0, sectorSize), iffyPulses };
     }
 
@@ -786,8 +787,9 @@ export function toHfe(disc) {
 
             // Add HFE v3 header bytes
             trackBuffer[bufferIndex++] = hfeByteFlip(HfeV3OpcodeSetIndex);
+            const BITRATE_250K = 72; // 250kbit
             trackBuffer[bufferIndex++] = hfeByteFlip(HfeV3OpcodeSetBitrate);
-            trackBuffer[bufferIndex++] = hfeByteFlip(72); // 72 = 250kbit
+            trackBuffer[bufferIndex++] = hfeByteFlip(BITRATE_250K);
 
             // Encode track data - always use the full standard track size (IbmDiscFormat.bytesPerTrack)
             // This ensures we preserve trailing zeros and maintain consistent track lengths
