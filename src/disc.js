@@ -721,7 +721,6 @@ export function toSsdOrDsd(disc) {
     return result.slice(0, offset);
 }
 
-
 export class Disc {
     /**
      * @returns {Disc} a new blank disc

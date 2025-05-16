@@ -217,7 +217,6 @@ describe(
     },
 );
 
-
 describe("ADF loader tests", function () {
     it("should load a somewhat blank ADFS disc", () => {
         const data = new Uint8Array(327680);
