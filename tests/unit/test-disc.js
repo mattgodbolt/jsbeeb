@@ -230,6 +230,39 @@ describe("HFE loader tests", function () {
             assert(!sector.hasDataCrcError);
         }
     });
+
+    it("should reject invalid HFE files", () => {
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+
+        // Test missing header
+        assert.throws(() => {
+            loadHfe(disc, new Uint8Array(10));
+        }, /HFE file missing header/);
+
+        // Test invalid header
+        const invalidHeader = new Uint8Array(512);
+        invalidHeader.set(new TextEncoder().encode("INVALID!"), 0);
+        assert.throws(() => {
+            loadHfe(disc, invalidHeader);
+        }, /HFE file bad header/);
+
+        // Test non-zero revision
+        const nonZeroRevision = new Uint8Array(512);
+        nonZeroRevision.set(new TextEncoder().encode("HXCHFEV3"), 0);
+        nonZeroRevision[8] = 1; // Set revision to 1 (should be 0)
+        assert.throws(() => {
+            loadHfe(disc, nonZeroRevision);
+        }, /HFE file revision not 0/);
+
+        // Test unsupported encoding
+        const unsupportedEncoding = new Uint8Array(512);
+        unsupportedEncoding.set(new TextEncoder().encode("HXCHFEV3"), 0);
+        unsupportedEncoding[8] = 0; // Revision 0
+        unsupportedEncoding[11] = 1; // Encoding 1 (not 0 or 2)
+        assert.throws(() => {
+            loadHfe(disc, unsupportedEncoding);
+        }, /HFE encoding not ISOIBM/);
+    });
 });
 
 describe(

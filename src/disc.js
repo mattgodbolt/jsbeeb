@@ -45,7 +45,8 @@ class TrackBuilder {
     }
 
     setTrackLength() {
-        if (this._index > this._track.pulses2Us.length) throw new Error("Track buffer overflow");
+        if (this._index > this._track.pulses2Us.length)
+            throw new Error(`Track buffer overflow in ${this._track.description}`);
         if (this._index !== 0) this._track.length = this._index;
         return this;
     }
@@ -56,7 +57,8 @@ class TrackBuilder {
     }
 
     appendFmDataAndClocks(data, clocks) {
-        if (this._index >= this._track.pulses2Us.length) throw new Error("Track buffer overflow");
+        if (this._index >= this._track.pulses2Us.length)
+            throw new Error(`Track buffer overflow in ${this._track.description}`);
         this._track.pulses2Us[this._index++] = IbmDiscFormat.fmTo2usPulses(clocks, data);
         this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
         return this;
@@ -73,7 +75,8 @@ class TrackBuilder {
     }
 
     fillFmByte(data) {
-        if (this._index >= this._track.pulses2Us.length) throw new Error("Track buffer overflow");
+        if (this._index >= this._track.pulses2Us.length)
+            throw new Error(`Track buffer overflow in ${this._track.description}`);
         // Fill to standard track size or buffer capacity, whichever is smaller
         const fillCount = Math.min(IbmDiscFormat.bytesPerTrack, this._track.pulses2Us.length) - this._index;
         this.appendRepeatFmByte(data, fillCount);
@@ -106,7 +109,8 @@ class TrackBuilder {
     }
 
     appendMfmPulses(pulses) {
-        if (this._index >= this._track.pulses2Us.length) throw new Error("Track buffer overflow");
+        if (this._index >= this._track.pulses2Us.length)
+            throw new Error(`Track buffer overflow in ${this._track.description}`);
         const existingPulses = this._track.pulses2Us[this._index];
         const mask = 0xffff << this._pulsesIndex;
         this._pulsesIndex = (this._pulsesIndex + 16) & 31;
@@ -142,7 +146,8 @@ class TrackBuilder {
     }
 
     fillMfmByte(data) {
-        if (this._index >= this._track.pulses2Us.length) throw new Error("Track buffer overflow");
+        if (this._index >= this._track.pulses2Us.length)
+            throw new Error(`Track buffer overflow in ${this._track.description}`);
         // Fill to standard track size or buffer capacity, whichever is smaller
         const maxFill = Math.min(IbmDiscFormat.bytesPerTrack, this._track.pulses2Us.length);
         while (this._index < maxFill) this.appendMfmByte(data);
@@ -170,7 +175,7 @@ class TrackBuilder {
     appendPulseDelta(deltaUs, quantizeMfm) {
         let num2UsUnits = quantizeMfm ? Math.round(deltaUs / 2) : 2 * Math.round(deltaUs / 4);
         while (num2UsUnits--) {
-            if (this._index >= this._track.pulses2Us.length) return false;
+            if (this._index >= this._track.pulses2Us.length) return false; // Silent failure for pulse delta
             if (num2UsUnits === 0) {
                 this._track.pulses2Us[this._index] |= 0x80000000 >>> this._pulsesIndex;
             }
@@ -361,7 +366,8 @@ class Sector {
         const { data: sectorData, iffyPulses } = dataReader.read(sectorSize + 2);
         crc = IbmDiscFormat.crcAddBytes(crc, sectorData.slice(0, sectorSize));
         const dataCrc = (sectorData[sectorSize] << 8) | sectorData[sectorSize + 1];
-        // Return only the actual sector data (without CRC bytes)
+        // The CRC bytes are used for error-checking and are not part of the actual sector data payload.
+        // Therefore, we exclude the last two bytes (CRC) from the returned `sectorData`.
         return { crcOk: dataCrc === crc, sectorData: sectorData.slice(0, sectorSize), iffyPulses };
     }
 
@@ -377,11 +383,10 @@ class Sector {
 class Track {
     constructor(upper, trackNum, initialByte) {
         // Use a fixed-size buffer large enough for any track in the HFE format
-        const FIXED_TRACK_SIZE = 3132; // Observed maximum track size needed based on our HFE files
         this.length = IbmDiscFormat.bytesPerTrack; // Default size, will be updated when track is populated
         this.upper = upper;
         this.trackNum = trackNum;
-        this.pulses2Us = new Uint32Array(FIXED_TRACK_SIZE);
+        this.pulses2Us = new Uint32Array(MaxHfeTrackPulses);
         this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 24));
     }
 
@@ -812,8 +817,7 @@ export function toHfe(disc) {
             // Add HFE v3 header opcodes required by the format spec
             trackBuffer[bufferIndex++] = hfeByteFlip(HfeV3OpcodeSetIndex);
             trackBuffer[bufferIndex++] = hfeByteFlip(HfeV3OpcodeSetBitrate);
-            const BITRATE_250K = 72; // 250kbit bitrate value per HFE spec
-            trackBuffer[bufferIndex++] = hfeByteFlip(BITRATE_250K);
+            trackBuffer[bufferIndex++] = hfeByteFlip(Bitrate250k);
 
             // Encode track data using the track's actual length
             for (let pulseIndex = 0; pulseIndex < track.length; pulseIndex++) {
@@ -851,6 +855,7 @@ export function toHfe(disc) {
     return hfeData;
 }
 
+// HFE format constants
 const HfeHeaderV1 = "HXCPICFE";
 const HfeHeaderV3 = "HXCHFEV3";
 const HfeV3OpcodeMask = 0xf0;
@@ -859,6 +864,13 @@ const HfeV3OpcodeSetIndex = 0xf1;
 const HfeV3OpcodeSetBitrate = 0xf2;
 const HfeV3OpcodeSkipBits = 0xf3;
 const HfeV3OpcodeRand = 0xf4;
+
+// Maximum observed track size needed in HFE format, based on analysis of real HFE files
+// This value needs to be large enough to accommodate any track in real-world HFE disc images
+const MaxHfeTrackPulses = 3132;
+
+// 250kbit bitrate value per HFE format specification
+const Bitrate250k = 72;
 
 function hfeByteFlip(val) {
     let ret = 0;

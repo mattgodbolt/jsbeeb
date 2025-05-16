@@ -83,7 +83,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Local un-exported properties should be used for shared constants
   - Local constants should be used for temporary values
   - Always use named constants instead of magic numbers in code
-  - Prefer `const FIXED_TRACK_SIZE = 3132;` over inline values like `new Uint32Array(3132)`
+  - Use PascalCase for module-level constants (e.g., `const MaxHfeTrackPulses = 3132;`)
+  - Prefer module-level constants over function-local constants for shared values
   - Define constants at the beginning of functions or at the class/module level as appropriate
   - Add comments explaining what the constant represents, especially for non-obvious values
 
