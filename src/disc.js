@@ -45,7 +45,7 @@ class TrackBuilder {
     }
 
     setTrackLength() {
-        if (this._index > IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
+        if (this._index > this._track.pulses2Us.length) throw new Error("Overflowed disc buffer");
         if (this._index !== 0) this._track.length = this._index;
         return this;
     }
@@ -56,7 +56,7 @@ class TrackBuilder {
     }
 
     appendFmDataAndClocks(data, clocks) {
-        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflow in disc buliding");
+        if (this._index >= this._track.pulses2Us.length) throw new Error("Overflow in disc building");
         this._track.pulses2Us[this._index++] = IbmDiscFormat.fmTo2usPulses(clocks, data);
         this._crc = IbmDiscFormat.crcAddByte(this._crc, data);
         return this;
@@ -73,8 +73,10 @@ class TrackBuilder {
     }
 
     fillFmByte(data) {
-        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
-        this.appendRepeatFmByte(data, IbmDiscFormat.bytesPerTrack - this._index);
+        if (this._index >= this._track.pulses2Us.length) throw new Error("Overflowed disc buffer");
+        // Fill to standard track size or current buffer size, whichever is smaller
+        const fillCount = Math.min(IbmDiscFormat.bytesPerTrack, this._track.pulses2Us.length) - this._index;
+        this.appendRepeatFmByte(data, fillCount);
         return this;
     }
 
@@ -104,7 +106,7 @@ class TrackBuilder {
     }
 
     appendMfmPulses(pulses) {
-        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
+        if (this._index >= this._track.pulses2Us.length) throw new Error("Overflowed disc buffer");
         const existingPulses = this._track.pulses2Us[this._index];
         const mask = 0xffff << this._pulsesIndex;
         this._pulsesIndex = (this._pulsesIndex + 16) & 31;
@@ -140,8 +142,10 @@ class TrackBuilder {
     }
 
     fillMfmByte(data) {
-        if (this._index >= IbmDiscFormat.bytesPerTrack) throw new Error("Overflowed disc size");
-        while (this._index < IbmDiscFormat.bytesPerTrack) this.appendMfmByte(data);
+        if (this._index >= this._track.pulses2Us.length) throw new Error("Overflowed disc buffer");
+        // Fill to standard track size or current buffer capacity, whichever is smaller
+        const maxFill = Math.min(IbmDiscFormat.bytesPerTrack, this._track.pulses2Us.length);
+        while (this._index < maxFill) this.appendMfmByte(data);
         return this;
     }
 
@@ -166,7 +170,8 @@ class TrackBuilder {
     appendPulseDelta(deltaUs, quantizeMfm) {
         let num2UsUnits = quantizeMfm ? Math.round(deltaUs / 2) : 2 * Math.round(deltaUs / 4);
         while (num2UsUnits--) {
-            if (this._index === IbmDiscFormat.bytesPerTrack) return false;
+            // Allow exceeding standard track size if buffer capacity permits
+            if (this._index >= this._track.pulses2Us.length) return false;
             if (num2UsUnits === 0) {
                 this._track.pulses2Us[this._index] |= 0x80000000 >>> this._pulsesIndex;
             }
@@ -372,10 +377,12 @@ class Sector {
 
 class Track {
     constructor(upper, trackNum, initialByte) {
-        this.length = IbmDiscFormat.bytesPerTrack;
+        // Use a fixed-size buffer that matches the size we see in HFE files
+        const FIXED_TRACK_SIZE = 3132;
+        this.length = IbmDiscFormat.bytesPerTrack; // Default to standard size, will be set correctly when track is populated
         this.upper = upper;
         this.trackNum = trackNum;
-        this.pulses2Us = new Uint32Array(256 * 13);
+        this.pulses2Us = new Uint32Array(FIXED_TRACK_SIZE);
         this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 24));
     }
 
@@ -718,11 +725,22 @@ export function toHfe(disc) {
     const numSides = disc.isDoubleSided ? 2 : 1;
     const numTracks = disc.tracksUsed;
 
-    // Calculate track data size for each track
-    // From C code: 4 bytes per 32-bit word, 3 "header" HFEv3 bytes, 2 sides
-    // Note: IbmDiscFormat.bytesPerTrack is already in 32-bit words (3125), not bytes
-    const hfeTrackLen = (IbmDiscFormat.bytesPerTrack * 4 + 3) * 2;
-    const hfeOffsetDelta = Math.floor(hfeTrackLen / 512) + 1;
+    // Pre-calculate sizes for each track to properly support variable track lengths
+    const trackSizes = [];
+    const trackOffsetDeltas = [];
+    for (let trackNum = 0; trackNum < numTracks; trackNum++) {
+        const track0 = disc.getTrack(false, trackNum);
+        const track1 = numSides > 1 ? disc.getTrack(true, trackNum) : { length: 0 };
+
+        // Calculate the actual size needed for this specific track
+        // From C code: 4 bytes per 32-bit word, 3 "header" HFEv3 bytes, 2 sides
+        const trackLen = Math.max(track0.length, track1.length);
+        const hfeTrackLen = (trackLen * 4 + 3) * 2;
+        const hfeOffsetDelta = Math.floor(hfeTrackLen / 512) + 1;
+
+        trackSizes.push(hfeTrackLen);
+        trackOffsetDeltas.push(hfeOffsetDelta);
+    }
 
     // Build header
     const header = new Uint8Array(512);
@@ -755,17 +773,20 @@ export function toHfe(disc) {
     const lutDataView = new DataView(lut.buffer);
     let hfeOffset = 2; // Start at block 2 (after header and LUT)
 
+    // Calculate total file size and build LUT
+    const headerSize = 512;
+    const lutSize = 512;
+    let totalSize = headerSize + lutSize;
+
     for (let trackNum = 0; trackNum < numTracks; trackNum++) {
         const index = trackNum * 4;
         lutDataView.setUint16(index, hfeOffset, true); // Offset in 512-byte blocks
-        lutDataView.setUint16(index + 2, hfeTrackLen, true); // Length in bytes
-        hfeOffset += hfeOffsetDelta;
-    }
+        lutDataView.setUint16(index + 2, trackSizes[trackNum], true); // Track-specific length in bytes
 
-    // Calculate total file size
-    const headerSize = 512;
-    const lutSize = 512;
-    const totalSize = headerSize + lutSize + hfeOffsetDelta * 512 * numTracks;
+        // Add this track's size to the total and advance offset
+        totalSize += trackOffsetDeltas[trackNum] * 512;
+        hfeOffset += trackOffsetDeltas[trackNum];
+    }
     const hfeData = new Uint8Array(totalSize);
 
     // Write header
@@ -781,8 +802,8 @@ export function toHfe(disc) {
             const track = disc.getTrack(side === 1, trackNum);
             const pulses = track.pulses2Us;
 
-            // Build track buffer for this side only
-            const trackBuffer = new Uint8Array(IbmDiscFormat.bytesPerTrack * 4 + 3);
+            // Build track buffer for this side based on the track's actual length
+            const trackBuffer = new Uint8Array(track.length * 4 + 3);
             let bufferIndex = 0;
 
             // Add HFE v3 header bytes
@@ -791,20 +812,9 @@ export function toHfe(disc) {
             trackBuffer[bufferIndex++] = hfeByteFlip(HfeV3OpcodeSetBitrate);
             trackBuffer[bufferIndex++] = hfeByteFlip(BITRATE_250K);
 
-            // Encode track data - always use the full standard track size (IbmDiscFormat.bytesPerTrack)
-            // This ensures we preserve trailing zeros and maintain consistent track lengths
-            // Additionally, force-zero the last few words to ensure consistent track endings
-            // First zero-out the track ends if there's any non-zero content
-            for (let i = Math.max(0, track.length - 10); i < track.length; i++) {
-                if (i >= 0 && i < pulses.length) {
-                    pulses[i] = 0;
-                }
-            }
-
-            // Then use a shorter effective track length for writing
-            const paddedLength = track.length > 0 ? Math.min(track.length - 10, IbmDiscFormat.bytesPerTrack - 10) : 0;
-            for (let pulseIndex = 0; pulseIndex < IbmDiscFormat.bytesPerTrack; pulseIndex++) {
-                const pulsesWord = pulseIndex < paddedLength ? pulses[pulseIndex] : 0;
+            // Encode track data using the track's actual length
+            for (let pulseIndex = 0; pulseIndex < track.length; pulseIndex++) {
+                const pulsesWord = pulses[pulseIndex];
 
                 // Convert to 4 bytes and flip bits
                 for (let bytePos = 3; bytePos >= 0; bytePos--) {
@@ -832,7 +842,7 @@ export function toHfe(disc) {
         }
 
         // Move to the next track after processing all sides
-        trackOffset += hfeOffsetDelta * 512;
+        trackOffset += trackOffsetDeltas[trackNum] * 512;
     }
 
     return hfeData;
@@ -880,7 +890,7 @@ export function loadHfe(disc, data) {
     if (data.length < 512) throw new Error("HFE file missing header");
     const header = new TextDecoder("ascii").decode(data.slice(0, 8));
     let isV3 = false;
-    let hfeVersion = 1; // TODO maybe in metadata?
+    let hfeVersion = 1;
 
     if (header === HfeHeaderV1) {
         // ... note in metadata?

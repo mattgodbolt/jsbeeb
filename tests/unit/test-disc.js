@@ -307,42 +307,16 @@ describe(
                 }
 
                 // Don't assert on exact track length - what matters is that all sectors can be read.
-                // The track length may vary slightly when round-tripping through HFE format
-                // but this doesn't affect disc functionality as long as all sectors are intact.
+                // Track lengths should be identical when roundtripping with the variable track length HFE implementation
                 console.log(`Track ${trackNum} length: original ${track1.length}, round-tripped ${track2.length}`);
-
-                // First verify that the round-tripped track is not longer than the original
-                assert(
-                    track1.length >= track2.length,
-                    `Round-tripped track ${trackNum} unexpectedly longer: ${track2.length} > ${track1.length}`,
+                assert.equal(
+                    track1.length,
+                    track2.length,
+                    `Track ${trackNum} length mismatch: original ${track1.length}, round-tripped ${track2.length}`,
                 );
 
-                // Check the difference between track lengths
-                const difference = track1.length - track2.length;
-
-                // If the original track is longer, verify that the truncated words are all zeros
-                if (difference > 0) {
-                    // Check that difference is reasonable
-                    assert(
-                        difference <= 5,
-                        `Track ${trackNum} length difference (${difference}) exceeds expected bound of 5 words`,
-                    );
-
-                    // Verify that all the extra words are zeros
-                    let allZeros = true;
-                    for (let i = track2.length; i < track1.length; i++) {
-                        if (track1.pulses2Us[i] !== 0) {
-                            allZeros = false;
-                            console.log(`Non-zero word found at index ${i}: 0x${track1.pulses2Us[i].toString(16)}`);
-                        }
-                    }
-                    assert(allZeros, `Track ${trackNum} has non-zero words in the truncated area`);
-
-                    console.log(`Track ${trackNum}: Verified ${difference} trailing zero words were safely truncated`);
-                }
-
                 // Compare sectors - this is the most important test
-                // Even if track lengths differ slightly, all sectors must be readable
+                // All sectors must be readable and contain the correct data
                 const sectors1 = track1.findSectors();
                 const sectors2 = track2.findSectors();
 
