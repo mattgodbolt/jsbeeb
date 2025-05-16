@@ -385,7 +385,8 @@ class Track {
         this.length = IbmDiscFormat.bytesPerTrack; // Default size, will be updated when track is populated
         this.upper = upper;
         this.trackNum = trackNum;
-        this.pulses2Us = new Uint32Array(MaxHfeTrackPulses);
+        // Make room for any extra pulses that might come from non-standard discs.
+        this.pulses2Us = new Uint32Array(IbmDiscFormat.bytesPerTrack * 2);
         this.pulses2Us.fill(initialByte | (initialByte << 8) | (initialByte << 16) | (initialByte << 24));
     }
 
@@ -868,10 +869,6 @@ const HfeV3OpcodeRand = 0xf4;
 const HfeBlockSideSize = 256;
 const HfeBlockSize = HfeBlockSideSize * 2;
 
-// Maximum observed track size needed in HFE format, based on analysis of real HFE files
-// This value needs to be large enough to accommodate any track in real-world HFE disc images
-const MaxHfeTrackPulses = 3132;
-
 // 250kbit bitrate value per HFE format specification
 const Bitrate250k = 72;
 
@@ -975,8 +972,7 @@ export function loadHfe(disc, data) {
             const rawPulses = trackObj.pulses2Us;
             for (let byteIndex = 0; byteIndex < bufLen; ++byteIndex) {
                 if (bytesWritten === rawPulses.length) {
-                    console.log(`HFE track ${trackNum} truncated`);
-                    break;
+                    throw new Error(`HFE track ${trackNum} truncated`);
                 }
                 const index = ((byteIndex >>> 8) << 9) + (sideNum << 8) + (byteIndex & 0xff);
                 let byte = hfeByteFlip(trackData[index]);
