@@ -265,50 +265,10 @@ describe(
                 const track1 = disc.getTrack(false, trackNum);
                 const track2 = disc2.getTrack(false, trackNum);
 
-                // Compare track lengths
-                if (track1.length !== track2.length) {
-                    console.log(
-                        `Track ${trackNum} length difference: original ${track1.length}, round-tripped ${track2.length}`,
-                    );
+                // With our variable track length HFE implementation,
+                // track lengths should be identical after roundtripping
 
-                    // Debug the track data
-                    console.log(`Original track first 4 words:`);
-                    for (let i = 0; i < 4; i++) {
-                        console.log(`  [${i}]: 0x${track1.pulses2Us[i].toString(16).padStart(8, "0")}`);
-                    }
-
-                    console.log(`Original track last 4 words:`);
-                    for (let i = track1.length - 4; i < track1.length; i++) {
-                        console.log(`  [${i}]: 0x${track1.pulses2Us[i].toString(16).padStart(8, "0")}`);
-                    }
-
-                    console.log(`Round-tripped track first 4 words:`);
-                    for (let i = 0; i < 4; i++) {
-                        console.log(`  [${i}]: 0x${track2.pulses2Us[i].toString(16).padStart(8, "0")}`);
-                    }
-
-                    console.log(`Round-tripped track last 4 words:`);
-                    for (let i = track2.length - 4; i < track2.length; i++) {
-                        console.log(`  [${i}]: 0x${track2.pulses2Us[i].toString(16).padStart(8, "0")}`);
-                    }
-
-                    // Look for non-zero words at the end of the original track
-                    console.log("Checking for trailing non-zero words in original track...");
-                    let lastNonZeroIdx = -1;
-                    for (let i = track1.length - 1; i >= 0; i--) {
-                        if (track1.pulses2Us[i] !== 0) {
-                            lastNonZeroIdx = i;
-                            break;
-                        }
-                    }
-                    console.log(
-                        `Last non-zero word in original track: index ${lastNonZeroIdx}, value 0x${track1.pulses2Us[lastNonZeroIdx].toString(16).padStart(8, "0")}`,
-                    );
-                }
-
-                // Don't assert on exact track length - what matters is that all sectors can be read.
                 // Track lengths should be identical when roundtripping with the variable track length HFE implementation
-                console.log(`Track ${trackNum} length: original ${track1.length}, round-tripped ${track2.length}`);
                 assert.equal(
                     track1.length,
                     track2.length,
@@ -326,8 +286,6 @@ describe(
                     sectors2.length,
                     `Track ${trackNum} sector count mismatch: ${sectors1.length} vs ${sectors2.length}`,
                 );
-
-                console.log(`  Found ${sectors1.length} sectors in both original and round-tripped track ${trackNum}`);
 
                 // Compare sector data for first sector as a sample
                 if (sectors1.length > 0 && sectors2.length > 0) {

@@ -52,15 +52,7 @@ describe("HFE export tests", function () {
         // Export to HFE
         const hfeData = toHfe(disc);
 
-        // Debug HFE header and LUT
-        const dataView = new DataView(hfeData.buffer);
-        const lutOffset = dataView.getUint16(18, true) * 512;
-        console.log(`HFE size: ${hfeData.length}, LUT offset: ${lutOffset}`);
-        const track0Offset = dataView.getUint16(lutOffset, true) * 512;
-        const track0Length = dataView.getUint16(lutOffset + 2, true);
-        console.log(`Track 0 offset: ${track0Offset}, length: ${track0Length}`);
-        console.log(`Track 0 expected bytes: ${disc.getTrack(false, 0).length * 4}`);
-        console.log(`bufLen per side: ${track0Length >> 1}`);
+        // Access the data structure to verify tracks
 
         // Reload from HFE
         const disc2 = new Disc(true, new DiscConfig(), "test2.hfe");
@@ -71,22 +63,6 @@ describe("HFE export tests", function () {
         for (let trackNum = 0; trackNum < disc.tracksUsed; trackNum++) {
             const track1 = disc.getTrack(false, trackNum);
             const track2 = disc2.getTrack(false, trackNum);
-
-            // Debug output
-            if (trackNum === 0) {
-                console.log(`Track 0 original length: ${track1.length}, loaded length: ${track2.length}`);
-                console.log(`Bytes per side: ${track1.length * 4}`);
-
-                // Compare first few words
-                console.log("First 4 original words:");
-                for (let i = 0; i < 4; i++) {
-                    console.log(`  [${i}]: 0x${track1.pulses2Us[i].toString(16).padStart(8, "0")}`);
-                }
-                console.log("First 4 loaded words:");
-                for (let i = 0; i < 4; i++) {
-                    console.log(`  [${i}]: 0x${track2.pulses2Us[i].toString(16).padStart(8, "0")}`);
-                }
-            }
 
             // With our improved implementation, track lengths should be exactly the same
             // when round-tripping through the HFE format
@@ -106,23 +82,6 @@ describe("HFE export tests", function () {
                 sectors2.length,
                 `Track ${trackNum} has ${sectors1.length} original sectors but ${sectors2.length} after round-trip`,
             );
-
-            // Debug sector finding
-            if (trackNum === 0) {
-                console.log(`Original sectors: ${sectors1.length}, loaded sectors: ${sectors2.length}`);
-                console.log("Original sectors:");
-                for (let s = 0; s < sectors1.length; s++) {
-                    console.log(
-                        `  Sector ${s}: idOffset=${sectors1[s].idPosBitOffset}, dataOffset=${sectors1[s].dataPosBitOffset}`,
-                    );
-                }
-                console.log("Loaded sectors:");
-                for (let s = 0; s < sectors2.length; s++) {
-                    console.log(
-                        `  Sector ${s}: idOffset=${sectors2[s].idPosBitOffset}, dataOffset=${sectors2[s].dataPosBitOffset}`,
-                    );
-                }
-            }
 
             assert.equal(sectors1.length, sectors2.length);
 
@@ -197,27 +156,6 @@ describe("HFE export tests", function () {
         const sectors = disc2.getTrack(false, 0).findSectors();
         assert.equal(sectors.length, 1);
         assert(sectors[0].isMfm);
-        console.log(`Sector data length: expected ${sectorData.length}, got ${sectors[0].sectorData.length}`);
-        console.log(
-            `First few bytes expected: ${Array.from(sectorData.slice(0, 10))
-                .map((b) => b.toString(16).padStart(2, "0"))
-                .join(" ")}`,
-        );
-        console.log(
-            `First few bytes got: ${Array.from(sectors[0].sectorData.slice(0, 10))
-                .map((b) => b.toString(16).padStart(2, "0"))
-                .join(" ")}`,
-        );
-        console.log(
-            `Last few bytes expected: ${Array.from(sectorData.slice(-10))
-                .map((b) => b.toString(16).padStart(2, "0"))
-                .join(" ")}`,
-        );
-        console.log(
-            `Last few bytes got: ${Array.from(sectors[0].sectorData.slice(-10))
-                .map((b) => b.toString(16).padStart(2, "0"))
-                .join(" ")}`,
-        );
         assert.deepEqual(sectors[0].sectorData, sectorData);
     });
 });
