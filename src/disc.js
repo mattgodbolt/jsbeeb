@@ -175,7 +175,7 @@ class TrackBuilder {
     appendPulseDelta(deltaUs, quantizeMfm) {
         let num2UsUnits = quantizeMfm ? Math.round(deltaUs / 2) : 2 * Math.round(deltaUs / 4);
         while (num2UsUnits--) {
-            if (this._index >= this._track.pulses2Us.length) return false; // Silent failure for pulse delta
+            if (this._index >= this._track.pulses2Us.length) return false;
             if (num2UsUnits === 0) {
                 this._track.pulses2Us[this._index] |= 0x80000000 >>> this._pulsesIndex;
             }
@@ -382,7 +382,6 @@ class Sector {
 
 class Track {
     constructor(upper, trackNum, initialByte) {
-        // Use a fixed-size buffer large enough for any track in the HFE format
         this.length = IbmDiscFormat.bytesPerTrack; // Default size, will be updated when track is populated
         this.upper = upper;
         this.trackNum = trackNum;
@@ -744,7 +743,7 @@ export function toHfe(disc) {
         // From C code: 4 bytes per 32-bit word, 3 "header" HFEv3 bytes, 2 sides
         const trackLen = Math.max(track0.length, track1.length);
         const hfeTrackLen = (trackLen * 4 + 3) * 2;
-        const hfeOffsetDelta = Math.floor(hfeTrackLen / 512) + 1;
+        const hfeOffsetDelta = Math.floor(hfeTrackLen / HfeBlockSize) + 1;
 
         trackSizes.push(hfeTrackLen);
         trackOffsetDeltas.push(hfeOffsetDelta);
@@ -776,23 +775,25 @@ export function toHfe(disc) {
     header[24] = 0xff;
     header[25] = 0xff;
 
+    const headerSize = HfeBlockSize;
+    // Assume everything will fit into one block.
+    const lutSize = 1 * HfeBlockSize;
+
     // Build LUT (Lookup Table) for track offsets
-    const lut = new Uint8Array(512);
+    const lut = new Uint8Array(lutSize);
     const lutDataView = new DataView(lut.buffer);
     let hfeOffset = 2; // Start at block 2 (after header and LUT)
 
     // Calculate total file size and build LUT
-    const headerSize = 512;
-    const lutSize = 512;
     let totalSize = headerSize + lutSize;
 
     for (let trackNum = 0; trackNum < numTracks; trackNum++) {
-        const index = trackNum * 4;
-        lutDataView.setUint16(index, hfeOffset, true); // Offset in 512-byte blocks
-        lutDataView.setUint16(index + 2, trackSizes[trackNum], true); // Track-specific length in bytes
+        const byteOffset = trackNum * 4;
+        lutDataView.setUint16(byteOffset, hfeOffset, true); // Offset in 512-byte blocks
+        lutDataView.setUint16(byteOffset + 2, trackSizes[trackNum], true); // Track-specific length in bytes
 
         // Add this track's size to the total and advance offset
-        totalSize += trackOffsetDeltas[trackNum] * 512;
+        totalSize += trackOffsetDeltas[trackNum] * HfeBlockSize;
         hfeOffset += trackOffsetDeltas[trackNum];
     }
     const hfeData = new Uint8Array(totalSize);
@@ -800,7 +801,7 @@ export function toHfe(disc) {
     // Write header
     hfeData.set(header, 0);
     // Write LUT
-    hfeData.set(lut, 512);
+    hfeData.set(lut, headerSize);
 
     // Write track data
     let trackOffset = 1024; // Start after header and LUT
@@ -830,26 +831,26 @@ export function toHfe(disc) {
                 }
             }
 
-            // Write track data in 256-byte chunks, interleaved according to HFE format
-            let writePos = trackOffset + (side === 1 ? 256 : 0);
+            // Write track data in per-side sized chunks, interleaved according to HFE format
+            let writePos = trackOffset + (side === 1 ? HfeBlockSideSize : 0);
             let iByte = 0;
 
             while (iByte < bufferIndex) {
-                const chunkLen = Math.min(256, bufferIndex - iByte);
-                const chunk = new Uint8Array(256);
+                const chunkLen = Math.min(HfeBlockSideSize, bufferIndex - iByte);
+                const chunk = new Uint8Array(HfeBlockSideSize);
 
                 if (chunkLen > 0) {
                     chunk.set(trackBuffer.slice(iByte, iByte + chunkLen));
                 }
 
                 hfeData.set(chunk, writePos);
-                writePos += 512;
+                writePos += HfeBlockSize;
                 iByte += chunkLen;
             }
         }
 
         // Move to the next track after processing all sides
-        trackOffset += trackOffsetDeltas[trackNum] * 512;
+        trackOffset += trackOffsetDeltas[trackNum] * HfeBlockSize;
     }
 
     return hfeData;
@@ -864,6 +865,8 @@ const HfeV3OpcodeSetIndex = 0xf1;
 const HfeV3OpcodeSetBitrate = 0xf2;
 const HfeV3OpcodeSkipBits = 0xf3;
 const HfeV3OpcodeRand = 0xf4;
+const HfeBlockSideSize = 256;
+const HfeBlockSize = HfeBlockSideSize * 2;
 
 // Maximum observed track size needed in HFE format, based on analysis of real HFE files
 // This value needs to be large enough to accommodate any track in real-world HFE disc images
@@ -892,7 +895,7 @@ function hfeByteFlip(val) {
  */
 function hfeGetTrackOffsetAndLength(metadata, track) {
     const index = track << 2;
-    const offset = 512 * (metadata[index] + (metadata[index + 1] << 8));
+    const offset = HfeBlockSize * (metadata[index] + (metadata[index + 1] << 8));
     const length = metadata[index + 2] + (metadata[index + 3] << 8);
     return { offset, length };
 }
@@ -903,7 +906,7 @@ function hfeGetTrackOffsetAndLength(metadata, track) {
  * @param {Uint8Array} data - The HFE file data
  */
 export function loadHfe(disc, data) {
-    if (data.length < 512) throw new Error("HFE file missing header");
+    if (data.length < HfeBlockSize) throw new Error("HFE file missing header");
     const header = new TextDecoder("ascii").decode(data.slice(0, 8));
     let isV3 = false;
     let hfeVersion = 1;
@@ -937,8 +940,8 @@ export function loadHfe(disc, data) {
 
     console.log(`HFE v${hfeVersion} loading ${numSides} sides, ${numTracks} tracks`);
 
-    const lutOffset = 512 * (data[18] + (data[19] << 8));
-    if (lutOffset + 512 > data.length) throw new Error("HFE LUT doesn't fit");
+    const lutOffset = HfeBlockSize * (data[18] + (data[19] << 8));
+    if (lutOffset + HfeBlockSize > data.length) throw new Error("HFE LUT doesn't fit");
 
     const metadata = data.slice(lutOffset, lutOffset + 512);
 
@@ -970,16 +973,7 @@ export function loadHfe(disc, data) {
             const trackObj = disc.getTrack(sideNum === 1, actualTrackNum);
             disc.setTrackUsed(sideNum === 1, actualTrackNum);
             const rawPulses = trackObj.pulses2Us;
-
-            // For HFE v3 format, we need to skip the initial opcodes
-            let byteIndexStart = 0;
-
-            if (isV3 && bufLen > 3) {
-                // Skip the HFE v3 header opcodes: SETINDEX, SETBITRATE and its value
-                byteIndexStart = 3;
-            }
-
-            for (let byteIndex = byteIndexStart; byteIndex < bufLen; ++byteIndex) {
+            for (let byteIndex = 0; byteIndex < bufLen; ++byteIndex) {
                 if (bytesWritten === rawPulses.length) {
                     console.log(`HFE track ${trackNum} truncated`);
                     break;
