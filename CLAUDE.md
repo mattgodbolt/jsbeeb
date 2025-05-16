@@ -84,6 +84,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Pre-commit Hooks**:
   - The project uses lint-staged with ESLint
   - Watch for unused variables and ensure proper error handling
+  - YOU MUST NEVER bypass git commit hooks on checkins. This leads to failures in CI later on
 
 ### Git Workflow
 

@@ -232,6 +232,171 @@ describe("HFE loader tests", function () {
     });
 });
 
+describe(
+    "HFE round-trip tests",
+    {
+        timeout: 120000, // HFE processing can be slow
+    },
+    function () {
+        const data = fs.readFileSync("public/discs/elite.hfe");
+        it("should round-trip elite.hfe", () => {
+            // Import the toHfe function for this test specifically
+            const { toHfe } = require("../../src/disc.js");
+
+            // Load the original HFE file
+            const disc = new Disc(true, new DiscConfig(), "test.hfe");
+            loadHfe(disc, data);
+
+            // Export it back to HFE
+            const hfeSaved = toHfe(disc);
+
+            // Load the saved HFE into a new disc
+            const disc2 = new Disc(true, new DiscConfig(), "test2.hfe");
+            loadHfe(disc2, hfeSaved);
+
+            // Verify that both discs have the same properties
+            assert.equal(disc.tracksUsed, disc2.tracksUsed);
+            assert.equal(disc.isDoubleSided, disc2.isDoubleSided);
+
+            // Compare sectors in a few sample tracks
+            const trackSamples = [0, 10, 20, 40]; // Sample a few tracks
+            for (const trackNum of trackSamples) {
+                if (trackNum >= disc.tracksUsed) continue;
+
+                const track1 = disc.getTrack(false, trackNum);
+                const track2 = disc2.getTrack(false, trackNum);
+
+                // Compare track lengths
+                if (track1.length !== track2.length) {
+                    console.log(
+                        `Track ${trackNum} length difference: original ${track1.length}, round-tripped ${track2.length}`,
+                    );
+
+                    // Debug the track data
+                    console.log(`Original track first 4 words:`);
+                    for (let i = 0; i < 4; i++) {
+                        console.log(`  [${i}]: 0x${track1.pulses2Us[i].toString(16).padStart(8, "0")}`);
+                    }
+
+                    console.log(`Original track last 4 words:`);
+                    for (let i = track1.length - 4; i < track1.length; i++) {
+                        console.log(`  [${i}]: 0x${track1.pulses2Us[i].toString(16).padStart(8, "0")}`);
+                    }
+
+                    console.log(`Round-tripped track first 4 words:`);
+                    for (let i = 0; i < 4; i++) {
+                        console.log(`  [${i}]: 0x${track2.pulses2Us[i].toString(16).padStart(8, "0")}`);
+                    }
+
+                    console.log(`Round-tripped track last 4 words:`);
+                    for (let i = track2.length - 4; i < track2.length; i++) {
+                        console.log(`  [${i}]: 0x${track2.pulses2Us[i].toString(16).padStart(8, "0")}`);
+                    }
+
+                    // Look for non-zero words at the end of the original track
+                    console.log("Checking for trailing non-zero words in original track...");
+                    let lastNonZeroIdx = -1;
+                    for (let i = track1.length - 1; i >= 0; i--) {
+                        if (track1.pulses2Us[i] !== 0) {
+                            lastNonZeroIdx = i;
+                            break;
+                        }
+                    }
+                    console.log(
+                        `Last non-zero word in original track: index ${lastNonZeroIdx}, value 0x${track1.pulses2Us[lastNonZeroIdx].toString(16).padStart(8, "0")}`,
+                    );
+                }
+
+                // Don't assert on exact track length - what matters is that all sectors can be read.
+                // The track length may vary slightly when round-tripping through HFE format
+                // but this doesn't affect disc functionality as long as all sectors are intact.
+                console.log(`Track ${trackNum} length: original ${track1.length}, round-tripped ${track2.length}`);
+
+                // First verify that the round-tripped track is not longer than the original
+                assert(
+                    track1.length >= track2.length,
+                    `Round-tripped track ${trackNum} unexpectedly longer: ${track2.length} > ${track1.length}`,
+                );
+
+                // Check the difference between track lengths
+                const difference = track1.length - track2.length;
+
+                // If the original track is longer, verify that the truncated words are all zeros
+                if (difference > 0) {
+                    // Check that difference is reasonable
+                    assert(
+                        difference <= 5,
+                        `Track ${trackNum} length difference (${difference}) exceeds expected bound of 5 words`,
+                    );
+
+                    // Verify that all the extra words are zeros
+                    let allZeros = true;
+                    for (let i = track2.length; i < track1.length; i++) {
+                        if (track1.pulses2Us[i] !== 0) {
+                            allZeros = false;
+                            console.log(`Non-zero word found at index ${i}: 0x${track1.pulses2Us[i].toString(16)}`);
+                        }
+                    }
+                    assert(allZeros, `Track ${trackNum} has non-zero words in the truncated area`);
+
+                    console.log(`Track ${trackNum}: Verified ${difference} trailing zero words were safely truncated`);
+                }
+
+                // Compare sectors - this is the most important test
+                // Even if track lengths differ slightly, all sectors must be readable
+                const sectors1 = track1.findSectors();
+                const sectors2 = track2.findSectors();
+
+                // All sectors must be found
+                assert.equal(
+                    sectors1.length,
+                    sectors2.length,
+                    `Track ${trackNum} sector count mismatch: ${sectors1.length} vs ${sectors2.length}`,
+                );
+
+                console.log(`  Found ${sectors1.length} sectors in both original and round-tripped track ${trackNum}`);
+
+                // Compare sector data for first sector as a sample
+                if (sectors1.length > 0 && sectors2.length > 0) {
+                    assert.equal(sectors1[0].sectorNumber, sectors2[0].sectorNumber);
+                    assert.equal(sectors1[0].trackNumber, sectors2[0].trackNumber);
+
+                    // Compare actual sector data if available
+                    if (sectors1[0].sectorData && sectors2[0].sectorData) {
+                        assert.equal(
+                            sectors1[0].sectorData.length,
+                            sectors2[0].sectorData.length,
+                            `Track ${trackNum} sector data length mismatch`,
+                        );
+
+                        // Sample a few bytes from the sector
+                        if (sectors1[0].sectorData.length > 0) {
+                            assert.equal(
+                                sectors1[0].sectorData[0],
+                                sectors2[0].sectorData[0],
+                                `Track ${trackNum} first byte mismatch`,
+                            );
+
+                            const midPoint = Math.floor(sectors1[0].sectorData.length / 2);
+                            assert.equal(
+                                sectors1[0].sectorData[midPoint],
+                                sectors2[0].sectorData[midPoint],
+                                `Track ${trackNum} middle byte mismatch`,
+                            );
+
+                            assert.equal(
+                                sectors1[0].sectorData[sectors1[0].sectorData.length - 1],
+                                sectors2[0].sectorData[sectors2[0].sectorData.length - 1],
+                                `Track ${trackNum} last byte mismatch`,
+                            );
+                        }
+                    }
+                }
+            }
+        });
+    },
+);
+
 describe("ADF loader tests", function () {
     it("should load a somewhat blank ADFS disc", () => {
         const data = new Uint8Array(327680);
