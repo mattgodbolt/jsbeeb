@@ -29,9 +29,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Linting**: ESLint with eslint-config-prettier integration
 - **Modules**: ES modules with import/export syntax (type: "module")
 - **JavaScript Target**: ES2020 with strict null checks
-- **Error Handling**: Use try/catch with explicit error messages
+- **Error Handling**: Use try/catch with explicit error messages that provide context about what failed
 - **Naming**: camelCase for variables and functions, PascalCase for classes
 - **Imports**: Group by source (internal/external) with proper separation
+- **Documentation**: Use JSDoc for public APIs and complex functions, add comments for non-obvious code
+- **Error Messages**: Use consistent, specific error messages (e.g., "Track buffer overflow" instead of "Overflow in disc building")
 
 ## Test Organization
 
@@ -76,10 +78,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Replace complex conditionals with more readable alternatives when possible
 - Ensure simplifications don't break existing behavior or assumptions
 
-- **Important Constants**:
+- **Constants and Magic Numbers**:
 
   - Local un-exported properties should be used for shared constants
   - Local constants should be used for temporary values
+  - Always use named constants instead of magic numbers in code
+  - Use PascalCase for module-level constants (e.g., `const MaxHfeTrackPulses = 3132;`)
+  - Prefer module-level constants over function-local constants for shared values
+  - Define constants at the beginning of functions or at the class/module level as appropriate
+  - Add comments explaining what the constant represents, especially for non-obvious values
 
 - **Pre-commit Hooks**:
   - The project uses lint-staged with ESLint
