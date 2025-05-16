@@ -2,10 +2,6 @@
 // https://github.com/scarybeasts/beebjit
 
 import * as utils from "./utils.js";
-import { loadHfe, toHfe } from "./disc-hfe.js";
-
-// Re-export HFE functions
-export { loadHfe, toHfe };
 
 /*
  * TODO: use in fingerprinting
