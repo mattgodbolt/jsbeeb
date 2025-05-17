@@ -17,14 +17,16 @@ export class DiscType {
      * @param {string} extension - File extension for this disc type (e.g. ".ssd", ".hfe")
      * @param {function(Disc, Uint8Array, function?): Disc} loader - Function to load this disc type
      * @param {function(Disc): Uint8Array} saver - Function to save this disc type
+     * @param {function(Uint8Array, string): void|null} nameSetter - Function to set the name/label in the disc image
      * @param {boolean} isDoubleSided - Whether the disc format is double-sided
      * @param {boolean} isDoubleDensity - Whether the disc format is double density
      * @param {number|undefined} byteSize - The size in bytes of this disc format, or undefined if variable
      */
-    constructor(extension, loader, saver, isDoubleSided, isDoubleDensity, byteSize) {
+    constructor(extension, loader, saver, nameSetter, isDoubleSided, isDoubleDensity, byteSize) {
         this._extension = extension;
         this._loader = loader;
         this._saver = saver;
+        this._nameSetter = nameSetter;
         this._isDoubleSided = isDoubleSided;
         this._isDoubleDensity = isDoubleDensity;
         this._byteSize = byteSize;
@@ -85,6 +87,28 @@ export class DiscType {
     get byteSize() {
         return this._byteSize;
     }
+    
+    /**
+     * Whether this disc format supports setting a catalogue name
+     * @returns {boolean} True if a name setter function exists
+     */
+    get supportsCatalogue() {
+        return this._nameSetter !== null;
+    }
+    
+    /**
+     * Sets the disc name in the disc data using the format-specific setter
+     * @param {Uint8Array} data - The disc data to modify
+     * @param {string} name - The name to set
+     * @throws {Error} If the disc format doesn't support setting a name
+     */
+    setDiscName(data, name) {
+        if (!this.supportsCatalogue) {
+            throw new Error(`Cannot set disc name for ${this._extension} format`);
+        }
+        
+        this._nameSetter(data, name);
+    }
 }
 // Standard sizes
 const SSD_BYTE_SIZE = 80 * 10 * 256; // 80 tracks, 10 sectors, 256 bytes/sector
@@ -92,8 +116,27 @@ const DSD_BYTE_SIZE = SSD_BYTE_SIZE * 2; // Double-sided
 const ADFS_LARGE_BYTE_SIZE = 2 * 80 * 16 * 256; // Double-sided, 16 sectors/track
 const ADFS_SMALL_BYTE_SIZE = 80 * 16 * 256; // Single-sided, 16 sectors/track
 
+/**
+ * Set the name in a DFS disc image (SSD/DSD format)
+ * @param {Uint8Array} data - The disc data to modify
+ * @param {string} name - The name to set (up to 8 characters)
+ */
+function setDfsDiscName(data, name) {
+    for (let i = 0; i < 8; ++i) {
+        data[i] = i < name.length ? name.charCodeAt(i) & 0xff : 0x20; // padded with spaces
+    }
+}
+
 // HFE disc type - variable size
-const hfeDiscType = new DiscType(".hfe", loadHfe, toHfe, true, true, undefined);
+const hfeDiscType = new DiscType(
+    ".hfe", 
+    loadHfe, 
+    toHfe, 
+    null, // no name setter function yet
+    true, // double-sided
+    true, // double density
+    undefined // variable size
+);
 
 // ADFS (Large) discs are double density, double sided
 const adlDiscType = new DiscType(
@@ -105,6 +148,7 @@ const adlDiscType = new DiscType(
     (_data) => {
         throw new Error("ADL unsupported");
     },
+    null, // no name setter function yet
     true, // double-sided
     true, // double density
     ADFS_LARGE_BYTE_SIZE
@@ -120,6 +164,7 @@ const adfDiscType = new DiscType(
     (_data) => {
         throw new Error("ADF unsupported");
     },
+    null, // no name setter function yet
     false, // single-sided
     true, // double density
     ADFS_SMALL_BYTE_SIZE
@@ -130,6 +175,7 @@ const dsdDiscType = new DiscType(
     ".dsd", 
     (disc, data, onChange) => loadSsd(disc, data, true, onChange), 
     toSsdOrDsd,
+    setDfsDiscName, // supports setting catalogue name
     true, // double-sided
     false, // standard density
     DSD_BYTE_SIZE
@@ -140,6 +186,7 @@ const ssdDiscType = new DiscType(
     ".ssd", 
     (disc, data, onChange) => loadSsd(disc, data, false, onChange), 
     toSsdOrDsd,
+    setDfsDiscName, // supports setting catalogue name
     false, // single-sided
     false, // standard density
     SSD_BYTE_SIZE
@@ -182,7 +229,9 @@ export function localDisc(fdc, name) {
             throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
         }
         data = new Uint8Array(discType.byteSize);
-        utils.setDiscName(data, name);
+        if (discType.supportsCatalogue) {
+            discType.setDiscName(data, name);
+        }
     } else {
         console.log("Loading browser-local disc " + name);
         data = utils.stringToUint8Array(dataString);

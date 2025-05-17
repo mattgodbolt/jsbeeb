@@ -1069,7 +1069,9 @@ $("#google-drive form").on("submit", async function (e) {
             throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
         }
         data = new Uint8Array(discType.byteSize);
-        utils.setDiscName(data, name); // Will not work for non-SSD/DSD
+        if (discType.supportsCatalogue) {
+            discType.setDiscName(data, name);
+        }
         console.log(`Creating blank: ${name}`);
     }
 
