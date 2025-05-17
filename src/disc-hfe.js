@@ -217,7 +217,7 @@ function encodeHfeV3Pulses(pulsesWord) {
 
         // Check if the byte could be mistakenly interpreted as a v3 opcode
         if (isHfeV3OpcodeCollision(flippedByte)) {
-            // Replace with RAND opcode to avoid confusion
+            // Replace with bit-flipped RAND opcode
             result[i] = hfeByteFlip(HfeV3OpcodeRand);
         } else {
             result[i] = flippedByte;

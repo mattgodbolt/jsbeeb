@@ -331,31 +331,31 @@ describe("HFE track conversion tests", function () {
         assert.equal(hfeData[3 + 19], randOpcodeFlipped);
     });
 
-    it("should handle v3 opcode collisions", () => {
-        // Create a pulse that would result in a v3 opcode after bit flipping
-        // The byte 0x0F after bit flipping would become 0xF0 which is the NOP opcode
-        // So it needs to be replaced with the RAND opcode
-        const pulseWithCollision = 0x0f000000;
+    it("should replace pulses with first byte 0xf0 to avoid collision", () => {
+        // When bit-flipped, 0xf0 becomes 0x0f, which triggers opcode collision
+        // The RAND opcode (0xf4) bit-flipped is 0x2f (47 decimal)
+        const randOpcodeFlipped = 0x2f;
+
+        // Create a pulse with 0xf0 as the first byte
+        const pulseWithF0 = 0xf0aabbcc;
 
         // Convert to HFE v3 format
-        const hfeData = convertTrackToHfeV3([pulseWithCollision]);
+        const hfeData = convertTrackToHfeV3([pulseWithF0]);
 
-        // Test was failing - our flipped bytes logic is different from what I expected
-        // Let's check the actual result by reading it directly
-        const firstByteValue = hfeData[3];
-        // The key thing is that we don't end up with 0x0F (the flipped value of 0xF0)
-        assert.notEqual(firstByteValue, 0x0f);
+        // When we detect this kind of collision, we replace with the bit-flipped RAND opcode
+        assert.equal(hfeData[3], randOpcodeFlipped);
+    });
 
-        // Create another test with a different byte pattern that would also cause a collision
-        // The byte 0xF0 after flipping would become 0x0F, which has lower 4 bits all set
-        // This would be interpreted as an opcode by a reader
-        const anotherCollision = 0xf0aabbcc;
+    it("should handle bit flipping for pulses starting with 0x0f", () => {
+        // Create a pulse with 0x0f as most significant byte
+        const pulseWithF = 0x0f000000;
 
         // Convert to HFE v3 format
-        const hfeData2 = convertTrackToHfeV3([anotherCollision]);
+        const hfeData = convertTrackToHfeV3([pulseWithF]);
 
-        // The first byte should not be 0xF0 (which would be flipped to 0x0F)
-        assert.notEqual(hfeData2[3], 0x0f);
+        // The flipped value (0xf0) is returned directly (no opcode collision detected)
+        // because 0xf0 doesn't match the collision detection pattern
+        assert.equal(hfeData[3], 0xf0);
     });
 
     it("should preserve normal pulses correctly", () => {
