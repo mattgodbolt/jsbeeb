@@ -56,9 +56,10 @@ function hfeGetTrackOffsetAndLength(metadata, track) {
  * Load a disc image in HFE format (v1 or v3)
  * @param {import("./disc.js").Disc} disc - The disc object to load into
  * @param {Uint8Array} data - The HFE file data
+ * @param {function(Uint8Array): void} onChange - Optional callback when disc content changes
  * @returns {import("./disc.js").Disc} - The loaded disc object
  */
-export function loadHfe(disc, data) {
+export function loadHfe(disc, data, onChange) {
     if (data.length < HfeBlockSize) throw new Error("HFE file missing header");
     const header = new TextDecoder("ascii").decode(data.slice(0, 8));
     let isV3 = false;
@@ -187,6 +188,16 @@ export function loadHfe(disc, data) {
             }
             trackObj.length = bytesWritten;
         }
+    }
+
+    // Set up write track callback if onChange is provided
+    if (onChange) {
+        disc.setWriteTrackCallback((_side, _trackNum, _trackObj) => {
+            // Generate a complete HFE image from the current disc state
+            const hfeData = toHfe(disc);
+            // Call the onChange handler with the updated HFE data
+            onChange(hfeData);
+        });
     }
 
     return disc;
