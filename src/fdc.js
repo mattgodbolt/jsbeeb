@@ -17,11 +17,17 @@ export class DiscType {
      * @param {string} extension - File extension for this disc type (e.g. ".ssd", ".hfe")
      * @param {function(Disc, Uint8Array, function?): Disc} loader - Function to load this disc type
      * @param {function(Disc): Uint8Array} saver - Function to save this disc type
+     * @param {boolean} isDoubleSided - Whether the disc format is double-sided
+     * @param {boolean} isDoubleDensity - Whether the disc format is double density
+     * @param {number|undefined} byteSize - The size in bytes of this disc format, or undefined if variable
      */
-    constructor(extension, loader, saver) {
+    constructor(extension, loader, saver, isDoubleSided, isDoubleDensity, byteSize) {
         this._extension = extension;
         this._loader = loader;
         this._saver = saver;
+        this._isDoubleSided = isDoubleSided;
+        this._isDoubleDensity = isDoubleDensity;
+        this._byteSize = byteSize;
     }
 
     /**
@@ -29,6 +35,14 @@ export class DiscType {
      * @returns {string} File extension including dot
      */
     get name() {
+        return this._extension;
+    }
+
+    /**
+     * Get the file extension for this disc type
+     * @returns {string} File extension including dot
+     */
+    get extension() {
         return this._extension;
     }
 
@@ -47,8 +61,41 @@ export class DiscType {
     get saver() {
         return this._saver;
     }
+
+    /**
+     * Get whether this disc format is double-sided
+     * @returns {boolean} True if double-sided, false otherwise
+     */
+    get isDoubleSided() {
+        return this._isDoubleSided;
+    }
+
+    /**
+     * Get whether this disc format is double density
+     * @returns {boolean} True if double density, false otherwise
+     */
+    get isDoubleDensity() {
+        return this._isDoubleDensity;
+    }
+
+    /**
+     * Get the size in bytes of this disc format
+     * @returns {number|undefined} The size in bytes, or undefined if variable
+     */
+    get byteSize() {
+        return this._byteSize;
+    }
 }
-const hfeDiscType = new DiscType(".hfe", loadHfe, toHfe);
+// Standard sizes
+const SSD_BYTE_SIZE = 80 * 10 * 256; // 80 tracks, 10 sectors, 256 bytes/sector
+const DSD_BYTE_SIZE = SSD_BYTE_SIZE * 2; // Double-sided
+const ADFS_LARGE_BYTE_SIZE = 2 * 80 * 16 * 256; // Double-sided, 16 sectors/track
+const ADFS_SMALL_BYTE_SIZE = 80 * 16 * 256; // Single-sided, 16 sectors/track
+
+// HFE disc type - variable size
+const hfeDiscType = new DiscType(".hfe", loadHfe, toHfe, true, true, undefined);
+
+// ADFS (Large) discs are double density, double sided
 const adlDiscType = new DiscType(
     ".adl",
     (disc, data, _onChange) => {
@@ -58,7 +105,12 @@ const adlDiscType = new DiscType(
     (_data) => {
         throw new Error("ADL unsupported");
     },
+    true, // double-sided
+    true, // double density
+    ADFS_LARGE_BYTE_SIZE
 );
+
+// ADFS (Small) discs are standard ADFS (non-double) density, single sided
 const adfDiscType = new DiscType(
     ".adf",
     (disc, data, _onChange) => {
@@ -68,9 +120,30 @@ const adfDiscType = new DiscType(
     (_data) => {
         throw new Error("ADF unsupported");
     },
+    false, // single-sided
+    true, // double density
+    ADFS_SMALL_BYTE_SIZE
 );
-const dsdDiscType = new DiscType(".dsd", (disc, data, onChange) => loadSsd(disc, data, true, onChange), toSsdOrDsd);
-const ssdDiscType = new DiscType(".ssd", (disc, data, onChange) => loadSsd(disc, data, false, onChange), toSsdOrDsd);
+
+// DSD (Double-sided disc)
+const dsdDiscType = new DiscType(
+    ".dsd", 
+    (disc, data, onChange) => loadSsd(disc, data, true, onChange), 
+    toSsdOrDsd,
+    true, // double-sided
+    false, // standard density
+    DSD_BYTE_SIZE
+);
+
+// SSD (Single-sided disc)
+const ssdDiscType = new DiscType(
+    ".ssd", 
+    (disc, data, onChange) => loadSsd(disc, data, false, onChange), 
+    toSsdOrDsd,
+    false, // single-sided
+    false, // standard density
+    SSD_BYTE_SIZE
+);
 /**
  * Determine the disc type based on the file name extension
  * @param {string} name - The file name with extension
@@ -104,7 +177,11 @@ export function localDisc(fdc, name) {
     const dataString = window.localStorage[discName];
     if (!dataString) {
         console.log("Creating browser-local disc " + name);
-        data = new Uint8Array(utils.discImageSize(name).byteSize);
+        const discType = guessDiscTypeFromName(name);
+        if (!discType.byteSize) {
+            throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
+        }
+        data = new Uint8Array(discType.byteSize);
         utils.setDiscName(data, name);
     } else {
         console.log("Loading browser-local disc " + name);
