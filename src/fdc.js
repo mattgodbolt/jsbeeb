@@ -23,7 +23,7 @@ export class DiscType {
         this._loader = loader;
         this._saver = saver;
     }
-    
+
     /**
      * Get the file extension for this disc type
      * @returns {string} File extension including dot
@@ -31,7 +31,7 @@ export class DiscType {
     get name() {
         return this._extension;
     }
-    
+
     /**
      * Get the loader function for this disc type
      * @returns {function} Function that loads the disc
@@ -39,7 +39,7 @@ export class DiscType {
     get loader() {
         return this._loader;
     }
-    
+
     /**
      * Get the saver function for this disc type
      * @returns {function} Function that saves the disc
@@ -49,18 +49,26 @@ export class DiscType {
     }
 }
 const hfeDiscType = new DiscType(".hfe", loadHfe, toHfe);
-const adlDiscType = new DiscType(".adl", (disc, data, _onChange) => {
-    // TODO handle onChange
-    return loadAdf(disc, data, true);
-}, (_data) => {
-    throw new Error("ADL unsupported");
-});
-const adfDiscType = new DiscType(".adf", (disc, data, _onChange) =>{
-    // TODO handle onChange
-    return loadAdf(disc, data, false);
-}, (_data) => {
-    throw new Error("ADF unsupported");
-});
+const adlDiscType = new DiscType(
+    ".adl",
+    (disc, data, _onChange) => {
+        // TODO handle onChange
+        return loadAdf(disc, data, true);
+    },
+    (_data) => {
+        throw new Error("ADL unsupported");
+    },
+);
+const adfDiscType = new DiscType(
+    ".adf",
+    (disc, data, _onChange) => {
+        // TODO handle onChange
+        return loadAdf(disc, data, false);
+    },
+    (_data) => {
+        throw new Error("ADF unsupported");
+    },
+);
 const dsdDiscType = new DiscType(".dsd", (disc, data, onChange) => loadSsd(disc, data, true, onChange), toSsdOrDsd);
 const ssdDiscType = new DiscType(".ssd", (disc, data, onChange) => loadSsd(disc, data, false, onChange), toSsdOrDsd);
 /**
@@ -70,14 +78,10 @@ const ssdDiscType = new DiscType(".ssd", (disc, data, onChange) => loadSsd(disc,
  */
 export function guessDiscTypeFromName(name) {
     const lowerName = name.toLowerCase();
-    if (lowerName.endsWith(".hfe"))
-        return hfeDiscType;
-    if (lowerName.endsWith(".adl"))
-        return adlDiscType;
-    if (lowerName.endsWith(".adf") || lowerName.endsWith(".adm"))
-        return adfDiscType;
-    if (lowerName.endsWith(".dsd"))
-        return dsdDiscType;
+    if (lowerName.endsWith(".hfe")) return hfeDiscType;
+    if (lowerName.endsWith(".adl")) return adlDiscType;
+    if (lowerName.endsWith(".adf") || lowerName.endsWith(".adm")) return adfDiscType;
+    if (lowerName.endsWith(".dsd")) return dsdDiscType;
     return ssdDiscType;
 }
 
