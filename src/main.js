@@ -22,6 +22,7 @@ import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
+import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import {
     buildUrlFromParams,
@@ -330,6 +331,27 @@ function replaceOrAddExtension(name, newExt) {
         return name + newExt;
     }
     return name.substring(0, lastDot) + newExt;
+}
+
+/**
+ * Helper function to download drive data in the specified format
+ * @param {Uint8Array} data - The binary data to download
+ * @param {string} name - The file name
+ * @param {string} extension - The file extension to use
+ */
+function downloadDriveData(data, name, extension) {
+    const a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    const fileName = replaceOrAddExtension(name, extension);
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
+
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    window.URL.revokeObjectURL(url);
 }
 
 async function loadHTMLFile(file) {
@@ -1059,34 +1081,24 @@ $("#google-drive form").on("submit", async function (e) {
 });
 
 $("#download-drive-link").on("click", function () {
-    const a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
     const disc = processor.fdc.drives[0].disc;
     const data = toSsdOrDsd(disc);
-    let name = processor.fdc.drives[0].disc.name;
-    name = replaceOrAddExtension(name, disc.isDoubleSided ? ".dsd" : ".ssd");
+    const name = disc.name;
+    const extension = disc.isDoubleSided ? ".dsd" : ".ssd";
 
-    const blob = new Blob([data], { type: "application/octet-stream" });
-    const url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = name;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadDriveData(data, name, extension);
+});
+
+$("#download-drive-hfe-link").on("click", function () {
+    const disc = processor.fdc.drives[0].disc;
+    const data = toHfe(disc);
+    const name = disc.name;
+
+    downloadDriveData(data, name, ".hfe");
 });
 
 $("#download-filestore-link").on("click", function () {
-    const a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
-    const blob = new Blob([processor.filestore.scsi], { type: "application/octet-stream" }),
-        url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = "scsi.dat";
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
 $("#hard-reset").click(function (event) {
