@@ -1,5 +1,6 @@
 // Floppy disc assorted utils.
-import { Disc, DiscConfig, loadHfe, loadAdf, loadSsd } from "./disc.js";
+import { Disc, DiscConfig, loadAdf, loadSsd } from "./disc.js";
+import { loadHfe } from "./disc-hfe.js";
 import * as utils from "./utils.js";
 
 export function load(name) {
