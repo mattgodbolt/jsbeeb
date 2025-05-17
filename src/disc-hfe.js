@@ -14,6 +14,8 @@ const HfeV3OpcodeSkipBits = 0xf3;
 const HfeV3OpcodeRand = 0xf4;
 const HfeBlockSideSize = 256;
 const HfeBlockSize = HfeBlockSideSize * 2;
+const HfeShugartDdFloppyMode = 7;
+const HfeIsoIbmFmEncoding = 2;
 
 // 250kbit bitrate value per HFE format specification
 const Bitrate250k = 72;
@@ -94,7 +96,7 @@ export function loadHfe(disc, data) {
     const lutOffset = HfeBlockSize * (data[18] + (data[19] << 8));
     if (lutOffset + HfeBlockSize > data.length) throw new Error("HFE LUT doesn't fit");
 
-    const metadata = data.slice(lutOffset, lutOffset + 512);
+    const metadata = data.slice(lutOffset, lutOffset + HfeBlockSize);
 
     for (let trackNum = 0; trackNum < numTracks; ++trackNum) {
         let actualTrackNum = trackNum;
@@ -229,12 +231,12 @@ export function toHfe(disc) {
     header[8] = 0; // Revision 0
     header[9] = numTracks;
     header[10] = numSides;
-    header[11] = 2; // IBM FM/MFM encoding
-    header[12] = 0xfa; // 250kbit
-    header[13] = 0; // RPM (unused)
-    header[14] = 0;
+    header[11] = HfeIsoIbmFmEncoding; // IBM FM/MFM encoding
+    header[12] = 250; // Bit rate (nb we use the set bitrate command per track)
+    header[13] = 0;
+    header[14] = 0; // RPM (unused)
     header[15] = 0;
-    header[16] = 7; // Mode: Shugart DD
+    header[16] = HfeShugartDdFloppyMode; // Mode: Shugart DD
     header[17] = 0xff; // Unused
     header[18] = 1; // LUT offset at block 1 (512 bytes)
     header[19] = 0;
