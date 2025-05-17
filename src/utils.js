@@ -1069,9 +1069,6 @@ export function unzipRomImage(data) {
     return unzipImage(data, knownRomExtensions);
 }
 
-// NOTE: This function has been combined with DiscType in fdc.js
-// See DiscType.setDiscName() for disc naming functionality
-
 export function resizeUint8Array(array, byteSize) {
     const newArray = new Uint8Array(byteSize);
     newArray.set(array.subarray(0, byteSize));
