@@ -3,7 +3,8 @@
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 // eslint-disable-next-line no-unused-vars
-import { Disc, IbmDiscFormat } from "./disc.js";
+import { Disc } from "./disc.js";
+import { IbmDiscFormat } from "./disc.js";
 
 class StepEvent extends Event {
     constructor(stepAmount) {
@@ -65,7 +66,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {Disc|undefined} _disc
      */
-    // eslint-disable-next-line no-unused-vars
     setDisc(_disc) {
         throw new Error("Not implemented: setDisc");
     }
@@ -73,7 +73,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {function(number, number): void} _callback
      */
-    // eslint-disable-next-line no-unused-vars
     setPulsesCallback(_callback) {
         throw new Error("Not implemented: setPulsesCallback");
     }
@@ -89,7 +88,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {boolean} _isSideUpper
      */
-    // eslint-disable-next-line no-unused-vars
     selectSide(_isSideUpper) {
         throw new Error("Not implemented: selectSide");
     }
@@ -97,7 +95,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {number} _delta
      */
-    // eslint-disable-next-line no-unused-vars
     seekOneTrack(_delta) {
         throw new Error("Not implemented: seekOneTrack");
     }
@@ -105,7 +102,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {number} _newTrack
      */
-    // eslint-disable-next-line no-unused-vars
     notifySeek(_newTrack) {
         throw new Error("Not implemented: notifySeek");
     }
@@ -113,7 +109,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {number} _delta
      */
-    // eslint-disable-next-line no-unused-vars
     notifySeekAmount(_delta) {
         throw new Error("Not implemented: notifySeekAmount");
     }
@@ -121,7 +116,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {boolean} _isDoubleDensity
      */
-    // eslint-disable-next-line no-unused-vars
     set32usMode(_isDoubleDensity) {
         throw new Error("Not implemented: set32usMode");
     }
@@ -129,7 +123,6 @@ export class BaseDiscDrive extends EventTarget {
     /**
      * @param {number} _pulses
      */
-    // eslint-disable-next-line no-unused-vars
     writePulses(_pulses) {
         throw new Error("Not implemented: writePulses");
     }
