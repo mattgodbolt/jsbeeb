@@ -536,7 +536,7 @@ class SsdFormat {
  * @param {Disc} disc - The disc object to load into
  * @param {Uint8Array} data - The disc image data
  * @param {boolean} isDsd - True if loading a double-sided disc
- * @param {*} onChange - Optional callback when disc content changes
+ * @param {function(Uint8Array): void} onChange - Optional callback when disc content changes
  */
 export function loadSsd(disc, data, isDsd, onChange) {
     const blankSector = new Uint8Array(SsdFormat.sectorSize);
