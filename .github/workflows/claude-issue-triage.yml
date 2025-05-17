@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Claude Issue Triage
-        uses: anthropics/claude-code/./.github/actions/claude-issue-triage-action@main
+        uses: ./.github/actions/claude-issue-triage-action@main
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
