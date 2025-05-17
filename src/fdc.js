@@ -87,7 +87,7 @@ export class DiscType {
     get byteSize() {
         return this._byteSize;
     }
-    
+
     /**
      * Whether this disc format supports setting a catalogue name
      * @returns {boolean} True if a name setter function exists
@@ -95,7 +95,7 @@ export class DiscType {
     get supportsCatalogue() {
         return this._nameSetter !== null;
     }
-    
+
     /**
      * Sets the disc name in the disc data using the format-specific setter
      * @param {Uint8Array} data - The disc data to modify
@@ -106,15 +106,15 @@ export class DiscType {
         if (!this.supportsCatalogue) {
             throw new Error(`Cannot set disc name for ${this._extension} format`);
         }
-        
+
         this._nameSetter(data, name);
     }
 }
 // Standard sizes
-const SSD_BYTE_SIZE = 80 * 10 * 256; // 80 tracks, 10 sectors, 256 bytes/sector
-const DSD_BYTE_SIZE = SSD_BYTE_SIZE * 2; // Double-sided
-const ADFS_LARGE_BYTE_SIZE = 2 * 80 * 16 * 256; // Double-sided, 16 sectors/track
-const ADFS_SMALL_BYTE_SIZE = 80 * 16 * 256; // Single-sided, 16 sectors/track
+const SsdByteSize = 80 * 10 * 256; // 80 tracks, 10 sectors, 256 bytes/sector
+const DsdByteSize = SsdByteSize * 2; // Double-sided
+const AdfsLargeByteSize = 2 * 80 * 16 * 256; // Double-sided, 16 sectors/track
+const AdfsSmallByteSize = 80 * 16 * 256; // Single-sided, 16 sectors/track
 
 /**
  * Set the name in a DFS disc image (SSD/DSD format)
@@ -129,13 +129,13 @@ function setDfsDiscName(data, name) {
 
 // HFE disc type - variable size
 const hfeDiscType = new DiscType(
-    ".hfe", 
-    loadHfe, 
-    toHfe, 
+    ".hfe",
+    loadHfe,
+    toHfe,
     null, // no name setter function yet
     true, // double-sided
     true, // double density
-    undefined // variable size
+    undefined, // variable size
 );
 
 // ADFS (Large) discs are double density, double sided
@@ -151,7 +151,7 @@ const adlDiscType = new DiscType(
     null, // no name setter function yet
     true, // double-sided
     true, // double density
-    ADFS_LARGE_BYTE_SIZE
+    AdfsLargeByteSize,
 );
 
 // ADFS (Small) discs are standard ADFS (non-double) density, single sided
@@ -167,29 +167,29 @@ const adfDiscType = new DiscType(
     null, // no name setter function yet
     false, // single-sided
     true, // double density
-    ADFS_SMALL_BYTE_SIZE
+    AdfsSmallByteSize,
 );
 
 // DSD (Double-sided disc)
 const dsdDiscType = new DiscType(
-    ".dsd", 
-    (disc, data, onChange) => loadSsd(disc, data, true, onChange), 
+    ".dsd",
+    (disc, data, onChange) => loadSsd(disc, data, true, onChange),
     toSsdOrDsd,
     setDfsDiscName, // supports setting catalogue name
     true, // double-sided
     false, // standard density
-    DSD_BYTE_SIZE
+    DsdByteSize,
 );
 
 // SSD (Single-sided disc)
 const ssdDiscType = new DiscType(
-    ".ssd", 
-    (disc, data, onChange) => loadSsd(disc, data, false, onChange), 
+    ".ssd",
+    (disc, data, onChange) => loadSsd(disc, data, false, onChange),
     toSsdOrDsd,
     setDfsDiscName, // supports setting catalogue name
     false, // single-sided
     false, // standard density
-    SSD_BYTE_SIZE
+    SsdByteSize,
 );
 /**
  * Determine the disc type based on the file name extension
