@@ -1058,14 +1058,15 @@ $("#google-drive form").on("submit", async function (e) {
 
     let data;
     if ($("#google-drive .create-from-existing").prop("checked")) {
-        const disc = processor.fdc.drives[0].disc;
-        data = toSsdOrDsd(disc);
-        name = replaceOrAddExtension(name, disc.isDoubleSided ? ".dsd" : ".ssd");
+        const discType = disc.guessDiscTypeFromName(name);
+        data = discType.saver(processor.fdc.drives[0].disc);
+        name = replaceOrAddExtension(name, discType.extension);
         console.log(`Saving existing disc: ${name}`);
     } else {
+        // TODO support HFE, I guess?
         const byteSize = utils.discImageSize(name).byteSize;
         data = new Uint8Array(byteSize);
-        utils.setDiscName(data, name);
+        utils.setDiscName(data, name); // Will not work for non-SSD/DSD
         console.log(`Creating blank: ${name}`);
     }
 

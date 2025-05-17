@@ -1069,6 +1069,7 @@ export function unzipRomImage(data) {
     return unzipImage(data, knownRomExtensions);
 }
 
+// TODO combine with DiscType in fdc.js
 export function discImageSize(name) {
     // SSD, aka. single-sided disc, is:
     // - 1 side :)
