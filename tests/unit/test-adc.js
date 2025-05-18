@@ -287,7 +287,7 @@ describe("ADC", () => {
 
         it("should update status bits correctly after conversion", () => {
             // Set channel 2
-            adc.write(2, 0x00);
+            adc.write(0, 0x02);
 
             // Simulate conversion completion
             adc.onComplete();
