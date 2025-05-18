@@ -10,7 +10,7 @@
   "version": "0.0.7",
   "//": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "type": "module",
   "main": "./src/app/app.js",
@@ -57,28 +57,25 @@
     }
   },
   "scripts": {
+    "prepare": "husky",
     "start": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "prepare": "husky",
     "ci-checks": "eslint .",
-    "lint": "eslint .",
-    "lint-fix": "eslint . --fix",
+    "lint": "eslint . --fix",
     "format": "prettier --write .",
     "pre-commit": "lint-staged",
-    "test-long:cpu": "node tests/test-suite.js",
+    "test": "npm-run-all test:*",
     "test:unit": "vitest run tests/unit --silent",
     "test:integration": "vitest run tests/integration --silent",
-    "test": "npm-run-all test:*",
-    "test-long": "npm-run-all test-long:*",
-    "test:coverage": "vitest run tests/unit --coverage",
-    "test:coverage:utils": "vitest run tests/unit/test-utils.js --coverage --coverage.reportsDirectory=coverage --coverage.include=src/utils.js",
-    "test:coverage:all": "vitest run --coverage",
+    "test:cpu": "node tests/test-suite.js",
+    "coverage:unit": "vitest run tests/unit --coverage",
+    "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node app-bench.js"
   },
   "lint-staged": {
     "*.js": [
-      "vitest related --run --no-file-parallelism",
+      "vitest related --run --exclude tests/integration --no-file-parallelism",
       "eslint --cache --fix",
       "prettier --write"
     ],
