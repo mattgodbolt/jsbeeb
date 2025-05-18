@@ -1,20 +1,71 @@
-"use strict";
-
+/**
+ * BBC Micro Analogue to Digital Converter (ADC)
+ * Handles input from analogue sources through various channels
+ */
 export class Adc {
+    /**
+     * Create a new ADC
+     * @param {object} sysvia - System VIA interface
+     * @param {object} scheduler - Scheduler for timing operations
+     */
     constructor(sysvia, scheduler) {
         this.sysvia = sysvia;
         this.task = scheduler.newTask(this.onComplete.bind(this));
         this.status = 0x40;
         this.low = 0x00;
         this.high = 0x00;
+        this.sources = [];
     }
 
+    /**
+     * Reset the ADC state
+     */
     reset() {
         this.status = 0x40;
         this.low = 0x00;
         this.high = 0x00;
     }
 
+    /**
+     * Add an analogue source to the ADC
+     * @param {object} source - The analogue source to add
+     * @returns {boolean} True if the source was added successfully
+     */
+    addSource(source) {
+        this.sources.push(source);
+        return true;
+    }
+
+    /**
+     * Remove an analogue source from the ADC
+     * @param {object} source - The analogue source to remove
+     * @returns {boolean} True if the source was found and removed
+     */
+    removeSource(source) {
+        const index = this.sources.indexOf(source);
+        if (index !== -1) {
+            const removedSource = this.sources.splice(index, 1)[0];
+            removedSource.dispose();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Clear all sources
+     */
+    clearSources() {
+        for (const source of this.sources) {
+            source.dispose();
+        }
+        this.sources = [];
+    }
+
+    /**
+     * Read from the ADC registers
+     * @param {number} addr - The address to read from
+     * @returns {number} The value at the address
+     */
     read(addr) {
         switch (addr & 3) {
             case 0:
@@ -29,6 +80,11 @@ export class Adc {
         return 0x40;
     }
 
+    /**
+     * Write to the ADC control register
+     * @param {number} addr - The address to write to
+     * @param {number} val - The value to write
+     */
     write(addr, val) {
         if ((addr & 3) !== 0) return;
         // 8 bit conversion takes 4ms whereas 10 bit conversions take 10ms, according to AUG
@@ -38,45 +94,21 @@ export class Adc {
         this.sysvia.setcb1(true);
     }
 
+    /**
+     * Called when the ADC conversion is complete
+     */
     onComplete() {
-        let val = 0x8000;
+        const channel = this.status & 0x03;
+        let val = 0x8000; // Default center value
 
-        const pads = this.sysvia.getGamepads();
-        if (pads && pads[0]) {
-            const pad = pads[0];
-            const pad2 = pads[1];
-
-            let rawValue = 0;
-
-            const stick = Math.floor(this.status & 0x03);
-
-            switch (stick) {
-                default:
-                case 0:
-                    rawValue = pad.axes[0];
-                    break;
-                case 1:
-                    rawValue = pad.axes[1];
-                    break;
-                case 2:
-                    if (pad2) {
-                        rawValue = pad2.axes[0];
-                    } else {
-                        rawValue = pad.axes[2];
-                    }
-                    break;
-                case 3:
-                    if (pad2) {
-                        rawValue = pad2.axes[1];
-                    } else {
-                        rawValue = pad.axes[3];
-                    }
-                    break;
+        // Try each source in order until one provides a value for this channel
+        for (const source of this.sources) {
+            if (source.hasChannel(channel)) {
+                val = source.getValue(channel);
+                break;
             }
-
-            // scale from [1,-1] to [0,0xffff]
-            val = Math.floor(((1 - rawValue) / 2) * 0xffff);
         }
+
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;
         this.high = (val >>> 8) & 0xff;

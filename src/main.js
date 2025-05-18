@@ -24,6 +24,8 @@ import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
+import { GamepadSource } from "./gamepad-source.js";
+import { MicrophoneInput } from "./microphone-input.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -91,6 +93,7 @@ const paramTypes = {
     logFdcCommands: ParamTypes.BOOL,
     logFdcStateChanges: ParamTypes.BOOL,
     coProcessor: ParamTypes.BOOL,
+    useAnalogueAudio: ParamTypes.BOOL,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -99,6 +102,7 @@ const paramTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
+    microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)
     model: ParamTypes.STRING,
@@ -249,6 +253,33 @@ config.set65c02(parsedQuery.coProcessor);
 config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
+
+// Add config methods for microphone settings
+config.setAnalogueAudio = function (enabled) {
+    if (enabled !== undefined) {
+        $("#useAnalogueAudio").prop("checked", !!enabled);
+        $("#analogueAudioSettings").toggle(!!enabled);
+    }
+    return $("#useAnalogueAudio").prop("checked");
+};
+
+config.setMicrophoneChannel = function (channel) {
+    if (channel !== undefined && channel >= 0 && channel <= 3) {
+        microphoneInput.setChannel(channel);
+        $(".mic-channel-text").text(`Channel ${channel}`);
+    }
+    return microphoneInput.getChannel();
+};
+
+// Initialize from URL parameters
+if (parsedQuery.useAnalogueAudio) {
+    config.setAnalogueAudio(true);
+
+    // Set channel if specified
+    if (parsedQuery.microphoneChannel !== undefined) {
+        config.setMicrophoneChannel(parsedQuery.microphoneChannel);
+    }
+}
 
 model = config.model;
 
@@ -494,6 +525,16 @@ processor = new Cpu6502(
     econet,
 );
 
+// Set up analogue sources
+const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
+processor.adconverter.addSource(gamepadSource);
+
+// Create MicrophoneInput but don't enable by default
+const microphoneInput = new MicrophoneInput();
+microphoneInput.setErrorCallback((message) => {
+    showError("accessing microphone", message);
+});
+
 // Initialize keyboard now that processor exists
 keyboard = new Keyboard({
     processor,
@@ -580,6 +621,56 @@ document.onkeydown = (evt) => {
 };
 document.onkeypress = (evt) => keyboard.keyPress(evt);
 document.onkeyup = (evt) => keyboard.keyUp(evt);
+
+// Set up microphone UI handlers
+$("#useAnalogueAudio").on("change", async function () {
+    const useAudio = $(this).prop("checked");
+    $("#analogueAudioSettings").toggle(useAudio);
+
+    if (useAudio) {
+        $("#micPermissionStatus").text("Requesting microphone access...");
+        const success = await microphoneInput.initialize();
+
+        if (success) {
+            processor.adconverter.addSource(microphoneInput);
+            $("#micPermissionStatus").text("Microphone connected successfully");
+            // Also resume audio context to ensure it's running
+            if (audioHandler.audioContext) {
+                await audioHandler.audioContext.resume();
+            }
+        } else {
+            const errorMsg = microphoneInput.getErrorMessage() || "Unknown error";
+            $("#micPermissionStatus").text(`Error: ${errorMsg}`);
+            $(this).prop("checked", false);
+            $("#analogueAudioSettings").hide();
+        }
+    } else {
+        processor.adconverter.removeSource(microphoneInput);
+        $("#micPermissionStatus").text("");
+    }
+
+    // Update URL parameters
+    parsedQuery.useAnalogueAudio = useAudio ? "" : undefined;
+    if (useAudio) {
+        parsedQuery.microphoneChannel = microphoneInput.getChannel();
+    } else {
+        delete parsedQuery.microphoneChannel;
+    }
+    updateUrl();
+});
+
+// Handle microphone channel selection
+$(".mic-channel-option").on("click", function () {
+    const channel = parseInt($(this).data("channel"), 10);
+    microphoneInput.setChannel(channel);
+    $(".mic-channel-text").text(`Channel ${channel}`);
+
+    // Update URL parameters if microphone is enabled
+    if ($("#useAnalogueAudio").prop("checked")) {
+        parsedQuery.microphoneChannel = channel;
+        updateUrl();
+    }
+});
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
