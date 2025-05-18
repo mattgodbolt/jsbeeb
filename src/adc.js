@@ -40,12 +40,9 @@ export class Adc {
             return false;
         }
 
-        console.log(`ADC: Setting source for channel ${channel} to ${source ? source.constructor.name : "null"}`);
-
         // Dispose of the old source if one exists and is different
         const oldSource = this.channelSources[channel];
         if (oldSource && oldSource !== source) {
-            console.log(`ADC: Disposing old source for channel ${channel}`);
             oldSource.dispose();
         }
 
@@ -79,7 +76,6 @@ export class Adc {
 
         const source = this.channelSources[channel];
         if (source) {
-            console.log(`ADC: Clearing source for channel ${channel}`);
             source.dispose();
             this.channelSources[channel] = null;
         }
@@ -139,29 +135,9 @@ export class Adc {
      */
     onComplete() {
         const channel = this.status & 0x03;
-        let val = 0x8000; // Default center value
 
-        // Get the source for this channel
         const source = this.channelSources[channel];
-
-        // Uncomment for debugging
-        // console.log(`ADC: onComplete for channel ${channel}, source: ${source ? source.constructor.name : 'none'}`);
-
-        // Get the value from the source if available
-        if (source) {
-            try {
-                val = source.getValue(channel);
-                // Make sure value is an integer
-                val = Math.floor(val);
-                // Uncomment for debugging
-                // console.log(`ADC: Got value 0x${val.toString(16)} (${val}) from ${source.constructor.name} for channel ${channel}`);
-            } catch (error) {
-                console.error(`ADC: Error getting value from source for channel ${channel}:`, error);
-            }
-        } else {
-            // Uncomment for debugging
-            // console.log(`ADC: No source for channel ${channel}, using default value 0x${val.toString(16)}`);
-        }
+        const val = source ? source.getValue(channel) | 0 : 0x8000;
 
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;

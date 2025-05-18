@@ -51,10 +51,7 @@ describe("ADC", () => {
         // Create a fresh ADC instance
         adc = new Adc(mockSysvia, mockScheduler);
 
-        // Create mock gamepad source
         mockGamepadSource = new MockGamepadSource();
-
-        // Set it as the source for all channels
         adc.setChannelSource(0, mockGamepadSource);
         adc.setChannelSource(1, mockGamepadSource);
         adc.setChannelSource(2, mockGamepadSource);
@@ -198,7 +195,6 @@ describe("ADC", () => {
 
     describe("Conversion completion", () => {
         it("should handle completion with no source for the channel", () => {
-            // Clear the source for channel 1
             adc.clearChannelSource(1);
 
             // Set up a conversion for channel 1
@@ -290,19 +286,19 @@ describe("ADC", () => {
         });
 
         it("should update status bits correctly after conversion", () => {
-            // Set channel 0
-            adc.write(0, 0x00);
+            // Set channel 2
+            adc.write(2, 0x00);
 
             // Simulate conversion completion
             adc.onComplete();
 
             // Get the expected value from our mock source
-            const expectedValue = mockGamepadSource.getValue(0);
+            const expectedValue = mockGamepadSource.getValue(2);
 
             // The status should have:
             // - bits 0-3: channel number (0)
             // - bit 6: end of conversion bit (1)
-            // - bits 4-5: ((expectedValue >>> 10) & 0x03)
+            // - bits 4-5: ((0x5fff >>> 10) & 0x03) = 0x01 (shifted to bit position)
             const expectedStatus = (0x00 & 0x0f) | 0x40 | ((expectedValue >>> 10) & 0x03);
 
             expect(adc.status).toBe(expectedStatus);

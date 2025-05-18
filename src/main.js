@@ -69,7 +69,6 @@ const extraRoms = [];
 
 // Build the query string from the URL
 const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
-console.log("URL query string:", queryString);
 let secondDiscImage = null;
 
 // Define parameter types
@@ -94,7 +93,7 @@ const paramTypes = {
     logFdcCommands: ParamTypes.BOOL,
     logFdcStateChanges: ParamTypes.BOOL,
     coProcessor: ParamTypes.BOOL,
-    useAnalogueAudio: ParamTypes.BOOL, // Important: This must be a boolean parameter
+    useAnalogueAudio: ParamTypes.BOOL,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -117,13 +116,6 @@ const paramTypes = {
 
 // Parse the query string with parameter types
 let parsedQuery = parseQueryString(queryString, paramTypes);
-console.log("Parsed query parameters:", parsedQuery);
-console.log(
-    "microphoneChannel in params:",
-    parsedQuery.microphoneChannel,
-    "useAnalogueAudio in params:",
-    parsedQuery.useAnalogueAudio,
-);
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
@@ -279,18 +271,10 @@ config.setMicrophoneChannel = function (channel) {
     return microphoneInput.getChannel();
 };
 
-// We'll store the microphone URL parameters to use later after the microphoneInput is created
-const urlHasMicrophone = queryString.includes("useAnalogueAudio") || queryString.includes("microphoneChannel");
+const microphoneSetupNeeded = queryString.includes("useAnalogueAudio") || queryString.includes("microphoneChannel");
 let microphoneChannelFromUrl = undefined;
 
-console.log(
-    "URL parameter check: useAnalogueAudio in URL =",
-    queryString.includes("useAnalogueAudio"),
-    "microphoneChannel in URL =",
-    queryString.includes("microphoneChannel"),
-);
-
-if (urlHasMicrophone) {
+if (microphoneSetupNeeded) {
     console.log("Microphone: URL parameters detected for microphone");
     // Save this to apply later
     if (parsedQuery.microphoneChannel !== undefined) {
@@ -300,8 +284,6 @@ if (urlHasMicrophone) {
 
     // We need to delay initialization until after the processor and microphoneInput are created
     console.log("Microphone: Will initialize after processor is created");
-} else {
-    console.log("Microphone: No URL parameters found for microphone");
 }
 
 model = config.model;
@@ -550,12 +532,10 @@ processor = new Cpu6502(
 
 // Set up gamepad as the default source for all channels
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
-// Set gamepad as source for all channels by default
 processor.adconverter.setChannelSource(0, gamepadSource);
 processor.adconverter.setChannelSource(1, gamepadSource);
 processor.adconverter.setChannelSource(2, gamepadSource);
 processor.adconverter.setChannelSource(3, gamepadSource);
-console.log("Added gamepad source to all ADC channels");
 
 // Create MicrophoneInput but don't enable by default
 const microphoneInput = new MicrophoneInput();
@@ -564,7 +544,7 @@ microphoneInput.setErrorCallback((message) => {
 });
 
 // Now that the microphoneInput is created, we can apply the settings from URL parameters
-if (urlHasMicrophone) {
+if (microphoneSetupNeeded) {
     console.log("Microphone: Initializing from URL parameters");
 
     // First, update the UI
