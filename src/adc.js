@@ -139,7 +139,7 @@ export class Adc {
         const channel = this.status & 0x03;
 
         const source = this.channelSources[channel];
-        const val = source ? source.getValue(channel) | 0 : 0x8000;
+        const val = source ? source.getValue(channel) : 0x8000;
 
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;
