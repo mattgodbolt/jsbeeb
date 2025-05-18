@@ -24,6 +24,7 @@ import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
+import { GamepadSource } from "./gamepad-source.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -493,6 +494,13 @@ processor = new Cpu6502(
     emulationConfig,
     econet,
 );
+
+// Set up gamepad as the default source for all channels
+const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
+processor.adconverter.setChannelSource(0, gamepadSource);
+processor.adconverter.setChannelSource(1, gamepadSource);
+processor.adconverter.setChannelSource(2, gamepadSource);
+processor.adconverter.setChannelSource(3, gamepadSource);
 
 // Initialize keyboard now that processor exists
 keyboard = new Keyboard({
