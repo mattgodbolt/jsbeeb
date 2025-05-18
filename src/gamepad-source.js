@@ -63,6 +63,29 @@ export class GamepadSource extends AnalogueSource {
      * @returns {boolean} True if this source provides input for the channel
      */
     hasChannel(channel) {
-        return channel >= 0 && channel <= 3;
+        // First check if we're valid channel in range
+        if (channel < 0 || channel > 3) {
+            console.log(`GamepadSource: hasChannel(${channel}), false - out of range`);
+            return false;
+        }
+
+        // Then check if the channel is blocked
+        if (this.blockedChannels && this.blockedChannels.includes(channel)) {
+            console.log(`GamepadSource: hasChannel(${channel}), false - blocked channel`);
+            return false;
+        }
+
+        console.log(`GamepadSource: hasChannel(${channel}), true - channel is available`);
+        return true;
+    }
+
+    /**
+     * Set blocked channels - channels that this source should not handle
+     * Used when another input source takes priority
+     * @param {number[]} channels - Array of channel numbers to block
+     */
+    setBlockedChannels(channels) {
+        this.blockedChannels = channels;
+        console.log(`GamepadSource: Blocking channels:`, channels);
     }
 }

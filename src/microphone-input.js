@@ -56,11 +56,16 @@ export class MicrophoneInput extends AnalogueSource {
      * @returns {Promise<boolean>} True if initialization was successful
      */
     async initialize() {
+        console.log("MicrophoneInput: Initializing microphone input for channel", this.channel);
+
         // Create audio context if needed
         if (!this.audioContext) {
             try {
+                console.log("MicrophoneInput: Creating audio context");
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log("MicrophoneInput: Audio context created:", this.audioContext.state);
             } catch (error) {
+                console.error("MicrophoneInput: Error creating audio context:", error);
                 this.errorMessage = `Could not create audio context: ${error.message}`;
                 if (this.errorCallback) this.errorCallback(this.errorMessage);
                 return false;
@@ -68,29 +73,38 @@ export class MicrophoneInput extends AnalogueSource {
         }
 
         try {
+            console.log("MicrophoneInput: Requesting microphone access");
             // Request microphone access
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log("MicrophoneInput: Microphone access granted");
 
             // Store the stream so we can stop it if needed
             this.microphoneStream = stream;
 
             // Create analyser node
+            console.log("MicrophoneInput: Creating audio analyser");
             this.microphoneAnalyser = this.audioContext.createAnalyser();
-            this.microphoneAnalyser.fftSize = 256;
+            this.microphoneAnalyser.fftSize = 1024; // Larger FFT size for better resolution
+            this.microphoneAnalyser.smoothingTimeConstant = 0.2; // Less smoothing for more responsive input
 
             // Create buffer for analyser data
             this.microphoneDataArray = new Uint8Array(this.microphoneAnalyser.frequencyBinCount);
+            console.log("MicrophoneInput: Created data buffer with", this.microphoneDataArray.length, "samples");
 
             // Create media stream source from microphone
+            console.log("MicrophoneInput: Creating media stream source");
             this.microphoneSource = this.audioContext.createMediaStreamSource(stream);
 
             // Connect microphone to analyser
+            console.log("MicrophoneInput: Connecting microphone to analyser");
             this.microphoneSource.connect(this.microphoneAnalyser);
 
             this.enabled = true;
             this.errorMessage = null;
+            console.log("MicrophoneInput: Initialization complete, enabled:", this.enabled);
             return true;
         } catch (error) {
+            console.error("MicrophoneInput: Error accessing microphone:", error);
             this.errorMessage = `Error accessing microphone: ${error.message}`;
             if (this.errorCallback) this.errorCallback(this.errorMessage);
             return false;
@@ -119,8 +133,20 @@ export class MicrophoneInput extends AnalogueSource {
      * @returns {number} A value between 0 and 0xffff
      */
     getValue(channel) {
-        if (!this.enabled || channel !== this.channel || !this.microphoneAnalyser || !this.microphoneDataArray) {
-            return 0x8000; // Default center value when not active
+        // Debug check for initial conditions
+        if (!this.enabled) {
+            console.log("MicrophoneInput: getValue called but microphone not enabled");
+            return 0x8000;
+        }
+        if (channel !== this.channel) {
+            console.log(
+                `MicrophoneInput: getValue called for channel ${channel}, but configured for channel ${this.channel}`,
+            );
+            return 0x8000;
+        }
+        if (!this.microphoneAnalyser || !this.microphoneDataArray) {
+            console.log("MicrophoneInput: getValue called but analyser not initialized");
+            return 0x8000;
         }
 
         // Get time domain data (waveform)
@@ -134,9 +160,20 @@ export class MicrophoneInput extends AnalogueSource {
 
         const average = sum / this.microphoneDataArray.length;
 
+        // Scale up the signal using a configurable scaling factor
+        // This can be adjusted based on testing
+        const scaleFactor = 800; // Amplify the signal
+        const scaledValue = average * scaleFactor;
+
         // Map to 16-bit range (0-0xFFFF)
-        // The scaling factor might need adjustment based on testing
-        return Math.min(0xffff, average * 64);
+        // IMPORTANT: Make sure we return an integer value
+        const value = Math.floor(Math.min(0xffff, scaledValue));
+
+        // Uncomment for debugging
+        // if (Math.random() < 0.01) {
+        //     console.log(`MicrophoneInput: getValue for channel ${channel}, avg=${average.toFixed(2)}, value=${value} (0x${value.toString(16)})`);
+        // }
+        return value;
     }
 
     /**
@@ -145,7 +182,12 @@ export class MicrophoneInput extends AnalogueSource {
      * @returns {boolean} True if this source provides input for the channel
      */
     hasChannel(channel) {
-        return this.enabled && channel === this.channel;
+        const result = this.enabled && channel === this.channel;
+        // Log every hasChannel call for a short period to debug
+        console.log(
+            `MicrophoneInput: hasChannel(${channel}) = ${result}, enabled=${this.enabled}, configured channel=${this.channel}`,
+        );
+        return result;
     }
 
     /**

@@ -14,7 +14,9 @@ export class Adc {
         this.status = 0x40;
         this.low = 0x00;
         this.high = 0x00;
-        this.sources = [];
+
+        // Initialize channel sources (one source per channel)
+        this.channelSources = [null, null, null, null];
     }
 
     /**
@@ -27,38 +29,76 @@ export class Adc {
     }
 
     /**
-     * Add an analogue source to the ADC
-     * @param {object} source - The analogue source to add
-     * @returns {boolean} True if the source was added successfully
+     * Set the source for a specific channel
+     * @param {number} channel - The channel number (0-3)
+     * @param {object} source - The source to assign to the channel
+     * @returns {boolean} True if the assignment was successful
      */
-    addSource(source) {
-        this.sources.push(source);
+    setChannelSource(channel, source) {
+        if (channel < 0 || channel > 3) {
+            console.error(`ADC: Invalid channel number: ${channel}`);
+            return false;
+        }
+
+        console.log(`ADC: Setting source for channel ${channel} to ${source ? source.constructor.name : "null"}`);
+
+        // Dispose of the old source if one exists and is different
+        const oldSource = this.channelSources[channel];
+        if (oldSource && oldSource !== source) {
+            console.log(`ADC: Disposing old source for channel ${channel}`);
+            oldSource.dispose();
+        }
+
+        // Set the channel source
+        this.channelSources[channel] = source;
         return true;
     }
 
     /**
-     * Remove an analogue source from the ADC
-     * @param {object} source - The analogue source to remove
-     * @returns {boolean} True if the source was found and removed
+     * Get the source for a specific channel
+     * @param {number} channel - The channel number (0-3)
+     * @returns {object|null} The source for the channel or null if none
      */
-    removeSource(source) {
-        const index = this.sources.indexOf(source);
-        if (index !== -1) {
-            const removedSource = this.sources.splice(index, 1)[0];
-            removedSource.dispose();
-            return true;
+    getChannelSource(channel) {
+        if (channel < 0 || channel > 3) {
+            return null;
         }
-        return false;
+        return this.channelSources[channel];
+    }
+
+    /**
+     * Clear the source for a specific channel
+     * @param {number} channel - The channel number (0-3)
+     * @returns {boolean} True if successful
+     */
+    clearChannelSource(channel) {
+        if (channel < 0 || channel > 3) {
+            console.error(`ADC: Invalid channel number: ${channel}`);
+            return false;
+        }
+
+        const source = this.channelSources[channel];
+        if (source) {
+            console.log(`ADC: Clearing source for channel ${channel}`);
+            source.dispose();
+            this.channelSources[channel] = null;
+        }
+
+        return true;
     }
 
     /**
      * Clear all sources
      */
     clearSources() {
-        for (const source of this.sources) {
-            source.dispose();
+        // Dispose and clear all channel sources
+        for (let i = 0; i < 4; i++) {
+            const source = this.channelSources[i];
+            if (source) {
+                source.dispose();
+                this.channelSources[i] = null;
+            }
         }
-        this.sources = [];
     }
 
     /**
@@ -101,12 +141,26 @@ export class Adc {
         const channel = this.status & 0x03;
         let val = 0x8000; // Default center value
 
-        // Try each source in order until one provides a value for this channel
-        for (const source of this.sources) {
-            if (source.hasChannel(channel)) {
+        // Get the source for this channel
+        const source = this.channelSources[channel];
+
+        // Uncomment for debugging
+        // console.log(`ADC: onComplete for channel ${channel}, source: ${source ? source.constructor.name : 'none'}`);
+
+        // Get the value from the source if available
+        if (source) {
+            try {
                 val = source.getValue(channel);
-                break;
+                // Make sure value is an integer
+                val = Math.floor(val);
+                // Uncomment for debugging
+                // console.log(`ADC: Got value 0x${val.toString(16)} (${val}) from ${source.constructor.name} for channel ${channel}`);
+            } catch (error) {
+                console.error(`ADC: Error getting value from source for channel ${channel}:`, error);
             }
+        } else {
+            // Uncomment for debugging
+            // console.log(`ADC: No source for channel ${channel}, using default value 0x${val.toString(16)}`);
         }
 
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);

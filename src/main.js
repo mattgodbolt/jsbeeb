@@ -69,6 +69,7 @@ const extraRoms = [];
 
 // Build the query string from the URL
 const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
+console.log("URL query string:", queryString);
 let secondDiscImage = null;
 
 // Define parameter types
@@ -93,7 +94,7 @@ const paramTypes = {
     logFdcCommands: ParamTypes.BOOL,
     logFdcStateChanges: ParamTypes.BOOL,
     coProcessor: ParamTypes.BOOL,
-    useAnalogueAudio: ParamTypes.BOOL,
+    useAnalogueAudio: ParamTypes.BOOL, // Important: This must be a boolean parameter
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -116,6 +117,13 @@ const paramTypes = {
 
 // Parse the query string with parameter types
 let parsedQuery = parseQueryString(queryString, paramTypes);
+console.log("Parsed query parameters:", parsedQuery);
+console.log(
+    "microphoneChannel in params:",
+    parsedQuery.microphoneChannel,
+    "useAnalogueAudio in params:",
+    parsedQuery.useAnalogueAudio,
+);
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
@@ -271,14 +279,29 @@ config.setMicrophoneChannel = function (channel) {
     return microphoneInput.getChannel();
 };
 
-// Initialize from URL parameters
-if (parsedQuery.useAnalogueAudio) {
-    config.setAnalogueAudio(true);
+// We'll store the microphone URL parameters to use later after the microphoneInput is created
+const urlHasMicrophone = queryString.includes("useAnalogueAudio") || queryString.includes("microphoneChannel");
+let microphoneChannelFromUrl = undefined;
 
-    // Set channel if specified
+console.log(
+    "URL parameter check: useAnalogueAudio in URL =",
+    queryString.includes("useAnalogueAudio"),
+    "microphoneChannel in URL =",
+    queryString.includes("microphoneChannel"),
+);
+
+if (urlHasMicrophone) {
+    console.log("Microphone: URL parameters detected for microphone");
+    // Save this to apply later
     if (parsedQuery.microphoneChannel !== undefined) {
-        config.setMicrophoneChannel(parsedQuery.microphoneChannel);
+        console.log("Microphone: URL parameter microphoneChannel =", parsedQuery.microphoneChannel);
+        microphoneChannelFromUrl = parsedQuery.microphoneChannel;
     }
+
+    // We need to delay initialization until after the processor and microphoneInput are created
+    console.log("Microphone: Will initialize after processor is created");
+} else {
+    console.log("Microphone: No URL parameters found for microphone");
 }
 
 model = config.model;
@@ -525,15 +548,96 @@ processor = new Cpu6502(
     econet,
 );
 
-// Set up analogue sources
+// Set up gamepad as the default source for all channels
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
-processor.adconverter.addSource(gamepadSource);
+// Set gamepad as source for all channels by default
+processor.adconverter.setChannelSource(0, gamepadSource);
+processor.adconverter.setChannelSource(1, gamepadSource);
+processor.adconverter.setChannelSource(2, gamepadSource);
+processor.adconverter.setChannelSource(3, gamepadSource);
+console.log("Added gamepad source to all ADC channels");
 
 // Create MicrophoneInput but don't enable by default
 const microphoneInput = new MicrophoneInput();
 microphoneInput.setErrorCallback((message) => {
     showError("accessing microphone", message);
 });
+
+// Now that the microphoneInput is created, we can apply the settings from URL parameters
+if (urlHasMicrophone) {
+    console.log("Microphone: Initializing from URL parameters");
+
+    // First, update the UI
+    $("#useAnalogueAudio").prop("checked", true);
+    $("#analogueAudioSettings").show();
+
+    // Apply channel setting if provided
+    if (microphoneChannelFromUrl !== undefined) {
+        console.log("Microphone: Setting channel from URL parameter to", microphoneChannelFromUrl);
+        microphoneInput.setChannel(microphoneChannelFromUrl);
+        $(".mic-channel-text").text(`Channel ${microphoneChannelFromUrl}`);
+    }
+
+    // We need to use setTimeout to make sure this runs after the page has loaded
+    // This is needed because some browsers require user interaction for audio context
+    setTimeout(async () => {
+        console.log("Microphone: Delayed initialization starting");
+        $("#micPermissionStatus").text("Requesting microphone access...");
+
+        // Try to initialize the microphone
+        const success = await microphoneInput.initialize();
+        if (success) {
+            console.log("Microphone: Successfully initialized from URL parameters");
+            // Set microphone as source for its channel
+            const channel = microphoneInput.getChannel();
+            console.log(`Setting microphone as source for channel ${channel}`);
+            processor.adconverter.setChannelSource(channel, microphoneInput);
+            $("#micPermissionStatus").text("Microphone connected successfully");
+
+            // Ensure audio context is running
+            if (microphoneInput.audioContext) {
+                console.log(
+                    "Microphone: Ensuring audio context is running, current state:",
+                    microphoneInput.audioContext.state,
+                );
+                try {
+                    await microphoneInput.audioContext.resume();
+                    console.log("Microphone: Audio context resumed, new state:", microphoneInput.audioContext.state);
+                } catch (err) {
+                    console.error("Microphone: Error resuming audio context:", err);
+                }
+            }
+
+            // Try starting audio context from user gesture
+            const tryAgain = () => {
+                if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
+                    console.log("Microphone: Auto-starting audio context from click");
+                    microphoneInput.audioContext.resume();
+                }
+                document.removeEventListener("click", tryAgain);
+            };
+            document.addEventListener("click", tryAgain);
+
+            // Make sure URL parameter is reflected in the UI
+            // Important: For boolean parameters, we need to set "" instead of true
+            parsedQuery.useAnalogueAudio = "";
+            if (microphoneChannelFromUrl !== undefined) {
+                parsedQuery.microphoneChannel = microphoneChannelFromUrl;
+            }
+            updateUrl();
+        } else {
+            console.error("Microphone: Failed to initialize from URL parameters:", microphoneInput.getErrorMessage());
+            $("#micPermissionStatus").text(`Error: ${microphoneInput.getErrorMessage() || "Unknown error"}`);
+            // Uncheck the checkbox since initialization failed
+            $("#useAnalogueAudio").prop("checked", false);
+            $("#analogueAudioSettings").hide();
+            // Update URL to remove the parameter
+            parsedQuery.useAnalogueAudio = undefined;
+            delete parsedQuery.microphoneChannel;
+            updateUrl();
+        }
+    }, 1000);
+}
 
 // Initialize keyboard now that processor exists
 keyboard = new Keyboard({
@@ -617,6 +721,13 @@ keyboard.registerKeyHandler(
 // Setup key handlers
 document.onkeydown = (evt) => {
     audioHandler.tryResume();
+    // Also try to resume microphone audio context if needed
+    if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
+        console.log("Microphone: Auto-resuming audio context on keydown");
+        microphoneInput.audioContext
+            .resume()
+            .catch((err) => console.error("Error resuming microphone audio context:", err));
+    }
     keyboard.keyDown(evt);
 };
 document.onkeypress = (evt) => keyboard.keyPress(evt);
@@ -625,27 +736,60 @@ document.onkeyup = (evt) => keyboard.keyUp(evt);
 // Set up microphone UI handlers
 $("#useAnalogueAudio").on("change", async function () {
     const useAudio = $(this).prop("checked");
+    console.log("Analogue audio checkbox changed:", useAudio);
     $("#analogueAudioSettings").toggle(useAudio);
 
     if (useAudio) {
+        console.log("Initializing microphone input");
         $("#micPermissionStatus").text("Requesting microphone access...");
         const success = await microphoneInput.initialize();
 
         if (success) {
-            processor.adconverter.addSource(microphoneInput);
+            console.log("Adding microphone input source to ADC");
+
+            // Set microphone as the source for its channel
+            const micChannel = microphoneInput.getChannel();
+            console.log(`Setting microphone as source for channel ${micChannel}`);
+            processor.adconverter.setChannelSource(micChannel, microphoneInput);
             $("#micPermissionStatus").text("Microphone connected successfully");
             // Also resume audio context to ensure it's running
             if (audioHandler.audioContext) {
-                await audioHandler.audioContext.resume();
+                console.log("Resuming audio context, current state:", audioHandler.audioContext.state);
+                try {
+                    await audioHandler.audioContext.resume();
+                    console.log("Audio context resumed, new state:", audioHandler.audioContext.state);
+                } catch (err) {
+                    console.error("Error resuming audio context:", err);
+                }
+            } else {
+                console.log("No audio context found in audioHandler");
+            }
+
+            // Also make sure the microphone's audio context is resumed
+            if (microphoneInput.audioContext) {
+                console.log("Resuming microphone audio context, current state:", microphoneInput.audioContext.state);
+                try {
+                    await microphoneInput.audioContext.resume();
+                    console.log("Microphone audio context resumed, new state:", microphoneInput.audioContext.state);
+                } catch (err) {
+                    console.error("Error resuming microphone audio context:", err);
+                }
             }
         } else {
             const errorMsg = microphoneInput.getErrorMessage() || "Unknown error";
+            console.error("Failed to initialize microphone:", errorMsg);
             $("#micPermissionStatus").text(`Error: ${errorMsg}`);
             $(this).prop("checked", false);
             $("#analogueAudioSettings").hide();
         }
     } else {
-        processor.adconverter.removeSource(microphoneInput);
+        console.log("Removing microphone input source from ADC");
+        const micChannel = microphoneInput.getChannel();
+
+        // Restore gamepad as the source for the microphone channel
+        console.log(`Restoring gamepad as source for channel ${micChannel}`);
+        processor.adconverter.setChannelSource(micChannel, gamepadSource);
+
         $("#micPermissionStatus").text("");
     }
 
@@ -653,20 +797,38 @@ $("#useAnalogueAudio").on("change", async function () {
     parsedQuery.useAnalogueAudio = useAudio ? "" : undefined;
     if (useAudio) {
         parsedQuery.microphoneChannel = microphoneInput.getChannel();
+        console.log("Set URL parameter microphoneChannel =", microphoneInput.getChannel());
     } else {
         delete parsedQuery.microphoneChannel;
+        console.log("Removed URL parameter microphoneChannel");
     }
     updateUrl();
+    console.log("URL updated with new parameters");
 });
 
 // Handle microphone channel selection
 $(".mic-channel-option").on("click", function () {
     const channel = parseInt($(this).data("channel"), 10);
+    console.log(`Microphone channel changed to ${channel}`);
+
+    // Get the old channel
+    const oldChannel = microphoneInput.getChannel();
+
+    // Set the channel in microphone input
     microphoneInput.setChannel(channel);
     $(".mic-channel-text").text(`Channel ${channel}`);
 
-    // Update URL parameters if microphone is enabled
+    // Update channel assignment in ADC if microphone is enabled
     if ($("#useAnalogueAudio").prop("checked")) {
+        console.log(`Moving microphone from channel ${oldChannel} to channel ${channel}`);
+
+        // Restore gamepad as source for the old channel
+        processor.adconverter.setChannelSource(oldChannel, gamepadSource);
+
+        // Set microphone as source for the new channel
+        processor.adconverter.setChannelSource(channel, microphoneInput);
+
+        // Update URL parameters
         parsedQuery.microphoneChannel = channel;
         updateUrl();
     }
