@@ -28,11 +28,11 @@ export class MicrophoneInput extends AnalogueSource {
     }
 
     /**
-     * Initialize microphone access
-     * @returns {Promise<boolean>} True if initialization was successful
+     * Initialise microphone access
+     * @returns {Promise<boolean>} True if initialiation was successful
      */
-    async initialize() {
-        console.log("MicrophoneInput: Initializing microphone input");
+    async initialise() {
+        console.log("MicrophoneInput: Initialising microphone input");
 
         // Create audio context if needed
         if (!this.audioContext) {
@@ -76,7 +76,7 @@ export class MicrophoneInput extends AnalogueSource {
             this.microphoneSource.connect(this.microphoneAnalyser);
 
             this.errorMessage = null;
-            console.log("MicrophoneInput: Initialization complete");
+            console.log("MicrophoneInput: Initialisation complete");
             return true;
         } catch (error) {
             console.error("MicrophoneInput: Error accessing microphone:", error);
@@ -101,7 +101,7 @@ export class MicrophoneInput extends AnalogueSource {
      */
     getValue(_channel) {
         if (!this.microphoneAnalyser || !this.microphoneDataArray) {
-            throw new Error("MicrophoneInput: getValue called but analyser not initialized");
+            throw new Error("MicrophoneInput: getValue called but analyser not initialised");
         }
 
         // Get time domain data (waveform)
