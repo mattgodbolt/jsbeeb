@@ -1,5 +1,6 @@
 /**
  * Base interface for analog input sources for the BBC Micro's ADC
+ * @abstract
  */
 export class AnalogueSource {
     /**

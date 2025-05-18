@@ -4,7 +4,7 @@ on: [push]
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -12,17 +12,19 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
       - name: npm install
         run: npm install
       - name: checks
         run: npm run ci-checks
-      - name: Short tests
-        run: npm test
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Integration tests
+        run: npm run test:integration
 
-  long-test:
-    runs-on: ubuntu-22.04
+  cpu-test:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,28 +32,28 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
       - name: npm install
         run: npm install
-      - name: long tests
-        run: npm run test-long
+      - name: CPU tests
+        run: npm run test:cpu
 
   update-web:
-    needs: [build-and-test, long-test]
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-22.04
+    needs: [build-and-test, cpu-test]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           cache: npm
       - name: Build distribution
         run: |
           make dist
       - uses: jakejarvis/s3-sync-action@master
+        if: github.ref == 'refs/heads/main'
         with:
           args: --cache-control max-age=30 --metadata-directive REPLACE
         env:

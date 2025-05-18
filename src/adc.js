@@ -1,6 +1,8 @@
 /**
  * BBC Micro Analogue to Digital Converter (ADC)
  * Handles input from analogue sources through various channels
+ *
+ * @typedef {import('./analogue-source.js').AnalogueSource} AnalogueSource
  */
 export class Adc {
     /**
@@ -31,7 +33,7 @@ export class Adc {
     /**
      * Set the source for a specific channel
      * @param {number} channel - The channel number (0-3)
-     * @param {object} source - The source to assign to the channel
+     * @param {AnalogueSource} source - The source to assign to the channel
      * @returns {boolean} True if the assignment was successful
      */
     setChannelSource(channel, source) {
@@ -54,7 +56,7 @@ export class Adc {
     /**
      * Get the source for a specific channel
      * @param {number} channel - The channel number (0-3)
-     * @returns {object|null} The source for the channel or null if none
+     * @returns {AnalogueSource|null} The source for the channel or null if none
      */
     getChannelSource(channel) {
         if (channel < 0 || channel > 3) {
@@ -137,7 +139,7 @@ export class Adc {
         const channel = this.status & 0x03;
 
         const source = this.channelSources[channel];
-        const val = source ? source.getValue(channel) | 0 : 0x8000;
+        const val = source ? source.getValue(channel) : 0x8000;
 
         this.status = (this.status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
         this.low = val & 0xff;

@@ -13,13 +13,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test` - Run all tests
 - `npm run test:unit` - Run unit tests
 - `npm run test:integration` - Run integration tests
+- `npm run test:cpu` - Run CPU compatibility tests
+- `npm run ci-checks` - Run linting checks for CI
 - `vitest run tests/unit/test-gzip.js` - Run a single test file
 
 ### Code Coverage
 
-- `npm run test:coverage` - Run unit tests with coverage
-- `npm run test:coverage:utils` - Run just utils.js tests with coverage
-- `npm run test:coverage:all` - Run all tests with coverage
+- `npm run coverage:unit` - Run unit tests with coverage
+- `npm run coverage:all-tests` - Run all tests with coverage
 - Coverage reports are generated in the `coverage` directory
 - HTML report includes line-by-line coverage visualization
 
