@@ -12,15 +12,6 @@ export class AnalogueSource {
     }
 
     /**
-     * Check if this source provides input for the specified channel
-     * @param {number} channel - The ADC channel (0-3)
-     * @returns {boolean} True if this source provides input for the channel
-     */
-    hasChannel(_channel) {
-        throw new Error("Method not implemented");
-    }
-
-    /**
      * Clean up resources when source is no longer needed
      */
     dispose() {

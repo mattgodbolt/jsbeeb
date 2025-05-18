@@ -12,27 +12,10 @@ class MockGamepadSource extends AnalogueSource {
             2: 0x5fff, // Channel 2: quarter (0.25) -> 0x5fff
             3: 0xdfff, // Channel 3: three quarters (-0.75) -> 0xdfff
         };
-        this.enabledChannels = [0, 1, 2, 3]; // All channels enabled by default
     }
 
     getValue(channel) {
         return this.mockValues[channel] || 0x8000;
-    }
-
-    hasChannel(channel) {
-        return this.enabledChannels.includes(channel);
-    }
-
-    // Test helper to disable specific channels
-    disableChannel(channel) {
-        this.enabledChannels = this.enabledChannels.filter((ch) => ch !== channel);
-    }
-
-    // Test helper to enable specific channels
-    enableChannel(channel) {
-        if (!this.enabledChannels.includes(channel)) {
-            this.enabledChannels.push(channel);
-        }
     }
 }
 

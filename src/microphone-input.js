@@ -7,17 +7,14 @@ import { AnalogueSource } from "./analogue-source.js";
 export class MicrophoneInput extends AnalogueSource {
     /**
      * Create a new MicrophoneInput
-     * @param {number} channel - The ADC channel to use (default: 1)
      */
-    constructor(channel = 1) {
+    constructor() {
         super();
-        this.channel = channel; // Default to channel 1 as per issue comments
         this.audioContext = null;
         this.microphoneStream = null;
         this.microphoneSource = null;
         this.microphoneAnalyser = null;
         this.microphoneDataArray = null;
-        this.enabled = false;
         this.errorCallback = null;
         this.errorMessage = null;
     }
@@ -31,32 +28,11 @@ export class MicrophoneInput extends AnalogueSource {
     }
 
     /**
-     * Set which channel the microphone input is on
-     * @param {number} channel - The ADC channel (0-3)
-     * @returns {boolean} True if the channel was set successfully
-     */
-    setChannel(channel) {
-        if (channel >= 0 && channel <= 3) {
-            this.channel = channel;
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * Get current channel
-     * @returns {number} The current channel
-     */
-    getChannel() {
-        return this.channel;
-    }
-
-    /**
      * Initialize microphone access
      * @returns {Promise<boolean>} True if initialization was successful
      */
     async initialize() {
-        console.log("MicrophoneInput: Initializing microphone input for channel", this.channel);
+        console.log("MicrophoneInput: Initializing microphone input");
 
         // Create audio context if needed
         if (!this.audioContext) {
@@ -99,9 +75,8 @@ export class MicrophoneInput extends AnalogueSource {
             console.log("MicrophoneInput: Connecting microphone to analyser");
             this.microphoneSource.connect(this.microphoneAnalyser);
 
-            this.enabled = true;
             this.errorMessage = null;
-            console.log("MicrophoneInput: Initialization complete, enabled:", this.enabled);
+            console.log("MicrophoneInput: Initialization complete");
             return true;
         } catch (error) {
             console.error("MicrophoneInput: Error accessing microphone:", error);
@@ -109,14 +84,6 @@ export class MicrophoneInput extends AnalogueSource {
             if (this.errorCallback) this.errorCallback(this.errorMessage);
             return false;
         }
-    }
-
-    /**
-     * Check if microphone is currently enabled
-     * @returns {boolean} True if microphone is enabled
-     */
-    isEnabled() {
-        return this.enabled;
     }
 
     /**
@@ -129,24 +96,12 @@ export class MicrophoneInput extends AnalogueSource {
 
     /**
      * Get analog value from microphone for the specified channel
-     * @param {number} channel - The ADC channel (0-3)
+     * @param {number} _channel - The ADC channel (0-3)
      * @returns {number} A value between 0 and 0xffff
      */
-    getValue(channel) {
-        // Debug check for initial conditions
-        if (!this.enabled) {
-            console.log("MicrophoneInput: getValue called but microphone not enabled");
-            return 0x8000;
-        }
-        if (channel !== this.channel) {
-            console.log(
-                `MicrophoneInput: getValue called for channel ${channel}, but configured for channel ${this.channel}`,
-            );
-            return 0x8000;
-        }
+    getValue(_channel) {
         if (!this.microphoneAnalyser || !this.microphoneDataArray) {
-            console.log("MicrophoneInput: getValue called but analyser not initialized");
-            return 0x8000;
+            throw new Error("MicrophoneInput: getValue called but analyser not initialized");
         }
 
         // Get time domain data (waveform)
@@ -166,28 +121,7 @@ export class MicrophoneInput extends AnalogueSource {
         const scaledValue = average * scaleFactor;
 
         // Map to 16-bit range (0-0xFFFF)
-        // IMPORTANT: Make sure we return an integer value
-        const value = Math.floor(Math.min(0xffff, scaledValue));
-
-        // Uncomment for debugging
-        // if (Math.random() < 0.01) {
-        //     console.log(`MicrophoneInput: getValue for channel ${channel}, avg=${average.toFixed(2)}, value=${value} (0x${value.toString(16)})`);
-        // }
-        return value;
-    }
-
-    /**
-     * Check if this source provides input for the specified channel
-     * @param {number} channel - The ADC channel (0-3)
-     * @returns {boolean} True if this source provides input for the channel
-     */
-    hasChannel(channel) {
-        const result = this.enabled && channel === this.channel;
-        // Log every hasChannel call for a short period to debug
-        console.log(
-            `MicrophoneInput: hasChannel(${channel}) = ${result}, enabled=${this.enabled}, configured channel=${this.channel}`,
-        );
-        return result;
+        return Math.min(0xffff, scaledValue) | 0;
     }
 
     /**
@@ -206,7 +140,6 @@ export class MicrophoneInput extends AnalogueSource {
 
         this.microphoneAnalyser = null;
         this.microphoneDataArray = null;
-        this.enabled = false;
 
         if (this.audioContext && this.audioContext.state !== "closed") {
             this.audioContext.close().catch((err) => console.error("Error closing audio context:", err));
