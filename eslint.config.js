@@ -22,11 +22,14 @@ export default [
             },
         },
         rules: {
-            "no-unused-vars": ["error", { 
-                "varsIgnorePattern": "^_", 
-                "argsIgnorePattern": "^_",
-                "caughtErrorsIgnorePattern": "^_"
-            }],
+            "no-unused-vars": [
+                "error",
+                {
+                    varsIgnorePattern: "^_",
+                    argsIgnorePattern: "^_",
+                    caughtErrorsIgnorePattern: "^_",
+                },
+            ],
         },
     },
 ];
