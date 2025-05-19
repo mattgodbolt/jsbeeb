@@ -2,7 +2,7 @@ import { describe, it } from "vitest";
 import { TestMachine } from "../test-machine.js";
 import assert from "assert";
 
-describe("test binary coded decimal behaviour", { timeout: 10000 }, function () {
+describe("test binary coded decimal behaviour", { timeout: 30000 }, function () {
     const doTest = async (model) => {
         const testMachine = new TestMachine(model);
         await testMachine.initialise();

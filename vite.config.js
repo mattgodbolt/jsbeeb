@@ -11,7 +11,7 @@ export default defineConfig({
     },
     test: {
         include: [...configDefaults.include, "tests/unit/**/*.js", "tests/integration/**/*.js"],
-        testTimout: 30000,
+        testTimout: 15000,
         slowTestThreshold: 1000,
         coverage: {
             provider: "v8",
