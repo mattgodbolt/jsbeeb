@@ -5,7 +5,8 @@ import { Cpu6502 } from "./6502.js";
 // eslint-disable-next-line no-unused-vars
 import { Disc, IbmDiscFormat } from "./disc.js";
 
-import { DiscDrive } from "./disc-drive.js";
+// eslint-disable-next-line no-unused-vars
+import { BaseDiscDrive, DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
 import * as utils from "./utils.js";
@@ -285,14 +286,14 @@ export class IntelFdc {
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
-     * @param {DiscDrive[] | undefined} drives
+     * @param {BaseDiscDrive[] | undefined} drives
      * @param {*} debugFlags
      */
     constructor(cpu, scheduler, drives, debugFlags) {
         this._cpu = cpu;
         if (drives) this._drives = drives;
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
-        /** @type {DiscDrive} */
+        /** @type {BaseDiscDrive} */
         this._currentDrive = null;
 
         this._paramCallback = ParamAccept.none;

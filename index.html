@@ -86,6 +86,11 @@
                     >Download drive 0 image as SSD/DSD</a
                   >
                 </li>
+                <li>
+                  <a href="#download-drive-hfe" class="dropdown-item" id="download-drive-hfe-link"
+                    >Download drive 0 image as HFE</a
+                  >
+                </li>
               </ul>
             </li>
             <li class="nav-item dropdown embed-hide">
@@ -830,6 +835,10 @@
               <div>
                 <form class="well" role="form" action="#">
                   <input type="text" placeholder="Create disc..." autofocus class="disc-name" />
+                  <label class="checkbox-inline">
+                    <input type="checkbox" class="create-from-existing" value="" />
+                    Use current disc image
+                  </label>
                   <button type="submit" class="btn btn-secondary create-button">Create</button>
                 </form>
               </div>
@@ -862,7 +871,7 @@
               Google Drive requires you to authorize jsbeeb to access your files by logging in.<br />
               Please click Authorize to open a Google Drive pop-up to authenticate and give permission to jsbeeb.
               <form class="well" role="form" action="#">
-                <button type="submit" class="btn btn-secondary create-button">Authorize</button>
+                <button type="submit" class="btn btn-secondary">Authorize</button>
               </form>
             </div>
           </div>
@@ -1072,6 +1081,36 @@
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div id="analogueAudioSettings" style="margin-top: 15px">
+              <div class="row align-items-center">
+                <div class="col-sm-6">
+                  <label for="micInputChannel" class="col-form-label">Microphone channel:</label>
+                </div>
+                <div class="col-sm-6 dropdown">
+                  <button
+                    type="button"
+                    class="btn btn-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown"
+                    id="micInputChannel"
+                  >
+                    <span class="mic-channel-text">Disabled</span>
+                  </button>
+                  <ul
+                    class="dropdown-menu dropdown-menu-dark mic-channel-menu"
+                    role="menu"
+                    aria-labelledby="micInputChannel"
+                  >
+                    <li><a href="#" class="dropdown-item mic-channel-option" data-channel="">Disabled</a></li>
+                    <li><a href="#" class="dropdown-item mic-channel-option" data-channel="0">Channel 0</a></li>
+                    <li><a href="#" class="dropdown-item mic-channel-option" data-channel="1">Channel 1</a></li>
+                    <li><a href="#" class="dropdown-item mic-channel-option" data-channel="2">Channel 2</a></li>
+                    <li><a href="#" class="dropdown-item mic-channel-option" data-channel="3">Channel 3</a></li>
+                  </ul>
+                </div>
+              </div>
+              <div id="micPermissionStatus" class="mt-2 small text-muted"></div>
             </div>
           </div>
           <div class="modal-footer">

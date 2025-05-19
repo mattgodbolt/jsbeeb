@@ -13,13 +13,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test` - Run all tests
 - `npm run test:unit` - Run unit tests
 - `npm run test:integration` - Run integration tests
+- `npm run test:cpu` - Run CPU compatibility tests
+- `npm run ci-checks` - Run linting checks for CI
 - `vitest run tests/unit/test-gzip.js` - Run a single test file
 
 ### Code Coverage
 
-- `npm run test:coverage` - Run unit tests with coverage
-- `npm run test:coverage:utils` - Run just utils.js tests with coverage
-- `npm run test:coverage:all` - Run all tests with coverage
+- `npm run coverage:unit` - Run unit tests with coverage
+- `npm run coverage:all-tests` - Run all tests with coverage
 - Coverage reports are generated in the `coverage` directory
 - HTML report includes line-by-line coverage visualization
 
@@ -29,9 +30,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Linting**: ESLint with eslint-config-prettier integration
 - **Modules**: ES modules with import/export syntax (type: "module")
 - **JavaScript Target**: ES2020 with strict null checks
-- **Error Handling**: Use try/catch with explicit error messages
+- **Error Handling**: Use try/catch with explicit error messages that provide context about what failed
 - **Naming**: camelCase for variables and functions, PascalCase for classes
 - **Imports**: Group by source (internal/external) with proper separation
+- **Documentation**: Use JSDoc for public APIs and complex functions, add comments for non-obvious code
+- **Error Messages**: Use consistent, specific error messages (e.g., "Track buffer overflow" instead of "Overflow in disc building")
 
 ## Test Organization
 
@@ -76,14 +79,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Replace complex conditionals with more readable alternatives when possible
 - Ensure simplifications don't break existing behavior or assumptions
 
-- **Important Constants**:
+- **Constants and Magic Numbers**:
 
   - Local un-exported properties should be used for shared constants
   - Local constants should be used for temporary values
+  - Always use named constants instead of magic numbers in code
+  - Use PascalCase for module-level constants (e.g., `const MaxHfeTrackPulses = 3132;`)
+  - Prefer module-level constants over function-local constants for shared values
+  - Define constants at the beginning of functions or at the class/module level as appropriate
+  - Add comments explaining what the constant represents, especially for non-obvious values
 
 - **Pre-commit Hooks**:
   - The project uses lint-staged with ESLint
   - Watch for unused variables and ensure proper error handling
+  - YOU MUST NEVER bypass git commit hooks on checkins. This leads to failures in CI later on
 
 ### Git Workflow
 

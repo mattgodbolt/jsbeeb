@@ -3,7 +3,7 @@
 # final image tidy (since it doesn't contain any generated temporary artifacts),
 # and its size to a minimum.
 # NOTE: The version of Node must be kept in sync with what's in package.json.
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 # build the webapp
 WORKDIR /app/

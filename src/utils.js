@@ -1069,42 +1069,6 @@ export function unzipRomImage(data) {
     return unzipImage(data, knownRomExtensions);
 }
 
-export function discImageSize(name) {
-    // SSD, aka. single-sided disc, is:
-    // - 1 side :)
-    // - 80 tracks.
-    // - 10 sectors per track.
-    // - 256 bytes per sector.
-    let isDsd = false;
-    let isDoubleDensity = false;
-    let byteSize = 80 * 10 * 256;
-    // DSD, aka. double-sided disc is twice the size.
-    let lowerName = name.toLowerCase();
-    if (lowerName.endsWith(".dsd")) {
-        byteSize *= 2;
-        isDsd = true;
-    }
-    if (lowerName.endsWith(".adl")) {
-        // ADFS (Large) disks are:
-        // double density, double sided, 80 track, 16 sectors per track, 256 bytes per sector (640K)
-        byteSize = 2 * 80 * 16 * 256;
-        isDsd = true;
-        isDoubleDensity = true;
-    }
-    if (lowerName.endsWith(".adf") || lowerName.endsWith(".adm")) {
-        // ADFS (Small) disks are:
-        // single density, double sided, 80 track, 16 sectors per track, 256 bytes per sector (640K)
-        byteSize = 80 * 16 * 256;
-        isDsd = false;
-        isDoubleDensity = true;
-    }
-    return { isDsd: isDsd, isDoubleDensity: isDoubleDensity, byteSize: byteSize };
-}
-
-export function setDiscName(data, name) {
-    for (let i = 0; i < 8; ++i) data[i] = name.charCodeAt(i) & 0xff;
-}
-
 export function resizeUint8Array(array, byteSize) {
     const newArray = new Uint8Array(byteSize);
     newArray.set(array.subarray(0, byteSize));

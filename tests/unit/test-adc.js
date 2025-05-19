@@ -1,11 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Adc } from "../../src/adc.js";
+import { AnalogueSource } from "../../src/analogue-source.js";
+
+// Create a mock gamepad source for testing
+class MockGamepadSource extends AnalogueSource {
+    constructor() {
+        super();
+        this.mockValues = {
+            0: 0x3fff, // Channel 0: halfway (0.5) -> 0x3fff
+            1: 0xffff, // Channel 1: max (-1.0) -> 0xffff
+            2: 0x5fff, // Channel 2: quarter (0.25) -> 0x5fff
+            3: 0xdfff, // Channel 3: three quarters (-0.75) -> 0xdfff
+        };
+    }
+
+    getValue(channel) {
+        return this.mockValues[channel] || 0x8000;
+    }
+}
 
 describe("ADC", () => {
     // Mock dependencies
     const mockSysvia = {
         setcb1: vi.fn(),
-        getGamepads: vi.fn().mockReturnValue([]),
     };
 
     const mockScheduler = {
@@ -18,6 +35,7 @@ describe("ADC", () => {
 
     let adc;
     let mockTask;
+    let mockGamepadSource;
 
     beforeEach(() => {
         // Reset mocks
@@ -32,6 +50,12 @@ describe("ADC", () => {
 
         // Create a fresh ADC instance
         adc = new Adc(mockSysvia, mockScheduler);
+
+        mockGamepadSource = new MockGamepadSource();
+        adc.setChannelSource(0, mockGamepadSource);
+        adc.setChannelSource(1, mockGamepadSource);
+        adc.setChannelSource(2, mockGamepadSource);
+        adc.setChannelSource(3, mockGamepadSource);
     });
 
     afterEach(() => {
@@ -147,9 +171,33 @@ describe("ADC", () => {
         });
     });
 
+    describe("Analogue sources", () => {
+        it("should set and get a channel source", () => {
+            const newSource = new MockGamepadSource();
+            const result = adc.setChannelSource(1, newSource);
+            expect(result).toBe(true);
+            expect(adc.getChannelSource(1)).toBe(newSource);
+        });
+
+        it("should clear a channel source", () => {
+            const result = adc.clearChannelSource(2);
+            expect(result).toBe(true);
+            expect(adc.getChannelSource(2)).toBe(null);
+        });
+
+        it("should clear all sources", () => {
+            adc.clearSources();
+            for (let i = 0; i < 4; i++) {
+                expect(adc.getChannelSource(i)).toBe(null);
+            }
+        });
+    });
+
     describe("Conversion completion", () => {
-        it("should handle completion with no gamepads", () => {
-            // Set up a conversion
+        it("should handle completion with no source for the channel", () => {
+            adc.clearChannelSource(1);
+
+            // Set up a conversion for channel 1
             adc.write(0, 0x01);
 
             // Reset mock to clearly see what happens during completion
@@ -166,157 +214,86 @@ describe("ADC", () => {
             expect(mockSysvia.setcb1).toHaveBeenCalledWith(false); // Interrupt cleared
         });
 
-        it("should read from gamepad on channel 0", () => {
-            // Mock gamepad with stick positioned halfway to the right
-            mockSysvia.getGamepads.mockReturnValue([
-                {
-                    axes: [0.5, 0, 0, 0], // X-axis at 0.5 (halfway right)
-                },
-            ]);
-
+        it("should read from source on channel 0", () => {
             // Set channel 0
             adc.write(0, 0x00);
 
             // Simulate conversion completion
             adc.onComplete();
 
-            // For axis position 0.5, the value should be (1 - 0.5) / 2 * 0xffff = 0x3fff
-            // Low byte should be 0xff, high byte should be 0x3f
-            const expectedValue = Math.floor(((1 - 0.5) / 2) * 0xffff);
-
+            // Check that the mock value was used
+            const expectedValue = mockGamepadSource.getValue(0);
             expect(adc.low).toBe(expectedValue & 0xff);
             expect(adc.high).toBe((expectedValue >>> 8) & 0xff);
         });
 
-        it("should read from gamepad on channel 1", () => {
-            // Mock gamepad with stick positioned all the way up
-            mockSysvia.getGamepads.mockReturnValue([
-                {
-                    axes: [0, -1, 0, 0], // Y-axis at -1 (all the way up)
-                },
-            ]);
-
+        it("should read from source on channel 1", () => {
             // Set channel 1
             adc.write(0, 0x01);
 
             // Simulate conversion completion
             adc.onComplete();
 
-            // For axis position -1, the value should be (1 - (-1)) / 2 * 0xffff = 0xffff
-            // Low byte should be 0xff, high byte should be 0xff
-            const expectedValue = Math.floor(((1 - -1) / 2) * 0xffff);
-
+            // Check that the mock value was used
+            const expectedValue = mockGamepadSource.getValue(1);
             expect(adc.low).toBe(expectedValue & 0xff);
             expect(adc.high).toBe((expectedValue >>> 8) & 0xff);
         });
 
-        it("should read from second gamepad if available", () => {
-            // Mock two gamepads
-            mockSysvia.getGamepads.mockReturnValue([{ axes: [0, 0, 0, 0] }, { axes: [0.25, -0.75, 0, 0] }]);
+        it("should use specific source for each channel", () => {
+            // Create a special source for channel 2 with a different value
+            const specialSource = new MockGamepadSource();
+            specialSource.mockValues[2] = 0x1234; // Different value
 
-            // Set channel 2 (first axis of second gamepad)
+            // Set it as the source for channel 2
+            adc.setChannelSource(2, specialSource);
+
+            // Set channel 2
             adc.write(0, 0x02);
 
             // Simulate conversion completion
             adc.onComplete();
 
-            // For axis position 0.25, the value should be (1 - 0.25) / 2 * 0xffff = 0x5fff
-            const expectedValue = Math.floor(((1 - 0.25) / 2) * 0xffff);
-
+            // Should use the special source for channel 2
+            const expectedValue = specialSource.getValue(2);
             expect(adc.low).toBe(expectedValue & 0xff);
             expect(adc.high).toBe((expectedValue >>> 8) & 0xff);
-
-            // Set channel 3 (second axis of second gamepad)
-            adc.write(0, 0x03);
-
-            // Simulate conversion completion
-            adc.onComplete();
-
-            // For axis position -0.75, the value should be (1 - (-0.75)) / 2 * 0xffff = 0xdfff
-            const expectedValue2 = Math.floor(((1 - -0.75) / 2) * 0xffff);
-
-            expect(adc.low).toBe(expectedValue2 & 0xff);
-            expect(adc.high).toBe((expectedValue2 >>> 8) & 0xff);
         });
 
-        it("should fall back to first gamepad extra axes if second gamepad not available", () => {
-            // Mock one gamepad with 4 axes
-            mockSysvia.getGamepads.mockReturnValue([
-                { axes: [0, 0, 0.75, -0.5] }, // Third axis at 0.75, fourth at -0.5
-            ]);
+        it("should switch between different sources by channel", () => {
+            // Create two different sources with different values
+            const source1 = new MockGamepadSource();
+            source1.mockValues[2] = 0x1111;
 
-            // Set channel 2 (should fall back to third axis of first gamepad)
-            adc.write(0, 0x02);
+            const source2 = new MockGamepadSource();
+            source2.mockValues[3] = 0x2222;
 
-            // Simulate conversion completion
-            adc.onComplete();
+            // Set them for different channels
+            adc.setChannelSource(2, source1);
+            adc.setChannelSource(3, source2);
 
-            // For axis position 0.75, the value should be (1 - 0.75) / 2 * 0xffff = 0x1fff
-            const expectedValue = Math.floor(((1 - 0.75) / 2) * 0xffff);
-
-            expect(adc.low).toBe(expectedValue & 0xff);
-            expect(adc.high).toBe((expectedValue >>> 8) & 0xff);
-
-            // Set channel 3 (should fall back to fourth axis of first gamepad)
-            adc.write(0, 0x03);
-
-            // Simulate conversion completion
-            adc.onComplete();
-
-            // For axis position -0.5, the value should be (1 - (-0.5)) / 2 * 0xffff = 0xbfff
-            const expectedValue2 = Math.floor(((1 - -0.5) / 2) * 0xffff);
-
-            expect(adc.low).toBe(expectedValue2 & 0xff);
-            expect(adc.high).toBe((expectedValue2 >>> 8) & 0xff);
-        });
-
-        it("should have full coverage of switch cases", () => {
-            // Setup gamepad with specific values for testing
-            const mockPad = {
-                axes: [0.1, 0.2, 0.3, 0.4],
-            };
-            mockSysvia.getGamepads.mockReturnValue([mockPad]);
-
-            // Test channel 0
-            adc.write(0, 0x00);
-            adc.onComplete();
-
-            // Test channel 1
-            adc.write(0, 0x01);
-            adc.onComplete();
-
-            // Test channel 2 (without second gamepad, uses first gamepad's third axis)
+            // Test channel 2 (should use source1)
             adc.write(0, 0x02);
             adc.onComplete();
+            expect(adc.low).toBe(0x11); // 0x1111 & 0xff
+            expect(adc.high).toBe(0x11); // (0x1111 >>> 8) & 0xff
 
-            // Test channel 3 (without second gamepad, uses first gamepad's fourth axis)
+            // Test channel 3 (should use source2)
             adc.write(0, 0x03);
             adc.onComplete();
-
-            // The default case in the switch statement should never be reached through
-            // the public interface since channel is always masked to 0-3
-            // For the sake of coverage, we've already tested all valid cases
+            expect(adc.low).toBe(0x22); // 0x2222 & 0xff
+            expect(adc.high).toBe(0x22); // (0x2222 >>> 8) & 0xff
         });
 
         it("should update status bits correctly after conversion", () => {
-            // Set a value that will result in specific high bits in the result
-            mockSysvia.getGamepads.mockReturnValue([
-                {
-                    axes: [0.25, 0, 0, 0], // Will result in value 0x5fff
-                },
-            ]);
-
-            // Set channel 0
-            adc.write(0, 0x00);
+            // Set channel 2
+            adc.write(0, 0x02);
 
             // Simulate conversion completion
             adc.onComplete();
 
-            // Let's examine exactly how the status register is updated in onComplete
-            // In the code: status = (status & 0x0f) | 0x40 | ((val >>> 10) & 0x03);
-
-            // For axis position 0.25, the value should be (1 - 0.25) / 2 * 0xffff = 0x5fff
-            const expectedValue = Math.floor(((1 - 0.25) / 2) * 0xffff);
+            // Get the expected value from our mock source
+            const expectedValue = mockGamepadSource.getValue(2);
 
             // The status should have:
             // - bits 0-3: channel number (0)

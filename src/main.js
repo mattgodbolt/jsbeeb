@@ -22,7 +22,10 @@ import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
+import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
+import { GamepadSource } from "./gamepad-source.js";
+import { MicrophoneInput } from "./microphone-input.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -105,6 +108,7 @@ const paramTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
+    microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)
     model: ParamTypes.STRING,
@@ -253,6 +257,15 @@ const config = new Config(function (changed) {
         emulationConfig.keyLayout = changed.keyLayout;
         keyboard.setKeyLayout(changed.keyLayout);
     }
+    // Restore gamepad as source for the old channels
+    for (let oldChannel = 0; oldChannel < 4; ++oldChannel)
+        processor.adconverter.setChannelSource(oldChannel, gamepadSource);
+    if (changed.microphoneChannel !== undefined) {
+        const channel = changed.microphoneChannel;
+        console.log(`Moving microphone to channel ${channel}`);
+        setupMicrophone(channel).then(() => {});
+    }
+    updateUrl();
 });
 
 // Perform mapping of legacy models to the new format
@@ -264,6 +277,7 @@ config.set65c02(parsedQuery.coProcessor);
 config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
+config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setNoiseKiller(parsedQuery.hasNoiseKiller);
 
 model = config.model;
@@ -366,6 +380,35 @@ function readFileAsBinaryString(file) {
     });
 }
 
+function replaceOrAddExtension(name, newExt) {
+    const lastDot = name.lastIndexOf(".");
+    if (lastDot === -1) {
+        return name + newExt;
+    }
+    return name.substring(0, lastDot) + newExt;
+}
+
+/**
+ * Helper function to download drive data in the specified format
+ * @param {Uint8Array} data - The binary data to download
+ * @param {string} name - The file name
+ * @param {string} extension - The file extension to use
+ */
+function downloadDriveData(data, name, extension) {
+    const a = document.createElement("a");
+    document.body.appendChild(a);
+    a.style = "display: none";
+
+    const fileName = replaceOrAddExtension(name, extension);
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    const url = window.URL.createObjectURL(blob);
+
+    a.href = url;
+    a.download = fileName;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
 async function loadHTMLFile(file) {
     const binaryData = await readFileAsBinaryString(file);
     processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, binaryData));
@@ -450,7 +493,7 @@ $("#fs").click(function (event) {
     event.preventDefault();
 });
 
-let keyboard; // This will be initialized after the processor is created
+let keyboard; // This will be initialised after the processor is created
 
 const $debugPause = $("#debug-pause");
 const $debugPlay = $("#debug-play");
@@ -528,7 +571,74 @@ processor = new Cpu6502(
     econet,
 );
 
-// Initialize keyboard now that processor exists
+// Set up gamepad as the default source for all channels
+const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
+processor.adconverter.setChannelSource(0, gamepadSource);
+processor.adconverter.setChannelSource(1, gamepadSource);
+processor.adconverter.setChannelSource(2, gamepadSource);
+processor.adconverter.setChannelSource(3, gamepadSource);
+
+// Create MicrophoneInput but don't enable by default
+const microphoneInput = new MicrophoneInput();
+microphoneInput.setErrorCallback((message) => {
+    showError("accessing microphone", message);
+});
+
+async function ensureMicrophoneRunning() {
+    if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
+        try {
+            await microphoneInput.audioContext.resume();
+            console.log("Microphone: Audio context resumed, new state:", microphoneInput.audioContext.state);
+        } catch (err) {
+            console.error("Microphone: Error resuming audio context:", err);
+            return false;
+        }
+    }
+    return true;
+}
+
+async function setupMicrophone(channel) {
+    const $micPermissionStatus = $("#micPermissionStatus");
+    $micPermissionStatus.text("Requesting microphone access...");
+
+    // Try to initialise the microphone
+    const success = await microphoneInput.initialise();
+    if (success) {
+        console.log("Microphone: Successfully initialised from URL parameters");
+        // Set microphone as source for its channel
+        console.log(`Setting microphone as source for channel ${channel}`);
+        processor.adconverter.setChannelSource(channel, microphoneInput);
+        $micPermissionStatus.text("Microphone connected successfully");
+
+        await ensureMicrophoneRunning();
+
+        // Try starting audio context from user gesture
+        const tryAgain = async () => {
+            if (await ensureMicrophoneRunning()) document.removeEventListener("click", tryAgain);
+        };
+        document.addEventListener("click", tryAgain);
+    } else {
+        console.error("Microphone: Failed to initialise from URL parameters:", microphoneInput.getErrorMessage());
+        $micPermissionStatus.text(`Error: ${microphoneInput.getErrorMessage() || "Unknown error"}`);
+        config.setMicrophoneChannel(undefined);
+        // Update URL to remove the parameter
+        delete parsedQuery.microphoneChannel;
+        updateUrl();
+    }
+}
+
+if (parsedQuery.microphoneChannel !== undefined) {
+    console.log("Microphone: Initialising from URL parameters");
+
+    // We need to use setTimeout to make sure this runs after the page has loaded
+    // This is needed because some browsers require user interaction for audio context
+    setTimeout(async () => {
+        console.log("Microphone: Delayed initialisation starting");
+        await setupMicrophone(parsedQuery.microphoneChannel);
+    }, 1000);
+}
+
+// Initialise keyboard now that processor exists
 keyboard = new Keyboard({
     processor,
     inputEnabledFunction: () => document.activeElement && document.activeElement.id === "paste-text",
@@ -609,7 +719,8 @@ keyboard.registerKeyHandler(
 
 // Setup key handlers
 document.onkeydown = (evt) => {
-    audioHandler.tryResume();
+    audioHandler.tryResume().then(() => {});
+    ensureMicrophoneRunning().then(() => {});
     keyboard.keyDown(evt);
 };
 document.onkeypress = (evt) => keyboard.keyPress(evt);
@@ -750,7 +861,7 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
         keyboard.sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks);
     } else {
-        console.warn("Tried to send keys before keyboard was initialized");
+        console.warn("Tried to send keys before keyboard was initialised");
     }
 }
 
@@ -1124,16 +1235,35 @@ $.each(availableImages, function (i, image) {
 
 $("#google-drive form").on("submit", async function (e) {
     e.preventDefault();
-    const text = $("#google-drive .disc-name").val();
-    if (!text) return;
+    let name = $("#google-drive .disc-name").val();
+    if (!name) return;
 
     popupLoading("Connecting to Google Drive");
     $googleDriveModal.hide();
-    popupLoading("Creating '" + text + "' on Google Drive");
+    popupLoading("Creating '" + name + "' on Google Drive");
+
+    let data;
+    if ($("#google-drive .create-from-existing").prop("checked")) {
+        const discType = disc.guessDiscTypeFromName(name);
+        data = discType.saver(processor.fdc.drives[0].disc);
+        name = replaceOrAddExtension(name, discType.extension);
+        console.log(`Saving existing disc: ${name}`);
+    } else {
+        // TODO support HFE, I guess?
+        const discType = disc.guessDiscTypeFromName(name);
+        if (!discType.byteSize) {
+            throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
+        }
+        data = new Uint8Array(discType.byteSize);
+        if (discType.supportsCatalogue) {
+            discType.setDiscName(data, name);
+        }
+        console.log(`Creating blank: ${name}`);
+    }
 
     try {
-        const result = await googleDrive.create(processor.fdc, text);
-        setDisc1Image("gd:" + result.fileId + "/" + text);
+        const result = await googleDrive.create(processor.fdc, name, data);
+        setDisc1Image("gd:" + result.fileId + "/" + name);
         processor.fdc.loadDisc(0, result.disc);
         loadingFinished();
     } catch (error) {
@@ -1143,34 +1273,24 @@ $("#google-drive form").on("submit", async function (e) {
 });
 
 $("#download-drive-link").on("click", function () {
-    const a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
     const disc = processor.fdc.drives[0].disc;
     const data = toSsdOrDsd(disc);
-    let name = processor.fdc.drives[0].disc.name;
-    name = name.substring(0, name.lastIndexOf(".")) + (disc.isDoubleSided ? ".dsd" : ".ssd");
+    const name = disc.name;
+    const extension = disc.isDoubleSided ? ".dsd" : ".ssd";
 
-    const blob = new Blob([data], { type: "application/octet-stream" });
-    const url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = name;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadDriveData(data, name, extension);
+});
+
+$("#download-drive-hfe-link").on("click", function () {
+    const disc = processor.fdc.drives[0].disc;
+    const data = toHfe(disc);
+    const name = disc.name;
+
+    downloadDriveData(data, name, ".hfe");
 });
 
 $("#download-filestore-link").on("click", function () {
-    const a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
-    const blob = new Blob([processor.filestore.scsi], { type: "application/octet-stream" }),
-        url = window.URL.createObjectURL(blob);
-    a.href = url;
-    a.download = "scsi.dat";
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
 $("#hard-reset").click(function (event) {
@@ -1387,7 +1507,7 @@ startPromise
         go();
     })
     .catch((error) => {
-        console.error("Error initializing emulator:", error);
+        console.error("Error initialising emulator:", error);
         showError("initialising", error);
     });
 

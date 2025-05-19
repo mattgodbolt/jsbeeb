@@ -50,10 +50,25 @@ export class Config {
             this.setKeyLayout(keyLayout);
         });
 
+        $(".mic-channel-option").on("click", (e) => {
+            const channelString = $(e.target).data("channel");
+            const channel = channelString === "" ? undefined : parseInt($(e.target).data("channel"), 10);
+            this.changed.microphoneChannel = channel;
+            this.setMicrophoneChannel(channel);
+        });
+
         // ATOM
         $("#hasNoiseKiller").on("click", () => {
             this.changed.hasNoiseKiller = $("#hasNoiseKiller").prop("checked");
         });
+    }
+
+    setMicrophoneChannel(channel) {
+        if (channel !== undefined) {
+            $(".mic-channel-text").text(`Channel ${channel}`);
+        } else {
+            $(".mic-channel-text").text("Disabled");
+        }
     }
 
     // ATOM

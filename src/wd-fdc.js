@@ -2,7 +2,8 @@
 // https://github.com/scarybeasts/beebjit
 // eslint-disable-next-line no-unused-vars
 import { Cpu6502 } from "./6502.js";
-import { DiscDrive } from "./disc-drive.js";
+// eslint-disable-next-line no-unused-vars
+import { BaseDiscDrive, DiscDrive } from "./disc-drive.js";
 import { IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
@@ -126,7 +127,7 @@ export class WdFdc {
     /**
      * @param {Cpu6502} cpu
      * @param {Scheduler} scheduler
-     * @param {DiscDrive[] | undefined} drives
+     * @param {BaseDiscDrive[] | undefined} drives
      * @param {*} debugFlags
      */
     constructor(cpu, scheduler, drives, debugFlags) {
@@ -148,7 +149,7 @@ export class WdFdc {
         this._isDrq = false;
         this._doRaiseIntRq = false;
 
-        /** @type {DiscDrive|null} */
+        /** @type {BaseDiscDrive|null} */
         this._currentDrive = null;
         this._isIndexPulse = false;
         this._isInterruptOnIndexPulse = false;

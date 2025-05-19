@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import assert from "assert";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
 import * as fs from "node:fs";
 
 describe("IBM disc format tests", function () {
@@ -216,21 +216,6 @@ describe(
         });
     },
 );
-
-describe("HFE loader tests", function () {
-    const data = fs.readFileSync("public/discs/elite.hfe");
-    it("should load Elite", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.hfe");
-        loadHfe(disc, data);
-        assert.equal(disc.tracksUsed, 81);
-        const sectors = disc.getTrack(false, 0).findSectors();
-        assert.equal(sectors.length, 10);
-        for (const sector of sectors) {
-            assert(!sector.hasHeaderCrcError);
-            assert(!sector.hasDataCrcError);
-        }
-    });
-});
 
 describe("ADF loader tests", function () {
     it("should load a somewhat blank ADFS disc", () => {

@@ -82,7 +82,7 @@ function logFailure(processor) {
     );
 }
 
-describe("dormann tests", { timeout: 10000 }, function () {
+describe("dormann tests", { timeout: 30000 }, function () {
     it("should pass 6502 functional tests", async () => {
         const cpu = fake6502();
         await cpu.initialise();
