@@ -337,6 +337,9 @@ class PPIA {
     }
 }
 
+// On the atom, the PPIA does the keyboard, speaker and tape.
+// On the BBC, sysVIA does the keyboard and pokes the soundchip
+// and the ACIA does the tape
 export class AtomPPIA extends PPIA {
     constructor(cpu, initialLayout, scheduler) {
         super(cpu);
@@ -354,13 +357,16 @@ export class AtomPPIA extends PPIA {
 
         this.lastTime = 0;
 
-        this.runTapeTask = scheduler.newTask(this.runTape);
+        // from ACIA
+        this.runTapeTask = scheduler.newTask(() => this.runTape());
     }
 
+    // from SysVIA
     setKeyLayoutAtom(map) {
         this.keycodeToRowCol = utils_atom.getKeyMapAtom(map);
     }
 
+    // from SysVIA
     clearKeys() {
         for (var i = 0; i < this.keys.length; ++i) {
             for (var j = 0; j < this.keys[i].length; ++j) {
@@ -370,21 +376,21 @@ export class AtomPPIA extends PPIA {
         this.updateKeys();
     }
 
+    // from SysVIA
     disableKeyboard() {
         this.keyboardEnabled = false;
         this.clearKeys();
     }
 
+    // from SysVIA
     enableKeyboard() {
         this.keyboardEnabled = true;
         this.clearKeys();
     }
 
+    // from SysVIA
     set(key, val, shiftDown) {
-        if (!this.keyboardEnabled) {
-            return;
-        }
-
+        if (!this.keyboardEnabled) return;
         var colrow = this.keycodeToRowCol[!!shiftDown][key];
         if (!colrow) {
             console.log("Unknown code or key: " + key);
@@ -400,10 +406,12 @@ export class AtomPPIA extends PPIA {
         this.updateKeys();
     }
 
+    // from SysVIA
     keyDown(key, shiftDown) {
         this.set(key, 1, shiftDown);
     }
 
+    // from SysVIA
     keyUp(key) {
         // set up for both keymaps
         // (with and without shift)
@@ -411,21 +419,25 @@ export class AtomPPIA extends PPIA {
         this.set(key, 0, false);
     }
 
+    // from SysVIA
     keyDownRaw(colrow) {
         this.keys[colrow[0]][colrow[1]] = 1;
         this.updateKeys();
     }
 
+    // from SysVIA
     keyUpRaw(colrow) {
         this.keys[colrow[0]][colrow[1]] = 0;
         this.updateKeys();
     }
 
+    // from SysVIA
     keyToggleRaw(colrow) {
         this.keys[colrow[0]][colrow[1]] = 1 - this.keys[colrow[0]][colrow[1]];
         this.updateKeys();
     }
 
+    // from SysVIA
     hasAnyKeyDown() {
         // 10 for ATOM
         var numCols = 10;
@@ -440,21 +452,24 @@ export class AtomPPIA extends PPIA {
         return false;
     }
 
+    // nothing on ATOM
     updateKeys() {}
 
+    // nothing on ATOM
     polltime() {}
 
     portAUpdated() {
         this.updateKeys();
     }
 
+    // nothing on ATOM
     portBUpdated() {}
 
     portCUpdated() {
         this.cpu.soundChip.speakerGenerator.pushBit(
             (this.portcpins & 0x04) >>> 2,
-            self.processor.currentCycles,
-            self.processor.cycleSeconds,
+            this.processor.currentCycles,
+            this.processor.cycleSeconds,
         );
     }
 
@@ -471,12 +486,17 @@ export class AtomPPIA extends PPIA {
     }
 
     // ATOM TAPE SUPPORT
+    // from ACIA on BBC
 
     // set by TAPE
     tone(freq) {
-        if (!freq) this.cpu.soundChip.toneGenerator.mute();
-        else this.cpu.soundChip.toneGenerator.tone(freq);
+        let toneGen = this.cpu.soundChip.toneGenerator;
+        if (!freq) toneGen.mute();
+        else toneGen.tone(freq);
     }
+
+    // nothing on ATOM
+    dcdLineUpdated() {}
 
     // set by TAPE
     setTapeCarrier(level) {
@@ -494,16 +514,12 @@ export class AtomPPIA extends PPIA {
             // Testing on real hardware, DCD is blipped, it lowers about
             // 210us after it raises, even though the carrier tone
             // may be continuing.
-            if (this.tapeCarrierCount === 209) {
-                this.tapeDcdLineLevel = true;
-            } else {
-                this.tapeDcdLineLevel = false;
-            }
+            this.tapeDcdLineLevel = this.tapeCarrierCount === 209;
         }
         this.dcdLineUpdated();
     }
-    dcdLineUpdated() {}
 
+    // Receive BITS on ATOM (bytes on BBC)
     // receive is set by the TAPE POLL
     receiveBit(bit) {
         // var clocksPerSecond = (1 * 1000 * 1000) | 0;
@@ -536,23 +552,8 @@ export class AtomPPIA extends PPIA {
         // }
     }
 
-    receive(/*_byte*/) {
-        // _byte |= 0;
-        // if (this.sr & 0x01) {
-        //     // Overrun.
-        //     // TODO: this doesn't match the datasheet:
-        //     // "The Overrun does not occur in the Status Register until the
-        //     // valid character prior to Overrun has been read."
-        //     console.log("Serial overrun");
-        //     this.sr |= 0xa0;
-        // } else {
-        //     this.dr = byte;
-        //     this.sr |= 0x81;
-        // }
-
-        // console.log("]- 0x" + _byte.toString(16).padStart(2, "0") + " : " + String.fromCharCode(_byte));
-        this.updateIrq();
-    }
+    // nothing on ATOM
+    receive(/*_byte*/) {}
 
     setTape(tape) {
         this.tape = tape;
@@ -609,8 +610,8 @@ export class AtomPPIA extends PPIA {
     stopTape() {
         if (this.tape) {
             console.log("stopping tape");
-
-            this.cpu.soundChip.toneGenerator.mute();
+            let toneGen = this.cpu.soundChip.toneGenerator;
+            toneGen.mute();
             this.runTapeTask.cancel();
             this.setTapeCarrier(false);
 
@@ -620,7 +621,7 @@ export class AtomPPIA extends PPIA {
     }
 
     runTape() {
-        if (this.tape) this.runTapeTask.reschedule(this.tape.poll(self));
+        if (this.tape) this.runTapeTask.reschedule(this.tape.poll(this));
     }
 
     updateIrq() {}

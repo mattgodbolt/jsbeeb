@@ -1297,7 +1297,11 @@ const startPromise = (async () => {
         imageLoads.push(
             (async () => {
                 const tape = await loadTapeImage(parsedQuery.tape);
-                processor.acia.setTape(tape);
+                if (processor.model.isAtom) {
+                    processor.atomppia.setTape(tape);
+                } else {
+                    processor.acia.setTape(tape);
+                }
             })(),
         );
     }

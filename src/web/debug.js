@@ -515,7 +515,7 @@ export class Debugger {
             case "N":
                 this.updatePrevMem();
                 this.cpu.execute(1);
-                self.debug(this.cpu.pc);
+                this.debug(this.cpu.pc);
                 break;
             case "m":
                 this.stepOver();

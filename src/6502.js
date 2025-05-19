@@ -1447,9 +1447,6 @@ export class Cpu6502 extends Base6502 {
             }
             this.filestore.polltime(cycles);
         }
-
-        // ATOM
-        if (this.model.isAtom) this.atomppia.polltime(cycles);
     }
 
     // Slow version allows video batching and cpu multipliers
