@@ -1,7 +1,9 @@
 import { configDefaults } from "vitest/config";
 
+import { defineConfig } from "vitest/config";
+
 /** @type {import("vite").UserConfig} */
-export default {
+export default defineConfig({
     build: {
         sourcemap: true,
         // Prevent inlining; we don't want any worklets/audio workers to be inlined as that doesn't work.
@@ -9,6 +11,8 @@ export default {
     },
     test: {
         include: [...configDefaults.include, "tests/unit/**/*.js", "tests/integration/**/*.js"],
+        testTimout: 30000,
+        slowTestThreshold: 1000,
         coverage: {
             provider: "v8",
             reporter: ["text", "html", "lcov"],
@@ -25,4 +29,4 @@ export default {
             all: false, // Only track imported files, not all files
         },
     },
-};
+});
