@@ -25,6 +25,7 @@ import { toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
+import { MicrophoneInput } from "./microphone-input.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -100,6 +101,7 @@ const paramTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
+    microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)
     model: ParamTypes.STRING,
@@ -239,6 +241,15 @@ const config = new Config(function (changed) {
         emulationConfig.keyLayout = changed.keyLayout;
         keyboard.setKeyLayout(changed.keyLayout);
     }
+    // Restore gamepad as source for the old channels
+    for (let oldChannel = 0; oldChannel < 4; ++oldChannel)
+        processor.adconverter.setChannelSource(oldChannel, gamepadSource);
+    if (changed.microphoneChannel !== undefined) {
+        const channel = changed.microphoneChannel;
+        console.log(`Moving microphone to channel ${channel}`);
+        setupMicrophone(channel).then(() => {});
+    }
+    updateUrl();
 });
 
 // Perform mapping of legacy models to the new format
@@ -250,6 +261,7 @@ config.set65c02(parsedQuery.coProcessor);
 config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
+config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 
 model = config.model;
 
@@ -417,7 +429,7 @@ $("#fs").click(function (event) {
     event.preventDefault();
 });
 
-let keyboard; // This will be initialized after the processor is created
+let keyboard; // This will be initialised after the processor is created
 
 const $debugPause = $("#debug-pause");
 const $debugPlay = $("#debug-play");
@@ -502,7 +514,67 @@ processor.adconverter.setChannelSource(1, gamepadSource);
 processor.adconverter.setChannelSource(2, gamepadSource);
 processor.adconverter.setChannelSource(3, gamepadSource);
 
-// Initialize keyboard now that processor exists
+// Create MicrophoneInput but don't enable by default
+const microphoneInput = new MicrophoneInput();
+microphoneInput.setErrorCallback((message) => {
+    showError("accessing microphone", message);
+});
+
+async function ensureMicrophoneRunning() {
+    if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
+        try {
+            await microphoneInput.audioContext.resume();
+            console.log("Microphone: Audio context resumed, new state:", microphoneInput.audioContext.state);
+        } catch (err) {
+            console.error("Microphone: Error resuming audio context:", err);
+            return false;
+        }
+    }
+    return true;
+}
+
+async function setupMicrophone(channel) {
+    const $micPermissionStatus = $("#micPermissionStatus");
+    $micPermissionStatus.text("Requesting microphone access...");
+
+    // Try to initialise the microphone
+    const success = await microphoneInput.initialise();
+    if (success) {
+        console.log("Microphone: Successfully initialised from URL parameters");
+        // Set microphone as source for its channel
+        console.log(`Setting microphone as source for channel ${channel}`);
+        processor.adconverter.setChannelSource(channel, microphoneInput);
+        $micPermissionStatus.text("Microphone connected successfully");
+
+        await ensureMicrophoneRunning();
+
+        // Try starting audio context from user gesture
+        const tryAgain = async () => {
+            if (await ensureMicrophoneRunning()) document.removeEventListener("click", tryAgain);
+        };
+        document.addEventListener("click", tryAgain);
+    } else {
+        console.error("Microphone: Failed to initialise from URL parameters:", microphoneInput.getErrorMessage());
+        $micPermissionStatus.text(`Error: ${microphoneInput.getErrorMessage() || "Unknown error"}`);
+        config.setMicrophoneChannel(undefined);
+        // Update URL to remove the parameter
+        delete parsedQuery.microphoneChannel;
+        updateUrl();
+    }
+}
+
+if (parsedQuery.microphoneChannel !== undefined) {
+    console.log("Microphone: Initialising from URL parameters");
+
+    // We need to use setTimeout to make sure this runs after the page has loaded
+    // This is needed because some browsers require user interaction for audio context
+    setTimeout(async () => {
+        console.log("Microphone: Delayed initialisation starting");
+        await setupMicrophone(parsedQuery.microphoneChannel);
+    }, 1000);
+}
+
+// Initialise keyboard now that processor exists
 keyboard = new Keyboard({
     processor,
     inputEnabledFunction: () => document.activeElement && document.activeElement.id === "paste-text",
@@ -583,7 +655,8 @@ keyboard.registerKeyHandler(
 
 // Setup key handlers
 document.onkeydown = (evt) => {
-    audioHandler.tryResume();
+    audioHandler.tryResume().then(() => {});
+    ensureMicrophoneRunning().then(() => {});
     keyboard.keyDown(evt);
 };
 document.onkeypress = (evt) => keyboard.keyPress(evt);
@@ -723,7 +796,7 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
         keyboard.sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks);
     } else {
-        console.warn("Tried to send keys before keyboard was initialized");
+        console.warn("Tried to send keys before keyboard was initialised");
     }
 }
 
@@ -1280,7 +1353,7 @@ startPromise
         go();
     })
     .catch((error) => {
-        console.error("Error initializing emulator:", error);
+        console.error("Error initialising emulator:", error);
         showError("initialising", error);
     });
 

@@ -45,6 +45,21 @@ export class Config {
             this.changed.keyLayout = keyLayout;
             this.setKeyLayout(keyLayout);
         });
+
+        $(".mic-channel-option").on("click", (e) => {
+            const channelString = $(e.target).data("channel");
+            const channel = channelString === "" ? undefined : parseInt($(e.target).data("channel"), 10);
+            this.changed.microphoneChannel = channel;
+            this.setMicrophoneChannel(channel);
+        });
+    }
+
+    setMicrophoneChannel(channel) {
+        if (channel !== undefined) {
+            $(".mic-channel-text").text(`Channel ${channel}`);
+        } else {
+            $(".mic-channel-text").text("Disabled");
+        }
     }
 
     setModel(modelName) {
