@@ -247,8 +247,7 @@ const config = new Config(function (changed) {
     if (changed.microphoneChannel !== undefined) {
         const channel = changed.microphoneChannel;
         console.log(`Moving microphone to channel ${channel}`);
-        processor.adconverter.setChannelSource(channel, microphoneInput);
-        setupMicrophone().then(() => {});
+        setupMicrophone(channel).then(() => {});
     }
     updateUrl();
 });
@@ -521,7 +520,20 @@ microphoneInput.setErrorCallback((message) => {
     showError("accessing microphone", message);
 });
 
-async function setupMicrophone() {
+async function ensureMicrophoneRunning() {
+    if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
+        try {
+            await microphoneInput.audioContext.resume();
+            console.log("Microphone: Audio context resumed, new state:", microphoneInput.audioContext.state);
+        } catch (err) {
+            console.error("Microphone: Error resuming audio context:", err);
+            return false;
+        }
+    }
+    return true;
+}
+
+async function setupMicrophone(channel) {
     const $micPermissionStatus = $("#micPermissionStatus");
     $micPermissionStatus.text("Requesting microphone access...");
 
@@ -530,31 +542,15 @@ async function setupMicrophone() {
     if (success) {
         console.log("Microphone: Successfully initialised from URL parameters");
         // Set microphone as source for its channel
-        console.log(`Setting microphone as source for channel ${parsedQuery.microphoneChannel}`);
-        processor.adconverter.setChannelSource(parsedQuery.microphoneChannel, microphoneInput);
+        console.log(`Setting microphone as source for channel ${channel}`);
+        processor.adconverter.setChannelSource(channel, microphoneInput);
         $micPermissionStatus.text("Microphone connected successfully");
 
-        // Ensure audio context is running
-        if (microphoneInput.audioContext) {
-            console.log(
-                "Microphone: Ensuring audio context is running, current state:",
-                microphoneInput.audioContext.state,
-            );
-            try {
-                await microphoneInput.audioContext.resume();
-                console.log("Microphone: Audio context resumed, new state:", microphoneInput.audioContext.state);
-            } catch (err) {
-                console.error("Microphone: Error resuming audio context:", err);
-            }
-        }
+        await ensureMicrophoneRunning();
 
         // Try starting audio context from user gesture
-        const tryAgain = () => {
-            if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
-                console.log("Microphone: Auto-starting audio context from click");
-                microphoneInput.audioContext.resume();
-            }
-            document.removeEventListener("click", tryAgain);
+        const tryAgain = async () => {
+            if (await ensureMicrophoneRunning()) document.removeEventListener("click", tryAgain);
         };
         document.addEventListener("click", tryAgain);
     } else {
@@ -574,7 +570,7 @@ if (parsedQuery.microphoneChannel !== undefined) {
     // This is needed because some browsers require user interaction for audio context
     setTimeout(async () => {
         console.log("Microphone: Delayed initialisation starting");
-        await setupMicrophone();
+        await setupMicrophone(parsedQuery.microphoneChannel);
     }, 1000);
 }
 
@@ -659,14 +655,8 @@ keyboard.registerKeyHandler(
 
 // Setup key handlers
 document.onkeydown = (evt) => {
-    audioHandler.tryResume();
-    // Also try to resume microphone audio context if needed
-    if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
-        console.log("Microphone: Auto-resuming audio context on keydown");
-        microphoneInput.audioContext
-            .resume()
-            .catch((err) => console.error("Error resuming microphone audio context:", err));
-    }
+    audioHandler.tryResume().then(() => {});
+    ensureMicrophoneRunning().then(() => {});
     keyboard.keyDown(evt);
 };
 document.onkeypress = (evt) => keyboard.keyPress(evt);
