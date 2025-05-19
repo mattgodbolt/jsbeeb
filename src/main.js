@@ -242,7 +242,7 @@ const config = new Config(function (changed) {
         keyboard.setKeyLayout(changed.keyLayout);
     }
     // Restore gamepad as source for the old channels
-    for (let oldChannel = 0; oldChannel < 3; ++oldChannel)
+    for (let oldChannel = 0; oldChannel < 4; ++oldChannel)
         processor.adconverter.setChannelSource(oldChannel, gamepadSource);
     if (changed.microphoneChannel !== undefined) {
         const channel = changed.microphoneChannel;
