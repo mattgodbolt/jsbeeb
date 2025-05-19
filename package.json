@@ -79,6 +79,6 @@
       "eslint --cache --fix",
       "prettier --write"
     ],
-    "*.{css,md,html}": "prettier --write"
+    "*.!(js)": "prettier --write"
   }
 }
