@@ -43,7 +43,7 @@ export class Keyboard extends EventEmitter {
 
         // set up for BBC or Atom
         this.interfaceAdaptor = this.processor.sysvia;
-        if (this.processor.model.isAtom) {
+        if (this.processor.model !== undefined && this.processor.model.isAtom) {
             this.interfaceAdaptor = this.processor.atomppia;
         }
     }

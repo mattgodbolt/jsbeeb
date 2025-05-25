@@ -61,7 +61,7 @@ function hfeGetTrackOffsetAndLength(metadata, track) {
  */
 export function loadHfe(disc, data, onChange) {
     if (data.length < HfeBlockSize) throw new Error("HFE file missing header");
-    const header = new TextDecoder("ascii").decode(data.slice(0, 8));
+    const header = new TextDecoder("ascii").decode(data.slice(0, 8)).toString();
     let isV3 = false;
     let hfeVersion = 1;
 
