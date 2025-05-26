@@ -88,6 +88,7 @@ export class Debugger {
         this.disassPc = 0;
         this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = null;
+        this.ppia = null;
         this.breakpoints = {};
 
         function setupGoto(form, func) {
@@ -128,9 +129,17 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
-        this.sysvia = this.setupVia($("#sysvia"), cpu.sysvia);
-        this.uservia = this.setupVia($("#uservia"), cpu.uservia);
-        this.crtc = this.setupCrtc($("#crtc_debug"), cpu.video);
+        if (this.cpu.model.isAtom) {
+            this.ppia = this.setupPpia($("#atomppia"), cpu.atomppia);
+            $("#sysvia").find("h6").remove();
+            $("#uservia").find("h6").remove();
+            $("#crtc_debug").find("h6").remove();
+        } else {
+            this.sysvia = this.setupVia($("#sysvia"), cpu.sysvia);
+            this.uservia = this.setupVia($("#uservia"), cpu.uservia);
+            this.crtc = this.setupCrtc($("#crtc_debug"), cpu.video);
+            $("#atomppia").find("h6").remove();
+        }
     }
 
     disassemble(addr) {
@@ -241,6 +250,37 @@ export class Debugger {
         return update;
     }
 
+    setupPpia(node, ppia) {
+        const updates = [];
+        if (!ppia) return noop;
+        const regs = ["portapins", "portbpins", "portcpins", "creg"];
+        node.find("tr:not(.template)").remove();
+        for (const elem of regs) {
+            if (ppia[elem] === undefined) continue;
+            const row = node.find(".template").clone().removeClass("template").appendTo(node);
+            row.find(".register").text(elem.toUpperCase());
+            const value = row.find(".value");
+            if (elem.match(/t[12][cl]/)) {
+                updates.push(() => {
+                    const reg = ppia[elem];
+                    this.updateElem(
+                        value,
+                        hexbyte((reg >>> 16) & 0xff) + hexbyte((reg >>> 8) & 0xff) + hexbyte(reg & 0xff),
+                    );
+                });
+            } else {
+                updates.push(() => {
+                    this.updateElem(value, hexbyte(ppia[elem]));
+                });
+            }
+        }
+        const update = () => {
+            for (const update of updates) update();
+        };
+        update();
+        return update;
+    }
+
     updateElem(elem, val) {
         const prevVal = elem.text();
         if (prevVal !== val) {
@@ -303,9 +343,15 @@ export class Debugger {
         this.updateDisassembly(where);
         this.updateRegisters();
         this._memoryView.update();
-        this.sysvia();
-        this.uservia();
-        this.crtc();
+
+        if (this.cpu.model.isAtom) {
+            this.ppia();
+        } else {
+            this.sysvia();
+            this.uservia();
+            this.crtc();
+        }
+
         this.cpu.video.debugPaint();
     }
 

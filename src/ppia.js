@@ -91,7 +91,7 @@ class PPIA {
         this.portapins = 0;
         this.portbpins = 0;
         this.portcpins = 0;
-        this.cr = 0;
+        this.creg = 0;
         this.processor = cpu;
         this.speaker = 0;
         this.prevcas = 0;
@@ -182,6 +182,7 @@ class PPIA {
                 this.recalculatePortCPins();
                 break;
             case CREG:
+                this.creg = val & 0xff;
                 // bit 7 is 0 for Bit Set/Reset (BSR) mode of PPIA
                 // using the CREG to quickly activate B2,B1,B0 of port C
                 // bit 0 is the set/reset value

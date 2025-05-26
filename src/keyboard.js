@@ -1,5 +1,6 @@
 "use strict";
 import * as utils from "./utils.js";
+import * as utils_atom from "./utils_atom.js";
 import EventEmitter from "event-emitter-es6";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
@@ -317,6 +318,7 @@ export class Keyboard extends EventEmitter {
      * @param {boolean} checkCapsAndShiftLocks - Whether to check caps and shift locks
      */
     sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
+        let debounceTime = 30;
         let lastChar;
         let nextKeyMillis = 0;
         this.interfaceAdaptor.disableKeyboard();
@@ -338,8 +340,20 @@ export class Keyboard extends EventEmitter {
                 return;
             }
 
-            if (lastChar && lastChar !== utils.BBC.SHIFT) {
-                this.interfaceAdaptor.keyToggleRaw(lastChar);
+            if (this.processor.model.isAtom) {
+                if (lastChar && lastChar !== utils_atom.ATOM.SHIFT) {
+                    // console.log("<"+lastChar+"> "+millis);
+                    this.processor.atomppia.keyToggleRaw(lastChar);
+
+                    //debounce every key on atom
+                    lastChar = undefined;
+                    nextKeyMillis = millis + debounceTime;
+                    return;
+                }
+            } else {
+                if (lastChar && lastChar !== utils.BBC.SHIFT) {
+                    this.interfaceAdaptor.keyToggleRaw(lastChar);
+                }
             }
 
             if (keysToSend.length === 0) {
@@ -354,7 +368,7 @@ export class Keyboard extends EventEmitter {
             lastChar = ch;
             if (debounce) {
                 lastChar = undefined;
-                nextKeyMillis = millis + 30;
+                nextKeyMillis = millis + debounceTime;
                 return;
             }
 
