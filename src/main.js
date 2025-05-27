@@ -1308,10 +1308,45 @@ if (model.isAtom) {
     $("#leds").hide();
     $("#playcas").show();
     $("#stopcas").show();
+
+    $(".navbar-brand").text("jsatom");
+    $(".navbar-brand").attr("href", "http://jsatom.commandercoder.com/");
+    $("span.navbar-text").hide();
+    $("a.sth").hide();
+    $("#analogueAudioSettings").hide();
+
+    let bbcperipherals = ["65c02", "hasMusic5000", "hasTeletextAdaptor", "hasEconet"];
+    for (const peripheral of bbcperipherals) {
+        $("div > #" + peripheral)
+            .parent()
+            .hide();
+    }
+
+    let bbctargets = ["B-DFS1.2", "B-DFS0.9", "B1770", "B1770A", "Master", "MasterADFS", "MasterANFS"];
+    for (const target of bbctargets) {
+        $("a[data-target='" + target + "']")
+            .parent()
+            .hide();
+    }
 } else {
     $("#leds").show();
     $("#playcas").hide();
     $("#stopcas").hide();
+    $("#jsatom-menu").hide();
+
+    let atomperipherals = ["hasNoiseKiller"];
+    for (const peripheral of atomperipherals) {
+        $("div > #" + peripheral)
+            .parent()
+            .hide();
+    }
+
+    let atomtargets = ["Atom", "Atom-DOS", "Atom-Tape", "Atom-Tape-FP"];
+    for (const target of atomtargets) {
+        $("a[data-target='" + target + "']")
+            .parent()
+            .hide();
+    }
 }
 $("#tape-menu a").on("click", function (e) {
     const type = $(e.target).attr("data-id");
