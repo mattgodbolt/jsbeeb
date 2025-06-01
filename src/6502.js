@@ -648,7 +648,7 @@ export class Cpu6502 extends Base6502 {
         // ATOM
         if (this.model.isAtom) {
             this.atomppia = new atom_ppia.AtomPPIA(this, this.config.keyLayout, this.scheduler);
-            this.atommc = atom_mmc.AtomMMC2(/*this*/);
+            this.atommc = new atom_mmc.AtomMMC2(this);
         }
     }
 

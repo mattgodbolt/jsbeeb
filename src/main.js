@@ -989,11 +989,11 @@ async function loadDiscImage(discImage) {
     }
 }
 
-function loadMMCImage(SDimage) {
+async function loadMMCImage(SDimage) {
     // console.log("Loading mmcImage from mmc/" + SDimage);
     // return mmc.LoadSD("mmc/" + SDimage);
     console.log("Loading mmcImage from " + SDimage);
-    return mmc.LoadSD(SDimage);
+    return await mmc.LoadSD(SDimage);
 }
 
 async function loadTapeImage(tapeImage) {
