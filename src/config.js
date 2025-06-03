@@ -52,6 +52,10 @@ export class Config {
             this.changed.microphoneChannel = channel;
             this.setMicrophoneChannel(channel);
         });
+
+        $("#mouseJoystickEnabled").on("click", () => {
+            this.changed.mouseJoystickEnabled = $("#mouseJoystickEnabled").prop("checked");
+        });
     }
 
     setMicrophoneChannel(channel) {
@@ -60,6 +64,10 @@ export class Config {
         } else {
             $(".mic-channel-text").text("Disabled");
         }
+    }
+
+    setMouseJoystickEnabled(enabled) {
+        $("#mouseJoystickEnabled").prop("checked", !!enabled);
     }
 
     setModel(modelName) {
