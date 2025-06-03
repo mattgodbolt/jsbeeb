@@ -369,7 +369,7 @@ class Via {
     portBUpdated() {}
 
     getJoysticks() {
-        return { button1: true, button2: true };
+        return { button1: false, button2: false };
     }
 
     recalculatePortAPins() {
@@ -381,18 +381,16 @@ class Via {
 
     recalculatePortBPins() {
         const prevPb6 = !!(this.portbpins & 0x40);
-        this.portbpins = this.orb & this.ddrb;
-        const buttons = this.getJoysticks();
+        // Start with output pins, and inputs all high
+        this.portbpins = (this.orb & this.ddrb) | (~this.ddrb & 0xff);
 
         // AUG p418
         // ### PB4 and PB5 inputs
-        // These are the inputs from the joystick FIRE buttons. They are
-        // normally at logic 1 with no button pressed and change to 0 when a
-        // button is pressed
-        if (!buttons.button1) this.portbpins |= 1 << 4;
-        if (!buttons.button2) this.portbpins |= 1 << 5;
+        // These are the inputs from the joystick FIRE buttons. They are active low.
+        const buttons = this.getJoysticks();
+        if (buttons.button1) this.portbpins &= ~(1 << 4); // Clear PB4 if button1 pressed
+        if (buttons.button2) this.portbpins &= ~(1 << 5); // Clear PB5 if button2 pressed
 
-        this.portbpins |= ~this.ddrb & 0xff;
         this.drivePortB();
         if (prevPb6 && !(this.portbpins & 0x40)) {
             // If we see a high to low transition on pb6, and we are in timer2 pulse counting mode, count a pulse.
