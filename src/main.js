@@ -567,6 +567,7 @@ async function setupMicrophone() {
     // Try to initialise the microphone
     const success = await microphoneInput.initialise();
     if (success) {
+        // Note: Channel assignment is handled by updateAdcSources()
         $micPermissionStatus.text("Microphone connected successfully");
         await ensureMicrophoneRunning();
 

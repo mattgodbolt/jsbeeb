@@ -15,7 +15,6 @@ export class Config {
             this.setTeletext(this.model.hasTeletextAdaptor);
             this.setMusic5000(this.model.hasMusic5000);
             this.setEconet(this.model.hasEconet);
-            // Note: mouseJoystickEnabled state will be set from main.js
         });
 
         $configuration.addEventListener("hide.bs.modal", () => onClose(this.changed));

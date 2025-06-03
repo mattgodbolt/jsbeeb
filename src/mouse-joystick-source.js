@@ -133,42 +133,27 @@ export class MouseJoystickSource extends AnalogueSource {
      * @returns {number} A value between 0 and 0xffff
      */
     getValue(channel) {
-        let value;
-
-        // Use mouse position when enabled (always active when assigned to a channel)
-        {
-            switch (channel) {
-                case 0:
-                    // X axis for joystick 1
-                    // BBC Micro: left=65535, right=0
-                    // Convert from [0,1] to [0xffff,0] (inverted)
-                    value = Math.floor((1 - this.mouseX) * 0xffff);
-                    break;
-                case 1:
-                    // Y axis for joystick 1
-                    // BBC Micro: up=65535, down=0
-                    // Convert from [0,1] to [0xffff,0] (inverted)
-                    value = Math.floor((1 - this.mouseY) * 0xffff);
-                    break;
-                case 2:
-                    // X axis for joystick 2 (not used for mouse)
-                    value = 0x8000;
-                    break;
-                case 3:
-                    // Y axis for joystick 2 (not used for mouse)
-                    value = 0x8000;
-                    break;
-                default:
-                    value = 0x8000;
-                    break;
-            }
+        switch (channel) {
+            case 0:
+                // X axis for joystick 1
+                // BBC Micro: left=65535, right=0
+                return Math.floor((1 - this.mouseX) * 0xffff);
+            case 1:
+                // Y axis for joystick 1
+                // BBC Micro: up=65535, down=0
+                return Math.floor((1 - this.mouseY) * 0xffff);
+            case 2:
+            case 3:
+                // Joystick 2 axes (not used for mouse)
+                return 0x8000;
+            default:
+                return 0x8000;
         }
-
-        return value;
     }
 
     /**
      * Clean up event listeners when source is no longer needed
+     * Called by ADC when switching to a different source
      */
     dispose() {
         this.canvas.removeEventListener("mousemove", this.handleMouseMove);
