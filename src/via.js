@@ -368,8 +368,8 @@ class Via {
 
     portBUpdated() {}
 
-    getJoysticks() {
-        return { button1: false, button2: false };
+    rawPortB() {
+        return 0xff;
     }
 
     recalculatePortAPins() {
@@ -381,15 +381,7 @@ class Via {
 
     recalculatePortBPins() {
         const prevPb6 = !!(this.portbpins & 0x40);
-        // Start with output pins, and inputs all high
-        this.portbpins = (this.orb & this.ddrb) | (~this.ddrb & 0xff);
-
-        // AUG p418
-        // ### PB4 and PB5 inputs
-        // These are the inputs from the joystick FIRE buttons. They are active low.
-        const buttons = this.getJoysticks();
-        if (buttons.button1) this.portbpins &= ~(1 << 4); // Clear PB4 if button1 pressed
-        if (buttons.button2) this.portbpins &= ~(1 << 5); // Clear PB5 if button2 pressed
+        this.portbpins = (this.orb & this.ddrb) | (~this.ddrb & this.rawPortB());
 
         this.drivePortB();
         if (prevPb6 && !(this.portbpins & 0x40)) {
@@ -607,6 +599,17 @@ export class SysVia extends Via {
     portAUpdated() {
         this.updateKeys();
         this.soundChip.updateSlowDataBus(this.portapins, !(this.IC32 & 1));
+    }
+
+    rawPortB() {
+        let result = 0xff;
+        // AUG p418
+        // ### PB4 and PB5 inputs
+        // These are the inputs from the joystick FIRE buttons. They are active low.
+        const buttons = this.getJoysticks();
+        if (buttons.button1) result &= ~(1 << 4); // Clear PB4 if button1 pressed
+        if (buttons.button2) result &= ~(1 << 5); // Clear PB5 if button2 pressed
+        return result;
     }
 
     portBUpdated() {
