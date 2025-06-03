@@ -245,7 +245,7 @@ const config = new Config(function (changed) {
     }
     // Handle ADC source changes
     if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
-        // Update sources based on new settings
+        // Update sources based on new settings (parsedQuery already updated with changed values)
         updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
 
         // Handle microphone initialization if needed
@@ -421,7 +421,23 @@ $cub.on("mousemove mousedown mouseup", function (evt) {
     const screenOffset = $screen.offset();
     const x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
     const y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
+
+    // Handle touchscreen
     if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
+
+    // Handle mouse joystick if enabled
+    if (parsedQuery.mouseJoystickEnabled && mouseJoystickSource.isEnabled()) {
+        // Use the API methods instead of direct manipulation
+        mouseJoystickSource.onMouseMove(x, y);
+
+        // Handle button events
+        if (evt.type === "mousedown" && evt.button === 0) {
+            mouseJoystickSource.onMouseDown(0);
+        } else if (evt.type === "mouseup" && evt.button === 0) {
+            mouseJoystickSource.onMouseUp(0);
+        }
+    }
+
     evt.preventDefault();
 });
 

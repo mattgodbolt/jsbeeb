@@ -3,28 +3,12 @@ import { MouseJoystickSource } from "../../src/mouse-joystick-source.js";
 
 describe("MouseJoystickSource", () => {
     let canvas, source, mockVia;
-    let originalDocument;
 
     beforeEach(() => {
-        // Mock document if it doesn't exist
-        originalDocument = globalThis.document;
-        if (!globalThis.document) {
-            globalThis.document = {
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-            };
-        }
-
-        // Create a mock canvas element
+        // Create a mock canvas element (simpler since we don't use event listeners)
         canvas = {
             addEventListener: vi.fn(),
             removeEventListener: vi.fn(),
-            getBoundingClientRect: vi.fn(() => ({
-                left: 100,
-                top: 100,
-                width: 800,
-                height: 600,
-            })),
         };
 
         mockVia = {
@@ -36,30 +20,12 @@ describe("MouseJoystickSource", () => {
 
     afterEach(() => {
         vi.restoreAllMocks();
-        // Restore original document
-        if (originalDocument) {
-            globalThis.document = originalDocument;
-        } else {
-            delete globalThis.document;
-        }
     });
 
     it("should initialize with center position", () => {
         expect(source.mouseX).toBe(0.5);
         expect(source.mouseY).toBe(0.5);
         expect(source.isActive).toBe(false);
-    });
-
-    it("should attach event listeners to canvas", () => {
-        expect(canvas.addEventListener).toHaveBeenCalledWith("mousemove", expect.any(Function));
-        expect(canvas.addEventListener).toHaveBeenCalledWith("mouseenter", expect.any(Function));
-        expect(canvas.addEventListener).toHaveBeenCalledWith("mouseleave", expect.any(Function));
-        expect(canvas.addEventListener).toHaveBeenCalledWith("mousedown", expect.any(Function));
-        expect(canvas.addEventListener).toHaveBeenCalledWith("mouseup", expect.any(Function));
-    });
-
-    it("should attach global mouse move listener", () => {
-        expect(document.addEventListener).toHaveBeenCalledWith("mousemove", expect.any(Function));
     });
 
     it("should return center value initially", () => {
@@ -69,81 +35,56 @@ describe("MouseJoystickSource", () => {
         expect(source.getValue(1)).toBe(32767);
     });
 
-    it("should handle mouse position tracking", () => {
-        // Simulate mouse enter
-        source.handleMouseEnter();
+    it("should handle mouse position tracking via API", () => {
+        // Use the API method to set mouse position
+        source.onMouseMove(0, 0); // top-left corner
         expect(source.isActive).toBe(true);
-
-        // Simulate mouse move to top-left corner
-        const mockEvent = {
-            clientX: 100, // left edge
-            clientY: 100, // top edge
-        };
-        source.handleMouseMove(mockEvent);
-
         expect(source.mouseX).toBe(0);
         expect(source.mouseY).toBe(0);
         expect(source.getValue(0)).toBe(0xffff); // X channel (left = max)
         expect(source.getValue(1)).toBe(0xffff); // Y channel (top = max)
 
-        // Simulate mouse move to bottom-right corner
-        mockEvent.clientX = 900; // right edge (100 + 800)
-        mockEvent.clientY = 700; // bottom edge (100 + 600)
-        source.handleMouseMove(mockEvent);
-
+        // Use the API method to move to bottom-right corner
+        source.onMouseMove(1, 1); // bottom-right corner
         expect(source.mouseX).toBe(1);
         expect(source.mouseY).toBe(1);
         expect(source.getValue(0)).toBe(0); // X channel (right = min)
         expect(source.getValue(1)).toBe(0); // Y channel (bottom = min)
     });
 
-    it("should handle mouse leave properly", () => {
-        source.handleMouseEnter();
-        source.mouseX = 0.8;
-        source.mouseY = 0.3;
-
-        source.handleMouseLeave();
-
+    it("should track active state via API", () => {
         expect(source.isActive).toBe(false);
-        // Position should remain unchanged when mouse leaves
+
+        // Using the API method sets the source as active
+        source.onMouseMove(0.8, 0.3);
+        expect(source.isActive).toBe(true);
         expect(source.mouseX).toBe(0.8);
         expect(source.mouseY).toBe(0.3);
     });
 
-    it("should handle fire button clicks", () => {
+    it("should handle fire button clicks via API", () => {
         source.setVia(mockVia);
-        source.handleMouseEnter();
 
-        // Simulate left mouse button down
-        const downEvent = { button: 0, preventDefault: vi.fn() };
-        source.handleMouseDown(downEvent);
-
+        // Use API method for mouse button down
+        source.onMouseDown(0); // left button
         expect(mockVia.setJoystickButton).toHaveBeenCalledWith(0, true);
-        expect(downEvent.preventDefault).toHaveBeenCalled();
 
-        // Simulate left mouse button up
-        const upEvent = { button: 0, preventDefault: vi.fn() };
-        source.handleMouseUp(upEvent);
-
+        // Use API method for mouse button up
+        source.onMouseUp(0); // left button
         expect(mockVia.setJoystickButton).toHaveBeenCalledWith(0, false);
-        expect(upEvent.preventDefault).toHaveBeenCalled();
     });
 
-    it("should ignore non-left mouse buttons", () => {
+    it("should ignore non-left mouse buttons via API", () => {
         source.setVia(mockVia);
-        source.handleMouseEnter();
 
-        const rightClickEvent = { button: 2, preventDefault: vi.fn() };
-        source.handleMouseDown(rightClickEvent);
-
+        // Use API method with right button (button 2)
+        source.onMouseDown(2);
         expect(mockVia.setJoystickButton).not.toHaveBeenCalled();
-        expect(rightClickEvent.preventDefault).not.toHaveBeenCalled();
     });
 
     it("should return correct values for all channels", () => {
-        source.handleMouseEnter();
-        source.mouseX = 0.25;
-        source.mouseY = 0.75;
+        // Use API method to set position
+        source.onMouseMove(0.25, 0.75);
 
         expect(source.getValue(0)).toBe(Math.floor((1 - 0.25) * 0xffff)); // X channel (inverted)
         expect(source.getValue(1)).toBe(Math.floor((1 - 0.75) * 0xffff)); // Y channel (inverted)
@@ -152,29 +93,36 @@ describe("MouseJoystickSource", () => {
         expect(source.getValue(99)).toBe(0x8000); // Invalid channel
     });
 
-    it("should track mouse position globally", () => {
-        const mockEvent = {
-            clientX: 300, // 200 pixels to the right of canvas left edge
-            clientY: 250, // 150 pixels below canvas top edge
-        };
+    it("should validate input range via API", () => {
+        // Test boundary clamping in API method
+        source.onMouseMove(-0.5, 1.5); // Out of bounds values
 
-        source.handleGlobalMouseMove(mockEvent);
-
-        // Expected: x = 200/800 = 0.25, y = 150/600 = 0.25
-        expect(source.mouseX).toBe(0.25);
-        expect(source.mouseY).toBe(0.25);
-        expect(source.getValue(0)).toBe(Math.floor((1 - 0.25) * 0xffff)); // Inverted
-        expect(source.getValue(1)).toBe(Math.floor((1 - 0.25) * 0xffff)); // Inverted
+        // Should be clamped to valid range [0, 1]
+        expect(source.mouseX).toBe(0);
+        expect(source.mouseY).toBe(1);
+        expect(source.getValue(0)).toBe(0xffff); // X channel (left = max)
+        expect(source.getValue(1)).toBe(0); // Y channel (bottom = min)
     });
 
-    it("should remove event listeners on dispose", () => {
+    it("should reset state on dispose", () => {
+        source.setVia(mockVia);
+        source.onMouseMove(0.8, 0.3);
+
         source.dispose();
 
-        expect(canvas.removeEventListener).toHaveBeenCalledWith("mousemove", expect.any(Function));
-        expect(canvas.removeEventListener).toHaveBeenCalledWith("mouseenter", expect.any(Function));
-        expect(canvas.removeEventListener).toHaveBeenCalledWith("mouseleave", expect.any(Function));
-        expect(canvas.removeEventListener).toHaveBeenCalledWith("mousedown", expect.any(Function));
-        expect(canvas.removeEventListener).toHaveBeenCalledWith("mouseup", expect.any(Function));
-        expect(document.removeEventListener).toHaveBeenCalledWith("mousemove", expect.any(Function));
+        expect(source.via).toBe(null);
+        expect(source.isActive).toBe(false);
+        // No event listeners to remove since we don't register any
+        expect(canvas.removeEventListener).not.toHaveBeenCalled();
+    });
+
+    it("should report enabled state correctly", () => {
+        expect(source.isEnabled()).toBe(false);
+
+        source.setVia(mockVia);
+        expect(source.isEnabled()).toBe(true);
+
+        source.setVia(null);
+        expect(source.isEnabled()).toBe(false);
     });
 });

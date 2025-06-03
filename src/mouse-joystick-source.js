@@ -16,107 +16,6 @@ export class MouseJoystickSource extends AnalogueSource {
         this.mouseY = 0.5; // Normalized position (0-1)
         this.isActive = false;
         this.via = null; // Will be set later
-
-        // Bind event handlers
-        this.handleMouseMove = this.handleMouseMove.bind(this);
-        this.handleMouseEnter = this.handleMouseEnter.bind(this);
-        this.handleMouseLeave = this.handleMouseLeave.bind(this);
-        this.handleMouseDown = this.handleMouseDown.bind(this);
-        this.handleMouseUp = this.handleMouseUp.bind(this);
-        this.handleGlobalMouseMove = this.handleGlobalMouseMove.bind(this);
-
-        // Attach event listeners
-        this.canvas.addEventListener("mousemove", this.handleMouseMove);
-        this.canvas.addEventListener("mouseenter", this.handleMouseEnter);
-        this.canvas.addEventListener("mouseleave", this.handleMouseLeave);
-        this.canvas.addEventListener("mousedown", this.handleMouseDown);
-        this.canvas.addEventListener("mouseup", this.handleMouseUp);
-
-        // Also listen to global mouse moves to track position even when not over canvas
-        document.addEventListener("mousemove", this.handleGlobalMouseMove);
-    }
-
-    /**
-     * Handle mouse movement over the canvas
-     * @param {MouseEvent} event - The mouse event
-     */
-    handleMouseMove(event) {
-        if (!this.isActive) return;
-
-        const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-
-        // Normalize to 0-1 range
-        this.mouseX = x / rect.width;
-        this.mouseY = y / rect.height;
-
-        // Clamp values
-        this.mouseX = Math.max(0, Math.min(1, this.mouseX));
-        this.mouseY = Math.max(0, Math.min(1, this.mouseY));
-    }
-
-    /**
-     * Handle mouse entering the canvas
-     */
-    handleMouseEnter() {
-        this.isActive = true;
-    }
-
-    /**
-     * Handle mouse leaving the canvas
-     */
-    handleMouseLeave() {
-        this.isActive = false;
-        // Don't center when mouse leaves - keep last position
-    }
-
-    /**
-     * Handle global mouse movement (even when not over canvas)
-     * @param {MouseEvent} event - The mouse event
-     */
-    handleGlobalMouseMove(event) {
-        const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-
-        // Normalize to 0-1 range
-        this.mouseX = x / rect.width;
-        this.mouseY = y / rect.height;
-
-        // Clamp values to 0-1 range
-        this.mouseX = Math.max(0, Math.min(1, this.mouseX));
-        this.mouseY = Math.max(0, Math.min(1, this.mouseY));
-    }
-
-    /**
-     * Handle mouse button press
-     * @param {MouseEvent} event - The mouse event
-     */
-    handleMouseDown(event) {
-        if (!this.isActive || !this.via) return;
-
-        // Only handle left mouse button (button 0)
-        if (event.button === 0) {
-            // Set fire button 1 pressed (PB4)
-            this.via.setJoystickButton(0, true);
-            event.preventDefault();
-        }
-    }
-
-    /**
-     * Handle mouse button release
-     * @param {MouseEvent} event - The mouse event
-     */
-    handleMouseUp(event) {
-        if (!this.via) return;
-
-        // Only handle left mouse button (button 0)
-        if (event.button === 0) {
-            // Release fire button 1 (PB4)
-            this.via.setJoystickButton(0, false);
-            event.preventDefault();
-        }
     }
 
     /**
@@ -125,6 +24,51 @@ export class MouseJoystickSource extends AnalogueSource {
      */
     setVia(via) {
         this.via = via;
+    }
+
+    /**
+     * Handle mouse movement event from external handler
+     * @param {number} x - Normalized X position (0-1)
+     * @param {number} y - Normalized Y position (0-1)
+     */
+    onMouseMove(x, y) {
+        this.mouseX = Math.max(0, Math.min(1, x));
+        this.mouseY = Math.max(0, Math.min(1, y));
+        this.isActive = true;
+    }
+
+    /**
+     * Handle mouse button press from external handler
+     * @param {number} button - Mouse button number (0 = left, 1 = middle, 2 = right)
+     */
+    onMouseDown(button) {
+        if (!this.via) return;
+
+        // Only handle left mouse button (button 0)
+        if (button === 0) {
+            this.via.setJoystickButton(0, true);
+        }
+    }
+
+    /**
+     * Handle mouse button release from external handler
+     * @param {number} button - Mouse button number (0 = left, 1 = middle, 2 = right)
+     */
+    onMouseUp(button) {
+        if (!this.via) return;
+
+        // Only handle left mouse button (button 0)
+        if (button === 0) {
+            this.via.setJoystickButton(0, false);
+        }
+    }
+
+    /**
+     * Check if mouse joystick is enabled and ready
+     * @returns {boolean} True if mouse joystick can handle events
+     */
+    isEnabled() {
+        return !!this.via;
     }
 
     /**
@@ -152,15 +96,12 @@ export class MouseJoystickSource extends AnalogueSource {
     }
 
     /**
-     * Clean up event listeners when source is no longer needed
+     * Clean up when source is no longer needed
      * Called by ADC when switching to a different source
      */
     dispose() {
-        this.canvas.removeEventListener("mousemove", this.handleMouseMove);
-        this.canvas.removeEventListener("mouseenter", this.handleMouseEnter);
-        this.canvas.removeEventListener("mouseleave", this.handleMouseLeave);
-        this.canvas.removeEventListener("mousedown", this.handleMouseDown);
-        this.canvas.removeEventListener("mouseup", this.handleMouseUp);
-        document.removeEventListener("mousemove", this.handleGlobalMouseMove);
+        // Reset state
+        this.via = null;
+        this.isActive = false;
     }
 }
