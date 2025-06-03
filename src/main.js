@@ -26,6 +26,7 @@ import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
+import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -93,6 +94,7 @@ const paramTypes = {
     logFdcCommands: ParamTypes.BOOL,
     logFdcStateChanges: ParamTypes.BOOL,
     coProcessor: ParamTypes.BOOL,
+    mouseJoystickEnabled: ParamTypes.BOOL,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -241,13 +243,15 @@ const config = new Config(function (changed) {
         emulationConfig.keyLayout = changed.keyLayout;
         keyboard.setKeyLayout(changed.keyLayout);
     }
-    // Restore gamepad as source for the old channels
-    for (let oldChannel = 0; oldChannel < 4; ++oldChannel)
-        processor.adconverter.setChannelSource(oldChannel, gamepadSource);
-    if (changed.microphoneChannel !== undefined) {
-        const channel = changed.microphoneChannel;
-        console.log(`Moving microphone to channel ${channel}`);
-        setupMicrophone(channel).then(() => {});
+    // Handle ADC source changes
+    if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
+        // Update sources based on new settings
+        updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
+
+        // Handle microphone initialization if needed
+        if (changed.microphoneChannel !== undefined) {
+            setupMicrophone().then(() => {});
+        }
     }
     updateUrl();
 });
@@ -262,6 +266,7 @@ config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
+config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
 
 model = config.model;
 
@@ -507,18 +512,40 @@ processor = new Cpu6502(
     econet,
 );
 
-// Set up gamepad as the default source for all channels
+// Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
-processor.adconverter.setChannelSource(0, gamepadSource);
-processor.adconverter.setChannelSource(1, gamepadSource);
-processor.adconverter.setChannelSource(2, gamepadSource);
-processor.adconverter.setChannelSource(3, gamepadSource);
 
 // Create MicrophoneInput but don't enable by default
 const microphoneInput = new MicrophoneInput();
 microphoneInput.setErrorCallback((message) => {
     showError("accessing microphone", message);
 });
+
+// Create MouseJoystickSource but don't enable by default
+const screenCanvas = document.getElementById("screen");
+const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
+
+// Helper to manage ADC source configuration
+function updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
+    // Default all channels to gamepad
+    for (let ch = 0; ch < 4; ch++) {
+        processor.adconverter.setChannelSource(ch, gamepadSource);
+    }
+
+    // Apply mouse joystick if enabled (takes priority on channels 0 & 1)
+    if (mouseJoystickEnabled) {
+        processor.adconverter.setChannelSource(0, mouseJoystickSource);
+        processor.adconverter.setChannelSource(1, mouseJoystickSource);
+        mouseJoystickSource.setVia(processor.sysvia);
+    } else {
+        mouseJoystickSource.setVia(null);
+    }
+
+    // Apply microphone if configured (can override any channel)
+    if (microphoneChannel !== undefined) {
+        processor.adconverter.setChannelSource(microphoneChannel, microphoneInput);
+    }
+}
 
 async function ensureMicrophoneRunning() {
     if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
@@ -533,19 +560,14 @@ async function ensureMicrophoneRunning() {
     return true;
 }
 
-async function setupMicrophone(channel) {
+async function setupMicrophone() {
     const $micPermissionStatus = $("#micPermissionStatus");
     $micPermissionStatus.text("Requesting microphone access...");
 
     // Try to initialise the microphone
     const success = await microphoneInput.initialise();
     if (success) {
-        console.log("Microphone: Successfully initialised from URL parameters");
-        // Set microphone as source for its channel
-        console.log(`Setting microphone as source for channel ${channel}`);
-        processor.adconverter.setChannelSource(channel, microphoneInput);
         $micPermissionStatus.text("Microphone connected successfully");
-
         await ensureMicrophoneRunning();
 
         // Try starting audio context from user gesture
@@ -554,7 +576,6 @@ async function setupMicrophone(channel) {
         };
         document.addEventListener("click", tryAgain);
     } else {
-        console.error("Microphone: Failed to initialise from URL parameters:", microphoneInput.getErrorMessage());
         $micPermissionStatus.text(`Error: ${microphoneInput.getErrorMessage() || "Unknown error"}`);
         config.setMicrophoneChannel(undefined);
         // Update URL to remove the parameter
@@ -564,15 +585,15 @@ async function setupMicrophone(channel) {
 }
 
 if (parsedQuery.microphoneChannel !== undefined) {
-    console.log("Microphone: Initialising from URL parameters");
-
     // We need to use setTimeout to make sure this runs after the page has loaded
     // This is needed because some browsers require user interaction for audio context
     setTimeout(async () => {
-        console.log("Microphone: Delayed initialisation starting");
-        await setupMicrophone(parsedQuery.microphoneChannel);
+        await setupMicrophone();
     }, 1000);
 }
+
+// Apply ADC source settings from URL parameters
+updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
 
 // Initialise keyboard now that processor exists
 keyboard = new Keyboard({

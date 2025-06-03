@@ -15,6 +15,7 @@ export class Config {
             this.setTeletext(this.model.hasTeletextAdaptor);
             this.setMusic5000(this.model.hasMusic5000);
             this.setEconet(this.model.hasEconet);
+            // Note: mouseJoystickEnabled state will be set from main.js
         });
 
         $configuration.addEventListener("hide.bs.modal", () => onClose(this.changed));
@@ -52,6 +53,10 @@ export class Config {
             this.changed.microphoneChannel = channel;
             this.setMicrophoneChannel(channel);
         });
+
+        $("#mouseJoystickEnabled").on("click", () => {
+            this.changed.mouseJoystickEnabled = $("#mouseJoystickEnabled").prop("checked");
+        });
     }
 
     setMicrophoneChannel(channel) {
@@ -60,6 +65,10 @@ export class Config {
         } else {
             $(".mic-channel-text").text("Disabled");
         }
+    }
+
+    setMouseJoystickEnabled(enabled) {
+        $("#mouseJoystickEnabled").prop("checked", !!enabled);
     }
 
     setModel(modelName) {

@@ -480,6 +480,9 @@ export class SysVia extends Via {
         for (let i = 0; i < 16; ++i) {
             this.keys[i] = new Uint8Array(16);
         }
+        // Mouse joystick button state
+        this.mouseButton1 = false;
+        this.mouseButton2 = false;
         this.keyboardEnabled = true;
         this.setKeyLayout(initialLayout);
         this.video = video;
@@ -645,19 +648,35 @@ export class SysVia extends Via {
         return null;
     }
 
+    /**
+     * Set joystick button state (for mouse joystick)
+     * @param {number} buttonNumber - Button number (0 for button1, 1 for button2)
+     * @param {boolean} pressed - Whether the button is pressed
+     */
+    setJoystickButton(buttonNumber, pressed) {
+        if (buttonNumber === 0) {
+            this.mouseButton1 = pressed;
+        } else if (buttonNumber === 1) {
+            this.mouseButton2 = pressed;
+        }
+        // Trigger port B recalculation to update button state
+        this.recalculatePortBPins();
+    }
+
     getJoysticks() {
-        let button1 = false;
-        let button2 = false;
+        let button1 = this.mouseButton1; // Start with mouse button state
+        let button2 = this.mouseButton2;
 
         const pads = this.getGamepads();
         if (pads && pads[0]) {
             const pad = pads[0];
             const pad2 = pads[1];
 
-            button1 = pad.buttons[10].pressed;
+            // Combine gamepad and mouse button states (OR logic)
+            button1 = button1 || pad.buttons[10].pressed;
             // if two gamepads, use button from 2nd
             // otherwise use 2nd button from first
-            button2 = pad2 ? pad2.buttons[10].pressed : pad.buttons[11].pressed;
+            button2 = button2 || (pad2 ? pad2.buttons[10].pressed : pad.buttons[11].pressed);
         }
 
         return { button1: button1, button2: button2 };
