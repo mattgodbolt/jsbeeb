@@ -64,7 +64,7 @@ describe("MouseJoystickSource", () => {
 
     it("should return center value initially", () => {
         // Mouse starts at center position (0.5, 0.5)
-        // Math.floor(0.5 * 0xffff) = Math.floor(32767.5) = 32767
+        // Math.floor((1 - 0.5) * 0xffff) = Math.floor(0.5 * 0xffff) = 32767
         expect(source.getValue(0)).toBe(32767);
         expect(source.getValue(1)).toBe(32767);
     });
@@ -83,8 +83,8 @@ describe("MouseJoystickSource", () => {
 
         expect(source.mouseX).toBe(0);
         expect(source.mouseY).toBe(0);
-        expect(source.getValue(0)).toBe(0); // X channel
-        expect(source.getValue(1)).toBe(0); // Y channel
+        expect(source.getValue(0)).toBe(0xffff); // X channel (left = max)
+        expect(source.getValue(1)).toBe(0xffff); // Y channel (top = max)
 
         // Simulate mouse move to bottom-right corner
         mockEvent.clientX = 900; // right edge (100 + 800)
@@ -93,8 +93,8 @@ describe("MouseJoystickSource", () => {
 
         expect(source.mouseX).toBe(1);
         expect(source.mouseY).toBe(1);
-        expect(source.getValue(0)).toBe(0xffff); // X channel
-        expect(source.getValue(1)).toBe(0xffff); // Y channel
+        expect(source.getValue(0)).toBe(0); // X channel (right = min)
+        expect(source.getValue(1)).toBe(0); // Y channel (bottom = min)
     });
 
     it("should handle mouse leave properly", () => {
@@ -145,8 +145,8 @@ describe("MouseJoystickSource", () => {
         source.mouseX = 0.25;
         source.mouseY = 0.75;
 
-        expect(source.getValue(0)).toBe(Math.floor(0.25 * 0xffff)); // X channel
-        expect(source.getValue(1)).toBe(Math.floor(0.75 * 0xffff)); // Y channel
+        expect(source.getValue(0)).toBe(Math.floor((1 - 0.25) * 0xffff)); // X channel (inverted)
+        expect(source.getValue(1)).toBe(Math.floor((1 - 0.75) * 0xffff)); // Y channel (inverted)
         expect(source.getValue(2)).toBe(0x8000); // Unused channel
         expect(source.getValue(3)).toBe(0x8000); // Unused channel
         expect(source.getValue(99)).toBe(0x8000); // Invalid channel
@@ -163,8 +163,8 @@ describe("MouseJoystickSource", () => {
         // Expected: x = 200/800 = 0.25, y = 150/600 = 0.25
         expect(source.mouseX).toBe(0.25);
         expect(source.mouseY).toBe(0.25);
-        expect(source.getValue(0)).toBe(Math.floor(0.25 * 0xffff));
-        expect(source.getValue(1)).toBe(Math.floor(0.25 * 0xffff));
+        expect(source.getValue(0)).toBe(Math.floor((1 - 0.25) * 0xffff)); // Inverted
+        expect(source.getValue(1)).toBe(Math.floor((1 - 0.25) * 0xffff)); // Inverted
     });
 
     it("should remove event listeners on dispose", () => {

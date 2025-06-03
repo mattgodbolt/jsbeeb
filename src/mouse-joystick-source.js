@@ -140,13 +140,15 @@ export class MouseJoystickSource extends AnalogueSource {
             switch (channel) {
                 case 0:
                     // X axis for joystick 1
-                    // Convert from [0,1] to [0,0xffff]
-                    value = Math.floor(this.mouseX * 0xffff);
+                    // BBC Micro: left=65535, right=0
+                    // Convert from [0,1] to [0xffff,0] (inverted)
+                    value = Math.floor((1 - this.mouseX) * 0xffff);
                     break;
                 case 1:
                     // Y axis for joystick 1
-                    // Convert from [0,1] to [0,0xffff]
-                    value = Math.floor(this.mouseY * 0xffff);
+                    // BBC Micro: up=65535, down=0
+                    // Convert from [0,1] to [0xffff,0] (inverted)
+                    value = Math.floor((1 - this.mouseY) * 0xffff);
                     break;
                 case 2:
                     // X axis for joystick 2 (not used for mouse)
