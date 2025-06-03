@@ -1,6 +1,9 @@
 "use strict";
 import * as utils from "./utils.js";
 import * as jsunzip from "./lib/jsunzip.js";
+import * as jszip from "./lib/jszip.min.js"; // https://stuk.github.io/jszip/
+import $ from "jquery";
+import * as filesaver from "./lib/FileSaver.js"; //https://github.com/eligrey/FileSaver.js
 
 /*
 highly adapted from:
@@ -81,6 +84,8 @@ const VSN_MAJ = 2;
 const VSN_MIN = 10;
 const FA_OPEN_EXISTING = 0;
 const FA_READ = 1;
+const FA_WRITE = 2;
+const FA_CREATE_NEW = 4;
 
 // See https://github.com/hoglet67/AtoMMC2Firmware
 /*
@@ -190,6 +195,24 @@ const FA_READ = 1;
 //     0x80: "STATUS_BUSY",
 // };
 
+export async function createZipFile(data)
+{
+    const zip = new JSZip();
+
+    // loop and enumerate data.names
+    for (let i = 0; i < data.names.length; i++) {
+        const name = data.names[i];
+        const file = data.uFiles[i];
+
+        zip.file(name, file.data ? file.data : file);
+    }
+
+    zip.generateAsync({type:"blob"}).then(function(content) {
+        // see FileSaver.js
+        saveAs(content, "atommc.zip");
+    });
+}
+
 export function extractSDFiles(data) {
     var unzip = new jsunzip.JSUnzip();
     // console.log("Attempting to unzip");
@@ -202,16 +225,16 @@ export function extractSDFiles(data) {
 
     for (var f in unzip.files) {
         var match = f.match(/^[a-z./]+/i);
-        // console.log("m "+match);
+        // console.log("m: "+match);
         if (!match) {
-            console.log("Skipping file", f);
+            // console.log("Skipping file: ", f);
             continue;
         }
-        // console.log("Adding file", f);
+        // console.log("Adding file: ", f);
         uncompressedFiles.push(unzip.read(f));
         loadedFiles.push("/" + f);
     }
-    console.log("Uncompressed files: ", uncompressedFiles.length);
+    // console.log("Uncompressed files: ", uncompressedFiles.length);
     return { uFiles: uncompressedFiles, names: loadedFiles };
 }
 
@@ -233,11 +256,16 @@ export class AtomMMC2 {
             this.configByte = 0xff; //eeprom[EE_SYSFLAGS];
         }
         this.CWD = "";
+        this.seekpos = 0;
     }
 
     // Set the MMC data, which is the unzipped files
     SetMMCData(data) {
         this.MMCdata = data;
+    }
+
+    GetMMCData() {
+        return this.MMCdata;
     }
 
     constructor(cpu) {
@@ -254,6 +282,7 @@ export class AtomMMC2 {
         this.globalDataPresent = 0;
         this.filenum = -1;
         this.worker = null;
+        this.seekpos = 0;
         this.WildPattern = ".*";
         this.foldersSeen = [];
         this.dfn = 0;
@@ -298,10 +327,28 @@ export class AtomMMC2 {
             } else if (a !== -1) {
                 this.fildata = this.MMCdata.uFiles[a].data;
                 ret = 0; //FR_OK
-            }
-            // } else {
+            } else {
+                console.log("FileOpen scratch file mode " + mode);
+
+                // need to open a new file (but not a directory) 
+                // need to add the fname to mmcdata.names
+                // and the data to mmcdata.uFiles
+                this.MMCdata.names.push(fname);
+                this.MMCdata.uFiles.push(this.fildata);
+
+                //file is opened for writing (or the directory is read!)
+                // opening the file for writing, creates an entry
+                // data can be written to that entry
+                // if the entry already exists, then a new entry is created and the old one is deleted
+                // if the entry is appended, then the old entry is loaded and the fildataIndex is set to the end.
+                // see 'ff_emu' in atomulator.
+
+            // ret = 0; // FR_OK
+
+
+
             //     // If a random access file is being opened, search for the first available FIL
-            //     this.filenum = 0;
+                // this.filenum = 0;
             //     if (!fildata[1].fs) {
             //         this.filenum = 1;
             //     } else if (!fildata[2].fs) {
@@ -318,7 +365,7 @@ export class AtomMMC2 {
             //     } else {
             //         // All files are open, return too many open files
             //         ret = ERROR_TOO_MANY_OPEN;
-            //     }
+            }   
         }
         return STATUS_COMPLETE | ret;
     }
@@ -336,11 +383,15 @@ export class AtomMMC2 {
 
     WFN_FileOpenWrite() {
         console.log("WFN_FileOpenWrite " + this.filenum + " not implemented yet");
-        //   WriteDataPort(STATUS_COMPLETE | fileOpen(FA_CREATE_NEW|FA_WRITE));
+        console.log("   " + this.globalData.slice(0,10).toString() + " " + this.globalData.length + " bytes " + this.globalAmount + " bytes");
+        const res = this.fileOpen(FA_CREATE_NEW|FA_WRITE)
+        this.WriteDataPort(STATUS_COMPLETE | res);
     }
 
     WFN_FileClose() {
         console.log("WFN_FileClose " + this.filenum);
+        this.seekpos = 0;
+
         // FIL *fil = &fildata[filenum];
         // WriteDataPort(STATUS_COMPLETE | f_close(fil));
         this.WriteDataPort(STATUS_COMPLETE);
@@ -475,21 +526,15 @@ export class AtomMMC2 {
 
     WFN_FileSeek() {
         console.log("WFN_FileSeek " + this.filenum + " not implemented yet");
+        // Combine 4 bytes from globalData into a 32-bit unsigned integer (little-endian)
+        this.seekpos =
+            (this.globalData[0]) |
+            (this.globalData[1] << 8) |
+            (this.globalData[2] << 16) |
+            (this.globalData[3] << 24);
+        console.log("    " + this.seekpos + " not implemented yet");
 
         //           FIL *fil = &fildata[filenum];
-
-        //    union
-        //    {
-        //       DWORD dword;
-        //       char byte[4];
-        //    }
-        //    dwb;
-
-        //    dwb.byte[0] = globalData[0];
-        //    dwb.byte[1] = globalData[1];
-        //    dwb.byte[2] = globalData[2];
-        //    dwb.byte[3] = globalData[3];
-
         //    WriteDataPort(STATUS_COMPLETE | f_lseek(fil, dwb.dword));
     }
 
@@ -526,15 +571,34 @@ export class AtomMMC2 {
     }
 
     WFN_FileWrite() {
-        console.log("WFN_FileWrite");
+        // first writes the header, then the code.
+        console.log("WFN_FileWrite ");
+        // Display the value of this.globalData as a string, replacing non-ASCII with '.'
+        let str = "";
+        for (let i = 0; i < this.globalAmount; i++) {
+            const code = this.globalData[i];
+            str += (code >= 32 && code <= 126) ? String.fromCharCode(code) : ".";
+        }
+        console.log(str);
+        
+        //***** 
+        // This must create a new entry in globaldata given the name in fildata[filenum] in "names"
+        // and data from globalData.
+        //  */
         //   FIL *fil = &fildata[filenum];
         //    UINT written;
-        //    if (globalAmount == 0)
-        //    {
-        //       globalAmount = 256;
-        //    }
+        if (this.globalAmount == 0)
+        {
+            this.globalAmount = 256;
+        }
+        const data = this.globalData;
+        const wrote = this.globalAmount;
+        var fildataEnd = this.fildataIndex + wrote;
 
-        //    WriteDataPort(STATUS_COMPLETE | f_write(fil, (void*)globalData, globalAmount, &written));
+//        this.fildata.slice(this.fildataIndex, fildataEnd) = data;
+        console.log("WFN_FileWrite " + this.fildataIndex + " .wrote " + wrote + " .fildataEnd " + fildataEnd);
+        const res = 0; // f_write(fil, (void*)globalData, globalAmount, &written);       
+        this.WriteDataPort(STATUS_COMPLETE | res);
     }
 
     WFN_ExecuteArbitrary() {
@@ -640,7 +704,7 @@ export class AtomMMC2 {
         return Current;
     }
     // Depending on the addr, that will say what command is required.
-    // If it is a write, then the data will be ReadDataPort from Atom.
+    // If it is a write, then the data will be ReadDataPort and this is in 'val' from Atom.
     // If it is a read, (via READ_DATA_REG) then the data will be written to Atom via WriteDataPort.
     at_process(addr, val, write) {
         let LatchedAddress = addr & 0x0f;
@@ -772,9 +836,10 @@ export class AtomMMC2 {
                         // data from READ_DATA_PORT. After execution of this command the first byte
                         // of data may be read from the READ_DATA_PORT.
                         //
-                        console.log(
-                            "CMD_INIT_READ: READ_DATA_REG 0x" + this.globalData[0].toString(16) + ", index " + 0,
-                        );
+                        console.log("CMD_INIT_READ of a 256 byte buffer using READ_DATA_REG");
+                        // console.log(
+                        //     "CMD_INIT_READ: READ_DATA_REG 0x" + this.globalData[0].toString(16) + ", index " + 0,
+                        // );
                         this.WriteDataPort(this.globalData[0]);
                         this.globalIndex = 1;
                         // LatchedAddress
@@ -907,9 +972,9 @@ export class AtomMMC2 {
                 case LATCH_REG: {
                     // latch the value from the MMC to the Atom (i.e. Atom is trying to read)
                     let received = val & 0xff;
-                    // console.log(
-                    //     "LATCH_REG 0x" + (addr & 0x0f).toString(16) + " <- received 0x" + received.toString(16),
-                    // );
+                    console.log(
+                        "LATCH_REG 0x" + (addr & 0x0f).toString(16) + " <- received 0x" + received.toString(16),
+                    );
                     this.byteValueLatch = received;
                     this.WriteDataPort(this.byteValueLatch);
                     break;

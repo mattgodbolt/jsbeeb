@@ -434,6 +434,10 @@ async function loadSCSIFile(file) {
     $fsModal.hide();
 }
 
+$("#mmcblob").on("click", function () {
+    mmc.createZipFile(processor.atommc.GetMMCData());
+});
+
 async function loadMMCZIPfile(file) {
     const binaryData = await readFileAsBinaryString(file);
     processor.atommc.SetMMCData(mmc.extractSDFiles(binaryData));
@@ -1291,6 +1295,12 @@ $("#download-drive-hfe-link").on("click", function () {
 
 $("#download-filestore-link").on("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
+});
+
+$("#download-mmczip-link").on("click", function () {
+    const zip = new JSZip();
+    const data = zip.file("mmc.zip", processor.atommc.getMMCData());
+    downloadDriveData(data, "atommc", ".zip");
 });
 
 $("#hard-reset").click(function (event) {
