@@ -1,8 +1,6 @@
 "use strict";
 import * as utils from "./utils.js";
-import * as jsunzip from "./lib/jsunzip.js";
 import * as jszip from "./lib/jszip.min.js"; // https://stuk.github.io/jszip/
-import $ from "jquery";
 import * as filesaver from "./lib/FileSaver.js"; //https://github.com/eligrey/FileSaver.js
 
 /*
@@ -12,8 +10,7 @@ in the src/atommc folder
 
 Simulate the AtoMMC2 device, which is a MMC/SD card reader for the Acorn Atom.
 
-First create a dictionary of the MMC data from a zipped file, into uFiles and names.  This will end up in
-this.MMCdata.
+First create a dictionary of the MMC data from a zipped file, into this.allfiles.
 
 The Acorn Atom MMC2 eprom will communicate with the MMC via 0xb400-0xb40c, which is the Atom side of the MMC2 device.
 The write() is called when 0xb400-0xb40c is written, read() is called when 0xb400-0xb40c is read.
@@ -86,6 +83,22 @@ const FA_OPEN_EXISTING = 0;
 const FA_READ = 1;
 const FA_WRITE = 2;
 const FA_CREATE_NEW = 4;
+
+// Simulate constants
+const FR_OK = 0,
+    FR_EXIST = 8,
+    FR_NO_FILE = 4,
+    FR_NO_PATH = 5,
+    FR_INVALID_NAME = 6;
+const FA_CREATE_ALWAYS = 8,
+    FA_OPEN_ALWAYS = 16,
+    ERROR_TOO_MANY_OPEN = 0x12,
+    FILENUM_OFFSET = 0x20;
+// Simulate open modes
+const O_CREAT = 0x100,
+    O_RDWR = 0x2,
+    O_RDONLY = 0x0,
+    O_BINARY = 0x8000;
 
 // See https://github.com/hoglet67/AtoMMC2Firmware
 /*
@@ -195,47 +208,76 @@ const FA_CREATE_NEW = 4;
 //     0x80: "STATUS_BUSY",
 // };
 
-export async function createZipFile(data)
-{
-    const zip = new JSZip();
+/** WFN functions
+ *
+ */
+/**
+ * Represents a file with a path and data.
+ */
+export class WFNFile {
+    /**
+     * @param {string} path - The file path.
+     * @param {Uint8Array} data - The file data.
+     */
+    constructor(path, data) {
+        this.path = path;
+        this.data = data instanceof Uint8Array ? data : new Uint8Array();
+    }
+}
 
-    // loop and enumerate data.names
-    for (let i = 0; i < data.names.length; i++) {
-        const name = data.names[i];
-        const file = data.uFiles[i];
+export async function createZipFile(data) {
+    const zip = new jszip.JSZip();
 
-        zip.file(name, file.data ? file.data : file);
+    // loop and enumerate data
+    for (let i = 0; i < data.length; i++) {
+        const name = data[i].path;
+        const file = data[i].data;
+
+        // remove leading /
+        const zipName = name.startsWith("/") ? name.slice(1) : name;
+
+        console.log("adding to zip: " + zipName);
+        zip.file(zipName, file);
     }
 
-    zip.generateAsync({type:"blob"}).then(function(content) {
+    zip.generateAsync({
+        type: "blob",
+        compression: "DEFLATE",
+        platform: "UNIX",
+    }).then(function (content) {
         // see FileSaver.js
-        saveAs(content, "atommc.zip");
+        filesaver.saveAs(content, "atommc.zip");
     });
 }
 
-export function extractSDFiles(data) {
-    var unzip = new jsunzip.JSUnzip();
-    // console.log("Attempting to unzip");
-    var result = unzip.open(data);
-    if (!result.status) {
-        throw new Error("Error unzipping ", result.error);
-    }
-    var uncompressedFiles = [];
-    var loadedFiles = [];
+export async function extractSDFiles(data) {
+    const newunzip = new jszip.JSZip();
+    const unzip = await newunzip.loadAsync(data);
 
-    for (var f in unzip.files) {
-        var match = f.match(/^[a-z./]+/i);
-        // console.log("m: "+match);
+    // Collect all promises for file extraction
+    const filePromises = [];
+    const unzippedfiles = [];
+
+    for (const f in unzip.files) {
+        // only unzip files with names that have a-z, ., or / (case insensitive)
+        const match = f.match(/^[a-z./]+/i);
         if (!match) {
-            // console.log("Skipping file: ", f);
+            console.log("Skipping file: ", fileObj);
             continue;
         }
-        // console.log("Adding file: ", f);
-        uncompressedFiles.push(unzip.read(f));
-        loadedFiles.push("/" + f);
+        // Push a promise that resolves when the file is extracted
+        const fileObj = unzip.files[f];
+        const promise = fileObj.async("uint8array").then((fileData) => {
+            // push the data and the filename
+            unzippedfiles.push(new WFNFile("/" + f, fileData));
+        });
+        filePromises.push(promise);
     }
-    // console.log("Uncompressed files: ", uncompressedFiles.length);
-    return { uFiles: uncompressedFiles, names: loadedFiles };
+
+    // Wait for all files to be extracted
+    await Promise.all(filePromises);
+
+    return unzippedfiles;
 }
 
 export async function LoadSD(file) {
@@ -243,362 +285,382 @@ export async function LoadSD(file) {
     return extractSDFiles(data);
 }
 
-export class AtomMMC2 {
-    attachGamepad(gamepad) {
-        this.gamepad = gamepad;
-    }
-
-    // the CPU is resetting the MMC
-    reset(hard) {
-        if (hard) {
-            // could store this to an EE file
-            // EEPROM is 0xFF initially
-            this.configByte = 0xff; //eeprom[EE_SYSFLAGS];
-        }
-        this.CWD = "";
-        this.seekpos = 0;
-    }
-
-    // Set the MMC data, which is the unzipped files
-    SetMMCData(data) {
-        this.MMCdata = data;
-    }
-
-    GetMMCData() {
-        return this.MMCdata;
-    }
-
-    constructor(cpu) {
+class WFN {
+    /**
+     * Create a new WFN instance.
+     * @param {Object} cpu - The CPU instance.
+     */
+    constructor(mmc, cpu) {
+        this.mmc = mmc;
         this.cpu = cpu;
-        this.MMCdata = undefined; // will be set by SetMMCData
-        this.gamepad = null;
-        this.MMCtoAtom = STATUS_BUSY;
-        this.heartbeat = 0x55;
-        this.MCUStatus = MMC_MCU_BUSY;
-        this.configByte = 0; /// EEPROM
-        this.byteValueLatch = 0;
+
         this.globalData = new Uint8Array(256);
         this.globalIndex = 0;
         this.globalDataPresent = 0;
-        this.filenum = -1;
-        this.worker = null;
-        this.seekpos = 0;
-        this.WildPattern = ".*";
-        this.foldersSeen = [];
-        this.dfn = 0;
-        this.fildata = null;
+        this.globalAmount = 0;
+
+        this.fildata = new Array(4).fill(null);
         this.fildataIndex = 0;
-        this.TRISB = 0;
-        this.PORTB = 0;
-        this.LATB = 0;
+
+        this.openeddir = ""; // Directory requested when reading directories
+        this.foldersSeen = []; // Folders seen when reading directories
+        this.dfn = 0; // Directory file number, used to track the current file in the zip file when reading directories
+
         this.CWD = "";
-        this.reset(true);
+
+        this.filenum = -1;
+        this.seekpos = 0;
+        this.WildPattern = ".*"; // Default wildcard pattern (for regex not ATOM)
+
+        this.allfiles = [];
     }
 
     WFN_WorkerTest() {
         console.log("WFN_WorkerTest");
     }
 
-    fileOpen(mode) {
-        // no data available
-        if (this.MMCdata === undefined) return 4; // no file
-
-        var ret = 0;
-        if (this.filenum === 0) {
-            // spread operator '...'
-            var fname = String.fromCharCode(...this.globalData.slice(0, -1)).split("\0")[0];
-            fname = "/" + fname;
-            if (this.CWD.length > 0) fname = this.CWD + fname;
-            console.log("FileOpen " + fname + " mode " + mode);
-            // The scratch file is fixed, so we are backwards compatible with 2.9 firmware
-            this.fildata = new Uint8Array();
-            this.fildataIndex = 0;
-            //ret = f_open(&fildata[0], (const char*)globalData, mode);
-            ret = 4; //FR_NO_FILE
-
-            // search to see if this might be a directory name
-            var dirname = fname + "/";
-            var result = this.MMCdata.names.findIndex((file) => {
-                return file.startsWith(dirname);
-            }, dirname);
-            var a = this.MMCdata.names.indexOf(fname);
-            if (result !== -1) {
-                ret = 8; //FR_EXISTS
-            } else if (a !== -1) {
-                this.fildata = this.MMCdata.uFiles[a].data;
-                ret = 0; //FR_OK
-            } else {
-                console.log("FileOpen scratch file mode " + mode);
-
-                // need to open a new file (but not a directory) 
-                // need to add the fname to mmcdata.names
-                // and the data to mmcdata.uFiles
-                this.MMCdata.names.push(fname);
-                this.MMCdata.uFiles.push(this.fildata);
-
-                //file is opened for writing (or the directory is read!)
-                // opening the file for writing, creates an entry
-                // data can be written to that entry
-                // if the entry already exists, then a new entry is created and the old one is deleted
-                // if the entry is appended, then the old entry is loaded and the fildataIndex is set to the end.
-                // see 'ff_emu' in atomulator.
-
-            // ret = 0; // FR_OK
-
-
-
-            //     // If a random access file is being opened, search for the first available FIL
-                // this.filenum = 0;
-            //     if (!fildata[1].fs) {
-            //         this.filenum = 1;
-            //     } else if (!fildata[2].fs) {
-            //         this.filenum = 2;
-            //     } else if (!fildata[3].fs) {
-            //         this.filenum = 3;
-            //     }
-            //     if (this.filenum > 0) {
-            //         // ret = f_open(&fildata[this.filenum], (const char*)globalData, mode);
-            //         // if (!ret) {
-            //             // No error, so update the return value to indicate the file num
-            //             // ret = FILENUM_OFFSET | filenum;
-            //         // }
-            //     } else {
-            //         // All files are open, return too many open files
-            //         ret = ERROR_TOO_MANY_OPEN;
-            }   
-        }
-        return STATUS_COMPLETE | ret;
-    }
-
     WFN_FileOpenRead() {
-        console.log("WFN_FileOpenRead " + this.filenum);
-
-        var res = this.fileOpen(FA_OPEN_EXISTING | FA_READ);
-        // if (this.filenum < 4) {
-        //     // FILINFO *filinfo = &filinfodata[this.filenum];
-        //     get_fileinfo_special(filinfo);
-        // }
-        this.WriteDataPort(STATUS_COMPLETE | res);
+        console.log(`WFN_FileOpenRead ${this.filenum}`);
+        const res = this.fileOpen(FA_OPEN_EXISTING | FA_READ);
+        this.mmc.WriteDataPort(STATUS_COMPLETE | res);
     }
 
     WFN_FileOpenWrite() {
-        console.log("WFN_FileOpenWrite " + this.filenum + " not implemented yet");
-        console.log("   " + this.globalData.slice(0,10).toString() + " " + this.globalData.length + " bytes " + this.globalAmount + " bytes");
-        const res = this.fileOpen(FA_CREATE_NEW|FA_WRITE)
-        this.WriteDataPort(STATUS_COMPLETE | res);
+        console.log(`WFN_FileOpenWrite ${this.filenum}`);
+        console.log(`filename   ${String.fromCharCode(...this.globalData)} `);
+        const res = this.fileOpen(FA_CREATE_NEW | FA_WRITE);
+        this.mmc.WriteDataPort(STATUS_COMPLETE | res);
     }
 
     WFN_FileClose() {
-        console.log("WFN_FileClose " + this.filenum);
+        console.log(`WFN_FileClose ${this.filenum}`);
         this.seekpos = 0;
+        this.mmc.WriteDataPort(STATUS_COMPLETE);
+    }
 
-        // FIL *fil = &fildata[filenum];
-        // WriteDataPort(STATUS_COMPLETE | f_close(fil));
-        this.WriteDataPort(STATUS_COMPLETE);
+    GetWildcard() {
+        // Extract the path from this.globalData (Uint8Array) until the first null byte
+        let path = this.trimToFilename(this.globalData);
+
+        // haswildcard is true if the path contains a wildcard character ('*' or '?')
+        let hasWildcard = path.includes("*") || path.includes("?");
+
+        path = path.replace(/\\/g, "/"); // Normalize path separators
+        let hasSlash = path.includes("/");
+
+        if (hasWildcard) {
+            if (hasSlash) {
+                // globaldata will have  everything up until the last slash
+                let lastSlashIndex = path.lastIndexOf("/");
+                this.globalData = path.slice(0, lastSlashIndex + 1);
+                this.WildPattern = path.slice(lastSlashIndex + 1);
+            } else {
+                this.WildPattern = this.globalData;
+                this.globalData = "";
+            }
+        } else {
+            // No wildcard, just return the path
+            this.WildPattern = ".*";
+        }
+    }
+
+    // Strip trailing slash from a path string
+    stripTrailingSlash(path) {
+        if (path.endsWith("/")) {
+            return path.slice(0, -1);
+        }
+        return path;
+    }
+
+    /*
+    MMCData file contains only files with paths, and no directories.
+    To simulate directories, a basepath with multiple entries is a directory
+    For example, if the MMCData file contains:
+    /dir1/file1.txt
+    /dir1/file2.txt
+    /dir2/file3.txt
+    then /dir1/ is a directory, and /dir2/ is a directory.
+    The findfirst and findnext functions will simulate directory traversal by checking the paths in allfiles.
+    The findfirst function will set this.dfn to the index of the first file in the directory, and this.openeddir to the directory path.
+    The findnext function will iterate through the files in the directory, checking if the file path starts with this.openeddir.
+    If a file path starts with this.openeddir, it is considered to be in the directory.
+    If a file path does not start with this.openeddir, it is considered to be outside the directory.
+    If a file path has a subdirectory (i.e., it contains a slash after the directory path), it is considered to be in a subdirectory and is returned
+    once and subsequent calls to findnext will skip it.
+
+
+
+    */
+
+    // Simulate findfirst: check if a directory exists in allfiles
+    findfirst(path) {
+        const dirPrefix = this.stripTrailingSlash(path) + "/"; // Ensure path ends with a slash
+
+        // Simulate directory open: check if any file starts with path + "/"
+        const f_index = this.allfiles.findIndex((file) => file.path.startsWith(dirPrefix));
+
+        // if index is found, set dfn to the index of the first file in the directory
+        if (f_index !== -1) {
+            this.dfn = f_index + 1; // Set dfn to the next entry after the first one in this directory
+            this.openeddir = dirPrefix; // record the opened directory
+        }
+
+        this.foldersSeen = [];
+
+        return f_index !== -1;
+    }
+
+    // this.dfn is the index of the next file in the zip file
+
+    // Simulate findnext: iterate through directory entries in allfiles[].path
+    findnext() {
+        let foundDirEntry = "";
+        do {
+            // entry = readdir()
+
+            if (this.dfn >= this.allfiles.length) break;
+
+            // Check if the next file starts with the opened directory
+            const nextFullName = this.allfiles[this.dfn].path;
+            //
+
+            if (!nextFullName.startsWith(this.openeddir)) {
+                this.dfn += 1;
+                continue; // Skip to the next entry if it doesn't match the opened directory
+            }
+
+            let relativeName = nextFullName.slice(this.openeddir.length);
+
+            // Skip empty or root entries
+            if (relativeName === "" && relativeName !== "/") {
+                this.dfn += 1;
+                continue; // Skip to the next entry if it doesn't match the opened directory
+            }
+
+            //
+            let folders = relativeName.split("/");
+
+            relativeName = folders[0];
+
+            // skip files in subdirectories if the subdirecty has been seen before
+            if (folders.length > 1) {
+                if (this.foldersSeen.includes(folders[0])) {
+                    // If this is seen subfolder, skip this entry
+                    this.dfn += 1;
+                    continue;
+                }
+                this.foldersSeen.push(folders[0]);
+                relativeName = folders[0] + "/"; // relative name is the folder + slash
+            }
+            foundDirEntry = relativeName;
+        } while (foundDirEntry == "");
+
+        if (foundDirEntry) {
+            // Optionally, check for valid 8.3 filename here if needed
+            // For now, just return the entry
+            this.dfn += 1;
+            return foundDirEntry;
+        }
+
+        // No more entries
+        return "";
+    }
+
+    // Simulate f_opendir: open a directory (set dir.dirname to path)
+    f_opendir(dir, path) {
+        // Build absolute path and check validity
+        const xpath = this.trimToFilename(path);
+        const absResult = this.buildAbsolutePath(xpath, false);
+        if (absResult.error) {
+            return absResult.error;
+        }
+        const newpath = absResult.path;
+
+        if (this.findfirst(newpath)) {
+            return FR_OK;
+        } else {
+            return FR_NO_PATH;
+        }
     }
 
     WFN_DirectoryOpen() {
-        var path = String.fromCharCode(...this.globalData.slice(0, -1)).split("\0")[0];
-        if (this.CWD.length > 0) path = this.CWD + path;
-        else if (path !== "") path = "/" + path;
+        // Separate wildcard and path
+        this.GetWildcard();
 
-        this.globalData = new TextEncoder("utf-8").encode(path + "\0");
-
-        console.log("WFN_DirectoryOpen : " + path);
-
-        // found a wildcard but no final '/' then just use wildcard
-        // found a final / followed by wildcard, set path and wildcard
-
-        this.WildPattern = ".*";
-        this.foldersSeen = [];
-        // GetWildcard(); // into globaldata
-
-        var res = 0; // FR_OK
-        path += "/";
-        // globaldata is the wildcard for the getting the director
-        // res = f_opendir(&dir, (const char*)globalData);
-        var result = this.MMCdata.names.findIndex((file) => {
-            return file.startsWith(path);
-        }, path);
-        this.openeddir = "";
-        if (result === -1)
-            res = 5; //FR_NO_PATH
-        else this.openeddir = path;
-
+        let dir = { dirname: "" };
+        let res = this.f_opendir(dir, this.globalData);
         this.dfn = 0;
-
-        if (this.MMCdata === undefined) res = 4; //FR_ERROR
-
-        // if (this.FR_OK != res)
-        if (0 !== res) {
-            this.WriteDataPort(STATUS_COMPLETE | res);
+        if (res !== 0) {
+            this.mmc.WriteDataPort(STATUS_COMPLETE | res);
             return;
         }
+        this.mmc.WriteDataPort(STATUS_OK);
+    }
 
-        this.WriteDataPort(STATUS_OK);
+    f_readdir() {
+        let fno = { fname: "", fsize: 0, fattrib: 0 };
+        // If a file found copy it's details, else set size to 0 and filename to ''
+        const nextentry = this.findnext();
+        fno.fname = nextentry;
+
+        return { error: FR_OK, fno: fno };
     }
 
     WFN_DirectoryRead() {
         console.log("WFN_DirectoryRead : ");
-
         while (true) {
-            if (
-                this.MMCdata === undefined ||
-                this.MMCdata.names[this.dfn] === undefined ||
-                this.MMCdata.names.length === 0
-            ) {
-                // done
-                var res = 0; // no error just empty
-                this.WriteDataPort(STATUS_COMPLETE | res);
-                // console.log("WFN_DirectoryRead STATUS_COMPLETE");
+            let result = this.f_readdir();
+            let res = result.error;
+
+            if (res !== FR_OK || result.fno.fname === "") {
+                this.mmc.WriteDataPort(STATUS_COMPLETE | res);
                 return;
             }
 
-            var longname = this.MMCdata.names[this.dfn];
-            var cwd = new RegExp("^" + this.openeddir); // ,'i'); for case insensitive
+            const fname = result.fno.fname;
 
-            // skip any file that doesn't begin with the CWD (beginning with /)
-            var dirmatch = longname.match(cwd);
-            if (!dirmatch) {
-                this.dfn += 1;
-                continue;
+            // Check to see if filename matches current wildcard
+            // const Match = wildcmp(WildPattern, longname);
+            const Match = fname.match(new RegExp(this.WildPattern));
+
+            if (Match) {
+                // if is a directory, str will be <fname>
+
+                const isdir = fname.endsWith("/");
+                let str = fname;
+                if (isdir) {
+                    str = str.slice(0, -1); // Remove trailing slash for directory names
+                    str = `<${str}>`; // Enclose directory names in <>
+                }
+
+                console.log(`WFN_DirectoryRead STATUS_OK  ${str}`);
+
+                // Convert the string to a Uint8Array
+                this.globalData = new TextEncoder("utf-8").encode(str + "\0");
+
+                this.mmc.WriteDataPort(STATUS_OK);
+                return;
             }
-
-            longname = longname.replace(cwd, "");
-
-            var folders = longname.split("/");
-            var fname = folders[0];
-            var isdir = folders.length > 1;
-            var Match = fname.match(new RegExp(this.WildPattern));
-
-            var seenAlready = isdir && this.foldersSeen.includes(fname);
-
-            if (!Match || seenAlready) {
-                this.dfn += 1;
-                continue;
-            }
-
-            var str = "";
-            // check for dir
-            if (isdir) {
-                // its a directory name
-                str += "<";
-            }
-
-            // str+=this.MMCdata.names[this.dfn];
-            str += fname;
-            if (isdir) {
-                // its a directory name
-                str += ">";
-                this.foldersSeen.push(fname);
-            }
-
-            console.log("WFN_DirectoryRead STATUS_OK  " + str);
-            this.WriteDataPort(STATUS_OK);
-            this.globalData = new TextEncoder("utf-8").encode(str + "\0");
-
-            this.dfn += 1;
-            return;
         }
+    }
+
+    dir_exists(path) {
+        // ensure path ends in slash
+        if (!path.endsWith("/")) path += "/";
+
+        // Check if the path exists in the names array
+        if (this.allfiles.some((file) => file.path === path || file.path.startsWith(path))) {
+            // Check if the path is a directory (ends with '/')
+            return FR_OK;
+        }
+        return FR_NO_PATH;
+    }
+
+    realpath(path) {
+        // In C, realpath resolves all symbolic links, relative paths, and returns the absolute path.
+        // In JS, we just normalize the path (remove redundant slashes, resolve '.' and '..').
+        // This is a simplified version and does not handle symlinks.
+        const parts = [];
+        for (const part of path.split("/")) {
+            if (part === "" || part === ".") continue;
+            if (part === "..") {
+                if (parts.length > 0) parts.pop();
+            } else {
+                parts.push(part);
+            }
+        }
+        path = "/" + parts.join("/");
+
+        while (path.length > 0 && path.endsWith("/")) {
+            path = path.slice(0, -1);
+        }
+        console.log("realpath " + path);
+        return path;
+    }
+
+    f_chdir(path) {
+        // ensure newpath is an absolute path (relative paths appended to CWD,
+        // absolute paths are used as is)
+        const newpath = this.buildAbsolutePath(path, false);
+        if (newpath.error) {
+            return newpath.error; // Return error if path is invalid
+        }
+
+        // Resolve the newpath
+        const fullpath = this.realpath(newpath.path);
+        if (fullpath !== undefined) {
+            // Path exists and is a directory
+            if (this.dir_exists(fullpath) == FR_OK) {
+                this.CWD = fullpath; // Update the base path
+                return FR_OK; // Success
+            }
+        }
+        return FR_NO_PATH;
+    }
+
+    trimToFilename(globaldata) {
+        return String.fromCharCode(...globaldata.slice(0, -1)).split("\0")[0];
     }
 
     WFN_SetCWDirectory() {
-        var dirname = String.fromCharCode(...this.globalData.slice(0, -1)).split("\0")[0];
-
-        console.log("WFN_SetCWDirectory " + dirname);
-        //this.WriteDataPort(STATUS_COMPLETE | f_chdir((const XCHAR*)globalData));
-        if (dirname === "/" || dirname === "") {
-            this.CWD = "";
-        } else if (dirname === ".") {
-            console.log("set to .");
-        } else if (dirname === "..") {
-            var dirs = this.CWD.split("/");
-            dirs.pop(); // remove right
-            if (dirs.length > 1) this.CWD = "/" + dirs.join("/");
-            else this.CWD = "";
-        } else if (dirname[0] === "/") {
-            this.CWD = dirname;
-        } else {
-            this.CWD += "/" + dirname;
-        }
-        this.WriteDataPort(STATUS_COMPLETE);
+        const dirname = this.trimToFilename(this.globalData);
+        console.log(`WFN_SetCWDirectory ${dirname}`);
+        let ret = this.f_chdir(dirname);
+        this.mmc.WriteDataPort(STATUS_COMPLETE | ret);
     }
 
     WFN_FileSeek() {
-        console.log("WFN_FileSeek " + this.filenum + " not implemented yet");
-        // Combine 4 bytes from globalData into a 32-bit unsigned integer (little-endian)
+        console.log(`WFN_FileSeek ${this.filenum} not implemented yet`);
         this.seekpos =
-            (this.globalData[0]) |
-            (this.globalData[1] << 8) |
-            (this.globalData[2] << 16) |
-            (this.globalData[3] << 24);
-        console.log("    " + this.seekpos + " not implemented yet");
-
-        //           FIL *fil = &fildata[filenum];
-        //    WriteDataPort(STATUS_COMPLETE | f_lseek(fil, dwb.dword));
+            this.globalData[0] | (this.globalData[1] << 8) | (this.globalData[2] << 16) | (this.globalData[3] << 24);
+        console.log(`    ${this.seekpos} not implemented yet`);
     }
 
     WFN_FileRead() {
-        // ÷        console.log("WFN_FileRead : ");
-
         if (this.globalAmount === 0) {
             this.globalAmount = 256;
         }
-
-        var read = Math.min(this.fildata.length, this.globalAmount);
-        var fildataEnd = this.fildataIndex + read;
-        var data = this.fildata.slice(this.fildataIndex, fildataEnd);
-        // console.log("WFN_FileRead " + this.fildataIndex + " .read " + read + " .datalen " + data.length);
-
-        //fildata
-        //int ret;
-        var ret;
-        //FIL *fil = &fildata[this.filenum];
-        //UINT read;
-        //ret = f_read(fil, globalData, globalAmount, &read);
-        //fil = &fildata[filenum];
-        ret = 0;
-
+        const read = Math.min(this.fildata[0].data.length, this.globalAmount);
+        const fildataEnd = this.fildataIndex + read;
+        const data = this.fildata[0].data.slice(this.fildataIndex, fildataEnd);
+        let ret = 0;
         this.globalData = data;
         this.fildataIndex = fildataEnd;
-
         if (this.filenum > 0 && ret === 0 && this.globalAmount !== read) {
-            this.WriteDataPort(STATUS_EOF); // normal file
+            this.mmc.WriteDataPort(STATUS_EOF);
         } else {
-            // scratch file
-            this.WriteDataPort(STATUS_COMPLETE | ret);
+            this.mmc.WriteDataPort(STATUS_COMPLETE | ret);
         }
     }
 
     WFN_FileWrite() {
-        // first writes the header, then the code.
-        console.log("WFN_FileWrite ");
-        // Display the value of this.globalData as a string, replacing non-ASCII with '.'
         let str = "";
         for (let i = 0; i < this.globalAmount; i++) {
             const code = this.globalData[i];
-            str += (code >= 32 && code <= 126) ? String.fromCharCode(code) : ".";
+            str += code >= 32 && code <= 126 ? String.fromCharCode(code) : ".";
         }
         console.log(str);
-        
-        //***** 
-        // This must create a new entry in globaldata given the name in fildata[filenum] in "names"
-        // and data from globalData.
-        //  */
-        //   FIL *fil = &fildata[filenum];
-        //    UINT written;
-        if (this.globalAmount == 0)
-        {
+        if (this.globalAmount === 0) {
             this.globalAmount = 256;
         }
-        const data = this.globalData;
         const wrote = this.globalAmount;
-        var fildataEnd = this.fildataIndex + wrote;
+        const fildataEnd = this.fildataIndex + wrote;
+        console.log(`WFN_FileWrite ${this.fildataIndex} .wrote ${wrote} .fildataEnd ${fildataEnd}`);
 
-//        this.fildata.slice(this.fildataIndex, fildataEnd) = data;
-        console.log("WFN_FileWrite " + this.fildataIndex + " .wrote " + wrote + " .fildataEnd " + fildataEnd);
-        const res = 0; // f_write(fil, (void*)globalData, globalAmount, &written);       
-        this.WriteDataPort(STATUS_COMPLETE | res);
+        // append this.globalData to this.fildata[0] at this.fildataIndex
+        let oldData = this.fildata[0].data;
+        let newLength = Math.max(oldData.length, fildataEnd);
+        let newData = new Uint8Array(newLength);
+        newData.set(oldData, 0);
+        newData.set(this.globalData.slice(0, wrote), this.fildataIndex);
+        this.fildata[0].data = newData;
+
+        this.fildataIndex = fildataEnd;
+
+        // const res = this.f_write(fil, (void*)globalData, globalAmount, &written);
+
+        let res = 0; // always works !
+        this.mmc.WriteDataPort(STATUS_COMPLETE | res);
     }
 
     WFN_ExecuteArbitrary() {
@@ -606,45 +668,266 @@ export class AtomMMC2 {
     }
 
     WFN_FileOpenRAF() {
-        console.log("WFN_FileOpenRAF " + this.filenum + " not implemented yet");
-        //    WriteDataPort(STATUS_COMPLETE | fileOpen(FA_OPEN_ALWAYS|FA_WRITE));
+        console.log(`WFN_FileOpenRAF ${this.filenum} not implemented yet`);
     }
     WFN_FileDelete() {
-        console.log("WFN_FileDelete " + this.filenum + " not implemented yet");
-        //    WriteDataPort(STATUS_COMPLETE | f_unlink((const XCHAR*)&globalData[0]));
+        console.log(`WFN_FileDelete ${this.filenum} not implemented yet`);
     }
     WFN_FileGetInfo() {
-        console.log("WFN_FileGetInfo " + this.filenum + " not implemented yet");
-        //    FIL *fil = &fildata[filenum];
-        //    FILINFO *filinfo = &filinfodata[filenum];
-        //    union
-        //    {
-        //       DWORD dword;
-        //       char byte[4];
-        //    }
-        //    dwb;
+        console.log(`WFN_FileGetInfo ${this.filenum} not implemented yet`);
+    }
 
-        //    dwb.dword = fil->fsize;
-        //    globalData[0] = dwb.byte[0];
-        //    globalData[1] = dwb.byte[1];
-        //    globalData[2] = dwb.byte[2];
-        //    globalData[3] = dwb.byte[3];
+    reset() {
+        this.CWD = "";
+    }
 
-        //    dwb.dword = (DWORD)(fil->org_clust-2) * fatfs.csize + fatfs.database;
-        //    globalData[4] = dwb.byte[0];
-        //    globalData[5] = dwb.byte[1];
-        //    globalData[6] = dwb.byte[2];
-        //    globalData[7] = dwb.byte[3];
+    clearData() {
+        this.globalData = new Uint8Array(256);
+        this.globalIndex = 0;
+        this.globalDataPresent = 0;
+    }
 
-        //    dwb.dword = fil->fptr;
-        //    globalData[8] = dwb.byte[0];
-        //    globalData[9] = dwb.byte[1];
-        //    globalData[10] = dwb.byte[2];
-        //    globalData[11] = dwb.byte[3];
+    addData(data) {
+        this.globalData[this.globalIndex] = data;
+        ++this.globalIndex;
+        this.globalDataPresent = 1;
+    }
 
-        //    globalData[12] = filinfo->fattrib & 0x3f;
+    getData(restart = false) {
+        if (restart) {
+            this.globalIndex = 0;
+            this.globalDataPresent = 0;
+        }
+        let val = 0;
+        if (this.globalIndex < this.globalData.length) val = this.globalData[this.globalIndex] | 0;
+        this.globalIndex++;
+        return val;
+    }
 
-        //    WriteDataPort(STATUS_OK);
+    setTransferLength(length) {
+        this.globalAmount = length;
+    }
+
+    fileOpen(mode) {
+        if (!this.allfiles) return 4; // no file
+        let ret = 0;
+        let fname = this.trimToFilename(this.globalData);
+        console.log(`FileOpen ${fname} mode ${mode}`);
+
+        if (this.filenum === 0) {
+            this.fildataIndex = 0; // FIXME : should be one for each fildata if going down this line!
+            // The scratch file is fixed, so we are backwards compatible with 2.9 firmware
+            let fopen = this.f_open(fname, mode);
+            if (fopen.fp !== null) this.fildata[0] = this.allfiles[fopen.fp];
+            ret = fopen.error;
+        } else {
+            this.filenum = 0;
+            if (this.fildata[1] === 0) {
+                this.filenum = 1;
+            } else if (this.fildata[2] === 0) {
+                this.filenum = 2;
+            } else if (this.fildata[3] === 0) {
+                this.filenum = 3;
+            }
+            if (this.filenum > 0) {
+                let fopen = this.f_open(fname, mode);
+                this.fildata[this.filenum] = this.allfiles[fopen.fp];
+                if (fopen.error) {
+                    // No error, so update the return value to indicate the file num
+                    ret = FILENUM_OFFSET | this.filenum;
+                }
+            } else {
+                // All files are open, return too many open files
+                ret = ERROR_TOO_MANY_OPEN;
+            }
+        }
+        return STATUS_COMPLETE | ret;
+    }
+
+    // Convert a path to an absolute, normalized path and optionally validate 8.3 filename
+    buildAbsolutePath(xpath, validateName = true) {
+        // Normalize path separators
+        let path = String(xpath).replace(/\\/g, "/");
+
+        // Optionally validate 8.3 filename rules
+        if (validateName) {
+            // Find the last element of the path
+            let nameIdx = path.lastIndexOf("/");
+            let name = nameIdx === -1 ? path : path.slice(nameIdx + 1);
+
+            // Find the suffix
+            let suffixIdx = name.indexOf(".");
+            let namePart = suffixIdx !== -1 ? name.slice(0, suffixIdx) : name;
+            let suffixPart = suffixIdx !== -1 ? name.slice(suffixIdx + 1) : "";
+
+            // Validate the name part
+            if (namePart.length < 1 || namePart.length > 8) {
+                // Name not between 1 and 8 characters
+                return { error: "FR_INVALID_NAME" };
+            }
+
+            // Validate the optional suffix part
+            if (suffixIdx !== -1) {
+                // Reject multiple suffixes
+                if (suffixPart.includes(".")) {
+                    return { error: "FR_INVALID_NAME" };
+                }
+                if (suffixPart.length === 0) {
+                    // Remove a dangling suffix
+                    path = path.slice(0, path.length - 1);
+                } else if (suffixPart.length > 3) {
+                    // Suffix too long
+                    return { error: "FR_INVALID_NAME" };
+                }
+            }
+        }
+
+        // Make the path absolute
+        let absPath;
+        if (path.startsWith("/")) {
+            // absolute: append the path to the root directory path
+            absPath = path;
+        } else {
+            // relative: append the path to current directory path
+            absPath = this.CWD + "/" + path; // CWD should be MMCPath
+        }
+        return { path: absPath };
+    }
+
+    // Check if a file exists in allfiles by name (returns FR_OK if exists, FR_NO_PATH if not)
+    file_exists(name) {
+        // if (!this.allfiles || !Array.isArray(this.allfiles)) return FR_NO_PATH;
+        // Normalize name to absolute path
+        const absResult = this.buildAbsolutePath(name, false);
+        if (absResult.error) return FR_NO_PATH;
+        const absName = absResult.path;
+        // Search for a WFNFile with matching path (not a directory)
+        // const file = this.allfiles.find(f => f instanceof WFNFile && f.path === absName && !absName.endsWith("/"));
+        const file = this.allfiles.find((f) => f.path === absName);
+        return file ? FR_OK : FR_NO_PATH;
+    }
+
+    open(path, mode) {
+        let fileIndex = -1;
+        if (this && this.allfiles) {
+            fileIndex = this.allfiles.findIndex((f) => f.path === path);
+
+            if (fileIndex === -1 && mode & O_CREAT) {
+                // Create new file
+                this.allfiles.push(new WFNFile(path, new Uint8Array()));
+                fileIndex = this.allfiles.length - 1;
+            } else if (fileIndex !== -1) {
+                //cannot find file and not creating it.
+            }
+        }
+
+        return fileIndex;
+    }
+
+    // Simulate f_open in JavaScript
+    // Returns FR_OK (0) on success, or error code
+    // fp: file object (JS object), path: string, mode: integer flags
+    f_open(path, mode) {
+        // Build absolute path and check validity
+        const absResult = this.buildAbsolutePath(path, true);
+        if (absResult.error) {
+            return { fp: null, error: FR_INVALID_NAME };
+        }
+        const open_path = absResult.path;
+
+        // Check if file exists
+        let exists = this.file_exists(open_path);
+
+        // Mask mode flags
+        mode &= FA_READ | FA_WRITE | FA_CREATE_ALWAYS | FA_OPEN_ALWAYS | FA_CREATE_NEW;
+
+        let open_mode = 0;
+        if (exists === FR_OK) {
+            if (mode & FA_CREATE_NEW) return FR_EXIST;
+            if (mode & FA_CREATE_ALWAYS) open_mode = O_CREAT;
+            if (mode & (FA_READ | FA_WRITE)) {
+                if (mode & FA_WRITE) open_mode |= O_RDWR;
+                else open_mode |= O_RDONLY;
+            }
+        } else {
+            if (mode & (FA_OPEN_ALWAYS | FA_CREATE_NEW | FA_CREATE_ALWAYS)) open_mode = O_CREAT | O_RDWR;
+            else return FR_NO_FILE;
+        }
+
+        // Simulate file open/create
+        let fileIndex = this.open(open_path, open_mode | O_BINARY);
+
+        if (fileIndex >= 0) {
+            return { fp: fileIndex, error: FR_OK };
+        } else {
+            return { error: FR_INVALID_NAME };
+        }
+    }
+}
+
+/**
+ * AtomMMC2 emulates the AtoMMC2 device for the Acorn Atom.
+ * Handles SD/MMC file operations and communication with the Atom.
+ */
+export class AtomMMC2 {
+    /**
+     * Attach a gamepad object for joystick support.
+     * @param {Object} gamepad
+     */
+    attachGamepad(gamepad) {
+        this.gamepad = gamepad;
+    }
+
+    /**
+     * Reset the MMC state.
+     * @param {boolean} hard - If true, perform a hard reset.
+     */
+    reset(hard) {
+        if (hard) {
+            this.configByte = 0xff;
+        }
+        this.WFN.reset();
+        this.seekpos = 0;
+    }
+
+    /**
+     * Set the MMC data (unzipped files).
+     * @param {Object} data
+     */
+    SetMMCData(data) {
+        this.WFN.allfiles = data;
+    }
+
+    /**
+     * Get the MMC data.
+     * @returns {Object}
+     */
+    GetMMCData() {
+        return this.WFN.allfiles;
+    }
+
+    /**
+     * @param {Object} cpu - The CPU instance.
+     */
+    constructor(cpu) {
+        this.cpu = cpu;
+        this.gamepad = null;
+        this.MMCtoAtom = STATUS_BUSY;
+        this.heartbeat = 0x55;
+        this.MCUStatus = MMC_MCU_BUSY;
+        this.configByte = 0;
+        this.byteValueLatch = 0;
+        this.worker = null;
+        this.seekpos = 0;
+        this.WildPattern = ".*";
+        this.foldersSeen = [];
+        this.dfn = 0;
+        this.TRISB = 0;
+        this.PORTB = 0;
+        this.LATB = 0;
+
+        this.WFN = new WFN(this, cpu);
+        this.reset(true);
     }
 
     // MMCtoAtom and MCUStatus are used to transfer data
@@ -667,327 +950,154 @@ export class AtomMMC2 {
 
     // CPU is writing to 0xb400-0xb40c
     write(addr, val) {
-        // begin a write operation to the MMC
-
-        // console.log("WriteMMC 0x" + addr.toString(16) + " <- 0x" + val.toString(16));
         this.lastaddr = addr;
         this.at_process(addr, val, true);
     }
 
     // CPU is reading from 0xb400-0xb40c
     read(addr) {
-        // the get the value from the MMC as it is now
-        var Current = this.MMCtoAtom;
-        var val = Current & 0xff;
-        var reg = addr & 0x0f;
-        var stat = this.MCUStatus;
-
-        // set the read bit
+        const Current = this.MMCtoAtom;
+        const val = Current & 0xff;
+        const reg = addr & 0x0f;
+        const stat = this.MCUStatus;
         this.MCUStatus &= ~MMC_MCU_READ;
-
-        // ignore the current addr; use the last write address
         addr = this.lastaddr;
-
-        // reading the MMC status register (returns the status)
-        // or a a value written to the port
         if (reg === STATUS_REG) {
-            // console.log("ReadMMC STATUS_REG : 0x" + (addr & 0x0f).toString(16) + " -> val 0x" + stat.toString(16));
-            // status REG from MCUStatus
             return stat;
         }
-        // else if (val in status) console.log("ReadMMC " + cmd[reg] + " -> " + status[val]);
-        // else console.log("ReadMMC " + cmd[reg] + " -> 0x" + val.toString(16));
-
-        // reading, but process the read before returning the value
         this.at_process(addr, val, false);
-
         return Current;
     }
-    // Depending on the addr, that will say what command is required.
-    // If it is a write, then the data will be ReadDataPort and this is in 'val' from Atom.
-    // If it is a read, (via READ_DATA_REG) then the data will be written to Atom via WriteDataPort.
+    /**
+     * Process Atom MMC register access.
+     * @param {number} addr
+     * @param {number} val
+     * @param {boolean} write
+     */
     at_process(addr, val, write) {
-        let LatchedAddress = addr & 0x0f;
+        const LatchedAddress = addr & 0x0f;
         const ADDRESS_MASK = 0x07;
-
-        // console.log("at_process "+write+" 0x"+addr.toString(16)+" <- 0x"+val.toString(16));
-
         this.worker = null;
-
-        // ser the read bit
         this.MCUStatus |= MMC_MCU_READ;
-
-        // if reading then need to set the data into DataPort
         if (write === false) {
-            // clear the read bit
             this.MCUStatus &= ~MMC_MCU_READ;
-            // IGNORE addr for 'read' it is just the last addr
             switch (LatchedAddress) {
                 case READ_DATA_REG: {
-                    // var received = val & 0xff;
-                    var q = this.globalIndex;
-                    var dd = 0;
-                    if (q < this.globalData.length) dd = this.globalData[q] | 0;
-                    // console.log("read READ_DATA_REG 0x" + dd.toString(16) + ", index " + q);
-                    this.WriteDataPort(dd);
-                    ++this.globalIndex;
-
+                    let data = this.WFN.getData();
+                    this.WriteDataPort(data);
                     break;
                 }
             }
         } else {
             switch (LatchedAddress & ADDRESS_MASK) {
-                case CMD_REG:
-                    var received = val & 0xff;
-
-                    // File Group 0x10-0x17, 0x30-0x37, 0x50-0x57, 0x70-0x77
-                    // filenum = bits 6,5
-                    // mask1 = 10011000 (test for file group command)
-                    // mask2 = 10011111 (remove file number)
+                case CMD_REG: {
+                    let received = val & 0xff;
                     if ((received & 0x98) === 0x10) {
-                        this.filenum = (received >> 5) & 3;
+                        this.WFN.filenum = (received >> 5) & 3;
                         received &= 0x9f;
                     }
-
-                    // Data Group 0x20-0x23, 0x24-0x27, 0x28-0x2B, 0x2C-0x2F
-                    // filenum = bits 3,2
-                    // mask1 = 11110000 (test for data group command)
-                    // mask2 = 11110011 (remove file number)
                     if ((received & 0xf0) === 0x20) {
-                        this.filenum = (received >> 2) & 3;
+                        this.WFN.filenum = (received >> 2) & 3;
                         received &= 0xf3;
                     }
-
-                    // console.log(
-                    //     "CMD_REG 0x" +
-                    //         (addr & 0x0f).toString(16) +
-                    //         " <- received 0x" +
-                    //         received.toString(16) +
-                    //         " filenum : " +
-                    //         this.filenum,
-                    // );
-
                     this.WriteDataPort(STATUS_BUSY);
                     this.MCUStatus |= MMC_MCU_BUSY;
-
-                    // Directory group, moved here 2011-05-29 PHS.
-                    //
                     if (received === CMD_DIR_OPEN) {
-                        // reset the directory reader
-                        //
-                        // when 0x3f is read back from this register it is appropriate to
-                        // start sending cmd 1s to get items.
-                        //
-                        this.worker = this.WFN_DirectoryOpen;
+                        this.worker = () => this.WFN.WFN_DirectoryOpen();
                     } else if (received === CMD_DIR_READ) {
-                        // get next directory entry
-                        //
-                        this.worker = this.WFN_DirectoryRead;
+                        this.worker = () => this.WFN.WFN_DirectoryRead();
                     } else if (received === CMD_DIR_CWD) {
-                        // set CWD
-                        //
-                        this.worker = this.WFN_SetCWDirectory;
-                    }
-
-                    // File group.
-                    //
-                    else if (received === CMD_FILE_CLOSE) {
-                        // close the open file, flushing any unwritten data
-                        //
-                        this.worker = this.WFN_FileClose;
+                        this.worker = () => this.WFN.WFN_SetCWDirectory();
+                    } else if (received === CMD_FILE_CLOSE) {
+                        this.worker = () => this.WFN.WFN_FileClose();
                     } else if (received === CMD_FILE_OPEN_READ) {
-                        // open the file with name in global data buffer
-                        //
-                        this.worker = this.WFN_FileOpenRead;
+                        this.worker = () => this.WFN.WFN_FileOpenRead();
                     } else if (received === CMD_FILE_OPEN_WRITE) {
-                        // open the file with name in global data buffer for write
-                        //
-                        this.worker = this.WFN_FileOpenWrite;
-                    }
-
-                    // SP9 START
-                    else if (received === CMD_FILE_OPEN_RAF) {
-                        // open the file with name in global data buffer for write/append
-                        //
-                        this.worker = this.WFN_FileOpenRAF;
-                    }
-
-                    // SP9 END
-                    else if (received === CMD_FILE_DELETE) {
-                        // delete the file with name in global data buffer
-                        //
-                        this.worker = this.WFN_FileDelete;
-                    }
-
-                    // SP9 START
-                    else if (received === CMD_FILE_GETINFO) {
-                        // return file's status byte
-                        //
-                        this.worker = this.WFN_FileGetInfo;
+                        this.worker = () => this.WFN.WFN_FileOpenWrite();
+                    } else if (received === CMD_FILE_OPEN_RAF) {
+                        this.worker = () => this.WFN.WFN_FileOpenRAF();
+                    } else if (received === CMD_FILE_DELETE) {
+                        this.worker = () => this.WFN.WFN_FileDelete();
+                    } else if (received === CMD_FILE_GETINFO) {
+                        this.worker = () => this.WFN.WFN_FileGetInfo();
                     } else if (received === CMD_FILE_SEEK) {
-                        // seek to a location within the file
-                        //
-                        this.worker = this.WFN_FileSeek;
-                    }
-
-                    // SP9 END
-                    else if (received === CMD_INIT_READ) {
-                        // All data read requests must send CMD_INIT_READ before beggining reading
-                        // data from READ_DATA_PORT. After execution of this command the first byte
-                        // of data may be read from the READ_DATA_PORT.
-                        //
-                        console.log("CMD_INIT_READ of a 256 byte buffer using READ_DATA_REG");
-                        // console.log(
-                        //     "CMD_INIT_READ: READ_DATA_REG 0x" + this.globalData[0].toString(16) + ", index " + 0,
-                        // );
-                        this.WriteDataPort(this.globalData[0]);
-                        this.globalIndex = 1;
-                        // LatchedAddress
+                        this.worker = () => this.WFN.WFN_FileSeek();
+                    } else if (received === CMD_INIT_READ) {
+                        // console.log("CMD_INIT_READ of a 256 byte buffer using READ_DATA_REG");
+                        let data = this.WFN.getData(true);
+                        this.WriteDataPort(data);
                         this.lastaddr = READ_DATA_REG;
                     } else if (received === CMD_INIT_WRITE) {
-                        // console.log("CMD_INIT_WRITE");
-                        // all data write requests must send CMD_INIT_WRITE here before poking data at
-                        // WRITE_DATA_REG
-                        // globalDataPresent is a flag to indicate whether data is present in the bfr.
-                        //
-                        this.globalData = new Uint8Array(256);
-                        this.globalIndex = 0;
-                        this.globalDataPresent = 0;
+                        this.WFN.clearData();
                     } else if (received === CMD_READ_BYTES) {
-                        // Replaces READ_BYTES_REG
-                        // Must be previously written to latch reg.
-                        this.globalAmount = this.byteValueLatch;
-                        this.worker = this.WFN_FileRead;
+                        this.WFN.setTransferLength(this.byteValueLatch);
+                        this.worker = () => this.WFN.WFN_FileRead();
                     } else if (received === CMD_WRITE_BYTES) {
-                        // replaces WRITE_BYTES_REG
-                        // Must be previously written to latch reg.
-                        this.globalAmount = this.byteValueLatch;
-                        this.worker = this.WFN_FileWrite;
-                    }
-
-                    //
-                    // Exec a packet in the data buffer.
-                    else if (received === CMD_EXEC_PACKET) {
-                        this.worker = this.WFN_ExecuteArbitrary;
+                        this.WFN.setTransferLength(this.byteValueLatch);
+                        this.worker = () => this.WFN.WFN_FileWrite();
+                    } else if (received === CMD_EXEC_PACKET) {
+                        this.worker = () => this.WFN.WFN_ExecuteArbitrary();
                     } else if (received === CMD_GET_FW_VER) {
-                        // read firmware version
                         this.WriteDataPort((VSN_MAJ << 4) | VSN_MIN);
                     } else if (received === CMD_GET_BL_VER) {
-                        // read bootloader version
-                        this.WriteDataPort(1); //(blVersion);
+                        this.WriteDataPort(1);
                     } else if (received === CMD_GET_CFG_BYTE) {
-                        // read config byte
-                        console.log("CMD_REG:CMD_GET_CFG_BYTE -> 0x" + this.configByte.toString(16));
+                        // console.log(`CMD_REG:CMD_GET_CFG_BYTE -> 0x${this.configByte.toString(16)}`);
                         this.WriteDataPort(this.configByte);
                     } else if (received === CMD_SET_CFG_BYTE) {
-                        // write config byte
                         this.configByte = this.byteValueLatch;
-
-                        console.log("CMD_REG:CMD_SET_CFG_BYTE -> 0x" + this.configByte.toString(16));
-                        //                                WriteEEPROM(EE_SYSFLAGS, this.configByte);
+                        // console.log(`CMD_REG:CMD_SET_CFG_BYTE -> 0x${this.configByte.toString(16)}`);
                         this.WriteDataPort(STATUS_OK);
                     } else if (received === CMD_READ_AUX) {
-                        // read porta - latch & aux pin on dongle
                         this.WriteDataPort(this.LatchedAddress);
                     } else if (received === CMD_GET_HEARTBEAT) {
-                        // console.log("CMD_REG:CMD_GET_HEARTBEAT -> 0x" + this.heartbeat.toString(16));
                         this.WriteDataPort(this.heartbeat);
                         this.heartbeat ^= 0xff;
-                    }
-                    //
-                    // Utility commands.
-                    // Moved here 2011-05-29 PHS
-                    else if (received === CMD_GET_CARD_TYPE) {
-                        // console.log("CMD_REG:CMD_GET_CARD_TYPE -> 0x01");
-                        // get card type - it's a slowcmd despite appearance
-                        // disk_initialize(0);
-                        //#define CT_MMC 0x01 /* MMC ver 3 */
+                    } else if (received === CMD_GET_CARD_TYPE) {
                         this.WriteDataPort(0x01);
-                    }
-
-                    // support for PORTs but really doing nothing!
-                    else if (received === CMD_GET_PORT_DDR) {
-                        // get portb direction register
+                    } else if (received === CMD_GET_PORT_DDR) {
                         this.WriteDataPort(this.TRISB);
                     } else if (received === CMD_SET_PORT_DDR) {
-                        // set portb direction register
                         this.TRISB = this.byteValueLatch;
-
-                        // this.WriteEEPROM(EE_PORTBTRIS, this.byteValueLatch);
                         this.WriteDataPort(STATUS_OK);
                     } else if (received === CMD_READ_PORT) {
-                        // read portb
-                        // SP3 JOYSTICK SUPPORT
-                        var JOYSTICK = 0xff;
-                        var joyst = true;
+                        let JOYSTICK = 0xff;
+                        const joyst = true;
                         if (joyst && this.gamepad && this.gamepad.gamepadButtons !== undefined) {
-                            if (this.gamepad.gamepadButtons[15])
-                                //right
-                                JOYSTICK ^= 1;
-                            if (this.gamepad.gamepadButtons[14])
-                                //left
-                                JOYSTICK ^= 2;
-                            if (this.gamepad.gamepadButtons[13])
-                                //down
-                                JOYSTICK ^= 4;
-                            if (this.gamepad.gamepadButtons[12])
-                                //up
-                                JOYSTICK ^= 8;
-                            if (this.gamepad.gamepadButtons[0])
-                                // Fire
-                                JOYSTICK ^= 0x10;
-
+                            if (this.gamepad.gamepadButtons[15]) JOYSTICK ^= 1;
+                            if (this.gamepad.gamepadButtons[14]) JOYSTICK ^= 2;
+                            if (this.gamepad.gamepadButtons[13]) JOYSTICK ^= 4;
+                            if (this.gamepad.gamepadButtons[12]) JOYSTICK ^= 8;
+                            if (this.gamepad.gamepadButtons[0]) JOYSTICK ^= 0x10;
                             this.WriteDataPort(JOYSTICK);
                         } else {
                             this.WriteDataPort(this.PORTB);
                         }
-
-                        // END SP3
                     } else if (received === CMD_WRITE_PORT) {
-                        // write port B value
                         this.LATB = this.byteValueLatch;
-
-                        // this.WriteEEPROM(EE_PORTBVALU, byteValueLatch);
                         this.WriteDataPort(STATUS_OK);
                     } else {
-                        console.log("unrecognised CMD: " + received);
+                        console.log(`unrecognised CMD: ${received}`);
                     }
-
-                    break;
-
-                case WRITE_DATA_REG: {
-                    // move data from the Atom to the MMC (i.e. Atom is trying to Write)
-                    let received = val & 0xff;
-
-                    // console.log("WRITE_DATA_REG  <- " + this.globalIndex + ", received 0x" + received.toString(16));
-
-                    this.globalData[this.globalIndex] = received;
-
-                    ++this.globalIndex;
-
-                    this.globalDataPresent = 1;
                     break;
                 }
-
+                case WRITE_DATA_REG: {
+                    const received = val & 0xff;
+                    this.WFN.addData(received);
+                    break;
+                }
                 case LATCH_REG: {
-                    // latch the value from the MMC to the Atom (i.e. Atom is trying to read)
-                    let received = val & 0xff;
-                    console.log(
-                        "LATCH_REG 0x" + (addr & 0x0f).toString(16) + " <- received 0x" + received.toString(16),
-                    );
+                    const received = val & 0xff;
+                    // console.log(`LATCH_REG 0x${(addr & 0x0f).toString(16)} <- received 0x${received.toString(16)}`);
                     this.byteValueLatch = received;
                     this.WriteDataPort(this.byteValueLatch);
                     break;
                 }
                 case STATUS_REG: {
                     // does nothing
-                    // var received = val & 0xff;
-                    // console.log(
-                    //     "STATUS_REG 0x" + (addr & 0x0f).toString(16) + " <- received 0x" + received.toString(16),
-                    // );
+                    break;
                 }
             }
-
             if (this.worker) {
                 this.worker();
             }

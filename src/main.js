@@ -360,6 +360,7 @@ $(".initially-hidden").removeClass("initially-hidden");
 
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
 const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
+const $sdModal = new bootstrap.Modal(document.getElementById("sdcards"));
 
 /**
  * Helper function to read a file as binary string
@@ -440,10 +441,11 @@ $("#mmcblob").on("click", function () {
 
 async function loadMMCZIPfile(file) {
     const binaryData = await readFileAsBinaryString(file);
-    processor.atommc.SetMMCData(mmc.extractSDFiles(binaryData));
+    const filedata = await mmc.extractSDFiles(binaryData);
+    processor.atommc.SetMMCData(filedata);
     delete parsedQuery.mmc;
     updateUrl();
-    $("#sdcards").modal("hide");
+    $sdModal.hide();
 }
 
 const $pastetext = $("#paste-text");
@@ -1297,11 +1299,11 @@ $("#download-filestore-link").on("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
-$("#download-mmczip-link").on("click", function () {
-    const zip = new JSZip();
-    const data = zip.file("mmc.zip", processor.atommc.getMMCData());
-    downloadDriveData(data, "atommc", ".zip");
-});
+// $("#download-mmczip-link").on("click", function () {
+//     const zip = new JSZip();
+//     const data = zip.file("mmc.zip", processor.atommc.getMMCData());
+//     downloadDriveData(data, "atommc", ".zip");
+// });
 
 $("#hard-reset").click(function (event) {
     processor.reset(true);
