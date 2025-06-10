@@ -32,6 +32,13 @@ The BBC had a somewhat different-looking keyboard to a modern PC, and so it's us
 To play right now, visit [https://bbc.xania.org/](https://bbc.xania.org/). To load the default disc image (Elite in this
 case), press shift-F12 (which is shift-Break on the BBC).
 
+### Joystick Support
+
+jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick emulation. Note that BBC Micro joysticks use inverted axes:
+
+- X-axis: Left = 65535, Right = 0
+- Y-axis: Up = 65535, Down = 0
+
 ## Getting Set Up to Run Locally
 
 ### Prerequisites
