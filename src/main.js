@@ -1365,6 +1365,7 @@ if (model.isAtom) {
     $("span.navbar-text").hide();
     $("a.sth").hide();
     $("#analogueAudioSettings").hide();
+    $("#mouseJoystickSettings").hide();
 
     let bbcperipherals = ["65c02", "hasMusic5000", "hasTeletextAdaptor", "hasEconet"];
     for (const peripheral of bbcperipherals) {
