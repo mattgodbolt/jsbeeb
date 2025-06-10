@@ -1,7 +1,8 @@
 "use strict";
 import * as utils from "./utils.js";
-import * as jszip from "./lib/jszip.min.js"; // https://stuk.github.io/jszip/
-import * as filesaver from "./lib/FileSaver.js"; //https://github.com/eligrey/FileSaver.js
+import "./lib/jszip.min.js"; // https://stuk.github.io/jszip/
+
+/* global JSZip */
 
 /*
 highly adapted from:
@@ -35,6 +36,11 @@ const STATUS_REG = 0x4;
 const CMD_DIR_OPEN = 0x0;
 const CMD_DIR_READ = 0x1;
 const CMD_DIR_CWD = 0x2;
+// const CMD_DIR_GETCWD = 0x3;
+const CMD_DIR_MKDIR = 0x4;
+const CMD_DIR_RMDIR = 0x5;
+
+const CMD_RENAME = 0x8;
 
 const CMD_FILE_CLOSE = 0x10;
 const CMD_FILE_OPEN_READ = 0x11;
@@ -216,7 +222,7 @@ const O_CREAT = 0x100,
  */
 export class WFNFile {
     /**
-     * @param {string} path - The file path.
+     * @param {string} path - The file path. prepended with § if deleted
      * @param {Uint8Array} data - The file data.
      */
     constructor(path, data) {
@@ -225,33 +231,35 @@ export class WFNFile {
     }
 }
 
-export async function createZipFile(data) {
-    const zip = new jszip.JSZip();
+export async function toMMCZipAsync(data) {
+    const newzip = new JSZip();
 
     // loop and enumerate data
     for (let i = 0; i < data.length; i++) {
         const name = data[i].path;
         const file = data[i].data;
 
+        if (name.startsWith("§"))
+            //unlinked file
+            continue;
         // remove leading /
         const zipName = name.startsWith("/") ? name.slice(1) : name;
 
         console.log("adding to zip: " + zipName);
-        zip.file(zipName, file);
+        newzip.file(zipName, file);
     }
 
-    zip.generateAsync({
+    const zipfile = await newzip.generateAsync({
         type: "blob",
         compression: "DEFLATE",
         platform: "UNIX",
-    }).then(function (content) {
-        // see FileSaver.js
-        filesaver.saveAs(content, "atommc.zip");
     });
+
+    return zipfile;
 }
 
 export async function extractSDFiles(data) {
-    const newunzip = new jszip.JSZip();
+    const newunzip = new JSZip();
     const unzip = await newunzip.loadAsync(data);
 
     // Collect all promises for file extraction
@@ -322,6 +330,10 @@ class WFN {
     WFN_FileOpenRead() {
         console.log(`WFN_FileOpenRead ${this.filenum}`);
         const res = this.fileOpen(FA_OPEN_EXISTING | FA_READ);
+        // if (filenum < 4) {
+        //      FILINFO *filinfo = &filinfodata[filenum];
+        //     get_fileinfo_special(filinfo);
+        // }
         this.mmc.WriteDataPort(STATUS_COMPLETE | res);
     }
 
@@ -355,7 +367,9 @@ class WFN {
                 this.globalData = path.slice(0, lastSlashIndex + 1);
                 this.WildPattern = path.slice(lastSlashIndex + 1);
             } else {
-                this.WildPattern = this.globalData;
+                // posix regex is .+ (1 or more characters) or . (exactly 1 character)
+                this.WildPattern = path.replace(/\*/g, ".+").replace(/\?/g, ".");
+
                 this.globalData = "";
             }
         } else {
@@ -466,8 +480,8 @@ class WFN {
         return "";
     }
 
-    // Simulate f_opendir: open a directory (set dir.dirname to path)
-    f_opendir(dir, path) {
+    // Simulate f_opendir: open a directory
+    f_opendir(path) {
         // Build absolute path and check validity
         const xpath = this.trimToFilename(path);
         const absResult = this.buildAbsolutePath(xpath, false);
@@ -487,8 +501,7 @@ class WFN {
         // Separate wildcard and path
         this.GetWildcard();
 
-        let dir = { dirname: "" };
-        let res = this.f_opendir(dir, this.globalData);
+        let res = this.f_opendir(this.globalData);
         this.dfn = 0;
         if (res !== 0) {
             this.mmc.WriteDataPort(STATUS_COMPLETE | res);
@@ -598,8 +611,42 @@ class WFN {
         return FR_NO_PATH;
     }
 
+    f_unlink(path) {
+        // ensure newpath is an absolute path (relative paths appended to CWD,
+        // absolute paths are used as is)
+        const newpath = this.buildAbsolutePath(path, true);
+        if (newpath.error) {
+            return newpath.error; // Return error if path is invalid
+        }
+
+        // remove all in a folder, but this doesn't seem to be
+        // used for *DELETE as files are deleted one by one
+        if (this.dir_exists(newpath.path) == FR_OK) {
+            // delete all the files within the folder
+            this.allfiles
+                .filter((file) => file.path.startsWith(newpath.path))
+                .map((file) => (file.path = "§" + file.path));
+
+            return FR_OK;
+        }
+
+        if (this.file_exists(newpath.path) == FR_OK) {
+            // remove the file from the list
+            this.allfiles.filter((file) => file.path == newpath.path).map((file) => (file.path = "§" + file.path));
+
+            return FR_OK;
+        }
+
+        return FR_NO_PATH;
+    }
+
     trimToFilename(globaldata) {
-        return String.fromCharCode(...globaldata.slice(0, -1)).split("\0")[0];
+        let path = String.fromCharCode(...globaldata.slice(0, -1)).split("\0")[0];
+        // when deleting folders, the pathname is echoed
+        // back by the ATOM which means they have <...> around the
+        // name
+        if (path.startsWith("<") && path.endsWith(">")) path = path.slice(1, -1);
+        return path;
     }
 
     WFN_SetCWDirectory() {
@@ -671,10 +718,30 @@ class WFN {
         console.log(`WFN_FileOpenRAF ${this.filenum} not implemented yet`);
     }
     WFN_FileDelete() {
-        console.log(`WFN_FileDelete ${this.filenum} not implemented yet`);
+        const pathname = this.trimToFilename(this.globalData);
+        console.log(`WFN_FileDelete ${pathname}`);
+        const ret = this.f_unlink(pathname);
+        this.mmc.WriteDataPort(STATUS_COMPLETE | ret);
     }
     WFN_FileGetInfo() {
         console.log(`WFN_FileGetInfo ${this.filenum} not implemented yet`);
+        this.mmc.WriteDataPort(STATUS_EOF);
+    }
+
+    WFN_DirectoryCreate() {
+        const pathname = this.trimToFilename(this.globalData);
+        console.log(`WFN_DirectoryCreate ${pathname} not implemented yet`);
+        this.mmc.WriteDataPort(STATUS_EOF);
+    }
+    WFN_DirectoryDelete() {
+        const pathname = this.trimToFilename(this.globalData);
+        console.log(`WFN_DirectoryDelete ${pathname} not implemented yet`);
+        this.mmc.WriteDataPort(STATUS_EOF);
+    }
+    WFN_Rename() {
+        const pathname = this.trimToFilename(this.globalData);
+        console.log(`WFN_Rename ${pathname} not implemented yet`);
+        this.mmc.WriteDataPort(STATUS_EOF);
     }
 
     reset() {
@@ -718,7 +785,7 @@ class WFN {
             this.fildataIndex = 0; // FIXME : should be one for each fildata if going down this line!
             // The scratch file is fixed, so we are backwards compatible with 2.9 firmware
             let fopen = this.f_open(fname, mode);
-            if (fopen.fp !== null) this.fildata[0] = this.allfiles[fopen.fp];
+            if (fopen.error == FR_OK) this.fildata[0] = this.allfiles[fopen.fp];
             ret = fopen.error;
         } else {
             this.filenum = 0;
@@ -731,8 +798,8 @@ class WFN {
             }
             if (this.filenum > 0) {
                 let fopen = this.f_open(fname, mode);
-                this.fildata[this.filenum] = this.allfiles[fopen.fp];
-                if (fopen.error) {
+                if (fopen.error == FR_OK) {
+                    this.fildata[this.filenum] = this.allfiles[fopen.fp];
                     // No error, so update the return value to indicate the file num
                     ret = FILENUM_OFFSET | this.filenum;
                 }
@@ -802,8 +869,7 @@ class WFN {
         if (absResult.error) return FR_NO_PATH;
         const absName = absResult.path;
         // Search for a WFNFile with matching path (not a directory)
-        // const file = this.allfiles.find(f => f instanceof WFNFile && f.path === absName && !absName.endsWith("/"));
-        const file = this.allfiles.find((f) => f.path === absName);
+        const file = this.allfiles.find((f) => f.path === absName && !f.path.startsWith("§"));
         return file ? FR_OK : FR_NO_PATH;
     }
 
@@ -831,7 +897,7 @@ class WFN {
         // Build absolute path and check validity
         const absResult = this.buildAbsolutePath(path, true);
         if (absResult.error) {
-            return { fp: null, error: FR_INVALID_NAME };
+            return { error: FR_INVALID_NAME };
         }
         const open_path = absResult.path;
 
@@ -851,7 +917,7 @@ class WFN {
             }
         } else {
             if (mode & (FA_OPEN_ALWAYS | FA_CREATE_NEW | FA_CREATE_ALWAYS)) open_mode = O_CREAT | O_RDWR;
-            else return FR_NO_FILE;
+            else return { error: FR_NO_FILE };
         }
 
         // Simulate file open/create
@@ -904,6 +970,45 @@ export class AtomMMC2 {
      */
     GetMMCData() {
         return this.WFN.allfiles;
+    }
+
+    /**
+     * clear
+     * @returns
+     */
+    ClearMMCData() {
+        const fname = "README".padEnd(15, "\0");
+        const loadaddr = 0x2900;
+        const basicstart = 0xb2c2;
+        const flen = 0x003e;
+        const basicfile = "\r\0\n REM created by jsatom\r\0\x14 REM \x19commandercoder.com\r\0\x1E END\r";
+        const fend = 0xc3;
+
+        // Build the byte array for the README file
+        // Format: [fname (16 bytes), loadaddr (2 bytes LE), basicstart (2 bytes LE), flen (2 bytes LE), basicfile (flen bytes), fend (1 byte)]
+        const readmeBytes = new Uint8Array(16 + 2 + 2 + 2 + basicfile.length + 1);
+        let offset = 0;
+        // fname (16 bytes)
+        for (let i = 0; i < 16; i++) {
+            readmeBytes[offset++] = fname.charCodeAt(i);
+        }
+        // loadaddr (2 bytes, little endian)
+        readmeBytes[offset++] = loadaddr & 0xff;
+        readmeBytes[offset++] = (loadaddr >> 8) & 0xff;
+        // basicstart (2 bytes, little endian)
+        readmeBytes[offset++] = basicstart & 0xff;
+        readmeBytes[offset++] = (basicstart >> 8) & 0xff;
+        // flen (2 bytes, little endian)
+        readmeBytes[offset++] = flen & 0xff;
+        readmeBytes[offset++] = (flen >> 8) & 0xff;
+        // basicfile (flen bytes)
+        for (let i = 0; i < basicfile.length; i++) {
+            readmeBytes[offset++] = basicfile.charCodeAt(i);
+        }
+        // fend (1 byte)
+        readmeBytes[offset++] = fend;
+
+        this.WFN.allfiles = [new WFNFile("/README", readmeBytes)];
     }
 
     /**
@@ -1008,6 +1113,15 @@ export class AtomMMC2 {
                         this.worker = () => this.WFN.WFN_DirectoryRead();
                     } else if (received === CMD_DIR_CWD) {
                         this.worker = () => this.WFN.WFN_SetCWDirectory();
+                    } else if (received == CMD_DIR_MKDIR) {
+                        // create directory
+                        this.worker = () => this.WFN.WFN_DirectoryCreate();
+                    } else if (received == CMD_DIR_RMDIR) {
+                        // delete directory
+                        this.worker = () => this.WFN.WFN_DirectoryDelete();
+                    } else if (received == CMD_RENAME) {
+                        // rename
+                        this.worker = () => this.WFN.WFN_Rename();
                     } else if (received === CMD_FILE_CLOSE) {
                         this.worker = () => this.WFN.WFN_FileClose();
                     } else if (received === CMD_FILE_OPEN_READ) {
