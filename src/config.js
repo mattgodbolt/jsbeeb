@@ -57,6 +57,10 @@ export class Config {
             this.setMicrophoneChannel(channel);
         });
 
+        $("#mouseJoystickEnabled").on("click", () => {
+            this.changed.mouseJoystickEnabled = $("#mouseJoystickEnabled").prop("checked");
+        });
+
         // ATOM
         $("#hasNoiseKiller").on("click", () => {
             this.changed.hasNoiseKiller = $("#hasNoiseKiller").prop("checked");
@@ -69,6 +73,10 @@ export class Config {
         } else {
             $(".mic-channel-text").text("Disabled");
         }
+    }
+
+    setMouseJoystickEnabled(enabled) {
+        $("#mouseJoystickEnabled").prop("checked", !!enabled);
     }
 
     // ATOM
