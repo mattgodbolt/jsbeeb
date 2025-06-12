@@ -98,6 +98,7 @@ site to make it smaller and faster to load when it's deployed to [https://bbc.xa
   file assumed to be within.
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `audioDebug=true` turns on some audio debug graphs.
+- `model=atom` jumps into the hidden [Acorn Atom emulator](README-jsatom.md) with preinserted AtomMMC zip file. Use `model=atom-tape` for just the Acorn Atom without MMC.
 
 ## Patches
 
