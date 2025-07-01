@@ -324,7 +324,7 @@ export class Keyboard extends EventEmitter {
         this.interfaceAdaptor.disableKeyboard();
         const clocksPerSecond = Math.floor(this.processor.cpuMultiplier * 2000000);
 
-        if (checkCapsAndShiftLocks) {
+        if (checkCapsAndShiftLocks && !this.processor.model.isAtom) {
             let toggleKey = null;
             if (!this.interfaceAdaptor.capsLockLight) toggleKey = utils.BBC.CAPSLOCK;
             else if (this.interfaceAdaptor.shiftLockLight) toggleKey = utils.BBC.SHIFTLOCK;

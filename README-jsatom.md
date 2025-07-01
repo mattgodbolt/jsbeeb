@@ -1,11 +1,13 @@
 [![jsbeeb tests](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml/badge.svg)](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml)
 
-# jsatom - JavaScript Acorn Atom Emulator (hidden within jsbeeb)
+# jsatom - JavaScript Acorn Atom Emulator
 
 [![jsatom](public/images/jsatom-snapper.png)](https://jsatom.commandercoder.com/)
 
 An Acorn Atom emulator written in JavaScript and running in modern browsers. Emulates a standard Atom with 12K RAM,
 along with various expansion options and peripherals.
+
+To get Acorn Atom running in the browser you can use `model=atom` to run the emulator with pre-inserted AtomMMC zip file. Use `model=atom-tape` for just the Acorn Atom without MMC.
 
 ## Table of Contents
 
@@ -32,7 +34,7 @@ The Atom had a somewhat different keyboard layout to a modern PC, and so it's us
 - Atom `CTRL` key is mapped to `LEFT SHIFT`
 - Atom `SHIFT` key is mapped to `CTRL`
 
-To play right now, visit [https://jsatom.commandercoder.com/](https://jsatom.commandercoder.com/). The Atom will boot directly to the BASIC prompt, ready for programming.
+To play right now, visit [https://atom.commandercoder.com/](https://atom.commandercoder.com/). The Atom will boot directly to the BASIC prompt, ready for programming.
 
 <img src="https://retrorepairsandrefurbs.com/wp-content/uploads/2021/09/img_6435-1.jpg?w=3136" width="400px" >
 
@@ -66,32 +68,32 @@ Unsupported.
 
 jsatom uses Node.js and vite to afford simple and standard web development tooling and third-party library access
 without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the
-site to make it smaller and faster to load when it's deployed to [https://jsatom.commandercoder.com/](https://jsatom.commandercoder.com/).
+site to make it smaller and faster to load when it's deployed to [https://atom.commandercoder.com/](https://atom.commandercoder.com/).
 
 ## URL Parameters
 
 **_These are mostly untested on the Acorn Atom implementation._**
 
 - `autoboot` - automatically starts the system [MMC or Disc]
-- `disc=XXX` - loads disc XXX (from the `discs/atom/` directory) into the drive, forces `model=ATOM-DOS`
+- [untested] `disc=XXX` - loads disc XXX (from the `discs/atom/` directory) into the drive, forces `model=ATOM-DOS`
 
-- `mmc=XXX` - inserts SDCard as a zip file (from the `mmc\` directory), forces `model=ATOM`
-- [future] `mmc=local:YYY` - creates a local SDCard which will be kept in browser local storage (empty cards can be created from the menu)
-- `tape=XXX` - loads tape XXX (from the `tapes/atom/` directory), forces `model=ATOM-TAPE`
-- `tape=local:YYY` - creates a local tape YYY which will be kept in browser local storage
-- `patch=P` - applies a memory patch `P`. See below.
-- `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in memory as if you'd typed
+- [untested] `mmc=XXX` - inserts SDCard as a zip file (from the `mmc\` directory), forces `model=ATOM`
+- [untested] `mmc=local:YYY` - creates a local SDCard which will be kept in browser local storage (empty cards can be created from the menu)
+- [untested] `tape=XXX` - loads tape XXX (from the `tapes/atom/` directory), forces `model=ATOM-TAPE`
+- [untested] `tape=local:YYY` - creates a local tape YYY which will be kept in browser local storage
+- [untested] `patch=P` - applies a memory patch `P`. See below.
+- [untested] `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in memory as if you'd typed
   it in to the emulator
-- `embedBasic=X` - loads 'X' (a URI-encoded string) as text, tokenises it and puts it in memory as if you'd typed it in
+- [untested] `embedBasic=X` - loads 'X' (a URI-encoded string) as text, tokenises it and puts it in memory as if you'd typed it in
   to the emulator
 - `autorun` - types `RUN` after loading BASIC code.
 - `autochain` - types `CHAIN""` to run from tape.
 - `autotype` - types whatever you put after. e.g. `&autotype=PRINT"Hello User"%0a` (return is URI escaped to `%0a`)
-- `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
+- [untested] `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
   transparent (intended for use when running within an iframe in a third-party site).
-- `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc
+- [untested] `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc
   loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
-- `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the Atom monitor. The left and right
+- [untested] `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the Atom monitor. The left and right
   should be around 480 high and the bottom image should be around 512 wide. Left and right wider than 300 will run into
   problems on smaller screens; bottom taller than 100 or so similarly.
 - [untested] `videoCyclesBatch` - the number of video cycles to batch up before running the video emulation. Defaults to zero:

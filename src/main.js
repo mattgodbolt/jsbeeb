@@ -452,12 +452,13 @@ async function loadMMCZIPfile(file) {
 const $pastetext = $("#paste-text");
 $pastetext.on("paste", function (event) {
     const text = event.originalEvent.clipboardData.getData("text/plain");
+
+    let bbcKeys = utils.stringToBBCKeys(text);
     // ATOM
     if (model.isAtom) {
-        sendRawKeyboardToBBC(utils_atom.stringToATOMKeys(text), false);
-    } else {
-        sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
+        bbcKeys = utils_atom.stringToATOMKeys(text);
     }
+    sendRawKeyboardToBBC(bbcKeys, true);
 });
 $pastetext.on("dragover", function (event) {
     event.preventDefault();
@@ -924,7 +925,10 @@ function autoBootType(keys) {
     console.log("Auto typing '" + keys + "'");
     utils.noteEvent("init", "autochain");
 
-    const bbcKeys = utils.stringToBBCKeys(keys);
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -932,7 +936,11 @@ function autoChainTape() {
     console.log("Auto Chaining Tape");
     utils.noteEvent("init", "autochain");
 
-    const bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
+    const keys = '*TAPE\n CH.""\n';
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -940,7 +948,11 @@ function autoRunTape() {
     console.log("Auto Running Tape");
     utils.noteEvent("init", "autorun");
 
-    const bbcKeys = utils.stringToBBCKeys("*TAPE\n*/\n");
+    const keys = "*TAPE\n */\n";
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -948,7 +960,11 @@ function autoRunBasic() {
     console.log("Auto Running basic");
     utils.noteEvent("init", "autorunbasic");
 
-    const bbcKeys = utils.stringToBBCKeys("RUN\n");
+    const keys = "RUN\n";
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -1361,7 +1377,7 @@ if (model.isAtom) {
     $("#stopcas").show();
 
     $(".navbar-brand").text("jsatom");
-    $(".navbar-brand").attr("href", "http://jsatom.commandercoder.com/");
+    $(".navbar-brand").attr("href", "http://atom.commandercoder.com/");
     $("span.navbar-text").hide();
     $("a.sth").hide();
     $("#analogueAudioSettings").hide();
