@@ -1,6 +1,6 @@
 "use strict";
-import * as jsunzip from "./lib/jsunzip.js";
 import { ungzip as pakoUngzip } from "pako";
+import { unzipSync } from "fflate";
 
 export const runningInNode = typeof window === "undefined";
 
@@ -887,6 +887,8 @@ export function readFloat32(data, offset) {
 }
 
 export function ungzip(data) {
+    // TODO: Consider switching to fflate for consistency with ZIP functionality
+    // Currently using pako due to better concatenated gzip stream support
     try {
         return pakoUngzip(data);
     } catch (e) {
@@ -994,35 +996,38 @@ const knownRomExtensions = {
 };
 
 function unzipImage(data, knownExtensions) {
-    const unzip = new jsunzip.JSUnzip();
     console.log("Attempting to unzip");
-    const result = unzip.open(data);
-    if (!result.status) {
-        throw new Error("Error unzipping " + result.error);
+
+    let files;
+    try {
+        files = unzipSync(new Uint8Array(data));
+    } catch (e) {
+        throw new Error("Error unzipping " + e.message);
     }
+
     let uncompressed = null;
     let loadedFile;
-    for (const f in unzip.files) {
-        const match = f.match(/.*\.([a-z]+)/i);
+
+    for (const [filename, fileData] of Object.entries(files)) {
+        const match = filename.match(/.*\.([a-z]+)/i);
         if (!match || !knownExtensions[match[1].toLowerCase()]) {
-            console.log("Skipping file", f);
+            console.log("Skipping file", filename);
             continue;
         }
         if (uncompressed) {
-            console.log("Ignoring", f, "as already found a file");
+            console.log("Ignoring", filename, "as already found a file");
             continue;
         }
-        loadedFile = f;
-        uncompressed = unzip.read(f);
+        loadedFile = filename;
+        uncompressed = fileData;
     }
+
     if (!uncompressed) {
         throw new Error("Couldn't find any compatible files in the archive");
     }
-    if (!uncompressed.status) {
-        throw new Error("Failed to uncompress file '" + loadedFile + "' - " + uncompressed.error);
-    }
+
     console.log("Unzipped '" + loadedFile + "'");
-    return { data: uncompressed.data, name: loadedFile };
+    return { data: uncompressed, name: loadedFile };
 }
 
 export function unzipDiscImage(data) {
