@@ -1,5 +1,6 @@
 "use strict";
 import * as jsunzip from "./lib/jsunzip.js";
+import { ungzip as pakoUngzip } from "pako";
 
 export const runningInNode = typeof window === "undefined";
 
@@ -886,48 +887,11 @@ export function readFloat32(data, offset) {
 }
 
 export function ungzip(data) {
-    const tinf = new jsunzip.TINF();
-    tinf.init();
-    const results = [];
-    while (data.length) {
-        if (results.length > 1000) throw new Error("Seems like something went wrong");
-        if (data[0] !== 0x1f || data[1] !== 0x8b) throw new Error("Corrupt data");
-        let dataOffset = 10;
-        if (data[3] & 0x02) dataOffset += 2; // Header CRC
-        if (data[3] & 0x04) {
-            dataOffset += 2 + readInt16(data, dataOffset); // FEXTRA
-        }
-        if (data[3] & 0x08) {
-            while (data[dataOffset] !== 0) dataOffset++; // FILENAME
-            dataOffset++;
-        }
-        if (data[3] & 0x10) {
-            while (data[dataOffset] !== 0) dataOffset++; // FCOMMENT
-            dataOffset++;
-        }
-        let maxDecompressSize = 16384;
-        let result;
-        for (;;) {
-            // Loop around trying to decompress this block, doubling in size if we can't fit a block.
-            result = tinf.uncompress(data, dataOffset, maxDecompressSize);
-            if (result.status !== 0) throw "Unable to ungzip";
-            if (result.dataSize < maxDecompressSize) break;
-            maxDecompressSize *= 2;
-        }
-        results.push(result.data.subarray(0, result.dataSize));
-        const nextOffset = result.offset + 8; // skip CRC and uncompressed length
-        data = data.subarray(nextOffset);
+    try {
+        return pakoUngzip(data);
+    } catch (e) {
+        throw new Error("Unable to ungzip: " + e.message);
     }
-    const total = results.reduce(function (prev, cur) {
-        return prev + cur.length;
-    }, 0);
-    const finalData = new Uint8Array(total);
-    let offset = 0;
-    results.forEach(function (res) {
-        finalData.set(res, offset);
-        offset += res.length;
-    });
-    return finalData;
 }
 
 export class DataStream {
