@@ -887,8 +887,6 @@ export function readFloat32(data, offset) {
 }
 
 export function ungzip(data) {
-    // TODO: Consider switching to fflate for consistency with ZIP functionality
-    // Currently using pako due to better concatenated gzip stream support
     try {
         return pakoUngzip(data);
     } catch (e) {
