@@ -1,5 +1,6 @@
 "use strict";
-import * as jsunzip from "./lib/jsunzip.js";
+import { ungzip as pakoUngzip } from "pako";
+import { unzipSync } from "fflate";
 
 export const runningInNode = typeof window === "undefined";
 
@@ -886,48 +887,11 @@ export function readFloat32(data, offset) {
 }
 
 export function ungzip(data) {
-    const tinf = new jsunzip.TINF();
-    tinf.init();
-    const results = [];
-    while (data.length) {
-        if (results.length > 1000) throw new Error("Seems like something went wrong");
-        if (data[0] !== 0x1f || data[1] !== 0x8b) throw new Error("Corrupt data");
-        let dataOffset = 10;
-        if (data[3] & 0x02) dataOffset += 2; // Header CRC
-        if (data[3] & 0x04) {
-            dataOffset += 2 + readInt16(data, dataOffset); // FEXTRA
-        }
-        if (data[3] & 0x08) {
-            while (data[dataOffset] !== 0) dataOffset++; // FILENAME
-            dataOffset++;
-        }
-        if (data[3] & 0x10) {
-            while (data[dataOffset] !== 0) dataOffset++; // FCOMMENT
-            dataOffset++;
-        }
-        let maxDecompressSize = 16384;
-        let result;
-        for (;;) {
-            // Loop around trying to decompress this block, doubling in size if we can't fit a block.
-            result = tinf.uncompress(data, dataOffset, maxDecompressSize);
-            if (result.status !== 0) throw "Unable to ungzip";
-            if (result.dataSize < maxDecompressSize) break;
-            maxDecompressSize *= 2;
-        }
-        results.push(result.data.subarray(0, result.dataSize));
-        const nextOffset = result.offset + 8; // skip CRC and uncompressed length
-        data = data.subarray(nextOffset);
+    try {
+        return pakoUngzip(data);
+    } catch (e) {
+        throw new Error("Unable to ungzip: " + e.message);
     }
-    const total = results.reduce(function (prev, cur) {
-        return prev + cur.length;
-    }, 0);
-    const finalData = new Uint8Array(total);
-    let offset = 0;
-    results.forEach(function (res) {
-        finalData.set(res, offset);
-        offset += res.length;
-    });
-    return finalData;
 }
 
 export class DataStream {
@@ -1030,35 +994,38 @@ const knownRomExtensions = {
 };
 
 function unzipImage(data, knownExtensions) {
-    const unzip = new jsunzip.JSUnzip();
     console.log("Attempting to unzip");
-    const result = unzip.open(data);
-    if (!result.status) {
-        throw new Error("Error unzipping " + result.error);
+
+    let files;
+    try {
+        files = unzipSync(data instanceof Uint8Array ? data : new Uint8Array(data));
+    } catch (e) {
+        throw new Error("Error unzipping " + e.message);
     }
+
     let uncompressed = null;
     let loadedFile;
-    for (const f in unzip.files) {
-        const match = f.match(/.*\.([a-z]+)/i);
+
+    for (const [filename, fileData] of Object.entries(files)) {
+        const match = filename.match(/.*\.([a-z]+)/i);
         if (!match || !knownExtensions[match[1].toLowerCase()]) {
-            console.log("Skipping file", f);
+            console.log("Skipping file", filename);
             continue;
         }
         if (uncompressed) {
-            console.log("Ignoring", f, "as already found a file");
+            console.log("Ignoring", filename, "as already found a file");
             continue;
         }
-        loadedFile = f;
-        uncompressed = unzip.read(f);
+        loadedFile = filename;
+        uncompressed = fileData;
     }
+
     if (!uncompressed) {
         throw new Error("Couldn't find any compatible files in the archive");
     }
-    if (!uncompressed.status) {
-        throw new Error("Failed to uncompress file '" + loadedFile + "' - " + uncompressed.error);
-    }
+
     console.log("Unzipped '" + loadedFile + "'");
-    return { data: uncompressed.data, name: loadedFile };
+    return { data: uncompressed, name: loadedFile };
 }
 
 export function unzipDiscImage(data) {

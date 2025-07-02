@@ -20,7 +20,9 @@
     "bootstrap": "^5.3.6",
     "bootswatch": "^5.3.6",
     "event-emitter-es6": "^1.1.5",
+    "fflate": "^0.8.2",
     "jquery": "^3.7.1",
+    "pako": "^2.1.0",
     "smoothie": "^1.36.1",
     "underscore": "^1.13.7"
   },
@@ -79,6 +81,6 @@
       "eslint --cache --fix",
       "prettier --write"
     ],
-    "*.!(js)": "prettier --write"
+    "*.{md,json,yml,yaml,css,html}": "prettier --write"
   }
 }
