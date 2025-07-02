@@ -1,5 +1,4 @@
-import { describe, it } from "vitest";
-import assert from "assert";
+import { describe, it, expect } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 
 describe("Scheduler tests", function () {
@@ -12,15 +11,15 @@ describe("Scheduler tests", function () {
         const s = new Scheduler();
         let called = false;
         const t = s.newTask(function () {
-            assert.strictEqual(called, false);
+            expect(called).toBe(false);
             called = true;
         });
         t.schedule(2);
-        assert.strictEqual(called, false);
+        expect(called).toBe(false);
         s.polltime(1);
-        assert.strictEqual(called, false);
+        expect(called).toBe(false);
         s.polltime(1);
-        assert.strictEqual(called, true);
+        expect(called).toBe(true);
         s.polltime(1);
     });
 
@@ -28,13 +27,13 @@ describe("Scheduler tests", function () {
         const s = new Scheduler();
         let called = false;
         const t = s.newTask(function () {
-            assert.strictEqual(called, false);
+            expect(called).toBe(false);
             called = true;
         });
         t.schedule(2);
-        assert.strictEqual(called, false);
+        expect(called).toBe(false);
         s.polltime(2);
-        assert.strictEqual(called, true);
+        expect(called).toBe(true);
         s.polltime(2);
     });
 
@@ -42,13 +41,13 @@ describe("Scheduler tests", function () {
         const s = new Scheduler();
         let called = false;
         const t = s.newTask(function () {
-            assert.strictEqual(called, false);
+            expect(called).toBe(false);
             called = true;
         });
         t.schedule(2);
-        assert.strictEqual(called, false);
+        expect(called).toBe(false);
         s.polltime(3);
-        assert.strictEqual(called, true);
+        expect(called).toBe(true);
         s.polltime(3);
     });
 
@@ -64,11 +63,11 @@ describe("Scheduler tests", function () {
         s.newTask(function () {
             called += "c";
         }).schedule(2);
-        assert.strictEqual(called, "");
+        expect(called).toBe("");
         s.polltime(1);
-        assert.strictEqual(called, "");
+        expect(called).toBe("");
         s.polltime(1);
-        assert.strictEqual(called, "abc");
+        expect(called).toBe("abc");
         s.polltime(1);
     });
 
@@ -87,7 +86,7 @@ describe("Scheduler tests", function () {
         }).schedule(2);
         a.cancel();
         s.polltime(2);
-        assert.strictEqual(called, "bc");
+        expect(called).toBe("bc");
     });
 
     it("cancels middle occurring event", function () {
@@ -105,7 +104,7 @@ describe("Scheduler tests", function () {
         }).schedule(2);
         b.cancel();
         s.polltime(2);
-        assert.strictEqual(called, "ac");
+        expect(called).toBe("ac");
     });
 
     it("cancels last occurring event", function () {
@@ -123,7 +122,7 @@ describe("Scheduler tests", function () {
         c.schedule(2);
         c.cancel();
         s.polltime(2);
-        assert.strictEqual(called, "ab");
+        expect(called).toBe("ab");
     });
 
     it("handle events registered in reverse (CBA) order", function () {
@@ -139,7 +138,7 @@ describe("Scheduler tests", function () {
             called += "c";
         }).schedule(2);
         s.polltime(10);
-        assert.strictEqual(called, "cba");
+        expect(called).toBe("cba");
     });
 
     it("handle events registered in CAB order", function () {
@@ -155,7 +154,7 @@ describe("Scheduler tests", function () {
             called += "c";
         }).schedule(2);
         s.polltime(10);
-        assert.strictEqual(called, "cab");
+        expect(called).toBe("cab");
     });
 
     it("works properly with epochs", function () {
@@ -167,7 +166,7 @@ describe("Scheduler tests", function () {
             epochAtCall = s.epoch;
         }).schedule(4);
         s.polltime(9974);
-        assert.strictEqual(4, epochAtCall - epochBefore);
+        expect(epochAtCall - epochBefore).toBe(4);
     });
 
     it("allows you to reschedule from within a callback", function () {
@@ -186,6 +185,6 @@ describe("Scheduler tests", function () {
         for (let i = 0; i < 500000; ++i) {
             s.polltime(3);
         }
-        assert.deepStrictEqual(called, [12356, 13356, 14356, 114356, 115356]);
+        expect(called).toEqual([12356, 13356, 14356, 114356, 115356]);
     });
 });
