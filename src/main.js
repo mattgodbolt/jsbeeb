@@ -145,7 +145,7 @@ let econet = null;
 const {
     discImage: queryDiscImage,
     secondDiscImage: querySecondDisc,
-    mmcImage: queryMMCImage,
+    mmcImage: queryMMCImage, // ATOM
 } = parseMediaParams(parsedQuery);
 
 // Only assign if values are provided

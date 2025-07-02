@@ -251,15 +251,10 @@ export function guessModelFromHostname(hostname) {
  * @returns {Object} Object containing disc and tape information (and mmc for ATOM)
  */
 export function parseMediaParams(parsedQuery) {
+    // BBC and
     // ATOM
     const { disc, disc1, disc2, tape, mmc } = parsedQuery;
-    // BBC
-    // const { disc, disc1, disc2, tape } = parsedQuery;
     const discImage = disc || disc1;
 
-    // ATOM
     return { discImage, secondDiscImage: disc2, tapeImage: tape, mmcImage: mmc };
-
-    // BBC
-    // return { discImage, secondDiscIm§age: disc2, tapeImage: tape };
 }
