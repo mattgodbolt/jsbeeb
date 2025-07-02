@@ -1,0 +1,3781 @@
+ca65 V2.16 - Ubuntu 2.16-2
+Main file   : atommc2.asm
+Current file: atommc2.asm
+
+000000r 1               
+000000r 1               .include "atmmc2def.asm"
+000000r 2               ; atmmmc2def.h Symbolic defines for AtoMMC2
+000000r 2               
+000000r 2               ; 2011-05-25, Phill Harvey-Smith.
+000000r 2               
+000000r 2               ; OS overrides
+000000r 2               ;
+000000r 2               TOP         =$0d
+000000r 2               PAGE        =$12
+000000r 2               ARITHWK     =$23
+000000r 2               
+000000r 2               ; if ATOM_CRC_POLYNOMIAL is defined, *CRC will use it
+000000r 2               ; if not, it will use the original code which is faster, but ~30 bytes longer
+000000r 2               ATOM_CRC_POLYNOMIAL = $2d
+000000r 2               
+000000r 2               
+000000r 2               ; these need to be in ZP
+000000r 2               ;
+000000r 2               RWPTR       =$ac         ; W - data target vector
+000000r 2               ZPTW        =$ae         ; [3] - general use temp vector, used by vechexs, RS, WS
+000000r 2               
+000000r 2               LFNPTR      =$c9         ; W -pointer to filename (usually $140)
+000000r 2               LLOAD       =$cb         ; W - load address
+000000r 2               LEXEC       =$cd         ; W - execution address
+000000r 2               LLENGTH     =$cf         ; W - byte length
+000000r 2               
+000000r 2               SFNPTR      =$c9         ; W -pointer to filename (usually $140)
+000000r 2               SLOAD       =$cb         ; W - reload address
+000000r 2               SEXEC       =$cd         ; W - execute
+000000r 2               SSTART      =$cf         ; W - data start
+000000r 2               SEND        =$d1         ; W - data end + 1
+000000r 2               
+000000r 2               CRC         =$c9         ; 3 bytes in ZP - should be ok as this addr only used for load/save??
+000000r 2               
+000000r 2               RDCCNT      =$c9         ; B - bytes in pool - ie ready to be read from file
+000000r 2               RDCLEN      =$ca         ; W - length of file supplying characters
+000000r 2               
+000000r 2               HANDLER     =$d1         ; used by iterator.asm
+000000r 2               TMPY        =$d5         ; used by iterator.asm
+000000r 2               
+000000r 2               tmp_ptr3    =$D5
+000000r 2               tmp_ptr5    =$D6
+000000r 2               tmp_ptr6    =$D7
+000000r 2               
+000000r 2               MONFLAG     =$ea         ; 0 = messages on, ff = off
+000000r 2               
+000000r 2               NAME       =$140         ; sits astride the BASIC input buffer and string processing area.
+000000r 2               
+000000r 2               IRQVEC     =$204         ; we patch these (maybe more ;l)
+000000r 2               COMVEC     =$206
+000000r 2               RDCVEC     =$20a
+000000r 2               LODVEC     =$20c
+000000r 2               SAVVEC     =$20e
+000000r 2               
+000000r 2               ; DOS scratch RAM 3CA-3FC. As the AtoMMC interface effectively precludes the use of DOS..
+000000r 2               ;
+000000r 2               FKIDX      =$3ca         ; B - fake key index
+000000r 2               RWLEN      =$3cb         ; W - count of bytes to write
+000000r 2               FILTER     =$3cd         ; B - dir walk filter
+000000r 2               
+000000r 2               
+000000r 2               ; FN       ADDR
+000000r 2               ;
+000000r 2               OSWRCH     =$fff4
+000000r 2               OSRDCH     =$ffe3
+000000r 2               OSECHO     =$ffe6
+000000r 2               OSCRLF     =$ffed
+000000r 2               COSSYN     =$fa7d
+000000r 2               COSPOST    =$fa76
+000000r 2               RDADDR     =$fa65
+000000r 2               CHKNAME    =$f84f
+000000r 2               SKIPSPC    =$f876
+000000r 2               RDOPTAD    =$f893
+000000r 2               BADNAME    =$f86c
+000000r 2               WSXFER2    =$f85C
+000000r 2               COPYNAME   =$f818
+000000r 2               HEXOUT4    =$f7ee
+000000r 2               HEXOUT2    =$f7f1
+000000r 2               HEXOUT     =$f802
+000000r 2               HEXOUTS    =$f7fa
+000000r 2               SPCOUT     =$f7fd
+000000r 2               STROUT     =$f7d1
+000000r 2               
+000000r 2               ; I/O register base
+000000r 2               ;
+000000r 2               
+000000r 2               .ifdef ALTADDR
+000000r 2               AREG_BASE         = $b408
+000000r 2               .else
+000000r 2               AREG_BASE         = $b400
+000000r 2               .endif
+000000r 2               
+000000r 2               ACMD_REG       = AREG_BASE+CMD_REG
+000000r 2               ALATCH_REG                      = AREG_BASE+LATCH_REG
+000000r 2               AREAD_DATA_REG                  = AREG_BASE+READ_DATA_REG
+000000r 2               AWRITE_DATA_REG                 = AREG_BASE+WRITE_DATA_REG
+000000r 2               ASTATUS_REG       = AREG_BASE+STATUS_REG
+000000r 2               
+000000r 2               ; // Register definitions, these are offsets from 0xB400 on the Atom side.
+000000r 2               
+000000r 2               CMD_REG                         =   $00
+000000r 2               LATCH_REG                       =   $01
+000000r 2               READ_DATA_REG                   =   $02
+000000r 2               WRITE_DATA_REG                  =   $03
+000000r 2               STATUS_REG                      =   $04
+000000r 2               
+000000r 2               ; // DIR_CMD_REG commands
+000000r 2               CMD_DIR_OPEN                    =   $00
+000000r 2               CMD_DIR_READ                    =   $01
+000000r 2               CMD_DIR_CWD                     =   $02
+000000r 2               CMD_DIR_GETCWD                  =   $03
+000000r 2               CMD_DIR_MKDIR                   =   $04
+000000r 2               CMD_DIR_RMDIR                   =   $05
+000000r 2               
+000000r 2               ; // RENAME commands
+000000r 2               CMD_RENAME                      =   $08
+000000r 2               
+000000r 2               ; // CMD_REG_COMMANDS
+000000r 2               CMD_FILE_CLOSE                  =   $10
+000000r 2               CMD_FILE_OPEN_READ              =   $11
+000000r 2               CMD_FILE_OPEN_IMG               =   $12
+000000r 2               CMD_FILE_OPEN_WRITE             =   $13
+000000r 2               CMD_FILE_DELETE                 =   $14
+000000r 2               CMD_FILE_GETINFO                =   $15
+000000r 2               
+000000r 2               CMD_INIT_READ                   =   $20
+000000r 2               CMD_INIT_WRITE                  =   $21
+000000r 2               CMD_READ_BYTES                  =   $22
+000000r 2               CMD_WRITE_BYTES                 =   $23
+000000r 2               
+000000r 2               ; // READ_DATA_REG "commands"
+000000r 2               
+000000r 2               ; // EXEC_PACKET_REG "commands"
+000000r 2               CMD_EXEC_PACKET                 =   $3F
+000000r 2               
+000000r 2               ; // SDOS_LBA_REG commands
+000000r 2               CMD_LOAD_PARAM                  =   $40
+000000r 2               CMD_GET_IMG_STATUS              =   $41
+000000r 2               CMD_GET_IMG_NAME                =   $42
+000000r 2               CMD_READ_IMG_SEC                =   $43
+000000r 2               CMD_WRITE_IMG_SEC               =   $44
+000000r 2               CMD_SER_IMG_INFO                =   $45
+000000r 2               CMD_VALID_IMG_NAMES             =   $46
+000000r 2               CMD_IMG_UNMOUNT                 =   $47
+000000r 2               
+000000r 2               ; // UTIL_CMD_REG commands
+000000r 2               CMD_GET_CARD_TYPE               =   $80
+000000r 2               CMD_GET_PORT_DDR                =   $A0
+000000r 2               CMD_SET_PORT_DDR                =   $A1
+000000r 2               CMD_READ_PORT                   =   $A2
+000000r 2               CMD_WRITE_PORT                  =   $A3
+000000r 2               CMD_GET_FW_VER                  =   $E0
+000000r 2               CMD_GET_BL_VER                  =   $E1
+000000r 2               CMD_GET_CFG_BYTE                =   $F0
+000000r 2               CMD_SET_CFG_BYTE                =   $F1
+000000r 2               CMD_READ_AUX                    =   $FD
+000000r 2               CMD_GET_HEARTBEAT               =   $FE
+000000r 2               
+000000r 2               
+000000r 2               ; // Status codes
+000000r 2               STATUS_OK                       =   $3F
+000000r 2               STATUS_COMPLETE                 =   $40
+000000r 2               STATUS_BUSY                     =   $80
+000000r 2               
+000000r 2               ERROR_MASK                      =   $3F
+000000r 2               
+000000r 2               ; // To be or'd with STATUS_COMPLETE
+000000r 2               ERROR_NO_DATA                   =   $08
+000000r 2               ERROR_INVALID_DRIVE             =   $09
+000000r 2               ERROR_READ_ONLY                 =   $0A
+000000r 2               ERROR_ALREADY_MOUNT             =   $0A
+000000r 2               
+000000r 2               ; // STATUS_REG bit masks
+000000r 2               ; //
+000000r 2               ; // MMC_MCU_BUSY set by a write to CMD_REG by the Atom, cleared by a write by the MCU
+000000r 2               ; // MMC_MCU_READ set by a write by the Atom (to any reg), cleared by a read by the MCU
+000000r 2               ; // MCU_MMC_WROTE set by a write by the MCU cleared by a read by the Atom (any reg except status).
+000000r 2               ; //
+000000r 2               MMC_MCU_BUSY                    =   $01
+000000r 2               MMC_MCU_READ                    =   $02
+000000r 2               MMC_MCU_WROTE                   =   $04
+000000r 2               
+000000r 1               
+000000r 1               .include "macros.asm"
+000000r 2               ;================================================================
+000000r 2               ; macro definitions for AtoMMC
+000000r 2               ; Collected macros from all files into a single file
+000000r 2               ;================================================================
+000000r 2               ;
+000000r 2               ; 2013-10-09 converted some of the macro calls to jsr calls where
+000000r 2               ; appropriate. -- PHS
+000000r 2               ; 2016-03-22 did this more aggressively to reduce code size and
+000000r 2               ; make other tail optimizations easier. -- DMB
+000000r 2               ;
+000000r 2               
+000000r 2               .macro FNADDR addr
+000000r 2                  .byte >addr, <addr
+000000r 2               .endmacro
+000000r 2               
+000000r 2               ; Subroutines for macros in util.asm
+000000r 2               
+000000r 1               
+000000r 1               .segment "CODE"
+000000r 1               
+000000r 1               
+000000r 1               AtoMMC2:
+000000r 1                  ; test ctrl - if pressed, don't initialise
+000000r 1                  ;
+000000r 1  2C 01 B0        bit   $b001
+000003r 1  70 03           bvs   @initialise
+000005r 1               
+000005r 1                  ; don't initialise the firmware
+000005r 1               .ifndef EOOO
+000005r 1                  ; - however we got an interrupt so we need to clear it
+000005r 1                  ;
+000005r 1                  ; lda   #30                  ; as we've had an interrupt we want to wait longer
+000005r 1                  ; sta   CRC                  ; for the interface to respond
+000005r 1                  jsr   irqgetcardtype
+000005r 1                  pla
+000005r 1                  rti
+000005r 1               .else
+000005r 1                  ; the E000 build
+000005r 1  4C B2 C2        jmp   $c2b2                  ; set #2900 text space and enter command handler
+000008r 1               .endif
+000008r 1               
+000008r 1               @initialise:
+000008r 1  98              tya
+000009r 1  48              pha
+00000Ar 1  8A              txa
+00000Br 1  48              pha
+00000Cr 1               
+00000Cr 1                  ; forget VIA! - we got the interrupt so the PL8 interface is in the house!
+00000Cr 1               
+00000Cr 1                  ; read card type
+00000Cr 1                  ;
+00000Cr 1                  ; lda   #7                   ; timeout value, ret when crc == -1
+00000Cr 1                  ; sta   CRC
+00000Cr 1  20 rr rr        jsr   irqgetcardtype
+00000Fr 1                  ; bit   CRC
+00000Fr 1                  ; bmi   @unpatched
+00000Fr 1               
+00000Fr 1  A8              tay
+000010r 1               
+000010r 1  A2 00           ldx   #0
+000012r 1               
+000012r 1  8E CA 03        stx   FKIDX                  ; fake key index for OSRDCH patch, just piggybacking
+000015r 1  8E CF 03        stx   TUBE_FLAG              ; @@TUBE@@ disable tube by default
+000018r 1               
+000018r 1  A9 2B           lda   #43                    ;'+'
+00001Ar 1  8D 0B 80        sta   $800b
+00001Dr 1               
+00001Dr 1               @shorttitle:
+00001Dr 1  BD rr rr        lda   version,x
+000020r 1  29 BF           and   #$bf
+000022r 1  9D 0D 80        sta   $800d,x
+000025r 1  E8              inx
+000026r 1  C9 20           cmp   #$20
+000028r 1  D0 F3           bne   @shorttitle
+00002Ar 1               
+00002Ar 1  2C 02 B0        bit   $b002                  ; is REPT pressed?
+00002Dr 1  70 22           bvs   @quiet
+00002Fr 1               
+00002Fr 1  CA              dex
+000030r 1               
+000030r 1               @announce:
+000030r 1  29 BF           and   #$bf
+000032r 1  9D 0D 80        sta   $800d,x
+000035r 1  E8              inx
+000036r 1               
+000036r 1  BD rr rr        lda   version,x
+000039r 1  C9 0D           cmp   #$0d
+00003Br 1  D0 F3           bne   @announce
+00003Dr 1               
+00003Dr 1                  ; display appropriate type
+00003Dr 1                  ; none = 0, mmc = 1, sdv1 = 2, sdv2 = 4
+00003Dr 1                  ;
+00003Dr 1  98              tya
+00003Er 1  20 rr rr        jsr   bittoindex
+000041r 1  A0 00           ldy   #0
+000043r 1               
+000043r 1               @sctloop:
+000043r 1  BD rr rr        lda   cardtypes,x
+000046r 1  29 BF           and   #$bf
+000048r 1  99 1C 80        sta   $801c,y
+00004Br 1  E8              inx
+00004Cr 1  C8              iny
+00004Dr 1  C0 04           cpy   #4
+00004Fr 1  D0 F2           bne   @sctloop
+000051r 1               
+000051r 1               
+000051r 1               @quiet:
+000051r 1  20 rr rr        jsr   installhooks
+000054r 1               
+000054r 1               ;    $b40f    $b001
+000054r 1               ;      0        0    [inv. sh, sh pressed]     0
+000054r 1               ;      0        1    [inv. sh, sh not pressed] 1
+000054r 1               ;      1        0    [norm sh, sh pressed]     1
+000054r 1               ;      1        1    [norm sh, sh not pressed] 0
+000054r 1               
+000054r 1  A9 F0           lda   #CMD_GET_CFG_BYTE      ; get config byte
+000056r 1  20 rr rr        jsr   fast_cmd
+000059r 1               
+000059r 1  0A              asl   a                      ; 'normal shift' bit is 6
+00005Ar 1  4D 01 B0        eor   $b001
+00005Dr 1  10 0A           bpl   @unpatched
+00005Fr 1               
+00005Fr 1               
+00005Fr 1               @patchosrdch:
+00005Fr 1  A9 rr           lda   #<osrdchcode
+000061r 1  8D 0A 02        sta   RDCVEC
+000064r 1  A9 rr           lda   #>osrdchcode
+000066r 1  8D 0B 02        sta   RDCVEC+1
+000069r 1               
+000069r 1               @unpatched:
+000069r 1  68              pla
+00006Ar 1  AA              tax
+00006Br 1  68              pla
+00006Cr 1  A8              tay
+00006Dr 1               
+00006Dr 1               .ifdef EOOO
+00006Dr 1  4C B2 C2        jmp   $c2b2                  ; set #2900 text space and enter command handler
+000070r 1               .endif
+000070r 1               
+000070r 1               irqveccode:
+000070r 1  68              pla                          ; pop the accumulator as saved by the irq handler
+000071r 1  40              rti
+000072r 1               
+000072r 1               ; takes a card type in A
+000072r 1               ; 0 = no card
+000072r 1               ; bit 1 = type 1 (MMC)
+000072r 1               ; bit 2 = type 2 (SD)
+000072r 1               ; etc etc
+000072r 1               ;
+000072r 1               bittoindex:
+000072r 1  09 08           ora   #8                     ; bit 3 -- 'no card available' - to ensure we stop
+000074r 1  85 AE           sta   ZPTW
+000076r 1               
+000076r 1  A9 FC           lda   #$fc                   ; spot the bit
+000078r 1  18              clc
+000079r 1               @add:
+000079r 1  69 04           adc   #4
+00007Br 1  46 AE           lsr   ZPTW
+00007Dr 1  90 FA           bcc   @add
+00007Fr 1  AA              tax
+000080r 1  60              rts
+000081r 1               
+000081r 1               print_version:
+000081r 1  A2 00           ldx   #0
+000083r 1               
+000083r 1               @announce:
+000083r 1  BD rr rr        lda   version,x
+000086r 1  20 F4 FF        jsr   OSWRCH
+000089r 1  E8              inx
+00008Ar 1  88              dey
+00008Br 1  D0 F6           bne   @announce
+00008Dr 1  60              rts
+00008Er 1               
+00008Er 1               installhooks2:
+00008Er 1  A0 10           ldy   #(version_short - version)
+000090r 1  20 rr rr        jsr   print_version
+000093r 1               
+000093r 1               .ifndef EOOO
+000093r 1                  jsr   ifen                   ; interface enable interrupt, if at A000
+000093r 1               .endif
+000093r 1               
+000093r 1               ; install hooks. 6 vectors, 12 bytes
+000093r 1               ;
+000093r 1               ; !!! this is all you need to call if you're not using IRQs !!!
+000093r 1               ;
+000093r 1               installhooks:
+000093r 1  A2 17           ldx   #11+12
+000095r 1               
+000095r 1               @initvectors:
+000095r 1  BD rr rr        lda   fullvecdat,x
+000098r 1  9D 04 02        sta   IRQVEC,x
+00009Br 1  CA              dex
+00009Cr 1  10 F7           bpl   @initvectors
+00009Er 1  60              rts
+00009Fr 1               
+00009Fr 1               ;igct_delay:
+00009Fr 1               ;   ldx   0
+00009Fr 1               ;   ldy   0
+00009Fr 1               ;igct_inner:
+00009Fr 1               ;   dey
+00009Fr 1               ;   bne   igct_inner
+00009Fr 1               ;   dex
+00009Fr 1               ;   bne   igct_inner
+00009Fr 1               ;
+00009Fr 1               ;   dec   CRC
+00009Fr 1               ;   bmi   igct_quit
+00009Fr 1               
+00009Fr 1               irqgetcardtype:
+00009Fr 1                  ; await the 0xaa,0x55,0xaa... sequence which shows that the interface
+00009Fr 1                  ; is initialised and responding
+00009Fr 1               
+00009Fr 1  A9 FE           lda   #CMD_GET_HEARTBEAT
+0000A1r 1  20 rr rr        jsr   fast_cmd
+0000A4r 1  C9 AA           cmp   #$aa
+0000A6r 1  D0 F7           bne   irqgetcardtype
+0000A8r 1               
+0000A8r 1               irqgetcardtype2:
+0000A8r 1  A9 FE           lda   #CMD_GET_HEARTBEAT
+0000AAr 1  20 rr rr        jsr   fast_cmd
+0000ADr 1  C9 55           cmp   #$55
+0000AFr 1  D0 EE           bne   irqgetcardtype
+0000B1r 1               
+0000B1r 1                  ; send read card type command - this also de-asserts the interrupt
+0000B1r 1               
+0000B1r 1  A9 80           lda   #CMD_GET_CARD_TYPE
+0000B3r 1  4C rr rr        jmp   slow_cmd
+0000B6r 1               
+0000B6r 1               ; patched os input function
+0000B6r 1               ;
+0000B6r 1               ; streams fake keypresses to the system
+0000B6r 1               ; re-registers the bios' function when
+0000B6r 1               ; a> fake keys have all been sent or
+0000B6r 1               ; b> when no shift-key is detected
+0000B6r 1               ;
+0000B6r 1               osrdchcode:
+0000B6r 1  08              php
+0000B7r 1  D8              cld
+0000B8r 1  86 E4           stx   $e4
+0000BAr 1  84 E5           sty   $e5
+0000BCr 1               
+0000BCr 1  AE CA 03        ldx   FKIDX
+0000BFr 1  BD rr rr        lda   fakekeys,x
+0000C2r 1  F0 0A           beq   @unpatch
+0000C4r 1               
+0000C4r 1  E8              inx
+0000C5r 1  8E CA 03        stx   FKIDX
+0000C8r 1               
+0000C8r 1  A6 E4           ldx   $e4
+0000CAr 1  A4 E5           ldy   $e5
+0000CCr 1  28              plp
+0000CDr 1  60              rts
+0000CEr 1               
+0000CEr 1               @unpatch:
+0000CEr 1                  ; restore OSRDCH, continue on to read a char
+0000CEr 1                  ;
+0000CEr 1                  ; ldx   $e4
+0000CEr 1                  ; ldy   $e5
+0000CEr 1               
+0000CEr 1               osrdchcode_unhook:
+0000CEr 1  A9 94           lda   #$94
+0000D0r 1  8D 0A 02        sta   RDCVEC
+0000D3r 1  A9 FE           lda   #$fe
+0000D5r 1  8D 0B 02        sta   RDCVEC+1
+0000D8r 1               
+0000D8r 1                  ; plp
+0000D8r 1  A9 0D           lda   #$0d
+0000DAr 1  48              pha
+0000DBr 1  4C 5C FE        jmp   $fe5c
+0000DEr 1                  ; jmp   (RDCVEC)
+0000DEr 1               
+0000DEr 1               ; Kees Van Oss' version of the CLI interpreter
+0000DEr 1               ;
+0000DEr 1               osclicode:
+0000DEr 1               
+0000DEr 1               ;=================================================================
+0000DEr 1               ; STAR-COMMAND INTERPRETER
+0000DEr 1               ;=================================================================
+0000DEr 1               star_com:
+0000DEr 1  A2 FF           ldx   #$ff                   ; set up pointers
+0000E0r 1  D8              cld
+0000E1r 1               star_com1:
+0000E1r 1  A0 00           ldy   #0
+0000E3r 1  20 76 F8        jsr   SKIPSPC
+0000E6r 1  88              dey
+0000E7r 1               star_com2:
+0000E7r 1  C8              iny
+0000E8r 1  E8              inx
+0000E9r 1               
+0000E9r 1               star_com3:
+0000E9r 1  BD rr rr        lda   com_tab,x              ; look up star-command
+0000ECr 1  30 18           bmi   star_com5
+0000EEr 1  D9 00 01        cmp   $100,y
+0000F1r 1  F0 F4           beq   star_com2
+0000F3r 1  CA              dex
+0000F4r 1               star_com4:
+0000F4r 1  E8              inx
+0000F5r 1  BD rr rr        lda   com_tab,x
+0000F8r 1  10 FA           bpl   star_com4
+0000FAr 1  E8              inx
+0000FBr 1  B9 00 01        lda   $100,y
+0000FEr 1  C9 2E           cmp   #46                    ; '.'
+000100r 1  D0 DF           bne   star_com1
+000102r 1  C8              iny
+000103r 1  CA              dex
+000104r 1  B0 E3           bcs   star_com3
+000106r 1               
+000106r 1               star_com5:
+000106r 1  84 9A           sty   $9a
+000108r 1               
+000108r 1  A4 03           ldy   $3                     ; save command pointers
+00010Ar 1  84 D5           sty   tmp_ptr3
+00010Cr 1  A4 05           ldy   $5
+00010Er 1  84 D6           sty   tmp_ptr5
+000110r 1  A4 06           ldy   $6
+000112r 1  84 D7           sty   tmp_ptr6
+000114r 1  A0 00           ldy   #<$100
+000116r 1  84 05           sty   $5
+000118r 1  A0 01           ldy   #>$100
+00011Ar 1  84 06           sty   $6
+00011Cr 1  A4 9A           ldy   $9a
+00011Er 1  84 03           sty   $3
+000120r 1               
+000120r 1  85 53           sta   $53                    ; execute star command
+000122r 1  BD rr rr        lda   com_tab+1,x
+000125r 1  85 52           sta   $52
+000127r 1  A2 00           ldx   #0
+000129r 1  20 rr rr        jsr   comint6
+00012Cr 1               
+00012Cr 1  A4 D6           ldy   tmp_ptr5               ; restore command pointers
+00012Er 1  84 05           sty   $5
+000130r 1  A4 D7           ldy   tmp_ptr6
+000132r 1  84 06           sty   $6
+000134r 1  A4 D5           ldy   tmp_ptr3
+000136r 1  84 03           sty   $3
+000138r 1               
+000138r 1  A9 0D           lda   #$0d
+00013Ar 1  91 05           sta   ($5),y
+00013Cr 1               
+00013Cr 1  60              rts
+00013Dr 1               
+00013Dr 1               comint6:
+00013Dr 1  6C 52 00        jmp   ($0052)
+000140r 1               
+000140r 1               .include "iterator.asm"
+000140r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000140r 2               ;
+000140r 2               ; Directory iterator pattern
+000140r 2               ;
+000140r 2               ; Used by *CAT, *INFO and *DELETE, e.g.
+000140r 2               ;
+000140r 2               ; *INFO  ([directory path]/)... ([file path])
+000140r 2               ; or
+000140r 2               ; *INFO  ([directory path]/)... ([wildcard pattern])
+000140r 2               ;
+000140r 2               ; The directory iterator calls back to the caller's handler for each matching child
+000140r 2               ;
+000140r 2               ; The handler code is expected to immediately follow the "jsr iterator"
+000140r 2               ;
+000140r 2               ; On Entry to the handler:
+000140r 2               ;     $140 contains the full path to the child
+000140r 2               ;     Y is the offset in the $140 buffer to the child name
+000140r 2               ;     C=0 if the child is a file, C=1 if the child is a directory
+000140r 2               
+000140r 2               iterator:
+000140r 2  68              pla                          ; save the caller's handler function, which is
+000141r 2  85 D2           sta   HANDLER+1              ; the code the immediately follows "jsr iterator"
+000143r 2  68              pla
+000144r 2  85 D1           sta   HANDLER
+000146r 2               
+000146r 2  20 rr rr        jsr   read_optional_filename ; read the command's argument
+000149r 2               
+000149r 2  A9 11           lda   #CMD_FILE_OPEN_READ    ; open it as if it were a file for reading
+00014Br 2  20 rr rr        jsr   open_file              ; in FatFS this can be done multiple times without a problem
+00014Er 2               
+00014Er 2  C9 41           cmp   #STATUS_COMPLETE+1     ; check for an error opening the file for read
+000150r 2  B0 09           bcs   @directory_mode        ; if so, assume directory mode
+000152r 2               
+000152r 2  A0 00           ldy   #0                     ; filename starts at offset 0 in $140
+000154r 2                  ; fall through to invoke the handler on an individual file (C = 0 at this point)
+000154r 2               
+000154r 2               @child_handler:
+000154r 2  A5 D1           lda   HANDLER
+000156r 2  48              pha
+000157r 2  A5 D2           lda   HANDLER+1
+000159r 2  48              pha
+00015Ar 2  60              rts                          ; call the command's handler
+00015Br 2               
+00015Br 2               @directory_mode:
+00015Br 2  20 rr rr        jsr   send_name              ; send string at $140 to the AtoMMC interface
+00015Er 2               
+00015Er 2  A9 00           lda   #CMD_DIR_OPEN          ; open directory
+000160r 2  20 rr rr        jsr   slow_cmd_and_check     ; invokes error handler if return code > 64
+000163r 2               
+000163r 2  20 rr rr        jsr   @find_directory_sep    ; parse the wildcard pattern in $140 to find the last directory seperator
+000166r 2  84 D5           sty   TMPY                   ; save y, which is the offset at which the child name will be written
+000168r 2               
+000168r 2               @get_next_loop:
+000168r 2  A9 01           lda   #CMD_DIR_READ          ; get directory item
+00016Ar 2  20 rr rr        jsr   slow_cmd_and_check     ; invokes error handler if return code > 64
+00016Dr 2               
+00016Dr 2  C9 40           cmp   #STATUS_COMPLETE       ; all done?
+00016Fr 2  F0 25           beq   @return
+000171r 2               
+000171r 2  A4 D5           ldy   TMPY                   ; save y, which is the offset at which the child name will be written
+000173r 2  20 rr rr        jsr   getasciizstringto140   ; append the child's name to the path
+000176r 2               
+000176r 2  20 rr rr        jsr   read_data_reg          ; read the child's attribute byte: bit 4 = dir/file, bit 1 = hidden
+000179r 2  6A              ror   a
+00017Ar 2  6A              ror   a                      ; now bit 2 = dir/file; carry = hidden,
+00017Br 2  B0 09           bcs   @pause                 ; hidden?, don't invoke the handler
+00017Dr 2               
+00017Dr 2  29 04           and   #$04                   ; mask dir/file bit
+00017Fr 2  C9 04           cmp   #$04                   ; C=0 for file; C=1 for directory
+000181r 2  A4 D5           ldy   TMPY                   ; restore y, the offset to the childs's name
+000183r 2  20 rr rr        jsr   @child_handler
+000186r 2               
+000186r 2               @pause:
+000186r 2  2C 02 B0        bit   $b002                  ; test the rept key
+000189r 2  50 FB           bvc   @pause                 ; stick here if rept pressed
+00018Br 2               
+00018Br 2  A9 20           lda   #$20                   ; bit 5 is the mask for the escape key
+00018Dr 2  2C 01 B0        bit   $b001                  ; test the ctrl/shift/esc keys
+000190r 2  10 F4           bpl   @pause                 ; stick here if shift pressed
+000192r 2  50 F2           bvc   @pause                 ; stick here if ctrl pressed
+000194r 2  D0 D2           bne   @get_next_loop         ; loop back if escape not pressed
+000196r 2               @return:
+000196r 2  60              rts
+000197r 2               
+000197r 2               ; Find the position of the directory seperator
+000197r 2               ;
+000197r 2               ; - search forward for a wild card
+000197r 2               ; - if not found, append extra / and return Y = next char
+000197r 2               ; - search backwards for a /
+000197r 2               ; - if found, return Y = next char
+000197r 2               ; - return Y = 0
+000197r 2               
+000197r 2               @find_directory_sep:
+000197r 2  A0 FF            ldy   #$ff
+000199r 2               
+000199r 2               @wild_loop:
+000199r 2  C8               iny
+00019Ar 2  B9 40 01         lda   NAME, y
+00019Dr 2  C9 3F            cmp   #'?'
+00019Fr 2  F0 13            beq   @slash_loop
+0001A1r 2  C9 2A            cmp   #'*'
+0001A3r 2  F0 0F            beq   @slash_loop
+0001A5r 2  C9 0D            cmp   #$0D
+0001A7r 2  D0 F0            bne   @wild_loop
+0001A9r 2  C0 00            cpy   #$00                  ; handle the case where no wildcard is present
+0001ABr 2  F0 06            beq   @exit
+0001ADr 2  A9 2F            lda   #'/'
+0001AFr 2  99 40 01         sta   NAME, y
+0001B2r 2  C8               iny
+0001B3r 2               @exit:
+0001B3r 2  60               rts
+0001B4r 2               
+0001B4r 2               @slash_loop:
+0001B4r 2  B9 40 01         lda   NAME, y
+0001B7r 2  C9 2F            cmp   #'/'
+0001B9r 2  F0 07            beq   @found_slash
+0001BBr 2  C9 5C            cmp   #'\'
+0001BDr 2  F0 03            beq   @found_slash
+0001BFr 2  88               dey
+0001C0r 2  10 F2            bpl   @slash_loop
+0001C2r 2               
+0001C2r 2               @found_slash:
+0001C2r 2  C8               iny
+0001C3r 2               
+0001C3r 2               return:
+0001C3r 2  60               rts                         ; a convenient rts for following code to branch to
+0001C4r 2               
+0001C4r 1               .include "cat.asm"              ; close to iterator so can branch to return
+0001C4r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0001C4r 2               ;
+0001C4r 2               ; *CAT  ([directory path]/)... ([file path])
+0001C4r 2               ; or
+0001C4r 2               ; *CAT  ([directory path]/)... ([wildcard pattern])
+0001C4r 2               ;
+0001C4r 2               ; Produce a directory listing of the specified directory, optionally
+0001C4r 2               ; displaying only those entries matching a wildcard pattern.
+0001C4r 2               ;
+0001C4r 2               ; The directory path is optional, if omitted the current directory is used.
+0001C4r 2               ;
+0001C4r 2               ; The wildcard pattern is optional, if omitted * is used.
+0001C4r 2               ;
+0001C4r 2               ; 2011-05-29, Now uses CMD_REG -- PHS
+0001C4r 2               ; 2012-05-21, converted to use macros for all writes to PIC
+0001C4r 2               ; 2016-03-21, removed old @[filter] code, as the PIC supports proper wildcards -- DMB
+0001C4r 2               ; 2016-03-22, *CAT code also used for *INFO, giving *INFO multi file / wildcard support
+0001C4r 2               ; 2016-03-23, Reworked *CAT and *INFO so code is more readable
+0001C4r 2               ; 2016-03-25, Rewrote using iterator pattern
+0001C4r 2               
+0001C4r 2               star_cat:
+0001C4r 2  20 rr rr        jsr   iterator               ; invoke the directory iterator
+0001C7r 2               ;
+0001C7r 2               ; The directory iterator calls back to this handler for each matching child
+0001C7r 2               ;
+0001C7r 2               ; On Entry:
+0001C7r 2               ;     $140 contains the full path to the child
+0001C7r 2               ;     Y is the offset in the $140 buffer to the child name
+0001C7r 2               ;     C=0 if the child is a file, C=1 if the child is a directory
+0001C7r 2               ;
+0001C7r 2  20 rr rr        jsr   print_filename         ; print just the filename without opening the file
+0001CAr 2  4C ED FF        jmp   OSCRLF                 ; followed by a newline
+0001CDr 2               
+0001CDr 1               .include "info.asm"             ; close to iterator so can branch to return
+0001CDr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0001CDr 2               ;
+0001CDr 2               ; *INFO  ([directory path]/)... ([file path])
+0001CDr 2               ; or
+0001CDr 2               ; *INFO  ([directory path]/)... ([wildcard pattern])
+0001CDr 2               ;
+0001CDr 2               ; Shows metatadata associated with one or more files.
+0001CDr 2               ;
+0001CDr 2               ; If the path resolved to a single file, then info for just this file is displayed.
+0001CDr 2               ;
+0001CDr 2               ; Otherwise the path is assumed to identify a directory and a wildcard pattern
+0001CDr 2               ; filters the files in this directory.
+0001CDr 2               ;
+0001CDr 2               ; The directory path is optional, if omitted the current directory is used.
+0001CDr 2               ;
+0001CDr 2               ; The wildcard pattern is optional, if omitted * is used.
+0001CDr 2               ;
+0001CDr 2               ; 2016-03-22, *CAT code also used for *INFO, giving *INFO multi file / wildcard support
+0001CDr 2               ; 2016-03-23, Added back support for *INFO on a single file
+0001CDr 2               ; 2016-03-23, Reworked *CAT and *INFO so code is more readable
+0001CDr 2               ; 2016-03-25, Rewrote using iterator pattern
+0001CDr 2               ;
+0001CDr 2               star_info:
+0001CDr 2  20 rr rr        jsr   iterator               ; invoke the directory iterator
+0001D0r 2               ;
+0001D0r 2               ; The directory iterator calls back to this handler for each matching child
+0001D0r 2               ;
+0001D0r 2               ; On Entry:
+0001D0r 2               ;     $140 contains the full path to the child
+0001D0r 2               ;     Y is the offset in the $140 buffer to the child name
+0001D0r 2               ;     C=0 if the child is a file, C=1 if the child is a directory
+0001D0r 2               ;
+0001D0r 2  08              php                          ; save C flag
+0001D1r 2  20 rr rr        jsr   print_filename         ; print the filename
+0001D4r 2  28              plp                          ; restore C flag
+0001D5r 2  B0 19           bcs   newline                ; if a directory, then skip the file info bit
+0001D7r 2               
+0001D7r 2               @padloop:
+0001D7r 2  20 FD F7        jsr   SPCOUT                 ; pad filename with spaces
+0001DAr 2  A5 E0           lda   $e0                    ; $e0 = horizontal cursor position
+0001DCr 2  C9 10           cmp   #16                    ; continue until column 16
+0001DEr 2  90 F7           bcc   @padloop
+0001E0r 2               
+0001E0r 2  85 CD           sta   LEXEC                  ; bit 7 = 0 forces read_info to read all info
+0001E2r 2  20 rr rr        jsr   open_file_read         ; open the file for reading
+0001E5r 2  20 rr rr        jsr   read_info
+0001E8r 2                  ; fall through into print_fileinfo
+0001E8r 2               
+0001E8r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0001E8r 2               ;
+0001E8r 2               ; Display file info
+0001E8r 2               ;
+0001E8r 2               ; Prints load, exec, length
+0001E8r 2               ;
+0001E8r 2               print_fileinfo:
+0001E8r 2  A2 CB           ldx   #LLOAD
+0001EAr 2  20 EE F7        jsr   HEXOUT4                ; $f7ee print 4 bytes in hex, incrementing X
+0001EDr 2  20 F1 F7        jsr   HEXOUT2                ; $f7f1 print 2 bytes in hex, incrementing X
+0001F0r 2               
+0001F0r 2               newline:
+0001F0r 2  4C ED FF        jmp   OSCRLF
+0001F3r 2               
+0001F3r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0001F3r 2               ;
+0001F3r 2               ; Display file name
+0001F3r 2               ;
+0001F3r 2               ; Prints name
+0001F3r 2               ;
+0001F3r 2               print_filename:
+0001F3r 2  B9 40 01        lda   NAME,y                 ; get next char of filename
+0001F6r 2  C9 0D           cmp   #$0d
+0001F8r 2  F0 C9           beq   return
+0001FAr 2  20 F4 FF        jsr   OSWRCH
+0001FDr 2  C8              iny
+0001FEr 2  D0 F3           bne   print_filename         ; branch always
+000200r 2               
+000200r 1               .include "delete.asm"           ; close to iterator so can branch to return
+000200r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000200r 2               ;
+000200r 2               ; *DELETE  ([directory path]/)... ([file path])
+000200r 2               ; or
+000200r 2               ; *DELETE  ([directory path]/)... ([wildcard pattern])
+000200r 2               ;
+000200r 2               ; Delete's one or more files.
+000200r 2               ;
+000200r 2               ; 2016-03-25, Rewrote using iterator pattern
+000200r 2               
+000200r 2               star_delete:
+000200r 2  20 rr rr        jsr   iterator               ; invoke the directory iterator
+000203r 2               ;
+000203r 2               ; The directory iterator calls back to this handler for each matching child
+000203r 2               ;
+000203r 2               ; On Entry:
+000203r 2               ;     $140 contains the full path to the child
+000203r 2               ;     Y is the offset in the $140 buffer to the child name
+000203r 2               ;     C=0 if the child is a file, C=1 if the child is a directory
+000203r 2               ;
+000203r 2  B0 BE           bcs   return                 ; skip directories
+000205r 2               
+000205r 2  20 rr rr        jsr   print_filename
+000208r 2               
+000208r 2  20 D1 F7        jsr   STROUT
+00020Br 2  3B 20 43 4F     .byte "; CONFIRM (Y):"
+00020Fr 2  4E 46 49 52  
+000213r 2  4D 20 28 59  
+000219r 2  EA              nop
+00021Ar 2               
+00021Ar 2  20 rr rr        jsr   confirm_or_rts         ; pops an extra address off the stack if Y not presed
+00021Dr 2               
+00021Dr 2  20 rr rr        jsr   open_file_read         ; to delete a file it must be open for read
+000220r 2  4C rr rr        jmp   delete_file
+000223r 2               
+000223r 1               .include "cwd.asm"
+000223r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000223r 2               ;
+000223r 2               ; *CWD [path]
+000223r 2               ;
+000223r 2               ; Sets the current working directory
+000223r 2               ;
+000223r 2               ; 2011-05-29, Now uses CMD_REG -- PHS
+000223r 2               
+000223r 2               star_cwd:
+000223r 2  20 rr rr        jsr   read_filename          ; copy filename into $140
+000226r 2               
+000226r 2  20 rr rr        jsr   send_name              ; put string at $140 to interface
+000229r 2               
+000229r 2  A9 02           lda   #CMD_DIR_CWD           ; set CWD
+00022Br 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+00022Er 2               
+00022Er 1               .include "cfg.asm"
+00022Er 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00022Er 2               ;
+00022Er 2               ; *PBD ([val])
+00022Er 2               ;
+00022Er 2               ; *PBD      - Print the current port B direction register in hex.
+00022Er 2               ; *PBD 7F   - Set the direction register.
+00022Er 2               ;
+00022Er 2               ; Port B is 8 bits wide and each bit's direction is independently controllable.
+00022Er 2               ; A set bit in the direction register indicates an 1nput and a clear bit represents
+00022Er 2               ; an 0utput.
+00022Er 2               ;
+00022Er 2               star_pbd:
+00022Er 2  A9 A0           lda   #CMD_GET_PORT_DDR
+000230r 2  D0 06           bne   do_cfg_cmd             ; branch always
+000232r 2               
+000232r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000232r 2               ;
+000232r 2               ; *PBV ([val])
+000232r 2               ;
+000232r 2               ; *PBV      - Print the state of port B in hex.
+000232r 2               ; *PBV 7F   - Write value to port B.
+000232r 2               ;
+000232r 2               ; If a port B bit is set as an input, you will read the value present on the port.
+000232r 2               ; If it is an output you will see the last value written to it.
+000232r 2               ;
+000232r 2               star_pbv:
+000232r 2  A9 A2           lda   #CMD_READ_PORT
+000234r 2  D0 02           bne   do_cfg_cmd             ; branch always
+000236r 2               
+000236r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000236r 2               ;
+000236r 2               ; *CFG ([val])
+000236r 2               ;
+000236r 2               ; *CFG      - Print the current port B direction register in hex.
+000236r 2               ; *CFG NN   - Set the config byte to the specified hex value.
+000236r 2               ;
+000236r 2               ; Bit 7 controls whether the boot loader is entered. 1 = enter, 0 = don't enter.
+000236r 2               ;     6 controls the action of the SHIFT key on boot. 1 = SHIFT+BREAK runs menu, 0 = menu runs unless SHIFT-BREAK pressed.
+000236r 2               ;     5 controls whether the interface generates an IRQ on reset. 1 = generate, 0 = don't.
+000236r 2               ;
+000236r 2               
+000236r 2               star_cfg:
+000236r 2  A9 F0           lda   #CMD_GET_CFG_BYTE
+000238r 2               
+000238r 2                  ; fall into ...
+000238r 2               
+000238r 2               ;
+000238r 2               ; do_cmd_cfg: is used by *CFG, *PBD and *PBV
+000238r 2               ;
+000238r 2               ; It rlies on the set port code having a function code one more than the get port code :
+000238r 2               ;
+000238r 2               ; get             value    set               value
+000238r 2               ; CMD_GET_PORT_DDR   $A0         CMD_SET_PORT_DDR  $A1
+000238r 2               ; CMD_READ_PORT      $A2         CMD_WRITE_PORT    $A3
+000238r 2               ; CMD_GET_CFG_BYTE   $F0         CMD_SET_CFG_BYTE  $F1
+000238r 2               ;
+000238r 2               
+000238r 2               do_cfg_cmd:
+000238r 2  85 CE           sta   $ce
+00023Ar 2  A2 CB           ldx   #$cb                   ; scan parameter - print existing val if none
+00023Cr 2  20 93 F8        jsr   RDOPTAD
+00023Fr 2  D0 0B           bne   @param1valid
+000241r 2               
+000241r 2  A5 CE           lda   $ce                    ; read config register
+000243r 2  20 rr rr        jsr   fast_cmd
+000246r 2  20 02 F8        jsr   HEXOUT
+000249r 2  4C ED FF        jmp   OSCRLF
+00024Cr 2               
+00024Cr 2               @param1valid:
+00024Cr 2  A5 CB           lda   $cb                    ; get read parameter
+00024Er 2  20 rr rr        jsr   write_latch_reg        ; latch the value
+000251r 2  A6 CE           ldx   $ce                    ; Load function code
+000253r 2  E8              inx                          ; change get code to put
+000254r 2  8A              txa
+000255r 2  4C rr rr        jmp   write_cmd_reg
+000258r 2               
+000258r 1               .include "crc.asm"
+000258r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000258r 2               ;
+000258r 2               ; *CRC [STAR_T] [LENGTH]
+000258r 2               ;
+000258r 2               ;  Example: *CRC 2900 400
+000258r 2               ;
+000258r 2               ;  Prints the CRC16 for the specified memory range
+000258r 2               ;
+000258r 2               star_crc:
+000258r 2  A2 CF           ldx   #SSTART                ; interpret parameters
+00025Ar 2  20 65 FA        jsr   $fa65
+00025Dr 2               
+00025Dr 2  A2 D1           ldx   #SEND
+00025Fr 2  20 65 FA        jsr   $fa65
+000262r 2               
+000262r 2               .ifdef ATOM_CRC_POLYNOMIAL
+000262r 2               
+000262r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000262r 2               ;
+000262r 2               ; This is Wouter Ras's conversion of the classic Atom CRC, see:
+000262r 2               ;    http://wouter.bbcmicro.net/_archive/atom/utils/bestanden/atom_crc.txt
+000262r 2               ;
+000262r 2               ; version 1
+000262r 2               ;
+000262r 2               ; code size: 56 bytes
+000262r 2               ;
+000262r 2               
+000262r 2  A0 00           ldy   #$00
+000264r 2               
+000264r 2  84 C9           sty   CRC
+000266r 2  84 CA           sty   CRC+1
+000268r 2               @ll0:
+000268r 2  B1 CF           lda   (SSTART),y
+00026Ar 2  85 CB           sta   CRC+2
+00026Cr 2  A2 08           ldx   #8
+00026Er 2               @ll1:
+00026Er 2  46 CB           lsr   CRC+2
+000270r 2  26 C9           rol   CRC
+000272r 2  26 CA           rol   CRC+1
+000274r 2  90 06           bcc   @ll2
+000276r 2  A5 C9           lda   CRC
+000278r 2  49 2D           eor   #ATOM_CRC_POLYNOMIAL
+00027Ar 2  85 C9           sta   CRC
+00027Cr 2               @ll2:
+00027Cr 2  CA              dex
+00027Dr 2  D0 EF           bne   @ll1
+00027Fr 2  C8              iny
+000280r 2  D0 02           bne   @ll3
+000282r 2  E6 D0           inc   SSTART+1
+000284r 2               @ll3:
+000284r 2  A5 D1           lda   SEND                   ; 16-bit decrement
+000286r 2  D0 02           bne   @ll4
+000288r 2  C6 D2           dec   SEND+1
+00028Ar 2               @ll4:
+00028Ar 2  C6 D1           dec   SEND
+00028Cr 2  D0 DA           bne   @ll0                   ; followed by 16-bit test for zero
+00028Er 2  A5 D2           lda   SEND + 1
+000290r 2  D0 D6           bne   @ll0
+000292r 2               
+000292r 2  A2 C9           ldx   #CRC
+000294r 2  20 F1 F7        jsr   $f7f1
+000297r 2  4C ED FF        jmp   OSCRLF
+00029Ar 2               
+00029Ar 2               
+00029Ar 2               .else
+00029Ar 2               
+00029Ar 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00029Ar 2               ;
+00029Ar 2               ; This is the fast CRC-16 code, see:
+00029Ar 2               ;    http://forum.6502.org/viewtopic.php?t=558
+00029Ar 2               ;    http://6502.org/source/integers/crc-more.html
+00029Ar 2               ;
+00029Ar 2               ; code size: 87 bytes
+00029Ar 2               ;
+00029Ar 2                  ldy   #$ff
+00029Ar 2                  sty   CRC
+00029Ar 2                  sty   CRC+1
+00029Ar 2               
+00029Ar 2                  iny                          ; y=0
+00029Ar 2                  beq   @pagetest              ; branch always
+00029Ar 2               
+00029Ar 2               @fullpageloop:
+00029Ar 2                  lda   #0                     ; whole page
+00029Ar 2                  jsr   calcblock
+00029Ar 2               
+00029Ar 2                  inc   SSTART+1
+00029Ar 2                  dec   SEND+1
+00029Ar 2               
+00029Ar 2               @pagetest:
+00029Ar 2                  lda   SEND+1                 ; any full pages left?
+00029Ar 2                  bne   @fullpageloop
+00029Ar 2               
+00029Ar 2                  lda   SEND                   ; stragglers?
+00029Ar 2                  beq   @showresult
+00029Ar 2               
+00029Ar 2                  jsr   calcblock
+00029Ar 2               
+00029Ar 2               @showresult:
+00029Ar 2                  ldx   #CRC
+00029Ar 2                  jsr   $f7f1
+00029Ar 2                  jmp   OSCRLF
+00029Ar 2               
+00029Ar 2               
+00029Ar 2               calcblock:
+00029Ar 2                  sta   CRC+2                  ; bytes to calc, 0 = 256
+00029Ar 2               
+00029Ar 2               @calc:
+00029Ar 2                  lda   (SSTART),y
+00029Ar 2                  sty   CRC+3
+00029Ar 2               
+00029Ar 2                  eor   CRC+1                  ; a contained the data
+00029Ar 2                  sta   CRC+1                  ; xor it into high byte
+00029Ar 2                  lsr   a                      ; right shift a 4 bits
+00029Ar 2                  lsr   a                      ; to make top of x^12 term
+00029Ar 2                  lsr   a                      ; ($1...)
+00029Ar 2                  lsr   a
+00029Ar 2                  tax                          ; save it
+00029Ar 2                  asl   a                      ; then make top of x^5 term
+00029Ar 2                  eor   CRC                    ; and xor that with low byte
+00029Ar 2                  sta   CRC                    ; and save
+00029Ar 2                  txa                          ; restore partial term
+00029Ar 2                  eor   CRC+1                  ; and update high byte
+00029Ar 2                  sta   CRC+1                  ; and save
+00029Ar 2                  asl   a                      ; left shift three
+00029Ar 2                  asl   a                      ; the rest of the terms
+00029Ar 2                  asl   a                      ; have feedback from x^12
+00029Ar 2                  tax                          ; save bottom of x^12
+00029Ar 2                  asl   a                      ; left shift two more
+00029Ar 2                  asl   a                      ; watch the carry flag
+00029Ar 2                  eor   CRC+1                  ; bottom of x^5 ($..2.)
+00029Ar 2                  tay                          ; save high byte
+00029Ar 2                  txa                          ; fetch temp value
+00029Ar 2                  rol   a                      ; bottom of x^12, middle of x^5!
+00029Ar 2                  eor   CRC                    ; finally update low byte
+00029Ar 2                  sta   CRC+1                  ; then swap high and low bytes
+00029Ar 2                  sty   CRC
+00029Ar 2               
+00029Ar 2                  ldy   CRC+3
+00029Ar 2                  iny
+00029Ar 2                  dec   CRC+2
+00029Ar 2                  bne   @calc
+00029Ar 2                  rts
+00029Ar 2               
+00029Ar 2               .endif
+00029Ar 2               
+00029Ar 2               
+00029Ar 1               .include "exec.asm"
+00029Ar 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00029Ar 2               ;
+00029Ar 2               ; *EXEC [filename]
+00029Ar 2               ;
+00029Ar 2               ; Feed bytes from a file to the system as if they were typed.
+00029Ar 2               ; Highly experimental :)
+00029Ar 2               ;
+00029Ar 2               star_exec:
+00029Ar 2  20 rr rr        jsr   open_filename_getinfo  ; opens the filename for reading, and calls getinfo
+00029Dr 2               
+00029Dr 2  AD 40 01        lda   NAME                   ; fat file length
+0002A0r 2  85 CA           sta   RDCLEN
+0002A2r 2  AD 41 01        lda   NAME+1
+0002A5r 2  85 CB           sta   RDCLEN+1
+0002A7r 2               
+0002A7r 2  A9 00           lda   #0                     ; indicate there are no bytes in the pipe
+0002A9r 2  85 C9           sta   RDCCNT
+0002ABr 2               
+0002ABr 2  A9 rr           lda   #<execrdch             ; point OSRDCH at our routine
+0002ADr 2  8D 0A 02        sta   RDCVEC
+0002B0r 2  A9 rr           lda   #>execrdch
+0002B2r 2  8D 0B 02        sta   RDCVEC+1
+0002B5r 2  60              rts
+0002B6r 2               
+0002B6r 2               ;
+0002B6r 2               ; pull characters from the file and return these to the OS
+0002B6r 2               ; until none left at which point unhook ourselves
+0002B6r 2               ;
+0002B6r 2               ; ---== no X or Y reg used ) ==---
+0002B6r 2               ;
+0002B6r 2               execrdch:
+0002B6r 2  08              php
+0002B7r 2  D8              cld
+0002B8r 2               
+0002B8r 2               sinkchar:
+0002B8r 2  A5 C9           lda   RDCCNT                 ; exhausted our little pool?
+0002BAr 2  D0 2D           bne   plentyleft
+0002BCr 2               
+0002BCr 2  A5 CB           lda   RDCLEN+1               ; are there pages left in the file?
+0002BEr 2  D0 06           bne   @nextread16
+0002C0r 2               
+0002C0r 2  A5 CA           lda   RDCLEN                 ; less than 16 left in the file?
+0002C2r 2  C9 11           cmp   #17
+0002C4r 2  90 02           bcc   @fillpool
+0002C6r 2               
+0002C6r 2               @nextread16:
+0002C6r 2  A9 10           lda   #16                    ; 16 or more left in the file
+0002C8r 2               
+0002C8r 2               @fillpool:
+0002C8r 2  85 C9           sta   RDCCNT                 ; pool count
+0002CAr 2               
+0002CAr 2  A5 CA           lda   RDCLEN                 ; file length remaining -= pool count
+0002CCr 2  38              sec
+0002CDr 2  E5 C9           sbc   RDCCNT
+0002CFr 2  85 CA           sta   RDCLEN
+0002D1r 2  B0 02           bcs   @refillpool
+0002D3r 2               
+0002D3r 2  C6 CB           dec   RDCLEN+1
+0002D5r 2               
+0002D5r 2               @refillpool:
+0002D5r 2  A5 C9           lda   RDCCNT                 ; recover count
+0002D7r 2  20 rr rr        jsr   write_latch_reg        ; set ammount to read
+0002DAr 2               
+0002DAr 2  A9 22           lda   #CMD_READ_BYTES        ; set command
+0002DCr 2  20 rr rr        jsr   slow_cmd
+0002DFr 2               
+0002DFr 2  C9 40           cmp   #STATUS_COMPLETE
+0002E1r 2  F0 03           beq   @allok
+0002E3r 2               
+0002E3r 2                  ; error! bail!
+0002E3r 2               
+0002E3r 2  4C rr rr        jmp   osrdchcode_unhook      ; eek
+0002E6r 2               
+0002E6r 2               @allok:
+0002E6r 2  20 rr rr        jsr   prepare_read_data      ; get data from pic
+0002E9r 2               
+0002E9r 2               plentyleft:
+0002E9r 2  C6 C9           dec   RDCCNT                 ; one less in the pool
+0002EBr 2  D0 15           bne   @finally
+0002EDr 2               
+0002EDr 2  A5 CA           lda   RDCLEN                 ; all done completely?
+0002EFr 2  05 CB           ora   RDCLEN+1
+0002F1r 2  D0 0F           bne   @finally
+0002F3r 2               
+0002F3r 2  A9 94           lda   #$94                   ; unhook and avoid trailing 'A' gotcha
+0002F5r 2  8D 0A 02        sta   RDCVEC
+0002F8r 2  A9 FE           lda   #$fe
+0002FAr 2  8D 0B 02        sta   RDCVEC+1
+0002FDr 2               
+0002FDr 2  20 rr rr        jsr   read_data_reg          ; get char from PIC/AVR
+000300r 2  28              plp
+000301r 2  60              rts
+000302r 2               
+000302r 2               
+000302r 2               @finally:
+000302r 2  20 rr rr        jsr   read_data_reg          ; get char from PIC/AVR
+000305r 2               
+000305r 2  C9 0A           cmp   #$0a                   ; lose LFs - god this is so ghetto i can't believe i've done it
+000307r 2  F0 AF           beq   sinkchar               ; this will fubar if the last char in a file is A. which is likely. BEWARE!
+000309r 2               
+000309r 2  28              plp
+00030Ar 2  60              rts
+00030Br 2               
+00030Br 1               .include "fatinfo.asm"
+00030Br 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00030Br 2               ;
+00030Br 2               ; *FATINFO [filename]
+00030Br 2               ;
+00030Br 2               ; Shows fat filesystem file info - size on disk, sector, fptr and attrib.
+00030Br 2               ;
+00030Br 2               star_fatinfo:
+00030Br 2  20 rr rr        jsr   open_filename_getinfo  ; opens the filename for reading, and calls getinfo
+00030Er 2               
+00030Er 2  24 EA           bit   MONFLAG                ; 0 = mon, ff = nomon
+000310r 2  10 01           bpl   @printit
+000312r 2               
+000312r 2                  ; maybe caller just wants the info in the buffer
+000312r 2               
+000312r 2  60              rts
+000313r 2               
+000313r 2               @printit:
+000313r 2  A2 03           ldx   #3
+000315r 2  20 rr rr        jsr   hexdword
+000318r 2  A2 07           ldx   #7
+00031Ar 2  20 rr rr        jsr   hexdword
+00031Dr 2  A2 0B           ldx   #11
+00031Fr 2  20 rr rr        jsr   hexdword
+000322r 2  AD 4C 01        lda   NAME+12
+000325r 2  20 02 F8        jsr   HEXOUT
+000328r 2  4C ED FF        jmp   OSCRLF
+00032Br 2               
+00032Br 2               
+00032Br 2               hexdword:
+00032Br 2  A0 04           ldy   #4
+00032Dr 2               @loop:
+00032Dr 2  BD 40 01        lda   NAME,x
+000330r 2  20 02 F8        jsr   HEXOUT
+000333r 2  CA              dex
+000334r 2  88              dey
+000335r 2  D0 F6           bne   @loop
+000337r 2  4C FD F7        jmp   SPCOUT
+00033Ar 2               
+00033Ar 1               .include "help.asm"
+00033Ar 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00033Ar 2               ;
+00033Ar 2               ; *HELP
+00033Ar 2               ;
+00033Ar 2               ; Shows some info
+00033Ar 2               ;
+00033Ar 2               star_help:
+00033Ar 2               
+00033Ar 2  A0 30           ldy   #(version_long - version)
+00033Cr 2  20 rr rr        jsr   print_version
+00033Fr 2               
+00033Fr 2  20 D1 F7        jsr   STROUT
+000342r 2  0A 0D 49 4E     .byte 10, 13, "INTERFACE F/W VERSION "
+000346r 2  54 45 52 46  
+00034Ar 2  41 43 45 20  
+00035Ar 2                  ; NOP not needed, as next opcode is > 0x80
+00035Ar 2               
+00035Ar 2  A9 E0           lda   #CMD_GET_FW_VER
+00035Cr 2  20 rr rr        jsr   fast_cmd
+00035Fr 2  20 rr rr        jsr   ndotn
+000362r 2               
+000362r 2  20 D1 F7        jsr   STROUT
+000365r 2  0A 0D 42 4F     .byte 10, 13, "BOOTLOADER VERSION "
+000369r 2  4F 54 4C 4F  
+00036Dr 2  41 44 45 52  
+00037Ar 2                  ; NOP not needed, as next opcode is > 0x80
+00037Ar 2               
+00037Ar 2  A9 E1           lda   #CMD_GET_BL_VER
+00037Cr 2  20 rr rr        jsr   fast_cmd
+00037Fr 2  20 rr rr        jsr   ndotn
+000382r 2               
+000382r 2                  ; read and display card type
+000382r 2                  ;
+000382r 2  20 D1 F7        jsr   STROUT
+000385r 2  0A 0D 43 41     .byte 10, 13, "CARD TYPE: "
+000389r 2  52 44 20 54  
+00038Dr 2  59 50 45 3A  
+000392r 2                  ; NOP not needed, as next opcode is > 0x80
+000392r 2               
+000392r 2  A9 80           lda   #CMD_GET_CARD_TYPE
+000394r 2  20 rr rr        jsr   slow_cmd
+000397r 2               
+000397r 2  20 rr rr        jsr   bittoindex
+00039Ar 2  A0 04           ldy   #4
+00039Cr 2               
+00039Cr 2               @sctloop:
+00039Cr 2  BD rr rr        lda   cardtypes,x
+00039Fr 2  C9 20           cmp   #$20
+0003A1r 2  F0 03           beq   @skipwhite
+0003A3r 2  20 F4 FF        jsr   OSWRCH
+0003A6r 2               @skipwhite:
+0003A6r 2  E8              inx
+0003A7r 2  88              dey
+0003A8r 2  D0 F2           bne   @sctloop
+0003AAr 2               
+0003AAr 2  4C ED FF        jmp   OSCRLF
+0003ADr 2               
+0003ADr 2               ndotn:
+0003ADr 2  48              pha
+0003AEr 2  4A              lsr   a
+0003AFr 2  4A              lsr   a
+0003B0r 2  4A              lsr   a
+0003B1r 2  4A              lsr   a
+0003B2r 2  20 0B F8        jsr   $f80b                  ; print major version
+0003B5r 2  A9 2E           lda   #'.'
+0003B7r 2  20 F4 FF        jsr   OSWRCH
+0003BAr 2  68              pla
+0003BBr 2  4C 0B F8        jmp   $f80b                  ; print minor version
+0003BEr 2               
+0003BEr 1               .include "load.asm"
+0003BEr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0003BEr 2               ;
+0003BEr 2               ; *LOAD [filename] ([address])
+0003BEr 2               ;
+0003BEr 2               ; Loads specified file to memory. If reload address is specified then this will be
+0003BEr 2               ; used in preference to the reload address stored in the file's metadata.
+0003BEr 2               ;
+0003BEr 2               star_load:
+0003BEr 2  20 rr rr        jsr   read_filename          ; copy filename into $140
+0003C1r 2  20 44 F8        jsr   $f844                  ; set $c9\a = $140, set x = $c9
+0003C4r 2  4C 5B F9        jmp   $f95b                  ; *LOAD+3
+0003C7r 2               
+0003C7r 2               
+0003C7r 2               ; LODVEC entry point
+0003C7r 2               ;
+0003C7r 2               ; 0,x = file parameter block
+0003C7r 2               ;
+0003C7r 2               ; 0,x = file name string address
+0003C7r 2               ; 2,x = data dump start address
+0003C7r 2               ; 4,x  if bit 7 is clear, then the file's own start address is to be used
+0003C7r 2               ;
+0003C7r 2               osloadcode:
+0003C7r 2                  ; transfer control block to $c9 (LFNPTR) onward and check name
+0003C7r 2                  ;
+0003C7r 2  20 rr rr        jsr   copy_name              ; copy data block at $00,x to COS workspace at $c9
+0003CAr 2                                               ; also checks filename is < 14 chars, PIC additionally checks < 8 chars
+0003CAr 2                                               ; copy filename from ($c9) to $140
+0003CAr 2               
+0003CAr 2  20 rr rr        jsr   open_file_read         ; invokes error handler if return code > 64
+0003CDr 2  20 rr rr        jsr   read_info
+0003D0r 2               
+0003D0r 2                  ; @@TUBE@@
+0003D0r 2                  ; Test if the tube is enabled, then claim and initiate transfer
+0003D0r 2  A2 CB           ldx   #LLOAD                 ; block containing transfer address
+0003D2r 2  A0 01           ldy   #1                     ; transfer type
+0003D4r 2  20 rr rr        jsr   tube_claim_wrapper
+0003D7r 2               
+0003D7r 2  24 EA           bit   MONFLAG                ; 0 = mon, ff = nomon
+0003D9r 2  30 03           bmi   @noprint
+0003DBr 2               
+0003DBr 2  20 rr rr        jsr   print_fileinfo
+0003DEr 2               
+0003DEr 2               @noprint:
+0003DEr 2  20 rr rr        jsr   read_file
+0003E1r 2               
+0003E1r 2                  ; @@TUBE@@
+0003E1r 2                  ; Test if the tube is enabled, then release
+0003E1r 2  4C rr rr        jmp   tube_release_wrapper
+0003E4r 2               
+0003E4r 2               
+0003E4r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0003E4r 2               ;
+0003E4r 2               ; *RLOAD [filename] [address]
+0003E4r 2               ;
+0003E4r 2               ; Load specified file to memory starting at the specified address. The file's FAT
+0003E4r 2               ; file system length is used, and any ATM metadata is read as part of the file.
+0003E4r 2               ;
+0003E4r 2               ;star_rload:
+0003E4r 2               ;  jsr   read_filename          ; copy filename into $140
+0003E4r 2               ;  jsr   $f844                  ; set $c9\a = $140, set x = $c9
+0003E4r 2               ;
+0003E4r 2               ;  ldx   #$cb                   ; Point to the vector at #CB, #CC
+0003E4r 2               ;  jsr   RDOPTAD                ; ..and interpret the load address to store it here
+0003E4r 2               ;  beq   rlerr                  ; ..can't interpret load address - error
+0003E4r 2               ;
+0003E4r 2               ;  jsr   COSPOST                ; Do COS interpreter post test
+0003E4r 2               ;  ldx   #$c9                   ; File data starts at #C9
+0003E4r 2               ;
+0003E4r 2               ;  jsr   CHKNAME
+0003E4r 2               ;  jsr   open_filename_getinfo  ; opens the filename for reading, and calls getinfo
+0003E4r 2               ;
+0003E4r 2               ;  lda   NAME                   ; fat file length
+0003E4r 2               ;  sta   LLENGTH
+0003E4r 2               ;  lda   NAME+1
+0003E4r 2               ;  sta   LLENGTH+1
+0003E4r 2               ;
+0003E4r 2               ;  jmp   read_file
+0003E4r 2               ;
+0003E4r 2               ;rlerr:
+0003E4r 2               ;  jmp   COSSYN
+0003E4r 2               ;
+0003E4r 2               ;
+0003E4r 2               ;nomemerr:
+0003E4r 2               ;  REPERROR noramstr
+0003E4r 2               ;
+0003E4r 2               ;
+0003E4r 2               ;noramstr:
+0003E4r 2               ;  .byte "NO RAM"
+0003E4r 2               ;  nop
+0003E4r 2               ;
+0003E4r 2               ;
+0003E4r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0003E4r 2               ;
+0003E4r 2               ; *ROMLOAD [filename]
+0003E4r 2               ;
+0003E4r 2               ; Requires RAMOTH RamRom board with firmware giving read access to the option latch.
+0003E4r 2               ; Ensures 4k bank at $7000 is present in memory map then loads the specified file
+0003E4r 2               ; there. Sets utility ROM to bank 0 (redundant, possibly) pages $70 to $a0 and
+0003E4r 2               ; waits for break.
+0003E4r 2               ;
+0003E4r 2               ;star_romload:
+0003E4r 2               ;  lda   $bffd                  ; map $7000-$7fff to $7000 - needs ramrom with latest CPLD code
+0003E4r 2               ;  and   #$fe
+0003E4r 2               ;
+0003E4r 2               ;  lda #0
+0003E4r 2               ;
+0003E4r 2               ;  sta   $bffe                  ; ensure there's RAM at 7000
+0003E4r 2               ;  ora   #1                     ; for 'selectrom' code later
+0003E4r 2               ;  sta   $cc
+0003E4r 2               ;
+0003E4r 2               ;  lda   #$55
+0003E4r 2               ;  sta   $7000
+0003E4r 2               ;  cmp   $7000
+0003E4r 2               ;  bne   nomemerr
+0003E4r 2               ;  asl   a
+0003E4r 2               ;  sta   $7000
+0003E4r 2               ;  cmp   $7000
+0003E4r 2               ;  bne   nomemerr
+0003E4r 2               ;
+0003E4r 2               ;  jsr   read_filename          ; copy filename into $140
+0003E4r 2               ;  jsr   $f844                  ; set $c9\a = $140, set x = $c9
+0003E4r 2               ;  ;jsr   CHKNAME
+0003E4r 2               ;  jsr   open_file_read         ; invokes error handler if return code > 64
+0003E4r 2               ;
+0003E4r 2               ;  lda   #0
+0003E4r 2               ;  sta   LLOAD
+0003E4r 2               ;  sta   LLENGTH
+0003E4r 2               ;
+0003E4r 2               ;  sta   $cb
+0003E4r 2               ;
+0003E4r 2               ;  lda   #$10
+0003E4r 2               ;  sta   LLENGTH+1
+0003E4r 2               ;  lda   #$70
+0003E4r 2               ;  sta   LLOAD+1
+0003E4r 2               ;
+0003E4r 2               ;  jsr   read_file
+0003E4r 2               ;
+0003E4r 2               ;  ; cb = rom num for bfff
+0003E4r 2               ;  ; cc = option latch at bffe
+0003E4r 2               ;  ;
+0003E4r 2               ;  jmp   selectrom
+0003E4r 2               
+0003E4r 1               .include "mkdir.asm"
+0003E4r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0003E4r 2               ;
+0003E4r 2               ; *MKDIR [path]
+0003E4r 2               ;
+0003E4r 2               ; Creates a new child directory
+0003E4r 2               ;
+0003E4r 2               
+0003E4r 2               star_mkdir:
+0003E4r 2  20 rr rr        jsr   read_filename          ; copy filename into $140
+0003E7r 2               
+0003E7r 2  20 rr rr        jsr   send_name              ; put string at $140 to interface
+0003EAr 2               
+0003EAr 2  A9 04           lda   #CMD_DIR_MKDIR         ; create the directory
+0003ECr 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+0003EFr 2               
+0003EFr 1               .include "ren.asm"
+0003EFr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0003EFr 2               ;
+0003EFr 2               ; *REN [from path] [to path]
+0003EFr 2               ;
+0003EFr 2               ; Renames a file/directory
+0003EFr 2               ;
+0003EFr 2               ; Can also be used to move a file/directory to a different directory
+0003EFr 2               ;
+0003EFr 2               star_ren:
+0003EFr 2  20 rr rr        jsr   read_filename          ; copy "from" path into $140
+0003F2r 2  20 rr rr        jsr   send_name              ; put string at $140 to interface
+0003F5r 2               
+0003F5r 2  20 rr rr        jsr   read_filename          ; copy "to" path  into $140
+0003F8r 2  20 rr rr        jsr   send_additional_name   ; put string at $140 to interface (without resetting write pointer)
+0003FBr 2               
+0003FBr 2  A9 08           lda   #CMD_RENAME            ; set RENAME
+0003FDr 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+000400r 2               
+000400r 1               .include "rmdir.asm"
+000400r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000400r 2               ;
+000400r 2               ; *RMDIR [path]
+000400r 2               ;
+000400r 2               ; Removes an existing child directory that must be empty
+000400r 2               ;
+000400r 2               
+000400r 2               star_rmdir:
+000400r 2  20 rr rr        jsr   read_filename          ; copy filename into $140
+000403r 2               
+000403r 2  20 rr rr        jsr   send_name              ; put string at $140 to interface
+000406r 2               
+000406r 2  A9 05           lda   #CMD_DIR_RMDIR         ; delete the directory
+000408r 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+00040Br 2               
+00040Br 1               .include "run.asm"
+00040Br 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00040Br 2               ;
+00040Br 2               ; *[file name]
+00040Br 2               ;
+00040Br 2               ; Synonymous with *RUN.
+00040Br 2               ;
+00040Br 2               star_arbitrary:
+00040Br 2               
+00040Br 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00040Br 2               ;
+00040Br 2               ; *RUN [filename]
+00040Br 2               ;
+00040Br 2               ; Try to execute the program with the specified name. If it's a BASIC program
+00040Br 2               ; with an execution address of C2B2 then execute a 'RUN' command at return.
+00040Br 2               ;
+00040Br 2               star_run:
+00040Br 2  20 rr rr        jsr   read_filename          ; copy filename into $140
+00040Er 2  20 76 F8        jsr   SKIPSPC
+000411r 2  A2 00           ldx   #0
+000413r 2               
+000413r 2               copyparams:
+000413r 2  B9 00 01        lda   $100,y
+000416r 2  9D 00 01        sta   $100,x
+000419r 2  E8              inx
+00041Ar 2  C8              iny
+00041Br 2  C9 0D           cmp   #$0d
+00041Dr 2  D0 F4           bne   copyparams
+00041Fr 2  88              dey
+000420r 2               
+000420r 2  A5 EA           lda   MONFLAG
+000422r 2  48              pha
+000423r 2  A9 FF           lda   #$ff
+000425r 2  85 EA           sta   MONFLAG
+000427r 2  20 44 F8        jsr   $f844                  ; set $c9\a = $140, set x = $c9
+00042Ar 2  20 5B F9        jsr   $f95b
+00042Dr 2  68              pla
+00042Er 2  85 EA           sta   MONFLAG
+000430r 2               
+000430r 2               checkbasic:
+000430r 2  A5 CD           lda   LEXEC                  ; if this is a non-auto-running basic program
+000432r 2  C9 B2           cmp   #$b2
+000434r 2  D0 11           bne   @runit
+000436r 2  A5 CE           lda   LEXEC+1
+000438r 2  C9 C2           cmp   #$c2
+00043Ar 2  D0 0B           bne   @runit
+00043Cr 2               
+00043Cr 2  A9 rr           lda   #<@runcmd
+00043Er 2  85 05           sta   $5
+000440r 2  A9 rr           lda   #>@runcmd
+000442r 2  85 06           sta   $6
+000444r 2  4C F2 C2        jmp   $c2f2
+000447r 2               
+000447r 2               @runit:
+000447r 2                  ; @@TUBE@@
+000447r 2                  ; Issue a transfer type 4, which is set the execution address
+000447r 2  A2 CD           ldx   #LEXEC                 ; block containing transfer address
+000449r 2  A0 04           ldy   #4                     ; transfer type
+00044Br 2  20 rr rr        jsr   tube_claim_wrapper
+00044Er 2                  ; If the tube is enabled, it will eventually jump to TubeIdleStartup and not return
+00044Er 2                  ; If the tube is disabled, it will fall through to here
+00044Er 2  6C CD 00        jmp   (LEXEC)
+000451r 2               
+000451r 2               @runcmd:
+000451r 2  52 55 4E 0D     .byte "RUN",$0d
+000455r 2               
+000455r 1               .include "save.asm"
+000455r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000455r 2               ;
+000455r 2               ; *SAVE
+000455r 2               ;
+000455r 2               ; Parses filename then resumes execution of the BIOS' save routine.
+000455r 2               ;
+000455r 2               star_save:
+000455r 2  20 rr rr        jsr   read_filename          ; copy filename into $140
+000458r 2  20 44 F8        jsr   $f844                  ; set $c9\a = $140, set x = $c9
+00045Br 2  4C BE FA        jmp   $fabe                  ; scan parameters and jmp through SAVVEC
+00045Er 2               
+00045Er 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00045Er 2               ;
+00045Er 2               ; SAVVEC
+00045Er 2               ;
+00045Er 2               ; 0,x = file parameter block
+00045Er 2               ;
+00045Er 2               ; 0,x = file name string address
+00045Er 2               ; 2,x = data reload address
+00045Er 2               ; 4,x = data execution address
+00045Er 2               ; 6,x = data start address
+00045Er 2               ; 8,x = data end address + 1
+00045Er 2               ;
+00045Er 2               
+00045Er 2               ossavecode:
+00045Er 2  20 rr rr        jsr   copy_name              ; copy data block at $00,x to COS workspace at $c9
+000461r 2                                               ; also checks filename is < 14 chars, PIC additionally checks < 8 chars
+000461r 2                                               ; copy filename from ($c9) to $140
+000461r 2               
+000461r 2               @retry_write:
+000461r 2  20 rr rr        jsr   open_file_write        ; returns with any error in A
+000464r 2               
+000464r 2  C9 48           cmp   #$48                   ; test for FILE EXISTS
+000466r 2  D0 1B           bne   @continue              ; no, then skip forwards
+000468r 2               
+000468r 2  20 D1 F7        jsr   STROUT                 ; prompt to the file
+00046Br 2  4F 56 45 52     .byte "OVERWRITE (Y):"
+00046Fr 2  57 52 49 54  
+000473r 2  45 20 28 59  
+000479r 2  EA              nop
+00047Ar 2  20 rr rr        jsr   confirm_or_rts         ; pops an extra address off the stack if Y not presed
+00047Dr 2  20 rr rr        jsr   delete_file
+000480r 2  4C rr rr        jmp   @retry_write
+000483r 2               
+000483r 2               @continue:
+000483r 2               
+000483r 2  20 rr rr        jsr   expect64orless         ; other kind of error
+000486r 2               
+000486r 2                  ; @@TUBE@@
+000486r 2                  ; Test if the tube is enabled, then claim and initiate transfer
+000486r 2  A2 CB           ldx   #SLOAD                 ; block containing transfer address
+000488r 2  A0 00           ldy   #0                     ; transfer type
+00048Ar 2  20 rr rr        jsr   tube_claim_wrapper
+00048Dr 2               
+00048Dr 2  A5 CB           lda   SLOAD                  ; tag the file info onto the end of the filename data
+00048Fr 2  8D 50 01        sta   $150
+000492r 2  A5 CC           lda   SLOAD+1
+000494r 2  8D 51 01        sta   $151
+000497r 2  A5 CD           lda   SEXEC
+000499r 2  8D 52 01        sta   $152
+00049Cr 2  A5 CE           lda   SEXEC+1
+00049Er 2  8D 53 01        sta   $153
+0004A1r 2  38              sec
+0004A2r 2  A5 D1           lda   SEND
+0004A4r 2  E5 CF           sbc   SSTART
+0004A6r 2  8D 54 01        sta   $154
+0004A9r 2  A5 D2           lda   SEND+1
+0004ABr 2  E5 D0           sbc   SSTART+1
+0004ADr 2  8D 55 01        sta   $155
+0004B0r 2               
+0004B0r 2  A2 FF           ldx   #$ff                   ; zero out any data after the name at $140
+0004B2r 2               
+0004B2r 2               @mungename:
+0004B2r 2  E8              inx
+0004B3r 2  BD 40 01        lda   NAME,x
+0004B6r 2  C9 0D           cmp   #$0d
+0004B8r 2  D0 F8           bne   @mungename
+0004BAr 2               
+0004BAr 2  A9 00           lda   #0
+0004BCr 2               
+0004BCr 2               @munge2:
+0004BCr 2  9D 40 01        sta   NAME,x
+0004BFr 2  E8              inx
+0004C0r 2  E0 10           cpx   #16
+0004C2r 2  D0 F8           bne   @munge2
+0004C4r 2               
+0004C4r 2  20 rr rr        jsr   write_info             ; write the ATM header
+0004C7r 2               
+0004C7r 2  20 rr rr        jsr   write_file             ; save the main body of data
+0004CAr 2               
+0004CAr 2                  ; @@TUBE@@
+0004CAr 2                  ; Test if the tube is enabled, then release
+0004CAr 2  20 rr rr        jsr   tube_release_wrapper
+0004CDr 2               
+0004CDr 2                  ; Don't need to call CLOSE_FILE here as write_file calls it.
+0004CDr 2                  ; CLOSE_FILE
+0004CDr 2               
+0004CDr 2  24 EA           bit   MONFLAG                ; 0 = mon, ff = nomon
+0004CFr 2  30 0D           bmi   @noprint
+0004D1r 2               
+0004D1r 2  A2 05           ldx   #5
+0004D3r 2               
+0004D3r 2               @cpydata:
+0004D3r 2  BD 50 01        lda   $150,x
+0004D6r 2  95 CB           sta   LLOAD,x
+0004D8r 2  CA              dex
+0004D9r 2  10 F8           bpl   @cpydata
+0004DBr 2               
+0004DBr 2  4C rr rr        jmp   print_fileinfo
+0004DEr 2               
+0004DEr 2               @noprint:
+0004DEr 2  60              rts
+0004DFr 2               
+0004DFr 1               .include "file.asm"
+0004DFr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0004DFr 2               ;
+0004DFr 2               ; Read filename, then fall through to open_file_read
+0004DFr 2               
+0004DFr 2               open_filename_read:
+0004DFr 2  20 rr rr        jsr   read_filename          ; copy filename from $100 to $140
+0004E2r 2                  ; fall through to open_file_read
+0004E2r 2               
+0004E2r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0004E2r 2               ;
+0004E2r 2               ; Open file for read or write
+0004E2r 2               ;
+0004E2r 2               ; $140 = name
+0004E2r 2               ; a = read/write $01 = read, $11 = write
+0004E2r 2               ;
+0004E2r 2               
+0004E2r 2               open_file_read:
+0004E2r 2  A9 11           lda   #CMD_FILE_OPEN_READ
+0004E4r 2  20 rr rr        jsr   open_file
+0004E7r 2  4C rr rr        jmp   expect64orless
+0004EAr 2               
+0004EAr 2               open_file_write:
+0004EAr 2  A9 13           lda   #CMD_FILE_OPEN_WRITE
+0004ECr 2               
+0004ECr 2               ; Falls through to
+0004ECr 2               open_file:
+0004ECr 2  48              pha
+0004EDr 2  20 rr rr        jsr   send_name
+0004F0r 2  68              pla
+0004F1r 2  4C rr rr        jmp   slow_cmd
+0004F4r 2               
+0004F4r 2               send_name:
+0004F4r 2  20 rr rr        jsr   prepare_write_data
+0004F7r 2               
+0004F7r 2               send_additional_name:
+0004F7r 2  A2 00           ldx   #0
+0004F9r 2  F0 04           beq   @pumpname
+0004FBr 2               
+0004FBr 2               @nextchar:
+0004FBr 2  20 rr rr        jsr   write_data_reg
+0004FEr 2  E8              inx
+0004FFr 2               
+0004FFr 2               @pumpname:
+0004FFr 2  BD 40 01        lda   NAME,x                 ; write filename to filename buffer
+000502r 2  C9 0D           cmp   #$0d
+000504r 2  D0 F5           bne   @nextchar
+000506r 2               
+000506r 2  A9 00           lda   #0                     ; terminate the string
+000508r 2  4C rr rr        jmp   write_data_reg
+00050Br 2               
+00050Br 2               
+00050Br 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00050Br 2               ;
+00050Br 2               ; Read the file's info from the ATM header to LLOAD
+00050Br 2               ;
+00050Br 2               ; If LEXEC bit 7 = 0 then reads load, exec and length to LLOAD, LEXEC and LLENGTH
+00050Br 2               ; If LEXEC bit 7 = 1 then reads       exec and length to        LEXEC and LLENGTH (LOAD is preserved)
+00050Br 2               ;
+00050Br 2               ; 2016/03/25: Rewrite to not use intermediate storage at $140
+00050Br 2               read_info:
+00050Br 2  A9 16           lda   #22                    ; ATM header size
+00050Dr 2  20 rr rr        jsr   read_block_shared
+000510r 2               
+000510r 2  A0 EF           ldy   #$ff-16                ; skip bytes 1..16 (ATM header file name)
+000512r 2               @loop:
+000512r 2  20 rr rr        jsr   read_data_reg          ; read next ATM header byte
+000515r 2  C8              iny
+000516r 2  30 FA           bmi   @loop
+000518r 2  C0 02           cpy   #2                     ; are we past the load byte?
+00051Ar 2  B0 04           bcs   @store                 ; branch if >= 2
+00051Cr 2  24 CD           bit   LEXEC                  ; if bit 7 is set on entry we don't overwrite load
+00051Er 2  30 03           bmi   @skip_store
+000520r 2               @store:
+000520r 2  99 CB 00        sta   LLOAD,y
+000523r 2               @skip_store:
+000523r 2  C0 05           cpy   #5
+000525r 2  90 EB           bcc   @loop                  ; branch if < 5
+000527r 2  60              rts
+000528r 2               
+000528r 2               
+000528r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000528r 2               ;
+000528r 2               ;  Read file
+000528r 2               ;
+000528r 2               ; (LLOAD) = memory target
+000528r 2               ; LLENGTH = bytes to read
+000528r 2               ;
+000528r 2               
+000528r 2               read_file_read:
+000528r 2  A9 00           lda   #0
+00052Ar 2  20 rr rr        jsr   read_file_adapter
+00052Dr 2               
+00052Dr 2  E6 CC           inc   LLOAD+1
+00052Fr 2  C6 D0           dec   LLENGTH+1
+000531r 2               
+000531r 2               read_file:
+000531r 2  A5 D0           lda   LLENGTH+1              ; any pages left?
+000533r 2  D0 F3           bne   read_file_read
+000535r 2               
+000535r 2  A5 CF           lda   LLENGTH                ; any stragglers?
+000537r 2  F0 10           beq   @alldone
+000539r 2               
+000539r 2  20 rr rr        jsr   read_file_adapter
+00053Cr 2               
+00053Cr 2  A5 CB           lda   LLOAD                  ; final adjustment to write pointer
+00053Er 2  18              clc
+00053Fr 2  65 CF           adc   LLENGTH
+000541r 2  85 CB           sta   LLOAD
+000543r 2  90 02           bcc   @zerolen
+000545r 2               
+000545r 2  E6 CC           inc   LLOAD+1
+000547r 2               
+000547r 2               @zerolen:
+000547r 2  86 CF           stx   LLENGTH                ; zero out the length
+000549r 2               
+000549r 2               @alldone:
+000549r 2  4C rr rr        jmp   closefile
+00054Cr 2               
+00054Cr 2               
+00054Cr 2               read_file_adapter:
+00054Cr 2               
+00054Cr 2  48              pha                          ; enter with a = bytes to read (0=256)
+00054Dr 2               
+00054Dr 2  A5 CB           lda   LLOAD
+00054Fr 2  85 AC           sta   RWPTR
+000551r 2  A5 CC           lda   LLOAD+1
+000553r 2  85 AD           sta   RWPTR+1
+000555r 2               
+000555r 2  68              pla
+000556r 2               
+000556r 2                  ; @@TUBE@@
+000556r 2  4C rr rr        JMP tube_read_block
+000559r 2               
+000559r 2               
+000559r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000559r 2               ;
+000559r 2               ; Read data to memory
+000559r 2               ;
+000559r 2               ; a = number of bytes to read (0 = 256)
+000559r 2               ; (RWPTR) points to target
+000559r 2               ;
+000559r 2               ; @@TUBE@@ Refactored to allow code sharing with tube_read_block
+000559r 2               read_block:
+000559r 2  20 rr rr        jsr   read_block_shared
+00055Cr 2  A0 00           ldy   #0
+00055Er 2               @loop:
+00055Er 2  20 rr rr        jsr   read_data_reg          ; then read it
+000561r 2  91 AC           sta   (RWPTR),y
+000563r 2  C8              iny
+000564r 2  CA              dex
+000565r 2  D0 F7           bne   @loop
+000567r 2  60              rts
+000568r 2               
+000568r 2               read_block_shared:
+000568r 2  AA              tax
+000569r 2                  ; ask PIC for (A) bytes of data (0=256)
+000569r 2  20 rr rr        jsr   write_latch_reg        ; set amount to read
+00056Cr 2  A9 22           lda   #CMD_READ_BYTES        ; set command
+00056Er 2  20 rr rr        jsr   slow_cmd_and_check     ; invokes error handler if return code > 64
+000571r 2  4C rr rr        jmp   prepare_read_data      ; tell pic to release the data we just read
+000574r 2               
+000574r 2               
+000574r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000574r 2               ;
+000574r 2               ; put 1st 22 bytes of data to open file
+000574r 2               ;
+000574r 2               ; file needs to be open at this point
+000574r 2               ;
+000574r 2               write_info:
+000574r 2  20 rr rr        jsr   set_rwptr_to_name
+000577r 2  A9 16           lda   #22
+000579r 2  4C rr rr        jmp   write_block
+00057Cr 2               
+00057Cr 2               
+00057Cr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00057Cr 2               ;
+00057Cr 2               ; Write data to open file
+00057Cr 2               ;
+00057Cr 2               ; SSTART = address to write from
+00057Cr 2               ; SEND   = final address + 1
+00057Cr 2               ;
+00057Cr 2               write_file_fullpageloop:
+00057Cr 2  A9 00           lda   #0                     ; 1 page
+00057Er 2  20 rr rr        jsr   write_file_adapter
+000581r 2               
+000581r 2  E6 D0           inc   SSTART+1
+000583r 2               
+000583r 2               write_file:
+000583r 2  A5 D0           lda   SSTART+1
+000585r 2  C5 D2           cmp   SEND+1
+000587r 2  D0 F3           bne   write_file_fullpageloop
+000589r 2               
+000589r 2  A5 D1           lda   SEND                   ; any stragglers to write?
+00058Br 2  C5 CF           cmp   SSTART
+00058Dr 2  F0 06           beq   closefile
+00058Fr 2               
+00058Fr 2  38              sec                          ; calc remaining bytes
+000590r 2  E5 CF           sbc   SSTART
+000592r 2  20 rr rr        jsr   write_file_adapter
+000595r 2               
+000595r 2               closefile:
+000595r 2  A9 10           lda   #CMD_FILE_CLOSE        ; close the file
+000597r 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+00059Ar 2               
+00059Ar 2               
+00059Ar 2               ; adapter - falls through to write_block
+00059Ar 2               ;
+00059Ar 2               write_file_adapter:
+00059Ar 2  A4 CF           ldy   SSTART
+00059Cr 2  84 AC           sty   RWPTR
+00059Er 2  A4 D0           ldy   SSTART+1
+0005A0r 2  84 AD           sty   RWPTR+1
+0005A2r 2               
+0005A2r 2                  ; @@TUBE@@
+0005A2r 2  4C rr rr        JMP   tube_write_block
+0005A5r 2               
+0005A5r 2               
+0005A5r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005A5r 2               ;
+0005A5r 2               ; write a block of data
+0005A5r 2               ;
+0005A5r 2               ; a = block length (0=256)
+0005A5r 2               ; (RWPTR) = source
+0005A5r 2               ;
+0005A5r 2               ; @@TUBE@@ Refactored to allow code sharing with tube_write_block
+0005A5r 2               write_block:
+0005A5r 2  AA              tax                          ; save away the block size
+0005A6r 2  48              pha
+0005A7r 2               
+0005A7r 2  20 rr rr        jsr   prepare_write_data     ; take it
+0005AAr 2               
+0005AAr 2  A0 00           ldy   #0
+0005ACr 2               
+0005ACr 2               @loop:
+0005ACr 2  B1 AC           lda   (RWPTR),y              ; upload data
+0005AEr 2  20 rr rr        jsr   write_data_reg
+0005B1r 2  C8              iny
+0005B2r 2  CA              dex
+0005B3r 2  D0 F7           bne   @loop
+0005B5r 2               
+0005B5r 2               write_block_shared:
+0005B5r 2  68              pla                          ; write block command
+0005B6r 2  20 rr rr        jsr   write_latch_reg        ; amount to write
+0005B9r 2  A9 23           lda   #CMD_WRITE_BYTES       ; give command to write
+0005BBr 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+0005BEr 2               
+0005BEr 2               
+0005BEr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005BEr 2               ;
+0005BEr 2               ; delete a file
+0005BEr 2               ;
+0005BEr 2               ; file to be deleted must be opened with open_read
+0005BEr 2               ;
+0005BEr 2               delete_file:
+0005BEr 2  A9 14           lda   #CMD_FILE_DELETE
+0005C0r 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+0005C3r 2               
+0005C3r 1               .include "util.asm"
+0005C3r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005C3r 2               ; "Init" commands that are used in several places
+0005C3r 2               ; TODO: Check these really don't need any delay / handshaking....
+0005C3r 2               
+0005C3r 2               prepare_read_data:
+0005C3r 2  A9 20           lda   #CMD_INIT_READ
+0005C5r 2  D0 02           bne   write_cmd_reg
+0005C7r 2               
+0005C7r 2               prepare_write_data:
+0005C7r 2  A9 21           lda   #CMD_INIT_WRITE
+0005C9r 2                  ; fall through to write_cmd_reg
+0005C9r 2               
+0005C9r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005C9r 2               ; Write command + wait
+0005C9r 2               
+0005C9r 2               write_cmd_reg:
+0005C9r 2  8D 00 B4        sta   ACMD_REG
+0005CCr 2               .ifdef AVR
+0005CCr 2  4C rr rr        jmp   WaitUntilRead
+0005CFr 2               .else
+0005CFr 2                  jmp   inter_write_delay
+0005CFr 2               .endif
+0005CFr 2               
+0005CFr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005CFr 2               ; Write latch + wait
+0005CFr 2               
+0005CFr 2               write_latch_reg:
+0005CFr 2  8D 01 B4        sta   ALATCH_REG
+0005D2r 2               .ifdef AVR
+0005D2r 2  4C rr rr        jmp   WaitUntilRead
+0005D5r 2               .else
+0005D5r 2                  jmp   inter_write_delay
+0005D5r 2               .endif
+0005D5r 2               
+0005D5r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005D5r 2               ; Write data + wait
+0005D5r 2               
+0005D5r 2               write_data_reg:
+0005D5r 2  8D 03 B4        sta   AWRITE_DATA_REG
+0005D8r 2               .ifdef AVR
+0005D8r 2  4C rr rr        jmp   WaitUntilRead
+0005DBr 2               .else
+0005DBr 2                  jmp   data_write_delay
+0005DBr 2               .endif
+0005DBr 2               
+0005DBr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005DBr 2               ; Wait + Read data
+0005DBr 2               
+0005DBr 2               read_data_reg:
+0005DBr 2               .ifdef AVR
+0005DBr 2  20 rr rr        jsr   WaitUntilWritten
+0005DEr 2               .else
+0005DEr 2                  jsr   data_read_delay
+0005DEr 2               .endif
+0005DEr 2  AD 02 B4        lda   AREAD_DATA_REG
+0005E1r 2  60              rts
+0005E2r 2               
+0005E2r 2               .ifndef AVR
+0005E2r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005E2r 2               ;
+0005E2r 2               ; Short delay
+0005E2r 2               ;
+0005E2r 2               ; Enough to intersperse 2 writes to the FATPIC.
+0005E2r 2               ;
+0005E2r 2               inter_write_delay:
+0005E2r 2                  pha
+0005E2r 2                  lda   #16
+0005E2r 2                  bne   write_delay
+0005E2r 2               data_write_delay:
+0005E2r 2                  pha
+0005E2r 2                  lda   #4
+0005E2r 2               write_delay:
+0005E2r 2                  sec
+0005E2r 2               @loop:
+0005E2r 2                  sbc   #1
+0005E2r 2                  bne   @loop
+0005E2r 2                  pla
+0005E2r 2               data_read_delay:
+0005E2r 2                  rts
+0005E2r 2               .endif
+0005E2r 2               
+0005E2r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005E2r 2               ;
+0005E2r 2               ; Fast command
+0005E2r 2               ; - On the PIC, command port write followed by interwrite delay
+0005E2r 2               ; - On the AVR, this is the same as slow_cmd
+0005E2r 2               
+0005E2r 2               fast_cmd:
+0005E2r 2               .ifndef AVR
+0005E2r 2                  jsr   write_cmd_reg
+0005E2r 2                  lda   ACMD_REG
+0005E2r 2                  rts
+0005E2r 2               .else
+0005E2r 2                  ; fall through to slow_cmd
+0005E2r 2               .endif
+0005E2r 2               
+0005E2r 2               
+0005E2r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0005E2r 2               ;
+0005E2r 2               ; Fast command, command port write followed by interwrite delay on PIC,
+0005E2r 2               ; Simply an alias for "jsr slow_cmd" on AVR.
+0005E2r 2               
+0005E2r 2               slow_cmd:
+0005E2r 2  20 rr rr        jsr   write_cmd_reg
+0005E5r 2               
+0005E5r 2               .ifndef AVR
+0005E5r 2               slow_cmd_loop:
+0005E5r 2                  lda   #0
+0005E5r 2                  sec
+0005E5r 2               slow_cmd_delay_loop:
+0005E5r 2                  sbc   #1
+0005E5r 2                  bne   slow_cmd_delay_loop
+0005E5r 2               
+0005E5r 2                  lda   ACMD_REG
+0005E5r 2                  bmi   slow_cmd_loop       ; loop until command done bit (bit 7) is cleared
+0005E5r 2                  jmp   inter_write_delay   ; seems necessary at 4MHz if slow_cmd immediately
+0005E5r 2                                            ; followed by prepare_read_data (e.g. as in osrdar)
+0005E5r 2               .else
+0005E5r 2  20 rr rr        jsr   WaitWhileBusy       ; Keep waiting until not busy
+0005E8r 2  AD 00 B4        lda   ACMD_REG            ; get status for client
+0005EBr 2  60              rts
+0005ECr 2               .endif
+0005ECr 2               
+0005ECr 2               .ifdef AVR
+0005ECr 2               WaitUntilRead:
+0005ECr 2  AD 04 B4        lda   ASTATUS_REG         ; Read status reg
+0005EFr 2  29 02           and   #MMC_MCU_READ       ; Been read yet ?
+0005F1r 2  D0 F9           bne   WaitUntilRead       ; nope keep waiting
+0005F3r 2  60              rts
+0005F4r 2               
+0005F4r 2               WaitUntilWritten:
+0005F4r 2  AD 04 B4        lda   ASTATUS_REG         ; Read status reg
+0005F7r 2  29 04           and   #MMC_MCU_WROTE      ; Been written yet ?
+0005F9r 2  F0 F9           beq   WaitUntilWritten    ; nope keep waiting
+0005FBr 2  60              rts
+0005FCr 2               
+0005FCr 2               WaitWhileBusy:
+0005FCr 2  AD 04 B4        lda   ASTATUS_REG         ; Read status reg
+0005FFr 2  29 01           and   #MMC_MCU_BUSY       ; MCU still busy ?
+000601r 2  D0 F9           bne   WaitWhileBusy       ; yes keep waiting
+000603r 2  60              rts
+000604r 2               .endif
+000604r 2               
+000604r 2               
+000604r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000604r 2               ;
+000604r 2               ; Read an asciiz string to name buffer at $140 + y
+000604r 2               ;
+000604r 2               ; on exit y = character count not including terminating 0
+000604r 2               ;
+000604r 2               ;  bug: this will keep reading until it hits a 0, if there is not one, it will
+000604r 2               ;      keep going forever......
+000604r 2               getasciizstringto140:
+000604r 2  20 rr rr        jsr   prepare_read_data
+000607r 2               
+000607r 2  88              dey
+000608r 2               @loop:
+000608r 2  C8              iny
+000609r 2  20 rr rr        jsr   read_data_reg
+00060Cr 2  99 40 01        sta   NAME,y
+00060Fr 2  D0 F7           bne   @loop
+000611r 2               
+000611r 2  A9 0D           lda   #$0d                   ; replace the terminator by <cr>
+000613r 2  99 40 01        sta   NAME,y                 ; so the filename can be reused by the pic
+000616r 2  60              rts
+000617r 2               
+000617r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000617r 2               ;
+000617r 2               ; Disable/Enable interface IRQ
+000617r 2               ;
+000617r 2               .ifndef EOOO
+000617r 2               ifdi:
+000617r 2                  jsr   getcb
+000617r 2                  and   #$DF                   ; remove bit 5
+000617r 2                  jmp   putcb
+000617r 2               
+000617r 2               ifen:
+000617r 2                  jsr   getcb
+000617r 2                  ora   #$20                   ; set bit 5
+000617r 2                  jmp   putcb
+000617r 2               
+000617r 2               getcb:
+000617r 2                  lda   #CMD_GET_CFG_BYTE      ; retreive config byte
+000617r 2                  jmp   fast_cmd
+000617r 2               
+000617r 2               putcb:
+000617r 2                  jsr   write_latch_reg
+000617r 2                  lda   #CMD_SET_CFG_BYTE      ; write latched val as config byte. irqs are now off
+000617r 2                  jmp   write_cmd_reg
+000617r 2               .endif
+000617r 2               
+000617r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000617r 2               ;
+000617r 2               ; opens a file for reading, then gets the file info
+000617r 2               ;
+000617r 2               ; this is used by fatinfo, exec, and rload
+000617r 2               open_filename_getinfo:
+000617r 2  20 rr rr        jsr   open_filename_read     ; invokes error handler if return code > 64
+00061Ar 2               
+00061Ar 2  20 rr rr        jsr   set_rwptr_to_name      ; get the FAT file size - text files won't have ATM headers
+00061Dr 2  A9 15           lda   #CMD_FILE_GETINFO
+00061Fr 2  20 rr rr        jsr   slow_cmd
+000622r 2               
+000622r 2  A2 0D           ldx   #13
+000624r 2                  ; jmp   read_data_buffer
+000624r 2                  ; fall through to read_data_buffer
+000624r 2               
+000624r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000624r 2               ;
+000624r 2               ; Read data to memory from the pic's buffer
+000624r 2               ;
+000624r 2               ; data may be from another source other than file, ie getfileinfo
+000624r 2               ; x = number of bytes to read (0 = 256)
+000624r 2               ; (RWPTR) points to store
+000624r 2               ;
+000624r 2               read_data_buffer:
+000624r 2  20 rr rr        jsr   prepare_read_data
+000627r 2               
+000627r 2  A0 00           ldy   #0
+000629r 2               
+000629r 2               @loop:
+000629r 2  20 rr rr        jsr   read_data_reg
+00062Cr 2  91 AC           sta   (RWPTR),y
+00062Er 2  C8              iny
+00062Fr 2  CA              dex
+000630r 2  D0 F7           bne   @loop
+000632r 2               
+000632r 2               return_ok:
+000632r 2  60              rts
+000633r 2               
+000633r 2               
+000633r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000633r 2               ;
+000633r 2               ; set RWPTR to point to NAME  (i.e. $140)
+000633r 2               ;
+000633r 2               ; this is called 5 times, so making it a subroutine rather than a macro
+000633r 2               ; saves 4 * (8 - 3) - 9 = 11 bytes!
+000633r 2               set_rwptr_to_name:
+000633r 2  A9 40           lda   #<NAME
+000635r 2  85 AC           sta   RWPTR
+000637r 2  A9 01           lda   #>NAME
+000639r 2  85 AD           sta   RWPTR+1
+00063Br 2  60              rts
+00063Cr 2               
+00063Cr 2               
+00063Cr 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00063Cr 2               ;
+00063Cr 2               ; Perform slow command initialisation and expect a return code <= 64
+00063Cr 2               ;
+00063Cr 2               slow_cmd_and_check:
+00063Cr 2  20 rr rr        jsr   slow_cmd
+00063Fr 2               
+00063Fr 2               expect64orless:
+00063Fr 2  C9 41           cmp   #STATUS_COMPLETE+1
+000641r 2  90 EF           bcc   return_ok
+000643r 2                  ; fall through to report_disk_failure
+000643r 2               
+000643r 2               
+000643r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000643r 2               ;
+000643r 2               ; report a file system error
+000643r 2               ;
+000643r 2               report_disk_failure:
+000643r 2  29 3F           and   #ERROR_MASK
+000645r 2  48              pha                          ; save error code
+000646r 2  AA              tax                          ; error code into x
+000647r 2  A0 FF           ldy   #$ff                   ; string indexer
+000649r 2               
+000649r 2               @findstring:
+000649r 2  C8              iny                          ; do this here because we need the z flag below
+00064Ar 2  B9 rr rr        lda   diskerrortab,y
+00064Dr 2  D0 FA           bne   @findstring            ; zip along the string till we find a zero
+00064Fr 2               
+00064Fr 2  CA              dex                          ; when this bottoms we've found our error
+000650r 2  D0 F7           bne   @findstring
+000652r 2  68              pla                          ; restore error code
+000653r 2  AA              tax                          ; error code in X
+000654r 2  AD CF 03        lda   TUBE_FLAG
+000657r 2  C9 5A           cmp   #TUBE_ENABLED
+000659r 2  F0 0A           beq   @tubeError
+00065Br 2               
+00065Br 2               @printstring:
+00065Br 2  C8              iny
+00065Cr 2  B9 rr rr        lda   diskerrortab,y
+00065Fr 2  20 F4 FF        jsr   OSWRCH
+000662r 2  D0 F7           bne   @printstring
+000664r 2  00              brk
+000665r 2               
+000665r 2               @tubeError:
+000665r 2  C8              iny                          ; store index for basic BRK-alike hander
+000666r 2  98              tya
+000667r 2  18              clc
+000668r 2  69 rr           adc   #<diskerrortab
+00066Ar 2  85 D5           sta   $d5
+00066Cr 2  A9 rr           lda   #>diskerrortab
+00066Er 2  69 00           adc   #0
+000670r 2  85 D6           sta   $d6
+000672r 2  4C 09 30        jmp   L0409                  ; error code in X (must be non zero)
+000675r 2               
+000675r 2               diskerrortab:
+000675r 2  00              .byte $00
+000676r 2  44 49 53 4B     .byte "DISK FAULT",$00
+00067Ar 2  20 46 41 55  
+00067Er 2  4C 54 00     
+000681r 2  49 4E 54 45     .byte "INTERNAL ERROR",$00
+000685r 2  52 4E 41 4C  
+000689r 2  20 45 52 52  
+000690r 2  4E 4F 54 20     .byte "NOT READY",$00
+000694r 2  52 45 41 44  
+000698r 2  59 00        
+00069Ar 2  4E 4F 54 20     .byte "NOT FOUND",$00
+00069Er 2  46 4F 55 4E  
+0006A2r 2  44 00        
+0006A4r 2  4E 4F 20 50     .byte "NO PATH",$00
+0006A8r 2  41 54 48 00  
+0006ACr 2  49 4E 56 41     .byte "INVALID NAME",$00
+0006B0r 2  4C 49 44 20  
+0006B4r 2  4E 41 4D 45  
+0006B9r 2  41 43 43 45     .byte "ACCESS DENIED",$00
+0006BDr 2  53 53 20 44  
+0006C1r 2  45 4E 49 45  
+0006C7r 2  45 58 49 53     .byte "EXISTS",$00
+0006CBr 2  54 53 00     
+0006CEr 2  49 4E 56 41     .byte "INVALID OBJECT",$00
+0006D2r 2  4C 49 44 20  
+0006D6r 2  4F 42 4A 45  
+0006DDr 2  57 52 49 54     .byte "WRITE PROTECTED",$00
+0006E1r 2  45 20 50 52  
+0006E5r 2  4F 54 45 43  
+0006EDr 2  49 4E 56 41     .byte "INVALID DRIVE",$00
+0006F1r 2  4C 49 44 20  
+0006F5r 2  44 52 49 56  
+0006FBr 2  4E 4F 54 20     .byte "NOT ENABLED",$00
+0006FFr 2  45 4E 41 42  
+000703r 2  4C 45 44 00  
+000707r 2  4E 4F 20 46     .byte "NO FILESYSTEM",$00
+00070Br 2  49 4C 45 53  
+00070Fr 2  59 53 54 45  
+000715r 2  00              .byte $00                    ; mkfs error
+000716r 2  54 49 4D 45     .byte "TIMEOUT",$00
+00071Ar 2  4F 55 54 00  
+00071Er 2  45 45 50 52     .byte "EEPROM ERROR",$00
+000722r 2  4F 4D 20 45  
+000726r 2  52 52 4F 52  
+00072Br 2  46 41 49 4C     .byte "FAILED",$00
+00072Fr 2  45 44 00     
+000732r 2  54 4F 4F 20     .byte "TOO MANY",$00
+000736r 2  4D 41 4E 59  
+00073Ar 2  00           
+00073Br 2  53 49 4C 4C     .byte "SILLY",$0d
+00073Fr 2  59 0D        
+000741r 2               
+000741r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000741r 2               ;
+000741r 2               ; Read filename from $100 to $140
+000741r 2               ;
+000741r 2               ; Input  $9A = pointer just after command
+000741r 2               ;
+000741r 2               ; Output $140 contains filename, terminated by $0D
+000741r 2               ;
+000741r 2               read_filename:
+000741r 2  20 rr rr        jsr   read_optional_filename
+000744r 2               
+000744r 2  E0 00           cpx   #0                     ; chec the filename length > 0
+000746r 2  D0 51           bne   filename_ok
+000748r 2               
+000748r 2               syn_error:
+000748r 2  4C 7D FA        jmp   COSSYN                 ; generate a SYN? ERROR 135
+00074Br 2               
+00074Br 2               
+00074Br 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00074Br 2               ;
+00074Br 2               ; Read Optional filename from $100 to $140
+00074Br 2               ;
+00074Br 2               ; Input  $9A = pointer just after command
+00074Br 2               ;
+00074Br 2               ; Output $140 contains filename, terminated by $0D
+00074Br 2               ;
+00074Br 2               read_optional_filename:
+00074Br 2  A2 00           ldx   #0
+00074Dr 2  A4 9A           ldy   $9a
+00074Fr 2               
+00074Fr 2               @filename1:
+00074Fr 2  20 76 F8        jsr   SKIPSPC
+000752r 2  C9 22           cmp   #$22
+000754r 2  F0 18           beq   @filename5
+000756r 2               
+000756r 2               @filename2:
+000756r 2  C9 0D           cmp   #$0d
+000758r 2  F0 0C           beq   @filename3
+00075Ar 2               
+00075Ar 2  9D 40 01        sta   NAME,x
+00075Dr 2  E8              inx
+00075Er 2  C8              iny
+00075Fr 2  B9 00 01        lda   $100,y
+000762r 2  C9 20           cmp   #$20
+000764r 2  D0 F0           bne   @filename2
+000766r 2               
+000766r 2               @filename3:
+000766r 2  A9 0D           lda   #$0d
+000768r 2  9D 40 01        sta   NAME,x
+00076Br 2  84 9A           sty   $9a
+00076Dr 2  60              rts
+00076Er 2               
+00076Er 2               @filename5:
+00076Er 2  C8              iny
+00076Fr 2  B9 00 01        lda   $100,y
+000772r 2  C9 0D           cmp   #$0d
+000774r 2  F0 D2           beq   syn_error
+000776r 2               
+000776r 2  9D 40 01        sta   NAME,x
+000779r 2  E8              inx
+00077Ar 2  C9 22           cmp   #$22
+00077Cr 2  D0 F0           bne   @filename5
+00077Er 2               
+00077Er 2  CA              dex
+00077Fr 2  C8              iny
+000780r 2  B9 00 01        lda   $100,y
+000783r 2  C9 22           cmp   #$22
+000785r 2  D0 DF           bne   @filename3
+000787r 2               
+000787r 2  E8              inx
+000788r 2  B0 E4           bcs   @filename5
+00078Ar 2               
+00078Ar 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00078Ar 2               ;
+00078Ar 2               ; Copy filename from ($c9) to $140
+00078Ar 2               ;
+00078Ar 2               copy_name:
+00078Ar 2  20 4F F8        jsr   CHKNAME                ; copy data block at $00,x to COS workspace at $c9
+00078Dr 2                                               ; also checks filename is < 14 chars, PIC additionally checks < 8 chars
+00078Dr 2  A0 00           ldy   #0
+00078Fr 2               
+00078Fr 2               copy_name_loop:
+00078Fr 2  B1 C9           lda   ($C9),y
+000791r 2  99 40 01        sta   NAME,y
+000794r 2  C8              iny
+000795r 2  C9 0D           cmp   #$0d
+000797r 2  D0 F6           bne   copy_name_loop
+000799r 2               
+000799r 2               filename_ok:
+000799r 2  60              rts
+00079Ar 2               
+00079Ar 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+00079Ar 2               ;
+00079Ar 2               ; Wait for a key press, return back two levels if not Y
+00079Ar 2               ;
+00079Ar 2               
+00079Ar 2               confirm_or_rts:
+00079Ar 2  20 E6 FF        jsr   OSECHO                 ; wait for a key press and echo it
+00079Dr 2               
+00079Dr 2  48              pha                          ; save it
+00079Er 2  20 ED FF        jsr   OSCRLF
+0007A1r 2  68              pla                          ; restore it
+0007A2r 2  C9 59           cmp   #'Y'
+0007A4r 2  F0 02           beq   @confirm_yes           ; return to the caller
+0007A6r 2               
+0007A6r 2  68              pla                          ; pop an extra level of stack
+0007A7r 2  68              pla                          ; which will cancel the operation
+0007A8r 2               
+0007A8r 2               @confirm_yes:
+0007A8r 2  60              rts
+0007A9r 2               
+0007A9r 1               .include "chain.asm"
+0007A9r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0007A9r 2               ;
+0007A9r 2               ; *CHAIN [filename]
+0007A9r 2               ;
+0007A9r 2               ; Loads specified Basic file to memory and runs it.
+0007A9r 2               ;
+0007A9r 2               star_chain:
+0007A9r 2  20 rr rr        jsr   star_load
+0007ACr 2               
+0007ACr 2  A5 12           lda   $12
+0007AEr 2  85 0E           sta   $0e
+0007B0r 2  A0 00           ldy   #0
+0007B2r 2  84 0D           sty   $0d
+0007B4r 2               laee1:
+0007B4r 2  A4 02           ldy   $2
+0007B6r 2               laee3:
+0007B6r 2  C8              iny
+0007B7r 2  B1 0D           lda   ($0d),y
+0007B9r 2  C9 0D           cmp   #$0d
+0007BBr 2  D0 F9           bne   laee3
+0007BDr 2  18              clc
+0007BEr 2  98              tya
+0007BFr 2  65 0D           adc   $0d
+0007C1r 2  85 0D           sta   $0d
+0007C3r 2  90 02           bcc   laef5
+0007C5r 2  E6 0E           inc   $0e
+0007C7r 2               laef5:
+0007C7r 2  A0 01           ldy   #1
+0007C9r 2  B1 0D           lda   ($0d),y
+0007CBr 2  10 E7           bpl   laee1
+0007CDr 2               
+0007CDr 2  18              clc
+0007CEr 2  A5 0D           lda   $0d
+0007D0r 2  69 02           adc   #2
+0007D2r 2  85 0D           sta   $0d
+0007D4r 2  85 23           sta   $23
+0007D6r 2  A5 0E           lda   $0e
+0007D8r 2  69 00           adc   #0
+0007DAr 2  85 0E           sta   $0e
+0007DCr 2  85 24           sta   $24
+0007DEr 2               
+0007DEr 2  4C 86 CE        jmp   $ce86
+0007E1r 2               
+0007E1r 1               .include "raf.asm"
+0007E1r 2               ;================================================================
+0007E1r 2               ; Random Access File Handling
+0007E1r 2               ;================================================================
+0007E1r 2               
+0007E1r 2               CMD_SEEK                   = $16
+0007E1r 2               CMD_FILE_OPEN_RANDOM_READ  = $31
+0007E1r 2               CMD_FILE_OPEN_RANDOM_WRITE = $37
+0007E1r 2               
+0007E1r 2               STATUS_FILEHANDLE          = $60
+0007E1r 2               STATUS_EOF                 = $60
+0007E1r 2               
+0007E1r 2               ;----------------------------------------------------------------
+0007E1r 2               ; OSFIND vector $218
+0007E1r 2               ;
+0007E1r 2               ; - Send INIT_READ/WRITE command
+0007E1r 2               ; - Send filename terminated with $0
+0007E1r 2               ; - Send FILE_OPEN_RANDOM_READ/WRITE command
+0007E1r 2               ; - Return file handle ($61,$62,$63) or 0 if error occured
+0007E1r 2               ;
+0007E1r 2               ; carry = 1 -> open file for reading (FIN)
+0007E1r 2               ;
+0007E1r 2               ;  Input:  X = pointer to filename
+0007E1r 2               ;
+0007E1r 2               ;  Output: File handle if file exists
+0007E1r 2               ;          0 if file does not exist
+0007E1r 2               ;
+0007E1r 2               ; carry = 0 -> open file for writing (FOUT)
+0007E1r 2               ;
+0007E1r 2               ;  Input:  X = pointer to filename
+0007E1r 2               ;
+0007E1r 2               ;  Output: File handle if file exists
+0007E1r 2               ;           If file does not exist, create new file
+0007E1r 2               ;
+0007E1r 2               ;----------------------------------------------------------------
+0007E1r 2               
+0007E1r 2               osfindcode:
+0007E1r 2  08              php                          ; Save status
+0007E2r 2               
+0007E2r 2  B5 00           lda   $00,x
+0007E4r 2  85 C9           sta   LFNPTR
+0007E6r 2  B5 01           lda   $01,x
+0007E8r 2  85 CA           sta   LFNPTR+1
+0007EAr 2  A0 00           ldy   #0
+0007ECr 2               name_copy:
+0007ECr 2  B1 C9           lda   (LFNPTR),y
+0007EEr 2  99 40 01        sta   NAME,y
+0007F1r 2  C8              iny
+0007F2r 2  C9 0D           cmp   #$0D
+0007F4r 2  D0 F6           bne   name_copy
+0007F6r 2               
+0007F6r 2  28              plp
+0007F7r 2  08              php
+0007F8r 2  B0 04           bcs   raf_open_read          ; Jump if FIN
+0007FAr 2               
+0007FAr 2               raf_open_write:                 ; Open file for writing
+0007FAr 2  A9 37           lda   #CMD_FILE_OPEN_RANDOM_WRITE
+0007FCr 2  D0 02           bne   raf1
+0007FEr 2               
+0007FEr 2               raf_open_read:                  ; Open file for reading
+0007FEr 2  A9 31           lda   #CMD_FILE_OPEN_RANDOM_READ
+000800r 2               raf1:
+000800r 2  20 rr rr        jsr   open_file              ; Open file
+000803r 2  C9 61           cmp   #STATUS_FILEHANDLE+1   ; Check if filehandle ok
+000805r 2  B0 09           bcs   open_ok                ; Existing file opened
+000807r 2               open_nok:
+000807r 2  28              plp                          ; Get status
+000808r 2  B0 03           bcs   open_in                ; C=1 is FIN; C=0 is FOUT
+00080Ar 2  4C rr rr        jmp   expect64orless         ; If FOUT, return ERROR
+00080Dr 2               open_in:
+00080Dr 2  A9 00           lda   #0                     ; If FIN, return 0
+00080Fr 2  60              rts
+000810r 2               
+000810r 2               open_ok:
+000810r 2  28              plp
+000811r 2  60              rts                          ; Return file handle in A
+000812r 2               
+000812r 2               ;----------------------------------------------------------------
+000812r 2               ; OSSHUT vector $21A
+000812r 2               ;
+000812r 2               ; Input:  Y = File handle
+000812r 2               ;             0 -> close all files
+000812r 2               ;----------------------------------------------------------------
+000812r 2               
+000812r 2               osshutcode:
+000812r 2  48              pha                          ; Save A
+000813r 2               
+000813r 2  98              tya                          ; Set handle in A
+000814r 2               
+000814r 2  D0 0C           bne   shut_one               ; Shut one file
+000816r 2               
+000816r 2               shut_all:
+000816r 2  A0 61           ldy   #$61
+000818r 2  20 rr rr        jsr   shut_file              ; Close file1
+00081Br 2  A0 62           ldy   #$62
+00081Dr 2  20 rr rr        jsr   shut_file              ; Close file2
+000820r 2  A0 63           ldy   #$63
+000822r 2               shut_one:
+000822r 2  20 rr rr        jsr   shut_file              ; Close file3
+000825r 2               
+000825r 2  68              pla                          ; Get A
+000826r 2  60              rts
+000827r 2               
+000827r 2               shut_file:
+000827r 2  20 rr rr        jsr   mul32handle            ; Command = 32*(file handle AND 3)
+00082Ar 2  69 10           adc   #CMD_FILE_CLOSE        ; Select CMD_FILE_CLOSE command file 1,2 or 3
+00082Cr 2  4C rr rr        jmp   slow_cmd               ; Send command + wait
+00082Fr 2               
+00082Fr 2               ;----------------------------------------------------------------
+00082Fr 2               ; OSBPUT vector $216
+00082Fr 2               ;
+00082Fr 2               ; - Send INIT_WRITE command
+00082Fr 2               ; - Send databyte
+00082Fr 2               ; - Send number of bytes to send
+00082Fr 2               ; - Send WRITE_BYTES command
+00082Fr 2               ;
+00082Fr 2               ; Input:  Y = File handle
+00082Fr 2               ;         A = Byte
+00082Fr 2               ;
+00082Fr 2               ; Output: If 1<=file handle<=3 -> output to file
+00082Fr 2               ;         If file handle=0     -> output to screen
+00082Fr 2               ;----------------------------------------------------------------
+00082Fr 2               
+00082Fr 2               osbputcode:
+00082Fr 2  48              pha                          ; Save databyte
+000830r 2               
+000830r 2  98              tya                          ; File handle in A
+000831r 2  F0 14           beq   bput_zero_device       ; Check for screen output
+000833r 2               
+000833r 2  20 rr rr        jsr   prepare_write_data     ; CMD_READ_WRITE
+000836r 2               
+000836r 2  68              pla
+000837r 2  20 rr rr        jsr   write_data_reg         ; Save databyte
+00083Ar 2               
+00083Ar 2  A9 01           lda   #1                     ; Set nr of bytes to send
+00083Cr 2  20 rr rr        jsr   write_latch_reg        ; Wait
+00083Fr 2               
+00083Fr 2  20 rr rr        jsr   mul4handle             ; Command=$21+4*file handle
+000842r 2  69 23           adc   #CMD_WRITE_BYTES
+000844r 2  4C rr rr        jmp   slow_cmd_and_check     ; invokes error handler if return code > 64
+000847r 2               
+000847r 2               bput_zero_device:
+000847r 2  68              pla                          ; Screen output
+000848r 2  4C E9 FF        jmp $ffe9
+00084Br 2               
+00084Br 2               ;----------------------------------------------------------------
+00084Br 2               ; OSBGET vector $214
+00084Br 2               ;
+00084Br 2               ; - Send number of bytes to read
+00084Br 2               ; - Send READ_BYTES command
+00084Br 2               ; - Check if EOF reached
+00084Br 2               ; - If not
+00084Br 2               ; -   Send INIT_READ command
+00084Br 2               ; -   Get databyte
+00084Br 2               ; -   Clear carry
+00084Br 2               ; - If yes
+00084Br 2               ; -   Return $FF
+00084Br 2               ; -   Set carry
+00084Br 2               ;
+00084Br 2               ; Input:  Y = File handle
+00084Br 2               ;
+00084Br 2               ; Output: A           = databyte -> carry cleared
+00084Br 2               ;        $ff -> EOF reached -> carry set
+00084Br 2               ;----------------------------------------------------------------
+00084Br 2               
+00084Br 2               osbgetcode:
+00084Br 2  98              tya                          ; Set handle in A
+00084Cr 2  F0 23           beq   bget_zero_device       ; If file handle zero, output to screen
+00084Er 2               
+00084Er 2  A9 01           lda   #1                     ; Set nr of bytes to send
+000850r 2  20 rr rr        jsr   write_latch_reg        ; Wait
+000853r 2               
+000853r 2  20 rr rr        jsr   mul4handle             ; Command=$22+4*file handle
+000856r 2  69 22           adc   #CMD_READ_BYTES        ; CMD_READ_BYTES
+000858r 2  20 rr rr        jsr   slow_cmd               ; Send command + wait
+00085Br 2  C9 60           cmp   #STATUS_EOF            ; Check for EOF flag
+00085Dr 2  F0 06           beq   set_eof_flag
+00085Fr 2  20 rr rr        jsr   expect64orless         ; Check for errors
+000862r 2  4C rr rr        jmp   read_byte              ; No errors, read byte
+000865r 2               
+000865r 2               set_eof_flag:
+000865r 2  A9 FF           lda   #$ff                   ; EOF reached
+000867r 2  38              sec                          ; Return carry set
+000868r 2  60              rts
+000869r 2               
+000869r 2               read_byte:
+000869r 2  20 rr rr        jsr   prepare_read_data      ; CMD_INIT_READ
+00086Cr 2  20 rr rr        jsr   read_data_reg          ; Read byte
+00086Fr 2               
+00086Fr 2  18              clc                          ; Return carry clear
+000870r 2  60              rts
+000871r 2               
+000871r 2               bget_zero_device:
+000871r 2  4C E6 FF        jmp   $ffe6                  ; Return input from keyboard
+000874r 2               
+000874r 2               ;----------------------------------------------------------------
+000874r 2               ; OSRDAR vector $210
+000874r 2               ;
+000874r 2               ; - If A=0 the read PTR
+000874r 2               ; -
+000874r 2               ; - If A=1 the read EXT
+000874r 2               ; -   Send CMD_FILE_GETINFO command
+000874r 2               ; -   Send INIT_READ command
+000874r 2               ; -   Read 3 bytes from WRITEDATAREG in $52/53/54
+000874r 2               ;
+000874r 2               ; Input:  A = 0 -> Read PTR
+000874r 2               ;        1 -> Read EXT
+000874r 2               ;    Y = File handle
+000874r 2               ;
+000874r 2               ; Output: PTR or EXT in $52/53/54
+000874r 2               ;----------------------------------------------------------------
+000874r 2               
+000874r 2               osrdarcode:
+000874r 2  48              pha                          ; Save A
+000875r 2               
+000875r 2  20 rr rr        jsr   mul32handle            ; Command=$15+32*file handle
+000878r 2  69 15           adc   #CMD_FILE_GETINFO
+00087Ar 2  20 rr rr        jsr   slow_cmd               ; Send command + wait
+00087Dr 2               
+00087Dr 2  20 rr rr        jsr   prepare_read_data      ; CMD_INIT_READ
+000880r 2               
+000880r 2  20 rr rr        jsr   rdar_cont              ; Read LOF
+000883r 2               
+000883r 2  68              pla
+000884r 2  D0 06           bne   rdar_end               ; If EXT then end
+000886r 2               
+000886r 2  20 rr rr        jsr   rdar_cont              ; Read sector
+000889r 2  20 rr rr        jsr   rdar_cont              ; Read PTR
+00088Cr 2               rdar_end:
+00088Cr 2  60              rts
+00088Dr 2               
+00088Dr 2               rdar_cont:
+00088Dr 2  20 rr rr        jsr   read_data_reg          ; Read data byte
+000890r 2  95 00           sta   $00,x
+000892r 2  20 rr rr        jsr   read_data_reg          ; Read data byte
+000895r 2  95 01           sta   $01,x
+000897r 2  20 rr rr        jsr   read_data_reg          ; Read data byte
+00089Ar 2  95 02           sta   $02,x
+00089Cr 2  4C rr rr        jmp   read_data_reg          ; Read data byte
+00089Fr 2               
+00089Fr 2               ;----------------------------------------------------------------
+00089Fr 2               ; OSSTAR vector $212
+00089Fr 2               ;
+00089Fr 2               ; - Send INIT_WRITE command
+00089Fr 2               ; - Write 3 bytes from $52/53/54 to WRITE_DATA_REG
+00089Fr 2               ; - Send CMD_SEEKO command
+00089Fr 2               ;
+00089Fr 2               ; Input:  Y         = File handle, if 0 then ERROR
+00089Fr 2               ;    $52/53/54 = value
+00089Fr 2               ;
+00089Fr 2               ; Output: PTR = $52/53/54
+00089Fr 2               ;----------------------------------------------------------------
+00089Fr 2               
+00089Fr 2               osstarcode:
+00089Fr 2  98              tya                          ; File handle in A
+0008A0r 2  F0 1F           beq   ptr_zero_device        ; Error if no file open
+0008A2r 2               
+0008A2r 2  20 rr rr        jsr   prepare_write_data     ; CMD_INIT_WRITE
+0008A5r 2               
+0008A5r 2  B5 00           lda   $00,x
+0008A7r 2  20 rr rr        jsr   write_data_reg         ; Write databyte
+0008AAr 2  B5 01           lda   $01,x
+0008ACr 2  20 rr rr        jsr   write_data_reg         ; Write databyte
+0008AFr 2  B5 02           lda   $02,x
+0008B1r 2  20 rr rr        jsr   write_data_reg         ; Write databyte
+0008B4r 2  A9 00           lda   #0
+0008B6r 2  20 rr rr        jsr   write_data_reg         ; Write databyte
+0008B9r 2               
+0008B9r 2  20 rr rr        jsr   mul32handle
+0008BCr 2  69 16           adc   #CMD_SEEK              ; Command=$16+32*file handle
+0008BEr 2  4C rr rr        jmp   slow_cmd               ; Send command + wait
+0008C1r 2               
+0008C1r 2               ptr_zero_device:
+0008C1r 2  00              brk
+0008C2r 2               
+0008C2r 2               ;----------------------------------------------------------------
+0008C2r 2               ; Command = 32*filenr
+0008C2r 2               ;----------------------------------------------------------------
+0008C2r 2               
+0008C2r 2               mul32handle:
+0008C2r 2  98              tya
+0008C3r 2  29 03           and   #3
+0008C5r 2  0A              asl   a
+0008C6r 2  0A              asl   a
+0008C7r 2  0A              asl   a
+0008C8r 2               mul4:
+0008C8r 2  0A              asl   a
+0008C9r 2  0A              asl   a
+0008CAr 2  18              clc
+0008CBr 2  60              rts
+0008CCr 2               
+0008CCr 2               ;----------------------------------------------------------------
+0008CCr 2               ; Command = 4*filenr
+0008CCr 2               ;----------------------------------------------------------------
+0008CCr 2               
+0008CCr 2               mul4handle:
+0008CCr 2  98              tya
+0008CDr 2  29 03           and   #3
+0008CFr 2  4C rr rr        jmp   mul4
+0008D2r 2               
+0008D2r 1               .include "tube.asm"
+0008D2r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0008D2r 2               ; Tube Handling
+0008D2r 2               
+0008D2r 2               L0406          = $3006          ; Tube claim/transfer/release (in AtomTube host code)
+0008D2r 2               L0409          = $3009          ; Tube error                  (in AtomTube host code)
+0008D2r 2               
+0008D2r 2               TUBE_CTRL      =   $60          ; Tube control block address
+0008D2r 2               TUBE_FLAG      =  $3CF          ; Tube enabled flag, set by atom tube host
+0008D2r 2               TUBE_ENABLED   =   $5A          ; Tube enable magic value
+0008D2r 2               TUBE_CLIENT_ID =   $DD          ; Client ID for AtoMMC2 used in tube protocol
+0008D2r 2               
+0008D2r 2               TUBE_R3        = $BEE5          ; Tube data transfer FIFO
+0008D2r 2               
+0008D2r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+0008D2r 2               ; tube_claim_wrapper
+0008D2r 2               ;
+0008D2r 2               ; Check if tube enabled, and if so claim and setup data transfer
+0008D2r 2               ; X = where to read transfer address, in zero page
+0008D2r 2               ; Y = transfer type
+0008D2r 2               ;     00 = parasite to host (i.e. save)
+0008D2r 2               ;     01 = host to parasite (i.e. load)
+0008D2r 2               ;
+0008D2r 2               tube_claim_wrapper:
+0008D2r 2               
+0008D2r 2                  ; Check if the Tube has been enabled
+0008D2r 2  AD CF 03        lda   TUBE_FLAG
+0008D5r 2  C9 5A           cmp   #TUBE_ENABLED
+0008D7r 2  D0 3D           bne   tube_disabled
+0008D9r 2               
+0008D9r 2                  ; Claim Tube
+0008D9r 2  A9 DD           lda   #TUBE_CLIENT_ID
+0008DBr 2  20 06 30        jsr   L0406
+0008DEr 2               
+0008DEr 2                  ; Setup Data Transfer
+0008DEr 2  B5 00           lda   0, X
+0008E0r 2  85 60           sta   TUBE_CTRL
+0008E2r 2  B5 01           lda   1, X
+0008E4r 2  85 61           sta   TUBE_CTRL + 1
+0008E6r 2  A9 00           lda   #$00
+0008E8r 2  85 62           sta   TUBE_CTRL + 2
+0008EAr 2  85 63           sta   TUBE_CTRL + 3
+0008ECr 2  98              tya
+0008EDr 2  A2 60           ldx   #<TUBE_CTRL
+0008EFr 2  A0 00           ldy   #>TUBE_CTRL
+0008F1r 2  4C 06 30        jmp   L0406
+0008F4r 2               
+0008F4r 2               tube_release_wrapper:
+0008F4r 2                  ; Check if the Tube has been enabled
+0008F4r 2  AD CF 03        lda   TUBE_FLAG
+0008F7r 2  C9 5A           cmp   #TUBE_ENABLED
+0008F9r 2  D0 1B           bne   tube_disabled
+0008FBr 2               
+0008FBr 2                  ; Release Tube
+0008FBr 2  A9 9D           lda   #TUBE_CLIENT_ID - $40
+0008FDr 2  4C 06 30        jmp   L0406
+000900r 2               
+000900r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000900r 2               ;
+000900r 2               ; Read a block of data from file to the Tube
+000900r 2               ;
+000900r 2               ; a = number of bytes to read (0 = 256)
+000900r 2               ;
+000900r 2               tube_read_block:
+000900r 2  AE CF 03        ldx   TUBE_FLAG
+000903r 2  E0 5A           cpx   #TUBE_ENABLED
+000905r 2  F0 03           beq   @tube_enabled
+000907r 2  4C rr rr        jmp   read_block             ; Fall back to old code if tube is disabled
+00090Ar 2               
+00090Ar 2               @tube_enabled:
+00090Ar 2  20 rr rr        jsr   read_block_shared
+00090Dr 2               @loop:
+00090Dr 2  20 rr rr        jsr   read_data_reg          ; then read it
+000910r 2  8D E5 BE        sta   TUBE_R3                ; write to the tube data transfer register
+000913r 2  CA              dex
+000914r 2  D0 F7           bne   @loop
+000916r 2               
+000916r 2               tube_disabled:
+000916r 2  60              rts
+000917r 2               
+000917r 2               ;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~;~~
+000917r 2               ;
+000917r 2               ; write a block of data from the Tube to a file
+000917r 2               ;
+000917r 2               ; a = block length (0=256)
+000917r 2               ;
+000917r 2               tube_write_block:
+000917r 2  AE CF 03        ldx   TUBE_FLAG
+00091Ar 2  E0 5A           cpx   #TUBE_ENABLED
+00091Cr 2  F0 03           beq   @tube_enabled
+00091Er 2  4C rr rr        jmp   write_block            ; Fall back to old code if tube is disabled
+000921r 2               
+000921r 2               @tube_enabled:
+000921r 2  AA              tax                          ; save away the block size
+000922r 2  48              pha
+000923r 2  20 rr rr        jsr   prepare_write_data     ; take it
+000926r 2               @loop:
+000926r 2  AD E5 BE        lda   TUBE_R3                ; read data from the tube data transfer register
+000929r 2  20 rr rr        jsr   write_data_reg
+00092Cr 2  CA              dex
+00092Dr 2  D0 F7           bne   @loop
+00092Fr 2  4C rr rr        jmp   write_block_shared
+000932r 2               
+000932r 1               
+000932r 1               ;.include "urom.asm"
+000932r 1               
+000932r 1               cardtypes:
+000932r 1  20 4D 4D 43     .byte " MMC  SDSDHC N/A"
+000936r 1  20 20 53 44  
+00093Ar 1  53 44 48 43  
+000942r 1                  ;      1111222244448888
+000942r 1               
+000942r 1               fullvecdat:
+000942r 1  rr rr           .word irqveccode             ; 204 IRQVEC
+000944r 1  rr rr           .word osclicode              ; 206 COMVEC
+000946r 1  52 FE           .word $fe52                  ; 208 WRCVEC
+000948r 1  94 FE           .word $fe94                  ; 20A RDCVEC
+00094Ar 1  rr rr           .word osloadcode             ; 20C LODVEC
+00094Cr 1  rr rr           .word ossavecode             ; 20E SAVVEC
+00094Er 1               
+00094Er 1               rafvecdat:
+00094Er 1  rr rr           .word osrdarcode             ; 210 RDRVEC
+000950r 1  rr rr           .word osstarcode             ; 212 STRVEC
+000952r 1  rr rr           .word osbgetcode             ; 214 BGTVEC
+000954r 1  rr rr           .word osbputcode             ; 216 BPTVEC
+000956r 1  rr rr           .word osfindcode             ; 218 FNDVEC
+000958r 1  rr rr           .word osshutcode             ; 21A SHTVEC
+00095Ar 1               
+00095Ar 1               fakekeys:
+00095Ar 1  2A 4D 45 4E     .byte "*MENU"
+00095Er 1  55           
+00095Fr 1  00              .byte 0
+000960r 1               
+000960r 1               com_tab:
+000960r 1  43 41 54        .byte "CAT"                  ; in cat.asm
+000963r 1  rr rr           FNADDR star_cat
+000965r 1               
+000965r 1  43 57 44        .byte "CWD"                  ; in cwd.asm
+000968r 1  rr rr           FNADDR star_cwd
+00096Ar 1               
+00096Ar 1  44 45 4C 45     .byte "DELETE"               ; in delete.asm
+00096Er 1  54 45        
+000970r 1  rr rr           FNADDR star_delete
+000972r 1               
+000972r 1  45 58 45 43     .byte "EXEC"                 ; in exec.asm
+000976r 1  rr rr           FNADDR star_exec
+000978r 1               
+000978r 1  52 55 4E        .byte "RUN"                  ; in exec.asm
+00097Br 1  rr rr           FNADDR star_run
+00097Dr 1               
+00097Dr 1  48 45 4C 50     .byte "HELP"                 ; in help.asm
+000981r 1  rr rr           FNADDR star_help
+000983r 1               
+000983r 1  49 4E 46 4F     .byte "INFO"                 ; in info.asm
+000987r 1  rr rr           FNADDR star_info
+000989r 1               
+000989r 1  4C 4F 41 44     .byte "LOAD"                 ; in load.asm
+00098Dr 1  rr rr           FNADDR star_load
+00098Fr 1               
+00098Fr 1               ;  .byte "RLOAD"                ; in load.asm
+00098Fr 1               ;  FNADDR star_rload
+00098Fr 1               
+00098Fr 1               ;  .byte "ROMLOAD"              ; in load.asm
+00098Fr 1               ;  FNADDR star_romload
+00098Fr 1               
+00098Fr 1               ;  .byte "UROM"                 ; in urom.asm
+00098Fr 1               ;  FNADDR star_urom
+00098Fr 1               
+00098Fr 1  4D 4B 44 49     .byte "MKDIR"                ; in mkdir.asm
+000993r 1  52           
+000994r 1  rr rr           FNADDR star_mkdir
+000996r 1               
+000996r 1  52 45 4E        .byte "REN"                  ; in ren.asm
+000999r 1  rr rr           FNADDR star_ren
+00099Br 1               
+00099Br 1  52 4D 44 49     .byte "RMDIR"                ; in rmdir.asm
+00099Fr 1  52           
+0009A0r 1  rr rr           FNADDR star_rmdir
+0009A2r 1               
+0009A2r 1  4D 4F 4E        .byte "MON"
+0009A5r 1  FA 1A           FNADDR $fa1a
+0009A7r 1               
+0009A7r 1  4E 4F 4D 4F     .byte "NOMON"
+0009ABr 1  4E           
+0009ACr 1  FA 19           FNADDR $fa19
+0009AEr 1               
+0009AEr 1  43 46 47        .byte "CFG"                  ; in cfg.asm
+0009B1r 1  rr rr           FNADDR star_cfg
+0009B3r 1               
+0009B3r 1  50 42 44        .byte "PBD"                  ; in cfg.asm
+0009B6r 1  rr rr           FNADDR star_pbd
+0009B8r 1               
+0009B8r 1  50 42 56        .byte "PBV"                  ; in cfg.asm
+0009BBr 1  rr rr           FNADDR star_pbv
+0009BDr 1               
+0009BDr 1  53 41 56 45     .byte "SAVE"                 ; in save.asm
+0009C1r 1  rr rr           FNADDR star_save
+0009C3r 1               
+0009C3r 1  46 41 54 49     .byte "FATINFO"              ; in fatinfo.asm
+0009C7r 1  4E 46 4F     
+0009CAr 1  rr rr           FNADDR star_fatinfo
+0009CCr 1               
+0009CCr 1  43 52 43        .byte "CRC"                  ; in crc.asm
+0009CFr 1  rr rr           FNADDR star_crc
+0009D1r 1               
+0009D1r 1  43 48 41 49     .byte "CHAIN"                ; in chain.asm
+0009D5r 1  4E           
+0009D6r 1  rr rr           FNADDR star_chain
+0009D8r 1               
+0009D8r 1  rr rr           FNADDR star_arbitrary
+0009DAr 1               
+0009DAr 1               
+0009DAr 1               .ifdef EOOO
+0009DAr 1               .include "BRAN.asm"
+0009DAr 2               ;
+0009DAr 2               ; **** Note **** to use this code you need to patch the floating point rom
+0009DAr 2               ;
+0009DAr 2               ;=============================
+0009DAr 2               ;Floating Point Patch (#Dxxx):
+0009DAr 2               ;=============================
+0009DAr 2               ;
+0009DAr 2               ;Original                     Patch
+0009DAr 2               ;-------------------------    -------------------------
+0009DAr 2               ;D4AF: Ad 04 E0  LDA #E004    D4AF: AD 20 EB  LDA #EB20
+0009DAr 2               ;D4B2: C9 BF     CMP @#BF     D4B2: C9 40     CMP @#40
+0009DAr 2               ;D4B4: F0 0A     BEQ #D4C0    D4B4: F0 0A     BEQ #D4C0
+0009DAr 2               ;D4B6: AD 00 A0  LDA #A000    D4B6: AD 01 A0  LDA #A001
+0009DAr 2               ;D4B9: C9 40     CMP @#40     D4B9: C9 BF     CMP @#BF
+0009DAr 2               ;D4BB: D0 83     BNE #D440    D4BB: D0 83     BNE #D440
+0009DAr 2               ;D4BD: 4C 01 A0  JMP #A002    D4BD: 4C 02 A0  JMP #A002
+0009DAr 2               ;D4C0: 4C 05 E0  JMP #E005    D4C3: 4C 22 EB  JMP #EB22
+0009DAr 2               
+0009DAr 2               
+0009DAr 2               ; *** Options ***
+0009DAr 2               
+0009DAr 2               LATCH           = $BFFF
+0009DAr 2               SHADOW          = $FD           ; If $BFFF is write only otherwise SHADOW =$BFFF
+0009DAr 2               MAX             = $8
+0009DAr 2               ZPBASE          = $90
+0009DAr 2               ZPLENGTH        = $10
+0009DAr 2               
+0009DAr 2               ; *** Workarea ***
+0009DAr 2               
+0009DAr 2               BASE            = $400
+0009DAr 2               BRKLOW          = BASE
+0009DAr 2               BRKHIGH         = BRKLOW+1
+0009DAr 2               BRKROM          = BRKHIGH+1
+0009DAr 2               STARTROM        = BRKROM+1
+0009DAr 2               TEMP            = STARTROM+1
+0009DAr 2               VECTOR          = TEMP
+0009DAr 2               DUMP            = TEMP+1
+0009DAr 2               VECT            = MAX*ZPLENGTH
+0009DAr 2               VECTAB          = VECT+DUMP+1
+0009DAr 2               SUB_ACCU        = VECTAB+1+15*3
+0009DAr 2               SUB_STATUS      = SUB_ACCU+1
+0009DAr 2               SUB_Y           = SUB_STATUS+1
+0009DAr 2               SUB_X           = SUB_Y+1
+0009DAr 2               STACKPOINTER    = SUB_X
+0009DAr 2               SUBVECTOR       = SUB_X+1
+0009DAr 2               INTVECTOR       = SUBVECTOR+2
+0009DAr 2               INT_ACCU        = INTVECTOR+2
+0009DAr 2               INT_STATUS1     = INT_ACCU+1
+0009DAr 2               INT_STATUS2     = INT_STATUS1+1
+0009DAr 2               INT_X           = INT_STATUS2+1
+0009DAr 2               INT_Y           = INT_X+1
+0009DAr 2               OPT_PCHARME     = INT_Y+1
+0009DAr 2               FREE            = OPT_PCHARME+1
+0009DAr 2               
+0009DAr 2               ; *** Constants ***
+0009DAr 2               
+0009DAr 2               BRKVEC          = $202
+0009DAr 2               TEXT            = $F7D1
+0009DAr 2               CR              = $D
+0009DAr 2               LF              = $A
+0009DAr 2               DELIM           = $EA
+0009DAr 2               
+0009DAr 2               .SEGMENT "BRAN"
+000000r 2               
+000000r 2               ; *** Start of assembly ***
+000000r 2               
+000000r 2  40 BF                .BYTE $40,$bf           ; ROM entry
+000002r 2               
+000002r 2               ; *** Entry in system ***
+000002r 2               
+000002r 2               entry:
+000002r 2  A5 06           lda   6                      ; test directmode
+000004r 2  C9 01           cmp   #1
+000006r 2  D0 10           bne   label8
+000008r 2               
+000008r 2  2C 01 B0        bit   $b001                  ; test shift
+00000Br 2  30 0B           bmi   label8
+00000Dr 2               
+00000Dr 2  A2 00           ldx   #0                     ; test return
+00000Fr 2  A1 05           lda   (5,x)
+000011r 2  C9 0D           cmp   #CR
+000013r 2  D0 03           bne   label8
+000015r 2               
+000015r 2  4C rr rr        jmp   unlock+3               ; if shift-return, unlock roms
+000018r 2               
+000018r 2               label8:
+000018r 2  24 FD           bit   SHADOW                 ; rom locked?
+00001Ar 2  50 03           bvc   not_locked
+00001Cr 2  4C rr rr        jmp   locked
+00001Fr 2               
+00001Fr 2               ; *** not locked search ***
+00001Fr 2               
+00001Fr 2               not_locked:
+00001Fr 2  A5 FD           lda   SHADOW                 ; save current rom nr
+000021r 2  8D 03 04        sta   STARTROM
+000024r 2  20 rr rr        jsr   update_vectors         ; save current vectors
+000027r 2  20 rr rr        jsr   switch_context_out     ; store zeropage
+00002Ar 2               
+00002Ar 2  AD 03 02        lda   BRKVEC+1               ; check if breakvector is changed
+00002Dr 2  C9 rr           cmp   #>handler
+00002Fr 2  F0 0E           beq   label1                 ; if not, change it
+000031r 2  8D 01 04        sta   BRKHIGH
+000034r 2  AD 02 02        lda   BRKVEC
+000037r 2  8D 00 04        sta   BRKLOW
+00003Ar 2               
+00003Ar 2  A5 FD           lda   SHADOW                 ; save lastrom
+00003Cr 2  8D 02 04        sta   BRKROM
+00003Fr 2               label1:
+00003Fr 2  4C rr rr        jmp   switch
+000042r 2               
+000042r 2               ; ***  try next box ***
+000042r 2               
+000042r 2               next_box:
+000042r 2  E6 FD           inc   SHADOW                 ; switch to next rom
+000044r 2  A5 FD           lda   SHADOW
+000046r 2  8D FF BF        sta   LATCH
+000049r 2               
+000049r 2  C9 08           cmp   #MAX                   ; if last reached, switch to rom 0
+00004Br 2  D0 07           bne   label2
+00004Dr 2  A9 00           lda   #0
+00004Fr 2  85 FD           sta   SHADOW
+000051r 2  8D FF BF        sta   LATCH
+000054r 2               label2:
+000054r 2  20 rr rr        jsr   switch_context_in      ; restore zeropage
+000057r 2               
+000057r 2  A5 FD           lda   SHADOW                 ; check if all roms entered
+000059r 2  CD 03 04        cmp   STARTROM
+00005Cr 2  D0 03           bne   switch
+00005Er 2  4C rr rr        jmp   not_found              ; command not found in roms, try table
+000061r 2               
+000061r 2               ; *** replace break vector and enter rom ***
+000061r 2               
+000061r 2               switch:
+000061r 2  A9 rr           lda   #>handler              ; replace breakvector
+000063r 2  8D 03 02        sta   BRKVEC+1
+000066r 2  A9 rr           lda   #<handler
+000068r 2  8D 02 02        sta   BRKVEC
+00006Br 2               
+00006Br 2  AD 00 A0        lda   $a000                  ; check if new rom is legal
+00006Er 2  C9 40           cmp   #$40
+000070r 2  D0 D0           bne   next_box
+000072r 2  AD 01 A0        lda   $a001
+000075r 2  C9 BF           cmp   #$bf
+000077r 2  D0 C9           bne   next_box
+000079r 2  4C 02 A0        jmp   $a002                  ; is legal, enter rom
+00007Cr 2               
+00007Cr 2               ; *** central break handler ***
+00007Cr 2               
+00007Cr 2               handler:
+00007Cr 2  68              pla
+00007Dr 2  8D 04 04        sta   TEMP                   ; save high byte error
+000080r 2  68              pla
+000081r 2  85 00           sta   0                      ; save low byte error
+000083r 2               
+000083r 2  24 FD           bit   SHADOW                 ; rom locked?
+000085r 2  50 03           bvc   not_locked_error
+000087r 2  4C rr rr        jmp   locked_error
+00008Ar 2               
+00008Ar 2               ; *** error with rom not locked ***
+00008Ar 2               
+00008Ar 2               not_locked_error:
+00008Ar 2  C9 5E           cmp   #94                    ; error 94?
+00008Cr 2  D0 11           bne   not_error_94
+00008Er 2               
+00008Er 2  A4 5E           ldy   $5e                    ; check if command is abreviated
+000090r 2  B1 05           lda   (5),y
+000092r 2  C9 2E           cmp   #'.'
+000094r 2  D0 03           bne   label99
+000096r 2  4C rr rr        jmp   not_found              ; command not found in roms, try table
+000099r 2               label99:
+000099r 2  A2 FF           ldx   #$ff                   ; reset STACKPOINTER
+00009Br 2  9A              txs
+00009Cr 2  4C rr rr        jmp   next_box               ; check next rom
+00009Fr 2               
+00009Fr 2               ; *** function check ***
+00009Fr 2               
+00009Fr 2               not_error_94:
+00009Fr 2  AD 00 04        lda   BRKLOW                 ; set breakpointer
+0000A2r 2  8D 02 02        sta   BRKVEC
+0000A5r 2  AD 01 04        lda   BRKHIGH
+0000A8r 2  8D 03 02        sta   BRKVEC+1
+0000ABr 2               
+0000ABr 2  A5 00           lda   0                      ; get error nr
+0000ADr 2  C9 AE           cmp   #174                   ; error 174?
+0000AFr 2  F0 04           beq   install
+0000B1r 2               
+0000B1r 2  C9 1D           cmp   #29                    ; error 29?
+0000B3r 2  D0 49           bne   not_install
+0000B5r 2               
+0000B5r 2               ; *** install fake caller ***
+0000B5r 2               
+0000B5r 2               install:
+0000B5r 2  BA              tsx                          ; save STACKPOINTER
+0000B6r 2  8E B7 04        stx   STACKPOINTER
+0000B9r 2               
+0000B9r 2  A2 FF           ldx   #$ff
+0000BBr 2               lb1:
+0000BBr 2  BD 00 01        lda   $100,x
+0000BEr 2  EC B7 04        cpx   STACKPOINTER
+0000C1r 2  90 3B           bcc   not_install
+0000C3r 2  F0 39           beq   not_install
+0000C5r 2               
+0000C5r 2  CA              dex
+0000C6r 2  CA              dex
+0000C7r 2  29 F0           and   #$f0
+0000C9r 2  C9 A0           cmp   #$a0
+0000CBr 2  F0 EE           beq   lb1
+0000CDr 2               
+0000CDr 2  E0 FD           cpx   #$fd                   ; no a-block?
+0000CFr 2  F0 2D           beq   not_install
+0000D1r 2               
+0000D1r 2  8A              txa
+0000D2r 2  18              clc
+0000D3r 2  69 03           adc   #3
+0000D5r 2  8D B7 04        sta   STACKPOINTER
+0000D8r 2  48              pha
+0000D9r 2  48              pha
+0000DAr 2  48              pha
+0000DBr 2  BA              tsx
+0000DCr 2               lb2:
+0000DCr 2  BD 03 01        lda   $103,x
+0000DFr 2  9D 00 01        sta   $100,x
+0000E2r 2  E8              inx
+0000E3r 2  EC B7 04        cpx   STACKPOINTER
+0000E6r 2  D0 F4           bne   lb2
+0000E8r 2               
+0000E8r 2  AD B7 04        lda   STACKPOINTER
+0000EBr 2  AA              tax
+0000ECr 2  CA              dex
+0000EDr 2  A5 FD           lda   SHADOW
+0000EFr 2  9D 00 01        sta   $100,x
+0000F2r 2  CA              dex
+0000F3r 2  A9 rr           lda   #>(switch_back-1)
+0000F5r 2  9D 00 01        sta   $100,x
+0000F8r 2  A9 rr           lda   #<(switch_back-1)
+0000FAr 2  CA              dex
+0000FBr 2  9D 00 01        sta   $100,x
+0000FEr 2               
+0000FEr 2               not_install:
+0000FEr 2  20 rr rr        jsr   switch_context_out     ; store zeropage
+000101r 2  20 rr rr        jsr   update_vectors         ; save vectors
+000104r 2               
+000104r 2  AD 02 04        lda   BRKROM                 ; set start rom nr
+000107r 2  85 FD           sta   SHADOW
+000109r 2  8D FF BF        sta   LATCH
+00010Cr 2               
+00010Cr 2  20 rr rr        jsr   switch_context_in      ; restore zeropage
+00010Fr 2               
+00010Fr 2               ; *** terminate search ***
+00010Fr 2               
+00010Fr 2  A5 00           lda   0                      ; get lb return address
+000111r 2  48              pha                          ; push on stack
+000112r 2  AD 04 04        lda   TEMP                   ; get hb return address
+000115r 2  48              pha                          ; push on stack
+000116r 2  6C 02 02        jmp   (BRKVEC)               ; return
+000119r 2               
+000119r 2               ; *** error with rom locked ***
+000119r 2               
+000119r 2               locked_error:
+000119r 2  A5 FD           lda   SHADOW                 ; set start rom nr
+00011Br 2  8D 02 04        sta   BRKROM
+00011Er 2               
+00011Er 2  A5 00           lda   0                      ; get error nr
+000120r 2  C9 5E           cmp   #94                    ; error 94?
+000122r 2  F0 03           beq   label3
+000124r 2  4C rr rr        jmp   not_error_94
+000127r 2               
+000127r 2               label3:
+000127r 2  A2 FF           ldx   #$ff                   ; reset STACKPOINTER
+000129r 2  9A              txs
+00012Ar 2  4C rr rr        jmp   not_found              ; command not found in roms, try table
+00012Dr 2               
+00012Dr 2               ; *** store zeropage (always #91-#98) ***
+00012Dr 2               
+00012Dr 2               switch_context_out:
+00012Dr 2  A5 FD           lda   SHADOW                 ; get rom nr
+00012Fr 2  29 0F           and   #$f                    ; filter to 0-15
+000131r 2  AA              tax
+000132r 2  E8              inx
+000133r 2               
+000133r 2  A9 00           lda   #0
+000135r 2               
+000135r 2               label4:
+000135r 2  18              clc                          ; dump pointer = romnr * ZPLENGTH-1
+000136r 2  69 10           adc   #ZPLENGTH
+000138r 2  CA              dex
+000139r 2  D0 FA           bne   label4
+00013Br 2               
+00013Br 2  A2 0F           ldx   #(ZPLENGTH-1)          ; set ZPBASE pointer
+00013Dr 2  A8              tay
+00013Er 2  88              dey
+00013Fr 2               
+00013Fr 2               label5:
+00013Fr 2  B5 90           lda   ZPBASE,x               ; save zeropage
+000141r 2  99 05 04        sta   DUMP,y
+000144r 2  88              dey
+000145r 2  CA              dex
+000146r 2  10 F7           bpl   label5
+000148r 2  60              rts
+000149r 2               
+000149r 2               ; *** restore zeropage (always #91-#98) ***
+000149r 2               
+000149r 2               switch_context_in:
+000149r 2  A5 FD           lda   SHADOW                 ; get rom nr
+00014Br 2  29 0F           and   #$f                    ; filter to 0-15
+00014Dr 2  AA              tax
+00014Er 2  E8              inx
+00014Fr 2               
+00014Fr 2  A9 00           lda   #0
+000151r 2               
+000151r 2               label6:
+000151r 2  18              clc                          ; dump pointer = romnr * ZPLENGTH-1
+000152r 2  69 10           adc   #ZPLENGTH
+000154r 2  CA              dex
+000155r 2  D0 FA           bne   label6
+000157r 2               
+000157r 2  A2 0F           ldx   #(ZPLENGTH-1)          ; set ZPBASE pointer
+000159r 2  A8              tay
+00015Ar 2  88              dey
+00015Br 2               
+00015Br 2               label7:
+00015Br 2  B9 05 04        lda   DUMP,y                 ; restore zeropage
+00015Er 2  95 90           sta   ZPBASE,x
+000160r 2  88              dey
+000161r 2  CA              dex
+000162r 2  10 F7           bpl   label7
+000164r 2  60              rts
+000165r 2               
+000165r 2               ; *** start search locked ***
+000165r 2               
+000165r 2               locked:
+000165r 2  AD 03 02        lda   BRKVEC+1               ; check if break handler switched
+000168r 2  C9 rr           cmp   #>handler
+00016Ar 2  F0 18           beq   label21
+00016Cr 2               
+00016Cr 2  8D 01 04        sta   BRKHIGH                ; if not, save break handler
+00016Fr 2  AD 02 02        lda   BRKVEC
+000172r 2  8D 00 04        sta   BRKLOW
+000175r 2               
+000175r 2  A9 rr           lda   #>handler              ; replace break handler
+000177r 2  8D 03 02        sta   BRKVEC+1
+00017Ar 2  A9 rr           lda   #<handler
+00017Cr 2  8D 02 02        sta   BRKVEC
+00017Fr 2               
+00017Fr 2  A5 FD           lda   SHADOW                 ; set start rom nr
+000181r 2  8D 02 04        sta   BRKROM
+000184r 2               
+000184r 2               label21:
+000184r 2  AD 00 A0        lda   $a000                  ; check if legal rom
+000187r 2  C9 40           cmp   #$40
+000189r 2  D0 0A           bne   trap_error
+00018Br 2  AD 01 A0        lda   $a001
+00018Er 2  C9 BF           cmp   #$bf
+000190r 2  D0 03           bne   trap_error
+000192r 2  4C 02 A0        jmp   $a002                  ; if legal, enter rom
+000195r 2               
+000195r 2               trap_error:
+000195r 2  4C 58 C5        jmp   $c558                  ; no legal rom, return
+000198r 2               
+000198r 2               ; *** not found in boxes ***
+000198r 2               ;     try own table
+000198r 2               ;     if not found in table
+000198r 2               ;     try by original BRKVEC
+000198r 2               
+000198r 2               not_found:
+000198r 2  AD 00 04        lda   BRKLOW                 ; reset break handler
+00019Br 2  8D 02 02        sta   BRKVEC
+00019Er 2  AD 01 04        lda   BRKHIGH
+0001A1r 2  8D 03 02        sta   BRKVEC+1
+0001A4r 2               
+0001A4r 2  20 rr rr        jsr   switch_context_out     ; store zeropage
+0001A7r 2               
+0001A7r 2  AD 02 04        lda   BRKROM                 ; reset rom nr
+0001AAr 2  85 FD           sta   SHADOW
+0001ACr 2  8D FF BF        sta   LATCH
+0001AFr 2               
+0001AFr 2  20 rr rr        jsr   switch_context_in      ; restore zeropage
+0001B2r 2  A2 FF           ldx   #$ff
+0001B4r 2               
+0001B4r 2               next_statement:
+0001B4r 2  A4 5E           ldy   $5e
+0001B6r 2  B1 05           lda   (5),y
+0001B8r 2  C9 2E           cmp   #'.'
+0001BAr 2  D0 03           bne   label54
+0001BCr 2               
+0001BCr 2               trap_error_94:
+0001BCr 2  4C 58 C5        jmp   $c558
+0001BFr 2               
+0001BFr 2               label54:
+0001BFr 2  88              dey
+0001C0r 2               
+0001C0r 2               next_char:
+0001C0r 2  E8              inx
+0001C1r 2  C8              iny
+0001C2r 2               
+0001C2r 2               label12:
+0001C2r 2  BD rr rr        lda   table,x
+0001C5r 2  C9 FF           cmp   #$ff
+0001C7r 2  F0 F3           beq   trap_error_94
+0001C9r 2               
+0001C9r 2               label15:
+0001C9r 2  C9 FE           cmp   #$fe
+0001CBr 2  F0 21           beq   label14
+0001CDr 2  D1 05           cmp   (5),y
+0001CFr 2  F0 EF           beq   next_char
+0001D1r 2  CA              dex
+0001D2r 2  B1 05           lda   (5),y
+0001D4r 2  C9 2E           cmp   #'.'
+0001D6r 2  F0 0D           beq   label100
+0001D8r 2               
+0001D8r 2               label13:
+0001D8r 2  E8              inx
+0001D9r 2  BD rr rr        lda   table,x
+0001DCr 2  C9 FE           cmp   #$fe
+0001DEr 2  D0 F8           bne   label13
+0001E0r 2  E8              inx
+0001E1r 2  E8              inx
+0001E2r 2  4C rr rr        jmp   next_statement
+0001E5r 2               
+0001E5r 2               label100:
+0001E5r 2  E8              inx
+0001E6r 2  BD rr rr        lda   table,x
+0001E9r 2  C9 FE           cmp   #$fe
+0001EBr 2  D0 F8           bne   label100
+0001EDr 2  C8              iny
+0001EEr 2               
+0001EEr 2               label14:
+0001EEr 2  BD rr rr        lda   table+1,x
+0001F1r 2  85 53           sta   $53
+0001F3r 2  BD rr rr        lda   table+2,x
+0001F6r 2  85 52           sta   $52
+0001F8r 2  84 03           sty   3
+0001FAr 2  A6 04           ldx   4
+0001FCr 2  6C 52 00        jmp   ($0052)
+0001FFr 2               
+0001FFr 2               ; *** own commands ***
+0001FFr 2               
+0001FFr 2               rom:
+0001FFr 2  20 E1 C4        jsr   $c4e1
+000202r 2  20 rr rr        jsr   update_vectors
+000205r 2  A6 04           ldx   4
+000207r 2  CA              dex
+000208r 2  86 04           stx   4
+00020Ar 2  B5 16           lda   $16,x
+00020Cr 2  29 0F           and   #$f
+00020Er 2  09 40           ora   #$40
+000210r 2  85 FD           sta   SHADOW
+000212r 2  8D FF BF        sta   LATCH
+000215r 2               
+000215r 2  AD 00 A0        lda   $a000
+000218r 2  C9 40           cmp   #$40
+00021Ar 2  D0 07           bne   label9
+00021Cr 2  AD 01 A0        lda   $a001
+00021Fr 2  C9 BF           cmp   #$bf
+000221r 2  F0 16           beq   label20
+000223r 2               
+000223r 2               label9:
+000223r 2  20 D1 F7        jsr   TEXT
+000226r 2  4E 4F 20 52     .byte "NO ROM AVAILABLE"
+00022Ar 2  4F 4D 20 41  
+00022Er 2  56 41 49 4C  
+000236r 2  0D 0A EA        .byte CR,LF,DELIM
+000239r 2               
+000239r 2               label20:
+000239r 2  AD 02 04        lda   BRKROM
+00023Cr 2  09 40           ora   #$40
+00023Er 2  C5 FD           cmp   SHADOW
+000240r 2  F0 0A           beq   label60
+000242r 2               
+000242r 2  A9 D8           lda   #$d8                   ; install original brk handler
+000244r 2  8D 02 02        sta   BRKVEC
+000247r 2  A9 C9           lda   #$c9
+000249r 2  8D 03 02        sta   BRKVEC+1
+00024Cr 2               
+00024Cr 2               label60:
+00024Cr 2  4C 5B C5        jmp   $c55b
+00024Fr 2               
+00024Fr 2               unlock:
+00024Fr 2  20 E4 C4        jsr   $c4e4
+000252r 2  A5 FD           lda   SHADOW
+000254r 2  29 0F           and   #$f
+000256r 2  85 FD           sta   SHADOW
+000258r 2  8D FF BF        sta   LATCH
+00025Br 2  4C 5B C5        jmp   $c55b
+00025Er 2               
+00025Er 2               ; *** table of commands ***
+00025Er 2               
+00025Er 2               table:
+00025Er 2  52 4F 4D FE     .byte "ROM",$fe
+000262r 2  rr rr           .byte >rom,<rom
+000264r 2  55 4E 4C 4F     .byte "UNLOCK",$fe
+000268r 2  43 4B FE     
+00026Br 2  rr rr           .byte >unlock,<unlock
+00026Dr 2               
+00026Dr 2  FF              .byte $ff
+00026Er 2               
+00026Er 2               ; *** check vectors ***
+00026Er 2               ; if vector point to #axxx,
+00026Er 2               ; save it with corresponding rom nr
+00026Er 2               ; and replace vector
+00026Er 2               
+00026Er 2               update_vectors:
+00026Er 2  08              php
+00026Fr 2  78              sei
+000270r 2               
+000270r 2  A2 00           ldx   #0                     ; reset pointers
+000272r 2  A0 00           ldy   #0
+000274r 2               
+000274r 2               label30:
+000274r 2  BD 01 02        lda   $201,x                 ; check if vector points to #axxx
+000277r 2  29 F0           and   #$f0
+000279r 2  C9 A0           cmp   #$a0
+00027Br 2  D0 25           bne   label31
+00027Dr 2  E0 02           cpx   #2                     ; skip brk vector
+00027Fr 2  F0 21           beq   label31
+000281r 2               
+000281r 2  BD 00 02        lda   $200,x                 ; save vector
+000284r 2  99 87 04        sta   VECTAB+1,y
+000287r 2  BD 01 02        lda   $201,x
+00028Ar 2  99 86 04        sta   VECTAB,y
+00028Dr 2  A5 FD           lda   SHADOW                 ; save rom nr
+00028Fr 2  99 88 04        sta   VECTAB+2,y
+000292r 2               
+000292r 2  8A              txa                          ; replace vector
+000293r 2  0A              asl   a
+000294r 2  0A              asl   a
+000295r 2  18              clc
+000296r 2  69 rr           adc   #<vecentry
+000298r 2  9D 00 02        sta   $200,x
+00029Br 2  A9 rr           lda   #>vecentry
+00029Dr 2  69 00           adc   #0
+00029Fr 2  9D 01 02        sta   $201,x
+0002A2r 2               
+0002A2r 2               label31:
+0002A2r 2  E8              inx                          ; point to next vector
+0002A3r 2  E8              inx
+0002A4r 2               
+0002A4r 2  C8              iny
+0002A5r 2  C8              iny
+0002A6r 2  C8              iny
+0002A7r 2               
+0002A7r 2  E0 1C           cpx   #$1c                   ; check end of vectors
+0002A9r 2  D0 C9           bne   label30
+0002ABr 2               
+0002ABr 2  AD FF 03        lda   $3ff                   ; check if plot vector points at #axxx (screen rom)
+0002AEr 2  29 F0           and   #$f0
+0002B0r 2  C9 A0           cmp   #$a0
+0002B2r 2  D0 1B           bne   label32
+0002B4r 2               
+0002B4r 2  AD FF 03        lda   $3ff                   ; save plot vector
+0002B7r 2  99 86 04        sta   VECTAB,y
+0002BAr 2  AD FE 03        lda   $3fe
+0002BDr 2  99 87 04        sta   VECTAB+1,y
+0002C0r 2  A9 rr           lda   #>(vecentry+14*8)      ; replace plot vector
+0002C2r 2  8D FF 03        sta   $3ff
+0002C5r 2  A9 rr           lda   #<(vecentry+14*8)
+0002C7r 2  8D FE 03        sta   $3fe
+0002CAr 2               
+0002CAr 2  A5 FD           lda   SHADOW                 ; save rom nr
+0002CCr 2  99 88 04        sta   VECTAB+2,y
+0002CFr 2               
+0002CFr 2               label32:
+0002CFr 2  28              plp
+0002D0r 2  60              rts
+0002D1r 2               
+0002D1r 2               ; *** entry vector pathways ***
+0002D1r 2               
+0002D1r 2               vecentry:
+0002D1r 2  20 rr rr        jsr   isave                  ; $200, nmi vector
+0002D4r 2  A2 00           ldx   #0
+0002D6r 2  4C rr rr        jmp   ijob
+0002D9r 2               
+0002D9r 2  EA              nop                          ; $202, brk vector
+0002DAr 2  EA              nop
+0002DBr 2  EA              nop
+0002DCr 2  EA              nop
+0002DDr 2  EA              nop
+0002DEr 2  4C 58 C5        jmp   $c558
+0002E1r 2               
+0002E1r 2  20 rr rr        jsr   isave                  ; $204, irq vector
+0002E4r 2  A2 06           ldx   #6
+0002E6r 2  4C rr rr        jmp   ijob
+0002E9r 2               
+0002E9r 2  20 rr rr        jsr   save                   ; $206, *com vector
+0002ECr 2  A2 09           ldx   #9
+0002EEr 2  4C rr rr        jmp   job
+0002F1r 2               
+0002F1r 2  20 rr rr        jsr   save                   ; $208, write vector
+0002F4r 2  A2 0C           ldx   #12
+0002F6r 2  4C rr rr        jmp   job
+0002F9r 2               
+0002F9r 2  20 rr rr        jsr   save                   ; $20a, read vector
+0002FCr 2  A2 0F           ldx   #15
+0002FEr 2  4C rr rr        jmp   job
+000301r 2               
+000301r 2  20 rr rr        jsr   save                   ; $20c, load vector
+000304r 2  A2 12           ldx   #18
+000306r 2  4C rr rr        jmp   job
+000309r 2               
+000309r 2  20 rr rr        jsr   save                   ; $20e, save vector
+00030Cr 2  A2 15           ldx   #21
+00030Er 2  4C rr rr        jmp   job
+000311r 2               
+000311r 2  20 rr rr        jsr   save                   ; $210,  vector
+000314r 2  A2 18           ldx   #24
+000316r 2  4C rr rr        jmp   job
+000319r 2               
+000319r 2  20 rr rr        jsr   save                   ; $212,  vector
+00031Cr 2  A2 1B           ldx   #27
+00031Er 2  4C rr rr        jmp   job
+000321r 2               
+000321r 2  20 rr rr        jsr   save                   ; $214, get byte vector
+000324r 2  A2 1E           ldx   #30
+000326r 2  4C rr rr        jmp   job
+000329r 2               
+000329r 2  20 rr rr        jsr   save                   ; $216, put byte vector
+00032Cr 2  A2 21           ldx   #33
+00032Er 2  4C rr rr        jmp   job
+000331r 2               
+000331r 2  20 rr rr        jsr   save                   ; $218, print message vector
+000334r 2  A2 24           ldx   #36
+000336r 2  4C rr rr        jmp   job
+000339r 2               
+000339r 2  20 rr rr        jsr   save                   ; $21a, shut vector
+00033Cr 2  A2 27           ldx   #39
+00033Er 2  4C rr rr        jmp   job
+000341r 2               
+000341r 2  20 rr rr        jsr   save                   ; $3ff, plot vector
+000344r 2  A2 2A           ldx   #42
+000346r 2  4C rr rr        jmp   job
+000349r 2               
+000349r 2               ; *** save normal processor/registers ***
+000349r 2               
+000349r 2               save:
+000349r 2  08              php                          ; save processor status
+00034Ar 2  8D B4 04        sta   SUB_ACCU               ; save accu
+00034Dr 2  68              pla
+00034Er 2  8D B5 04        sta   SUB_STATUS             ; save status
+000351r 2  8E B7 04        stx   SUB_X                  ; save x-reg
+000354r 2  8C B6 04        sty   SUB_Y                  ; save y-reg
+000357r 2  60              rts
+000358r 2               
+000358r 2               ; *** save interrupt processor/registers ***
+000358r 2               
+000358r 2               isave:
+000358r 2  08              php                          ; save processor status
+000359r 2  8D BC 04        sta   INT_ACCU               ; save accu
+00035Cr 2  68              pla
+00035Dr 2  8D BD 04        sta   INT_STATUS1            ; save status
+000360r 2  8E BF 04        stx   INT_X                  ; save x-reg
+000363r 2  8C C0 04        sty   INT_Y                  ; save y-reg
+000366r 2  60              rts
+000367r 2               
+000367r 2               ; *** reset normal processor/registers ***
+000367r 2               
+000367r 2               load:
+000367r 2  AC B6 04        ldy   SUB_Y                  ; reset y-reg
+00036Ar 2  AE B7 04        ldx   SUB_X                  ; reset x-reg
+00036Dr 2  AD B5 04        lda   SUB_STATUS             ; reset status
+000370r 2  48              pha
+000371r 2  AD B4 04        lda   SUB_ACCU               ; reset accu
+000374r 2  28              plp                          ; reset processor status
+000375r 2  60              rts
+000376r 2               
+000376r 2               ; *** reset interrupt processor/registers ***
+000376r 2               
+000376r 2               iload:
+000376r 2  AE BF 04        ldx   INT_X                  ; reset y-reg
+000379r 2  AC C0 04        ldy   INT_Y                  ; reset x-reg
+00037Cr 2  AD BD 04        lda   INT_STATUS1            ; reset status
+00037Fr 2  48              pha
+000380r 2  AD BC 04        lda   INT_ACCU               ; reset accu
+000383r 2  28              plp                          ; reset processor status
+000384r 2  60              rts
+000385r 2               
+000385r 2               ; *** interrupt switching pathway ***
+000385r 2               
+000385r 2               ijob:
+000385r 2  68              pla
+000386r 2  8D BC 04        sta   INT_ACCU
+000389r 2  68              pla
+00038Ar 2  48              pha
+00038Br 2  8D BE 04        sta   INT_STATUS2
+00038Er 2               
+00038Er 2  A5 FD           lda   SHADOW                 ; save rom nr
+000390r 2  48              pha
+000391r 2               
+000391r 2  BD 88 04        lda   VECTAB+2,x             ; reset rom nr
+000394r 2  85 FD           sta   SHADOW
+000396r 2  8D FF BF        sta   LATCH
+000399r 2               
+000399r 2  BD 86 04        lda   VECTAB,x               ; reset nmi/irq vector
+00039Cr 2  8D BB 04        sta   INTVECTOR+1
+00039Fr 2  BD 87 04        lda   VECTAB+1,x
+0003A2r 2  8D BA 04        sta   INTVECTOR
+0003A5r 2               
+0003A5r 2  A9 rr           lda   #>ientry               ; replace nmi/irq vector
+0003A7r 2  48              pha
+0003A8r 2  A9 rr           lda   #<ientry
+0003AAr 2  48              pha
+0003ABr 2  AD BE 04        lda   INT_STATUS2
+0003AEr 2  48              pha
+0003AFr 2  AD BC 04        lda   INT_ACCU
+0003B2r 2  48              pha
+0003B3r 2  20 rr rr        jsr   iload
+0003B6r 2  6C BA 04        jmp   (INTVECTOR)            ; jump interrupt vector
+0003B9r 2               
+0003B9r 2               
+0003B9r 2               ; *** nmi/irq entry ***
+0003B9r 2               
+0003B9r 2               ientry:
+0003B9r 2  20 rr rr        jsr   isave                  ; save processor/register values
+0003BCr 2  68              pla
+0003BDr 2  85 FD           sta   SHADOW
+0003BFr 2  8D FF BF        sta   LATCH
+0003C2r 2  28              plp
+0003C3r 2  AD BE 04        lda   INT_STATUS2
+0003C6r 2  48              pha
+0003C7r 2  20 rr rr        jsr   iload                  ; load processor/register values
+0003CAr 2  40              rti                          ; return from interrupt
+0003CBr 2               
+0003CBr 2               ; *** non interrupt switching pathway ***
+0003CBr 2               
+0003CBr 2               job:
+0003CBr 2  8E 04 04        stx   VECTOR
+0003CEr 2  8A              txa
+0003CFr 2  48              pha
+0003D0r 2               
+0003D0r 2  A5 60           lda   $60                    ; save option pcharm
+0003D2r 2  8D C1 04        sta   OPT_PCHARME            ;**!!**
+0003D5r 2               
+0003D5r 2  BD 88 04        lda   VECTAB+2,x
+0003D8r 2  C5 FD           cmp   SHADOW
+0003DAr 2  F0 6B           beq   short_execution
+0003DCr 2  E0 15           cpx   #21                    ; save file
+0003DEr 2  D0 06           bne   label40
+0003E0r 2               
+0003E0r 2  20 rr rr        jsr   update_vectors         ;**!!**
+0003E3r 2  AE 04 04        ldx   VECTOR
+0003E6r 2               
+0003E6r 2               label40:
+0003E6r 2  E0 1E           cpx   #30                    ; get byte
+0003E8r 2  F0 5D           beq   short_execution
+0003EAr 2  E0 21           cpx   #33                    ; put byte
+0003ECr 2  F0 59           beq   short_execution
+0003EEr 2  20 rr rr        jsr   switch_context_out     ; store zeropage
+0003F1r 2  AE 04 04        ldx   VECTOR
+0003F4r 2  A5 FD           lda   SHADOW
+0003F6r 2  48              pha
+0003F7r 2  BD 87 04        lda   VECTAB+1,x
+0003FAr 2  8D B8 04        sta   SUBVECTOR
+0003FDr 2  BD 86 04        lda   VECTAB,x
+000400r 2  8D B9 04        sta   SUBVECTOR+1
+000403r 2  BD 88 04        lda   VECTAB+2,x
+000406r 2  85 FD           sta   SHADOW
+000408r 2  8D FF BF        sta   LATCH
+00040Br 2  20 rr rr        jsr   switch_context_in      ; restore zeropage
+00040Er 2  20 rr rr        jsr   load
+000411r 2  20 rr rr        jsr   lb50
+000414r 2  4C rr rr        jmp   lb51
+000417r 2               
+000417r 2               lb50:
+000417r 2  6C B8 04        jmp   (SUBVECTOR)
+00041Ar 2               
+00041Ar 2               lb51:
+00041Ar 2  20 rr rr        jsr   save
+00041Dr 2  20 rr rr        jsr   switch_context_out     ; store zeropage
+000420r 2  68              pla
+000421r 2  85 FD           sta   SHADOW
+000423r 2  8D FF BF        sta   LATCH
+000426r 2  20 rr rr        jsr   switch_context_in      ; restore zeropage
+000429r 2               
+000429r 2  AD C1 04        lda   OPT_PCHARME            ;**!!**
+00042Cr 2  85 60           sta   $60
+00042Er 2               
+00042Er 2  68              pla
+00042Fr 2  C9 15           cmp   #21                    ; save file
+000431r 2  D0 11           bne   lb10
+000433r 2  AD 93 04        lda   VECTAB+13
+000436r 2  C9 CE           cmp   #$ce                   ; ed64 outchar?
+000438r 2  D0 0A           bne   lb10
+00043Ar 2               
+00043Ar 2  A9 CE           lda   #$ce                   ;**!!**
+00043Cr 2  8D 08 02        sta   $208
+00043Fr 2  A9 AC           lda   #$ac
+000441r 2  8D 09 02        sta   $209
+000444r 2               
+000444r 2               lb10:
+000444r 2  4C rr rr        jmp   load
+000447r 2               
+000447r 2               ; *** no swith pathway ***
+000447r 2               
+000447r 2               short_execution:
+000447r 2  68              pla
+000448r 2  AE 04 04        ldx   VECTOR
+00044Br 2  A5 FD           lda   SHADOW
+00044Dr 2  48              pha
+00044Er 2  BD 88 04        lda   VECTAB+2,x
+000451r 2  85 FD           sta   SHADOW
+000453r 2  8D FF BF        sta   LATCH
+000456r 2  BD 86 04        lda   VECTAB,x
+000459r 2  8D B9 04        sta   SUBVECTOR+1
+00045Cr 2  BD 87 04        lda   VECTAB+1,x
+00045Fr 2  8D B8 04        sta   SUBVECTOR
+000462r 2  20 rr rr        jsr   load
+000465r 2  20 rr rr        jsr   lb60
+000468r 2  4C rr rr        jmp   lb61
+00046Br 2               
+00046Br 2               lb60:
+00046Br 2  6C B8 04        jmp   (SUBVECTOR)
+00046Er 2               
+00046Er 2               lb61:
+00046Er 2  20 rr rr        jsr   save
+000471r 2  68              pla
+000472r 2  85 FD           sta   SHADOW
+000474r 2  8D FF BF        sta   LATCH
+000477r 2               
+000477r 2  AD C1 04        lda   OPT_PCHARME            ;**!!**
+00047Ar 2  85 60           sta   $60
+00047Cr 2  4C rr rr        jmp   load
+00047Fr 2               
+00047Fr 2               ; *** fake expression caller ***
+00047Fr 2               
+00047Fr 2               switch_back:
+00047Fr 2  20 rr rr        jsr   save
+000482r 2  20 rr rr        jsr   switch_context_out     ; store zeropage
+000485r 2  68              pla
+000486r 2  85 FD           sta   SHADOW
+000488r 2  8D FF BF        sta   LATCH
+00048Br 2  20 rr rr        jsr   switch_context_in      ; restore zeropage
+00048Er 2  A9 rr           lda   #>handler              ; reinit break handler
+000490r 2  8D 03 02        sta   BRKVEC+1
+000493r 2  A9 rr           lda   #<handler
+000495r 2  8D 02 02        sta   BRKVEC
+000498r 2  4C rr rr        jmp   load
+00049Br 2               
+00049Br 1               .endif
+00049Br 1               
+00049Br 1               .SEGMENT "WRMSTRT"
+000000r 1               
+000000r 1               warmstart:
+000000r 1  4C rr rr        jmp   installhooks2
+000003r 1               
+000003r 1               
+000003r 1               .SEGMENT "VSN"
+000000r 1               
+000000r 1               version:
+000000r 1  41 54 4F 4D     .byte "ATOMMC2 V3.00"
+000004r 1  4D 43 32 20  
+000008r 1  56 33 2E 30  
+00000Dr 1               .ifndef EOOO
+00000Dr 1                  .byte "A"
+00000Dr 1               .else
+00000Dr 1  45              .byte "E"
+00000Er 1               .endif
+00000Er 1  0D 0A           .byte $0d,$0a
+000010r 1               version_short:
+000010r 1  20 28 43 29     .byte " (C) 2008-2016  "
+000014r 1  20 32 30 30  
+000018r 1  38 2D 32 30  
+000020r 1  43 48 41 52     .byte "CHARLIE ROBSON. "
+000024r 1  4C 49 45 20  
+000028r 1  52 4F 42 53  
+000030r 1               version_long:
+000030r 1               
+000030r 1                  .end
