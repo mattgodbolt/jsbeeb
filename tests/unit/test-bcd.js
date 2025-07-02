@@ -1,5 +1,4 @@
-import { describe, it } from "vitest";
-import assert from "assert";
+import { describe, it, expect } from "vitest";
 
 import { fake65C12 } from "../../src/fake6502.js";
 
@@ -13,9 +12,9 @@ describe("BCD tests", function () {
         cpu.p.d = true;
         cpu.a = 0x90;
         cpu.sbc(0x0b);
-        assert.strictEqual(cpu.p.v, false, "Expected V clear");
-        assert.strictEqual(cpu.p.c, true, "Expected C set");
-        assert.strictEqual(cpu.a, 126);
+        expect(cpu.p.v).toBe(false);
+        expect(cpu.p.c).toBe(true);
+        expect(cpu.a).toBe(126);
     });
 
     it("handles 65c12sbc2", async function () {
@@ -24,8 +23,8 @@ describe("BCD tests", function () {
         cpu.p.d = true;
         cpu.a = 0x80;
         cpu.sbc(0x01);
-        assert.strictEqual(cpu.p.v, true, "Expected V set");
-        assert.strictEqual(cpu.p.c, true, "Expected C set");
-        assert.strictEqual(cpu.a, 120);
+        expect(cpu.p.v).toBe(true);
+        expect(cpu.p.c).toBe(true);
+        expect(cpu.a).toBe(120);
     });
 });

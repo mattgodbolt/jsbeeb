@@ -1,5 +1,4 @@
-import { describe, it } from "vitest";
-import assert from "assert";
+import { describe, it, expect } from "vitest";
 import * as Tokeniser from "../../src/basic-tokenise.js";
 const tokeniser = Tokeniser.create();
 
@@ -9,10 +8,10 @@ describe("Tokeniser", function () {
     async function check(text, expected) {
         try {
             const t = await tokeniser;
-            assert.strictEqual(t.tokenise(text), expected);
+            expect(t.tokenise(text)).toBe(expected);
         } catch (e) {
             console.log("Failed:", e);
-            assert.strictEqual(e, "");
+            expect(e).toBe("");
         }
     }
 
@@ -21,9 +20,9 @@ describe("Tokeniser", function () {
             const t = await tokeniser;
             t.tokenise(text);
             console.log("Failed to give exception with message:", expectedError);
-            assert.strictEqual(false, true);
+            expect.fail("Expected an exception to be thrown");
         } catch (e) {
-            assert.strictEqual(e.message, expectedError);
+            expect(e.message).toBe(expectedError);
         }
     }
 

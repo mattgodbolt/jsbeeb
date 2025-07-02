@@ -1,5 +1,4 @@
-import { describe, it } from "vitest";
-import assert from "assert";
+import { describe, it, expect } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
 import { IntelFdc } from "../../src/intel-fdc.js";
@@ -45,8 +44,8 @@ describe("Intel 8271 tests", function () {
         const fakeCpu = fake6502();
         const scheduler = new Scheduler();
         const fdc = new IntelFdc(fakeCpu, scheduler);
-        assert.equal(fdc.internalStatus, 0);
-        assert.equal(scheduler.headroom(), Scheduler.MaxHeadroom);
+        expect(fdc.internalStatus).toBe(0);
+        expect(scheduler.headroom()).toBe(Scheduler.MaxHeadroom);
     });
 
     it("should go busy as soon as a command is registered", () => {
@@ -54,7 +53,7 @@ describe("Intel 8271 tests", function () {
         const scheduler = new Scheduler();
         const fdc = new IntelFdc(fakeCpu, scheduler);
         fdc.write(0, 0x3a);
-        assert.equal(fdc.internalStatus, 0x80); // 0x80 = busy
+        expect(fdc.internalStatus).toBe(0x80); // 0x80 = busy
     });
 
     const loadHead = 0x08;
@@ -68,11 +67,11 @@ describe("Intel 8271 tests", function () {
         const scheduler = new Scheduler();
         const fakeDrive = new FakeDrive();
         const fdc = new IntelFdc(fakeCpu, scheduler, [fakeDrive]);
-        assert.equal(fdc._driveOut & loadHead, 0);
-        assert(!fakeDrive.spinning);
+        expect(fdc._driveOut & loadHead).toBe(0);
+        expect(fakeDrive.spinning).toBe(false);
         sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);
-        assert.equal(fdc._driveOut & loadHead, loadHead);
-        assert(fakeDrive.spinning);
+        expect(fdc._driveOut & loadHead).toBe(loadHead);
+        expect(fakeDrive.spinning).toBe(true);
     });
     it("should seek to a track", () => {
         const fakeCpu = fake6502();
@@ -82,13 +81,13 @@ describe("Intel 8271 tests", function () {
         sendCommand(fdc, writeRegCmd, mmioWrite, loadHead | select1);
         // nb will seek two more due to bad track nonsense
         sendCommand(fdc, seekCmd, 2);
-        assert.equal(fakeDrive.track, 1);
+        expect(fakeDrive.track).toBe(1);
         // We should have some 3ms step scheduled
-        assert.equal(scheduler.headroom(), 6000);
+        expect(scheduler.headroom()).toBe(6000);
         scheduler.polltime(6000);
-        assert.equal(fakeDrive.track, 2);
+        expect(fakeDrive.track).toBe(2);
         // We should reach and stop at track 4.
         scheduler.polltime(6000 * 10);
-        assert.equal(fakeDrive.track, 4);
+        expect(fakeDrive.track).toBe(4);
     });
 });
