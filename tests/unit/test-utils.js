@@ -87,7 +87,7 @@ describe("Utils tests", function () {
             const str = "Hello, world!";
             const arr = stringToUint8Array(str);
 
-            expect(arr instanceof Uint8Array).toBeTruthy();
+            expect(arr).toBeInstanceOf(Uint8Array);
             expect(arr.length).toBe(str.length);
             expect(uint8ArrayToString(arr)).toBe(str);
         });
@@ -96,7 +96,7 @@ describe("Utils tests", function () {
             const str = "";
             const arr = stringToUint8Array(str);
 
-            expect(arr instanceof Uint8Array).toBeTruthy();
+            expect(arr).toBeInstanceOf(Uint8Array);
             expect(arr.length).toBe(0);
             expect(uint8ArrayToString(arr)).toBe(str);
         });

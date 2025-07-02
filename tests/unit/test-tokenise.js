@@ -20,7 +20,7 @@ describe("Tokeniser", function () {
             const t = await tokeniser;
             t.tokenise(text);
             console.log("Failed to give exception with message:", expectedError);
-            expect(false).toBe(true);
+            expect.fail("Expected an exception to be thrown");
         } catch (e) {
             expect(e.message).toBe(expectedError);
         }
