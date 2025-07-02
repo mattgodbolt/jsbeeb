@@ -998,7 +998,7 @@ function unzipImage(data, knownExtensions) {
 
     let files;
     try {
-        files = unzipSync(new Uint8Array(data));
+        files = unzipSync(data instanceof Uint8Array ? data : new Uint8Array(data));
     } catch (e) {
         throw new Error("Error unzipping " + e.message);
     }
