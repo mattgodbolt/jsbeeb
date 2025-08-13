@@ -6,69 +6,95 @@ on:
 
 jobs:
   triage-issue:
-    # Always run on issue creation, regardless of @claude mention
-    if: github.event_name == 'issues'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       issues: write
-      id-token: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Run Claude Issue Triage
-        uses: anthropics/claude-code-action@beta
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Disable trigger phrase requirement for automatic triage
-          trigger_phrase: ""
-          additional_permissions: |
-            issues: write
-          custom_instructions: |
-            You're an issue triage assistant for GitHub issues. Your task is to analyze the issue and select appropriate labels from the provided list.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
 
-            IMPORTANT: If there's no ambiguity or error: do not post any comments or messages to the issue. Your only action should be to apply labels.
+      - name: Install GitHub MCP Server
+        run: |
+          claude mcp add-json github '{
+            "command": "docker",
+            "args": [
+              "run",
+              "-i",
+              "--rm",
+              "-e",
+              "GITHUB_PERSONAL_ACCESS_TOKEN",
+              "ghcr.io/github/github-mcp-server:sha-ff3036d"
+            ],
+            "env": {
+              "GITHUB_PERSONAL_ACCESS_TOKEN": "${{ secrets.GITHUB_TOKEN }}"
+            }
+          }'
 
-            TASK OVERVIEW:
+      - name: Create triage prompt
+        run: |
+          cat > /tmp/triage-prompt.txt << 'EOF'
+          You're an issue triage assistant for GitHub issues. Your task is to analyze the issue and select appropriate labels from the provided list.
 
-            1. First, fetch the list of labels available in this repository by running: `gh label list`. Run exactly this command with nothing else.
+          IMPORTANT: If there's no ambiguity or error: do not post any comments or messages to the issue. Your only action should be to apply labels.
 
-            2. Next, use the GitHub tools to get context about the issue:
-               - You have access to these tools:
-                 - mcp__github__get_issue: Use this to retrieve the current issue's details including title, description, and existing labels
-                 - mcp__github__get_issue_comments: Use this to read any discussion or additional context provided in the comments
-                 - mcp__github__update_issue: Use this to apply labels to the issue (do not use this for commenting)
-                 - mcp__github__search_issues: Use this to find similar issues that might provide context for proper categorization and to identify potential duplicate issues
-                 - mcp__github__list_issues: Use this to understand patterns in how other issues are labeled
-               - Start by using mcp__github__get_issue to get the issue details
+          Issue Information:
+          - REPO: ${{ github.repository }}
+          - ISSUE_NUMBER: ${{ github.event.issue.number }}
 
-            3. Analyze the issue content, considering:
-               - The issue title and description
-               - The type of issue (bug report, feature request, question, etc.)
-               - Technical areas mentioned
-               - Severity or priority indicators
-               - User impact
-               - Components affected
+          TASK OVERVIEW:
 
-            4. Select appropriate labels from the available labels list provided above:
-               - Choose labels that accurately reflect the issue's nature
-               - Be specific but comprehensive
-               - If you find similar issues using mcp__github__search_issues, consider using a "duplicate" label if appropriate. Only do so if the issue is a duplicate of another OPEN issue.
+          1. First, fetch the list of labels available in this repository by running: `gh label list`. Run exactly this command with nothing else.
 
-            5. Apply the selected labels:
-               - Use mcp__github__update_issue to apply your selected labels
-               - DO NOT post any comments explaining your decision
-               - DO NOT communicate directly with users other than @mattgodbolt
-               - If no labels are clearly applicable, do not apply any labels
+          2. Next, use the GitHub tools to get context about the issue:
+             - You have access to these tools:
+               - mcp__github__get_issue: Use this to retrieve the current issue's details including title, description and existing labels
+               - mcp__github__get_issue_comments: Use this to read any discussion or additional context provided in the comments
+               - mcp__github__update_issue: Use this to apply labels to the issue (do not use this for commenting)
+               - mcp__github__search_issues: Use this to find similar issues that might provide context for proper categorization and to identify potential duplicate issues
+               - mcp__github__list_issues: Use this to understand patterns in how other issues are labeled
+             - Start by using mcp__github__get_issue to get the issue details
 
-            IMPORTANT GUIDELINES:
-            - Be thorough in your analysis
-            - Only select labels from the provided list above
-            - DO NOT post any comments to the issue EXCEPT as defined below
-            - It's okay to not add any labels if none are clearly applicable
-            - If there's an issue understanding these instructions or you encounter an error, post a message and mark it `@mattgodbolt` for attention
-          allowed_tools: "Bash(gh label list),mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__update_issue,mcp__github__search_issues,mcp__github__list_issues"
+          3. Analyze the issue content, considering:
+             - The issue title and description
+             - The type of issue (bug report, feature request, question, etc.)
+             - Technical areas mentioned
+             - Severity or priority indicators
+             - User impact
+             - Components affected
+
+          4. Select appropriate labels from the available labels list provided above:
+             - Choose labels that accurately reflect the issue's nature
+             - Be specific but comprehensive
+             - If you find similar issues using mcp__github__search_issues, consider using a "duplicate" label if appropriate. Only do so if the issue is a duplicate of another OPEN issue.
+
+          5. Apply the selected labels:
+             - Use mcp__github__update_issue to apply your selected labels
+             - DO NOT post any comments explaining your decision
+             - DO NOT communicate directly with users other than @mattgodbolt
+             - If no labels are clearly applicable, do not apply any labels
+
+          IMPORTANT GUIDELINES:
+          - Be thorough in your analysis
+          - Only select labels from the provided list above
+          - DO NOT post any comments to the issue EXCEPT as defined below
+          - It's okay to not add any labels if none are clearly applicable
+          - If there's an issue understanding these instructions or you encounter an error, post a message and mark it `@mattgodbolt` for attention
+          EOF
+
+      - name: Run Claude Code
+        run: |
+          timeout 300 claude \
+            -p \
+            --verbose \
+            --allowedTools "Bash(gh label list),mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__update_issue,mcp__github__search_issues,mcp__github__list_issues" \
+            "$(cat /tmp/triage-prompt.txt)"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
