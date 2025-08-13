@@ -93,7 +93,7 @@ jobs:
           timeout 300 claude \
             --verbose \
             --allowedTools "Bash(gh label list),mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__update_issue,mcp__github__search_issues,mcp__github__list_issues" \
-            "$(cat /tmp/triage-prompt.txt)"
+            < /tmp/triage-prompt.txt
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
