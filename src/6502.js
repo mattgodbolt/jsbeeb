@@ -1168,14 +1168,42 @@ export class Cpu6502 extends Base6502 {
             this.acia.reset();
             this.serial.reset();
             this.ddNoise.spinDown();
+
+            // Preserve loaded discs across FDC reset
+            const savedDiscs = [];
+            for (let i = 0; i < this.fdc.drives.length; i++) {
+                savedDiscs[i] = this.fdc.drives[i].disc;
+            }
+
             this.fdc.powerOnReset();
+
+            // Restore the preserved discs
+            for (let i = 0; i < savedDiscs.length; i++) {
+                if (savedDiscs[i]) {
+                    this.fdc.loadDisc(i, savedDiscs[i]);
+                }
+            }
+
             this.adconverter.reset();
 
             this.touchScreen = new TouchScreen(this.scheduler);
             if (this.model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
             if (this.econet) this.filestore = new Filestore(this, this.econet);
         } else {
+            // Preserve loaded discs across FDC reset
+            const savedDiscs = [];
+            for (let i = 0; i < this.fdc.drives.length; i++) {
+                savedDiscs[i] = this.fdc.drives[i].disc;
+            }
+
             this.fdc.reset();
+
+            // Restore the preserved discs
+            for (let i = 0; i < savedDiscs.length; i++) {
+                if (savedDiscs[i]) {
+                    this.fdc.loadDisc(i, savedDiscs[i]);
+                }
+            }
         }
         this.tube.reset(hard);
         if (hard) {
