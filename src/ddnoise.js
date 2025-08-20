@@ -1,23 +1,16 @@
 "use strict";
-import * as utils from "./utils.js";
+import { loadSounds, BaseAudioNoise } from "./audio-utils.js";
 import _ from "underscore";
 
 const IDLE = 0;
 const SPIN_UP = 1;
 const SPINNING = 2;
-const VOLUME = 0.25;
 
-export class DdNoise {
+export class DdNoise extends BaseAudioNoise {
     constructor(context) {
-        this.context = context;
-        this.sounds = {};
+        super(context, 0.25);
         this.state = IDLE;
         this.motor = null;
-        this.gain = context.createGain();
-        this.gain.gain.value = VOLUME;
-        this.gain.connect(context.destination);
-        // workaround for older safaris that GC sounds when they're playing...
-        this.playing = [];
     }
     async initialise() {
         const sounds = await loadSounds(this.context, {
@@ -30,16 +23,6 @@ export class DdNoise {
             seek3: "sounds/disc525/seek3.wav",
         });
         this.sounds = sounds;
-    }
-    oneShot(sound) {
-        const duration = sound.duration;
-        const context = this.context;
-        if (context.state !== "running") return duration;
-        const source = context.createBufferSource();
-        source.buffer = sound;
-        source.connect(this.gain);
-        source.start();
-        return duration;
     }
     play(sound, loop) {
         if (this.context.state !== "running") return Promise.reject();
@@ -94,33 +77,6 @@ export class DdNoise {
         else if (diff <= 40) return this.oneShot(this.sounds.seek2);
         else return this.oneShot(this.sounds.seek3);
     }
-    mute() {
-        this.gain.gain.value = 0;
-    }
-    unmute() {
-        this.gain.gain.value = VOLUME;
-    }
-}
-
-async function loadSounds(context, sounds) {
-    const loaded = await Promise.all(
-        _.map(sounds, async (sound) => {
-            // Safari doesn't support the Promise stuff directly, so we create
-            // our own Promise here.
-            const data = await utils.loadData(sound);
-            return await new Promise((resolve) => {
-                context.decodeAudioData(data.buffer, (decodedData) => {
-                    resolve(decodedData);
-                });
-            });
-        }),
-    );
-    const keys = _.keys(sounds);
-    const result = {};
-    for (let i = 0; i < keys.length; ++i) {
-        result[keys[i]] = loaded[i];
-    }
-    return result;
 }
 
 export class FakeDdNoise {

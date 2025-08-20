@@ -2,9 +2,7 @@
 import * as utils from "./utils.js";
 import _ from "underscore";
 
-const VOLUME = 0.25;
-
-async function loadSounds(context, sounds) {
+export async function loadSounds(context, sounds) {
     const loaded = await Promise.all(
         _.map(sounds, async (sound) => {
             // Safari doesn't support the Promise stuff directly, so we create
@@ -25,23 +23,16 @@ async function loadSounds(context, sounds) {
     return result;
 }
 
-export class TapeNoise {
-    constructor(context) {
+export class BaseAudioNoise {
+    constructor(context, volume = 0.25) {
         this.context = context;
         this.sounds = {};
         this.gain = context.createGain();
-        this.gain.gain.value = VOLUME;
+        this.gain.gain.value = volume;
         this.gain.connect(context.destination);
         // workaround for older safaris that GC sounds when they're playing...
         this.playing = [];
-    }
-
-    async initialise() {
-        const sounds = await loadSounds(this.context, {
-            motorOn: "sounds/tape/motor_on.wav",
-            motorOff: "sounds/tape/motor_off.wav",
-        });
-        this.sounds = sounds;
+        this.volume = volume;
     }
 
     oneShot(sound) {
@@ -55,34 +46,11 @@ export class TapeNoise {
         return duration;
     }
 
-    motorOn() {
-        if (this.sounds.motorOn) {
-            this.oneShot(this.sounds.motorOn);
-        }
-    }
-
-    motorOff() {
-        if (this.sounds.motorOff) {
-            this.oneShot(this.sounds.motorOff);
-        }
-    }
-
     mute() {
         this.gain.gain.value = 0;
     }
 
     unmute() {
-        this.gain.gain.value = VOLUME;
+        this.gain.gain.value = this.volume;
     }
-}
-
-export class FakeTapeNoise {
-    constructor() {}
-    initialise() {
-        return Promise.resolve();
-    }
-    motorOn() {}
-    motorOff() {}
-    mute() {}
-    unmute() {}
 }

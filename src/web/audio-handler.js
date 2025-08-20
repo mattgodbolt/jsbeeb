@@ -1,7 +1,7 @@
 import { SmoothieChart, TimeSeries } from "smoothie";
 import { FakeSoundChip, SoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
-import { TapeNoise, FakeTapeNoise } from "../tapenoise.js";
+import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
 
 // Using this approach means when jsbeeb is embedded in other projects, vite doesn't have a fit.
@@ -36,7 +36,7 @@ export class AudioHandler {
             this.audioContext.onstatechange = () => this.checkStatus();
             this.soundChip = new SoundChip((buffer, time) => this._onBuffer(buffer, time));
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext);
-            this.tapeNoise = new TapeNoise(this.audioContext);
+            this.relayNoise = new RelayNoise(this.audioContext);
             this._setup(audioFilterFreq, audioFilterQ).then();
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
@@ -54,7 +54,7 @@ export class AudioHandler {
             }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
-            this.tapeNoise = new FakeTapeNoise();
+            this.relayNoise = new FakeRelayNoise();
         }
 
         this.warningNode.on("mousedown", () => this.tryResume());
@@ -135,18 +135,18 @@ export class AudioHandler {
 
     async initialise() {
         await this.ddNoise.initialise();
-        await this.tapeNoise.initialise();
+        await this.relayNoise.initialise();
     }
 
     mute() {
         this.soundChip.mute();
         this.ddNoise.mute();
-        this.tapeNoise.mute();
+        this.relayNoise.mute();
     }
 
     unmute() {
         this.soundChip.unmute();
         this.ddNoise.unmute();
-        this.tapeNoise.unmute();
+        this.relayNoise.unmute();
     }
 }

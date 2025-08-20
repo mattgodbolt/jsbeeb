@@ -5,7 +5,7 @@ import { FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
 import { findModel, TEST_6502, TEST_65C02, TEST_65C12 } from "./models.js";
 import { FakeDdNoise } from "./ddnoise.js";
-import { FakeTapeNoise } from "./tapenoise.js";
+import { FakeRelayNoise } from "./relaynoise.js";
 import { Cpu6502 } from "./6502.js";
 import { Cmos } from "./cmos.js";
 import { FakeMusic5000 } from "./music5000.js";
@@ -27,7 +27,7 @@ export function fake6502(model, opts) {
         video,
         soundChip,
         new FakeDdNoise(),
-        new FakeTapeNoise(),
+        new FakeRelayNoise(),
         new FakeMusic5000(),
         new Cmos(),
     );

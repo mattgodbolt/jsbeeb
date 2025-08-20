@@ -569,7 +569,7 @@ function is1MHzAccess(addr) {
 }
 
 export class Cpu6502 extends Base6502 {
-    constructor(model, dbgr, video_, soundChip_, ddNoise_, tapeNoise_, music5000_, cmos, config, econet_) {
+    constructor(model, dbgr, video_, soundChip_, ddNoise_, relayNoise_, music5000_, cmos, config, econet_) {
         super(model);
         this.config = fixUpConfig(config);
         this.debugFlags = this.config.debugFlags;
@@ -582,7 +582,7 @@ export class Cpu6502 extends Base6502 {
         this.soundChip = soundChip_;
         this.music5000 = music5000_;
         this.ddNoise = ddNoise_;
-        this.tapeNoise = tapeNoise_;
+        this.relayNoise = relayNoise_;
         this.memStatOffsetByIFetchBank = 0;
         this.memStatOffset = 0;
         this.memStat = new Uint8Array(512);
@@ -631,7 +631,7 @@ export class Cpu6502 extends Base6502 {
             this.config.getGamepads,
         );
         this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
-        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen, this.tapeNoise);
+        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen, this.relayNoise);
         this.serial = new Serial(this.acia);
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.soundChip.setScheduler(this.scheduler);

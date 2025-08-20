@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { TapeNoise, FakeTapeNoise } from "../../src/tapenoise.js";
+import { RelayNoise, FakeRelayNoise } from "../../src/relaynoise.js";
 
-describe("TapeNoise", () => {
+describe("RelayNoise", () => {
     let mockContext;
-    let tapeNoise;
+    let relayNoise;
 
     beforeEach(() => {
         mockContext = {
@@ -31,67 +31,67 @@ describe("TapeNoise", () => {
             }),
         );
 
-        tapeNoise = new TapeNoise(mockContext);
+        relayNoise = new RelayNoise(mockContext);
     });
 
     afterEach(() => {
         vi.restoreAllMocks();
     });
 
-    describe("TapeNoise class", () => {
+    describe("RelayNoise class", () => {
         it("should create gain node and connect to destination", () => {
             expect(mockContext.createGain).toHaveBeenCalled();
         });
 
         it("should initialize with sound files", async () => {
-            await tapeNoise.initialise();
-            expect(tapeNoise.sounds).toBeDefined();
+            await relayNoise.initialise();
+            expect(relayNoise.sounds).toBeDefined();
         });
 
         it("should play motor on sound when motorOn is called", () => {
             const mockSound = { duration: 0.05 };
-            tapeNoise.sounds = { motorOn: mockSound };
+            relayNoise.sounds = { motorOn: mockSound };
 
-            tapeNoise.motorOn();
+            relayNoise.motorOn();
 
             expect(mockContext.createBufferSource).toHaveBeenCalled();
         });
 
         it("should play motor off sound when motorOff is called", () => {
             const mockSound = { duration: 0.05 };
-            tapeNoise.sounds = { motorOff: mockSound };
+            relayNoise.sounds = { motorOff: mockSound };
 
-            tapeNoise.motorOff();
+            relayNoise.motorOff();
 
             expect(mockContext.createBufferSource).toHaveBeenCalled();
         });
 
         it("should handle mute/unmute", () => {
             const mockGain = { gain: { value: 0.25 } };
-            tapeNoise.gain = mockGain;
+            relayNoise.gain = mockGain;
 
-            tapeNoise.mute();
+            relayNoise.mute();
             expect(mockGain.gain.value).toBe(0);
 
-            tapeNoise.unmute();
+            relayNoise.unmute();
             expect(mockGain.gain.value).toBe(0.25);
         });
     });
 
-    describe("FakeTapeNoise class", () => {
+    describe("FakeRelayNoise class", () => {
         it("should create fake implementation", () => {
-            const fakeTapeNoise = new FakeTapeNoise();
+            const fakeRelayNoise = new FakeRelayNoise();
 
-            expect(() => fakeTapeNoise.initialise()).not.toThrow();
-            expect(() => fakeTapeNoise.motorOn()).not.toThrow();
-            expect(() => fakeTapeNoise.motorOff()).not.toThrow();
-            expect(() => fakeTapeNoise.mute()).not.toThrow();
-            expect(() => fakeTapeNoise.unmute()).not.toThrow();
+            expect(() => fakeRelayNoise.initialise()).not.toThrow();
+            expect(() => fakeRelayNoise.motorOn()).not.toThrow();
+            expect(() => fakeRelayNoise.motorOff()).not.toThrow();
+            expect(() => fakeRelayNoise.mute()).not.toThrow();
+            expect(() => fakeRelayNoise.unmute()).not.toThrow();
         });
 
         it("should return resolved promise for initialise", async () => {
-            const fakeTapeNoise = new FakeTapeNoise();
-            const result = await fakeTapeNoise.initialise();
+            const fakeRelayNoise = new FakeRelayNoise();
+            const result = await fakeRelayNoise.initialise();
             expect(result).toBeUndefined();
         });
     });
