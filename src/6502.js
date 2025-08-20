@@ -1128,24 +1128,6 @@ export class Cpu6502 extends Base6502 {
         this.resetLine = !resetOn;
     }
 
-    _resetFdcWithDiscPreservation(resetFn) {
-        // Preserve loaded discs across FDC reset
-        const savedDiscs = [];
-        for (let i = 0; i < this.fdc.drives.length; i++) {
-            savedDiscs[i] = this.fdc.drives[i].disc;
-        }
-
-        // Perform FDC reset
-        resetFn();
-
-        // Restore the preserved discs
-        for (let i = 0; i < savedDiscs.length; i++) {
-            if (savedDiscs[i]) {
-                this.fdc.loadDisc(i, savedDiscs[i]);
-            }
-        }
-    }
-
     reset(hard) {
         if (hard) {
             // On the Master, opcodes executing from 0xc000 - 0xdfff can optionally have their memory accesses
@@ -1187,7 +1169,7 @@ export class Cpu6502 extends Base6502 {
             this.serial.reset();
             this.ddNoise.spinDown();
 
-            this._resetFdcWithDiscPreservation(() => this.fdc.powerOnReset());
+            this.fdc.powerOnReset();
 
             this.adconverter.reset();
 
@@ -1195,7 +1177,7 @@ export class Cpu6502 extends Base6502 {
             if (this.model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
             if (this.econet) this.filestore = new Filestore(this, this.econet);
         } else {
-            this._resetFdcWithDiscPreservation(() => this.fdc.reset());
+            this.fdc.reset();
         }
         this.tube.reset(hard);
         if (hard) {

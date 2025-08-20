@@ -348,6 +348,12 @@ export class IntelFdc {
     }
 
     powerOnReset() {
+        // Preserve loaded discs across power-on reset
+        const savedDiscs = [];
+        for (let i = 0; i < this._drives.length; i++) {
+            savedDiscs[i] = this._drives[i].disc;
+        }
+
         // The reset line does most things.
         this.reset();
         this._regs.fill(0);
@@ -356,9 +362,22 @@ export class IntelFdc {
         this._mmioClocks = 0;
         this._stateCount = 0;
         this._stateIsIndexPulse = false;
+
+        // Restore the preserved discs
+        for (let i = 0; i < savedDiscs.length; i++) {
+            if (savedDiscs[i]) {
+                this.loadDisc(i, savedDiscs[i]);
+            }
+        }
     }
 
     reset() {
+        // Preserve loaded discs across reset
+        const savedDiscs = [];
+        for (let i = 0; i < this._drives.length; i++) {
+            savedDiscs[i] = this._drives[i].disc;
+        }
+
         // Abort any in-progress command.
         this._commandAbort();
         this._clearCallbacks();
@@ -366,6 +385,13 @@ export class IntelFdc {
         this._setDriveOut(0);
         // On a real machine, status appears to be cleared but result and data not.
         this._statusLower(this.internalStatus);
+
+        // Restore the preserved discs
+        for (let i = 0; i < savedDiscs.length; i++) {
+            if (savedDiscs[i]) {
+                this.loadDisc(i, savedDiscs[i]);
+            }
+        }
     }
 
     get internalStatus() {
