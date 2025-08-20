@@ -1168,9 +1168,7 @@ export class Cpu6502 extends Base6502 {
             this.acia.reset();
             this.serial.reset();
             this.ddNoise.spinDown();
-
             this.fdc.powerOnReset();
-
             this.adconverter.reset();
 
             this.touchScreen = new TouchScreen(this.scheduler);
