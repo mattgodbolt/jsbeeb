@@ -1,5 +1,6 @@
 "use strict";
 import * as utils from "./utils.js";
+import * as utils_atom from "./utils_atom.js";
 import EventEmitter from "event-emitter-es6";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
@@ -40,6 +41,12 @@ export class Keyboard extends EventEmitter {
         this.lastShiftLocation = 1;
         this.lastCtrlLocation = 1;
         this.lastAltLocation = 1;
+
+        // set up for BBC or Atom
+        this.interfaceAdaptor = this.processor.sysvia;
+        if (this.processor.model !== undefined && this.processor.model.isAtom) {
+            this.interfaceAdaptor = this.processor.atomppia;
+        }
     }
 
     /**
@@ -127,7 +134,7 @@ export class Keyboard extends EventEmitter {
      */
     setKeyLayout(layout) {
         this.keyLayout = layout;
-        this.processor.sysvia.setKeyLayout(layout);
+        this.interfaceAdaptor.setKeyLayout(layout);
     }
 
     /**
@@ -215,7 +222,7 @@ export class Keyboard extends EventEmitter {
         if (isSpecialHandled) return;
 
         // Always pass the key to the BBC Micro (unless it was a special key)
-        this.processor.sysvia.keyDown(code, evt.shiftKey);
+        this.interfaceAdaptor.keyDown(code, evt.shiftKey);
 
         // Check for registered handlers
         const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
@@ -254,7 +261,7 @@ export class Keyboard extends EventEmitter {
 
         // Always let the key ups come through to avoid sticky keys in the debugger
         const code = this.keyCode(evt);
-        this.processor.sysvia.keyUp(code);
+        this.interfaceAdaptor.keyUp(code);
 
         // No further special handling needed if not running
         if (!this.running) return;
@@ -287,10 +294,10 @@ export class Keyboard extends EventEmitter {
 
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
-        this.processor.sysvia.keyDown(utils.keyCodes.CAPSLOCK);
+        this.interfaceAdaptor.keyDown(utils.keyCodes.CAPSLOCK);
 
         // Simulate a key release after a short delay
-        setTimeout(() => this.processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
+        setTimeout(() => this.interfaceAdaptor.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (isMac && window.localStorage && !window.localStorage.getItem("warnedAboutRubbishMacs")) {
             this.emit("showError", {
@@ -311,15 +318,16 @@ export class Keyboard extends EventEmitter {
      * @param {boolean} checkCapsAndShiftLocks - Whether to check caps and shift locks
      */
     sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
+        let debounceTime = 30;
         let lastChar;
         let nextKeyMillis = 0;
-        this.processor.sysvia.disableKeyboard();
+        this.interfaceAdaptor.disableKeyboard();
         const clocksPerSecond = Math.floor(this.processor.cpuMultiplier * 2000000);
 
-        if (checkCapsAndShiftLocks) {
+        if (checkCapsAndShiftLocks && !this.processor.model.isAtom) {
             let toggleKey = null;
-            if (!this.processor.sysvia.capsLockLight) toggleKey = utils.BBC.CAPSLOCK;
-            else if (this.processor.sysvia.shiftLockLight) toggleKey = utils.BBC.SHIFTLOCK;
+            if (!this.interfaceAdaptor.capsLockLight) toggleKey = utils.BBC.CAPSLOCK;
+            else if (this.interfaceAdaptor.shiftLockLight) toggleKey = utils.BBC.SHIFTLOCK;
             if (toggleKey) {
                 keysToSend.unshift(toggleKey);
                 keysToSend.push(toggleKey);
@@ -332,13 +340,25 @@ export class Keyboard extends EventEmitter {
                 return;
             }
 
-            if (lastChar && lastChar !== utils.BBC.SHIFT) {
-                this.processor.sysvia.keyToggleRaw(lastChar);
+            if (this.processor.model.isAtom) {
+                if (lastChar && lastChar !== utils_atom.ATOM.SHIFT) {
+                    // console.log("<"+lastChar+"> "+millis);
+                    this.processor.atomppia.keyToggleRaw(lastChar);
+
+                    //debounce every key on atom
+                    lastChar = undefined;
+                    nextKeyMillis = millis + debounceTime;
+                    return;
+                }
+            } else {
+                if (lastChar && lastChar !== utils.BBC.SHIFT) {
+                    this.interfaceAdaptor.keyToggleRaw(lastChar);
+                }
             }
 
             if (keysToSend.length === 0) {
                 // Finished
-                this.processor.sysvia.enableKeyboard();
+                this.interfaceAdaptor.enableKeyboard();
                 sendCharHook.remove();
                 return;
             }
@@ -348,7 +368,7 @@ export class Keyboard extends EventEmitter {
             lastChar = ch;
             if (debounce) {
                 lastChar = undefined;
-                nextKeyMillis = millis + 30;
+                nextKeyMillis = millis + debounceTime;
                 return;
             }
 
@@ -357,7 +377,7 @@ export class Keyboard extends EventEmitter {
                 time = lastChar;
                 lastChar = undefined;
             } else {
-                this.processor.sysvia.keyToggleRaw(lastChar);
+                this.interfaceAdaptor.keyToggleRaw(lastChar);
             }
 
             // remove first character
@@ -371,7 +391,7 @@ export class Keyboard extends EventEmitter {
      * Clears all pressed keys
      */
     clearKeys() {
-        this.processor.sysvia.clearKeys();
+        this.interfaceAdaptor.clearKeys();
     }
 
     /**
