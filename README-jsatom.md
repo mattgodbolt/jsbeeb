@@ -53,7 +53,7 @@ Unsupported.
 
 1. Clone the repository:
    ```sh
-   git clone https://github.com/mattgodbolt/jsbeeb.git
+   git clone https://github.com/CommanderCoder/jsbeeb.git
    cd jsbeeb
    ```
 2. Install dependencies:
