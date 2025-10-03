@@ -363,3 +363,76 @@ div.smoothie-chart-tooltip {
   font-size: 10px;
   pointer-events: none;
 }
+
+/* // ATOM */
+
+#nec-tv {
+  position: relative;
+  margin-left: auto;
+  margin-right: auto;
+  width: 1023px;
+  height: 668px;
+}
+
+#nec-tv-pic {
+  position: absolute;
+}
+
+#nec-tv-screen {
+  position: absolute;
+  z-index: -1;
+  top: 32px;
+  left: 0;
+  display: block;
+  width: 830px;
+  height: 622px;
+}
+
+#cas-controls {
+  box-shadow: 3px 3px 5px #000;
+  border-radius: 6px;
+  border: 1px solid #555555;
+  background-color: #ffffff;
+  margin: 2px;
+  padding: 2px;
+  font-size: 8pt;
+  bottom: 0;
+  right: 0;
+  position: fixed;
+}
+
+.cas.button {
+  color: #dddddd;
+  border: 1px solid #666666;
+  border-radius: 2px;
+  padding: 2px;
+  background-color: #000;
+  box-shadow: 2px 2px 1px #888888;
+  display: inline-block;
+  min-width: 2em;
+  min-height: 2em;
+}
+
+.cas.counter {
+  height: auto;
+  border: none;
+  background-color: #555555;
+  max-width: 290px;
+  vertical-align: center;
+  padding-top: 12px;
+  padding-left: 10px;
+  align-content: center;
+}
+.cas.counter.num_tiles {
+  width: 30px;
+  height: 30px;
+  background-color: #888888;
+  color: #ffffff;
+  font-size: 22px;
+  text-align: center;
+  line-height: 20px;
+  padding: 3px;
+  margin: 1.5px;
+  font-family: verdana;
+  vertical-align: center;
+}
