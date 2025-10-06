@@ -15,6 +15,7 @@ import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
 import { loadTape, loadTapeFromData } from "./tapes.js";
 import { GoogleDriveLoader } from "./google-drive.js";
+import { saveState, restoreState } from "./state.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
@@ -1354,6 +1355,58 @@ $("#download-mmczip-link").on("click", async function () {
     const data = await mmc.toMMCZipAsync(mmcdata);
 
     downloadDriveData(data, "atommc", ".zip");
+});
+
+// Save/Load emulator state
+$("#save-state-link").on("click", async function (e) {
+    e.preventDefault();
+    try {
+        const blob = await saveState(processor);
+        const a = document.createElement("a");
+        const url = window.URL.createObjectURL(blob);
+        const now = new Date();
+        const filename = `jsbeeb-state-${now.toISOString().replace(/[:.]/g, "-")}.json`;
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error("Failed to save state:", err);
+        showError("save state", err);
+    }
+});
+
+$("#load-state-link").on("click", function (e) {
+    e.preventDefault();
+    // Trigger hidden file input
+    const input = document.getElementById("state-load-input");
+    if (input) input.click();
+});
+
+$("#state-load-input").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
+    const file = evt.target.files[0];
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+        try {
+            const json = JSON.parse(e.target.result);
+            await restoreState(processor, json);
+            // After restoring, force a redraw and resume paused state if needed
+            if (!running) {
+                // leave paused
+            } else {
+                // continue running
+            }
+        } catch (err) {
+            console.error("Failed to restore state:", err);
+            showError("restore state", err);
+        }
+    };
+    reader.readAsText(file);
+    // clear value so same file can be selected again
+    evt.target.value = "";
 });
 
 $("#empty-mmc-link").on("click", async function () {

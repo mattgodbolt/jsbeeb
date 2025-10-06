@@ -191,6 +191,12 @@
                     About jsbeeb</a
                   >
                 </li>
+                <li>
+                  <a href="#" class="dropdown-item" id="save-state-link">Save state</a>
+                </li>
+                <li>
+                  <a href="#" class="dropdown-item" id="load-state-link">Load state</a>
+                </li>
                 <span id="jsatom-menu" class="initially-hidden">
                   <li class="dropdown-divider"></li>
                   <li class="dropdown-header">Acorn Atom</li>
@@ -257,6 +263,9 @@
         </div>
       </div>
     </nav>
+
+    <!-- Hidden file input used to load saved emulator state -->
+    <input id="state-load-input" type="file" accept="application/json" style="display: none" />
 
     <div id="audio-warning" class="alert alert-warning initially-hidden">
       Your browser has suspended audio -- mouse click or key press for sound.
