@@ -320,6 +320,9 @@ class WFN {
         this.seekpos = 0;
         this.WildPattern = ".*"; // Default wildcard pattern (for regex not ATOM)
 
+        /**
+         * @type {WFNFile[]}
+         */
         this.allfiles = [];
     }
 

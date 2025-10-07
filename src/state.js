@@ -1,5 +1,6 @@
 import * as utils from "./utils.js";
 import * as disc from "./disc.js";
+import { findModel } from "./models.js";
 
 // Helper to convert Uint8Array to base64 string for JSON transport
 function uint8ToB64(u8) {
@@ -85,9 +86,24 @@ export async function saveState(processor) {
     // ATOM MMC
     try {
         if (processor.atommc && processor.atommc.GetMMCData) {
-            const mmcdata = processor.atommc.GetMMCData();
-            // mmcdata may be an Array/Uint8Array
-            state.mmc = uint8ToB64(new Uint8Array(mmcdata));
+            const u = processor.atommc.GetMMCData();
+            // u is array of WFNFiles - for very large arrays, serialize each entry individually to avoid string size limits
+            // Each entry is JSON-stringified, encoded as Uint8Array, then base64-encoded
+            state.mmc = u.map((entry) => {
+                // display the name and the size of the entry
+                if (!entry) return null;
+                const path = entry.path || "unnamed";
+                const dataU8 = entry.data instanceof Uint8Array ? entry.data : new Uint8Array(entry.data || []);
+                if (dataU8 && dataU8.length) {
+                    console.log(`state: MMC entry "${path}" size ${dataU8.length}`);
+                }
+                // Store a small JSON object where the data is base64 encoded so JSON.stringify
+                // round-trips cleanly across save/restore.
+                const obj = { path: path, data: uint8ToB64(dataU8) };
+                const jsonStr = JSON.stringify(obj);
+                const u8 = utils.stringToUint8Array(jsonStr);
+                return uint8ToB64(u8);
+            });
         }
     } catch (e) {
         console.warn("state: atommc serialise error", e);
@@ -245,6 +261,13 @@ export async function saveState(processor) {
 
     // Minimal VIA/ACIA/Econet state could be extended here.
 
+    // Model (name)
+    try {
+        if (processor.model && processor.model.name) state.model = processor.model.name;
+    } catch (e) {
+        console.warn("state: model serialise error", e);
+    }
+
     const json = JSON.stringify({ version: 1, state });
     const blob = new Blob([json], { type: "application/json" });
     return blob;
@@ -257,6 +280,28 @@ export async function saveState(processor) {
  */
 export async function restoreState(processor, jsonObj) {
     const obj = jsonObj && jsonObj.state ? jsonObj.state : jsonObj;
+    // Restore model if present. We map by name using findModel to obtain the Model object.
+    try {
+        if (obj.model) {
+            const m = findModel(obj.model);
+            if (m) {
+                processor.model = m;
+                // Mirror some of the flags that main.js sets when a model is chosen
+                processor.model.isAtom =
+                    processor.model.synonyms && processor.model.synonyms[0]
+                        ? processor.model.synonyms[0].slice(0, 4) === "Atom"
+                        : false;
+                if (processor.model.isAtom) {
+                    processor.model.useMMC = processor.model.name.includes("(MMC)");
+                    processor.model.useFdc = processor.model.name.includes("(DOS)");
+                }
+            } else {
+                console.warn("state: unknown model name stored in snapshot:", obj.model);
+            }
+        }
+    } catch (e) {
+        console.warn("state: model restore error", e);
+    }
 
     if (obj.cpu) {
         processor.a = obj.cpu.a | 0;
@@ -335,7 +380,37 @@ export async function restoreState(processor, jsonObj) {
     // MMC
     try {
         if (obj.mmc && processor.atommc && processor.atommc.SetMMCData) {
-            const u = b64ToUint8(obj.mmc);
+            // obj.mmc is an array of base64-encoded entries, each representing a WFNFile
+            let u = [];
+            try {
+                if (Array.isArray(obj.mmc)) {
+                    u = obj.mmc.map((entry) => {
+                        if (!entry) return null;
+                        try {
+                            const u8 = b64ToUint8(entry);
+                            const jsonStr = utils.uint8ArrayToString(u8);
+                            const parsed = JSON.parse(jsonStr);
+                            // Expect parsed to have { path: string, data: base64 }
+                            if (parsed && parsed.path && typeof parsed.data === "string") {
+                                try {
+                                    const dataU8 = b64ToUint8(parsed.data);
+                                    console.log(`state: Restoring MMC entry "${parsed.path}" size ${dataU8.length}`);
+                                    return { path: parsed.path, data: dataU8 };
+                                } catch (e) {
+                                    console.warn("state: MMC entry data base64 decode failed", e);
+                                }
+                            }
+                            return null;
+                        } catch (e) {
+                            console.warn("state: MMC entry decode error", e);
+                            return null;
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn("state: MMC restore decode error", e);
+                u = [];
+            }
             processor.atommc.SetMMCData(u);
         }
     } catch (e) {
