@@ -206,6 +206,97 @@ export async function saveState(processor) {
         console.warn("state: via serialise error", e);
     }
 
+    // Teletext (video.teletext)
+    try {
+        if (processor.video && processor.video.teletext) {
+            const t = processor.video.teletext;
+            state.teletext = {
+                prevCol: t.prevCol,
+                col: t.col,
+                bg: t.bg,
+                sep: t.sep,
+                dbl: t.dbl,
+                oldDbl: t.oldDbl,
+                secondHalfOfDouble: t.secondHalfOfDouble,
+                wasDbl: t.wasDbl,
+                gfx: t.gfx,
+                flash: t.flash,
+                flashOn: t.flashOn,
+                flashTime: t.flashTime,
+                heldChar: t.heldChar,
+                holdChar: t.holdChar,
+                dataQueue: Array.prototype.slice.call(t.dataQueue),
+                scanlineCounter: t.scanlineCounter,
+                levelDEW: !!t.levelDEW,
+                levelDISPTMG: !!t.levelDISPTMG,
+                levelRA0: !!t.levelRA0,
+            };
+        }
+    } catch (e) {
+        console.warn("state: teletext serialise error", e);
+    }
+
+    // Atom PPIA (keyboard, tape, speaker)
+    try {
+        if (processor.atomppia) {
+            const p = processor.atomppia;
+            state.atomppia = {
+                latcha: p.latcha,
+                latchb: p.latchb,
+                latchc: p.latchc,
+                portapins: p.portapins,
+                portbpins: p.portbpins,
+                portcpins: p.portcpins,
+                creg: p.creg,
+                prevcas: p.prevcas,
+                keyboardEnabled: !!p.keyboardEnabled,
+                lastTime: p.lastTime || 0,
+                tapeCarrierCount: p.tapeCarrierCount | 0,
+                tapeDcdLineLevel: !!p.tapeDcdLineLevel,
+                // keys: array of Uint8Array -> arrays
+                keys: p.keys ? p.keys.map((k) => Array.prototype.slice.call(k)) : null,
+            };
+        }
+    } catch (e) {
+        console.warn("state: atomppia serialise error", e);
+    }
+
+    // 6847 video chip runtime state (video.video6847)
+    try {
+        if (processor.video && processor.video.video6847) {
+            const v = processor.video.video6847;
+            state.video6847 = {
+                regs: Array.prototype.slice.call(v.regs || []),
+                bitmapX: v.bitmapX | 0,
+                bitmapY: v.bitmapY | 0,
+                frameCount: v.frameCount | 0,
+                inHSync: !!v.inHSync,
+                inVSync: !!v.inVSync,
+                doubledScanlines: !!v.doubledScanlines,
+                interlacedSyncAndVideo: !!v.interlacedSyncAndVideo,
+                horizCounter: v.horizCounter | 0,
+                vertCounter: v.vertCounter | 0,
+                scanlineCounter: v.scanlineCounter | 0,
+                addr: v.addr | 0,
+                lineStartAddr: v.lineStartAddr | 0,
+                nextLineStartAddr: v.nextLineStartAddr | 0,
+                pixelsPerChar: v.pixelsPerChar | 0,
+                bitmapPxPerPixel: v.bitmapPxPerPixel | 0,
+                pixelsPerBit: v.pixelsPerBit | 0,
+                bpp: v.bpp | 0,
+                cpuAddr: v.cpuAddr | 0,
+                // lastmode is an internal cache used to avoid recomputing the mode;
+                // don't persist it so we always recompute mode on restore.
+                vdg_cycles: v.vdg_cycles | 0,
+                charTime: v.charTime | 0,
+                bordercolour: v.bordercolour | 0,
+                dispEnabled: v.dispEnabled | 0,
+            };
+        }
+    } catch (e) {
+        console.warn("state: video6847 serialise error", e);
+    }
+
     // ACIA
     try {
         if (processor.acia) {
@@ -266,6 +357,19 @@ export async function saveState(processor) {
         if (processor.model && processor.model.name) state.model = processor.model.name;
     } catch (e) {
         console.warn("state: model serialise error", e);
+    }
+
+    // Video-level flags (teletext/ULA)
+    try {
+        if (processor.video) {
+            state.video = state.video || {};
+            state.video.teletextMode = !!processor.video.teletextMode;
+            state.video.ulactrl = processor.video.ulactrl | 0;
+            state.video.ulaMode = processor.video.ulaMode | 0;
+            state.video.pixelsPerChar = processor.video.pixelsPerChar | 0;
+        }
+    } catch (e) {
+        console.warn("state: video serialise error", e);
     }
 
     const json = JSON.stringify({ version: 1, state });
@@ -535,6 +639,165 @@ export async function restoreState(processor, jsonObj) {
         }
     } catch (e) {
         console.warn("state: uservia restore error", e);
+    }
+
+    // Restore teletext
+    try {
+        if (obj.teletext && processor.video && processor.video.teletext) {
+            const t = processor.video.teletext;
+            const s = obj.teletext;
+            if (s.prevCol !== undefined) t.prevCol = s.prevCol | 0;
+            if (s.col !== undefined) t.col = s.col | 0;
+            if (s.bg !== undefined) t.bg = s.bg | 0;
+            if (s.sep !== undefined) t.sep = !!s.sep;
+            if (s.dbl !== undefined) t.dbl = !!s.dbl;
+            if (s.oldDbl !== undefined) t.oldDbl = !!s.oldDbl;
+            if (s.secondHalfOfDouble !== undefined) t.secondHalfOfDouble = !!s.secondHalfOfDouble;
+            if (s.wasDbl !== undefined) t.wasDbl = !!s.wasDbl;
+            if (s.gfx !== undefined) t.gfx = !!s.gfx;
+            if (s.flash !== undefined) t.flash = !!s.flash;
+            if (s.flashOn !== undefined) t.flashOn = !!s.flashOn;
+            if (s.flashTime !== undefined) t.flashTime = s.flashTime | 0;
+            if (s.heldChar !== undefined) t.heldChar = s.heldChar | 0;
+            if (s.holdChar !== undefined) t.holdChar = !!s.holdChar;
+            if (s.dataQueue && Array.isArray(s.dataQueue) && t.dataQueue) {
+                for (let i = 0; i < Math.min(t.dataQueue.length, s.dataQueue.length); ++i)
+                    t.dataQueue[i] = s.dataQueue[i] | 0;
+            }
+            if (s.scanlineCounter !== undefined) t.scanlineCounter = s.scanlineCounter | 0;
+            if (s.levelDEW !== undefined) t.levelDEW = !!s.levelDEW;
+            if (s.levelDISPTMG !== undefined) t.levelDISPTMG = !!s.levelDISPTMG;
+            if (s.levelRA0 !== undefined) t.levelRA0 = !!s.levelRA0;
+        }
+    } catch (e) {
+        console.warn("state: teletext restore error", e);
+    }
+
+    // Restore top-level video flags
+    try {
+        if (obj.video && processor.video) {
+            const sv = obj.video;
+            const pv = processor.video;
+            if (sv.teletextMode !== undefined) pv.teletextMode = !!sv.teletextMode;
+            if (sv.ulactrl !== undefined) pv.ulactrl = sv.ulactrl | 0;
+            if (sv.ulaMode !== undefined) pv.ulaMode = sv.ulaMode | 0;
+            if (sv.pixelsPerChar !== undefined) pv.pixelsPerChar = sv.pixelsPerChar | 0;
+        }
+    } catch (e) {
+        console.warn("state: video restore error", e);
+    }
+
+    // Restore Atom PPIA
+    try {
+        if (obj.atomppia && processor.atomppia) {
+            const p = processor.atomppia;
+            const s = obj.atomppia;
+            if (s.latcha !== undefined) p.latcha = s.latcha | 0;
+            if (s.latchb !== undefined) p.latchb = s.latchb | 0;
+            if (s.latchc !== undefined) p.latchc = s.latchc | 0;
+            if (s.portapins !== undefined) p.portapins = s.portapins | 0;
+            if (s.portbpins !== undefined) p.portbpins = s.portbpins | 0;
+            if (s.portcpins !== undefined) p.portcpins = s.portcpins | 0;
+            if (s.creg !== undefined) p.creg = s.creg | 0;
+            if (s.prevcas !== undefined) p.prevcas = s.prevcas | 0;
+            if (s.keyboardEnabled !== undefined) p.keyboardEnabled = !!s.keyboardEnabled;
+            if (s.lastTime !== undefined) p.lastTime = s.lastTime;
+            if (s.tapeCarrierCount !== undefined) p.tapeCarrierCount = s.tapeCarrierCount | 0;
+            if (s.tapeDcdLineLevel !== undefined) p.tapeDcdLineLevel = !!s.tapeDcdLineLevel;
+            if (s.keys && Array.isArray(s.keys) && p.keys) {
+                try {
+                    for (let i = 0; i < Math.min(p.keys.length, s.keys.length); ++i) {
+                        p.keys[i].set(s.keys[i].slice(0, p.keys[i].length));
+                    }
+                } catch (e) {
+                    console.warn("state: atomppia keys restore error", e);
+                }
+            }
+            // Recalculate port pin derived values (and trigger any side-effects)
+            try {
+                if (typeof p.recalculatePortAPins === "function") p.recalculatePortAPins();
+                if (typeof p.recalculatePortBPins === "function") p.recalculatePortBPins();
+                if (typeof p.recalculatePortCPins === "function") p.recalculatePortCPins();
+            } catch (e) {
+                console.warn("state: atomppia recalc pins error", e);
+            }
+        }
+    } catch (e) {
+        console.warn("state: atomppia restore error", e);
+    }
+
+    // Restore 6847 video chip state
+    try {
+        if (obj.video6847 && processor.video && processor.video.video6847) {
+            const v = processor.video.video6847;
+            const s = obj.video6847;
+            if (s.regs && v.regs) {
+                for (let i = 0; i < Math.min(v.regs.length, s.regs.length); ++i) v.regs[i] = s.regs[i] | 0;
+            }
+            if (s.bitmapX !== undefined) v.bitmapX = s.bitmapX | 0;
+            if (s.bitmapY !== undefined) v.bitmapY = s.bitmapY | 0;
+            if (s.frameCount !== undefined) v.frameCount = s.frameCount | 0;
+            if (s.inHSync !== undefined) v.inHSync = !!s.inHSync;
+            if (s.inVSync !== undefined) v.inVSync = !!s.inVSync;
+            if (s.doubledScanlines !== undefined) v.doubledScanlines = !!s.doubledScanlines;
+            if (s.interlacedSyncAndVideo !== undefined) v.interlacedSyncAndVideo = !!s.interlacedSyncAndVideo;
+            if (s.horizCounter !== undefined) v.horizCounter = s.horizCounter | 0;
+            if (s.vertCounter !== undefined) v.vertCounter = s.vertCounter | 0;
+            if (s.scanlineCounter !== undefined) v.scanlineCounter = s.scanlineCounter | 0;
+            if (s.addr !== undefined) v.addr = s.addr | 0;
+            if (s.lineStartAddr !== undefined) v.lineStartAddr = s.lineStartAddr | 0;
+            if (s.nextLineStartAddr !== undefined) v.nextLineStartAddr = s.nextLineStartAddr | 0;
+            if (s.pixelsPerChar !== undefined) v.pixelsPerChar = s.pixelsPerChar | 0;
+            if (s.bitmapPxPerPixel !== undefined) v.bitmapPxPerPixel = s.bitmapPxPerPixel | 0;
+            if (s.pixelsPerBit !== undefined) v.pixelsPerBit = s.pixelsPerBit | 0;
+            if (s.bpp !== undefined) v.bpp = s.bpp | 0;
+            if (s.cpuAddr !== undefined) v.cpuAddr = s.cpuAddr | 0;
+            // Do not restore lastmode from the saved state: clear it so setValuesFromMode
+            // will recompute derived mode fields during restore.
+            if (s.lastmode !== undefined) {
+                try {
+                    v.lastmode = undefined;
+                } catch (e) {
+                    console.warn("state: unable to undefine lastnmode", e);
+                    v.lastmode = null;
+                }
+            }
+            if (s.vdg_cycles !== undefined) v.vdg_cycles = s.vdg_cycles | 0;
+            if (s.charTime !== undefined) v.charTime = s.charTime | 0;
+            if (s.bordercolour !== undefined) v.bordercolour = s.bordercolour | 0;
+            if (s.dispEnabled !== undefined) v.dispEnabled = s.dispEnabled | 0;
+            // Recompute derived mode fields from the PPIA port pins and sync paint buffer
+            try {
+                const modeFromPpia = v.ppia ? v.ppia.portapins : processor.atomppia ? processor.atomppia.portapins : 0;
+                v.setValuesFromMode(modeFromPpia);
+            } catch (e) {
+                // ignore if setValuesFromMode isn't present or fails
+                console.warn("state: setValuesFromMode not present or failed error", e);
+            }
+            try {
+                if (v.clearPaintBuffer) v.clearPaintBuffer();
+            } catch (e) {
+                console.warn("state: video6847 clearPaintBuffer error", e);
+            }
+            // Sync top-level video rendering flags so the Video renderer uses the same parameters
+            try {
+                if (processor.video) {
+                    processor.video.pixelsPerChar = v.pixelsPerChar | 0;
+                    processor.video.bitmapX = v.bitmapX | 0;
+                    processor.video.bitmapY = v.bitmapY | 0;
+                    processor.video.doubledScanlines = !!v.doubledScanlines;
+                    processor.video.interlacedSyncAndVideo = !!v.interlacedSyncAndVideo;
+                    processor.video.pixelsPerChar = v.pixelsPerChar | 0;
+                    // Also ensure per-pixel scaling matches
+                    processor.video.bitmapPxPerPixel = v.bitmapPxPerPixel | 0;
+                    processor.video.pixelsPerChar = v.pixelsPerChar | 0;
+                }
+            } catch (e) {
+                console.warn("state: sync video flags error", e);
+            }
+        }
+    } catch (e) {
+        console.warn("state: video6847 restore error", e);
     }
 
     try {
