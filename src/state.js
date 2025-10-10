@@ -36,13 +36,13 @@ export async function saveState(processor) {
     state.ramRomOs = uint8ToB64(processor.ramRomOs);
     state.memStat = uint8ToB64(processor.memStat);
     // memLook is Int32Array; convert to regular array
-    state.memLook = Array.prototype.slice.call(processor.memLook);
+    state.memLook = [...processor.memLook];
 
     // Old PC/A/X/Y history
-    state.oldPcArray = Array.prototype.slice.call(processor.oldPcArray);
-    state.oldAArray = Array.prototype.slice.call(processor.oldAArray);
-    state.oldXArray = Array.prototype.slice.call(processor.oldXArray);
-    state.oldYArray = Array.prototype.slice.call(processor.oldYArray);
+    state.oldPcArray = [...processor.oldPcArray];
+    state.oldAArray = [...processor.oldAArray];
+    state.oldXArray = [...processor.oldXArray];
+    state.oldYArray = [...processor.oldYArray];
 
     // Video state
     state.videoDisplayPage = processor.videoDisplayPage;
@@ -56,7 +56,7 @@ export async function saveState(processor) {
                 state.discs.push(null);
                 continue;
             }
-            // Try to guess disc type and use saver
+            // Try to guess disc type and use the disc's saver to get a byte array
             const discType = disc.guessDiscTypeFromName(d.name || "disk.ssd");
             if (discType && discType.saver) {
                 try {
@@ -111,7 +111,7 @@ export async function saveState(processor) {
 
     // CMOS contents
     try {
-        if (processor.cmos && processor.cmos.store) state.cmos = Array.prototype.slice.call(processor.cmos.store);
+        if (processor.cmos && processor.cmos.store) state.cmos = [...processor.cmos.store];
     } catch (e) {
         console.warn("state: cmos serialise error", e);
     }
@@ -155,7 +155,7 @@ export async function saveState(processor) {
                 t1_pb7: v.t1_pb7,
                 lastPolltime: v.lastPolltime,
                 // keys: array of arrays
-                keys: Array.prototype.map.call(v.keys, (k) => Array.prototype.slice.call(k)),
+                keys: v.keys.map((k) => [...k]),
             };
             // task scheduling
             try {
@@ -225,7 +225,7 @@ export async function saveState(processor) {
                 flashTime: t.flashTime,
                 heldChar: t.heldChar,
                 holdChar: t.holdChar,
-                dataQueue: Array.prototype.slice.call(t.dataQueue),
+                dataQueue: [...t.dataQueue],
                 scanlineCounter: t.scanlineCounter,
                 levelDEW: !!t.levelDEW,
                 levelDISPTMG: !!t.levelDISPTMG,
@@ -254,7 +254,7 @@ export async function saveState(processor) {
                 tapeCarrierCount: p.tapeCarrierCount | 0,
                 tapeDcdLineLevel: !!p.tapeDcdLineLevel,
                 // keys: array of Uint8Array -> arrays
-                keys: p.keys ? p.keys.map((k) => Array.prototype.slice.call(k)) : null,
+                keys: p.keys ? p.keys.map((k) => [...k]) : null,
             };
         }
     } catch (e) {
@@ -266,7 +266,7 @@ export async function saveState(processor) {
         if (processor.video && processor.video.video6847) {
             const v = processor.video.video6847;
             state.video6847 = {
-                regs: Array.prototype.slice.call(v.regs || []),
+                regs: [...(v.regs || [])],
                 bitmapX: v.bitmapX | 0,
                 bitmapY: v.bitmapY | 0,
                 frameCount: v.frameCount | 0,
@@ -340,7 +340,7 @@ export async function saveState(processor) {
         if (processor.fdc) {
             const f = processor.fdc;
             const fdcState = {};
-            if (f._regs) fdcState.regs = Array.prototype.slice.call(f._regs);
+            if (f._regs) fdcState.regs = [...f._regs];
             if (f._state !== undefined) fdcState.state = f._state;
             if (f._stateCount !== undefined) fdcState.stateCount = f._stateCount;
             if (f._mmioData !== undefined) fdcState.mmioData = f._mmioData;
@@ -350,7 +350,7 @@ export async function saveState(processor) {
         console.warn("state: fdc serialise error", e);
     }
 
-    // Minimal VIA/ACIA/Econet state could be extended here.
+    // Minimal Econet state could be extended here.
 
     // Model (name)
     try {

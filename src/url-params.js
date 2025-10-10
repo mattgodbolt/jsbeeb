@@ -253,8 +253,8 @@ export function guessModelFromHostname(hostname) {
 export function parseMediaParams(parsedQuery) {
     // BBC and
     // ATOM
-    const { disc, disc1, disc2, tape, mmc } = parsedQuery;
+    const { disc, disc1, disc2, tape, mmc, restore } = parsedQuery;
     const discImage = disc || disc1;
 
-    return { discImage, secondDiscImage: disc2, tapeImage: tape, mmcImage: mmc };
+    return { discImage, secondDiscImage: disc2, tapeImage: tape, mmcImage: mmc, restoreImage: restore };
 }

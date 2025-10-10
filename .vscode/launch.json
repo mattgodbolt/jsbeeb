@@ -2,13 +2,23 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "chrome",
+      "name": "Launch Chrome against localhost:5173",
+      "type": "pwa-chrome",
       "request": "launch",
-      "name": "Debug a running dev server",
-      "url": "http://localhost:8080?logFdcStateChanges&logFdcCommands&model=MasterADFS&disc=CodenameDroid-ADFS_E.adf",
-      "webRoot": "${workspaceFolder}",
+      "url": "http://localhost:5173/?model=Atom",
+      "webRoot": "${workspaceFolder}/src",
+      "userDataDir": "${workspaceFolder}/.vscode/chrome-profile",
       "sourceMaps": true,
-      "trace": true
+      "trace": false
+    },
+    {
+      "name": "Attach to Chrome (remote debugging)",
+      "type": "pwa-chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/src",
+      "sourceMaps": true,
+      "trace": false
     }
   ]
 }

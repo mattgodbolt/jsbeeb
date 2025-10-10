@@ -43,6 +43,7 @@ import { Video6847 } from "./6847.js";
 import * as utils_atom from "./utils_atom.js";
 import * as mmc from "./mmc.js";
 var mmcImage = "mmc/SDcard.zip";
+var restoreImage = null; // restorable image for ATOM and BEEB
 
 let processor;
 let video;
@@ -123,6 +124,7 @@ const paramTypes = {
     autotype: ParamTypes.STRING,
     // ATOM
     mmc: ParamTypes.STRING,
+    restore: ParamTypes.STRING,
 };
 
 // Parse the query string with parameter types
@@ -147,6 +149,7 @@ const {
     discImage: queryDiscImage,
     secondDiscImage: querySecondDisc,
     mmcImage: queryMMCImage, // ATOM
+    restoreImage: queryRestoreImage, // ATOM (and BEEB)
 } = parseMediaParams(parsedQuery);
 
 // Only assign if values are provided
@@ -154,6 +157,7 @@ if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
 //ATOM
 if (queryMMCImage) mmcImage = queryMMCImage;
+if (queryRestoreImage) restoreImage = queryRestoreImage;
 
 // Process keyboard mappings
 parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
@@ -757,6 +761,17 @@ keyboard.registerKeyHandler(
         }
     },
     { alt: false, ctrl: true },
+);
+
+keyboard.registerKeyHandler(
+    utils.keyCodes.D, //DUMP state to a restorable image
+    (down) => {
+        if (down) {
+            // Trigger a click on your save state link
+            document.getElementById("save-state-link").click();
+        }
+    },
+    { alt: true, ctrl: false },
 );
 
 // Setup key handlers
@@ -1542,7 +1557,18 @@ const startPromise = (async () => {
         if (!processor.model.useMMC) mmcImage = null;
         if (!processor.model.useFdc) discImage = null;
 
-        if (mmcImage)
+        if (restoreImage) {
+            // load image as uint8array
+            imageLoads.push(
+                (async () => {
+                    const jsonfile = await utils.loadData(restoreImage);
+                    // jsonfile is uint8array - better if it just returned a string
+                    const jsonstring = new TextDecoder("utf-8").decode(jsonfile);
+                    const json = JSON.parse(jsonstring);
+                    await restoreState(processor, json);
+                })(),
+            );
+        } else if (mmcImage)
             imageLoads.push(
                 (async () => {
                     const sdcard = await loadMMCImage(mmcImage);
