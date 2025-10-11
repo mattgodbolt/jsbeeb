@@ -5,7 +5,7 @@ import globals from "globals";
 
 export default [
     {
-        ignores: ["lib/", "out/", "dist/", "coverage/", ".firebaserc"],
+        ignores: ["lib/", "out/", "dist/", "coverage/", ".firebaserc", "src/lib/"],
     },
     js.configs.recommended,
     eslintConfigPrettier,
