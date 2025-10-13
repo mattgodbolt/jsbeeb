@@ -45,6 +45,27 @@ import * as mmc from "./mmc.js";
 var mmcImage = "mmc/SDcard.zip";
 var restoreImage = null; // restorable image for ATOM and BEEB
 
+// Firebase Analytics
+import { initializeApp } from "firebase/app";
+import { getAnalytics, logEvent } from "firebase/analytics";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyAhDASnKOXcurh4ylCYdB_tKMjTVWWsgdk",
+    authDomain: "jsacorn-7d5bc.firebaseapp.com",
+    databaseURL: "https://jsacorn-7d5bc.firebaseio.com",
+    projectId: "jsacorn-7d5bc",
+    storageBucket: "jsacorn-7d5bc.firebasestorage.app",
+    messagingSenderId: "435681505971",
+    appId: "1:435681505971:web:ba2b299935e23b80db76c6",
+    measurementId: "G-JFS9REYRHJ",
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+
+//--
+
 let processor;
 let video;
 const dbgr = new Debugger();
@@ -309,6 +330,12 @@ if (model.isAtom) {
     $("#navbarAtomMMC").hide();
     $("#owlet").show();
 }
+
+logEvent(analytics, "screen_view", {
+    screen_name: "jsbeeb",
+    screen_class: model.name,
+});
+
 function sbBind(div, url, onload) {
     const img = div.find("img");
     img.hide();

@@ -20,6 +20,7 @@
     "bootstrap": "^5.3.6",
     "bootswatch": "^5.3.6",
     "event-emitter-es6": "^1.1.5",
+    "firebase": "^12.4.0",
     "jquery": "^3.7.1",
     "smoothie": "^1.36.1",
     "underscore": "^1.13.7"
