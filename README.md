@@ -1,11 +1,11 @@
 [![jsbeeb tests](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml/badge.svg)](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml)
 
-# jsbeeb - JavaScript BBC Micro Emulator
+# jsbeeb - JavaScript BBC Micro Emulator (and Acorn Atom Emulator)
 
 [![jsbeeb](public/images/jsbeeb-example.png)](https://bbc.xania.org/)
 
 A BBC Micro emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B (with sideways RAM)
-and a 128K BBC Master, along with a number of different peripherals.
+and a 128K BBC Master, along with a number of different peripherals. Hidden within is the [Acorn Atom emulator](README-jsatom.md).
 
 ## Table of Contents
 
@@ -98,6 +98,7 @@ site to make it smaller and faster to load when it's deployed to [https://bbc.xa
   file assumed to be within.
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `audioDebug=true` turns on some audio debug graphs.
+- `model=atom` jumps into the hidden [Acorn Atom emulator](README-jsatom.md) with pre-inserted AtomMMC zip file. Use `model=atom-tape` for just the Acorn Atom without MMC.
 
 ## Patches
 

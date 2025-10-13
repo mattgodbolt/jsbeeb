@@ -245,7 +245,7 @@ export class GamePad {
 
             for (let i = 0; i < 16; i++) {
                 if (this.gamepad0.buttons[i]) {
-                    const button = this.gamepad0.buttons[i];
+                    var button = this.gamepad0.buttons[i];
 
                     if (button.pressed !== this.gamepadButtons[i]) {
                         // different to last time

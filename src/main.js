@@ -15,6 +15,7 @@ import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
 import { loadTape, loadTapeFromData } from "./tapes.js";
 import { GoogleDriveLoader } from "./google-drive.js";
+import { saveState, restoreState } from "./state.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
@@ -37,6 +38,13 @@ import {
     processKeyboardParams,
 } from "./url-params.js";
 
+// ATOM
+import { Video6847 } from "./6847.js";
+import * as utils_atom from "./utils_atom.js";
+import * as mmc from "./mmc.js";
+var mmcImage = "mmc/SDcard.zip";
+var restoreImage = null; // restorable image for ATOM and BEEB
+
 let processor;
 let video;
 const dbgr = new Debugger();
@@ -47,6 +55,7 @@ let discSth;
 let tapeSth;
 let running;
 let model;
+
 const gamepad = new GamePad();
 const availableImages = [
     {
@@ -113,6 +122,9 @@ const paramTypes = {
     tape: ParamTypes.STRING,
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
+    // ATOM
+    mmc: ParamTypes.STRING,
+    restore: ParamTypes.STRING,
 };
 
 // Parse the query string with parameter types
@@ -132,12 +144,20 @@ let audioFilterQ = 5;
 let stationId = 101;
 let econet = null;
 
-// Parse disc and tape images from query parameters
-const { discImage: queryDiscImage, secondDiscImage: querySecondDisc } = parseMediaParams(parsedQuery);
+// Parse disc and tape images from query parameters (and MMC for ATOM)
+const {
+    discImage: queryDiscImage,
+    secondDiscImage: querySecondDisc,
+    mmcImage: queryMMCImage, // ATOM
+    restoreImage: queryRestoreImage, // ATOM (and BEEB)
+} = parseMediaParams(parsedQuery);
 
 // Only assign if values are provided
 if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
+//ATOM
+if (queryMMCImage) mmcImage = queryMMCImage;
+if (queryRestoreImage) restoreImage = queryRestoreImage;
 
 // Process keyboard mappings
 parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
@@ -226,7 +246,8 @@ const config = new Config(function (changed) {
         changed.coProcessor !== undefined ||
         changed.hasMusic5000 !== undefined ||
         changed.hasTeletextAdaptor !== undefined ||
-        changed.hasEconet !== undefined
+        changed.hasEconet !== undefined ||
+        changed.hasNoiseKiller !== undefined // ATOM noisekiller
     ) {
         areYouSure(
             "Changing model requires a restart of the emulator. Restart now?",
@@ -267,9 +288,27 @@ config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
+config.setNoiseKiller(parsedQuery.hasNoiseKiller);
 
 model = config.model;
 
+// ATOM
+// adding isAtom to model, and thus processor.model
+model.isAtom = model.synonyms[0].slice(0, 4) === "Atom";
+if (model.isAtom) {
+    model.useMMC = model.name.includes("(MMC)");
+    model.useFdc = model.name.includes("(DOS)");
+
+    discImage = "atom/disk0725.dsk"; // Graphics demos
+    utils_atom.remapGamepad(gamepad);
+}
+// Acorn Atom menus
+if (model.isAtom) {
+    $("#owlet").hide();
+} else {
+    $("#navbarAtomMMC").hide();
+    $("#owlet").show();
+}
 function sbBind(div, url, onload) {
     const img = div.find("img");
     img.hide();
@@ -294,14 +333,15 @@ if (parsedQuery.cpuMultiplier !== undefined) {
     cpuMultiplier = parsedQuery.cpuMultiplier;
     console.log("CPU multiplier set to " + cpuMultiplier);
 }
-const clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
+const cpuSpeed = model.isAtom ? 1 * 1000 * 1000 : 2 * 1000 * 1000;
+const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 const MaxCyclesPerFrame = clocksPerSecond / 10;
 
 let tryGl = true;
 if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
-const $screen = $("#screen");
+const $screen = model.isAtom ? $("#nec-tv-screen") : $("#screen");
 const canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
     frames++;
@@ -310,9 +350,16 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
     canvas.paint(minx, miny, maxx, maxy);
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
+if (model.isAtom) {
+    video.video6847 = new Video6847(video);
+    video.polltime = video.video6847.polltimeFacade;
+}
 
 const audioStatsNode = document.getElementById("audio-stats");
 const audioHandler = new AudioHandler($("#audio-warning"), audioStatsNode, audioFilterFreq, audioFilterQ, noSeek);
+audioHandler.soundChip.setCPUSpeed(cpuSpeed);
+audioHandler.soundChip.isAtom = model.isAtom;
+
 if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
@@ -323,6 +370,7 @@ $(".initially-hidden").removeClass("initially-hidden");
 
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
 const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
+const $sdModal = new bootstrap.Modal(document.getElementById("sdcards"));
 
 /**
  * Helper function to read a file as binary string
@@ -397,10 +445,25 @@ async function loadSCSIFile(file) {
     $fsModal.hide();
 }
 
+async function loadMMCZIPfile(file) {
+    const binaryData = await readFileAsBinaryString(file);
+    const filedata = await mmc.extractSDFiles(binaryData);
+    processor.atommc.SetMMCData(filedata);
+    delete parsedQuery.mmc;
+    updateUrl();
+    $sdModal.hide();
+}
+
 const $pastetext = $("#paste-text");
 $pastetext.on("paste", function (event) {
     const text = event.originalEvent.clipboardData.getData("text/plain");
-    sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
+
+    let bbcKeys = utils.stringToBBCKeys(text);
+    // ATOM
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(text);
+    }
+    sendRawKeyboardToBBC(bbcKeys, true);
 });
 $pastetext.on("dragover", function (event) {
     event.preventDefault();
@@ -413,7 +476,16 @@ $pastetext.on("drop", async function (event) {
     await loadHTMLFile(file);
 });
 
-const $cub = $("#cub-monitor");
+var $cub = $("#cub-monitor");
+// ATOM
+var $nec = $("#nec-tv");
+$nec.hide();
+if (model.isAtom) {
+    $cub.hide();
+    $cub = $nec;
+    $cub.show();
+}
+
 $cub.on("mousemove mousedown mouseup", function (evt) {
     audioHandler.tryResume().then(() => {});
     if (document.activeElement !== document.body) document.activeElement.blur();
@@ -691,6 +763,17 @@ keyboard.registerKeyHandler(
     { alt: false, ctrl: true },
 );
 
+keyboard.registerKeyHandler(
+    utils.keyCodes.D, //DUMP state to a restorable image
+    (down) => {
+        if (down) {
+            // Trigger a click on your save state link
+            document.getElementById("save-state-link").click();
+        }
+    },
+    { alt: true, ctrl: false },
+);
+
 // Setup key handlers
 document.onkeydown = (evt) => {
     audioHandler.tryResume().then(() => {});
@@ -830,6 +913,7 @@ $("#sth-filter").on("change keyup", function () {
     setSthFilter($("#sth-filter").val());
 });
 
+// send to BBC or ATOM
 function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
         keyboard.sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks);
@@ -839,20 +923,28 @@ function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
 }
 
 function autoboot(image) {
-    const BBC = utils.BBC;
+    if (model.isAtom) {
+        console.log("Autobooting MMC");
+        processor.atommc.configByte &= ~0x40;
+    } else {
+        const BBC = utils.BBC;
 
-    console.log("Autobooting disc");
-    utils.noteEvent("init", "autoboot", image);
+        console.log("Autobooting disc");
+        utils.noteEvent("init", "autoboot", image);
 
-    // Shift-break simulation, hold SHIFT for 1000ms.
-    sendRawKeyboardToBBC([BBC.SHIFT, 1000], false);
+        // Shift-break simulation, hold SHIFT for 1000ms.
+        sendRawKeyboardToBBC([BBC.SHIFT, 1000], false);
+    }
 }
 
 function autoBootType(keys) {
     console.log("Auto typing '" + keys + "'");
     utils.noteEvent("init", "autochain");
 
-    const bbcKeys = utils.stringToBBCKeys(keys);
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -860,7 +952,11 @@ function autoChainTape() {
     console.log("Auto Chaining Tape");
     utils.noteEvent("init", "autochain");
 
-    const bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
+    const keys = '*TAPE\n CH.""\n';
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -868,7 +964,11 @@ function autoRunTape() {
     console.log("Auto Running Tape");
     utils.noteEvent("init", "autorun");
 
-    const bbcKeys = utils.stringToBBCKeys("*TAPE\n*/\n");
+    const keys = "*TAPE\n */\n";
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -876,7 +976,11 @@ function autoRunBasic() {
     console.log("Auto Running basic");
     utils.noteEvent("init", "autorunbasic");
 
-    const bbcKeys = utils.stringToBBCKeys("RUN\n");
+    const keys = "RUN\n";
+    let bbcKeys = utils.stringToBBCKeys(keys);
+    if (model.isAtom) {
+        bbcKeys = utils_atom.stringToATOMKeys(keys);
+    }
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -957,6 +1061,13 @@ async function loadDiscImage(discImage) {
     }
 }
 
+async function loadMMCImage(SDimage) {
+    // console.log("Loading mmcImage from mmc/" + SDimage);
+    // return mmc.LoadSD("mmc/" + SDimage);
+    console.log("Loading mmcImage from " + SDimage);
+    return await mmc.LoadSD(SDimage);
+}
+
 async function loadTapeImage(tapeImage) {
     const split = splitImage(tapeImage);
     tapeImage = split.image;
@@ -1021,6 +1132,34 @@ $("#tape_load").on("change", async function (evt) {
 
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
+
+$("#sdcard_load").on("change", function (evt) {
+    utils.noteEvent("local", "click"); // NB no filename here
+    var file = evt.target.files[0];
+    loadMMCZIPfile(file);
+});
+
+const $tapes = $("#tapes");
+const $tapesModel = new bootstrap.Modal($tapes[0]);
+var tapeload = function (evt) {
+    var file = evt.target.files[0];
+    var reader = new FileReader();
+    utils.noteEvent("local", "clickTape"); // NB no filename here
+    reader.onload = function (e) {
+        if (model.isAtom) {
+            processor.atomppia.setTape(loadTapeFromData("local file", e.target.result));
+        } else {
+            processor.acia.setTape(loadTapeFromData("local file", e.target.result));
+        }
+        delete parsedQuery.tape;
+        updateUrl();
+
+        $tapesModel.hide();
+    };
+    reader.readAsBinaryString(file);
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
+};
+$("#tape_load").on("change", tapeload);
 
 function anyModalsVisible() {
     return $(".modal:visible").length !== 0;
@@ -1226,6 +1365,69 @@ $("#download-filestore-link").on("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
+$("#download-mmczip-link").on("click", async function () {
+    const mmcdata = processor.atommc.GetMMCData();
+    const data = await mmc.toMMCZipAsync(mmcdata);
+
+    downloadDriveData(data, "atommc", ".zip");
+});
+
+// Save/Load emulator state
+$("#save-state-link").on("click", async function (e) {
+    e.preventDefault();
+    try {
+        const blob = await saveState(processor);
+        const a = document.createElement("a");
+        const url = window.URL.createObjectURL(blob);
+        const now = new Date();
+        const filename = `jsbeeb-state-${now.toISOString().replace(/[:.]/g, "-")}.json`;
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error("Failed to save state:", err);
+        showError("save state", err);
+    }
+});
+
+$("#load-state-link").on("click", function (e) {
+    e.preventDefault();
+    // Trigger hidden file input
+    const input = document.getElementById("state-load-input");
+    if (input) input.click();
+});
+
+$("#state-load-input").on("change", function (evt) {
+    if (evt.target.files.length === 0) return;
+    const file = evt.target.files[0];
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+        try {
+            const json = JSON.parse(e.target.result);
+            await restoreState(processor, json);
+            // After restoring, force a redraw and resume paused state if needed
+            if (!running) {
+                // leave paused
+            } else {
+                // continue running
+            }
+        } catch (err) {
+            console.error("Failed to restore state:", err);
+            showError("restore state", err);
+        }
+    };
+    reader.readAsText(file);
+    // clear value so same file can be selected again
+    evt.target.value = "";
+});
+
+$("#empty-mmc-link").on("click", async function () {
+    processor.atommc.ClearMMCData();
+});
+
 $("#hard-reset").click(function (event) {
     processor.reset(true);
     event.preventDefault();
@@ -1236,16 +1438,81 @@ $("#soft-reset").click(function (event) {
     event.preventDefault();
 });
 
+// ATOM
+if (model.isAtom) {
+    $("#leds").hide();
+    $("#playcas").show();
+    $("#stopcas").show();
+
+    $(".navbar-brand").text("jsatom");
+    $(".navbar-brand").attr("href", "http://atom.commandercoder.com/");
+    $("span.navbar-text").hide();
+    $("a.sth").hide();
+    $("#analogueAudioSettings").hide();
+    $("#mouseJoystickSettings").hide();
+
+    let bbcperipherals = ["65c02", "hasMusic5000", "hasTeletextAdaptor", "hasEconet"];
+    for (const peripheral of bbcperipherals) {
+        $("div > #" + peripheral)
+            .parent()
+            .hide();
+    }
+
+    let bbctargets = ["B-DFS1.2", "B-DFS0.9", "B1770", "B1770A", "Master", "MasterADFS", "MasterANFS"];
+    for (const target of bbctargets) {
+        $("a[data-target='" + target + "']")
+            .parent()
+            .hide();
+    }
+} else {
+    $("#leds").show();
+    $("#playcas").hide();
+    $("#stopcas").hide();
+    $("#jsatom-menu").hide();
+
+    let atomperipherals = ["hasNoiseKiller"];
+    for (const peripheral of atomperipherals) {
+        $("div > #" + peripheral)
+            .parent()
+            .hide();
+    }
+
+    let atomtargets = ["Atom", "Atom-DOS", "Atom-Tape", "Atom-Tape-FP"];
+    for (const target of atomtargets) {
+        $("a[data-target='" + target + "']")
+            .parent()
+            .hide();
+    }
+}
 $("#tape-menu a").on("click", function (e) {
     const type = $(e.target).attr("data-id");
     if (type === undefined) return;
 
-    if (type === "rewind") {
-        console.log("Rewinding tape to the start");
+    // ATOM
+    if (model.isAtom) {
+        if (type === "rewind") {
+            console.log("Rewinding tape to the start");
 
-        processor.acia.rewindTape();
+            processor.atomppia.rewindTape();
+        } else if (type === "play") {
+            console.log("Play tape");
+
+            processor.atomppia.playTape();
+        } else if (type === "stop") {
+            console.log("Stop tape");
+
+            processor.atomppia.stopTape();
+        } else {
+            console.log("unknown type", type);
+        }
     } else {
-        console.log("unknown type", type);
+        if (type === "rewind") {
+            console.log("Rewinding tape to the start");
+
+            processor.acia.rewindTape();
+        } else {
+            console.log("unknown type", type);
+        }
     }
 });
 
@@ -1283,6 +1550,33 @@ const startPromise = (async () => {
     // Ideally would start the loads first. But their completion needs the FDC from the processor
     const imageLoads = [];
 
+    // ATOM
+    // AcornAtom - not (Tape) version
+    if (processor.model.isAtom) {
+        processor.atommc.attachGamepad(gamepad);
+        if (!processor.model.useMMC) mmcImage = null;
+        if (!processor.model.useFdc) discImage = null;
+
+        if (restoreImage) {
+            // load image as uint8array
+            imageLoads.push(
+                (async () => {
+                    const jsonfile = await utils.loadData(restoreImage);
+                    // jsonfile is uint8array - better if it just returned a string
+                    const jsonstring = new TextDecoder("utf-8").decode(jsonfile);
+                    const json = JSON.parse(jsonstring);
+                    await restoreState(processor, json);
+                })(),
+            );
+        } else if (mmcImage)
+            imageLoads.push(
+                (async () => {
+                    const sdcard = await loadMMCImage(mmcImage);
+                    processor.atommc.SetMMCData(sdcard);
+                })(),
+            );
+    }
+
     if (discImage) {
         imageLoads.push(
             (async () => {
@@ -1305,7 +1599,11 @@ const startPromise = (async () => {
         imageLoads.push(
             (async () => {
                 const tape = await loadTapeImage(parsedQuery.tape);
-                processor.acia.setTape(tape);
+                if (processor.model.isAtom) {
+                    processor.atomppia.setTape(tape);
+                } else {
+                    processor.acia.setTape(tape);
+                }
             })(),
         );
     }
@@ -1469,7 +1767,7 @@ function VirtualSpeedUpdater() {
         if (this.cycles) {
             const thisMHz = this.cycles / this.time / 1000;
             this.v.text(thisMHz.toFixed(1));
-            if (this.cycles >= 10 * 2 * 1000 * 1000) {
+            if (this.cycles >= 10 * cpuSpeed) {
                 this.cycles = this.time = 0;
             }
             this.header.css("color", this.speedy ? "red" : "white");
@@ -1515,7 +1813,9 @@ function draw(now) {
     }
 
     audioHandler.soundChip.catchUp();
-    gamepad.update(processor.sysvia);
+    //ATOM
+    if (model.isAtom) gamepad.update(processor.atomppia);
+    else gamepad.update(processor.sysvia);
     syncLights();
     if (last !== 0) {
         let cycles;
@@ -1592,8 +1892,9 @@ function stop(debug) {
 }
 
 (function () {
-    const $cubMonitor = $("#cub-monitor");
-    const $cubMonitorPic = $("#cub-monitor-pic");
+    // ATOM
+    const $cubMonitor = model.isAtom ? $("#nec-tv") : $("#cub-monitor");
+    const $cubMonitorPic = model.isAtom ? $("#nec-tv-pic") : $("#cub-monitor-pic");
     const cubOrigHeight = $cubMonitorPic.attr("height");
     const cubOrigWidth = $cubMonitorPic.attr("width");
     const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
@@ -1615,6 +1916,8 @@ function stop(debug) {
         }
         $cubMonitor.height(height).width(width);
         $cubMonitorPic.height(height).width(width);
+        //ATOM
+        if (model.isAtom) width = 0.8 * width; // atom screen, slightly narrower because of speaker grill on the NEC-TV
         $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
     }
 

@@ -15,6 +15,10 @@ export class Config {
             this.setTeletext(this.model.hasTeletextAdaptor);
             this.setMusic5000(this.model.hasMusic5000);
             this.setEconet(this.model.hasEconet);
+
+            // ATOM
+            this.setNoiseKiller(this.model.hasNoiseKiller);
+            this.setModelMenus(this.model.name);
         });
 
         $configuration.addEventListener("hide.bs.modal", () => onClose(this.changed));
@@ -56,6 +60,11 @@ export class Config {
         $("#mouseJoystickEnabled").on("click", () => {
             this.changed.mouseJoystickEnabled = $("#mouseJoystickEnabled").prop("checked");
         });
+
+        // ATOM
+        $("#hasNoiseKiller").on("click", () => {
+            this.changed.hasNoiseKiller = $("#hasNoiseKiller").prop("checked");
+        });
     }
 
     setMicrophoneChannel(channel) {
@@ -68,6 +77,25 @@ export class Config {
 
     setMouseJoystickEnabled(enabled) {
         $("#mouseJoystickEnabled").prop("checked", !!enabled);
+    }
+
+    // ATOM
+    setNoiseKiller(enabled) {
+        enabled = !!enabled;
+        $("#hasNoiseKiller").prop("checked", enabled);
+        this.model.hasNoiseKiller = enabled;
+    }
+
+    // ATOM
+    setModelMenus(modelname) {
+        // set BBC and ATOM stuff
+        let atom = modelname.includes("Atom");
+
+        $("#65c02").prop("disabled", atom);
+        $("#hasTeletextAdaptor").prop("disabled", atom);
+        $("#hasMusic5000").prop("disabled", atom);
+        $("#hasEconet").prop("disabled", atom);
+        $("#hasNoiseKiller").prop("disabled", !atom);
     }
 
     setModel(modelName) {

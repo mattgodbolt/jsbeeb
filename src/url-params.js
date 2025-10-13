@@ -240,17 +240,21 @@ export function processAutobootParams(parsedQuery) {
 export function guessModelFromHostname(hostname) {
     if (hostname.startsWith("bbc")) return "B-DFS1.2";
     if (hostname.startsWith("master")) return "Master";
+    // ATOM
+    if (hostname.startsWith("atom")) return "Atom";
     return "B-DFS1.2";
 }
 
 /**
  * Parse disc or tape images from the query parameters
  * @param {Object} parsedQuery - The query parameters
- * @returns {Object} Object containing disc and tape information
+ * @returns {Object} Object containing disc and tape information (and mmc for ATOM)
  */
 export function parseMediaParams(parsedQuery) {
-    const { disc, disc1, disc2, tape } = parsedQuery;
+    // BBC and
+    // ATOM
+    const { disc, disc1, disc2, tape, mmc, restore } = parsedQuery;
     const discImage = disc || disc1;
 
-    return { discImage, secondDiscImage: disc2, tapeImage: tape };
+    return { discImage, secondDiscImage: disc2, tapeImage: tape, mmcImage: mmc, restoreImage: restore };
 }

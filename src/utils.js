@@ -326,8 +326,8 @@ export const keyCodes = {
     Y: 89,
     Z: 90,
     /* also META on Mac */
-    WINDOWS: 91,
-    MENU: 93,
+    WINDOWS: 91, // note: WINDOWS is CMD_LEFT on MAC
+    MENU: 93, // note: MENU is CMD_RIGHT on MAC
     NUMPAD0: 96,
     NUMPAD1: 97,
     NUMPAD2: 98,

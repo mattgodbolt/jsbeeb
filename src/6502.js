@@ -10,6 +10,10 @@ import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
 
+// ATOM
+import * as atom_ppia from "./ppia.js";
+import * as atom_mmc from "./mmc.js";
+
 const signExtend = utils.signExtend;
 
 function _set(byte, mask, set) {
@@ -432,6 +436,11 @@ class Tube6502 extends Base6502 {
         if (this.romPaged && (offset & 0xf000) === 0xf000) {
             return this.rom[offset & 0xfff];
         }
+
+        // ATOM
+        // video generator needs to know when CPU is accessing memory so it can make snow
+        if (this.model.isAtom && !this.model.hasNoiseKiller) this.video.video6847.cpuAddrAccess(offset & 0xffff);
+
         return this.memory[offset & 0xffff];
     }
 
@@ -635,6 +644,12 @@ export class Cpu6502 extends Base6502 {
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.soundChip.setScheduler(this.scheduler);
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
+
+        // ATOM
+        if (this.model.isAtom) {
+            this.atomppia = new atom_ppia.AtomPPIA(this, this.config.keyLayout, this.scheduler);
+            this.atommc = new atom_mmc.AtomMMC2(this);
+        }
     }
 
     getPrevPc(index) {
@@ -711,6 +726,83 @@ export class Cpu6502 extends Base6502 {
         const res = this.ramRomOs[addr];
         if (this._debugRead) this._debugRead(addr, 0, res);
         return res | 0;
+    }
+
+    // ATOM
+
+    // DEBUGGING TAPE READ ON ACORN ATOM
+    // in readmemZpStack(addr)
+    // if (this.model.isAtom) {
+    //     if (addr === 0x00c0 && this.pc === 0xfc1e)
+    //         // console.log("0x"+this.pc.toString(16)+" >> 0x"+ res.toString(16) +" << at " + this.cycleSeconds + "seconds, " + this.currentCycles + "cycles } ");
+    //         console.log(
+    //             "  " + res.toString(16) + " : " + String.fromCharCode(res) + " [0x" + addr.toString(16) + "]"
+    //         );
+
+    //     if (addr === 0x00dc && this.pc === 0xfc29)
+    //         console.log(
+    //             "0x" +
+    //                 this.pc.toString(16) +
+    //                 " >> 0x" +
+    //                 res.toString(16) +
+    //                 " << at " +
+    //                 this.cycleSeconds +
+    //                 "seconds, " +
+    //                 this.currentCycles +
+    //                 "cycles } "
+    //         );
+    // }
+
+    //ACORN ATOM
+    readDeviceAtom(addr) {
+        addr &= 0xffff;
+        switch (addr & ~0x0003) {
+            case 0x0a00:
+            case 0x0a04: {
+                // FDC (8271)
+                var res = this.fdc.read(addr);
+                // console.log("read fdc " + addr.toString(16)+" : " +res.toString(16) + " : " + String.fromCharCode(res));
+                return res;
+            }
+            case 0xb000: // mirror 0x3fc
+            case 0xb004: {
+                // PPIA 8255
+                let res = this.atomppia.read(addr);
+                // if (addr === 0xb002)
+                //     console.log("read PPIA 8255 0x"+addr.toString(16) +": 0x"+res.toString(16));
+                return res;
+            }
+            case 0xb008:
+            case 0xb00c:
+                return 0x00; //TODO: PPI
+            case 0xb400:
+            case 0xb404:
+            case 0xb408:
+            case 0xb40c:
+                // MMC
+                return this.atommc.read(addr); // on atom
+            case 0xb800: // mirror 0x3f0
+            case 0xb804:
+            case 0xb808:
+            case 0xb80c: {
+                // only set up a single VIA - repurposing USERVIA from BBC
+                // VIA 6522
+                let res = this.uservia.read(addr);
+                // console.log("read VIA  6522 0x"+addr.toString(16) +": 0x"+res.toString(16));
+                return res;
+            }
+            case 0xbc10:
+            case 0xbc14:
+                // 1770 - not implemented
+                break;
+            case 0xbdc0:
+            case 0xbdd0:
+            case 0xbde0:
+            case 0xbdf0:
+                // SID - not implemented
+                break;
+        }
+        return addr >>> 8;
     }
 
     writememZpStack(addr, b) {
@@ -914,7 +1006,11 @@ export class Cpu6502 extends Base6502 {
             if (this._debugRead) this._debugRead(addr, res, offset);
             return res | 0;
         } else {
-            const res = this.readDevice(addr);
+            // ATOM
+            let res = this.readDevice(addr);
+            if (this.model.isAtom) {
+                res = this.readDeviceAtom(addr);
+            }
             if (this._debugRead) this._debugRead(addr, res, 0);
             return res | 0;
         }
@@ -926,8 +1022,20 @@ export class Cpu6502 extends Base6502 {
             const offset = this.memLook[statOffset];
             return this.ramRomOs[offset + addr];
         } else {
-            return 0xff; // TODO; peekDevice -- this.peekDevice(addr);
+            // ATOM
+            if (this.model.isAtom) {
+                return this.peekDeviceAtom(addr);
+            } else {
+                return 0xff; // TODO; peekDevice -- this.peekDevice(addr);
+            }
         }
+    }
+
+    // ATOM
+    peekDeviceAtom(addr) {
+        // TODO: just show the memory - should really do a form of readDevice
+        var offset = this.memLook[this.memStatOffset + (addr >>> 8)];
+        return this.ramRomOs[offset + addr];
     }
 
     writemem(addr, b) {
@@ -937,11 +1045,22 @@ export class Cpu6502 extends Base6502 {
         const statOffset = this.memStatOffset + (addr >>> 8);
         if (this.memStat[statOffset] === 1) {
             const offset = this.memLook[statOffset];
+
+            // ATOM
+            // video generator needs to know when CPU is accessing memory so it can make snow
+            if (this.model.isAtom && !this.model.hasNoiseKiller) this.video.video6847.cpuAddrAccess(offset + addr);
+
             this.ramRomOs[offset + addr] = b;
             return;
         }
-        if (addr < 0xfc00 || addr >= 0xff00) return;
-        this.writeDevice(addr, b);
+        // ATOM
+        if (this.model.isAtom) {
+            // got this far - should be an atom device address
+            this.writeDevice(addr, b);
+        } else {
+            if (addr < 0xfc00 || addr >= 0xff00) return;
+            this.writeDevice(addr, b);
+        }
     }
 
     writeDevice(addr, b) {
@@ -951,6 +1070,36 @@ export class Cpu6502 extends Base6502 {
         if (this.model.hasMusic5000 && (addr & 0xff00) === 0xfd00 && (this.music5000PageSel & 0xf0) === 0x30) {
             this.music5000.write(this.music5000PageSel, addr, b);
             return;
+        }
+
+        // ATOM
+        switch (addr & ~0x0003) {
+            case 0x0a00:
+            case 0x0a04:
+                // FDC (8271)
+                // console.log("wrte fdc "+addr + ","+b);
+                return this.fdc.write(addr, b);
+            case 0xb000:
+            case 0xb004:
+            case 0xb008:
+            case 0xb00c:
+                // if (addr >= 0xb002 ) // SOUND
+                // console.log("wrte PPIA 8255 0x"+addr.toString(16)+" <- 0x"+b.toString(16));
+                return this.atomppia.write(addr, b); // on atom is 6847
+            case 0xb400:
+            case 0xb404:
+            case 0xb408:
+            case 0xb40c:
+                // MMC
+                return this.atommc.write(addr, b); // on atom
+            case 0xb800:
+            case 0xb804:
+            case 0xb808:
+            case 0xb80c:
+                // only set up a single VIA - repurposing USERVIA from BBC
+                // 6522 VIA
+                // console.log("wrte VIA  6522 0x"+addr.toString(16)+" <- 0x"+b.toString(16));
+                return this.uservia.write(addr, b);
         }
 
         switch (addr & ~0x0003) {
@@ -1092,6 +1241,18 @@ export class Cpu6502 extends Base6502 {
         if (/\.zip/i.test(name)) {
             data = utils.unzipRomImage(data).data;
         }
+
+        // ATOM
+        const len = data.length;
+        if (this.model.isAtom) {
+            if (len !== 16384 && len !== 8192 && len !== 4096) {
+                throw new Error("Broken rom file " + len + " " + name);
+            }
+        } else {
+            if (len !== 16384 && len !== 8192) {
+                throw new Error("Broken rom file");
+            }
+        }
         ramRomOs.set(data, offset);
     }
 
@@ -1102,26 +1263,45 @@ export class Cpu6502 extends Base6502 {
         const ramRomOs = this.ramRomOs;
         const data = await utils.loadData(os);
         const len = data.length;
-        if (len < 16384 || len & 16383) throw new Error(`Broken OS ROM file (length=${len})`);
-        ramRomOs.set(data, this.osOffset);
-        const numExtraBanks = (len - 16384) / 16384;
-        let romIndex = 16 - numExtraBanks;
-        for (let i_1 = 0; i_1 < numExtraBanks; ++i_1) {
-            const srcBase = 16384 + 16384 * i_1;
-            const destBase = this.romOffset + (romIndex + i_1) * 16384;
-            ramRomOs.set(data.subarray(srcBase, srcBase + 16384), destBase);
-        }
-        const awaiting = [];
-        for (let i_2 = 0; i_2 < extraRoms.length; ++i_2) {
-            // Skip over banks 4-7 (sideways RAM on a Master)
-            romIndex--;
-            while (this.model.swram[romIndex]) {
-                romIndex--;
-            }
 
-            awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * 16384));
+        // ATOM
+        if (this.model.isAtom) {
+            //Load 4K ATOM OS into 0xc000 + 0x3000 (i.e 0xf000)
+            if (len < 0x1000 || len & 0x0fff) throw new Error("Broken ROM file (length=" + len + ")");
+            let romIndex = 5;
+            ramRomOs.fill(0x00, this.osOffset, this.osOffset + 0x4000);
+            ramRomOs.set(data.subarray(0, 0x1000), this.osOffset);
+
+            const awaiting = [];
+            for (let i_2 = 0; i_2 < extraRoms.length; ++i_2) {
+                romIndex--;
+                //0x1000 - 4kb rom
+                if (extraRoms[i_2] !== "")
+                    awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * 0x1000));
+            }
+            return await Promise.all(awaiting);
+        } else {
+            if (len < 16384 || len & 16383) throw new Error(`Broken OS ROM file (length=${len})`);
+            ramRomOs.set(data, this.osOffset);
+            const numExtraBanks = (len - 16384) / 16384;
+            let romIndex = 16 - numExtraBanks;
+            for (let i_1 = 0; i_1 < numExtraBanks; ++i_1) {
+                const srcBase = 16384 + 16384 * i_1;
+                const destBase = this.romOffset + (romIndex + i_1) * 16384;
+                ramRomOs.set(data.subarray(srcBase, srcBase + 16384), destBase);
+            }
+            const awaiting = [];
+            for (let i_2 = 0; i_2 < extraRoms.length; ++i_2) {
+                // Skip over banks 4-7 (sideways RAM on a Master)
+                romIndex--;
+                while (this.model.swram[romIndex]) {
+                    romIndex--;
+                }
+
+                awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * 16384));
+            }
+            return await Promise.all(awaiting);
         }
-        return await Promise.all(awaiting);
     }
 
     setReset(resetOn) {
@@ -1140,7 +1320,31 @@ export class Cpu6502 extends Base6502 {
                 for (let i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
                 for (let i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
 
-                for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                // ATOM
+                if (this.model.isAtom) {
+                    // ROMS are different on ATOM - using 0x8000 onwards for video memory
+                    //0x8000 -> 0xbfff
+                    for (let i = 0x80; i < 0xc0; ++i) this.memLook[i] = this.memLook[256 + i] = 0; // just usual address
+
+                    // roms
+                    //0xa000 -> 0xefff
+                    for (let i = 0xa0; i < 0xf0; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0xa000;
+                    //0xf000 -> 0xffff
+                    for (let i = 0xf0; i < 0x100; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xf000;
+
+                    for (let i = 0; i < 0xa0; ++i) this.memStat[i] = this.memStat[256 + i] = 1; // up 0x9fff : 1 means RAM
+                    for (let i = 0xa0; i < 0xb0; ++i) this.memStat[i] = this.memStat[256 + i] = 1; // 0xA000 onwards : 1 means RAM (ROMS loaded here are writable!)
+                    for (let i = 0xb0; i < 0xc0; ++i) this.memStat[i] = this.memStat[256 + i] = 0; //0xb000 to 0xbfff  : 0 means DEVICE/PERIPHERAL/IO
+                    for (let i = 0xc0; i < 0x100; ++i) this.memStat[i] = this.memStat[256 + i] = 2; // 0xC000 onwards : 2 means ROM
+
+                    if (this.model.useFdc) {
+                        // FDC is reserved between 0a00 - 0a80  (0aff in this emulator)
+                        let i = 0x0a;
+                        this.memStat[i] = this.memStat[256 + i] = 0; // 0 means DEVICE/PERIPHERAL/IO
+                    }
+                } else {
+                    for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+                }
             } else {
                 // Test sets everything as RAM.
                 for (let i = 0; i < 256; ++i) {
@@ -1174,6 +1378,16 @@ export class Cpu6502 extends Base6502 {
             this.touchScreen = new TouchScreen(this.scheduler);
             if (this.model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
             if (this.econet) this.filestore = new Filestore(this, this.econet);
+
+            // ATOM
+            if (this.model.isAtom) {
+                this.atomppia.reset(hard);
+
+                // random numbers
+                for (let i = 8; i < 13; this.ramRomOs[i++] = (256 * Math.random()) | 0); // Random number seed address
+                // randomise the video memory
+                for (let i = 0x8000; i < 0x9000; this.ramRomOs[i++] = (256 * Math.random()) | 0); // Random number seed address
+            }
         } else {
             this.fdc.reset();
         }
@@ -1190,6 +1404,12 @@ export class Cpu6502 extends Base6502 {
         this.halted = false;
         this.music5000PageSel = 0;
         this.video.reset(this, this.sysvia, hard);
+
+        // ATOM
+        if (this.model.isAtom) {
+            this.atommc.reset(hard);
+            this.video.video6847.reset(this, this.atomppia);
+        }
         this.soundChip.reset(hard);
         if (this.teletextAdaptor) this.teletextAdaptor.reset(hard);
         if (this.music5000) this.music5000.reset(hard);
@@ -1201,6 +1421,9 @@ export class Cpu6502 extends Base6502 {
 
     updateKeyLayout() {
         this.sysvia.setKeyLayout(this.config.keyLayout);
+
+        // ATOM
+        if (this.model.isAtom) this.atomppia.setKeyLayoutAtom(this.config.keyLayout);
     }
 
     polltimeAddr(cycles, addr) {

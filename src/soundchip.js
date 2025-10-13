@@ -29,6 +29,7 @@ export class SoundChip {
         this.sampleDecrement = this.waveDecrementPerSecond / sampleRate;
         // How many samples are generated per CPU cycle.
         this.samplesPerCycle = sampleRate / 2000000;
+        // samplesPerCycle will be overwritten by setCPUSpeed
         this.minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
         this.registers = new Uint16Array(4);
@@ -41,6 +42,7 @@ export class SoundChip {
             this.toneChannel.bind(this),
             this.noiseChannel.bind(this),
             this.sineChannel.bind(this),
+            this.speakerChannel.bind(this), // Acorn Atom generator
         ];
 
         this.sineTable = makeSineTable(1 / this.generators.length);
@@ -75,6 +77,40 @@ export class SoundChip {
                 this.sineStep = (freq / sampleRate) * this.sineTable.length;
             },
         };
+
+        // ATOM
+        this.isAtom = false; // set to true for the ATOM
+        // this.speakerGenerator with mute and pushbit to push bits to the speaker which
+        // will play all the time and play the bits in packets to the speaker
+        this.speakerGenerator = {
+            mute: () => {
+                this.catchUp();
+                this.speakerReset();
+            },
+            pushBit: (bit, cycles, seconds) => {
+                this.catchUp();
+                this.updateSpeaker(bit, cycles, seconds);
+            },
+        };
+
+        this.cpuFreq = 1 / 1000000; // 1MHZ atom
+        this.speakerBufferSize = 8192;
+        this.speakerBuffer = [];
+        for (let i = 0; i < this.speakerBufferSize; ++i) {
+            this.speakerBuffer[i] = 0.0;
+        }
+        this.speakerTime = 0;
+        this.bufferPos = this.speakerBufferSize >> 1; // start buffer half way through buffer and speakertime at the beginning
+        this.lastSecond = 0;
+        this.lastMicroCycle = 0;
+        this.outstandingCycles = 0;
+        this.numSamplesAdded = 0;
+    }
+
+    // ATOM
+    setCPUSpeed(cpuSpeed) {
+        this.cpuFreq = 1 / cpuSpeed;
+        this.samplesPerCycle = this.soundchipFreq * this.cpuFreq;
     }
 
     sineChannel(channel, out, offset, length) {
@@ -168,6 +204,17 @@ export class SoundChip {
         }
         if (!this.enabled) return;
         for (let i = 0; i < this.generators.length; ++i) {
+            // ATOM
+            if (this.isAtom) {
+                // no need to generate these channels on ATOM
+                // BBC only
+                if (i < 4) continue;
+            } else {
+                // no need to generate this channel on BBC
+                // ATOM only
+                if (i == 5) continue;
+            }
+            // NOTE: channel 4 is sine channel which can be used by both
             this.generators[i](i, out, offset, length);
         }
     }
@@ -273,6 +320,9 @@ export class SoundChip {
         }
         this.noisePoked();
         this.lastRunEpoch = this.scheduler.epoch;
+
+        // ATOM
+        this.speakerReset();
     }
 
     enable(e) {
@@ -285,6 +335,83 @@ export class SoundChip {
 
     unmute() {
         this.enabled = true;
+    }
+
+    // ATOM
+    // Atom Speaker - pushBit will be called by the CPU via the PPIA to set a 0 to the physical speaker output
+    // but the PPIA port A bit is usually set to 1 giving no sound. Only a change in the value causes the speaker to
+    // buzz.
+
+    // The 'soundchip' is scheduled to send data to the browser audiohandler at sampleRate.
+    // speakerChannel will fill the out buffer with data from the speakerBuffer
+    // the speakerbuffer is filled with the data via updateSpeaker
+
+    // so cpu -> ppia -> updatespeaker > speakerbuffer -> speakerchannel -> out
+
+    // ATOM
+    speakerReset() {
+        this.bitChange = []; // FIFO queue
+        this.currentSpeakerBit = 0.0; // most recent bit to be copied into out
+    }
+
+    // ATOM
+    speakerChannel(channel, out, offset, length) {
+        // channel not used
+        // out is the buffer to fill (total buffer is no more than 512 samples in size)
+        // offset is the position in the out buffer to start filling
+        // length is the number of samples to fill
+
+        // this.scheduler.epoch is the number of cycles since the last update
+        let fromTime = this.scheduler.epoch - length;
+        let bitIndex = 0;
+
+        // start filling the out buffer with bits from the bitChange queue
+        for (let i = 0; i < length; ++i) {
+            // need some bits in the queue or just stick with the current bit value
+            // i will be incrementing through the cycles so it will eventuall be greater than
+            // the last bitChange cycle
+            // when this happens, make the current bit that in the queue
+            // NOTE: using bitIndex and splice to avoid using 'shift' which is O(n)
+            while (bitIndex < this.bitChange.length && this.bitChange[bitIndex].cycles <= fromTime + i) {
+                this.currentSpeakerBit = this.bitChange[bitIndex].bit;
+                bitIndex++;
+            }
+
+            out[i + offset] += this.currentSpeakerBit;
+        }
+
+        // Remove processed bits from the queue
+        if (bitIndex > 0) {
+            this.bitChange.splice(0, bitIndex);
+        }
+    }
+
+    // ATOM
+    // record changes in the value in a FIFO queue
+    // bit changed from the PPIA on the ATOM
+    updateSpeaker(value, microCycle, seconds) {
+        // value is usually 1, it is flipped between 1 and 0 when a sound is required
+
+        // cycles is the number of cycles since the last update
+        const cycles = microCycle + seconds / this.cpuFreq;
+
+        const newbit = value ? 1.0 : 0.0;
+
+        // create a FIFO queue and push on the newbit, and totalCycles
+        this.bitChange.push({ bit: newbit, cycles: cycles });
+
+        // running this program (from Atomic Theory and Practice) page 26
+        // section 4.6.1 Labels - a to z
+        // shows that the frequencies and sounds are right
+        /*
+        10 REM 322 Hz
+        20 P=#B002
+        30 FOR Z=0 TO 10000000 STEP 4;?P=Z;N.
+        40 END
+        RUN
+        */
+
+        // can also run the SYNTHESISER program from the ATOM MMC
     }
 }
 
