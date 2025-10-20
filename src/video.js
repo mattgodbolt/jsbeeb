@@ -153,7 +153,7 @@ export class Video {
                 0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
             ]),
         );
-        this.screenAddrSubtract = new Uint8Array([8, 10, 4, 5]);
+        this.screenAddrSubtract = new Uint8Array([8, 4, 10, 5]);
         this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
         this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x08, 0x10]);
         this.regs = new Uint8Array(32);

@@ -285,4 +285,51 @@ describe("Video", () => {
             expect(mockTeletext.render).not.toHaveBeenCalled();
         });
     });
+
+    describe("Hardware scrolling address translation", () => {
+        beforeEach(() => {
+            // Set up for graphics mode (non-teletext)
+            video.ula.write(0, 0);
+            video.addr = 0x1000; // Set MA12 to trigger translation
+            video.scanlineCounter = 0;
+        });
+
+        it("should apply mode 0-2 scroll offset (subtract 10)", () => {
+            video.setScreenHwScroll(2); // C1=1, C0=0 -> MODE 0-2, subtract 0x5000 (10 from MA11-MA8)
+            mockCpu.videoRead.mockReturnValue(0x42);
+
+            const result = video.readVideoMem();
+
+            // MA=0x1000: MA12=1 (trigger), MA11-MA8=0x0, MA7-MA0=0x00
+            // adjustedHigh = (0x0 - 10) & 0x0f = 0x6
+            // Expected: ((0x6 << 11) | (0x00 << 3) | 0x0) = 0x3000
+            // Matches beebjit: (0x1000 * 8) - 0x5000 = 0x8000 - 0x5000 = 0x3000
+            expect(mockCpu.videoRead).toHaveBeenCalledWith(0x3000);
+            expect(result).toBe(0x42);
+        });
+
+        it("should not affect addresses when MA12 is clear", () => {
+            video.setScreenHwScroll(2);
+            video.addr = 0x0500; // MA12 clear
+
+            video.readVideoMem();
+
+            // No translation: ((0x5 << 11) | (0x00 << 3) | 0x0) = 0x2800
+            expect(mockCpu.videoRead).toHaveBeenCalledWith(0x2800);
+        });
+
+        it("should handle scanlineCounter offset correctly", () => {
+            video.setScreenHwScroll(0); // C1=0, C0=0 -> MODE 3, subtract 0x4000 (8 from MA11-MA8)
+            video.addr = 0x1000;
+            video.scanlineCounter = 5; // RA = 5
+
+            video.readVideoMem();
+
+            // MA=0x1000: MA12=1 (trigger), MA11-MA8=0x0, MA7-MA0=0x00, RA=5
+            // adjustedHigh = (0x0 - 8) & 0x0f = 0x8
+            // Expected: ((0x8 << 11) | (0x00 << 3) | 0x5) = 0x4005
+            // Matches beebjit: (0x1000 * 8) - 0x4000 + 5 = 0x8000 - 0x4000 + 5 = 0x4005
+            expect(mockCpu.videoRead).toHaveBeenCalledWith(0x4005);
+        });
+    });
 });
