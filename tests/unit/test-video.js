@@ -173,108 +173,96 @@ describe("Video", () => {
             // Setup for rendering
             video.dispEnabled = EVERYTHINGENABLED;
 
-            // Test pattern - alternating bits
-            const testPattern = 0x55; // 01010101
+            // Use 0xFF (all bits set) as a simple, predictable test pattern
+            const testPattern = 0xff;
             mockCpu.videoRead.mockReturnValue(testPattern);
 
-            // Setup palette for testing to ensure pixels have visible values
-            video.ula.write(1, 0xf1); // Set palette entry F to color 1 (bright)
-            video.ula.write(1, 0x02); // Set palette entry 0 to color 2 (bright)
+            // Setup palette with known colours
+            // For 0xFF, the palette index will be 15 (0xF) in all modes
+            const testColour = 0xffff0000; // Red
+            video.ulaPal.fill(testColour); // Set all palette entries to make test robust
 
-            // Add some colors directly to the ulaPal array to ensure visibility
-            video.ulaPal[0] = 0xff0000ff; // Red
-            video.ulaPal[1] = 0xff00ff00; // Green
-
-            // Render the pattern in Mode 0 (high resolution, 2 colors)
+            // Render the pattern in Mode 0 (8 pixels per character)
             video.ula.write(0, 0); // Set Mode 0
-            video.pixelsPerChar = 8; // Ensure correct pixel width for the mode
+            video.pixelsPerChar = 8;
 
-            // Render and capture Mode 0 result
             const offset = 1024 * 100 + 100;
             video.blitFb(testPattern, offset, 8);
 
-            // Check that some pixels were written (non-zero values in buffer)
-            let mode0PixelCount = 0;
+            // Verify all 8 pixels were rendered with the test colour
             for (let i = 0; i < 8; i++) {
-                if (mockFb32[offset + i] !== 0) mode0PixelCount++;
+                const pixel = mockFb32[offset + i];
+                expect(pixel).toBe(testColour);
             }
 
             // Clear frame buffer
             mockFb32.fill(0);
 
-            // Now render in Mode 2 (medium resolution, 4 colors)
+            // Now render in Mode 2 (16 pixels per character)
             video.ula.write(0, 8); // Set Mode 2
-            video.pixelsPerChar = 16; // Ensure correct pixel width for the mode
+            video.pixelsPerChar = 16;
 
-            // Render and count pixels for Mode 2
             video.blitFb(testPattern, offset, 16);
 
-            let mode2PixelCount = 0;
+            // Verify all 16 pixels were rendered with the test colour
             for (let i = 0; i < 16; i++) {
-                if (mockFb32[offset + i] !== 0) mode2PixelCount++;
+                const pixel = mockFb32[offset + i];
+                expect(pixel).toBe(testColour);
             }
 
-            // The two modes should produce different numbers of non-zero pixels
-            expect(mode0PixelCount).toBeGreaterThan(0); // Some pixels should be set
-            expect(mode2PixelCount).toBeGreaterThan(0); // Some pixels should be set
-
-            // Mode 2 uses 16 pixels per character, Mode 0 uses 8
-            expect(mode0PixelCount).toBeLessThanOrEqual(8);
-            expect(mode2PixelCount).toBeLessThanOrEqual(16);
+            // The key difference: Mode 0 renders 8 pixels, Mode 2 renders 16 pixels
+            // Both should have all pixels set to the same colour for the 0xFF pattern
         });
 
         it("should expand Mode 2 pixels horizontally compared to Mode 3", () => {
-            // In Mode 2, each pixel is 2x wider than in Mode 3
+            // Mode 2 doubles pixels horizontally: each palette index is used for 2 consecutive pixels
             mockFb32.fill(0);
             const offset = 1024 * 100 + 100;
 
-            // Prepare test data
             const testData = 0xaa; // 10101010
 
-            // Setup for rendering
+            // Setup palette with distinct colours
+            video.ulaPal[0] = 0xffff0000; // Red
+            video.ulaPal[1] = 0xff00ff00; // Green
+            video.ulaPal[2] = 0xff0000ff; // Blue
+            video.ulaPal[3] = 0xffffff00; // Yellow
+
             video.dispEnabled = EVERYTHINGENABLED;
 
-            // Render in Mode 2
+            // Render in Mode 2 (16 pixels)
             video.ula.write(0, 8); // Set Mode 2
             video.blitFb(testData, offset, 16);
 
             // Capture Mode 2 result
-            const mode2Pattern = Array.from(mockFb32.slice(offset, offset + 16))
-                .map((v) => (v ? 1 : 0))
-                .join("");
+            const mode2Pixels = Array.from(mockFb32.slice(offset, offset + 16));
+
+            // Key property of Mode 2: consecutive pairs of pixels should be identical (doubling)
+            for (let i = 0; i < 16; i += 2) {
+                expect(mode2Pixels[i]).toBe(mode2Pixels[i + 1]);
+            }
 
             // Clear buffer
             mockFb32.fill(0);
 
-            // Render the same data in Mode 3
+            // Render the same data in Mode 3 (8 pixels)
             video.ula.write(0, 12); // Set Mode 3
             video.blitFb(testData, offset, 8);
 
-            // Capture Mode 3 result
-            const mode3Pattern = Array.from(mockFb32.slice(offset, offset + 8))
-                .map((v) => (v ? 1 : 0))
-                .join("");
+            const mode3Pixels = Array.from(mockFb32.slice(offset, offset + 8));
 
-            // Mode 2 should have twice as many pixels as Mode 3 for same data
-            expect(mode2Pattern.length).toBe(16);
-            expect(mode3Pattern.length).toBe(8);
-
-            // The mode2 pattern should have pixels doubled horizontally
-            // For example: If mode3 is "10101010", mode2 might be "1100110011001100"
-            let expandedMode3 = "";
-            for (let i = 0; i < mode3Pattern.length; i++) {
-                expandedMode3 += mode3Pattern[i].repeat(2);
+            // Verify that Mode 2's doubled pixels correspond to Mode 3's pixels
+            // mode2[0,1] should equal mode3[0], mode2[2,3] should equal mode3[1], etc.
+            for (let i = 0; i < 8; i++) {
+                expect(mode2Pixels[i * 2]).toBe(mode3Pixels[i]);
+                expect(mode2Pixels[i * 2 + 1]).toBe(mode3Pixels[i]);
             }
-
-            // This checks that pixels are expanded, even if the exact values differ
-            expect(mode2Pattern.length).toBe(expandedMode3.length);
         });
 
         it("should handle palette writes via ULA interface", () => {
             // Setup Mode 2
             video.ula.write(0, 8);
 
-            // Set palette entries directly to ensure visible colors
+            // Set palette entries directly to ensure visible colours
             video.ulaPal[0] = 0xff0000ff; // Red
             video.ulaPal[1] = 0xff00ff00; // Green
 
@@ -283,13 +271,12 @@ describe("Video", () => {
             expect(video.ulaPal[1]).toBe(0xff00ff00);
 
             // Now set a palette entry using the ULA interface
-            video.ula.write(1, 0x17); // Palette entry 1, color 7 (white)
+            video.ula.write(1, 0x17); // Palette entry 1, colour 7 (white)
 
-            // Verify the actual palette entry was updated (the internal representation)
+            // Verify the actual palette entry was updated to the specific colour
             expect(video.actualPal[1]).toBe(7);
 
-            // Check that different indices point to different colors
-            // This verifies palette handling is active and functional
+            // Verify that different palette indices have different values
             expect(video.actualPal[0]).not.toBe(video.actualPal[1]);
         });
     });
@@ -338,6 +325,9 @@ describe("Video", () => {
             // Call endOfScanline to increment scanlineCounter to 1
             video.endOfScanline();
 
+            // Verify scanlineCounter was incremented
+            expect(video.scanlineCounter).toBe(1);
+
             // Verify setRA0 was called with the correct value (bit 0 is 1)
             expect(mockTeletext.setRA0).toHaveBeenCalledWith(true);
 
@@ -346,6 +336,9 @@ describe("Video", () => {
 
             // Call endOfScanline again to increment scanlineCounter to 2
             video.endOfScanline();
+
+            // Verify scanlineCounter was incremented
+            expect(video.scanlineCounter).toBe(2);
 
             // Verify setRA0 was called with the correct value (bit 0 is 0)
             expect(mockTeletext.setRA0).toHaveBeenCalledWith(false);
