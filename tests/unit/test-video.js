@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
 
-// Setup the video with imported constants
+// Setup with focus on testing behavior rather than implementation details
 describe("Video", () => {
     let video;
     let mockCpu;
@@ -10,6 +10,9 @@ describe("Video", () => {
     let mockFb32;
     let mockPaintExt;
     let mockTeletext;
+
+    // Test framebuffer offset at pixel (100, 100) - assumes 1024 pixel width
+    const TEST_FB_OFFSET = 1024 * 100 + 100;
 
     beforeEach(() => {
         // Reset all mocks
@@ -76,16 +79,45 @@ describe("Video", () => {
             // Verify teletext mode was cleared
             expect(video.teletextMode).toBe(false);
         });
-    });
 
-    describe("Memory access in teletext mode", () => {
-        beforeEach(() => {
-            // Set teletext mode
-            video.ula.write(0, 2);
+        it("should set correct ulaMode based on bits 2-3", () => {
+            // Test mode 0: bits 2-3 = 00
+            video.ula.write(0, 0); // 00000000
+            expect(video.ulaMode).toBe(0);
+
+            // Test mode 1: bits 2-3 = 01
+            video.ula.write(0, 4); // 00000100
+            expect(video.ulaMode).toBe(1);
+
+            // Test mode 2: bits 2-3 = 10
+            video.ula.write(0, 8); // 00001000
+            expect(video.ulaMode).toBe(2);
+
+            // Test mode 3: bits 2-3 = 11
+            video.ula.write(0, 12); // 00001100
+            expect(video.ulaMode).toBe(3);
         });
 
-        it("should use correct addressing for Mode 7 on Master", () => {
-            // Set up MA13 set (addr bit 13 set) for Mode 7 addressing
+        it("should set pixelsPerChar and halfClock based on bit 4", () => {
+            // Test with bit 4 clear (default case)
+            video.ula.write(0, 0); // 00000000
+            expect(video.pixelsPerChar).toBe(16);
+            expect(video.halfClock).toBe(true);
+
+            // Test with bit 4 set
+            video.ula.write(0, 16); // 00010000
+            expect(video.pixelsPerChar).toBe(8);
+            expect(video.halfClock).toBe(false);
+        });
+    });
+
+    describe("Memory addressing", () => {
+        it("should use Mode 7 chunky addressing when MA13 is set", () => {
+            // Set teletext mode
+            video.ula.write(0, 2);
+            expect(video.teletextMode).toBe(true);
+
+            // Set up MA13 set (addr bit 13 set)
             video.addr = 0x2000; // Bit 13 set
             video.isMaster = true; // Set to Master mode
 
@@ -99,12 +131,15 @@ describe("Video", () => {
             // Verify result
             expect(result).toBe(expectedData);
 
-            // Check correct address was used (should mask to 0x3ff and add 0x7c00 for Master)
+            // Check correct address was used for Master
             expect(mockCpu.videoRead).toHaveBeenCalledWith(0x7c00);
         });
 
-        it("should handle Model B quirk for reading 0x3c00", () => {
-            // Set up addr with MA13 set but MA11 clear for Model B quirk
+        it("should handle Model B quirk for reading 0x3c00 in Mode 7", () => {
+            // Set teletext mode
+            video.ula.write(0, 2);
+
+            // Set up addr with MA13 set but MA11 clear
             video.addr = 0x2000; // Bit 13 set, bit 11 clear
             video.isMaster = false; // Set to Model B mode
 
@@ -113,6 +148,136 @@ describe("Video", () => {
 
             // For Model B, should use 0x3c00 instead of 0x7c00
             expect(mockCpu.videoRead).toHaveBeenCalledWith(0x3c00);
+        });
+
+        it("should use scanline-based addressing for non-teletext modes", () => {
+            // Ensure not in teletext mode
+            video.ula.write(0, 0);
+            expect(video.teletextMode).toBe(false);
+
+            // Set test values
+            video.addr = 0x1234;
+            video.scanlineCounter = 5;
+
+            // Call readVideoMem
+            video.readVideoMem();
+
+            // Check address formation combines scanline and character address
+            const expectedAddr = (5 & 0x07) | (0x1234 << 3);
+            expect(mockCpu.videoRead).toHaveBeenCalledWith(expectedAddr & 0x7fff);
+        });
+    });
+
+    describe("Video mode rendering", () => {
+        it("should use different number of pixels per character in different modes", () => {
+            // Initialize frame buffer
+            mockFb32.fill(0);
+
+            // Setup for rendering
+            video.dispEnabled = EVERYTHINGENABLED;
+
+            // Use 0xFF (all bits set) as a simple, predictable test pattern
+            const testPattern = 0xff;
+
+            // Setup palette with known colours
+            // For 0xFF, the palette index will be 15 (0xF) in all modes
+            const testColour = 0xffff0000; // Red
+            video.ulaPal.fill(testColour); // Set all palette entries to make test robust
+
+            // Render the pattern in Mode 0 (8 pixels per character)
+            video.ula.write(0, 0); // Set Mode 0
+            video.pixelsPerChar = 8;
+
+            video.blitFb(testPattern, TEST_FB_OFFSET, 8);
+
+            // Verify all 8 pixels were rendered with the test colour
+            for (let i = 0; i < 8; i++) {
+                const pixel = mockFb32[TEST_FB_OFFSET + i];
+                expect(pixel).toBe(testColour);
+            }
+
+            // Clear frame buffer
+            mockFb32.fill(0);
+
+            // Now render in Mode 2 (16 pixels per character)
+            video.ula.write(0, 8); // Set Mode 2
+            video.pixelsPerChar = 16;
+
+            video.blitFb(testPattern, TEST_FB_OFFSET, 16);
+
+            // Verify all 16 pixels were rendered with the test colour
+            for (let i = 0; i < 16; i++) {
+                const pixel = mockFb32[TEST_FB_OFFSET + i];
+                expect(pixel).toBe(testColour);
+            }
+
+            // The key difference: Mode 0 renders 8 pixels, Mode 2 renders 16 pixels
+            // Both should have all pixels set to the same colour for the 0xFF pattern
+        });
+
+        it("should expand Mode 2 pixels horizontally compared to Mode 3", () => {
+            // Mode 2 doubles pixels horizontally: each palette index is used for 2 consecutive pixels
+            mockFb32.fill(0);
+
+            const testData = 0xaa; // 10101010
+
+            // Setup palette with distinct colours
+            video.ulaPal[0] = 0xffff0000; // Red
+            video.ulaPal[1] = 0xff00ff00; // Green
+            video.ulaPal[2] = 0xff0000ff; // Blue
+            video.ulaPal[3] = 0xffffff00; // Yellow
+
+            video.dispEnabled = EVERYTHINGENABLED;
+
+            // Render in Mode 2 (16 pixels)
+            video.ula.write(0, 8); // Set Mode 2
+            video.blitFb(testData, TEST_FB_OFFSET, 16);
+
+            // Capture Mode 2 result
+            const mode2Pixels = Array.from(mockFb32.slice(TEST_FB_OFFSET, TEST_FB_OFFSET + 16));
+
+            // Key property of Mode 2: consecutive pairs of pixels should be identical (doubling)
+            for (let i = 0; i < 16; i += 2) {
+                expect(mode2Pixels[i]).toBe(mode2Pixels[i + 1]);
+            }
+
+            // Clear buffer
+            mockFb32.fill(0);
+
+            // Render the same data in Mode 3 (8 pixels)
+            video.ula.write(0, 12); // Set Mode 3
+            video.blitFb(testData, TEST_FB_OFFSET, 8);
+
+            const mode3Pixels = Array.from(mockFb32.slice(TEST_FB_OFFSET, TEST_FB_OFFSET + 8));
+
+            // Verify that Mode 2's doubled pixels correspond to Mode 3's pixels
+            // mode2[0,1] should equal mode3[0], mode2[2,3] should equal mode3[1], etc.
+            for (let i = 0; i < 8; i++) {
+                expect(mode2Pixels[i * 2]).toBe(mode3Pixels[i]);
+                expect(mode2Pixels[i * 2 + 1]).toBe(mode3Pixels[i]);
+            }
+        });
+
+        it("should handle palette writes via ULA interface", () => {
+            // Setup Mode 2
+            video.ula.write(0, 8);
+
+            // Set palette entries directly to ensure visible colours
+            video.ulaPal[0] = 0xff0000ff; // Blue
+            video.ulaPal[1] = 0xff00ff00; // Green
+
+            // Verify palette entries have been initialized
+            expect(video.ulaPal[0]).toBe(0xff0000ff);
+            expect(video.ulaPal[1]).toBe(0xff00ff00);
+
+            // Now set a palette entry using the ULA interface
+            video.ula.write(1, 0x17); // Palette entry 1, colour 7 (white)
+
+            // Verify the actual palette entry was updated to the specific colour
+            expect(video.actualPal[1]).toBe(7);
+
+            // Verify that different palette indices have different values
+            expect(video.actualPal[0]).not.toBe(video.actualPal[1]);
         });
     });
 
@@ -132,16 +297,15 @@ describe("Video", () => {
             video.dispEnableSet(HDISPENABLE | VDISPENABLE | USERDISPENABLE);
 
             // The mask in dispEnableChanged is HDISPENABLE | VDISPENABLE | USERDISPENABLE
-            // and it checks if all bits are set with (this.dispEnabled & mask) === mask
             expect(mockTeletext.setDISPTMG).toHaveBeenCalledWith(true);
 
             // Clear the mock history
             mockTeletext.setDISPTMG.mockClear();
 
-            // Test display enable clear - clear a required flag
+            // Test display enable clear
             video.dispEnableClear(HDISPENABLE);
 
-            // Now the mask check will fail, so setDISPTMG is called with false
+            // Now setDISPTMG is called with false
             expect(mockTeletext.setDISPTMG).toHaveBeenCalledWith(false);
         });
 
@@ -211,7 +375,6 @@ describe("Video", () => {
             // Clear mock history
             mockTeletext.setDEW.mockClear();
 
-            // Triggering vsync is complex, we need to set up more state
             // Calling polltime with the right conditions
             video.polltime(1);
 
