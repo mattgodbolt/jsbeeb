@@ -145,6 +145,10 @@ export class GlCanvas {
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
 
+        // Set PAL filter uniforms for visible region (need original pixel coords before normalization)
+        gl.uniform1f(this.palFilter.locations.uLeftBorder, extent.minx);
+        gl.uniform1f(this.palFilter.locations.uActiveWidth, extent.maxx - extent.minx);
+
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 }
