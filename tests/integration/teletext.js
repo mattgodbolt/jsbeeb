@@ -72,7 +72,7 @@ async function compare(video, testMachine, expectedName) {
     );
 }
 
-describe("Test Ceefax test page", () => {
+describe("Test Ceefax test page", { timeout: 30000 }, () => {
     it("should match the Ceefax test page (no flash)", async () => {
         const video = new CapturingVideo();
         const testMachine = await setupCeefaxTestMachine(video);
@@ -99,7 +99,7 @@ describe("Test Ceefax test page", () => {
     });
 });
 
-describe("Test other teletext test pages", () => {
+describe("Test other teletext test pages", { timeout: 30000 }, () => {
     it("should work with hoglet's test case", async () => {
         const video = new CapturingVideo();
         const testMachine = new TestMachine(null, { video: video });

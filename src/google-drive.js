@@ -26,34 +26,34 @@ export class GoogleDriveLoader {
 
     async initialise() {
         console.log("Creating GAPI");
-        const gapi = await this._loadScript("https://apis.google.com/js/api.js", () => window.gapi);
+        await this._loadScript("https://apis.google.com/js/api.js");
         console.log("Got GAPI, creating token client");
-        this.tokenClient = await this._loadScript("https://accounts.google.com/gsi/client", () => {
-            return window.google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                error_callback: "", // defined later
-                callback: "", // defined later
-            });
+        this.gapi = window.gapi;
+        await this._loadScript("https://accounts.google.com/gsi/client");
+        this.tokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
+            error_callback: "", // defined later
+            callback: "", // defined later
         });
         console.log("Token client created, loading client");
 
-        await gapi.load("client", async () => {
+        await this.gapi.load("client", async () => {
             console.log("Client loaded; initialising GAPI");
-            await gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
+            await this.gapi.client.init({ discoveryDocs: [DISCOVERY_DOC] });
             console.log("GAPI initialised");
-            this.driveClient = gapi.client.drive;
+            this.driveClient = this.gapi.client.drive;
         });
         console.log("Google Drive: available");
         return true;
     }
 
-    _loadScript(src, onload) {
+    _loadScript(src) {
         // https://github.com/google/google-api-javascript-client/issues/319
         return new Promise((resolve) => {
             const script = document.createElement("script");
             script.src = src;
-            script.onload = () => resolve(onload());
+            script.onload = resolve;
             document.body.appendChild(script);
         });
     }
@@ -128,11 +128,8 @@ export class GoogleDriveLoader {
         });
     }
 
-    async create(fdc, name) {
+    async create(fdc, name, data) {
         console.log(`Google Drive: creating disc image: '${name}'`);
-        const byteSize = utils.discImageSize(name).byteSize;
-        const data = new Uint8Array(byteSize);
-        utils.setDiscName(data, name);
         const response = await this.saveFile(name, data);
         const meta = response.result;
         return { fileId: meta.id, disc: this.makeDisc(fdc, data, meta) };

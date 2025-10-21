@@ -1,5 +1,4 @@
-import { describe, it } from "vitest";
-import assert from "assert";
+import { describe, it, expect } from "vitest";
 
 import { Disc, IbmDiscFormat } from "../../src/disc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
@@ -9,11 +8,11 @@ describe("Disc drive tests", function () {
     it("starts empty", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
-        assert.equal(drive.trackLength, IbmDiscFormat.bytesPerTrack);
-        assert.equal(drive.disc, null);
-        assert(!drive.spinning);
+        expect(drive.trackLength).toBe(IbmDiscFormat.bytesPerTrack);
+        expect(drive.disc).toBeFalsy();
+        expect(drive.spinning).toBe(false);
         drive.setPulsesCallback(() => {
-            assert(false); // no callbacks expected
+            expect.fail("no callbacks expected");
         });
         scheduler.polltime(1000000);
     });
@@ -22,24 +21,24 @@ describe("Disc drive tests", function () {
         const drive = new DiscDrive(0, scheduler);
         const disc = Disc.createBlank();
         drive.setDisc(disc);
-        assert.equal(drive.disc, disc);
+        expect(drive.disc).toBe(disc);
     });
     it("calls back with pulses after spinning starts", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
         drive.setDisc(0, Disc.createBlank());
         drive.setPulsesCallback(() => {
-            assert(false); // no callbacks expected
+            expect.fail("no callbacks expected");
         });
         scheduler.polltime(1000000);
         drive.startSpinning();
         let numPulses = 0;
         drive.setPulsesCallback(() => numPulses++);
         scheduler.polltime(500);
-        assert.equal(numPulses, 4);
+        expect(numPulses).toBe(4);
         drive.stopSpinning();
         drive.setPulsesCallback(() => {
-            assert(false); // no callbacks expected
+            expect.fail("no callbacks expected");
         });
         scheduler.polltime(1000000);
     });
@@ -53,17 +52,17 @@ describe("Disc drive tests", function () {
         let called = false;
         drive.setPulsesCallback((pulses, numPulses) => {
             called = true;
-            assert.equal(numPulses, 32);
-            assert.equal(pulses, 0xdeadbeef);
+            expect(numPulses).toBe(32);
+            expect(pulses).toBe(0xdeadbeef);
         });
         drive.startSpinning();
         scheduler.polltime(1000000);
-        assert(called);
+        expect(called).toBe(true);
     });
     it("asserts index all the time with no disc", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
-        assert(drive.indexPulse);
+        expect(drive.indexPulse).toBe(true);
     });
     it("asserts index periodically with a spinning disc", () => {
         const scheduler = new Scheduler();
@@ -81,6 +80,6 @@ describe("Disc drive tests", function () {
             if (drive.indexPulse && !previousIndex) risingEdges++;
             previousIndex = drive.indexPulse;
         }
-        assert.equal(risingEdges, (rpm / 60) * testSeconds);
+        expect(risingEdges).toBe((rpm / 60) * testSeconds);
     });
 });

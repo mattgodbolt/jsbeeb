@@ -153,7 +153,7 @@ export class Video {
                 0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
             ]),
         );
-        this.screenAddrAdd = new Uint16Array([0x4000, 0x3000, 0x6000, 0x5800]);
+        this.screenAddrSubtract = new Uint8Array([8, 4, 10, 5]);
         this.cursorTable = new Uint8Array([0x00, 0x00, 0x00, 0x80, 0x40, 0x20, 0x20]);
         this.cursorFlashMask = new Uint8Array([0x00, 0x00, 0x08, 0x10]);
         this.regs = new Uint8Array(32);
@@ -203,7 +203,7 @@ export class Video {
         this.interlacedSyncAndVideo = false;
         this.doubledScanlines = true;
         this.frameSkipCount = 0;
-        this.screenAdd = 0;
+        this.screenSubtract = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -345,8 +345,8 @@ export class Video {
         if (++this.cursorDrawIndex === 7) this.cursorDrawIndex = 0;
     }
 
-    setScreenAdd(viaScreenAdd) {
-        this.screenAdd = this.screenAddrAdd[viaScreenAdd];
+    setScreenHwScroll(viaScreenHwScroll) {
+        this.screenSubtract = this.screenAddrSubtract[viaScreenHwScroll];
     }
 
     readVideoMem() {
@@ -363,10 +363,15 @@ export class Video {
             }
             return this.cpu.videoRead(memAddr);
         } else {
-            let addr = (this.scanlineCounter & 0x07) | (this.addr << 3);
-            // Perform screen address wrap around if MA12 set
-            if (this.addr & 0x1000) addr += this.screenAdd;
-            return this.cpu.videoRead(addr & 0x7fff);
+            // Emulate IC32/IC39 address translation: adjust MA11..MA8 on overflow before composing the DRAM address.
+            const ma = this.addr & 0x1fff;
+            const raLow = this.scanlineCounter & 0x07;
+            let adjustedHigh = (ma >>> 8) & 0x0f;
+            if (ma & 0x1000) {
+                adjustedHigh = (adjustedHigh - this.screenSubtract) & 0x0f;
+            }
+            const hiResAddr = ((adjustedHigh << 11) | ((ma & 0xff) << 3) | raLow) & 0x7fff;
+            return this.cpu.videoRead(hiResAddr);
         }
     }
 
@@ -782,5 +787,5 @@ export class FakeVideo {
 
     polltime() {}
 
-    setScreenAdd() {}
+    setScreenHwScroll() {}
 }

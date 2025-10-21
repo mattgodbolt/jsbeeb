@@ -368,8 +368,8 @@ class Via {
 
     portBUpdated() {}
 
-    getJoysticks() {
-        return { button1: true, button2: true };
+    rawPortB() {
+        return 0xff;
     }
 
     recalculatePortAPins() {
@@ -381,18 +381,8 @@ class Via {
 
     recalculatePortBPins() {
         const prevPb6 = !!(this.portbpins & 0x40);
-        this.portbpins = this.orb & this.ddrb;
-        const buttons = this.getJoysticks();
+        this.portbpins = (this.orb & this.ddrb) | (~this.ddrb & this.rawPortB());
 
-        // AUG p418
-        // ### PB4 and PB5 inputs
-        // These are the inputs from the joystick FIRE buttons. They are
-        // normally at logic 1 with no button pressed and change to 0 when a
-        // button is pressed
-        if (!buttons.button1) this.portbpins |= 1 << 4;
-        if (!buttons.button2) this.portbpins |= 1 << 5;
-
-        this.portbpins |= ~this.ddrb & 0xff;
         this.drivePortB();
         if (prevPb6 && !(this.portbpins & 0x40)) {
             // If we see a high to low transition on pb6, and we are in timer2 pulse counting mode, count a pulse.
@@ -480,6 +470,9 @@ export class SysVia extends Via {
         for (let i = 0; i < 16; ++i) {
             this.keys[i] = new Uint8Array(16);
         }
+        // Mouse joystick button state
+        this.mouseButton1 = false;
+        this.mouseButton2 = false;
         this.keyboardEnabled = true;
         this.setKeyLayout(initialLayout);
         this.video = video;
@@ -608,6 +601,17 @@ export class SysVia extends Via {
         this.soundChip.updateSlowDataBus(this.portapins, !(this.IC32 & 1));
     }
 
+    rawPortB() {
+        let result = 0xff;
+        // AUG p418
+        // ### PB4 and PB5 inputs
+        // These are the inputs from the joystick FIRE buttons. They are active low.
+        const buttons = this.getJoysticks();
+        if (buttons.button1) result &= ~(1 << 4); // Clear PB4 if button1 pressed
+        if (buttons.button2) result &= ~(1 << 5); // Clear PB5 if button2 pressed
+        return result;
+    }
+
     portBUpdated() {
         const portbpins = this.portbpins;
         if (portbpins & 8) this.IC32 |= 1 << (portbpins & 7);
@@ -616,7 +620,7 @@ export class SysVia extends Via {
         this.capsLockLight = !(this.IC32 & 0x40);
         this.shiftLockLight = !(this.IC32 & 0x80);
 
-        this.video.setScreenAdd((this.IC32 & 16 ? 2 : 0) | (this.IC32 & 32 ? 1 : 0));
+        this.video.setScreenHwScroll((this.IC32 & 16 ? 2 : 0) | (this.IC32 & 32 ? 1 : 0));
 
         if (this.isMaster) this.cmos.writeControl(portbpins, this.portapins, this.IC32);
 
@@ -645,19 +649,35 @@ export class SysVia extends Via {
         return null;
     }
 
+    /**
+     * Set joystick button state (for mouse joystick)
+     * @param {number} buttonNumber - Button number (0 for button1, 1 for button2)
+     * @param {boolean} pressed - Whether the button is pressed
+     */
+    setJoystickButton(buttonNumber, pressed) {
+        if (buttonNumber === 0) {
+            this.mouseButton1 = pressed;
+        } else if (buttonNumber === 1) {
+            this.mouseButton2 = pressed;
+        }
+        // Trigger port B recalculation to update button state
+        this.recalculatePortBPins();
+    }
+
     getJoysticks() {
-        let button1 = false;
-        let button2 = false;
+        let button1 = this.mouseButton1; // Start with mouse button state
+        let button2 = this.mouseButton2;
 
         const pads = this.getGamepads();
         if (pads && pads[0]) {
             const pad = pads[0];
             const pad2 = pads[1];
 
-            button1 = pad.buttons[10].pressed;
+            // Combine gamepad and mouse button states (OR logic)
+            button1 = button1 || pad.buttons[10].pressed;
             // if two gamepads, use button from 2nd
             // otherwise use 2nd button from first
-            button2 = pad2 ? pad2.buttons[10].pressed : pad.buttons[11].pressed;
+            button2 = button2 || (pad2 ? pad2.buttons[10].pressed : pad.buttons[11].pressed);
         }
 
         return { button1: button1, button2: button2 };

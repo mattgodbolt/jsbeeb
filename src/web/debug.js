@@ -1,6 +1,5 @@
 "use strict";
 import $ from "jquery";
-import _ from "underscore";
 import { hexbyte, hexword, noop, parseAddr } from "../utils.js";
 
 const numToShow = 16;
@@ -80,9 +79,8 @@ class MemoryView {
 }
 
 export class Debugger {
-    constructor(video) {
-        this.video = video;
-        this.patchInstructions = {};
+    constructor() {
+        this.patchInstructions = new Map();
         this._enabled = false;
         this.disass = $("#disassembly");
         this._memoryView = new MemoryView($("#memory"), (address) => (this.cpu ? this.cpu.peekmem(address) : 0));
@@ -142,6 +140,7 @@ export class Debugger {
     setupCrtc(node, video) {
         if (!video) return noop;
         const updates = [];
+        node.find("tr:not(.template)").remove();
 
         const regNode = node.find(".crtc_regs");
 
@@ -215,6 +214,7 @@ export class Debugger {
             "portbpins",
             "IC32",
         ];
+        node.find("tr:not(.template)").remove();
         for (const elem of regs) {
             if (via[elem] === undefined) continue;
             const row = node.find(".template").clone().removeClass("template").appendTo(node);
@@ -260,41 +260,36 @@ export class Debugger {
         }
     }
 
-    execPatch(inst) {
-        const insts = inst.split(",");
-        if (insts.length !== 1) {
-            _.each(insts, this.execPatch);
-            return;
-        }
-        if (!inst) return;
-        const ops = inst.split(":");
-        let addr = parseInt(ops[0], 16);
-        const setTo = ops[1];
-        for (let i = 0; i < setTo.length; i += 2) {
-            const b = parseInt(setTo.substring(i, 2), 16);
-            this.cpu.writemem(addr, b);
-            addr++;
+    execPatch(instString) {
+        for (const inst of instString.split(",")) {
+            if (!inst) continue;
+            const ops = inst.split(":");
+            let addr = parseInt(ops[0], 16);
+            const setTo = ops[1];
+            for (let i = 0; i < setTo.length; i += 2) {
+                const b = parseInt(setTo.substring(i, i + 2), 16);
+                this.cpu.writemem(addr, b);
+                addr++;
+            }
         }
     }
 
     setPatch(patch) {
-        _.each(patch.split(";"), (inst) => {
+        for (const inst of patch.split(";")) {
             if (inst[0] === "@") {
-                const at = parseInt(inst.substring(1, 4), 16);
-                inst = inst.substring(5);
-                if (!this.patchInstructions[at]) this.patchInstructions[at] = [];
-                this.patchInstructions[at].push(inst);
+                const at = parseInt(inst.substring(1, 5), 16);
+                if (!this.patchInstructions.has(at)) this.patchInstructions.set(at, []);
+                this.patchInstructions.get(at).push(inst.substring(5));
             } else {
                 this.execPatch(inst);
             }
-        });
-        if (Object.keys(this.patchInstructions).length !== 0) {
+        }
+        if (this.patchInstructions.size > 0) {
             const hook = this.cpu.debugInstruction.add((pc) => {
-                const insts = this.patchInstructions[pc];
-                if (!insts) return false;
-                _.each(insts, this.execPatch);
-                delete this.patchInstructions[pc];
-                if (Object.keys(this.patchInstructions).length === 0) {
+                if (!this.patchInstructions.has(pc)) return false;
+                for (const inst of this.patchInstructions.get(pc)) this.execPatch(inst);
+                this.patchInstructions.delete(pc);
+                if (this.patchInstructions.size === 0) {
                     console.log("All patches done");
                     hook.remove();
                 }
@@ -311,7 +306,7 @@ export class Debugger {
         this.sysvia();
         this.uservia();
         this.crtc();
-        this.video.debugPaint();
+        this.cpu.video.debugPaint();
     }
 
     enable(e) {

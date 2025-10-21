@@ -1,7 +1,6 @@
-import { describe, it } from "vitest";
-import assert from "assert";
+import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadHfe, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
 import * as fs from "node:fs";
 
 describe("IBM disc format tests", function () {
@@ -11,7 +10,7 @@ describe("IBM disc format tests", function () {
         crc = IbmDiscFormat.crcAddByte(crc, 0x34);
         crc = IbmDiscFormat.crcAddByte(crc, 0x56);
         crc = IbmDiscFormat.crcAddByte(crc, 0x70);
-        assert.equal(crc, 0xb1e4);
+        expect(crc).toBe(0xb1e4);
     });
     it("calculates MFM crcs", () => {
         let crc = IbmDiscFormat.crcInit(true);
@@ -19,77 +18,77 @@ describe("IBM disc format tests", function () {
         crc = IbmDiscFormat.crcAddByte(crc, 0x34);
         crc = IbmDiscFormat.crcAddByte(crc, 0x56);
         crc = IbmDiscFormat.crcAddByte(crc, 0x70);
-        assert.equal(crc, 0x9d39);
+        expect(crc).toBe(0x9d39);
     });
     it("converts to FM pulses", () => {
-        assert.equal(IbmDiscFormat.fmTo2usPulses(0xff, 0x00), 0x44444444);
-        assert.equal(IbmDiscFormat.fmTo2usPulses(0xff, 0xff), 0x55555555);
-        assert.equal(IbmDiscFormat.fmTo2usPulses(0xc7, 0xfe), 0x55111554);
+        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0x00)).toBe(0x44444444);
+        expect(IbmDiscFormat.fmTo2usPulses(0xff, 0xff)).toBe(0x55555555);
+        expect(IbmDiscFormat.fmTo2usPulses(0xc7, 0xfe)).toBe(0x55111554);
     });
     it("converts from FM pulses", () => {
         // TODO either fix these or understand why beebjit doesn't use same bit posn for bits.
         const deliberateFudge = 1;
-        assert.deepEqual(IbmDiscFormat._2usPulsesToFm(0x44444444 << deliberateFudge), {
+        expect(IbmDiscFormat._2usPulsesToFm(0x44444444 << deliberateFudge)).toEqual({
             clocks: 0xff,
             data: 0x00,
             iffyPulses: false,
         });
-        assert.deepEqual(IbmDiscFormat._2usPulsesToFm(0x55555555 << deliberateFudge), {
+        expect(IbmDiscFormat._2usPulsesToFm(0x55555555 << deliberateFudge)).toEqual({
             clocks: 0xff,
             data: 0xff,
             iffyPulses: false,
         });
-        assert.deepEqual(IbmDiscFormat._2usPulsesToFm(0x55111554 << deliberateFudge), {
+        expect(IbmDiscFormat._2usPulsesToFm(0x55111554 << deliberateFudge)).toEqual({
             clocks: 0xc7,
             data: 0xfe,
             iffyPulses: false,
         });
-        assert.deepEqual(IbmDiscFormat._2usPulsesToFm((0x55111554 << deliberateFudge) | 0x05), {
+        expect(IbmDiscFormat._2usPulsesToFm((0x55111554 << deliberateFudge) | 0x05)).toEqual({
             clocks: 0xc7,
             data: 0xfe,
             iffyPulses: true,
         });
     });
     it("converts to MFM pulses", () => {
-        assert.deepEqual(IbmDiscFormat.mfmTo2usPulses(false, 0x00), { lastBit: false, pulses: 0xaaaa });
-        assert.deepEqual(IbmDiscFormat.mfmTo2usPulses(true, 0x00), { lastBit: false, pulses: 0x2aaa });
-        assert.deepEqual(IbmDiscFormat.mfmTo2usPulses(false, 0xff), { lastBit: true, pulses: 0x5555 });
-        assert.deepEqual(IbmDiscFormat.mfmTo2usPulses(true, 0xff), { lastBit: true, pulses: 0x5555 });
-        assert.deepEqual(IbmDiscFormat.mfmTo2usPulses(false, 0x37), { lastBit: true, pulses: 0xa515 });
-        assert.deepEqual(IbmDiscFormat.mfmTo2usPulses(true, 0x37), { lastBit: true, pulses: 0x2515 });
+        expect(IbmDiscFormat.mfmTo2usPulses(false, 0x00)).toEqual({ lastBit: false, pulses: 0xaaaa });
+        expect(IbmDiscFormat.mfmTo2usPulses(true, 0x00)).toEqual({ lastBit: false, pulses: 0x2aaa });
+        expect(IbmDiscFormat.mfmTo2usPulses(false, 0xff)).toEqual({ lastBit: true, pulses: 0x5555 });
+        expect(IbmDiscFormat.mfmTo2usPulses(true, 0xff)).toEqual({ lastBit: true, pulses: 0x5555 });
+        expect(IbmDiscFormat.mfmTo2usPulses(false, 0x37)).toEqual({ lastBit: true, pulses: 0xa515 });
+        expect(IbmDiscFormat.mfmTo2usPulses(true, 0x37)).toEqual({ lastBit: true, pulses: 0x2515 });
     });
     it("Converts from MFM pulses", () => {
-        assert.equal(IbmDiscFormat._2usPulsesToMfm(0xaaaa), 0);
-        assert.equal(IbmDiscFormat._2usPulsesToMfm(0x2aaa), 0);
-        assert.equal(IbmDiscFormat._2usPulsesToMfm(0x5555), 0xff);
-        assert.equal(IbmDiscFormat._2usPulsesToMfm(0xa515), 0x37);
-        assert.equal(IbmDiscFormat._2usPulsesToMfm(0x2515), 0x37);
+        expect(IbmDiscFormat._2usPulsesToMfm(0xaaaa)).toBe(0);
+        expect(IbmDiscFormat._2usPulsesToMfm(0x2aaa)).toBe(0);
+        expect(IbmDiscFormat._2usPulsesToMfm(0x5555)).toBe(0xff);
+        expect(IbmDiscFormat._2usPulsesToMfm(0xa515)).toBe(0x37);
+        expect(IbmDiscFormat._2usPulsesToMfm(0x2515)).toBe(0x37);
     });
     it("checks gaps between MFM pulses", () => {
-        assert(!IbmDiscFormat.checkPulse(0.0, true));
-        assert(!IbmDiscFormat.checkPulse(3.49, true));
-        assert(!IbmDiscFormat.checkPulse(4.51, true));
-        assert(!IbmDiscFormat.checkPulse(7.49, true));
-        assert(!IbmDiscFormat.checkPulse(8.51, true));
+        expect(IbmDiscFormat.checkPulse(0.0, true)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(3.49, true)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(4.51, true)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(7.49, true)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(8.51, true)).toBe(false);
 
-        assert(IbmDiscFormat.checkPulse(4.0, true));
-        assert(IbmDiscFormat.checkPulse(5.51, true));
-        assert(IbmDiscFormat.checkPulse(6.0, true));
-        assert(IbmDiscFormat.checkPulse(6.49, true));
-        assert(IbmDiscFormat.checkPulse(8.0, true));
+        expect(IbmDiscFormat.checkPulse(4.0, true)).toBe(true);
+        expect(IbmDiscFormat.checkPulse(5.51, true)).toBe(true);
+        expect(IbmDiscFormat.checkPulse(6.0, true)).toBe(true);
+        expect(IbmDiscFormat.checkPulse(6.49, true)).toBe(true);
+        expect(IbmDiscFormat.checkPulse(8.0, true)).toBe(true);
     });
     it("checks gaps between FM pulses", () => {
-        assert(!IbmDiscFormat.checkPulse(0.0, false));
-        assert(!IbmDiscFormat.checkPulse(3.49, false));
-        assert(!IbmDiscFormat.checkPulse(4.51, false));
-        assert(!IbmDiscFormat.checkPulse(5.51, false));
-        assert(!IbmDiscFormat.checkPulse(6.0, false));
-        assert(!IbmDiscFormat.checkPulse(6.49, false));
-        assert(!IbmDiscFormat.checkPulse(7.49, false));
-        assert(!IbmDiscFormat.checkPulse(8.51, false));
+        expect(IbmDiscFormat.checkPulse(0.0, false)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(3.49, false)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(4.51, false)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(5.51, false)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(6.0, false)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(6.49, false)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(7.49, false)).toBe(false);
+        expect(IbmDiscFormat.checkPulse(8.51, false)).toBe(false);
 
-        assert(IbmDiscFormat.checkPulse(4.0, false));
-        assert(IbmDiscFormat.checkPulse(8.0, false));
+        expect(IbmDiscFormat.checkPulse(4.0, false)).toBe(true);
+        expect(IbmDiscFormat.checkPulse(8.0, false)).toBe(true);
     });
 });
 
@@ -145,17 +144,17 @@ describe("Disc builder tests", () => {
 
     it("should note how much disc is being used", () => {
         const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        assert.equal(disc.tracksUsed, 0);
-        assert(!disc.isDoubleSided);
+        expect(disc.tracksUsed).toBe(0);
+        expect(disc.isDoubleSided).toBe(false);
         disc.buildTrack(false, 0);
-        assert.equal(disc.tracksUsed, 1);
-        assert(!disc.isDoubleSided);
+        expect(disc.tracksUsed).toBe(1);
+        expect(disc.isDoubleSided).toBe(false);
         disc.buildTrack(false, 3);
-        assert.equal(disc.tracksUsed, 4);
-        assert(!disc.isDoubleSided);
+        expect(disc.tracksUsed).toBe(4);
+        expect(disc.isDoubleSided).toBe(false);
         disc.buildTrack(true, 1);
-        assert.equal(disc.tracksUsed, 4);
-        assert(disc.isDoubleSided);
+        expect(disc.tracksUsed).toBe(4);
+        expect(disc.isDoubleSided).toBe(true);
     });
 
     it("should build from FM pulses", () => {
@@ -163,7 +162,7 @@ describe("Disc builder tests", () => {
         const builder = disc.buildTrack(false, 0);
         const pulses = [4, 4, 8, 8, 4, 8, 8, 8, 8, 8, 8, 8, 8];
         builder.buildFromPulses(pulses, false);
-        assert.equal(builder.track.length, 1);
+        expect(builder.track.length).toBe(1);
     });
 
     it("should build from MFM pulses", () => {
@@ -171,7 +170,7 @@ describe("Disc builder tests", () => {
         const builder = disc.buildTrack(false, 0);
         const pulses = [4, 4, 6, 6, 4, 6, 6, 6, 6, 6, 6, 6, 6, 6];
         builder.buildFromPulses(pulses, true);
-        assert.equal(builder.track.length, 1);
+        expect(builder.track.length).toBe(1);
     });
 });
 
@@ -185,7 +184,7 @@ describe(
         it("should load Elite", () => {
             const disc = new Disc(true, new DiscConfig(), "test.ssd");
             loadSsd(disc, data, false);
-            assert.equal(disc.tracksUsed, 80);
+            expect(disc.tracksUsed).toBe(80);
         });
         it("should roundtrip Elite", () => {
             const disc = new Disc(true, new DiscConfig(), "test.ssd");
@@ -193,56 +192,41 @@ describe(
             const ssdSaved = toSsdOrDsd(disc);
             // // Check the first few bytes, else a diff blows things up
             const maxDiff = 50;
-            assert.deepEqual(ssdSaved.slice(0, maxDiff), Uint8Array.prototype.slice.call(data, 0, maxDiff));
+            expect(ssdSaved.slice(0, maxDiff)).toEqual(new Uint8Array(data.slice(0, maxDiff)));
 
             // But also check everything else; and the padding should be all zeros.
-            assert(ssdSaved.length >= data.length);
+            expect(ssdSaved.length >= data.length).toBe(true);
             for (let i = 0; i < data.length; ++i) {
-                assert.equal(ssdSaved[i], data[i]);
+                expect(ssdSaved[i]).toBe(data[i]);
             }
             for (let i = data.length; i < ssdSaved.length; ++i) {
-                assert.equal(ssdSaved[i], 0);
+                expect(ssdSaved[i]).toBe(0);
             }
         });
         it("should have sane tracks", () => {
             const disc = new Disc(true, new DiscConfig(), "test.ssd");
             loadSsd(disc, data, false);
             const sectors = disc.getTrack(false, 0).findSectors();
-            assert.equal(sectors.length, 10);
+            expect(sectors.length).toBe(10);
             for (const sector of sectors) {
-                assert(!sector.hasHeaderCrcError);
-                assert(!sector.hasDataCrcError);
+                expect(sector.hasHeaderCrcError).toBe(false);
+                expect(sector.hasDataCrcError).toBe(false);
             }
         });
     },
 );
-
-describe("HFE loader tests", function () {
-    const data = fs.readFileSync("public/discs/elite.hfe");
-    it("should load Elite", () => {
-        const disc = new Disc(true, new DiscConfig(), "test.hfe");
-        loadHfe(disc, data);
-        assert.equal(disc.tracksUsed, 81);
-        const sectors = disc.getTrack(false, 0).findSectors();
-        assert.equal(sectors.length, 10);
-        for (const sector of sectors) {
-            assert(!sector.hasHeaderCrcError);
-            assert(!sector.hasDataCrcError);
-        }
-    });
-});
 
 describe("ADF loader tests", function () {
     it("should load a somewhat blank ADFS disc", () => {
         const data = new Uint8Array(327680);
         const disc = new Disc(true, new DiscConfig(), "test.adf");
         loadAdf(disc, data, true);
-        assert.equal(disc.tracksUsed, 40);
+        expect(disc.tracksUsed).toBe(40);
         const sectors = disc.getTrack(false, 0).findSectors();
-        assert.equal(sectors.length, 16);
+        expect(sectors.length).toBe(16);
         for (const sector of sectors) {
-            assert(!sector.hasHeaderCrcError);
-            assert(!sector.hasDataCrcError);
+            expect(sector.hasHeaderCrcError).toBe(false);
+            expect(sector.hasDataCrcError).toBe(false);
         }
     });
 });

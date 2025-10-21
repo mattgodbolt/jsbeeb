@@ -21,5 +21,15 @@ export default [
                 ...globals.node,
             },
         },
+        rules: {
+            "no-unused-vars": [
+                "error",
+                {
+                    varsIgnorePattern: "^_",
+                    argsIgnorePattern: "^_",
+                    caughtErrorsIgnorePattern: "^_",
+                },
+            ],
+        },
     },
 ];
