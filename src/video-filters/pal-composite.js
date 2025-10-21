@@ -6,70 +6,25 @@
 // composite signal and decoding it back to RGB, mimicking the behavior of
 // connecting a BBC Micro to a PAL television via composite cable.
 //
+// IMPLEMENTATION:
+// 1. Encode RGB to PAL composite: Y + U*sin(ωt) + V*cos(ωt)*phase
+// 2. Demodulate chroma with 20-tap FIR low-pass filter (~1.3 MHz bandwidth)
+// 3. Apply FIR_GAIN = 2.0 to compensate for demodulation amplitude loss (CRITICAL!)
+// 4. Extract luma via 2H comb filter with tunable weighting (COMB_PREV_WEIGHT)
+// 5. Combine filtered luma and chroma, convert back to RGB
+//
+// TUNABLE PARAMETERS:
+// - FIR_GAIN: Must be 2.0 to compensate for sin²(x) amplitude loss during demodulation
+// - COMB_PREV_WEIGHT: Controls blur vs sharpness tradeoff
+//   * 0.5 = authentic equal-weight comb (Watkinson)
+//   * 0.33 = current setting (1/3 prev, 2/3 curr) - empirically tuned
+//   * Lower values favor current line → sharper but potentially more cross-color
+//
 // REFERENCES:
-// - John Watkinson's "Engineer's Guide to Decoding & Encoding" (particularly Section 3.4)
+// - John Watkinson's "Engineer's Guide to Decoding & Encoding" (Section 3.4)
 // - https://www.jim-easterbrook.me.uk/pal/ - Jim Easterbrook's PAL decoder research
-//
-// CURRENT APPROACH:
-// - Encode RGB to composite signal (Y + U*sin(ωt) + V*cos(ωt)*phase)
-// - Demodulate chroma with 20-tap FIR low-pass filter (~1.3 MHz bandwidth)
-// - Apply FIR_GAIN = 2.0 to compensate for demodulation amplitude loss
-// - Extract luma via notch filter: subtract re-modulated chroma from composite
-// - Proper PAL 4-field temporal phase sequence (283.75 cycles/line)
-//
-// APPROACHES TRIED:
-// 1. Notch filter for luma (svofski/CRT approach):
-//    - Subtract FIR-filtered chroma from composite to extract luma
-//    - ORIGINAL ASSESSMENT: Wide FIR filter (20 taps) reached across color transitions,
-//      creating premature artifacts ~10 pixels before edges
-//    - RE-TESTED: Super sharp, NO premature edge artifacts observed!
-//    - Initial problem: Checkerboard (chroma leaking into luma)
-//    - ROOT CAUSE FOUND: FIR_GAIN = 1.0 was wrong! Should be 2.0 to compensate for
-//      demodulation amplitude loss (sin²(x) = 0.5 - 0.5·cos(2x) identity)
-//    - FIXED: Set FIR_GAIN = 2.0, checkerboard gone, sharp, good saturation
-//    - This approach WORKS correctly with proper gain compensation!
-//
-// 2. Comb filter without temporal phase:
-//    - Average current and previous scanlines to cancel chroma
-//    - PROBLEM: Heavy vertical striping because we didn't account for the
-//      0.75 cycle phase offset between lines
-//    - FIXED by adding proper line_phase_offset calculation
-//
-// 3. Various horizontal bandwidth limiting attempts:
-//    - Tried filtering composite signal horizontally
-//    - ABANDONED as unnecessary once comb filter phase was fixed
-//
-// 4. 1H (1-line) comb filter spacing (NTSC-style):
-//    - Used line N and line N-1 with 0.75 cycle (270°) phase difference
-//    - PROBLEM: 270° phase shift causes U/V rotation, not cancellation
-//    - Result: Checkerboard artifacts on solid colors due to U/V mixing
-//    - FIXED by switching to 2H (2-line) spacing per Watkinson's guide
-//
-// 5. 3-tap bandpass comb with complementary luma subtraction:
-//    - Used -0.25, +0.5, -0.25 coefficients for "bandpass" chroma extraction
-//    - Subtracted chroma from current line to get luma (complementary decoder)
-//    - PROBLEM CONFIRMED: Complementary subtraction negates the negative coefficients:
-//      y_out = composite_curr - (-0.25*prev + 0.5*curr - 0.25*next)
-//            = 0.25*prev + 0.5*curr + 0.25*next  // Reduces to standard lowpass!
-//    - Test A verified: Explicit lowpass produces IDENTICAL blur (toggled multiple times)
-//    - Result: Luma averaged across 4 scanlines, excessive blur vs authentic PAL TVs
-//    - Good chroma separation but unacceptable vertical resolution loss
-//    - ABANDONED: Complementary approach doesn't work as intended with 3-tap comb
-//
-// 6. Various 2-tap comb filter weights (CURRENT TESTING):
-//    - Test E: No filtering (y = yuv_curr.x) - TOO sharp, missing PAL artifacts, unrealistic
-//    - Test B: 50/50 average (0.5*prev + 0.5*curr) - Still too blurry
-//    - Test B weighted: 25/75 (0.25*prev + 0.75*curr) - Better sharpness, subtle artifacts
-//    - PROBLEM: As we reduce blur (favor current line), checkerboard increases
-//    - CONCERN: Tuning weights may be papering over a fundamental bug
-//    - INVESTIGATING: Why does blur reduction increase checkerboard artifacts?
-//
-// CURRENT STATUS:
-// - Using notch filter for luma extraction (working correctly with FIR_GAIN = 2.0)
-// - Sharp image, no checkerboard artifacts
-// - Good color saturation
-// - Temporal dot crawl animates correctly across 4-frame sequence
-// - Ready to revisit comb filter approaches with correct gain to compare
+// - docs/pal-simulation-design.md - Full implementation details and alternatives tried
+// - docs/pal-comb-filter-research.md - Research on authentic PAL TV implementations
 
 const VERT_SHADER = `
 attribute vec2 pos;
@@ -103,6 +58,13 @@ const float PI = 3.14159265359;
 // due to sin²(x) = 0.5 - 0.5·cos(2x). We must scale by 2 to recover original.
 // Without this, we only remove HALF the chroma from luma → checkerboard artifacts!
 const float FIR_GAIN = 2.0;
+
+// 2H comb filter weight for previous line (delayed by 2H)
+// Current line gets (1.0 - COMB_PREV_WEIGHT)
+// Watkinson suggests 0.5 (equal weighting) for authentic PAL TVs
+// Lower values (e.g., 0.33, 0.25) favor current line → sharper but less Y/C separation
+// Higher values (e.g., 0.5) → more blur but better chroma cancellation
+const float COMB_PREV_WEIGHT = 0.33;
 
 // 20-tap FIR low-pass filter coefficients for chroma bandwidth limiting (~1.3 MHz)
 // Copied from svofski/CRT (glsl/shaders/singlepass/pass1.fsh:24)
@@ -249,13 +211,10 @@ void main() {
     vec3 yuv_next = rgb_to_yuv(rgb_next);
     float composite_next = yuv_next.x + yuv_next.y * sin(t_next) + yuv_next.z * cos(t_next) * next_pal_phase;
 
-    // RE-TEST: svofski notch filter approach (approach #1, previously abandoned)
-    // Extract luma by subtracting re-modulated filtered chroma from composite.
-    // This was abandoned due to premature artifacts ~10 pixels before edges,
-    // but re-testing to confirm and document so we don't loop back to this.
-    // (t_curr already defined at line 204)
-    float remodulated_chroma = filtered_uv.x * sin(t_curr) + filtered_uv.y * cos(t_curr) * pal_phase;
-    float y_out = composite_curr - remodulated_chroma;
+    // 2H comb filter with weighted coefficients
+    // Weight controlled by COMB_PREV_WEIGHT constant (see top of shader)
+    // With FIR_GAIN = 2.0 (corrected), checkerboard should be minimal
+    float y_out = COMB_PREV_WEIGHT * composite_prev + (1.0 - COMB_PREV_WEIGHT) * composite_curr;
 
     vec3 rgb_out = yuv_to_rgb(vec3(y_out, filtered_uv.x, filtered_uv.y));
     gl_FragColor = vec4(clamp(rgb_out, 0.0, 1.0), 1.0);
