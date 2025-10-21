@@ -18,7 +18,7 @@ export class Canvas {
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
-    paint(minx, miny, maxx, maxy) {
+    paint(minx, miny, maxx, maxy, _frameCount) {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
@@ -106,7 +106,7 @@ export class GlCanvas {
         console.log("GL Canvas set up");
     }
 
-    paint(minx, miny, maxx, maxy) {
+    paint(minx, miny, maxx, maxy, frameCount) {
         const gl = this.gl;
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
@@ -145,9 +145,8 @@ export class GlCanvas {
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
 
-        // Set PAL filter uniforms for visible region (need original pixel coords before normalization)
-        gl.uniform1f(this.palFilter.locations.uLeftBorder, extent.minx);
-        gl.uniform1f(this.palFilter.locations.uActiveWidth, extent.maxx - extent.minx);
+        // Set PAL filter uniforms
+        gl.uniform1f(this.palFilter.locations.uFrameCount, frameCount % 4); // 4-field temporal phase sequence
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }

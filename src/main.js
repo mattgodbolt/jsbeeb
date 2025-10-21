@@ -307,7 +307,7 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
     frames++;
     if (frames < frameSkip) return;
     frames = 0;
-    canvas.paint(minx, miny, maxx, maxy);
+    canvas.paint(minx, miny, maxx, maxy, this.frameCount);
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
