@@ -93,9 +93,11 @@ The implementation uses WebGL fragment shaders to perform real-time PAL encoding
 
 **Known Issues:**
 
-- ⚠️ Slight checkerboard pattern visible in solid color areas
-  - May be authentic PAL behavior (dot crawl)
-  - Needs verification against real hardware
+- ⚠️ **CRITICAL: Excessive blur** (October 2025 - Under Investigation)
+  - Current 3-tap comb implementation appears to cause more blur than authentic PAL TVs
+  - Mathematical analysis suggests unintended 4-line averaging (hypothesis, not yet confirmed)
+  - See "Blur Investigation" section below for details
+  - Good chroma separation observed, investigating vertical resolution issue
 
 **Not Yet Implemented (from original design):**
 
@@ -110,6 +112,176 @@ The implementation uses WebGL fragment shaders to perform real-time PAL encoding
 - Using notch filter would be simpler but less authentic
 - Could reduce FIR taps for performance (but quality suffers)
 - No edge detection or adaptive filtering (real TVs didn't have this)
+
+## Blur Investigation (October 2025)
+
+### Problem Statement
+
+The current implementation exhibits excessive blur compared to authentic PAL televisions. While PAL TVs were inherently blurry due to comb filtering, the current level of blur makes content difficult to read and appears worse than real hardware.
+
+### Confirmed Observations
+
+- ✅ Excessive vertical blur (confirmed by user testing)
+- ✅ Good chroma separation - no checkerboard artifacts in solid colors
+- ✅ Proper 2H comb spacing with 180° phase inversion
+- ✅ Correct temporal dot crawl animation (4-field sequence)
+
+### Working Hypothesis
+
+**Current implementation** (lines 222-228 in pal-composite.js):
+
+```glsl
+chroma_from_comb = -0.25 * composite_prev + 0.5 * composite_curr - 0.25 * composite_next;
+y_out = composite_curr - chroma_from_comb;
+```
+
+**Mathematical expansion:**
+
+```
+y_out = composite_curr - (-0.25*composite_prev + 0.5*composite_curr - 0.25*composite_next)
+y_out = composite_curr + 0.25*composite_prev - 0.5*composite_curr + 0.25*composite_next
+y_out = 0.25*composite_prev + 0.5*composite_curr + 0.25*composite_next
+```
+
+**Hypothesis:** This may reduce to a standard lowpass comb filter with POSITIVE coefficients (+0.25, +0.5, +0.25), which would average luma across 4 scanlines (N-2, N-1, N, N+1, N+2 span), potentially causing the observed excessive blur.
+
+**Status:** ✅ **CONFIRMED** - Test A verified hypothesis. Explicit lowpass produces identical blur when toggled multiple times. The complementary subtraction approach mathematically collapses to a simple averaging filter.
+
+### Investigation Questions
+
+1. **Does the math match reality?**
+   - Try different coefficients to verify the mathematical reduction is causing the blur
+
+2. **Is 3-tap (4-line span) too much?**
+   - Historical context: Earlier sessions found 2-tap had less blur but more checkerboard
+   - Question: Can we find a middle ground?
+
+3. **Is "complementary decoder" being misunderstood?**
+   - Watkinson shows standard comb with positive coefficients for luma
+   - Jim Easterbrook describes "complementary" as chroma extraction + delayed subtraction
+   - Question: Are we implementing the wrong variant?
+
+4. **Do we need different filter design?**
+   - Maybe complementary approach requires more taps for true bandpass
+   - Maybe we need different coefficient ratios
+   - Question: What did real PAL TVs actually use?
+
+### References Consulted
+
+**Watkinson "Engineer's Guide to Decoding & Encoding" (page 37):**
+
+- Shows standard PAL comb filters with POSITIVE coefficients: +0.25, +0.5, +0.25
+- This is explicitly for luma extraction (lowpass)
+- Creates averaging across lines
+
+**Jim Easterbrook PAL decoder page:**
+
+- Line 311: "Some form of filter is used to extract the modulated chrominance from a PAL signal. Subtracting this chrominance from a suitably delayed PAL signal then yields luminance"
+- Describes "complementary decoder" principle
+- BBC transform decoder: Uses Fourier transforms (much more sophisticated than simple comb)
+
+### Proposed Experiments
+
+**Test A: Verify the math hypothesis**
+
+- Change to explicit positive coefficients: `y_out = 0.25*prev + 0.5*curr + 0.25*next`
+- If blur is IDENTICAL, hypothesis confirmed
+- If blur CHANGES, something else is going on
+
+**Test B: Try 2-tap comb (reduce span)**
+
+- Use only lines N-2 and N (2 taps instead of 3)
+- Reduces span from 4 lines to 3 lines
+- May trade some chroma separation for less blur
+- Code change: Remove `composite_next` term
+
+**Test C: Try standard Watkinson approach**
+
+- Extract luma with positive comb: `y = 0.25*prev + 0.5*curr + 0.25*next`
+- Get chroma by subtraction: `chroma = composite - y`
+- This is the "textbook" approach from Watkinson
+- Compare blur vs current implementation
+
+**Test D: Adjust coefficient ratios**
+
+- Try different weighting: -0.5, +1.0, -0.5 (stronger center)
+- Try asymmetric: -0.25, +1.0, -0.75
+- See if coefficient tuning can preserve chroma separation while reducing blur
+
+### Historical Context from Earlier Sessions
+
+- Both 2-tap and 3-tap approaches were explored previously
+- 3-tap had better chroma separation (less checkerboard) but more blur
+- 2-tap had less blur but more checkerboard artifacts in solid colors
+- Switched from 1H to 2H spacing to fix 270° phase issue
+- This suggests fundamental tradeoff: chroma separation ↔ vertical resolution
+
+### Test Results (October 2025)
+
+**Test A: Verify mathematical hypothesis** ✅ CONFIRMED
+
+- Changed to explicit lowpass: `y_out = 0.25*prev + 0.5*curr + 0.25*next`
+- Result: IDENTICAL blur to original complementary approach (toggled multiple times)
+- Conclusion: Hypothesis confirmed - complementary subtraction collapses to simple lowpass
+
+**Test E: No comb filter (sharp baseline)** ✅ COMPLETED
+
+- Used clean luma from source: `y_out = yuv_curr.x`
+- Result: Very sharp, few artifacts
+- Observation: TOO sharp - missing subtle color artifacts expected from PAL
+- Note: Real TVs couldn't do this (need some Y/C filtering)
+
+**Test B: 2-tap comb (50/50 average)** ✅ COMPLETED
+
+- Used: `y_out = 0.5*prev + 0.5*curr` (2H spacing)
+- Result: Better sharpness than 3-tap, color artifacts returned (dot crawl visible)
+- Observation: Still blurrier than recalled authentic PAL TVs
+
+**Test B Weighted: 2-tap with 25/75 coefficients** ✅ COMPLETED
+
+- Used: `y_out = 0.25*prev + 0.75*curr`
+- Result: Much better sharpness, subtle color artifacts present
+- Observation: Getting close to authentic PAL blur levels
+- PROBLEM: Checkerboard artifacts more pronounced than expected in solid colors
+- **CONCERN**: Weight tuning might be papering over a fundamental bug rather than addressing root cause
+
+**RE-TEST: Notch filter (svofski approach)** ✅ COMPLETED - FOUND ROOT CAUSE!
+
+- Used: `y_out = composite_curr - remodulated_chroma` (subtract FIR-filtered chroma from composite)
+- Result: Super sharp, no blur
+- **UNEXPECTED**: NO premature edge artifacts (contrary to original abandonment reason!)
+- Initial problem: Checkerboard artifacts (chroma leaking into luma)
+- **ROOT CAUSE IDENTIFIED**: FIR_GAIN was 1.0, should be 2.0!
+  - Demodulation math: composite × sin(ωt) yields 0.5×U after low-pass (sin² identity)
+  - With gain=1.0: Only removed HALF the chroma from luma → checkerboard
+  - With gain=2.0: Properly compensates for amplitude loss → chroma fully removed
+- **FIXED**: Changed FIR_GAIN from 1.0 to 2.0
+- Result after fix: Checkerboard GONE, sharp, good color saturation
+- **MAJOR FINDING**: This was the fundamental bug causing all our issues!
+
+### Investigation Continues
+
+**Current Status:**
+
+- We can empirically tune weights to approximate desired look
+- BUT: Checkerboard issue suggests underlying problem
+- Hypothesis: There may be a fundamental bug in how we're extracting luma from composite
+- Need to investigate: Are we using the right approach for Y/C separation?
+
+**Questions for Further Investigation:**
+
+1. Should luma be extracted from composite signal vs clean YUV?
+2. Is 2H spacing correct for luma extraction in PAL comb filters?
+3. Are we missing a filtering step that real PAL TVs used?
+4. Is there a fundamental issue with our encoding/decoding approach?
+5. Why does reducing blur (less averaging) increase checkerboard artifacts?
+
+### Next Steps
+
+1. Research what real PAL TV comb filters actually did
+2. Check if we should be using different signals for luma vs chroma extraction
+3. Investigate if there's a "sweet spot" filter design that minimizes both blur AND checkerboard
+4. Consider whether we're missing horizontal filtering that real TVs had
 
 ### Key Learnings
 
