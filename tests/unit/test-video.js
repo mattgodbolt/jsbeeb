@@ -11,6 +11,9 @@ describe("Video", () => {
     let mockPaintExt;
     let mockTeletext;
 
+    // Test framebuffer offset at pixel (100, 100) - assumes 1024 pixel width
+    const TEST_FB_OFFSET = 1024 * 100 + 100;
+
     beforeEach(() => {
         // Reset all mocks
         vi.clearAllMocks();
@@ -175,7 +178,6 @@ describe("Video", () => {
 
             // Use 0xFF (all bits set) as a simple, predictable test pattern
             const testPattern = 0xff;
-            mockCpu.videoRead.mockReturnValue(testPattern);
 
             // Setup palette with known colours
             // For 0xFF, the palette index will be 15 (0xF) in all modes
@@ -186,12 +188,11 @@ describe("Video", () => {
             video.ula.write(0, 0); // Set Mode 0
             video.pixelsPerChar = 8;
 
-            const offset = 1024 * 100 + 100;
-            video.blitFb(testPattern, offset, 8);
+            video.blitFb(testPattern, TEST_FB_OFFSET, 8);
 
             // Verify all 8 pixels were rendered with the test colour
             for (let i = 0; i < 8; i++) {
-                const pixel = mockFb32[offset + i];
+                const pixel = mockFb32[TEST_FB_OFFSET + i];
                 expect(pixel).toBe(testColour);
             }
 
@@ -202,11 +203,11 @@ describe("Video", () => {
             video.ula.write(0, 8); // Set Mode 2
             video.pixelsPerChar = 16;
 
-            video.blitFb(testPattern, offset, 16);
+            video.blitFb(testPattern, TEST_FB_OFFSET, 16);
 
             // Verify all 16 pixels were rendered with the test colour
             for (let i = 0; i < 16; i++) {
-                const pixel = mockFb32[offset + i];
+                const pixel = mockFb32[TEST_FB_OFFSET + i];
                 expect(pixel).toBe(testColour);
             }
 
@@ -217,7 +218,6 @@ describe("Video", () => {
         it("should expand Mode 2 pixels horizontally compared to Mode 3", () => {
             // Mode 2 doubles pixels horizontally: each palette index is used for 2 consecutive pixels
             mockFb32.fill(0);
-            const offset = 1024 * 100 + 100;
 
             const testData = 0xaa; // 10101010
 
@@ -231,10 +231,10 @@ describe("Video", () => {
 
             // Render in Mode 2 (16 pixels)
             video.ula.write(0, 8); // Set Mode 2
-            video.blitFb(testData, offset, 16);
+            video.blitFb(testData, TEST_FB_OFFSET, 16);
 
             // Capture Mode 2 result
-            const mode2Pixels = Array.from(mockFb32.slice(offset, offset + 16));
+            const mode2Pixels = Array.from(mockFb32.slice(TEST_FB_OFFSET, TEST_FB_OFFSET + 16));
 
             // Key property of Mode 2: consecutive pairs of pixels should be identical (doubling)
             for (let i = 0; i < 16; i += 2) {
@@ -246,9 +246,9 @@ describe("Video", () => {
 
             // Render the same data in Mode 3 (8 pixels)
             video.ula.write(0, 12); // Set Mode 3
-            video.blitFb(testData, offset, 8);
+            video.blitFb(testData, TEST_FB_OFFSET, 8);
 
-            const mode3Pixels = Array.from(mockFb32.slice(offset, offset + 8));
+            const mode3Pixels = Array.from(mockFb32.slice(TEST_FB_OFFSET, TEST_FB_OFFSET + 8));
 
             // Verify that Mode 2's doubled pixels correspond to Mode 3's pixels
             // mode2[0,1] should equal mode3[0], mode2[2,3] should equal mode3[1], etc.
