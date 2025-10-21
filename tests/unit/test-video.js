@@ -263,7 +263,7 @@ describe("Video", () => {
             video.ula.write(0, 8);
 
             // Set palette entries directly to ensure visible colours
-            video.ulaPal[0] = 0xff0000ff; // Red
+            video.ulaPal[0] = 0xff0000ff; // Blue
             video.ulaPal[1] = 0xff00ff00; // Green
 
             // Verify palette entries have been initialized
