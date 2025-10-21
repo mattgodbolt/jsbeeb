@@ -68,7 +68,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Minimise special case handling - prefer explicit over implicit behaviour
   - Consider adding tests first before implementing features
 - **When simplifying existing code**
-
   - Prefer helper functions for repetitive operations (like the `appendParam` function)
   - Remove unnecessary type checking where types are expected to be correct
   - Replace complex conditionals with more readable alternatives when possible
@@ -81,7 +80,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Ensure simplifications don't break existing behavior or assumptions
 
 - **Constants and Magic Numbers**:
-
   - Local un-exported properties should be used for shared constants
   - Local constants should be used for temporary values
   - Always use named constants instead of magic numbers in code
