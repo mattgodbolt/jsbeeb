@@ -1,24 +1,26 @@
 "use strict";
 
-// PAL Composite Video Filter
+// PAL Composite Video Filter - Approach D: Baseband Chroma Blending
 //
 // Simulates PAL composite video artifacts by encoding the framebuffer to a
 // composite signal and decoding it back to RGB, mimicking the behavior of
 // connecting a BBC Micro to a PAL television via composite cable.
 //
-// IMPLEMENTATION:
+// IMPLEMENTATION (Baseband Blending Method):
 // 1. Encode RGB to PAL composite: Y + U*sin(ωt) + V*cos(ωt)*phase
-// 2. Demodulate chroma with 20-tap FIR low-pass filter (~1.3 MHz bandwidth)
-// 3. Apply FIR_GAIN = 2.0 to compensate for demodulation amplitude loss (CRITICAL!)
-// 4. Extract luma via 2H comb filter with tunable weighting (COMB_PREV_WEIGHT)
-// 5. Combine filtered luma and chroma, convert back to RGB
+// 2. Demodulate current line (with correct phase) → U_curr, V_curr
+// 3. Demodulate previous line (with correct phase) → U_prev, V_prev
+// 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
+// 5. Remodulate blended chroma back to composite frequency
+// 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma
+// 7. Combine luma and chroma, convert back to RGB
+//
+// KEY INSIGHT: Demodulate FIRST (with each line's correct phase), THEN blend.
+// This avoids U/V mixing that occurs when blending at composite level (Approach C failure).
 //
 // TUNABLE PARAMETERS:
 // - FIR_GAIN: Must be 2.0 to compensate for sin²(x) amplitude loss during demodulation
-// - COMB_PREV_WEIGHT: Controls blur vs sharpness tradeoff
-//   * 0.5 = authentic equal-weight comb (Watkinson)
-//   * 0.33 = current setting (1/3 prev, 2/3 curr) - empirically tuned
-//   * Lower values favor current line → sharper but potentially more cross-color
+// - CHROMA_BLEND_WEIGHT: Controls vertical chroma blending (0.0 = sharp, 0.5 = smooth)
 //
 // REFERENCES:
 // - John Watkinson's "Engineer's Guide to Decoding & Encoding" (Section 3.4)
@@ -52,12 +54,11 @@ uniform float uFrameCount;
 
 const float PI = 3.14159265359;
 
-// Chroma demodulation gain - CRITICAL: Must be 2.0 to compensate for sin²(x) amplitude loss
+// Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
 const float FIR_GAIN = 2.0;
 
-// 2H comb filter weight - controls blur vs sharpness tradeoff
-// 0.5 = equal weight (Watkinson), 0.33 = current (empirical), lower = sharper
-const float COMB_PREV_WEIGHT = 0.33;
+// Chroma vertical blending weight (0.0 = no blend, 0.5 = equal blend)
+const float CHROMA_BLEND_WEIGHT = 0.5;
 
 // 20-tap FIR low-pass filter coefficients for chroma bandwidth limiting (~1.3 MHz)
 // Copied from svofski/CRT (glsl/shaders/singlepass/pass1.fsh:24)
@@ -79,7 +80,7 @@ vec3 yuv_to_rgb(vec3 yuv) {
     );
 }
 
-// Demodulate composite signal: multiply by carrier to shift chroma to baseband
+// Demodulate composite signal at given position
 vec2 demodulate_uv(vec2 xy, float offset_pixels, float pal_phase, float cycles_per_pixel, float phase_offset) {
     float t = ((vPixelCoord.x + offset_pixels) * cycles_per_pixel + phase_offset) * 2.0 * PI;
 
@@ -116,37 +117,46 @@ void main() {
     // 0.75 cycles/line accumulates: 625 lines × 0.75 = 468.75 cycles/frame
     float line_phase_offset = line * 0.75;
     float frame_phase_offset = uFrameCount * 468.75;
-
-    // Demodulate composite signal and apply FIR low-pass filter to extract chroma
     float phase_offset = line_phase_offset + frame_phase_offset;
-    vec2 filtered_uv = vec2(0.0);
+
+    // Approach D: Baseband Chroma Blending
+    // Demodulate current and previous lines separately, then blend at baseband
+
+    // Step 1: Demodulate current line with FIR filter
+    vec2 filtered_uv_curr = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
         float offset = float(i - FIRTAPS / 2);
         vec2 uv = demodulate_uv(vTexCoord, offset, pal_phase, cycles_per_pixel, phase_offset);
-        filtered_uv += FIR_GAIN * uv * FIR[i];
+        filtered_uv_curr += FIR_GAIN * uv * FIR[i];
     }
 
-    // Extract luma using 2H comb filter
-    // 2H spacing provides 180° phase shift (1.5 cycles) for proper chroma cancellation
+    // Step 2: Demodulate previous line (1H) with FIR filter
+    vec2 prev_uv = vTexCoord - vec2(0.0, 1.0 * uTexelSize.y);
+    float prev_line = line - 1.0;
+    float prev_pal_phase = mod(prev_line, 2.0) < 1.0 ? 1.0 : -1.0;
+    float prev_phase_offset = prev_line * 0.75 + frame_phase_offset;
 
-    // Current scanline
+    vec2 filtered_uv_prev = vec2(0.0);
+    for (int i = 0; i < FIRTAPS; i++) {
+        float offset = float(i - FIRTAPS / 2);
+        vec2 uv = demodulate_uv(prev_uv, offset, prev_pal_phase, cycles_per_pixel, prev_phase_offset);
+        filtered_uv_prev += FIR_GAIN * uv * FIR[i];
+    }
+
+    // Step 3: Blend chroma at baseband (no U/V mixing!)
+    vec2 filtered_uv = mix(filtered_uv_curr, filtered_uv_prev, CHROMA_BLEND_WEIGHT);
+
+    // Step 4: Get luma via complementary subtraction
     float t_curr = (vPixelCoord.x * cycles_per_pixel + phase_offset) * 2.0 * PI;
     vec3 rgb_curr = texture2D(uFramebuffer, vTexCoord).rgb;
     vec3 yuv_curr = rgb_to_yuv(rgb_curr);
     float composite_curr = yuv_curr.x + yuv_curr.y * sin(t_curr) + yuv_curr.z * cos(t_curr) * pal_phase;
 
-    // Previous scanline (2 lines up for 2H spacing)
-    vec2 prev_uv = vTexCoord - vec2(0.0, 2.0 * uTexelSize.y);
-    float prev_line = line - 2.0;
-    float prev_pal_phase = mod(prev_line, 2.0) < 1.0 ? 1.0 : -1.0;
-    float prev_phase_offset = prev_line * 0.75 + frame_phase_offset;
-    float t_prev = (vPixelCoord.x * cycles_per_pixel + prev_phase_offset) * 2.0 * PI;
-    vec3 rgb_prev = texture2D(uFramebuffer, prev_uv).rgb;
-    vec3 yuv_prev = rgb_to_yuv(rgb_prev);
-    float composite_prev = yuv_prev.x + yuv_prev.y * sin(t_prev) + yuv_prev.z * cos(t_prev) * prev_pal_phase;
+    // Remodulate blended chroma back to composite frequency
+    float remodulated_chroma = filtered_uv.x * sin(t_curr) + filtered_uv.y * cos(t_curr) * pal_phase;
 
-    // Apply weighted 2H comb filter
-    float y_out = COMB_PREV_WEIGHT * composite_prev + (1.0 - COMB_PREV_WEIGHT) * composite_curr;
+    // Complementary subtraction: luma = composite - chroma
+    float y_out = composite_curr - remodulated_chroma;
 
     vec3 rgb_out = yuv_to_rgb(vec3(y_out, filtered_uv.x, filtered_uv.y));
     gl_FragColor = vec4(clamp(rgb_out, 0.0, 1.0), 1.0);

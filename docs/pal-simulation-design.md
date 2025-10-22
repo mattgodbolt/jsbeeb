@@ -43,67 +43,94 @@ The implementation uses WebGL fragment shaders to perform real-time PAL encoding
 
 **✅ Approaches That Worked:**
 
-1. **2H Comb Filter with Weighted Coefficients** (CURRENT IMPLEMENTATION)
-   - Uses 2H (2-line) spacing for proper PAL phase relationships (180° inversion)
-   - Tunable weighting via COMB_PREV_WEIGHT constant (currently 0.33)
-   - Formula: `luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current`
-   - Current setting: 0.33 (1/3 prev, 2/3 curr) empirically matches PAL TV memory
-   - Result: Good balance of sharpness and Y/C separation
+1. **Baseband Chroma Blending + Complementary Decoder** (APPROACH D - CURRENT IMPLEMENTATION)
+   - Demodulates current and previous (1H) scanlines separately with correct phase
+   - Blends U/V at baseband (after demodulation) to avoid phase mixing
+   - Extracts luma via complementary subtraction from composite
+   - Tunable chroma blending via CHROMA_BLEND_WEIGHT (currently 0.5)
+   - Result: Sharp luma with slight authentic blur, smooth chroma, good color saturation, no checkerboard
+   - Key insight: Demodulate FIRST with correct phase, THEN blend (avoids U/V corruption)
 
-2. **FIR_GAIN = 2.0 for Chroma Demodulation** (CRITICAL FIX)
+2. **2H Comb Filter with Weighted Coefficients** (SUPERSEDED BY APPROACH D)
+   - Uses 2H (2-line) spacing for proper PAL phase relationships (180° inversion)
+   - Tunable weighting via COMB_PREV_WEIGHT constant (0.33 was final setting)
+   - Formula: `luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current`
+   - Result: Good Y/C separation but more vertical blur than Approach D
+   - Status: Working but superseded by sharper Approach D
+
+3. **FIR_GAIN = 2.0 for Chroma Demodulation** (ESSENTIAL)
    - Compensates for demodulation amplitude loss (sin²(x) = 0.5 - 0.5·cos(2x))
    - Without this, only HALF the chroma was removed from luma
    - THIS was the root cause of all checkerboard artifacts
    - Result: Clean Y/C separation, minimal checkerboard
 
-3. **20-tap FIR Filter for Chroma**
+4. **20-tap FIR Filter for Chroma**
    - Demodulate first, then filter (not filter composite then demodulate)
    - Limits chroma bandwidth to ~1.3 MHz as per PAL spec
    - Coefficients from svofski/CRT project
    - Result: Good color reproduction, proper bandwidth limiting
 
-4. **Full Scanline Phase Calculation**
+5. **Full Scanline Phase Calculation**
    - Maps 283.75 cycles across full 1024-pixel texture width
    - Includes blanking periods in phase calculation
    - Result: Correct temporal phase relationships
 
 **❌ Approaches That Failed:**
 
-1. **Notch Filter for Luma** (RECONSIDERED)
+1. **1H Comb Bandpass + Complementary Decoder** (APPROACH C - FAILED)
+   - **Source**: BBC decoder schematic from Jim Easterbrook's PAL decoder page
+   - **Approach**: Use 1H comb as BANDPASS to extract chroma at composite level, then complementary subtraction
+   - **Implementation**:
+     ```
+     chroma_band = (composite_curr + composite_prev_1H) / 2.0
+     Demodulate chroma_band with FIR → U, V
+     Y = composite_curr - remodulated_chroma
+     ```
+   - **Problem**: 270° phase shift from 1H spacing causes U/V mixing
+     - Mathematical analysis: chroma*band = (U_N + V*{N-1})·sin(ωt) + (V*N + U*{N-1})·cos(ωt)
+     - When demodulated, extracted corrupted U/V values
+   - **Result**: Severe checkerboard artifacts, washed out colors
+   - **Attempted fix**: FIR_GAIN = 4.0 to compensate for double amplitude loss (comb + demodulation)
+     - Made checkerboard worse, colors still washed out
+   - **Why it failed**: Fundamental phase mixing issue, not amplitude problem
+   - **Key learning**: 1H comb at composite level doesn't work for PAL due to phase relationships
+     - Must demodulate first, THEN blend
+
+2. **Notch Filter for Luma** (RECONSIDERED)
    - Approach: Subtract re-modulated FIR-filtered chroma from composite
    - ORIGINAL ASSESSMENT: Wide FIR filter caused premature edge artifacts
    - RE-TESTED: With FIR_GAIN = 2.0, NO edge artifacts, super sharp, no checkerboard
    - However: Sharper than authentic PAL TVs (less blur than real hardware)
    - Status: Works correctly but less authentic than comb filter
 
-2. **Comb Filter WITHOUT Temporal Phase** (FIXED)
+3. **Comb Filter WITHOUT Temporal Phase** (FIXED)
    - Approach: Average current and previous scanlines
    - Problem: Didn't account for 0.75 cycle phase offset between lines
    - Result: Heavy vertical striping (chroma not properly canceling)
    - Why it failed: Phase relationship between lines was incorrect
    - Fixed by adding `line_phase_offset = line * 0.75`
 
-3. **Horizontal Bandwidth Limiting of Composite** (ABANDONED)
+4. **Horizontal Bandwidth Limiting of Composite** (ABANDONED)
    - Approach: Apply horizontal low-pass filter to composite signal
    - Rationale: Simulate bandwidth limits of real video circuits
    - Problem: Didn't address root cause of artifacts
    - Result: Just added blur without fixing issues
    - Abandoned as unnecessary once comb filter phase was fixed
 
-4. **Active Video Only Phase Calculation** (ABANDONED)
+5. **Active Video Only Phase Calculation** (ABANDONED)
    - Approach: Calculate 230 cycles over 896 visible pixels only
    - Problem: Ignored blanking periods, incorrect phase
    - Result: Wrong subcarrier frequency mapping
    - Fixed by using full scanline (283.75 / 1024)
 
-5. **1H (1-line) Comb Filter Spacing** (ABANDONED - NTSC-style)
+6. **1H (1-line) Comb Filter Spacing** (ABANDONED - NTSC-style)
    - Approach: Use line N and line N-1 with 0.75 cycle (270°) phase difference
    - Problem: 270° phase shift causes U/V rotation, not cancellation
    - Result: Checkerboard artifacts on solid colors due to U/V mixing
    - Fixed by switching to 2H (2-line) spacing per Watkinson's guide
    - Why 2H works: 1.5 cycles = 540° = 180° (mod 360°) for proper phase inversion
 
-6. **3-tap Bandpass Comb with Complementary Subtraction** (ABANDONED)
+7. **3-tap Bandpass Comb with Complementary Subtraction** (ABANDONED)
    - Approach: Use -0.25, +0.5, -0.25 coefficients for "bandpass" chroma extraction
    - Then: Subtract from current line to get luma (complementary decoder)
    - Problem: Mathematical reduction negates the negative coefficients:
@@ -115,7 +142,7 @@ The implementation uses WebGL fragment shaders to perform real-time PAL encoding
    - Result: Luma averaged across 4 scanlines (N-2 to N+2), excessive blur
    - Abandoned: Complementary approach doesn't work as intended with 3-tap comb
 
-7. **2-tap Comb with FIR_GAIN = 1.0** (ABANDONED)
+8. **2-tap Comb with FIR_GAIN = 1.0** (ABANDONED)
    - Various weightings tested: 50/50, 25/75, 33/67
    - All showed checkerboard artifacts
    - Root cause: FIR_GAIN = 1.0 only removed HALF the chroma from luma
@@ -294,70 +321,83 @@ y_out = 0.25*composite_prev + 0.5*composite_curr + 0.25*composite_next
 
 ### Resolution
 
-**FINAL SOLUTION: FIR_GAIN = 2.0 + Authentic 2H Comb**
+**FINAL SOLUTION: Baseband Chroma Blending (Approach D)**
 
-After investigation and research into authentic PAL TV implementations:
+After extensive investigation and multiple failed approaches:
 
-1. **Root cause identified:** FIR_GAIN was 1.0, should be 2.0
-   - Demodulation with sin(ωt) causes 0.5× amplitude loss (sin² identity)
-   - Without compensation, only half the chroma was removed from luma
-   - This caused ALL the checkerboard artifacts we observed
+1. **Root cause identified:** Previous approaches either:
+   - Mixed U/V during 1H comb at composite level (Approach C - phase mixing)
+   - Or averaged luma vertically causing excessive blur (2H comb)
 
-2. **Research findings:** Most consumer PAL TVs used simple 2H comb filters
-   - Equal weighting: `luma = 0.5 * current + 0.5 * delayed_2H`
-   - Accepted vertical blur as necessary tradeoff for Y/C separation
-   - Watkinson confirms: "quite a lot of vertical luminance resolution is being lost"
-   - This blur is AUTHENTIC to real PAL TVs
-   - See `docs/pal-comb-filter-research.md` for detailed sources
+2. **Key insight from PAL decoder expert:** "improve the decoded chroma" - blend AFTER demodulation
+   - Demodulate each line with its correct phase FIRST
+   - Then blend the clean U/V components at baseband
+   - This avoids phase mixing that corrupts chroma
 
-3. **Current implementation:**
-   - 2H comb filter for luma with tunable weighting (COMB_PREV_WEIGHT)
-   - FIR_GAIN = 2.0 for proper chroma demodulation
-   - Current setting: COMB_PREV_WEIGHT = 0.33 (1/3 prev, 2/3 curr)
-   - Minimal checkerboard (corrected gain removes chroma properly)
-   - Good balance of sharpness and Y/C separation
-   - Good color saturation
-   - Easy to adjust for different PAL TV characteristics
+3. **Current implementation (Approach D):**
+   - Demodulate current and previous (1H) scanlines separately
+   - Each demodulation uses correct phase for that line (avoids U/V mixing)
+   - Blend U/V at baseband with tunable weight (CHROMA_BLEND_WEIGHT = 0.5)
+   - Extract luma via complementary subtraction from composite
+   - FIR_GAIN = 2.0 for proper demodulation amplitude compensation
 
-4. **Tuning guidance:**
-   - COMB_PREV_WEIGHT = 0.5: Authentic equal-weight comb (Watkinson)
-   - COMB_PREV_WEIGHT = 0.33: Current empirically tuned setting
-   - COMB_PREV_WEIGHT = 0.25: Sharper, may show slight cross-color
-   - Can be verified against real BBC Master + British TV when set up
+4. **Results:**
+   - Sharp luma with slight authentic blur (no vertical averaging of composite)
+   - Smooth chroma (vertical blending exploits slow chroma changes)
+   - Good color saturation (no phase corruption)
+   - No checkerboard artifacts (clean Y/C separation)
 
-5. **Alternative approaches in git history:**
-   - Notch filter: Sharper than real TVs, but less authentic
-   - 3-tap comb: Excessive blur from 4-line averaging
-   - Various other combinations documented in "What Worked vs. What Didn't"
+5. **Why this works:**
+   - Phase-correct demodulation: Each line processed with its own PAL phase
+   - Baseband blending: No U/V mixing (pure U with U, pure V with V)
+   - Complementary decoder: Luma from composite path (authentic signal processing)
+   - Proper gain compensation: FIR_GAIN = 2.0 for demodulation loss only
 
-**Conclusion:** The "blur vs checkerboard" tradeoff we observed was NOT fundamental to PAL - it was a symptom of incorrect demodulation gain (FIR_GAIN = 1.0). With FIR_GAIN = 2.0, the 2H comb filter works correctly. The COMB_PREV_WEIGHT parameter allows tuning the blur/sharpness balance to match specific PAL TV characteristics.
+6. **Alternative approaches in git history:**
+   - 2H comb: Good but more blur than Approach D
+   - 1H bandpass (Approach C): Phase mixing caused checkerboard
+   - Notch filter alone: Very sharp but missing vertical chroma structure
+
+**Conclusion:** The key was understanding that "blending chroma between lines" meant blending AFTER demodulation (at baseband), not before. This avoids the phase mixing issues that plagued Approach C while keeping luma sharp.
 
 ### Key Learnings
 
-1. **Demodulation amplitude loss must be compensated**
+1. **Phase-correct demodulation before blending is essential**
+   - Blending at composite level (1H comb before demod) causes U/V mixing at 270° phase
+   - Must demodulate each line with its correct phase FIRST
+   - Then blend the clean U/V components at baseband
+   - This was the key insight that made Approach D work after Approach C failed
+
+2. **Demodulation amplitude loss must be compensated**
    - When demodulating with sin(ωt), the trig identity sin²(x) = 0.5 - 0.5·cos(2x) means baseband has 0.5× amplitude
-   - FIR_GAIN = 2.0 is CRITICAL to compensate for this loss
+   - FIR_GAIN = 2.0 compensates for this loss
    - Without proper gain, only half the chroma is removed from luma → checkerboard artifacts
-   - This was the root cause of ALL the blur vs checkerboard tradeoff issues we observed
 
-2. **The "bit" in "delayed by a line and a bit" is critical**
-   - The 0.75 cycle phase offset between lines is essential for comb filter
-   - Without it, chroma doesn't cancel properly → vertical striping
+3. **"Improve the decoded chroma" means post-demodulation processing**
+   - Advice to "blend chroma between lines" means at baseband, not composite
+   - Vertical comb filters work differently depending on where in the signal chain they're applied
+   - Composite-level: Creates phase mixing (Approach C failure)
+   - Baseband-level: Clean blending of separated U/V (Approach D success)
 
-3. **Texture coordinates represent full scanline, not just visible**
+4. **The "bit" in "delayed by a line and a bit" is critical**
+   - The 0.75 cycle phase offset between lines is essential for proper phase relationships
+   - 1H spacing = 270° phase shift (exploited for bandpass OR causes mixing)
+   - 2H spacing = 180° phase shift (used for cancellation in comb filters)
+
+5. **Texture coordinates represent full scanline, not just visible**
    - 1024px = 64μs complete scanline (displayed + blanking)
    - Subcarrier runs continuously through blanking
    - Must map phase across full width, not just visible region
 
-4. **2H spacing is essential for PAL (not 1H like NTSC)**
-   - PAL requires 2-line spacing: 1.5 cycles = 540° = 180° (mod 360°) phase inversion
-   - 1H spacing gives 270° phase shift → U/V rotation instead of cancellation
-   - V-switch is same on lines N and N±2, different on N and N±1
+6. **Mathematical phase analysis reveals bugs**
+   - Carefully working through trig identities showed U/V mixing in Approach C
+   - chroma*band = (U_N + V*{N-1})·sin + (V*N + U*{N-1})·cos
+   - No amount of gain compensation could fix this fundamental corruption
 
-5. **Research and verification are critical**
+7. **Research and verification are critical**
    - Don't assume early decisions were correct - revisit and test
-   - Mathematical analysis can reveal hidden bugs (complementary decoder collapse)
-   - Real hardware comparison provides ground truth when available
+   - Test with solid colors to see checkerboard artifacts clearly
+   - User feedback is essential ("too sharp" revealed we were cheating)
 
 ## Background and Motivation
 
