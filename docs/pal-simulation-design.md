@@ -44,10 +44,11 @@ The implementation uses WebGL fragment shaders to perform real-time PAL encoding
 **✅ Approaches That Worked:**
 
 1. **Baseband Chroma Blending + Complementary Decoder** (APPROACH D - CURRENT IMPLEMENTATION)
-   - Demodulates current and previous (1H) scanlines separately with correct phase
+   - Demodulates current and previous (2H for interlaced) scanlines separately with correct phase
    - Blends U/V at baseband (after demodulation) to avoid phase mixing
    - Extracts luma via complementary subtraction from composite
    - Tunable chroma blending via CHROMA_BLEND_WEIGHT (currently 0.5)
+   - Uses 2H delay (line-2) to sample same field in interlaced mode
    - Result: Sharp luma with slight authentic blur, smooth chroma, good color saturation, no checkerboard
    - Key insight: Demodulate FIRST with correct phase, THEN blend (avoids U/V corruption)
 
@@ -192,10 +193,16 @@ The implementation uses WebGL fragment shaders to perform real-time PAL encoding
 
 **Outstanding Issues:**
 
-4. **Potential 2H Delay Question:**
-   - Currently using `line - 1.0` for baseband chroma blending (Approach D)
-   - Code correctly accounts for previous line's different phase (v_switch and phase_offset)
-   - 2H spacing would be different approach - current method appears correct
+4. **✅ FIXED: Interlaced Rendering Requires 2H Delay:**
+   - **Problem:** jsbeeb simulates interlacing by rendering only odd OR even lines per frame
+     - Even frames: render lines 1,3,5... (clear lines 0,2,4...)
+     - Odd frames: render lines 0,2,4... (clear lines 1,3,5...)
+   - **Issue:** Using `line - 1.0` accessed either black (just cleared) or stale data from previous frame
+   - **Solution:** Changed to `line - 2.0` to sample from same field (both lines fresh)
+   - **PAL Correctness:** In interlaced fields, consecutive scanlines have same V phase
+     - Line 4 (V+) blends with Line 2 (V+) → chroma adds constructively (correct)
+     - This represents TV's 1H delay within a single field (2 texture lines apart)
+   - **Status:** Implemented 2024-10-23
 
 5. **Missing Gamma Correction:**
    - Should use sRGB framebuffer with GL_FRAMEBUFFER_SRGB

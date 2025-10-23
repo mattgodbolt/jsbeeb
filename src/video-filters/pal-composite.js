@@ -9,11 +9,15 @@
 // IMPLEMENTATION (Baseband Blending Method):
 // 1. Encode RGB to PAL composite: Y + CHROMA_GAIN*(U*sin(ωt) + V*cos(ωt)*v_switch)
 // 2. Demodulate current line (with correct phase) → U_curr, V_curr
-// 3. Demodulate previous line (with correct phase) → U_prev, V_prev
+// 3. Demodulate previous line (2H for interlaced, same field) → U_prev, V_prev
 // 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
 // 5. Remodulate blended chroma back to composite frequency
 // 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma
 // 7. Combine luma and chroma, convert back to RGB
+//
+// NOTE: Uses 2H delay (line-2) not 1H (line-1) because jsbeeb simulates interlacing by
+// rendering only odd or even lines per frame. A real PAL TV's 1H delay line would contain
+// the previous scanline from the SAME field, which is 2 texture lines apart.
 //
 // KEY INSIGHT: Demodulate FIRST (with each line's correct phase), THEN blend.
 // This avoids U/V mixing that occurs when blending at composite level (Approach C failure).
@@ -145,9 +149,12 @@ void main() {
         filtered_uv_curr += FIR_GAIN * uv * FIR[i];
     }
 
-    // Step 2: Demodulate previous line (1H) with FIR filter
-    vec2 prev_uv = vTexCoord - vec2(0.0, 1.0 * uTexelSize.y);
-    float prev_line = line - 1.0;
+    // Step 2: Demodulate previous line (2H for interlaced, same field) with FIR filter
+    // In interlaced mode, only odd OR even lines are rendered per frame.
+    // Using 2H (line-2) ensures we sample from the same field (both fresh data).
+    // This represents the TV's 1H delay within a single field.
+    vec2 prev_uv = vTexCoord - vec2(0.0, 2.0 * uTexelSize.y);
+    float prev_line = line - 2.0;
     float prev_v_switch = mod(prev_line, 2.0) < 1.0 ? 1.0 : -1.0;
     float prev_phase_offset = prev_line * 0.7516 + frame_phase_offset;
 
