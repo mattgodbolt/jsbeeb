@@ -1355,6 +1355,227 @@ Ideas for future development beyond initial implementation:
    - GPU/CPU usage
    - Help identify bottlenecks
 
+## Appendix E: Interlacing Complexity (Future Work)
+
+**Status:** Partially addressed (interlaced mode fixed, non-interlaced deferred)
+**Contributors:** @richtw1 (research and analysis)
+**Date:** October 2025
+
+### Problem Discovery
+
+Initial implementation used `line - 1.0` for chroma blending, assuming consecutive texture lines represent temporally consecutive scanlines. This was wrong for interlaced rendering.
+
+**jsbeeb's Interlacing Simulation:**
+
+```javascript
+// video.js:261-270
+if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
+  // Interlaced: clear alternate lines each frame
+  let line = this.frameCount & 1;
+  while (line < 625) {
+    const start = line * 1024;
+    fb32.fill(0, start, start + 1024);
+    line += 2;
+  }
+} else {
+  // Non-interlaced: clear entire buffer, then double up rendered lines
+  fb32.fill(0);
+}
+```
+
+**Interlaced rendering:**
+
+- Even frames (frameCount & 1 = 0): render lines 1,3,5... (clear 0,2,4...)
+- Odd frames (frameCount & 1 = 1): render lines 0,2,4... (clear 1,3,5...)
+
+**Problem:** Using `line - 1.0` accessed either:
+
+- Black pixels (line was just cleared this frame)
+- Stale data (from previous frame, wrong field)
+
+### Current Solution: 2H Delay for Interlaced Mode
+
+**Implementation (2024-10-23):**
+Changed to `line - 2.0` to sample from the same field (both lines fresh).
+
+**PAL Correctness:**
+In interlaced PAL, consecutive scanlines within the same field have the same V phase:
+
+- Line 4: v_switch = 1.0 (even → V+)
+- Line 2: v_switch = 1.0 (even → V+)
+- Same V phase → chroma adds constructively ✓
+
+This represents a TV's 1H delay **within a single field** (which is 2 texture lines apart).
+
+**Status:** ✅ Works correctly for interlaced mode (the default)
+
+### Open Questions and Future Work
+
+#### 1. Non-Interlaced Mode Handling
+
+**Current Implementation:** Uses same line-2 approach (suboptimal)
+
+**How jsbeeb handles non-interlaced (from @richtw1):**
+
+> "it should just be updating the same 312 lines of the texture each field if interlace is off, but instead of leaving the alternate ones blank, we double the contents up"
+
+```javascript
+// video.js:695
+if (doubledLines) {
+  this.fb32.copyWithin(offset + 1024, offset, offset + this.pixelsPerChar);
+}
+```
+
+- Same 312 lines updated each field
+- Each rendered line copied to adjacent line (no blanks)
+- "Every field is an even field" in non-interlaced mode
+
+**Problem with line-2 in non-interlaced:**
+
+- All consecutive lines exist (not alternating blanks)
+- PAL phase alternates every line: N(V+), N+1(V-), N+2(V+)...
+- Should blend line N with line N-1 (opposite phases)
+- Using line-2 blends same-phase lines (wrong)
+
+**Additionally:** "non-interlaced doesn't fit into any multiple of fields before a repeat" - phase relationships more complex than interlaced 8-field cycle.
+
+**Possible Solutions:**
+
+1. **Mode-aware shader:**
+
+   ```glsl
+   uniform bool uInterlaced;
+   float line_offset = uInterlaced ? 2.0 : 1.0;
+   vec2 prev_uv = vTexCoord - vec2(0.0, line_offset * uTexelSize.y);
+   ```
+
+   - Pass `video.interlacedSyncAndVideo || !video.doubledScanlines`
+   - Clean separation of modes
+
+2. **Dynamic detection:**
+   - Sample both line-1 and line-2
+   - Use line-1 if non-black, else line-2
+   - Hacky but doesn't require plumbing mode flag
+
+3. **Accept limitation:**
+   - Document that PAL filter optimized for interlaced mode
+   - Non-interlaced mode gets basic filter (less authentic)
+
+#### 2. Field Offset Accuracy
+
+**Current Implementation:**
+
+```glsl
+float frame_phase_offset = uFrameCount * 234.875;  // Assumes 312.5 lines/field
+```
+
+**Issue (from @richtw1):**
+
+> "it needs to adjust the field offset according to the number of lines in the last field it rendered"
+
+**Questions:**
+
+- Are field line counts variable in jsbeeb?
+- Does CRTC configuration affect lines per field (312 vs 313)?
+- Should we track actual rendered line count and pass as uniform?
+
+**Potential Solution:**
+
+```glsl
+uniform float uPrevFieldLines;  // Actual lines in previous field
+float frame_phase_offset = uPrevFieldLines * 0.7516;  // More accurate
+```
+
+Would require:
+
+- Tracking line count in video.js during rendering
+- Passing to canvas.js → shader as uniform
+- May be essential for accurate dot crawl in variable scanline modes
+
+#### 3. Temporal vs. Spatial Phase Relationships
+
+**What a real PAL TV sees:**
+
+- Continuous stream of ~312 scanlines per field
+- Temporally consecutive scanlines (N, N+1 in signal)
+- Always have alternating V phase (due to PAL line alternation)
+- 1H delay line compares temporally adjacent scanlines
+
+**What our shader sees:**
+
+- 625-line framebuffer texture (spatial, not temporal)
+- Interlaced: spatially adjacent lines (2 and 3) are from **different fields**
+- They're NOT temporally adjacent in the transmitted signal
+- They were received half a frame apart (20ms at 50Hz)
+
+**Current Approach:** Uses spatial line-2 offset as proxy for temporal 1H delay in same field. This is approximate but pragmatic.
+
+**More Authentic Approach:** Would require:
+
+- Storing previous field in separate texture/framebuffer
+- True temporal comparison between fields
+- Account for phase accumulated across entire previous field
+- Much more complex, questionable visual benefit
+
+#### 4. V-Switch Calculation Confirmation
+
+**Current Implementation:**
+
+```glsl
+float v_switch = mod(line, 2.0) < 1.0 ? 1.0 : -1.0;
+```
+
+**Confirmed by @richtw1:**
+
+> "we still need to phase reverse every line which we do rasterise, it's just they come from every other line in the texture itself"
+
+This is **correct**:
+
+- Line 0: V+, Line 1: V-, Line 2: V+, Line 3: V-
+- Represents PAL phase alternation in source signal
+- Independent of which lines are rendered per field
+
+### Recommendations for Future Implementation
+
+**Short-term (acceptable for most use):**
+
+1. ✅ Keep current line-2 approach for interlaced mode (implemented)
+2. Document non-interlaced limitation in user-facing docs
+3. Consider disabling PAL filter in non-interlaced mode (or warn user)
+
+**Medium-term (better non-interlaced support):**
+
+1. Implement mode-aware shader with uInterlaced uniform
+2. Use line-1 for non-interlaced, line-2 for interlaced
+3. Test both modes thoroughly with various CRTC configurations
+
+**Long-term (maximum authenticity):**
+
+1. Research variable field line counts in jsbeeb
+2. Implement accurate field offset tracking (uPrevFieldLines)
+3. Consider separate previous-field texture for true temporal comparison
+4. Validate against real hardware captures of both modes
+
+### Related Code Sections
+
+- `src/video.js:261-270` - Interlaced/non-interlaced buffer clearing
+- `src/video.js:431-434` - Scanline counter interlaced increment
+- `src/video.js:680-685` - Doubled scanline logic
+- `src/video.js:91` - `interlacedSyncAndVideo` flag setting
+- `src/video-filters/pal-composite.js:148-155` - Current 2H delay implementation
+- `src/canvas.js:149` - Frame counter passed to shader
+
+### Test Cases Needed
+
+When implementing non-interlaced support:
+
+1. Test with interlaced mode (R8=3, default BBC Micro)
+2. Test with non-interlaced mode (R8≠3)
+3. Test mode switching at runtime
+4. Verify dot crawl pattern in both modes
+5. Compare chroma artifacts between modes
+6. Validate with unusual CRTC configurations (variable line counts)
+
 ---
 
 **End of Design Document**
