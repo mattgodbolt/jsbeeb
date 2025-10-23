@@ -55,8 +55,8 @@ uniform float uFrameCount;
 
 const float PI = 3.14159265359;
 
-// Chroma amplitude: No scaling needed - BBC Micro palette works fine at full amplitude
-// Theoretical overmodulation with fully saturated colors doesn't appear to be an issue in practice
+// Chroma amplitude: Set to 1.0 as scaling is now baked into the YUV matrix
+// The properly scaled matrix (from ITU-R BT.470-6) ensures signals stay within spec
 const float CHROMA_GAIN = 1.0;
 
 // Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
@@ -65,23 +65,28 @@ const float FIR_GAIN = 2.0;
 // Chroma vertical blending weight (0.0 = no blend, 0.5 = equal blend)
 const float CHROMA_BLEND_WEIGHT = 0.5;
 
-// 20-tap FIR low-pass filter coefficients for chroma bandwidth limiting (~1.3 MHz)
-// Copied from svofski/CRT (glsl/shaders/singlepass/pass1.fsh:24)
-const int FIRTAPS = 20;
+// 21-tap FIR low-pass filter coefficients for chroma bandwidth limiting
+// Cutoff: 2.217 MHz (half subcarrier), sample rate: 16 MHz
+// Generated for proper PAL chroma filtering with symmetric response
+const int FIRTAPS = 21;
 
+// RGB → YUV conversion with proper PAL signal levels baked in
+// Derived from ITU-R BT.470-6: white at 0.7V, peak at 0.931V
+// Matrix ensures RGB(1,1,1) → YUV(0.7,0,0) and worst case (yellow) peaks at 0.931V
 vec3 rgb_to_yuv(vec3 rgb) {
     return vec3(
-        0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b,
-        -0.147 * rgb.r - 0.289 * rgb.g + 0.436 * rgb.b,
-        0.615 * rgb.r - 0.515 * rgb.g - 0.100 * rgb.b
+        0.2093 * rgb.r + 0.4109 * rgb.g + 0.0798 * rgb.b,
+        -0.102228 * rgb.r - 0.200704 * rgb.g + 0.302939 * rgb.b,
+        0.427311 * rgb.r - 0.357823 * rgb.g - 0.069488 * rgb.b
     );
 }
 
+// YUV → RGB inverse matrix
 vec3 yuv_to_rgb(vec3 yuv) {
     return vec3(
-        yuv.x + 1.140 * yuv.z,
-        yuv.x - 0.394 * yuv.y - 0.581 * yuv.z,
-        yuv.x + 2.028 * yuv.y
+        1.42857143 * yuv.x - 0.0000193387 * yuv.y + 1.64048673 * yuv.z,
+        1.42857711 * yuv.x - 0.567986687 * yuv.y - 0.83560997 * yuv.z,
+        1.42854218 * yuv.x + 2.92468392 * yuv.y - 0.0000217418 * yuv.z
     );
 }
 
@@ -103,12 +108,14 @@ vec2 demodulate_uv(vec2 xy, float offset_pixels, float v_switch, float cycles_pe
 
 void main() {
     // Initialize FIR coefficients (GLSL ES 1.00 limitation)
-    float FIR[20];
-    FIR[0] = -0.008030271; FIR[1] = 0.003107906; FIR[2] = 0.016841352; FIR[3] = 0.032545161;
-    FIR[4] = 0.049360136; FIR[5] = 0.066256720; FIR[6] = 0.082120150; FIR[7] = 0.095848433;
-    FIR[8] = 0.106453014; FIR[9] = 0.113151423; FIR[10] = 0.115441842; FIR[11] = 0.113151423;
-    FIR[12] = 0.106453014; FIR[13] = 0.095848433; FIR[14] = 0.082120150; FIR[15] = 0.066256720;
-    FIR[16] = 0.049360136; FIR[17] = 0.032545161; FIR[18] = 0.016841352; FIR[19] = 0.003107906;
+    // 21-tap symmetric filter, cutoff 2.217 MHz @ 16 MHz sample rate
+    float FIR[21];
+    FIR[0] = 0.000427769337; FIR[1] = 0.00231068052; FIR[2] = 0.00344911363; FIR[3] = -0.00203420476;
+    FIR[4] = -0.0168416192; FIR[5] = -0.0301975906; FIR[6] = -0.0173992619; FIR[7] = 0.0424187581;
+    FIR[8] = 0.141605897; FIR[9] = 0.237531717; FIR[10] = 0.277457482; FIR[11] = 0.237531717;
+    FIR[12] = 0.141605897; FIR[13] = 0.0424187581; FIR[14] = -0.0173992619; FIR[15] = -0.0301975906;
+    FIR[16] = -0.0168416192; FIR[17] = -0.00203420476; FIR[18] = 0.00344911363; FIR[19] = 0.00231068052;
+    FIR[20] = 0.000427769337;
 
     float line = floor(vPixelCoord.y);
 
@@ -119,10 +126,12 @@ void main() {
     // BBC Micro maps this across 1024 pixels (896 visible + 128 blanking)
     const float cycles_per_pixel = 283.75 / 1024.0;
 
-    // PAL temporal phase (4-field sequence creates animated dot crawl)
-    // 0.75 cycles/line accumulates: 625 lines × 0.75 = 468.75 cycles/frame
-    float line_phase_offset = line * 0.75;
-    float frame_phase_offset = uFrameCount * 468.75;
+    // PAL temporal phase (8-field sequence creates animated dot crawl)
+    // Correct: 0.7516 cycles/line (not 0.75)
+    // Per field: 312.5 lines × 0.7516 ≈ 234.875 cycles
+    // 8 fields = 1 complete cycle (234.875 × 8 ≈ 1879)
+    float line_phase_offset = line * 0.7516;
+    float frame_phase_offset = uFrameCount * 234.875;  // Assumes 312.5 lines/field
     float phase_offset = line_phase_offset + frame_phase_offset;
 
     // Approach D: Baseband Chroma Blending
@@ -131,7 +140,7 @@ void main() {
     // Step 1: Demodulate current line with FIR filter
     vec2 filtered_uv_curr = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
-        float offset = float(i - FIRTAPS / 2);
+        float offset = float(i - (FIRTAPS - 1) / 2);
         vec2 uv = demodulate_uv(vTexCoord, offset, v_switch, cycles_per_pixel, phase_offset);
         filtered_uv_curr += FIR_GAIN * uv * FIR[i];
     }
@@ -140,11 +149,11 @@ void main() {
     vec2 prev_uv = vTexCoord - vec2(0.0, 1.0 * uTexelSize.y);
     float prev_line = line - 1.0;
     float prev_v_switch = mod(prev_line, 2.0) < 1.0 ? 1.0 : -1.0;
-    float prev_phase_offset = prev_line * 0.75 + frame_phase_offset;
+    float prev_phase_offset = prev_line * 0.7516 + frame_phase_offset;
 
     vec2 filtered_uv_prev = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
-        float offset = float(i - FIRTAPS / 2);
+        float offset = float(i - (FIRTAPS - 1) / 2);
         vec2 uv = demodulate_uv(prev_uv, offset, prev_v_switch, cycles_per_pixel, prev_phase_offset);
         filtered_uv_prev += FIR_GAIN * uv * FIR[i];
     }

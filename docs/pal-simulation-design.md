@@ -173,6 +173,40 @@ The implementation uses WebGL fragment shaders to perform real-time PAL encoding
 - Could reduce FIR taps for performance (but quality suffers)
 - No edge detection or adaptive filtering (real TVs didn't have this)
 
+**Issues Identified and Resolved (November 2025 - Rich's Review):**
+
+1. ✅ **FIXED: YUV Matrix Scaling:**
+   - Implemented properly scaled RGB→YUV matrix from ITU-R BT.470-6
+   - Matrix ensures white at 0.7V, peak at 0.931V (no overmodulation)
+   - Eliminates need for separate CHROMA_GAIN scaling factor
+
+2. ✅ **FIXED: FIR Filter Issues:**
+   - Changed from 20 taps (asymmetric) to 21 taps (symmetric)
+   - Updated coefficients for 2.217 MHz cutoff @ 16 MHz sample rate
+   - Corrected tap offset calculation: `float(i - (FIRTAPS - 1) / 2)`
+
+3. ✅ **FIXED: Phase Offset Inaccuracies:**
+   - Changed from 0.75 to 0.7516 cycles/line (accurate PAL spec)
+   - Updated frame phase: 234.875 cycles/field (for 312.5 lines)
+   - Now properly simulates 8-field dot crawl cycle (not 4-field)
+
+**Outstanding Issues:**
+
+4. **Potential 2H Delay Question:**
+   - Currently using `line - 1.0` for baseband chroma blending (Approach D)
+   - Code correctly accounts for previous line's different phase (v_switch and phase_offset)
+   - 2H spacing would be different approach - current method appears correct
+
+5. **Missing Gamma Correction:**
+   - Should use sRGB framebuffer with GL_FRAMEBUFFER_SRGB
+   - Would require adjusting mode 7 rendering
+   - Deferred for future implementation
+
+6. **Edge Artifacts:**
+   - Visible fringe at content/border boundaries (top line, left/right edges)
+   - Caused by chroma blending with black border (correct behavior)
+   - May need comparison with real hardware to validate
+
 ## Blur Investigation (October 2025)
 
 ### Problem Statement
@@ -463,29 +497,47 @@ Research into BBC Micro hardware documentation reveals the PAL encoding process:
 - U and V (chrominance): ~1.3 MHz bandwidth each
 - This bandwidth mismatch is the source of color bleeding artifacts
 
-**Chroma Amplitude Scaling**
+**Chroma Amplitude Scaling (Updated from ITU-R BT.470-6 Research)**
 
-The ITU-R BT.470 specification defines the mathematical YUV color space transformation, but it doesn't account for the physical voltage constraints of composite video transmission:
+The ITU-R BT.470-6 specification provides the actual PAL signal level requirements:
 
-- PAL composite signals must stay within 0V (sync) to 1.0V (peak white)
-- Luma occupies 0.3V (black) to 1.0V (white) - a 0.7V range
-- Chroma is AC-coupled on top of this DC luma level
+**PAL Signal Levels (from ITU-R BT.470-6):**
 
-**The Problem:** Using raw ITU-R BT.470 YUV values causes overmodulation:
+- White level: 0.7V (normalized to 100%)
+- Peak allowed level (including chroma): 0.931V (normalized to 133%)
+- Black level: 0.3V (sync at 0V)
 
-- Fully saturated colors produce chroma amplitudes up to 0.632 (for Red/Cyan)
-- Blue (Y=0.114, chroma=0.447) would create composite values from -0.333 to 0.561 (goes negative!)
-- Yellow (Y=0.886, chroma=0.447) would create composite values from 0.439 to 1.333 (exceeds 1.0V!)
+**The Solution: Properly Scaled YUV Matrix**
 
-**The Solution:** Chroma must be scaled down to prevent clipping:
+Rather than using the standard "analog YUV" matrix and applying a separate scaling factor, we can derive a matrix that bakes in the constraints:
 
-- Theoretical maximum safe scaling: **0.255** (25.5% of signal range)
-  - Limited by Blue's low Y value (lower bound constraint)
-  - Limited by Yellow's high Y value (upper bound constraint)
-- Practical implementations use **0.2** (20%) with a comfortable safety margin
-- At 0.2 scaling: Maximum chroma amplitude is 0.126 (12.6% of full signal range)
+1. Start with standard YUV matrix:
 
-This 20% chroma scaling is the origin of Thomas Harte's "Y×0.8 + chroma×0.2" formula - it prevents overmodulation while maintaining good color saturation. The scaling factor is an implementation detail for composite video encoding, separate from the theoretical YUV color space definition.
+   ```
+    0.299    0.587    0.114
+   -0.14713 -0.28886  0.436
+    0.615   -0.51499 -0.10001
+   ```
+
+2. Scale to limit Y to 0.7 and peak to 0.931, yielding:
+   ```
+   RGB → YUV (properly scaled):
+    0.2093    0.4109    0.0798
+   -0.102228 -0.200704  0.302939
+    0.427311 -0.357823 -0.069488
+   ```
+
+**Properties of this matrix:**
+
+- RGB(1,1,1) → YUV(0.7, 0, 0) ✓ (white at 0.7V)
+- RGB(1,1,0) → YUV(0.62, -0.307, 0.05) with peak = Y + √(U²+V²) = 0.931V ✓ (worst case)
+
+This eliminates the need for separate CHROMA_GAIN constants - the proper scaling is built into the color space conversion.
+
+**References:**
+
+- ITU-R BT.470-6 (1998): https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.470-6-199811-S!!PDF-E.pdf
+- ScienceDirect - Luma Signal: https://www.sciencedirect.com/topics/engineering/luma-signal
 
 ### PAL Decoding (in Television)
 
