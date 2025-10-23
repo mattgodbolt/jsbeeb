@@ -1,5 +1,6 @@
 "use strict";
 import webglDebug from "./lib/webgl-debug.js";
+import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 
 export class Canvas {
     constructor(canvas) {
@@ -17,7 +18,7 @@ export class Canvas {
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
-    paint(minx, miny, maxx, maxy) {
+    paint(minx, miny, maxx, maxy, _frameCount) {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
@@ -51,35 +52,9 @@ export class GlCanvas {
 
         checkedGl.depthMask(false);
 
-        function compileShader(type, src) {
-            const shader = checkedGl.createShader(type);
-            checkedGl.shaderSource(shader, src.join("\n"));
-            checkedGl.compileShader(shader);
-            return shader;
-        }
-
-        const vertexShader = compileShader(checkedGl.VERTEX_SHADER, [
-            "attribute vec2 pos;",
-            "attribute vec2 uvIn;",
-            "varying vec2 uv;",
-            "void main() {",
-            "  uv = uvIn;",
-            "  gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);",
-            "}",
-        ]);
-        const fragmentShader = compileShader(checkedGl.FRAGMENT_SHADER, [
-            "precision mediump float;",
-            "uniform sampler2D tex;",
-            "varying vec2 uv;",
-            "void main() {",
-            "  gl_FragColor = texture2D(tex, uv).rgba;",
-            "}",
-        ]);
-
-        const program = checkedGl.createProgram();
-        checkedGl.attachShader(program, fragmentShader);
-        checkedGl.attachShader(program, vertexShader);
-        checkedGl.linkProgram(program);
+        // Create PAL composite filter
+        this.palFilter = new PALCompositeFilter(checkedGl);
+        const program = this.palFilter.program;
         checkedGl.useProgram(program);
 
         this.fb8 = new Uint8Array(width * height * 4);
@@ -104,7 +79,10 @@ export class GlCanvas {
         );
         checkedGl.bindTexture(checkedGl.TEXTURE_2D, null);
 
-        checkedGl.uniform1i(checkedGl.getUniformLocation(program, "tex"), 0);
+        // Set up PAL filter uniforms
+        checkedGl.uniform1i(this.palFilter.locations.uFramebuffer, 0);
+        checkedGl.uniform2f(this.palFilter.locations.uResolution, width, height);
+        checkedGl.uniform2f(this.palFilter.locations.uTexelSize, 1.0 / width, 1.0 / height);
 
         const vertexPositionAttrLoc = checkedGl.getAttribLocation(program, "pos");
         checkedGl.enableVertexAttribArray(vertexPositionAttrLoc);
@@ -128,7 +106,7 @@ export class GlCanvas {
         console.log("GL Canvas set up");
     }
 
-    paint(minx, miny, maxx, maxy) {
+    paint(minx, miny, maxx, maxy, frameCount) {
         const gl = this.gl;
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
@@ -166,6 +144,9 @@ export class GlCanvas {
             gl.bindBuffer(gl.ARRAY_BUFFER, this.uvBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
+
+        // Set PAL filter uniforms
+        gl.uniform1f(this.palFilter.locations.uFrameCount, frameCount % 4); // 4-field temporal phase sequence
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
