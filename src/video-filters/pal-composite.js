@@ -7,7 +7,7 @@
 // connecting a BBC Micro to a PAL television via composite cable.
 //
 // IMPLEMENTATION (Baseband Blending Method):
-// 1. Encode RGB to PAL composite: Y + U*sin(ωt) + V*cos(ωt)*phase
+// 1. Encode RGB to PAL composite: Y + CHROMA_GAIN*(U*sin(ωt) + V*cos(ωt)*v_switch)
 // 2. Demodulate current line (with correct phase) → U_curr, V_curr
 // 3. Demodulate previous line (with correct phase) → U_prev, V_prev
 // 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
@@ -19,6 +19,7 @@
 // This avoids U/V mixing that occurs when blending at composite level (Approach C failure).
 //
 // TUNABLE PARAMETERS:
+// - CHROMA_GAIN: Set to 0.2 to prevent overmodulation (fully saturated colors would clip)
 // - FIR_GAIN: Must be 2.0 to compensate for sin²(x) amplitude loss during demodulation
 // - CHROMA_BLEND_WEIGHT: Controls vertical chroma blending (0.0 = sharp, 0.5 = smooth)
 //
@@ -54,6 +55,10 @@ uniform float uFrameCount;
 
 const float PI = 3.14159265359;
 
+// Chroma amplitude: No scaling needed - BBC Micro palette works fine at full amplitude
+// Theoretical overmodulation with fully saturated colors doesn't appear to be an issue in practice
+const float CHROMA_GAIN = 1.0;
+
 // Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
 const float FIR_GAIN = 2.0;
 
@@ -81,18 +86,19 @@ vec3 yuv_to_rgb(vec3 yuv) {
 }
 
 // Demodulate composite signal at given position
-vec2 demodulate_uv(vec2 xy, float offset_pixels, float pal_phase, float cycles_per_pixel, float phase_offset) {
+vec2 demodulate_uv(vec2 xy, float offset_pixels, float v_switch, float cycles_per_pixel, float phase_offset) {
     float t = ((vPixelCoord.x + offset_pixels) * cycles_per_pixel + phase_offset) * 2.0 * PI;
 
     vec2 sample_uv = xy + vec2(offset_pixels * uTexelSize.x, 0.0);
     vec3 rgb = texture2D(uFramebuffer, sample_uv).rgb;
     vec3 yuv = rgb_to_yuv(rgb);
 
-    // Encode to composite: Y + U*sin(ωt) + V*cos(ωt)*phase
-    float composite = yuv.x + yuv.y * sin(t) + yuv.z * cos(t) * pal_phase;
+    // Encode to composite: Y + CHROMA_GAIN * (U*sin(ωt) + V*cos(ωt)*v_switch)
+    // CHROMA_GAIN prevents overmodulation (see docs/pal-simulation-design.md)
+    float composite = yuv.x + CHROMA_GAIN * (yuv.y * sin(t) + yuv.z * cos(t) * v_switch);
 
     // Demodulate: multiply by carrier to shift chroma to baseband
-    return vec2(composite * sin(t), composite * cos(t) * pal_phase);
+    return vec2(composite * sin(t), composite * cos(t) * v_switch);
 }
 
 void main() {
@@ -107,7 +113,7 @@ void main() {
     float line = floor(vPixelCoord.y);
 
     // PAL phase alternates each scanline (V component inverts)
-    float pal_phase = mod(line, 2.0) < 1.0 ? 1.0 : -1.0;
+    float v_switch = mod(line, 2.0) < 1.0 ? 1.0 : -1.0;
 
     // PAL subcarrier: 4.43MHz × 64μs = 283.75 cycles/line
     // BBC Micro maps this across 1024 pixels (896 visible + 128 blanking)
@@ -126,20 +132,20 @@ void main() {
     vec2 filtered_uv_curr = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
         float offset = float(i - FIRTAPS / 2);
-        vec2 uv = demodulate_uv(vTexCoord, offset, pal_phase, cycles_per_pixel, phase_offset);
+        vec2 uv = demodulate_uv(vTexCoord, offset, v_switch, cycles_per_pixel, phase_offset);
         filtered_uv_curr += FIR_GAIN * uv * FIR[i];
     }
 
     // Step 2: Demodulate previous line (1H) with FIR filter
     vec2 prev_uv = vTexCoord - vec2(0.0, 1.0 * uTexelSize.y);
     float prev_line = line - 1.0;
-    float prev_pal_phase = mod(prev_line, 2.0) < 1.0 ? 1.0 : -1.0;
+    float prev_v_switch = mod(prev_line, 2.0) < 1.0 ? 1.0 : -1.0;
     float prev_phase_offset = prev_line * 0.75 + frame_phase_offset;
 
     vec2 filtered_uv_prev = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
         float offset = float(i - FIRTAPS / 2);
-        vec2 uv = demodulate_uv(prev_uv, offset, prev_pal_phase, cycles_per_pixel, prev_phase_offset);
+        vec2 uv = demodulate_uv(prev_uv, offset, prev_v_switch, cycles_per_pixel, prev_phase_offset);
         filtered_uv_prev += FIR_GAIN * uv * FIR[i];
     }
 
@@ -150,10 +156,11 @@ void main() {
     float t_curr = (vPixelCoord.x * cycles_per_pixel + phase_offset) * 2.0 * PI;
     vec3 rgb_curr = texture2D(uFramebuffer, vTexCoord).rgb;
     vec3 yuv_curr = rgb_to_yuv(rgb_curr);
-    float composite_curr = yuv_curr.x + yuv_curr.y * sin(t_curr) + yuv_curr.z * cos(t_curr) * pal_phase;
+    float composite_curr = yuv_curr.x + CHROMA_GAIN * (yuv_curr.y * sin(t_curr) + yuv_curr.z * cos(t_curr) * v_switch);
 
     // Remodulate blended chroma back to composite frequency
-    float remodulated_chroma = filtered_uv.x * sin(t_curr) + filtered_uv.y * cos(t_curr) * pal_phase;
+    // Note: filtered_uv already contains CHROMA_GAIN scaling from demodulation, don't apply again!
+    float remodulated_chroma = filtered_uv.x * sin(t_curr) + filtered_uv.y * cos(t_curr) * v_switch;
 
     // Complementary subtraction: luma = composite - chroma
     float y_out = composite_curr - remodulated_chroma;

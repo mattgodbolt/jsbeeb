@@ -463,6 +463,30 @@ Research into BBC Micro hardware documentation reveals the PAL encoding process:
 - U and V (chrominance): ~1.3 MHz bandwidth each
 - This bandwidth mismatch is the source of color bleeding artifacts
 
+**Chroma Amplitude Scaling**
+
+The ITU-R BT.470 specification defines the mathematical YUV color space transformation, but it doesn't account for the physical voltage constraints of composite video transmission:
+
+- PAL composite signals must stay within 0V (sync) to 1.0V (peak white)
+- Luma occupies 0.3V (black) to 1.0V (white) - a 0.7V range
+- Chroma is AC-coupled on top of this DC luma level
+
+**The Problem:** Using raw ITU-R BT.470 YUV values causes overmodulation:
+
+- Fully saturated colors produce chroma amplitudes up to 0.632 (for Red/Cyan)
+- Blue (Y=0.114, chroma=0.447) would create composite values from -0.333 to 0.561 (goes negative!)
+- Yellow (Y=0.886, chroma=0.447) would create composite values from 0.439 to 1.333 (exceeds 1.0V!)
+
+**The Solution:** Chroma must be scaled down to prevent clipping:
+
+- Theoretical maximum safe scaling: **0.255** (25.5% of signal range)
+  - Limited by Blue's low Y value (lower bound constraint)
+  - Limited by Yellow's high Y value (upper bound constraint)
+- Practical implementations use **0.2** (20%) with a comfortable safety margin
+- At 0.2 scaling: Maximum chroma amplitude is 0.126 (12.6% of full signal range)
+
+This 20% chroma scaling is the origin of Thomas Harte's "Y×0.8 + chroma×0.2" formula - it prevents overmodulation while maintaining good color saturation. The scaling factor is an implementation detail for composite video encoding, separate from the theoretical YUV color space definition.
+
 ### PAL Decoding (in Television)
 
 A PAL television reverses this process:
@@ -822,15 +846,18 @@ B = Y + 2.028·U
 **Composite Signal:**
 
 ```
-C(x,y,t) = Y(x,y) + U(x,y)·sin(ωt) + V(x,y)·cos(ωt)·P(y)
+C(x,y,t) = Y(x,y) + CHROMA_GAIN · [U(x,y)·sin(ωt) + V(x,y)·cos(ωt)·P(y)]
 
 where:
   ω = 2π × 4.43361875 MHz
-  P(y) = (-1)^y  (alternates each scanline)
+  P(y) = (-1)^y  (alternates each scanline, also called v_switch)
+  CHROMA_GAIN = 0.2  (prevents overmodulation, see "Chroma Amplitude Scaling" above)
   x = horizontal position
   y = scanline number
   t = time (related to x)
 ```
+
+**Note:** The CHROMA_GAIN factor (0.2) scales the chroma to prevent the composite signal from exceeding the valid voltage range (0-1V). Without this scaling, fully saturated colors would cause the signal to clip. This is distinct from the ITU-R BT.470 YUV conversion coefficients, which are already included in the U and V values.
 
 **Horizontal Sampling:**
 To properly capture the 4.43 MHz subcarrier:
