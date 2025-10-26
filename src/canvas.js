@@ -4,14 +4,14 @@ import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 
 export class Canvas {
     constructor(canvas) {
-        this.ctx = canvas.getContext("2d");
+        this.ctx = canvas.getContext("2d", { alpha: false });
         if (this.ctx === null) throw new Error("Unable to get a 2D context");
         this.ctx.fillStyle = "black";
         this.ctx.fillRect(0, 0, 1024, 625);
         this.backBuffer = window.document.createElement("canvas");
         this.backBuffer.width = 1024;
         this.backBuffer.height = 625;
-        this.backCtx = this.backBuffer.getContext("2d");
+        this.backCtx = this.backBuffer.getContext("2d", { alpha: false });
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.canvasWidth = canvas.width;
         this.canvasHeight = canvas.height;
