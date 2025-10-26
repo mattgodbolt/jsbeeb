@@ -1,6 +1,7 @@
 "use strict";
 import webglDebug from "./lib/webgl-debug.js";
 import { PALCompositeFilter } from "./video-filters/pal-composite.js";
+import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
 
 export class Canvas {
     constructor(canvas) {
@@ -29,7 +30,7 @@ export class Canvas {
 const width = 1024;
 const height = 1024;
 export class GlCanvas {
-    constructor(canvas) {
+    constructor(canvas, usePalFilter = false) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
         // rendering, which is much worse than simply using a 2D canvas for
         // rendering.
@@ -52,9 +53,9 @@ export class GlCanvas {
 
         checkedGl.depthMask(false);
 
-        // Create PAL composite filter
-        this.palFilter = new PALCompositeFilter(checkedGl);
-        const program = this.palFilter.program;
+        // Create appropriate filter based on display mode
+        this.filter = usePalFilter ? new PALCompositeFilter(checkedGl) : new PassthroughFilter(checkedGl);
+        const program = this.filter.program;
         checkedGl.useProgram(program);
 
         this.fb8 = new Uint8Array(width * height * 4);
@@ -78,11 +79,6 @@ export class GlCanvas {
             this.fb8,
         );
         checkedGl.bindTexture(checkedGl.TEXTURE_2D, null);
-
-        // Set up PAL filter uniforms
-        checkedGl.uniform1i(this.palFilter.locations.uFramebuffer, 0);
-        checkedGl.uniform2f(this.palFilter.locations.uResolution, width, height);
-        checkedGl.uniform2f(this.palFilter.locations.uTexelSize, 1.0 / width, 1.0 / height);
 
         const vertexPositionAttrLoc = checkedGl.getAttribLocation(program, "pos");
         checkedGl.enableVertexAttribArray(vertexPositionAttrLoc);
@@ -145,18 +141,21 @@ export class GlCanvas {
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
 
-        // Set PAL filter uniforms
-        gl.uniform1f(this.palFilter.locations.uFrameCount, frameCount % 8); // 8-field temporal phase sequence
+        // Set filter uniforms
+        this.filter.setUniforms({ width, height, frameCount });
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 }
 
-export function bestCanvas(canvas) {
+export function bestCanvas(canvas, usePalFilter = false) {
     try {
-        return new GlCanvas(canvas);
+        return new GlCanvas(canvas, usePalFilter);
     } catch (e) {
         console.log("Unable to use OpenGL: " + e);
+        if (usePalFilter) {
+            console.warn("PAL TV mode requires WebGL. Falling back to standard 2D canvas.");
+        }
     }
     return new Canvas(canvas);
 }

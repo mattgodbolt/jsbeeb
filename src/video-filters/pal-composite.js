@@ -86,4 +86,12 @@ export class PALCompositeFilter {
 
         return shader;
     }
+
+    setUniforms(params) {
+        const gl = this.gl;
+        gl.uniform1i(this.locations.uFramebuffer, 0); // Texture unit 0
+        gl.uniform2f(this.locations.uResolution, params.width, params.height);
+        gl.uniform2f(this.locations.uTexelSize, 1.0 / params.width, 1.0 / params.height);
+        gl.uniform1f(this.locations.uFrameCount, params.frameCount % 8); // 8-field temporal phase sequence
+    }
 }

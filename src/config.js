@@ -56,6 +56,12 @@ export class Config {
         $("#mouseJoystickEnabled").on("click", () => {
             this.changed.mouseJoystickEnabled = $("#mouseJoystickEnabled").prop("checked");
         });
+
+        $(".display-mode-option").on("click", (e) => {
+            const mode = $(e.target).data("mode");
+            this.changed.displayMode = mode;
+            this.setDisplayMode(mode);
+        });
     }
 
     setMicrophoneChannel(channel) {
@@ -68,6 +74,11 @@ export class Config {
 
     setMouseJoystickEnabled(enabled) {
         $("#mouseJoystickEnabled").prop("checked", !!enabled);
+    }
+
+    setDisplayMode(mode) {
+        const text = mode === "pal" ? "PAL TV" : "CUB Monitor";
+        $(".display-mode-text").text(text);
     }
 
     setModel(modelName) {

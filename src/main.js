@@ -113,6 +113,7 @@ const paramTypes = {
     tape: ParamTypes.STRING,
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
+    displayMode: ParamTypes.STRING,
 };
 
 // Parse the query string with parameter types
@@ -254,6 +255,11 @@ const config = new Config(function (changed) {
         }
     }
     updateUrl();
+    // Handle display mode changes - reload after URL update
+    if (changed.displayMode) {
+        window.location.reload();
+        return;
+    }
 });
 
 // Perform mapping of legacy models to the new format
@@ -267,6 +273,7 @@ config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
+config.setDisplayMode(parsedQuery.displayMode || "cub");
 
 model = config.model;
 
@@ -302,7 +309,24 @@ if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
 const $screen = $("#screen");
-const canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
+const usePalFilter = (parsedQuery.displayMode || "cub") === "pal";
+const canvas = tryGl ? canvasLib.bestCanvas($screen[0], usePalFilter) : new canvasLib.Canvas($screen[0]);
+
+// Setup error dialog (needed early for canvas fallback warnings)
+const $errorDialog = $("#error-dialog");
+const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
+
+function showError(context, error) {
+    $errorDialog.find(".context").text(context);
+    $errorDialog.find(".error").text(error);
+    $errorDialogModal.show();
+}
+
+// Warn if PAL mode selected but GL unavailable
+if (usePalFilter && !(canvas instanceof canvasLib.GlCanvas)) {
+    showError("enabling PAL TV mode", "PAL TV requires WebGL. Using standard display instead.");
+}
+
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
     frames++;
     if (frames < frameSkip) return;
@@ -884,15 +908,6 @@ function updateUrl() {
     const baseUrl = window.location.origin + window.location.pathname;
     const url = buildUrlFromParams(baseUrl, parsedQuery, paramTypes);
     window.history.pushState(null, null, url);
-}
-
-const $errorDialog = $("#error-dialog");
-const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
-
-function showError(context, error) {
-    $errorDialog.find(".context").text(context);
-    $errorDialog.find(".error").text(error);
-    $errorDialogModal.show();
 }
 
 function splitImage(image) {
