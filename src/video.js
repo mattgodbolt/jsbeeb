@@ -11,6 +11,9 @@ export const FRAMESKIPENABLE = 1 << 5;
 export const EVERYTHINGENABLED =
     VDISPENABLE | HDISPENABLE | SKEWDISPENABLE | SCANLINEDISPENABLE | USERDISPENABLE | FRAMESKIPENABLE;
 
+export const OPAQUE_BLACK = 0xff000000;
+export const OPAQUE_WHITE = 0xffffffff;
+
 ////////////////////
 // ULA interface
 class Ula {
@@ -262,11 +265,11 @@ export class Video {
             let line = this.frameCount & 1;
             while (line < 625) {
                 const start = line * 1024;
-                fb32.fill(0, start, start + 1024);
+                fb32.fill(OPAQUE_BLACK, start, start + 1024);
                 line += 2;
             }
         } else {
-            fb32.fill(0);
+            fb32.fill(OPAQUE_BLACK);
         }
     }
 
@@ -306,7 +309,7 @@ export class Video {
                 const dist = Math.sqrt(x * x + y * y) / dotSize;
                 if (dist > 1) continue;
                 const offset = this.debugOffset(this.bitmapX + x, this.bitmapY + y);
-                this.fb32[offset] = lerp(this.fb32[offset], 0xffffff, Math.pow(1 - dist, 2));
+                this.fb32[offset] = lerp(this.fb32[offset], OPAQUE_WHITE, Math.pow(1 - dist, 2));
             }
         }
         this.paint();
