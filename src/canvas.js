@@ -146,7 +146,7 @@ export class GlCanvas {
         }
 
         // Set PAL filter uniforms
-        gl.uniform1f(this.palFilter.locations.uFrameCount, frameCount % 4); // 4-field temporal phase sequence
+        gl.uniform1f(this.palFilter.locations.uFrameCount, frameCount % 8); // 8-field temporal phase sequence
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
