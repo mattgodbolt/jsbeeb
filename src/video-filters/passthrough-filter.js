@@ -8,6 +8,14 @@
 // on CUB monitors.
 
 export class PassthroughFilter {
+    static getDisplayConfig() {
+        return {
+            name: "CUB Monitor",
+            image: "images/cub-monitor.png",
+            imageAlt: "A fake CUB computer monitor",
+        };
+    }
+
     constructor(gl) {
         this.gl = gl;
         this.program = null;

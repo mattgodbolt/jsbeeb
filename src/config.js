@@ -1,6 +1,7 @@
 "use strict";
 import $ from "jquery";
 import { findModel } from "./models.js";
+import { getFilterForMode } from "./canvas.js";
 
 export class Config {
     constructor(onClose) {
@@ -77,8 +78,13 @@ export class Config {
     }
 
     setDisplayMode(mode) {
-        const text = mode === "pal" ? "PAL TV" : "CUB Monitor";
-        $(".display-mode-text").text(text);
+        const filter = getFilterForMode(mode);
+        const config = filter.getDisplayConfig();
+        $(".display-mode-text").text(config.name);
+
+        const $monitorPic = $("#cub-monitor-pic");
+        $monitorPic.attr("src", config.image);
+        $monitorPic.attr("alt", config.imageAlt);
     }
 
     setModel(modelName) {

@@ -37,6 +37,14 @@ import VERT_SHADER from "./shaders/pal-composite.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
 
 export class PALCompositeFilter {
+    static getDisplayConfig() {
+        return {
+            name: "PAL TV",
+            image: "images/cub-monitor.png", // TEMPORARY: Using CUB image until pal-tv.png is ready
+            imageAlt: "A PAL television",
+        };
+    }
+
     constructor(gl) {
         this.gl = gl;
         this.program = null;

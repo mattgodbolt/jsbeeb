@@ -309,8 +309,8 @@ if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
 const $screen = $("#screen");
-const usePalFilter = (parsedQuery.displayMode || "cub") === "pal";
-const canvas = tryGl ? canvasLib.bestCanvas($screen[0], usePalFilter) : new canvasLib.Canvas($screen[0]);
+const displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "cub");
+const canvas = tryGl ? canvasLib.bestCanvas($screen[0], displayModeFilter) : new canvasLib.Canvas($screen[0]);
 
 // Setup error dialog (needed early for canvas fallback warnings)
 const $errorDialog = $("#error-dialog");
@@ -322,9 +322,11 @@ function showError(context, error) {
     $errorDialogModal.show();
 }
 
-// Warn if PAL mode selected but GL unavailable
-if (usePalFilter && !(canvas instanceof canvasLib.GlCanvas)) {
-    showError("enabling PAL TV mode", "PAL TV requires WebGL. Using standard display instead.");
+// Warn if filter selected but GL unavailable
+const defaultFilter = canvasLib.getFilterForMode("cub");
+if (displayModeFilter !== defaultFilter && !(canvas instanceof canvasLib.GlCanvas)) {
+    const config = displayModeFilter.getDisplayConfig();
+    showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
 }
 
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {

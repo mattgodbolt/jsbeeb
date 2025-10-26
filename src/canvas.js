@@ -3,6 +3,16 @@ import webglDebug from "./lib/webgl-debug.js";
 import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
 
+// Single source of truth for display mode -> filter mapping
+const DISPLAY_MODE_FILTERS = {
+    pal: PALCompositeFilter,
+    cub: PassthroughFilter,
+};
+
+export function getFilterForMode(mode) {
+    return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.cub;
+}
+
 export class Canvas {
     constructor(canvas) {
         this.ctx = canvas.getContext("2d", { alpha: false });
@@ -30,7 +40,7 @@ export class Canvas {
 const width = 1024;
 const height = 1024;
 export class GlCanvas {
-    constructor(canvas, usePalFilter = false) {
+    constructor(canvas, filterClass = PassthroughFilter) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
         // rendering, which is much worse than simply using a 2D canvas for
         // rendering.
@@ -53,8 +63,8 @@ export class GlCanvas {
 
         checkedGl.depthMask(false);
 
-        // Create appropriate filter based on display mode
-        this.filter = usePalFilter ? new PALCompositeFilter(checkedGl) : new PassthroughFilter(checkedGl);
+        // Create the specified filter
+        this.filter = new filterClass(checkedGl);
         const program = this.filter.program;
         checkedGl.useProgram(program);
 
@@ -148,13 +158,14 @@ export class GlCanvas {
     }
 }
 
-export function bestCanvas(canvas, usePalFilter = false) {
+export function bestCanvas(canvas, filterClass = PassthroughFilter) {
     try {
-        return new GlCanvas(canvas, usePalFilter);
+        return new GlCanvas(canvas, filterClass);
     } catch (e) {
         console.log("Unable to use OpenGL: " + e);
-        if (usePalFilter) {
-            console.warn("PAL TV mode requires WebGL. Falling back to standard 2D canvas.");
+        if (filterClass !== PassthroughFilter) {
+            const config = filterClass.getDisplayConfig();
+            console.warn(`${config.name} requires WebGL. Falling back to standard 2D canvas.`);
         }
     }
     return new Canvas(canvas);
