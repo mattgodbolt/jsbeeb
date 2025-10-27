@@ -254,12 +254,11 @@ const config = new Config(function (changed) {
             setupMicrophone().then(() => {});
         }
     }
-    updateUrl();
-    // Handle display mode changes - reload after URL update
+    // Handle display mode changes - swap canvas without reload
     if (changed.displayMode) {
-        window.location.reload();
-        return;
+        swapCanvas(canvasLib.getFilterForMode(changed.displayMode));
     }
+    updateUrl();
 });
 
 // Perform mapping of legacy models to the new format
@@ -309,8 +308,6 @@ if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
 const $screen = $("#screen");
-const displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "cub");
-const canvas = tryGl ? canvasLib.bestCanvas($screen[0], displayModeFilter) : new canvasLib.Canvas($screen[0]);
 
 // Setup error dialog (needed early for canvas fallback warnings)
 const $errorDialog = $("#error-dialog");
@@ -322,12 +319,34 @@ function showError(context, error) {
     $errorDialogModal.show();
 }
 
-// Warn if filter selected but GL unavailable
-const defaultFilter = canvasLib.getFilterForMode("cub");
-if (displayModeFilter !== defaultFilter && !(canvas instanceof canvasLib.GlCanvas)) {
-    const config = displayModeFilter.getDisplayConfig();
-    showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
+function createCanvasForFilter(filterClass) {
+    const newCanvas = tryGl ? canvasLib.bestCanvas($screen[0], filterClass) : new canvasLib.Canvas($screen[0]);
+
+    const defaultFilter = canvasLib.getFilterForMode("cub");
+    if (filterClass !== defaultFilter && !(newCanvas instanceof canvasLib.GlCanvas)) {
+        const config = filterClass.getDisplayConfig();
+        showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
+    }
+
+    return newCanvas;
 }
+
+function swapCanvas(newFilterClass) {
+    const newCanvas = createCanvasForFilter(newFilterClass);
+    video.fb32 = newCanvas.fb32;
+    video.paint_ext = function paint(minx, miny, maxx, maxy) {
+        frames++;
+        if (frames < frameSkip) return;
+        frames = 0;
+        newCanvas.paint(minx, miny, maxx, maxy, this.frameCount);
+    };
+    canvas = newCanvas;
+    displayModeFilter = newFilterClass;
+    window.setTimeout(() => window.onresize(), 1);
+}
+
+let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "cub");
+let canvas = createCanvasForFilter(displayModeFilter);
 
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
     frames++;
