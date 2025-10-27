@@ -13,6 +13,12 @@ export class PassthroughFilter {
             name: "CUB Monitor",
             image: "images/cub-monitor.png",
             imageAlt: "A fake CUB computer monitor",
+            imageWidth: 896,
+            imageHeight: 648,
+            canvasLeft: 0,
+            canvasTop: 8,
+            visibleWidth: 896,
+            visibleHeight: 600,
         };
     }
 

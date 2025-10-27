@@ -1611,17 +1611,26 @@ function stop(debug) {
 (function () {
     const $cubMonitor = $("#cub-monitor");
     const $cubMonitorPic = $("#cub-monitor-pic");
-    const cubOrigHeight = $cubMonitorPic.attr("height");
-    const cubOrigWidth = $cubMonitorPic.attr("width");
-    const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
-    const cubToScreenWidthRatio = $screen.attr("width") / cubOrigWidth;
-    const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
-    const minWidth = cubOrigWidth / 4;
-    const minHeight = cubOrigHeight / 4;
     const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
     const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
 
     function resizeTv() {
+        // Get current display config (may change when display mode switches)
+        const displayConfig = displayModeFilter.getDisplayConfig();
+
+        const imageOrigHeight = displayConfig.imageHeight;
+        const imageOrigWidth = displayConfig.imageWidth;
+        const canvasOrigLeft = displayConfig.canvasLeft;
+        const canvasOrigTop = displayConfig.canvasTop;
+        const visibleWidth = displayConfig.visibleWidth;
+        const visibleHeight = displayConfig.visibleHeight;
+
+        const canvasNativeWidth = $screen.attr("width");
+        const canvasNativeHeight = $screen.attr("height");
+        const desiredAspectRatio = imageOrigWidth / imageOrigHeight;
+        const minWidth = imageOrigWidth / 4;
+        const minHeight = imageOrigHeight / 4;
+
         let navbarHeight = $("#header-bar").outerHeight();
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
@@ -1630,9 +1639,34 @@ function stop(debug) {
         } else {
             width = height * desiredAspectRatio;
         }
+
+        // Calculate scale ratio for container
+        const containerScale = width / imageOrigWidth;
+
+        // Calculate scaled visible area dimensions
+        const scaledVisibleWidth = visibleWidth * containerScale;
+        const scaledVisibleHeight = visibleHeight * containerScale;
+
+        // Fit canvas (896×600) into scaled visible area, maintaining aspect ratio
+        const canvasAspect = canvasNativeWidth / canvasNativeHeight;
+        const visibleAspect = scaledVisibleWidth / scaledVisibleHeight;
+
+        let finalCanvasWidth, finalCanvasHeight;
+        if (canvasAspect > visibleAspect) {
+            // Canvas is wider, constrained by width
+            finalCanvasWidth = scaledVisibleWidth;
+            finalCanvasHeight = scaledVisibleWidth / canvasAspect;
+        } else {
+            // Canvas is taller, constrained by height
+            finalCanvasHeight = scaledVisibleHeight;
+            finalCanvasWidth = scaledVisibleHeight * canvasAspect;
+        }
+
         $cubMonitor.height(height).width(width);
         $cubMonitorPic.height(height).width(width);
-        $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
+        $screen.width(finalCanvasWidth).height(finalCanvasHeight);
+        $screen.css("left", canvasOrigLeft * containerScale + "px");
+        $screen.css("top", canvasOrigTop * containerScale + "px");
     }
 
     window.onresize = resizeTv;

@@ -40,8 +40,14 @@ export class PALCompositeFilter {
     static getDisplayConfig() {
         return {
             name: "PAL TV",
-            image: "images/cub-monitor.png", // TEMPORARY: Using CUB image until pal-tv.png is ready
-            imageAlt: "A PAL television",
+            image: "images/tv.png",
+            imageAlt: "A SolaVox television",
+            imageWidth: 1021,
+            imageHeight: 689,
+            canvasLeft: 20,
+            canvasTop: 60,
+            visibleWidth: 830,
+            visibleHeight: 540,
         };
     }
 

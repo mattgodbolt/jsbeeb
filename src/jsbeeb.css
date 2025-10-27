@@ -9,8 +9,7 @@ body {
   position: relative;
   margin-left: auto;
   margin-right: auto;
-  width: 896px;
-  height: 648px;
+  /* width and height set dynamically by resize logic */
 }
 
 #cub-monitor-pic {
@@ -45,8 +44,7 @@ body {
 #screen {
   position: absolute;
   z-index: -1;
-  top: 8px;
-  left: 0;
+  /* top and left set dynamically by resize logic */
   display: block;
   width: 896px;
   height: 600px;

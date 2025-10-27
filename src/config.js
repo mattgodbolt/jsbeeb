@@ -85,6 +85,11 @@ export class Config {
         const $monitorPic = $("#cub-monitor-pic");
         $monitorPic.attr("src", config.image);
         $monitorPic.attr("alt", config.imageAlt);
+        $monitorPic.attr("width", config.imageWidth);
+        $monitorPic.attr("height", config.imageHeight);
+
+        // Trigger window resize to recalculate layout with new dimensions
+        $(window).trigger("resize");
     }
 
     setModel(modelName) {
