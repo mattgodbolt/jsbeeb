@@ -265,61 +265,33 @@ luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current;
 
 ### PAL Parameters
 
-```glsl
-// Subcarrier frequency mapping
-cycles_per_pixel = 283.75 / 1024.0;  // 4.43 MHz over 64μs scanline
-
-// Temporal phase (creates 8-field dot crawl cycle)
-line_phase_offset = line * 0.7516;        // Cycles per line
-frame_phase_offset = frameCount * 234.875; // Cycles per field (312.5 lines)
-
-// PAL phase alternation
-v_switch = (line % 2 == 0) ? 1.0 : -1.0;  // ±1 per scanline
-```
+- **Subcarrier frequency:** 283.75 cycles per scanline (4.43 MHz over 64μs)
+- **Line phase offset:** 0.7516 fractional cycles per line
+- **Field phase offset:** 234.875 cycles per field (= 0.7516 × 312.5 lines)
+- **V phase alternation:** ±1 per scanline (PAL's defining characteristic)
+- **8-field sequence:** Phase repeats every 8 fields, creating animated dot crawl
 
 ### Color Space Conversion
 
-**RGB → YUV (ITU-R BT.470-6 scaled for PAL signal levels):**
-
-```glsl
-Y =  0.2093   * R + 0.4109   * G + 0.0798   * B
-U = -0.102228 * R - 0.200704 * G + 0.302939 * B
-V =  0.427311 * R - 0.357823 * G - 0.069488 * B
-```
-
-Properties:
+Uses ITU-R BT.470-6 YUV matrix scaled for PAL signal levels:
 
 - RGB(1,1,1) → YUV(0.7, 0, 0) — white at 0.7V
 - Worst case (yellow) peaks at 0.931V — prevents overmodulation
-- No separate CHROMA_GAIN needed (baked into matrix)
+- No separate CHROMA_GAIN needed (baked into matrix coefficients)
 
-**YUV → RGB (inverse matrix):**
+See shader source for actual matrix values.
 
-```glsl
-R = 1.42857143 * Y - 0.0000193387 * U + 1.64048673 * V
-G = 1.42857711 * Y - 0.567986687  * U - 0.83560997 * V
-B = 1.42854218 * Y + 2.92468392   * U - 0.0000217418 * V
-```
+### FIR Filter
 
-### FIR Filter Coefficients
-
-21-tap symmetric low-pass filter, cutoff 2.217 MHz @ 16 MHz sample rate:
-
-```glsl
-[0.000427769, 0.00231068, 0.00344911, -0.00203420, -0.0168416, -0.0301976,
- -0.0173993, 0.0424188, 0.141606, 0.237532, 0.277457, 0.237532, 0.141606,
- 0.0424188, -0.0173993, -0.0301976, -0.0168416, -0.00203420, 0.00344911,
- 0.00231068, 0.000427769]
-```
-
-Applied with FIR_GAIN = 2.0 to compensate for demodulation amplitude loss.
+- **Taps:** 21 (symmetric)
+- **Cutoff frequency:** 2.217 MHz (half subcarrier)
+- **Sample rate:** 16 MHz
+- **Gain compensation:** FIR_GAIN = 2.0 to compensate for demodulation amplitude loss
+- **Source:** Derived from svofski/CRT project
 
 ### Chroma Blending
 
-```glsl
-CHROMA_BLEND_WEIGHT = 0.5;  // 50/50 mix of current and previous line
-filtered_uv = mix(filtered_uv_curr, filtered_uv_prev, CHROMA_BLEND_WEIGHT);
-```
+50/50 weighted average of current and previous line's U/V components (at baseband, after demodulation).
 
 ## Known Limitations
 

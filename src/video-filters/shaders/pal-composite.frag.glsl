@@ -9,11 +9,40 @@ uniform float uFrameCount;
 
 const float PI = 3.14159265359;
 
+// IMPLEMENTATION (Baseband Blending Method):
+// 1. Encode RGB to PAL composite: Y + U*sin(ωt) + V*cos(ωt)*v_switch
+// 2. Demodulate current line (with correct phase) → U_curr, V_curr
+// 3. Demodulate previous line (2H for interlaced, same field) → U_prev, V_prev
+// 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
+// 5. Remodulate blended chroma back to composite frequency
+// 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma
+// 7. Combine luma and chroma, convert back to RGB
+//
+// NOTE: Uses 2H delay (line-2) not 1H (line-1) because jsbeeb simulates interlacing by
+// rendering only odd or even lines per frame. A real PAL TV's 1H delay line would contain
+// the previous scanline from the SAME field, which is 2 texture lines apart. Proper
+// support for non-interlaced modes needs to be added.
+
 // Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
 const float FIR_GAIN = 2.0;
 
 // Chroma vertical blending weight (0.0 = no blend, 0.5 = equal blend)
 const float CHROMA_BLEND_WEIGHT = 0.5;
+
+// PAL standard base parameters
+const float PAL_TOTAL_LINES = 625.0;         // Total scanlines per frame
+const float PAL_FRAME_RATE = 25.0;           // Frames per second
+const float PAL_SUBCARRIER_MHZ = 4.43361875; // PAL color subcarrier frequency (exact)
+
+// Derived PAL parameters
+const float PAL_LINES_PER_FIELD = PAL_TOTAL_LINES / 2.0;
+const float PAL_LINE_DURATION_US = 1e6 / (PAL_TOTAL_LINES * PAL_FRAME_RATE);
+const float PAL_CYCLES_PER_LINE = PAL_SUBCARRIER_MHZ * PAL_LINE_DURATION_US;
+const float PAL_LINE_PHASE_OFFSET = fract(PAL_CYCLES_PER_LINE);
+const float PAL_FIELD_PHASE_OFFSET = PAL_LINE_PHASE_OFFSET * PAL_LINES_PER_FIELD;
+
+// jsbeeb texture parameters
+const float TEXTURE_WIDTH = 1024.0;          // Framebuffer width (896 visible + 128 blanking)
 
 // 21-tap FIR low-pass filter coefficients for chroma bandwidth limiting
 // Cutoff: 2.217 MHz (half subcarrier), sample rate: 16 MHz
@@ -71,16 +100,12 @@ void main() {
     // PAL phase alternates each scanline (V component inverts)
     float v_switch = mod(line, 2.0) < 1.0 ? 1.0 : -1.0;
 
-    // PAL subcarrier: 4.43MHz × 64μs = 283.75 cycles/line
-    // BBC Micro maps this across 1024 pixels (896 visible + 128 blanking)
-    const float cycles_per_pixel = 283.75 / 1024.0;
+    // Map PAL subcarrier across texture width
+    float cycles_per_pixel = PAL_CYCLES_PER_LINE / TEXTURE_WIDTH;
 
     // PAL temporal phase (8-field sequence creates animated dot crawl)
-    // 0.7516 cycles/line
-    // Per field: 312.5 lines × 0.7516 ≈ 234.875 cycles
-    // 8 fields = 1 complete cycle (234.875 × 8 ≈ 1879)
-    float line_phase_offset = line * 0.7516;
-    float frame_phase_offset = uFrameCount * 234.875;  // Assumes 312.5 lines/field
+    float line_phase_offset = line * PAL_LINE_PHASE_OFFSET;
+    float frame_phase_offset = uFrameCount * PAL_FIELD_PHASE_OFFSET;
     float phase_offset = line_phase_offset + frame_phase_offset;
 
     // Step 1: Demodulate current line with FIR filter
@@ -98,7 +123,7 @@ void main() {
     vec2 prev_uv = vTexCoord - vec2(0.0, 2.0 * uTexelSize.y);
     float prev_line = line - 2.0;
     float prev_v_switch = v_switch * -1.0;
-    float prev_phase_offset = prev_line * 0.7516 + frame_phase_offset;
+    float prev_phase_offset = prev_line * PAL_LINE_PHASE_OFFSET + frame_phase_offset;
 
     vec2 filtered_uv_prev = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
@@ -107,7 +132,7 @@ void main() {
         filtered_uv_prev += FIR_GAIN * uv * FIR[i];
     }
 
-    // Step 3: Blend chroma at baseband (no U/V mixing!)
+    // Step 3: Blend chroma at baseband
     vec2 filtered_uv = mix(filtered_uv_curr, filtered_uv_prev, CHROMA_BLEND_WEIGHT);
 
     // Step 4: Get luma via complementary subtraction
