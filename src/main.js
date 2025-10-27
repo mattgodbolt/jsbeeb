@@ -27,6 +27,7 @@ import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
+import { getFilterForMode } from "./canvas.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -113,6 +114,7 @@ const paramTypes = {
     tape: ParamTypes.STRING,
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
+    displayMode: ParamTypes.STRING,
 };
 
 // Parse the query string with parameter types
@@ -219,42 +221,50 @@ const emulationConfig = {
     },
 };
 
-const config = new Config(function (changed) {
-    parsedQuery = _.extend(parsedQuery, changed);
-    if (
-        changed.model ||
-        changed.coProcessor !== undefined ||
-        changed.hasMusic5000 !== undefined ||
-        changed.hasTeletextAdaptor !== undefined ||
-        changed.hasEconet !== undefined
-    ) {
-        areYouSure(
-            "Changing model requires a restart of the emulator. Restart now?",
-            "Yes, restart now",
-            "No, thanks",
-            function () {
-                updateUrl();
-                window.location.reload();
-            },
-        );
-    }
-    if (changed.keyLayout) {
-        window.localStorage.keyLayout = changed.keyLayout;
-        emulationConfig.keyLayout = changed.keyLayout;
-        keyboard.setKeyLayout(changed.keyLayout);
-    }
-    // Handle ADC source changes
-    if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
-        // Update sources based on new settings (parsedQuery already updated with changed values)
-        updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
-
-        // Handle microphone initialization if needed
-        if (changed.microphoneChannel !== undefined) {
-            setupMicrophone().then(() => {});
+const config = new Config(
+    function onChange(changed) {
+        if (changed.displayMode) {
+            displayModeFilter = getFilterForMode(changed.displayMode);
+            setCrtPic(displayModeFilter);
+            swapCanvas(displayModeFilter);
+            // Trigger window resize to recalculate layout with new dimensions
+            $(window).trigger("resize");
         }
-    }
-    updateUrl();
-});
+    },
+    function onClose(changed) {
+        parsedQuery = _.extend(parsedQuery, changed);
+        if (
+            changed.model ||
+            changed.coProcessor !== undefined ||
+            changed.hasMusic5000 !== undefined ||
+            changed.hasTeletextAdaptor !== undefined ||
+            changed.hasEconet !== undefined
+        ) {
+            areYouSure(
+                "Changing model requires a restart of the emulator. Restart now?",
+                "Yes, restart now",
+                "No, thanks",
+                function () {
+                    updateUrl();
+                    window.location.reload();
+                },
+            );
+        }
+        if (changed.keyLayout) {
+            window.localStorage.keyLayout = changed.keyLayout;
+            emulationConfig.keyLayout = changed.keyLayout;
+            keyboard.setKeyLayout(changed.keyLayout);
+        }
+        if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
+            updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
+
+            if (changed.microphoneChannel !== undefined) {
+                setupMicrophone().then(() => {});
+            }
+        }
+        updateUrl();
+    },
+);
 
 // Perform mapping of legacy models to the new format
 config.mapLegacyModels(parsedQuery);
@@ -267,6 +277,8 @@ config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
+let displayMode = parsedQuery.displayMode || "rgb";
+config.setDisplayMode(displayMode);
 
 model = config.model;
 
@@ -302,12 +314,49 @@ if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
 const $screen = $("#screen");
-const canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
+
+const $errorDialog = $("#error-dialog");
+const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
+
+function showError(context, error) {
+    $errorDialog.find(".context").text(context);
+    $errorDialog.find(".error").text(error);
+    $errorDialogModal.show();
+}
+
+function createCanvasForFilter(filterClass) {
+    const newCanvas = tryGl ? canvasLib.bestCanvas($screen[0], filterClass) : new canvasLib.Canvas($screen[0]);
+
+    if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
+        const config = filterClass.getDisplayConfig();
+        showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
+    }
+
+    return newCanvas;
+}
+
+let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
+function swapCanvas(newFilterClass) {
+    const newCanvas = createCanvasForFilter(newFilterClass);
+    video.fb32 = newCanvas.fb32;
+    video.paint_ext = function paint(minx, miny, maxx, maxy) {
+        frames++;
+        if (frames < frameSkip) return;
+        frames = 0;
+        newCanvas.paint(minx, miny, maxx, maxy, this.frameCount);
+    };
+    canvas = newCanvas;
+    displayModeFilter = newFilterClass;
+    window.setTimeout(() => window.onresize(), 1);
+}
+
+let canvas = createCanvasForFilter(displayModeFilter);
+
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
     frames++;
     if (frames < frameSkip) return;
     frames = 0;
-    canvas.paint(minx, miny, maxx, maxy);
+    canvas.paint(minx, miny, maxx, maxy, this.frameCount);
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
@@ -440,6 +489,16 @@ $cub.on("mousemove mousedown mouseup", function (evt) {
 
     evt.preventDefault();
 });
+
+function setCrtPic(filterMode) {
+    const config = filterMode.getDisplayConfig();
+    const $monitorPic = $("#cub-monitor-pic");
+    $monitorPic.attr("src", config.image);
+    $monitorPic.attr("alt", config.imageAlt);
+    $monitorPic.attr("width", config.imageWidth);
+    $monitorPic.attr("height", config.imageHeight);
+}
+setCrtPic(displayModeFilter);
 
 $(window).blur(function () {
     keyboard.clearKeys();
@@ -884,15 +943,6 @@ function updateUrl() {
     const baseUrl = window.location.origin + window.location.pathname;
     const url = buildUrlFromParams(baseUrl, parsedQuery, paramTypes);
     window.history.pushState(null, null, url);
-}
-
-const $errorDialog = $("#error-dialog");
-const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
-
-function showError(context, error) {
-    $errorDialog.find(".context").text(context);
-    $errorDialog.find(".error").text(error);
-    $errorDialogModal.show();
 }
 
 function splitImage(image) {
@@ -1594,17 +1644,26 @@ function stop(debug) {
 (function () {
     const $cubMonitor = $("#cub-monitor");
     const $cubMonitorPic = $("#cub-monitor-pic");
-    const cubOrigHeight = $cubMonitorPic.attr("height");
-    const cubOrigWidth = $cubMonitorPic.attr("width");
-    const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
-    const cubToScreenWidthRatio = $screen.attr("width") / cubOrigWidth;
-    const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
-    const minWidth = cubOrigWidth / 4;
-    const minHeight = cubOrigHeight / 4;
     const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
     const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
 
     function resizeTv() {
+        // Get current display config (may change when display mode switches)
+        const displayConfig = displayModeFilter.getDisplayConfig();
+
+        const imageOrigHeight = displayConfig.imageHeight;
+        const imageOrigWidth = displayConfig.imageWidth;
+        const canvasOrigLeft = displayConfig.canvasLeft;
+        const canvasOrigTop = displayConfig.canvasTop;
+        const visibleWidth = displayConfig.visibleWidth;
+        const visibleHeight = displayConfig.visibleHeight;
+
+        const canvasNativeWidth = $screen.attr("width");
+        const canvasNativeHeight = $screen.attr("height");
+        const desiredAspectRatio = imageOrigWidth / imageOrigHeight;
+        const minWidth = imageOrigWidth / 4;
+        const minHeight = imageOrigHeight / 4;
+
         let navbarHeight = $("#header-bar").outerHeight();
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
@@ -1613,9 +1672,28 @@ function stop(debug) {
         } else {
             width = height * desiredAspectRatio;
         }
+
+        const containerScale = width / imageOrigWidth;
+        const scaledVisibleWidth = visibleWidth * containerScale;
+        const scaledVisibleHeight = visibleHeight * containerScale;
+
+        const canvasAspect = canvasNativeWidth / canvasNativeHeight;
+        const visibleAspect = scaledVisibleWidth / scaledVisibleHeight;
+
+        let finalCanvasWidth, finalCanvasHeight;
+        if (canvasAspect > visibleAspect) {
+            finalCanvasWidth = scaledVisibleWidth;
+            finalCanvasHeight = scaledVisibleWidth / canvasAspect;
+        } else {
+            finalCanvasHeight = scaledVisibleHeight;
+            finalCanvasWidth = scaledVisibleHeight * canvasAspect;
+        }
+
         $cubMonitor.height(height).width(width);
         $cubMonitorPic.height(height).width(width);
-        $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
+        $screen.width(finalCanvasWidth).height(finalCanvasHeight);
+        $screen.css("left", canvasOrigLeft * containerScale + "px");
+        $screen.css("top", canvasOrigTop * containerScale + "px");
     }
 
     window.onresize = resizeTv;
