@@ -61,10 +61,10 @@ export class Config {
         });
 
         $(".display-mode-option").on("click", (e) => {
-            const filter = getFilterForMode($(e.target).data("mode"));
-            this.changed.displayFilter = filter;
-            this.setDisplayFilter(filter);
-            this.onChange({ displayFilter: filter });
+            const mode = $(e.target).data("mode");
+            this.changed.displayMode = mode;
+            this.setDisplayMode(mode);
+            this.onChange({ displayMode: mode });
         });
     }
 
@@ -80,8 +80,8 @@ export class Config {
         $("#mouseJoystickEnabled").prop("checked", !!enabled);
     }
 
-    setDisplayFilter(filter) {
-        const config = filter.getDisplayConfig();
+    setDisplayMode(mode) {
+        const config = getFilterForMode(mode).getDisplayConfig();
         $(".display-mode-text").text(config.name);
     }
 

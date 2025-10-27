@@ -27,6 +27,7 @@ import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
+import { getFilterForMode } from "./canvas.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -222,8 +223,8 @@ const emulationConfig = {
 
 const config = new Config(
     function onChange(changed) {
-        if (changed.displayFilter) {
-            displayModeFilter = changed.displayFilter;
+        if (changed.displayMode) {
+            displayModeFilter = getFilterForMode(changed.displayMode);
             setCrtPic(displayModeFilter);
             swapCanvas(displayModeFilter);
             // Trigger window resize to recalculate layout with new dimensions
@@ -276,8 +277,8 @@ config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
-let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
-config.setDisplayFilter(displayModeFilter);
+let displayMode = parsedQuery.displayMode || "rgb";
+config.setDisplayMode(displayMode);
 
 model = config.model;
 
@@ -334,6 +335,7 @@ function createCanvasForFilter(filterClass) {
     return newCanvas;
 }
 
+let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
 function swapCanvas(newFilterClass) {
     const newCanvas = createCanvasForFilter(newFilterClass);
     video.fb32 = newCanvas.fb32;
