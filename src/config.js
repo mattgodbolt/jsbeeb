@@ -61,10 +61,10 @@ export class Config {
         });
 
         $(".display-mode-option").on("click", (e) => {
-            const mode = $(e.target).data("mode");
-            this.changed.displayMode = mode;
-            this.setDisplayMode(mode);
-            this.onChange({ displayMode: mode });
+            const filter = getFilterForMode($(e.target).data("mode"));
+            this.changed.displayFilter = filter;
+            this.setDisplayFilter(filter);
+            this.onChange({ displayFilter: filter });
         });
     }
 
@@ -80,19 +80,9 @@ export class Config {
         $("#mouseJoystickEnabled").prop("checked", !!enabled);
     }
 
-    setDisplayMode(mode) {
-        const filter = getFilterForMode(mode);
+    setDisplayFilter(filter) {
         const config = filter.getDisplayConfig();
         $(".display-mode-text").text(config.name);
-
-        const $monitorPic = $("#cub-monitor-pic");
-        $monitorPic.attr("src", config.image);
-        $monitorPic.attr("alt", config.imageAlt);
-        $monitorPic.attr("width", config.imageWidth);
-        $monitorPic.attr("height", config.imageHeight);
-
-        // Trigger window resize to recalculate layout with new dimensions
-        $(window).trigger("resize");
     }
 
     setModel(modelName) {

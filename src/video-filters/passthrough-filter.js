@@ -10,7 +10,7 @@ export class PassthroughFilter {
 
     static getDisplayConfig() {
         return {
-            name: "CUB Monitor",
+            name: "RGB Monitor",
             image: "images/cub-monitor.png",
             imageAlt: "A fake CUB computer monitor",
             imageWidth: 896,

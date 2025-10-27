@@ -222,8 +222,12 @@ const emulationConfig = {
 
 const config = new Config(
     function onChange(changed) {
-        if (changed.displayMode) {
-            swapCanvas(canvasLib.getFilterForMode(changed.displayMode));
+        if (changed.displayFilter) {
+            displayModeFilter = changed.displayFilter;
+            setCrtPic(displayModeFilter);
+            swapCanvas(displayModeFilter);
+            // Trigger window resize to recalculate layout with new dimensions
+            $(window).trigger("resize");
         }
     },
     function onClose(changed) {
@@ -272,7 +276,8 @@ config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
-config.setDisplayMode(parsedQuery.displayMode || "cub");
+let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
+config.setDisplayFilter(displayModeFilter);
 
 model = config.model;
 
@@ -343,7 +348,6 @@ function swapCanvas(newFilterClass) {
     window.setTimeout(() => window.onresize(), 1);
 }
 
-let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "cub");
 let canvas = createCanvasForFilter(displayModeFilter);
 
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
@@ -483,6 +487,16 @@ $cub.on("mousemove mousedown mouseup", function (evt) {
 
     evt.preventDefault();
 });
+
+function setCrtPic(filterMode) {
+    const config = filterMode.getDisplayConfig();
+    const $monitorPic = $("#cub-monitor-pic");
+    $monitorPic.attr("src", config.image);
+    $monitorPic.attr("alt", config.imageAlt);
+    $monitorPic.attr("width", config.imageWidth);
+    $monitorPic.attr("height", config.imageHeight);
+}
+setCrtPic(displayModeFilter);
 
 $(window).blur(function () {
     keyboard.clearKeys();

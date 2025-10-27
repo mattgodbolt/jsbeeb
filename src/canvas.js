@@ -5,11 +5,11 @@ import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
 
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,
-    cub: PassthroughFilter,
+    rgb: PassthroughFilter,
 };
 
 export function getFilterForMode(mode) {
-    return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.cub;
+    return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
 }
 
 export class Canvas {

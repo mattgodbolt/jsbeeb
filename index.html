@@ -206,8 +206,7 @@
     <div>
       <div id="outer">
         <div id="cub-monitor">
-          <!-- Image is dynamically swapped by config.js based on filter.displayImage
-               TODO: Create images/pal-tv.png (896x648) for PAL TV mode -->
+          <!-- Image is dynamically swapped by config.js based on filter.displayImage -->
           <img
             id="cub-monitor-pic"
             width="896"
@@ -831,6 +830,35 @@
                 </ul>
               </div>
             </div>
+            <div id="displaySettings" style="margin-top: 15px">
+              <div class="row align-items-center">
+                <div class="col-sm-6">
+                  <label for="displayModeDropdown" class="col-form-label">Display mode:</label>
+                </div>
+                <div class="col-sm-6 dropdown">
+                  <button
+                    type="button"
+                    class="btn btn-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown"
+                    id="displayModeDropdown"
+                  >
+                    <span class="display-mode-text">CUB Monitor</span>
+                  </button>
+                  <ul
+                    class="dropdown-menu dropdown-menu-dark display-mode-menu"
+                    role="menu"
+                    aria-labelledby="displayModeDropdown"
+                  >
+                    <li>
+                      <a href="#" class="dropdown-item display-mode-option" data-mode="rgb">RGB Monitor</a>
+                    </li>
+                    <li>
+                      <a href="#" class="dropdown-item display-mode-option" data-mode="pal">PAL TV</a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
             <div class="align-items-center">
               <div class="row">
                 <div class="col-sm-6">
@@ -912,41 +940,6 @@
                     Maps mouse position on BBC display to channels 0 (X) and 1 (Y)
                   </div>
                 </div>
-              </div>
-            </div>
-
-            <div id="displaySettings" style="margin-top: 15px">
-              <div class="row align-items-center">
-                <div class="col-sm-6">
-                  <label for="displayModeDropdown" class="col-form-label">Display mode:</label>
-                </div>
-                <div class="col-sm-6 dropdown">
-                  <button
-                    type="button"
-                    class="btn btn-secondary dropdown-toggle"
-                    data-bs-toggle="dropdown"
-                    id="displayModeDropdown"
-                  >
-                    <span class="display-mode-text">CUB Monitor</span>
-                  </button>
-                  <ul
-                    class="dropdown-menu dropdown-menu-dark display-mode-menu"
-                    role="menu"
-                    aria-labelledby="displayModeDropdown"
-                  >
-                    <li>
-                      <a href="#" class="dropdown-item display-mode-option" data-mode="cub"> CUB Monitor (RGB)</a>
-                    </li>
-                    <li>
-                      <a href="#" class="dropdown-item display-mode-option" data-mode="pal">
-                        PAL TV (composite artifacts)</a
-                      >
-                    </li>
-                  </ul>
-                </div>
-              </div>
-              <div class="small text-muted mt-2">
-                CUB Monitor: sharp RGB. PAL TV: dot crawl, color bleeding (needs WebGL).
               </div>
             </div>
           </div>
