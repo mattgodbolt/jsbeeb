@@ -37,6 +37,10 @@ import VERT_SHADER from "./shaders/pal-composite.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
 
 export class PALCompositeFilter {
+    static requiresGl() {
+        return true;
+    }
+
     static getDisplayConfig() {
         return {
             name: "PAL TV",

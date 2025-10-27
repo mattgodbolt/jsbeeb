@@ -3,7 +3,6 @@ import webglDebug from "./lib/webgl-debug.js";
 import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
 
-// Single source of truth for display mode -> filter mapping
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,
     cub: PassthroughFilter,
@@ -14,6 +13,10 @@ export function getFilterForMode(mode) {
 }
 
 export class Canvas {
+    isWebGl() {
+        return false;
+    }
+
     constructor(canvas) {
         this.ctx = canvas.getContext("2d", { alpha: false });
         if (this.ctx === null) throw new Error("Unable to get a 2D context");
@@ -40,7 +43,11 @@ export class Canvas {
 const width = 1024;
 const height = 1024;
 export class GlCanvas {
-    constructor(canvas, filterClass = PassthroughFilter) {
+    isWebGl() {
+        return true;
+    }
+
+    constructor(canvas, filterClass) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
         // rendering, which is much worse than simply using a 2D canvas for
         // rendering.
@@ -63,7 +70,6 @@ export class GlCanvas {
 
         checkedGl.depthMask(false);
 
-        // Create the specified filter
         this.filter = new filterClass(checkedGl);
         const program = this.filter.program;
         checkedGl.useProgram(program);
@@ -151,19 +157,18 @@ export class GlCanvas {
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
 
-        // Set filter uniforms
         this.filter.setUniforms({ width, height, frameCount });
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 }
 
-export function bestCanvas(canvas, filterClass = PassthroughFilter) {
+export function bestCanvas(canvas, filterClass) {
     try {
         return new GlCanvas(canvas, filterClass);
     } catch (e) {
         console.log("Unable to use OpenGL: " + e);
-        if (filterClass !== PassthroughFilter) {
+        if (filterClass.requiresGl()) {
             const config = filterClass.getDisplayConfig();
             console.warn(`${config.name} requires WebGL. Falling back to standard 2D canvas.`);
         }

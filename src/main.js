@@ -309,7 +309,6 @@ if (parsedQuery.glEnabled !== undefined) {
 }
 const $screen = $("#screen");
 
-// Setup error dialog (needed early for canvas fallback warnings)
 const $errorDialog = $("#error-dialog");
 const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
 
@@ -322,8 +321,7 @@ function showError(context, error) {
 function createCanvasForFilter(filterClass) {
     const newCanvas = tryGl ? canvasLib.bestCanvas($screen[0], filterClass) : new canvasLib.Canvas($screen[0]);
 
-    const defaultFilter = canvasLib.getFilterForMode("cub");
-    if (filterClass !== defaultFilter && !(newCanvas instanceof canvasLib.GlCanvas)) {
+    if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
         const config = filterClass.getDisplayConfig();
         showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
     }
@@ -1659,24 +1657,18 @@ function stop(debug) {
             width = height * desiredAspectRatio;
         }
 
-        // Calculate scale ratio for container
         const containerScale = width / imageOrigWidth;
-
-        // Calculate scaled visible area dimensions
         const scaledVisibleWidth = visibleWidth * containerScale;
         const scaledVisibleHeight = visibleHeight * containerScale;
 
-        // Fit canvas (896×600) into scaled visible area, maintaining aspect ratio
         const canvasAspect = canvasNativeWidth / canvasNativeHeight;
         const visibleAspect = scaledVisibleWidth / scaledVisibleHeight;
 
         let finalCanvasWidth, finalCanvasHeight;
         if (canvasAspect > visibleAspect) {
-            // Canvas is wider, constrained by width
             finalCanvasWidth = scaledVisibleWidth;
             finalCanvasHeight = scaledVisibleWidth / canvasAspect;
         } else {
-            // Canvas is taller, constrained by height
             finalCanvasHeight = scaledVisibleHeight;
             finalCanvasWidth = scaledVisibleHeight * canvasAspect;
         }

@@ -1,13 +1,13 @@
 "use strict";
 
-// Passthrough Filter - Simple texture copy for CUB Monitor mode
-//
-// This filter performs no processing - it simply copies the framebuffer
-// texture to the screen with linear interpolation. This is the default
-// behavior matching the main branch, providing clean RGB output as seen
-// on CUB monitors.
+import VERT_SHADER from "./shaders/passthrough.vert.glsl?raw";
+import FRAG_SHADER from "./shaders/passthrough.frag.glsl?raw";
 
 export class PassthroughFilter {
+    static requiresGl() {
+        return false;
+    }
+
     static getDisplayConfig() {
         return {
             name: "CUB Monitor",
@@ -33,34 +33,9 @@ export class PassthroughFilter {
     _init() {
         const gl = this.gl;
 
-        // Simple vertex shader - same as main branch
-        const vertexShader = this._compileShader(
-            gl.VERTEX_SHADER,
-            `
-            attribute vec2 pos;
-            attribute vec2 uvIn;
-            varying vec2 uv;
-            void main() {
-                uv = uvIn;
-                gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);
-            }
-        `,
-        );
+        const vertexShader = this._compileShader(gl.VERTEX_SHADER, VERT_SHADER);
+        const fragmentShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
 
-        // Simple fragment shader - just copy texture to screen
-        const fragmentShader = this._compileShader(
-            gl.FRAGMENT_SHADER,
-            `
-            precision mediump float;
-            uniform sampler2D tex;
-            varying vec2 uv;
-            void main() {
-                gl_FragColor = texture2D(tex, uv).rgba;
-            }
-        `,
-        );
-
-        // Link program
         this.program = gl.createProgram();
         gl.attachShader(this.program, vertexShader);
         gl.attachShader(this.program, fragmentShader);
@@ -70,7 +45,6 @@ export class PassthroughFilter {
             throw new Error("Failed to link passthrough shader program: " + gl.getProgramInfoLog(this.program));
         }
 
-        // Get uniform locations
         this.locations.tex = gl.getUniformLocation(this.program, "tex");
     }
 
@@ -91,6 +65,6 @@ export class PassthroughFilter {
 
     setUniforms(_params) {
         const gl = this.gl;
-        gl.uniform1i(this.locations.tex, 0); // Texture unit 0
+        gl.uniform1i(this.locations.tex, 0);
     }
 }
