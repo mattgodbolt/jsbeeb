@@ -9,10 +9,6 @@ uniform float uFrameCount;
 
 const float PI = 3.14159265359;
 
-// Chroma amplitude: Set to 1.0 as scaling is now baked into the YUV matrix
-// The properly scaled matrix (from ITU-R BT.470-6) ensures signals stay within spec
-const float CHROMA_GAIN = 1.0;
-
 // Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
 const float FIR_GAIN = 2.0;
 
@@ -52,9 +48,8 @@ vec2 demodulate_uv(vec2 xy, float offset_pixels, float v_switch, float cycles_pe
     vec3 rgb = texture2D(uFramebuffer, sample_uv).rgb;
     vec3 yuv = rgb_to_yuv(rgb);
 
-    // Encode to composite: Y + CHROMA_GAIN * (U*sin(ωt) + V*cos(ωt)*v_switch)
-    // CHROMA_GAIN prevents overmodulation (see docs/pal-simulation-design.md)
-    float composite = yuv.x + CHROMA_GAIN * (yuv.y * sin(t) + yuv.z * cos(t) * v_switch);
+    // Encode to composite: Y + U*sin(ωt) + V*cos(ωt)*v_switch
+    float composite = yuv.x + yuv.y * sin(t) + yuv.z * cos(t) * v_switch;
 
     // Demodulate: multiply by carrier to shift chroma to baseband
     return vec2(composite * sin(t), composite * cos(t) * v_switch);
@@ -81,15 +76,12 @@ void main() {
     const float cycles_per_pixel = 283.75 / 1024.0;
 
     // PAL temporal phase (8-field sequence creates animated dot crawl)
-    // Correct: 0.7516 cycles/line (not 0.75)
+    // 0.7516 cycles/line
     // Per field: 312.5 lines × 0.7516 ≈ 234.875 cycles
     // 8 fields = 1 complete cycle (234.875 × 8 ≈ 1879)
     float line_phase_offset = line * 0.7516;
     float frame_phase_offset = uFrameCount * 234.875;  // Assumes 312.5 lines/field
     float phase_offset = line_phase_offset + frame_phase_offset;
-
-    // Approach D: Baseband Chroma Blending
-    // Demodulate current and previous lines separately, then blend at baseband
 
     // Step 1: Demodulate current line with FIR filter
     vec2 filtered_uv_curr = vec2(0.0);
@@ -105,7 +97,7 @@ void main() {
     // This represents the TV's 1H delay within a single field.
     vec2 prev_uv = vTexCoord - vec2(0.0, 2.0 * uTexelSize.y);
     float prev_line = line - 2.0;
-    float prev_v_switch = mod(prev_line, 2.0) < 1.0 ? 1.0 : -1.0;
+    float prev_v_switch = v_switch * -1.0;
     float prev_phase_offset = prev_line * 0.7516 + frame_phase_offset;
 
     vec2 filtered_uv_prev = vec2(0.0);
@@ -122,10 +114,9 @@ void main() {
     float t_curr = (vPixelCoord.x * cycles_per_pixel + phase_offset) * 2.0 * PI;
     vec3 rgb_curr = texture2D(uFramebuffer, vTexCoord).rgb;
     vec3 yuv_curr = rgb_to_yuv(rgb_curr);
-    float composite_curr = yuv_curr.x + CHROMA_GAIN * (yuv_curr.y * sin(t_curr) + yuv_curr.z * cos(t_curr) * v_switch);
+    float composite_curr = yuv_curr.x + yuv_curr.y * sin(t_curr) + yuv_curr.z * cos(t_curr) * v_switch;
 
     // Remodulate blended chroma back to composite frequency
-    // Note: filtered_uv already contains CHROMA_GAIN scaling from demodulation, don't apply again!
     float remodulated_chroma = filtered_uv.x * sin(t_curr) + filtered_uv.y * cos(t_curr) * v_switch;
 
     // Complementary subtraction: luma = composite - chroma

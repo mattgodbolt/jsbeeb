@@ -7,7 +7,7 @@
 // connecting a BBC Micro to a PAL television via composite cable.
 //
 // IMPLEMENTATION (Baseband Blending Method):
-// 1. Encode RGB to PAL composite: Y + CHROMA_GAIN*(U*sin(ωt) + V*cos(ωt)*v_switch)
+// 1. Encode RGB to PAL composite: Y + U*sin(ωt) + V*cos(ωt)*v_switch
 // 2. Demodulate current line (with correct phase) → U_curr, V_curr
 // 3. Demodulate previous line (2H for interlaced, same field) → U_prev, V_prev
 // 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
@@ -17,15 +17,8 @@
 //
 // NOTE: Uses 2H delay (line-2) not 1H (line-1) because jsbeeb simulates interlacing by
 // rendering only odd or even lines per frame. A real PAL TV's 1H delay line would contain
-// the previous scanline from the SAME field, which is 2 texture lines apart.
-//
-// KEY INSIGHT: Demodulate FIRST (with each line's correct phase), THEN blend.
-// This avoids U/V mixing that occurs when blending at composite level (Approach C failure).
-//
-// TUNABLE PARAMETERS:
-// - CHROMA_GAIN: Set to 0.2 to prevent overmodulation (fully saturated colors would clip)
-// - FIR_GAIN: Must be 2.0 to compensate for sin²(x) amplitude loss during demodulation
-// - CHROMA_BLEND_WEIGHT: Controls vertical chroma blending (0.0 = sharp, 0.5 = smooth)
+// the previous scanline from the SAME field, which is 2 texture lines apart. Proper
+// support for non-interlaced modes needs to be added.
 //
 // REFERENCES:
 // - John Watkinson's "Engineer's Guide to Decoding & Encoding" (Section 3.4)
