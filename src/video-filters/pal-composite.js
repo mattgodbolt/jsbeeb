@@ -42,12 +42,12 @@ export class PALCompositeFilter {
             name: "PAL TV",
             image: "images/tv.png",
             imageAlt: "A SolaVox television",
-            imageWidth: 1021,
-            imageHeight: 689,
-            canvasLeft: 20,
-            canvasTop: 60,
-            visibleWidth: 830,
-            visibleHeight: 540,
+            imageWidth: 1000,
+            imageHeight: 719,
+            canvasLeft: 50,
+            canvasTop: 70,
+            visibleWidth: 800,
+            visibleHeight: 600,
         };
     }
 
