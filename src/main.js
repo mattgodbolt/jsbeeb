@@ -220,46 +220,46 @@ const emulationConfig = {
     },
 };
 
-const config = new Config(function (changed) {
-    parsedQuery = _.extend(parsedQuery, changed);
-    if (
-        changed.model ||
-        changed.coProcessor !== undefined ||
-        changed.hasMusic5000 !== undefined ||
-        changed.hasTeletextAdaptor !== undefined ||
-        changed.hasEconet !== undefined
-    ) {
-        areYouSure(
-            "Changing model requires a restart of the emulator. Restart now?",
-            "Yes, restart now",
-            "No, thanks",
-            function () {
-                updateUrl();
-                window.location.reload();
-            },
-        );
-    }
-    if (changed.keyLayout) {
-        window.localStorage.keyLayout = changed.keyLayout;
-        emulationConfig.keyLayout = changed.keyLayout;
-        keyboard.setKeyLayout(changed.keyLayout);
-    }
-    // Handle ADC source changes
-    if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
-        // Update sources based on new settings (parsedQuery already updated with changed values)
-        updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
-
-        // Handle microphone initialization if needed
-        if (changed.microphoneChannel !== undefined) {
-            setupMicrophone().then(() => {});
+const config = new Config(
+    function onChange(changed) {
+        if (changed.displayMode) {
+            swapCanvas(canvasLib.getFilterForMode(changed.displayMode));
         }
-    }
-    // Handle display mode changes - swap canvas without reload
-    if (changed.displayMode) {
-        swapCanvas(canvasLib.getFilterForMode(changed.displayMode));
-    }
-    updateUrl();
-});
+    },
+    function onClose(changed) {
+        parsedQuery = _.extend(parsedQuery, changed);
+        if (
+            changed.model ||
+            changed.coProcessor !== undefined ||
+            changed.hasMusic5000 !== undefined ||
+            changed.hasTeletextAdaptor !== undefined ||
+            changed.hasEconet !== undefined
+        ) {
+            areYouSure(
+                "Changing model requires a restart of the emulator. Restart now?",
+                "Yes, restart now",
+                "No, thanks",
+                function () {
+                    updateUrl();
+                    window.location.reload();
+                },
+            );
+        }
+        if (changed.keyLayout) {
+            window.localStorage.keyLayout = changed.keyLayout;
+            emulationConfig.keyLayout = changed.keyLayout;
+            keyboard.setKeyLayout(changed.keyLayout);
+        }
+        if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
+            updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
+
+            if (changed.microphoneChannel !== undefined) {
+                setupMicrophone().then(() => {});
+            }
+        }
+        updateUrl();
+    },
+);
 
 // Perform mapping of legacy models to the new format
 config.mapLegacyModels(parsedQuery);
