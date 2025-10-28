@@ -12,3 +12,5 @@ coverage
 /dist
 
 **/.claude/settings.local.json
+.vscode/*
+

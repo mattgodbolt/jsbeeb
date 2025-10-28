@@ -437,10 +437,6 @@ class Tube6502 extends Base6502 {
             return this.rom[offset & 0xfff];
         }
 
-        // ATOM
-        // video generator needs to know when CPU is accessing memory so it can make snow
-        if (this.model.isAtom && !this.model.hasNoiseKiller) this.video.video6847.cpuAddrAccess(offset & 0xffff);
-
         return this.memory[offset & 0xffff];
     }
 
@@ -649,6 +645,10 @@ export class Cpu6502 extends Base6502 {
         if (this.model.isAtom) {
             this.atomppia = new atom_ppia.AtomPPIA(this, this.config.keyLayout, this.scheduler);
             this.atommc = new atom_mmc.AtomMMC2(this);
+            this.branquart_latch = 0; // WRITE only latch at 0xBFFF for RAM bank selection at 0xA000
+            // The BRAN software in the AtomMMC will SHADOWN the value written to 0xBFFF into 0xFD for reading back
+            // the software will use bit 6 of 0xFD to LOCK the selected bank from further changes
+            this.branquart_ram = new Array(16).fill(true); // 16 RAM/ROM banks of 4KB each, all RAM by default
         }
     }
 
@@ -800,6 +800,8 @@ export class Cpu6502 extends Base6502 {
             case 0xbde0:
             case 0xbdf0:
                 // SID - not implemented
+                break;
+            case 0xbffc: // RAM/ROM select is write only at 0xbfff
                 break;
         }
         return addr >>> 8;
@@ -999,14 +1001,23 @@ export class Cpu6502 extends Base6502 {
 
     readmem(addr) {
         addr &= 0xffff;
+
         const statOffset = this.memStatOffset + (addr >>> 8);
         if (this.memStat[statOffset]) {
             const offset = this.memLook[statOffset];
-            const res = this.ramRomOs[offset + addr];
+            let res = this.ramRomOs[offset + addr];
+            if (this.model.isAtom) {
+                // rom.ram banks on atom at 0xa000 selected by latch at 0xbfff
+                if (addr >= 0xa000 && addr <= 0xafff) {
+                    let ramBank = this.branquart_latch & 0x0f; // bits 0,1,2,3 select ram bank at 0xa000
+                    res = this.ramRomOs[this.romOffset + 0x10000 + ramBank * 0x1000 + (addr & 0x1fff)];
+                    // console.log("Readmem 0x"+ addr.toString(16) + " with "+ res + " from RAM bank "+ ramBank.toString(16) );
+                }
+            }
             if (this._debugRead) this._debugRead(addr, res, offset);
             return res | 0;
         } else {
-            // ATOM
+            // ATOM device
             let res = this.readDevice(addr);
             if (this.model.isAtom) {
                 res = this.readDeviceAtom(addr);
@@ -1020,7 +1031,19 @@ export class Cpu6502 extends Base6502 {
         const statOffset = this.memStatOffset + (addr >>> 8);
         if (this.memStat[statOffset]) {
             const offset = this.memLook[statOffset];
-            return this.ramRomOs[offset + addr];
+            let res = this.ramRomOs[offset + addr];
+            if (this.model.isAtom) {
+                // rom.ram banks on atom at 0xa000 selected by latch at 0xbfff
+                if (addr >= 0xa000 && addr <= 0xafff) {
+                    let ramBank = this.branquart_latch & 0x0f; // bits 0,1,2,3 select ram bank at 0xa000
+                    res = this.ramRomOs[this.romOffset + 0x10000 + ramBank * 0x1000 + (addr & 0x1fff)];
+                    console.log(
+                        "Peekmem 0x" + addr.toString(16) + " with " + res + " from RAM bank " + ramBank.toString(16),
+                    );
+                }
+            }
+
+            return res;
         } else {
             // ATOM
             if (this.model.isAtom) {
@@ -1050,7 +1073,16 @@ export class Cpu6502 extends Base6502 {
             // video generator needs to know when CPU is accessing memory so it can make snow
             if (this.model.isAtom && !this.model.hasNoiseKiller) this.video.video6847.cpuAddrAccess(offset + addr);
 
-            this.ramRomOs[offset + addr] = b;
+            // rom.ram banks on atom at 0xa000 selected by latch at 0xbfff
+            if (this.model.isAtom && addr >= 0xa000 && addr <= 0xafff) {
+                let ramBank = this.branquart_latch & 0x0f; // bits 0,1,2,3 select ram bank at 0xa000
+                if (this.branquart_ram[ramBank]) {
+                    // console.log("Writemem 0x"+ addr.toString(16) + " with " + b + " to RAM bank "+ ramBank.toString(16) );
+                    this.ramRomOs[this.romOffset + 0x10000 + ramBank * 0x1000 + (addr & 0x1fff)] = b;
+                }
+            } else {
+                this.ramRomOs[offset + addr] = b;
+            }
             return;
         }
         // ATOM
@@ -1072,6 +1104,7 @@ export class Cpu6502 extends Base6502 {
             return;
         }
 
+        // WHY NOT if model.isAtom?
         // ATOM
         switch (addr & ~0x0003) {
             case 0x0a00:
@@ -1100,6 +1133,10 @@ export class Cpu6502 extends Base6502 {
                 // 6522 VIA
                 // console.log("wrte VIA  6522 0x"+addr.toString(16)+" <- 0x"+b.toString(16));
                 return this.uservia.write(addr, b);
+            case 0xbffc: // RAM/ROM select
+                // the latch at 0xbfff is WRITE ONLY
+                if (addr === 0xbfff) this.branquart_latch = b & 0xff;
+                return;
         }
 
         switch (addr & ~0x0003) {
@@ -1257,7 +1294,9 @@ export class Cpu6502 extends Base6502 {
     }
 
     async loadOs(os) {
+        // ATOM - extra roms after os
         const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
+        const bankRoms = this.model.banks || [];
         os = "roms/" + os;
         console.log(`Loading OS from ${os}`);
         const ramRomOs = this.ramRomOs;
@@ -1279,6 +1318,16 @@ export class Cpu6502 extends Base6502 {
                 if (extraRoms[i_2] !== "")
                     awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * 0x1000));
             }
+
+            let ramBank = 0;
+            for (let i_3 = 0; i_3 < bankRoms.length; ++i_3) {
+                //0x1000 - 4kb rom
+                if (bankRoms[i_3] !== "")
+                    awaiting.push(this.loadRom(bankRoms[i_3], this.romOffset + 0x10000 + ramBank * 0x1000));
+                this.branquart_ram[ramBank] = false; // mark as ROM
+                ramBank++;
+            }
+
             return await Promise.all(awaiting);
         } else {
             if (len < 16384 || len & 16383) throw new Error(`Broken OS ROM file (length=${len})`);
@@ -1333,8 +1382,8 @@ export class Cpu6502 extends Base6502 {
                     for (let i = 0xf0; i < 0x100; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xf000;
 
                     for (let i = 0; i < 0xa0; ++i) this.memStat[i] = this.memStat[256 + i] = 1; // up 0x9fff : 1 means RAM
-                    for (let i = 0xa0; i < 0xb0; ++i) this.memStat[i] = this.memStat[256 + i] = 1; // 0xA000 onwards : 1 means RAM (ROMS loaded here are writable!)
-                    for (let i = 0xb0; i < 0xc0; ++i) this.memStat[i] = this.memStat[256 + i] = 0; //0xb000 to 0xbfff  : 0 means DEVICE/PERIPHERAL/IO
+                    for (let i = 0xa0; i < 0xb0; ++i) this.memStat[i] = this.memStat[256 + i] = 1; // 0xA000 onwards : 1 means RAM (ROMS loaded here are possibly writable if in a bank))
+                    for (let i = 0xb0; i < 0xc0; ++i) this.memStat[i] = this.memStat[256 + i] = 0; // 0xb000 to 0xbfff  : 0 means DEVICE/PERIPHERAL/IO; 0xbfff used for bank switching latch
                     for (let i = 0xc0; i < 0x100; ++i) this.memStat[i] = this.memStat[256 + i] = 2; // 0xC000 onwards : 2 means ROM
 
                     if (this.model.useFdc) {

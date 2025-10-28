@@ -11,10 +11,11 @@ const CpuModel = Object.freeze({
 });
 
 class Model {
-    constructor(name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride) {
+    constructor(name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride, banks) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
+        this.banks = banks;
         this._cpuModel = cpuModel;
         this.isMaster = isMaster;
         this.Fdc = fdc;
@@ -173,11 +174,19 @@ export const allModels = [
     new Model(
         "Acorn Atom (MMC)", // (MMC) used to distinguish from Atom (DOS)
         ["Atom"],
+        // OS in Block F, then some extras in Block E (DOS), D (FP), C (BASIC).. can go down to B (IO) and A (Utility)
         ["atom/Atom_Kernel_E.rom", "atom/ATMMC3E.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
         CpuModel.MOS6502,
         false,
         beebSwram,
         NoiseAwareIntelFdc, // not used
+        null,
+        null,
+        // utility rom can be in banks via an array here go into bank 0 and 1 of Block A
+        ["atom/PCHARME.ROM", "atom/gags.rom"], // banks 0, 1, but can have up to 7 (i.e. 8 banks)
+
+        // bit 0 ... bit 3 -> bank at #A000 - #AFFF
+        // bit 6 ->  Branquart uses it as lock-bit
     ),
     new Model(
         "Acorn Atom (Tape)",
