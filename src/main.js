@@ -1223,6 +1223,16 @@ const $discManagerModal = new bootstrap.Modal(document.getElementById("disc-mana
 const driveContents = [null, null]; // [drive0, drive1]
 
 function updateDriveStatus() {
+    // Check if processor is initialized
+    if (!processor || !processor.fdc || !processor.fdc.drives) {
+        $("#drive0-status").val("Not initialized");
+        $("#drive1-status").val("Not initialized");
+        $("#drive0-eject").prop("disabled", true);
+        $("#drive1-eject").prop("disabled", true);
+        $("#swap-drives").prop("disabled", true);
+        return;
+    }
+
     // Update drive 0 status
     const drive0Disc = processor.fdc.drives[0].disc;
     if (drive0Disc && drive0Disc.name) {
@@ -1328,27 +1338,47 @@ async function discManagerSthClick(item) {
     }
 }
 
-function discManagerSthOnCatalog(catalog) {
-    const sthList = $("#disc-manager-sth-list");
-    $("#sth-panel .loading").hide();
-    const template = sthList.find(".template");
-
-    function updateFilter() {
+function makeDiscManagerSthOnCat(onClick) {
+    return function (catalog) {
         discManagerSthClearList();
-        const filter = $("#disc-manager-sth-filter").val().toLowerCase();
-        catalog.forEach(function (item) {
-            if (!filter || item.toLowerCase().includes(filter)) {
+        const sthList = $("#disc-manager-sth-list");
+        $("#sth-panel .loading").hide();
+        const template = sthList.find(".template");
+
+        function doSome(all) {
+            const MaxAtATime = 100;
+            const Delay = 30;
+            const items = all.slice(0, MaxAtATime);
+            const remaining = all.slice(MaxAtATime);
+            const filter = $("#disc-manager-sth-filter").val().toLowerCase();
+
+            items.forEach(function (item) {
                 const row = template.clone().removeClass("template").appendTo(sthList);
                 row.find(".name").text(item);
-                row.on("click", async function () {
-                    await discManagerSthClick(item);
+                $(row).on("click", function () {
+                    onClick(item);
                 });
-            }
-        });
-    }
+                row.toggle(!filter || item.toLowerCase().includes(filter));
+            });
 
-    updateFilter();
-    $("#disc-manager-sth-filter").on("change keyup", updateFilter);
+            if (remaining.length) {
+                setTimeout(() => doSome(remaining), Delay);
+            }
+        }
+
+        doSome(catalog);
+
+        // Set up filter handler
+        $("#disc-manager-sth-filter")
+            .off("change keyup")
+            .on("change keyup", function () {
+                const filter = $(this).val().toLowerCase();
+                $("#disc-manager-sth-list li:not(.template)").each(function () {
+                    const text = $(this).find(".name").text().toLowerCase();
+                    $(this).toggle(!filter || text.includes(filter));
+                });
+            });
+    };
 }
 
 function discManagerSthOnError() {
@@ -1360,14 +1390,16 @@ function discManagerSthOnError() {
 
 const discManagerSth = new StairwayToHell(
     discManagerSthStartLoad,
-    discManagerSthOnCatalog,
+    makeDiscManagerSthOnCat(discManagerSthClick),
     discManagerSthOnError,
     false,
 );
 
 // Trigger STH load when tab is shown
 $("#sth-tab").on("shown.bs.tab", function () {
-    discManagerSth.populate();
+    if ($("#disc-manager-sth-list li:not(.template)").length === 0) {
+        discManagerSth.populate();
+    }
 });
 
 // Local file upload for disc manager
@@ -1403,6 +1435,7 @@ $("#disc-manager-file-input").on("change", async function (evt) {
 
 // Eject functionality
 $("#drive0-eject").on("click", function () {
+    if (!processor || !processor.fdc) return;
     processor.fdc.loadDisc(0, disc.discFor(processor.fdc, "empty", null));
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
@@ -1411,6 +1444,7 @@ $("#drive0-eject").on("click", function () {
 });
 
 $("#drive1-eject").on("click", function () {
+    if (!processor || !processor.fdc) return;
     processor.fdc.loadDisc(1, disc.discFor(processor.fdc, "empty", null));
     delete parsedQuery.disc2;
     updateUrl();
@@ -1419,8 +1453,18 @@ $("#drive1-eject").on("click", function () {
 
 // Swap drives functionality
 $("#swap-drives").on("click", function () {
+    if (!processor || !processor.fdc || !processor.fdc.drives) {
+        console.error("Cannot swap drives: processor not initialized");
+        return;
+    }
+
     const drive0Disc = processor.fdc.drives[0].disc;
     const drive1Disc = processor.fdc.drives[1].disc;
+
+    if (!drive0Disc || !drive1Disc) {
+        console.error("Cannot swap: one or both drives empty");
+        return;
+    }
 
     processor.fdc.loadDisc(0, drive1Disc);
     processor.fdc.loadDisc(1, drive0Disc);
@@ -1441,6 +1485,9 @@ $("#swap-drives").on("click", function () {
     updateUrl();
 
     updateDriveStatus();
+
+    // Provide feedback
+    console.log("Drives swapped successfully");
 });
 
 // Google Drive integration for disc manager
@@ -1566,9 +1613,19 @@ $("#gdrive-tab").on("shown.bs.tab", function () {
     loadDiscManagerGoogleDrive();
 });
 
-// Update drive status when modal is shown
+// Update drive status when modal is shown and auto-switch to STH tab for convenience
+let discManagerFirstOpen = true;
 document.getElementById("disc-manager").addEventListener("show.bs.modal", function () {
     updateDriveStatus();
+
+    // On first open, activate the STH tab and start loading for convenience
+    if (discManagerFirstOpen) {
+        discManagerFirstOpen = false;
+        // Switch to STH tab
+        const sthTab = new bootstrap.Tab(document.getElementById("sth-tab"));
+        sthTab.show();
+        // The shown.bs.tab event will trigger populate()
+    }
 });
 
 // Keep old Google Drive modal working for now
