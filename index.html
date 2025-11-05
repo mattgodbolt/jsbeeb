@@ -59,17 +59,9 @@
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
                 <li>
-                  <a href="#sth" class="dropdown-item sth" data-id="discs" data-bs-toggle="modal" data-bs-target="#sth"
-                    >From STH archive</a
+                  <a href="#disc-manager" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#disc-manager">
+                    Disc Manager</a
                   >
-                </li>
-                <li>
-                  <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
-                    From examples or local</a
-                  >
-                </li>
-                <li class="if-drive-available">
-                  <a href="#google-drive" class="dropdown-item" id="open-drive-link">From Google Drive</a>
                 </li>
                 <hr />
                 <div id="fsmenuitem">
@@ -700,6 +692,218 @@
             <label class="float-xs-left checkbox-inline">
               <input type="checkbox" class="autoboot" value="" />Autoboot</label
             >
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="disc-manager" tabindex="-1" aria-labelledby="discManagerModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="discManagerModalLabel">Disc Manager</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <!-- Drive Status Section -->
+            <div style="margin-bottom: 1.5rem">
+              <h6>Current Drives:</h6>
+              <div class="row mb-2">
+                <div class="col-sm-2 d-flex align-items-center">
+                  <strong>Drive 0:</strong>
+                </div>
+                <div class="col-sm-7">
+                  <input type="text" class="form-control form-control-sm" id="drive0-status" readonly value="Empty" />
+                </div>
+                <div class="col-sm-3">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="drive0-eject" disabled>
+                    Eject
+                  </button>
+                </div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-sm-2 d-flex align-items-center">
+                  <strong>Drive 1:</strong>
+                </div>
+                <div class="col-sm-7">
+                  <input type="text" class="form-control form-control-sm" id="drive1-status" readonly value="Empty" />
+                </div>
+                <div class="col-sm-3">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="drive1-eject" disabled>
+                    Eject
+                  </button>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-sm-12">
+                  <button type="button" class="btn btn-sm btn-secondary" id="swap-drives" disabled>
+                    Swap Drives 0 ↔ 1
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <hr />
+
+            <!-- Target Drive Selection -->
+            <div style="margin-bottom: 1rem">
+              <h6>Load disc to:</h6>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="targetDrive" id="targetDrive0" value="0" checked />
+                <label class="form-check-label" for="targetDrive0">Drive 0</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="targetDrive" id="targetDrive1" value="1" />
+                <label class="form-check-label" for="targetDrive1">Drive 1</label>
+              </div>
+            </div>
+
+            <!-- Source Selection Tabs -->
+            <ul class="nav nav-tabs" id="discSourceTabs" role="tablist">
+              <li class="nav-item" role="presentation">
+                <button
+                  class="nav-link active"
+                  id="builtin-tab"
+                  data-bs-toggle="tab"
+                  data-bs-target="#builtin-panel"
+                  type="button"
+                  role="tab"
+                >
+                  Built-in
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button
+                  class="nav-link"
+                  id="sth-tab"
+                  data-bs-toggle="tab"
+                  data-bs-target="#sth-panel"
+                  type="button"
+                  role="tab"
+                >
+                  STH Archive
+                </button>
+              </li>
+              <li class="nav-item" role="presentation">
+                <button
+                  class="nav-link"
+                  id="local-tab"
+                  data-bs-toggle="tab"
+                  data-bs-target="#local-panel"
+                  type="button"
+                  role="tab"
+                >
+                  Local File
+                </button>
+              </li>
+              <li class="nav-item if-drive-available" role="presentation">
+                <button
+                  class="nav-link"
+                  id="gdrive-tab"
+                  data-bs-toggle="tab"
+                  data-bs-target="#gdrive-panel"
+                  type="button"
+                  role="tab"
+                >
+                  Google Drive
+                </button>
+              </li>
+            </ul>
+
+            <div class="tab-content" id="discSourceTabContent" style="margin-top: 1rem">
+              <!-- Built-in Images Tab -->
+              <div class="tab-pane fade show active" id="builtin-panel" role="tabpanel">
+                <ul id="disc-manager-builtin-list">
+                  <li class="template">
+                    <a href="#"><span class="name"></span></a> - <span class="description"></span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- STH Archive Tab -->
+              <div class="tab-pane fade" id="sth-panel" role="tabpanel">
+                <div style="margin-bottom: 1rem">
+                  <div class="loading">Loading catalog from STH archive...</div>
+                  <div class="filter">
+                    <label
+                      >Filter <input type="text" class="form-control form-control-sm" id="disc-manager-sth-filter"
+                    /></label>
+                  </div>
+                </div>
+                <div style="max-height: 400px; overflow-y: auto">
+                  <ul id="disc-manager-sth-list">
+                    <li class="template">
+                      <a href="#"><span class="name"></span></a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Local File Tab -->
+              <div class="tab-pane fade" id="local-panel" role="tabpanel">
+                <p>Load a disc image from your computer (SSD, DSD, HFE, ADF, ADM or ADL file).</p>
+                <p class="small">
+                  Search the web or check
+                  <a href="http://www.bbcmicrogames.com/GettingStarted.html" target="_blank">here</a>
+                  for disc images. Images are usually stored in ZIP files - unzip first.
+                </p>
+                <div>
+                  <label class="form-label">
+                    Select file:
+                    <input
+                      type="file"
+                      class="form-control"
+                      id="disc-manager-file-input"
+                      accept=".ssd,.dsd,.adf,.adm,.adl,.hfe,application/binary"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <!-- Google Drive Tab -->
+              <div class="tab-pane fade if-drive-available" id="gdrive-panel" role="tabpanel">
+                <div class="loading">Loading...</div>
+                <div style="display: none" class="content">
+                  <ul class="list" id="disc-manager-gdrive-list">
+                    <li class="template">
+                      <a href="#"><span class="name"></span></a>
+                    </li>
+                  </ul>
+                  <div style="margin-top: 1rem">
+                    <h6>Create new disc on Google Drive:</h6>
+                    <form class="well" role="form" action="#" id="disc-manager-gdrive-create-form">
+                      <div class="mb-2">
+                        <input
+                          type="text"
+                          class="form-control form-control-sm"
+                          placeholder="Create disc..."
+                          class="disc-name"
+                          id="disc-manager-gdrive-name"
+                        />
+                      </div>
+                      <div class="form-check mb-2">
+                        <input
+                          type="checkbox"
+                          class="form-check-input create-from-existing"
+                          id="disc-manager-gdrive-from-existing"
+                        />
+                        <label class="form-check-label" for="disc-manager-gdrive-from-existing">
+                          Use current disc image
+                        </label>
+                      </div>
+                      <button type="submit" class="btn btn-sm btn-secondary create-button">Create</button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <label class="me-auto">
+              <input type="checkbox" class="form-check-input" id="disc-manager-autoboot" />
+              Autoboot after loading
+            </label>
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>

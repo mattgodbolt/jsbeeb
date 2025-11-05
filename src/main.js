@@ -1216,6 +1216,362 @@ $.each(availableImages, function (i, image) {
     });
 });
 
+// Disc Manager - Unified disc loading interface
+const $discManagerModal = new bootstrap.Modal(document.getElementById("disc-manager"));
+
+// Track current drive contents
+const driveContents = [null, null]; // [drive0, drive1]
+
+function updateDriveStatus() {
+    // Update drive 0 status
+    const drive0Disc = processor.fdc.drives[0].disc;
+    if (drive0Disc && drive0Disc.name) {
+        $("#drive0-status").val(drive0Disc.name);
+        $("#drive0-eject").prop("disabled", false);
+        driveContents[0] = drive0Disc.name;
+    } else {
+        $("#drive0-status").val("Empty");
+        $("#drive0-eject").prop("disabled", true);
+        driveContents[0] = null;
+    }
+
+    // Update drive 1 status
+    const drive1Disc = processor.fdc.drives[1].disc;
+    if (drive1Disc && drive1Disc.name) {
+        $("#drive1-status").val(drive1Disc.name);
+        $("#drive1-eject").prop("disabled", false);
+        driveContents[1] = drive1Disc.name;
+    } else {
+        $("#drive1-status").val("Empty");
+        $("#drive1-eject").prop("disabled", true);
+        driveContents[1] = null;
+    }
+
+    // Enable swap button only if both drives have discs
+    $("#swap-drives").prop("disabled", !(driveContents[0] && driveContents[1]));
+}
+
+function getSelectedDrive() {
+    return parseInt($("input[name='targetDrive']:checked").val());
+}
+
+async function loadDiscToDrive(driveNumber, discImageName) {
+    try {
+        const disc = await loadDiscImage(discImageName);
+        processor.fdc.loadDisc(driveNumber, disc);
+
+        // Update URL parameters
+        if (driveNumber === 0) {
+            delete parsedQuery.disc;
+            parsedQuery.disc1 = discImageName;
+        } else {
+            parsedQuery.disc2 = discImageName;
+        }
+        updateUrl();
+
+        // Update drive status display
+        updateDriveStatus();
+
+        // Handle autoboot if requested
+        if ($("#disc-manager-autoboot").prop("checked") && driveNumber === 0) {
+            if (!parsedQuery.autoboot && !parsedQuery.autochain && !parsedQuery.autorun) {
+                parsedQuery.autoboot = true;
+                updateUrl();
+            }
+            autoboot(discImageName);
+        }
+
+        return true;
+    } catch (error) {
+        console.error(`Error loading disc to drive ${driveNumber}:`, error);
+        showError(`loading disc to drive ${driveNumber}`, error);
+        return false;
+    }
+}
+
+// Populate built-in images list in disc manager
+const discManagerBuiltinList = $("#disc-manager-builtin-list");
+const builtinTemplate = discManagerBuiltinList.find(".template");
+$.each(availableImages, function (i, image) {
+    const elem = builtinTemplate.clone().removeClass("template").appendTo(discManagerBuiltinList);
+    elem.find(".name").text(image.name);
+    elem.find(".description").text(image.desc);
+    $(elem).on("click", async function (e) {
+        e.preventDefault();
+        utils.noteEvent("disc-manager", "click-builtin", image.file);
+        const driveNum = getSelectedDrive();
+        const success = await loadDiscToDrive(driveNum, image.file);
+        if (success) {
+            $discManagerModal.hide();
+        }
+    });
+});
+
+// STH Archive integration for disc manager
+function discManagerSthClearList() {
+    $("#disc-manager-sth-list li:not(.template)").remove();
+}
+
+function discManagerSthStartLoad() {
+    const $loading = $("#sth-panel .loading");
+    $loading.text("Loading catalog from STH archive");
+    $loading.show();
+    discManagerSthClearList();
+}
+
+async function discManagerSthClick(item) {
+    utils.noteEvent("disc-manager", "click-sth", item);
+    const driveNum = getSelectedDrive();
+    const success = await loadDiscToDrive(driveNum, "sth:" + item);
+    if (success) {
+        $discManagerModal.hide();
+    }
+}
+
+function discManagerSthOnCatalog(catalog) {
+    const sthList = $("#disc-manager-sth-list");
+    $("#sth-panel .loading").hide();
+    const template = sthList.find(".template");
+
+    function updateFilter() {
+        discManagerSthClearList();
+        const filter = $("#disc-manager-sth-filter").val().toLowerCase();
+        catalog.forEach(function (item) {
+            if (!filter || item.toLowerCase().includes(filter)) {
+                const row = template.clone().removeClass("template").appendTo(sthList);
+                row.find(".name").text(item);
+                row.on("click", async function () {
+                    await discManagerSthClick(item);
+                });
+            }
+        });
+    }
+
+    updateFilter();
+    $("#disc-manager-sth-filter").on("change keyup", updateFilter);
+}
+
+function discManagerSthOnError() {
+    const $loading = $("#sth-panel .loading");
+    $loading.text("There was an error accessing the STH archive");
+    $loading.show();
+    discManagerSthClearList();
+}
+
+const discManagerSth = new StairwayToHell(
+    discManagerSthStartLoad,
+    discManagerSthOnCatalog,
+    discManagerSthOnError,
+    false,
+);
+
+// Trigger STH load when tab is shown
+$("#sth-tab").on("shown.bs.tab", function () {
+    discManagerSth.populate();
+});
+
+// Local file upload for disc manager
+$("#disc-manager-file-input").on("change", async function (evt) {
+    if (evt.target.files.length === 0) return;
+    utils.noteEvent("disc-manager", "click-local");
+    const file = evt.target.files[0];
+    const driveNum = getSelectedDrive();
+
+    try {
+        const binaryData = await readFileAsBinaryString(file);
+        const loadedDisc = disc.discFor(processor.fdc, file.name, binaryData);
+        processor.fdc.loadDisc(driveNum, loadedDisc);
+
+        // Update URL - don't store local files in URL
+        if (driveNum === 0) {
+            delete parsedQuery.disc;
+            delete parsedQuery.disc1;
+        } else {
+            delete parsedQuery.disc2;
+        }
+        updateUrl();
+
+        updateDriveStatus();
+        $discManagerModal.hide();
+    } catch (error) {
+        console.error("Error loading local file:", error);
+        showError("loading local disc file", error);
+    }
+
+    evt.target.value = ""; // clear so user can pick same file again
+});
+
+// Eject functionality
+$("#drive0-eject").on("click", function () {
+    processor.fdc.loadDisc(0, disc.discFor(processor.fdc, "empty", null));
+    delete parsedQuery.disc;
+    delete parsedQuery.disc1;
+    updateUrl();
+    updateDriveStatus();
+});
+
+$("#drive1-eject").on("click", function () {
+    processor.fdc.loadDisc(1, disc.discFor(processor.fdc, "empty", null));
+    delete parsedQuery.disc2;
+    updateUrl();
+    updateDriveStatus();
+});
+
+// Swap drives functionality
+$("#swap-drives").on("click", function () {
+    const drive0Disc = processor.fdc.drives[0].disc;
+    const drive1Disc = processor.fdc.drives[1].disc;
+
+    processor.fdc.loadDisc(0, drive1Disc);
+    processor.fdc.loadDisc(1, drive0Disc);
+
+    // Swap URL parameters
+    const temp = parsedQuery.disc1 || parsedQuery.disc;
+    if (parsedQuery.disc2) {
+        parsedQuery.disc1 = parsedQuery.disc2;
+    } else {
+        delete parsedQuery.disc1;
+    }
+    if (temp) {
+        parsedQuery.disc2 = temp;
+    } else {
+        delete parsedQuery.disc2;
+    }
+    delete parsedQuery.disc;
+    updateUrl();
+
+    updateDriveStatus();
+});
+
+// Google Drive integration for disc manager
+async function loadDiscManagerGoogleDrive() {
+    const $panel = $("#gdrive-panel");
+    const $loading = $panel.find(".loading");
+    const $content = $panel.find(".content");
+    const list = $("#disc-manager-gdrive-list");
+
+    try {
+        $loading.show();
+        $content.hide();
+
+        const available = await googleDrive.initialise();
+        if (!available) {
+            $loading.text("Google Drive is not available");
+            return;
+        }
+
+        const catalog = await googleDrive.catalogue();
+        list.find("li:not(.template)").remove();
+
+        const template = list.find(".template");
+        catalog.forEach(function (cat) {
+            const elem = template.clone().removeClass("template").appendTo(list);
+            elem.find(".name").text(cat.name);
+            elem.on("click", async function () {
+                try {
+                    utils.noteEvent("disc-manager", "click-gdrive", cat.name);
+                    const driveNum = getSelectedDrive();
+
+                    popupLoading("Loading '" + cat.name + "' from Google Drive");
+                    $discManagerModal.hide();
+
+                    const loadedDisc = await googleDrive.load(processor.fdc, cat.id);
+                    processor.fdc.loadDisc(driveNum, loadedDisc);
+
+                    // Update URL
+                    const discImageName = "gd:" + cat.id + "/" + cat.name;
+                    if (driveNum === 0) {
+                        delete parsedQuery.disc;
+                        parsedQuery.disc1 = discImageName;
+                    } else {
+                        parsedQuery.disc2 = discImageName;
+                    }
+                    updateUrl();
+
+                    updateDriveStatus();
+                    loadingFinished();
+                } catch (error) {
+                    console.error("Error loading from Google Drive:", error);
+                    loadingFinished(`Error loading from Google Drive: ${error}`);
+                }
+            });
+        });
+
+        $loading.hide();
+        $content.show();
+    } catch (error) {
+        console.error("Error accessing Google Drive:", error);
+        $loading.text("Error accessing Google Drive: " + error);
+        $content.hide();
+    }
+}
+
+// Google Drive create form in disc manager
+$("#disc-manager-gdrive-create-form").on("submit", async function (e) {
+    e.preventDefault();
+    let name = $("#disc-manager-gdrive-name").val();
+    if (!name) return;
+
+    const driveNum = getSelectedDrive();
+
+    try {
+        popupLoading("Connecting to Google Drive");
+        $discManagerModal.hide();
+        popupLoading("Creating '" + name + "' on Google Drive");
+
+        let data;
+        if ($("#disc-manager-gdrive-from-existing").prop("checked")) {
+            // Use the disc from the target drive
+            const sourceDisc = processor.fdc.drives[driveNum].disc;
+            if (!sourceDisc || !sourceDisc.name) {
+                throw new Error(`Drive ${driveNum} is empty - cannot create from existing`);
+            }
+            const discType = disc.guessDiscTypeFromName(name);
+            data = discType.saver(sourceDisc);
+            name = replaceOrAddExtension(name, discType.extension);
+        } else {
+            const discType = disc.guessDiscTypeFromName(name);
+            if (!discType.byteSize) {
+                throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
+            }
+            data = new Uint8Array(discType.byteSize);
+            if (discType.supportsCatalogue) {
+                discType.setDiscName(data, name);
+            }
+        }
+
+        const result = await googleDrive.create(processor.fdc, name, data);
+        processor.fdc.loadDisc(driveNum, result.disc);
+
+        // Update URL
+        const discImageName = "gd:" + result.fileId + "/" + name;
+        if (driveNum === 0) {
+            delete parsedQuery.disc;
+            parsedQuery.disc1 = discImageName;
+        } else {
+            parsedQuery.disc2 = discImageName;
+        }
+        updateUrl();
+
+        updateDriveStatus();
+        loadingFinished();
+    } catch (error) {
+        console.error("Error creating Google Drive disc:", error);
+        loadingFinished(`Create failed: ${error}`);
+    }
+});
+
+// Load Google Drive catalog when tab is shown
+$("#gdrive-tab").on("shown.bs.tab", function () {
+    loadDiscManagerGoogleDrive();
+});
+
+// Update drive status when modal is shown
+document.getElementById("disc-manager").addEventListener("show.bs.modal", function () {
+    updateDriveStatus();
+});
+
+// Keep old Google Drive modal working for now
 $("#google-drive form").on("submit", async function (e) {
     e.preventDefault();
     let name = $("#google-drive .disc-name").val();
