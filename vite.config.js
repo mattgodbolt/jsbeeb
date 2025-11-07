@@ -1,9 +1,11 @@
 import { configDefaults } from "vitest/config";
 
 import { defineConfig } from "vitest/config";
+import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
+    plugins: [firShaderPlugin()],
     build: {
         sourcemap: true,
         // Prevent inlining; we don't want any worklets/audio workers to be inlined as that doesn't work.
