@@ -44,8 +44,8 @@ const float PAL_FIELD_PHASE_OFFSET = PAL_LINE_PHASE_OFFSET * PAL_LINES_PER_FIELD
 const float TEXTURE_WIDTH = 1024.0;          // Framebuffer width (896 visible + 128 blanking)
 
 // 21-tap FIR low-pass filter coefficients for chroma bandwidth limiting
-// Cutoff: 2.217 MHz (half subcarrier), sample rate: 16 MHz
-// Generated for proper PAL chroma filtering with symmetric response
+// Cutoff: 1.108 MHz (quarter subcarrier), sample rate: 16 MHz
+// Tighter chroma filtering for smoother color transitions
 const int FIRTAPS = 21;
 
 // RGB → YUV conversion with proper PAL signal levels baked in
@@ -88,14 +88,14 @@ void main() {
     vec2 pixelCoord = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
 
     // Initialize FIR coefficients (GLSL ES 1.00 limitation)
-    // 21-tap symmetric filter, cutoff 2.217 MHz @ 16 MHz sample rate
+    // 21-tap symmetric filter, cutoff 1.108 MHz (quarter subcarrier) @ 16 MHz sample rate
     float FIR[21];
-    FIR[0] = 0.000427769337; FIR[1] = 0.00231068052; FIR[2] = 0.00344911363; FIR[3] = -0.00203420476;
-    FIR[4] = -0.0168416192; FIR[5] = -0.0301975906; FIR[6] = -0.0173992619; FIR[7] = 0.0424187581;
-    FIR[8] = 0.141605897; FIR[9] = 0.237531717; FIR[10] = 0.277457482; FIR[11] = 0.237531717;
-    FIR[12] = 0.141605897; FIR[13] = 0.0424187581; FIR[14] = -0.0173992619; FIR[15] = -0.0301975906;
-    FIR[16] = -0.0168416192; FIR[17] = -0.00203420476; FIR[18] = 0.00344911363; FIR[19] = 0.00231068052;
-    FIR[20] = 0.000427769337;
+    FIR[0] = -0.000638834376; FIR[1] = -0.0016986177; FIR[2] = -0.00191473412; FIR[3] = 0.00108939462;
+    FIR[4] = 0.0102771892; FIR[5] = 0.0278912703; FIR[6] = 0.0539186832; FIR[7] = 0.085139644;
+    FIR[8] = 0.115453168; FIR[9] = 0.137610031; FIR[10] = 0.145745611; FIR[11] = 0.137610031;
+    FIR[12] = 0.115453168; FIR[13] = 0.085139644; FIR[14] = 0.0539186832; FIR[15] = 0.0278912703;
+    FIR[16] = 0.0102771892; FIR[17] = 0.00108939462; FIR[18] = -0.00191473412; FIR[19] = -0.0016986177;
+    FIR[20] = -0.000638834376;
 
     float line = floor(pixelCoord.y);
 
