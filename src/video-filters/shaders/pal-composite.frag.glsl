@@ -83,9 +83,11 @@ void main() {
     vec2 pixelCoord = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
 
     // BEGIN_FIR_COEFFICIENTS
+    // This section is replaced by the Vite build to include FIR filter coefficients.
+    // Change Cutoff (in comment below) or FIRTAPS value to configure.
     // Cutoff: 1.108 MHz (quarter subcarrier)
     const int FIRTAPS = 21;
-    float FIR[FIRTAPS]; // PLACEHOLDER WILL BE REPLACED by vite magic
+    float FIR[FIRTAPS];
     // END_FIR_COEFFICIENTS
 
     float line = floor(pixelCoord.y);

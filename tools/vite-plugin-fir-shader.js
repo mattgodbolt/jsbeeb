@@ -26,7 +26,7 @@ const FIR_END_MARKER = "// END_FIR_COEFFICIENTS";
  * @returns {{ cutoff: number, taps: number } | null} - Parsed parameters or null if invalid
  */
 function parseFirParams(markedSection) {
-    const cutoffMatch = markedSection.match(/\/\/\s*Cutoff:\s*([\d.]+)/);
+    const cutoffMatch = markedSection.match(/\/\/\s*Cutoff:\s*(\d+(?:\.\d+)?)/);
     const tapsMatch = markedSection.match(/const\s+int\s+FIRTAPS\s*=\s*(\d+)/);
 
     if (!cutoffMatch || !tapsMatch) {
@@ -44,17 +44,18 @@ function parseFirParams(markedSection) {
  *
  * @param {number} taps - Number of filter taps
  * @param {number} cutoff - Cutoff frequency in MHz
+ * @param {string} indent - Indentation string to use (e.g., "    ")
  * @returns {string} - Complete marked section with generated code
  */
-function generateFirSection(taps, cutoff) {
-    const coeffCode = generateFirCoefficients(taps, cutoff);
+function generateFirSection(taps, cutoff, indent) {
+    const coeffCode = generateFirCoefficients(taps, cutoff, indent);
 
-    return `${FIR_BEGIN_MARKER}
-    // Cutoff: ${cutoff}
-    const int FIRTAPS = ${taps};
-    float FIR[FIRTAPS];
+    return `${indent}${FIR_BEGIN_MARKER}
+${indent}// Cutoff: ${cutoff}
+${indent}const int FIRTAPS = ${taps};
+${indent}float FIR[FIRTAPS];
 ${coeffCode}
-    ${FIR_END_MARKER}`;
+${indent}${FIR_END_MARKER}`;
 }
 
 /**
@@ -88,14 +89,18 @@ export function firShaderPlugin() {
                 return null;
             }
 
-            // Extract the marked section
+            // Extract the marked section and detect indentation
             const beginIdx = code.indexOf(FIR_BEGIN_MARKER);
             const endIdx = code.indexOf(FIR_END_MARKER);
 
-            if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) {
-                console.warn(`[FIR Plugin] Invalid FIR markers in ${filePath}`);
+            if (endIdx < beginIdx) {
+                console.warn(`[FIR Plugin] Invalid FIR marker order in ${filePath}`);
                 return null;
             }
+
+            // Detect indentation by finding the start of the line containing BEGIN marker
+            const lineStart = code.lastIndexOf("\n", beginIdx) + 1;
+            const indent = code.substring(lineStart, beginIdx);
 
             const markedSection = code.substring(beginIdx, endIdx + FIR_END_MARKER.length);
 
@@ -106,8 +111,8 @@ export function firShaderPlugin() {
                 return null;
             }
 
-            // Generate new section
-            const newSection = generateFirSection(params.taps, params.cutoff);
+            // Generate new section with preserved indentation
+            const newSection = generateFirSection(params.taps, params.cutoff, indent);
 
             // Replace old section with new
             const transformedCode = code.replace(markedSection, newSection);

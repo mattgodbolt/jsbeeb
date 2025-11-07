@@ -50,9 +50,18 @@ function generateFirLowpass(numTaps, cutoffNormalized, beta) {
  *
  * @param {number} numTaps - Number of filter taps (must be odd)
  * @param {number} nominalCutoffMhz - Nominal cutoff frequency in MHz
+ * @param {string} indent - Indentation string to prepend to each line
  * @returns {string} GLSL array initialization code
  */
-export function generateFirCoefficients(numTaps, nominalCutoffMhz) {
+export function generateFirCoefficients(numTaps, nominalCutoffMhz, indent) {
+    // Validate inputs
+    if (numTaps <= 0 || numTaps % 2 === 0) {
+        throw new Error(`numTaps must be a positive odd number, got ${numTaps}`);
+    }
+    if (nominalCutoffMhz <= 0 || nominalCutoffMhz > 8) {
+        throw new Error(`nominalCutoffMhz must be between 0 and 8 MHz (Nyquist), got ${nominalCutoffMhz}`);
+    }
+
     // Key discovery: actual cutoff is 0.5× the specified frequency
     const actualCutoffHz = nominalCutoffMhz * 1e6 * 0.5;
     const cutoffNormalized = actualCutoffHz / (SAMPLE_RATE_HZ / 2.0);
@@ -64,7 +73,7 @@ export function generateFirCoefficients(numTaps, nominalCutoffMhz) {
     for (let i = 0; i < coeffs.length; i += 4) {
         const chunk = coeffs.slice(i, i + 4);
         const formatted = chunk.map((c, j) => `FIR[${i + j}] = ${c.toPrecision(10)}`).join("; ");
-        lines.push(`    ${formatted};`);
+        lines.push(`${indent}${formatted};`);
     }
 
     return lines.join("\n");
