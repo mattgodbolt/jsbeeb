@@ -1,9 +1,9 @@
-precision mediump float;
+precision highp float;
 
 varying vec2 vTexCoord;
-varying vec2 vPixelCoord;
 
 uniform sampler2D uFramebuffer;
+uniform vec2 uResolution;
 uniform vec2 uTexelSize;
 uniform float uFrameCount;
 
@@ -69,8 +69,8 @@ vec3 yuv_to_rgb(vec3 yuv) {
 }
 
 // Demodulate composite signal at given position
-vec2 demodulate_uv(vec2 xy, float offset_pixels, float v_switch, float cycles_per_pixel, float phase_offset) {
-    float t = ((vPixelCoord.x + offset_pixels) * cycles_per_pixel + phase_offset) * 2.0 * PI;
+vec2 demodulate_uv(vec2 xy, float pixel_x, float offset_pixels, float v_switch, float cycles_per_pixel, float phase_offset) {
+    float t = ((pixel_x + offset_pixels) * cycles_per_pixel + phase_offset) * 2.0 * PI;
 
     vec2 sample_uv = xy + vec2(offset_pixels * uTexelSize.x, 0.0);
     vec3 rgb = texture2D(uFramebuffer, sample_uv).rgb;
@@ -84,6 +84,9 @@ vec2 demodulate_uv(vec2 xy, float offset_pixels, float v_switch, float cycles_pe
 }
 
 void main() {
+    // Use gl_FragCoord for pixel coordinates - it's hardware-provided and avoids interpolation artifacts
+    vec2 pixelCoord = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
+
     // Initialize FIR coefficients (GLSL ES 1.00 limitation)
     // 21-tap symmetric filter, cutoff 2.217 MHz @ 16 MHz sample rate
     float FIR[21];
@@ -94,7 +97,7 @@ void main() {
     FIR[16] = -0.0168416192; FIR[17] = -0.00203420476; FIR[18] = 0.00344911363; FIR[19] = 0.00231068052;
     FIR[20] = 0.000427769337;
 
-    float line = floor(vPixelCoord.y);
+    float line = floor(pixelCoord.y);
 
     // PAL phase alternates each scanline (V component inverts)
     float v_switch = mod(line, 2.0) < 1.0 ? 1.0 : -1.0;
@@ -111,7 +114,7 @@ void main() {
     vec2 filtered_uv_curr = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
         float offset = float(i - (FIRTAPS - 1) / 2);
-        vec2 uv = demodulate_uv(vTexCoord, offset, v_switch, cycles_per_pixel, phase_offset);
+        vec2 uv = demodulate_uv(vTexCoord, pixelCoord.x, offset, v_switch, cycles_per_pixel, phase_offset);
         filtered_uv_curr += FIR_GAIN * uv * FIR[i];
     }
 
@@ -127,7 +130,7 @@ void main() {
     vec2 filtered_uv_prev = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {
         float offset = float(i - (FIRTAPS - 1) / 2);
-        vec2 uv = demodulate_uv(prev_uv, offset, prev_v_switch, cycles_per_pixel, prev_phase_offset);
+        vec2 uv = demodulate_uv(prev_uv, pixelCoord.x, offset, prev_v_switch, cycles_per_pixel, prev_phase_offset);
         filtered_uv_prev += FIR_GAIN * uv * FIR[i];
     }
 
@@ -135,7 +138,7 @@ void main() {
     vec2 filtered_uv = mix(filtered_uv_curr, filtered_uv_prev, CHROMA_BLEND_WEIGHT);
 
     // Step 4: Get luma via complementary subtraction
-    float t_curr = (vPixelCoord.x * cycles_per_pixel + phase_offset) * 2.0 * PI;
+    float t_curr = (pixelCoord.x * cycles_per_pixel + phase_offset) * 2.0 * PI;
     vec3 rgb_curr = texture2D(uFramebuffer, vTexCoord).rgb;
     vec3 yuv_curr = rgb_to_yuv(rgb_curr);
     float composite_curr = yuv_curr.x + yuv_curr.y * sin(t_curr) + yuv_curr.z * cos(t_curr) * v_switch;
