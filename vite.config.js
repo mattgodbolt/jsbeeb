@@ -28,7 +28,6 @@ export default defineConfig({
                 "**/*.config.js",
                 "src/app/**", // App-specific code
             ],
-            all: false, // Only track imported files, not all files
         },
     },
 });

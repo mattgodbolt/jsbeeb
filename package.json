@@ -27,7 +27,7 @@
     "underscore": "^1.13.7"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^4.0.10",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -37,8 +37,8 @@
     "pixelmatch": "^7.1.0",
     "prettier": "^3.6.2",
     "sharp": "^0.34.5",
-    "vite": "^6.4.1",
-    "vitest": "^3.1.1"
+    "vite": "^7.2.2",
+    "vitest": "^4.0.10"
   },
   "license": "GPL-3.0-or-later",
   "build": {
