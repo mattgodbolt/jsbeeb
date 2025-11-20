@@ -28,8 +28,6 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.12",
-    "electron": "^33.0.0",
-    "electron-builder": "^26.0.12",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -41,6 +39,10 @@
     "sharp": "^0.34.5",
     "vite": "^7.2.4",
     "vitest": "^4.0.10"
+  },
+  "optionalDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.12"
   },
   "license": "GPL-3.0-or-later",
   "build": {
