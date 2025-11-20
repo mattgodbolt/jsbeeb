@@ -1,0 +1,53 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: node
+          package-name: jsbeeb
+
+  upload-electron-packages:
+    needs: release-please
+    runs-on: ubuntu-24.04
+    if: ${{ needs.release-please.outputs.release_created }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: npm install
+        run: npm install
+      - name: Build web distribution
+        run: npm run build
+      - name: Build Electron packages in Docker
+        run: |
+          docker run --rm \
+            -v "$(pwd)":/project \
+            electronuserland/builder:latest \
+            /bin/bash -c "cd /project && npm run electron:build"
+      - name: Upload Release Artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ needs.release-please.outputs.tag_name }} \
+            out/dist/*.deb \
+            out/dist/*.rpm \
+            out/dist/*.snap
