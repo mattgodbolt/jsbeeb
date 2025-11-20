@@ -11,6 +11,7 @@ and a 128K BBC Master, along with a number of different peripherals.
 
 - [Keyboard Mappings](#keyboard-mappings)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
+- [Running as a Desktop Application](#running-as-a-desktop-application)
 - [URL Parameters](#url-parameters)
 - [Patches](#patches)
 - [Loading BASIC Files from GitHub Gists](#loading-basic-files-from-github-gists)
@@ -66,6 +67,69 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 jsbeeb uses Node.js and vite to afford simple and standard web development tooling and third-party library access
 without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the
 site to make it smaller and faster to load when it's deployed to [https://bbc.xania.org](https://bbc.xania.org).
+
+## Running as a Desktop Application
+
+jsbeeb can also run as a standalone desktop application using Electron:
+
+### Running in Development
+
+```sh
+npm run build
+npm run electron
+```
+
+### Building Distributable Packages
+
+To build packages for Linux distribution:
+
+```sh
+npm run build
+npm run electron:build
+```
+
+This creates three package formats in `out/dist/`:
+
+- **Debian/Ubuntu**: `.deb` package
+- **Fedora/RHEL**: `.rpm` package
+- **Universal**: `.snap` package (works on any distro with Snap support)
+
+**Note for Ubuntu/Debian users:** If you encounter RPM build errors, you may need to use the system FPM package manager instead of electron-builder's bundled version. First, install the required dependencies:
+
+```sh
+sudo apt-get install ruby rubygems build-essential
+sudo gem install fpm
+```
+
+Then build with:
+
+```sh
+USE_SYSTEM_FPM=true npm run electron:build
+```
+
+### Installing the Packaged Application
+
+**Debian/Ubuntu:**
+
+```sh
+sudo apt install ./out/dist/jsbeeb_0.0.7_amd64.deb
+```
+
+**Fedora/RHEL/CentOS:**
+
+```sh
+sudo rpm -i out/dist/jsbeeb-0.0.7.x86_64.rpm
+```
+
+**Universal (Snap):**
+
+```sh
+sudo snap install out/dist/jsbeeb_0.0.7_amd64.snap --dangerous
+```
+
+_Note: The `--dangerous` flag is required for locally-built snaps that aren't from the Snap Store. It simply bypasses signature verification since you built it yourself._
+
+**Note:** Electron support was re-enabled in November 2024 after being disabled during the ESM migration in 2021. It now works with Electron 28+ which added full ES Modules support.
 
 ## URL Parameters
 
