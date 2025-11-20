@@ -28,6 +28,8 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.12",
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.12",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -47,7 +49,11 @@
       "output": "out/dist"
     },
     "linux": {
-      "target": "AppImage",
+      "target": [
+        "deb",
+        "rpm",
+        "snap"
+      ],
       "category": "Game"
     },
     "files": [
@@ -73,7 +79,9 @@
     "test:cpu": "node tests/test-suite.js",
     "coverage:unit": "vitest run tests/unit --coverage",
     "coverage:all-tests": "vitest run --coverage",
-    "benchmark": "node app-bench.js"
+    "benchmark": "node app-bench.js",
+    "electron": "ELECTRON_DISABLE_SANDBOX=1 electron .",
+    "electron:build": "electron-builder"
   },
   "lint-staged": {
     "*.js": [

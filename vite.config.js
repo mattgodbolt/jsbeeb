@@ -5,6 +5,7 @@ import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
+    base: "./", // Use relative paths for Electron compatibility
     plugins: [firShaderPlugin()],
     build: {
         sourcemap: true,

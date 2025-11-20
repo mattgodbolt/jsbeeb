@@ -39,6 +39,21 @@ jobs:
       - name: CPU tests
         run: npm run test:cpu
 
+  build-electron-packages:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Electron packages in Docker
+        run: |
+          docker run --rm \
+            -v "$(pwd)":/project \
+            -v jsbeeb-node-modules:/project/node_modules \
+            electronuserland/builder:latest \
+            /bin/bash -c "cd /project && npm install && npm run build && npm run electron:build"
+      - name: Verify packages were created
+        run: |
+          ls -lh out/dist/*.deb out/dist/*.rpm out/dist/*.snap
+
   update-web:
     needs: [build-and-test, cpu-test]
     runs-on: ubuntu-24.04

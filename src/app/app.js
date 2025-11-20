@@ -1,5 +1,5 @@
 "use strict";
-import { app, BrowserWindow, dialog, Menu } from "electron";
+import { app, BrowserWindow, dialog, Menu, shell } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 import { ArgumentParser } from "argparse";
@@ -16,18 +16,18 @@ function getArguments() {
 
 const parser = new ArgumentParser({
     prog: "jsbeeb",
-    addHelp: true,
+    add_help: true,
     description: "Emulate a Beeb",
 });
-parser.add_argument(["--noboot"], {
-    action: "storeTrue",
+parser.add_argument("--noboot", {
+    action: "store_true",
     help: "don't autoboot if given a disc image",
 });
-parser.add_argument(["disc1"], {
+parser.add_argument("disc1", {
     nargs: "?",
     help: "image to load in drive 0",
 });
-parser.add_argument(["disc2"], {
+parser.add_argument("disc2", {
     nargs: "?",
     help: "image to load in drive 1",
 });
@@ -47,7 +47,7 @@ async function createWindow() {
         width: 1280,
         height: 1024,
         webPreferences: {
-            preload: path.join(__dirname, "preload.js"),
+            preload: path.join(import.meta.dirname, "preload.js"),
         },
     });
 
@@ -55,7 +55,7 @@ async function createWindow() {
     if (args.disc1 && !args.noboot) query.autoboot = true;
     if (args.disc1) query.disc1 = getFileParam(args.disc1);
     if (args.disc2) query.disc2 = getFileParam(args.disc2);
-    await win.loadFile("index.html", { query });
+    await win.loadFile("dist/index.html", { query });
 
     app.on("activate", function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -153,7 +153,6 @@ const template = [
             {
                 label: "Learn More",
                 click: async () => {
-                    const { shell } = require("electron");
                     await shell.openExternal("https://github.com/mattgodbolt/jsbeeb/");
                 },
             },

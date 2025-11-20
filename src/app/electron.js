@@ -1,7 +1,8 @@
 "use strict";
 
-// Left for posterity and the hope that one day Electron (the standalone app generator)
-// supports ES Modules. See https://github.com/electron/electron/issues/21457
+// Electron integration for jsbeeb desktop application.
+// Note: Electron now supports ES Modules as of version 28.0.0 (Dec 2023).
+// See https://github.com/electron/electron/issues/21457
 
 export let initialise = function () {};
 
