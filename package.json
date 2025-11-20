@@ -56,7 +56,8 @@
         "rpm",
         "snap"
       ],
-      "category": "Game"
+      "category": "Game",
+      "icon": "public/jsbeeb-icon.png"
     },
     "files": [
       "!tests"
