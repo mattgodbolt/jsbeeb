@@ -1,6 +1,7 @@
 import $ from "jquery";
 import _ from "underscore";
 import * as bootstrap from "bootstrap";
+import { version } from "../package.json";
 
 import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
@@ -1748,3 +1749,9 @@ window.m7dump = function () {
 
 // Hooks for electron.
 electron({ loadDiscImage, processor });
+
+// Display version in About dialog
+const versionElement = document.getElementById("jsbeeb-version");
+if (versionElement) {
+    versionElement.textContent = `Version ${version}`;
+}
