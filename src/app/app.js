@@ -1,5 +1,5 @@
 "use strict";
-import { app, BrowserWindow, dialog, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, Menu, shell, nativeImage } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 import { ArgumentParser } from "argparse";
@@ -43,9 +43,13 @@ function getFileParam(filename) {
 }
 
 async function createWindow() {
+    const iconPath = path.join(import.meta.dirname, "..", "..", "public", "jsbeeb-icon.png");
+    const icon = nativeImage.createFromPath(iconPath);
+
     const win = new BrowserWindow({
         width: 1280,
         height: 1024,
+        icon: icon,
         webPreferences: {
             preload: path.join(import.meta.dirname, "preload.js"),
         },
