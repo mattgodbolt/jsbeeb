@@ -41,7 +41,7 @@
     "vitest": "^4.0.10"
   },
   "optionalDependencies": {
-    "electron": "^33.0.0",
+    "electron": "^35.7.5",
     "electron-builder": "^26.0.12"
   },
   "license": "GPL-3.0-or-later",
