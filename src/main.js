@@ -522,22 +522,24 @@ $debugPlay.click(() => {
 
 // To lower chance of data loss, only accept drop events in the drop
 // zone in the menu bar.
-document.ondragover = function (event) {
+document.addEventListener("dragover", function (event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
-};
-document.ondrop = function (event) {
+});
+document.addEventListener("drop", function (event) {
     event.preventDefault();
-};
+});
 
-window.onbeforeunload = function () {
+window.addEventListener("beforeunload", function (event) {
     if (running && processor.sysvia.hasAnyKeyDown()) {
-        return (
+        const message =
             "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window."
-        );
+            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+        event.preventDefault();
+        event.returnValue = message;
+        return message;
     }
-};
+});
 
 if (model.hasEconet) {
     econet = new Econet(stationId);
@@ -752,13 +754,13 @@ keyboard.registerKeyHandler(
 );
 
 // Setup key handlers
-document.onkeydown = (evt) => {
+document.addEventListener("keydown", (evt) => {
     audioHandler.tryResume().then(() => {});
     ensureMicrophoneRunning().then(() => {});
     keyboard.keyDown(evt);
-};
-document.onkeypress = (evt) => keyboard.keyPress(evt);
-document.onkeyup = (evt) => keyboard.keyUp(evt);
+});
+document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
+document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
@@ -1665,7 +1667,7 @@ function stop(debug) {
         const minWidth = imageOrigWidth / 4;
         const minHeight = imageOrigHeight / 4;
 
-        let navbarHeight = $("#header-bar").outerHeight();
+        let navbarHeight = $("#header-bar").outerHeight() || 0;
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
         if (width / height <= desiredAspectRatio) {
@@ -1697,7 +1699,7 @@ function stop(debug) {
         $screen.css("top", canvasOrigTop * containerScale + "px");
     }
 
-    window.onresize = resizeTv;
+    window.addEventListener("resize", resizeTv);
     window.setTimeout(resizeTv, 1);
     window.setTimeout(resizeTv, 500);
 })();

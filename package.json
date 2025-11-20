@@ -82,7 +82,7 @@
     "coverage:unit": "vitest run tests/unit --coverage",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node app-bench.js",
-    "electron": "ELECTRON_DISABLE_SANDBOX=1 electron .",
+    "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder"
   },
   "lint-staged": {
