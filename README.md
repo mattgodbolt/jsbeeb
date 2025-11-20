@@ -112,19 +112,19 @@ USE_SYSTEM_FPM=true npm run electron:build
 **Debian/Ubuntu:**
 
 ```sh
-sudo dpkg -i out/dist/jsbeeb_*_amd64.deb
+sudo apt install ./out/dist/jsbeeb_0.0.7_amd64.deb
 ```
 
 **Fedora/RHEL/CentOS:**
 
 ```sh
-sudo rpm -i out/dist/jsbeeb-*.x86_64.rpm
+sudo rpm -i out/dist/jsbeeb-0.0.7.x86_64.rpm
 ```
 
 **Universal (Snap):**
 
 ```sh
-sudo snap install out/dist/jsbeeb_*_amd64.snap --dangerous
+sudo snap install out/dist/jsbeeb_0.0.7_amd64.snap --dangerous
 ```
 
 _Note: The `--dangerous` flag is required for locally-built snaps that aren't from the Snap Store. It simply bypasses signature verification since you built it yourself._
