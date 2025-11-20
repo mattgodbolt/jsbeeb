@@ -75,9 +75,10 @@ jsbeeb can also run as a standalone desktop application using Electron:
 ### Running in Development
 
 ```sh
-npm run build
 npm run electron
 ```
+
+This automatically builds the latest code before launching Electron.
 
 ### Building Distributable Packages
 
