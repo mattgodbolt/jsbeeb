@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.0.0...v1.0.1) (2025-11-20)
+
+
+### Bug Fixes
+
+* Trying to get release-please to work
+
 ## 1.0.0 (2025-11-20)
 
 First actual release with a changelog! These fixes below are not the only thing in this release, we previously had v0.0.7 which was 4+ years old. But - this include Electron support again!
