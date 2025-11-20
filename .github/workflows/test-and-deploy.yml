@@ -15,7 +15,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: npm install
-        run: npm install --no-optional
+        run: npm install
       - name: checks
         run: npm run ci-checks
       - name: Unit tests
@@ -35,7 +35,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: npm install
-        run: npm install --no-optional
+        run: npm install
       - name: CPU tests
         run: npm run test:cpu
 
