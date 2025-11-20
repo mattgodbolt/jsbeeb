@@ -27,17 +27,17 @@
     "underscore": "^1.13.7"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.10",
+    "@vitest/coverage-v8": "^4.0.12",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.6",
+    "lint-staged": "^16.2.7",
     "npm-run-all": "^4.1.5",
     "pixelmatch": "^7.1.0",
     "prettier": "^3.6.2",
     "sharp": "^0.34.5",
-    "vite": "^7.2.2",
+    "vite": "^7.2.4",
     "vitest": "^4.0.10"
   },
   "license": "GPL-3.0-or-later",
