@@ -67,7 +67,7 @@ jobs:
       - name: Build web distribution
         run: npm run build
       - name: Build Windows Electron package
-        run: npm run electron:build
+        run: npm run electron:build -- --publish never
       - name: Upload Windows Release Artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
