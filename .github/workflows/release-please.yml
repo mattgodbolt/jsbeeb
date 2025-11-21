@@ -22,7 +22,7 @@ jobs:
         with:
           release-type: node
 
-  upload-electron-packages:
+  upload-linux-packages:
     needs: release-please
     runs-on: ubuntu-24.04
     if: ${{ needs.release-please.outputs.release_created }}
@@ -43,11 +43,33 @@ jobs:
             -v "$(pwd)":/project \
             electronuserland/builder:latest \
             /bin/bash -c "cd /project && npm run electron:build"
-      - name: Upload Release Artifacts
+      - name: Upload Linux Release Artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ needs.release-please.outputs.tag_name }} \
             out/dist/*.deb \
-            out/dist/*.rpm \
-            out/dist/*.snap
+            out/dist/*.rpm
+
+  upload-windows-packages:
+    needs: release-please
+    runs-on: windows-latest
+    if: ${{ needs.release-please.outputs.release_created }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: npm install
+        run: npm install
+      - name: Build web distribution
+        run: npm run build
+      - name: Build Windows Electron package
+        run: npm run electron:build
+      - name: Upload Windows Release Artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ needs.release-please.outputs.tag_name }} out/dist/*.exe

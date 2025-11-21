@@ -58,6 +58,12 @@
       "category": "Game",
       "icon": "public/jsbeeb-icon.png"
     },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/jsbeeb-icon.png"
+    },
     "files": [
       "!tests"
     ],
