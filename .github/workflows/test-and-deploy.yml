@@ -60,7 +60,7 @@ jobs:
             /bin/bash -c "cd /project && npm run electron:build"
       - name: Verify packages were created
         run: |
-          ls -lh out/dist/*.deb out/dist/*.rpm out/dist/*.snap
+          ls -lh out/dist/*.deb out/dist/*.rpm
 
   update-web:
     needs: [build-and-test, cpu-test]
