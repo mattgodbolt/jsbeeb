@@ -53,8 +53,7 @@
     "linux": {
       "target": [
         "deb",
-        "rpm",
-        "snap"
+        "rpm"
       ],
       "category": "Game",
       "icon": "public/jsbeeb-icon.png"

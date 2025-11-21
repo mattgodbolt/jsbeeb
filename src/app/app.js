@@ -8,10 +8,17 @@ const isMac = process.platform === "darwin";
 
 function getArguments() {
     // Heinous hack to get "built" versions working
+    let args;
     if (path.basename(process.argv[0]) === "jsbeeb")
         // Is this ia "built" version?
-        return process.argv.slice(1);
-    return process.argv.slice(2);
+        args = process.argv.slice(1);
+    else args = process.argv.slice(2);
+
+    // Filter out Chrome switches that appear in process.argv. The snap wrapper
+    // adds --no-sandbox for compatibility, and `--disable-gpu` might be useful.
+    // Note that we don't support snap any more, but these seemed useful to leave.
+    const ignoredChromeFlags = ["--no-sandbox", "--disable-gpu"];
+    return args.filter((arg) => !ignoredChromeFlags.includes(arg));
 }
 
 const parser = new ArgumentParser({
