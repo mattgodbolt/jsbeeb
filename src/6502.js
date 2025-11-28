@@ -607,11 +607,7 @@ export class Cpu6502 extends Base6502 {
         this.peripheralCycles = 0;
         this.videoCycles = 0;
 
-        if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {
-            this.polltime = this.polltimeFast;
-        } else {
-            this.polltime = this.polltimeSlow;
-        }
+        this.polltime = this.buildPolltime();
 
         this._debugRead = this._debugWrite = this._debugInstruction = null;
         this.debugInstruction = new DebugHook(this, "_debugInstruction");
@@ -1211,44 +1207,56 @@ export class Cpu6502 extends Base6502 {
         this.polltime(cycles);
     }
 
-    // Common between polltimeSlow and polltimeFast
-    polltimeCommon(cycles) {
-        this.scheduler.polltime(cycles);
-        this.tube.execute(cycles);
-        if (this.teletextAdaptor) this.teletextAdaptor.polltime(cycles);
-        if (this.music5000) this.music5000.polltime(cycles);
-        if (this.econet) {
-            const donmi = this.econet.polltime(cycles);
-            if (donmi && this.econet.econetNMIEnabled) {
-                this.NMI(true);
-            }
-            this.filestore.polltime(cycles);
-        }
-    }
+    // Builds commong code between polltimeSlow and polltimeFast
+    buildPolltime() {
+        const nop = (_cycles) => {};
+        const tubeStuff = (cycles) => (this.model.tube ? this.tube.execute(cycles) : nop);
+        const teletextStuff = this.teletextAdaptor ? (cycles) => this.teletextAdaptor.polltime(cycles) : nop;
+        const musicStuff = this.music5000 ? (cycles) => this.music5000.polltime(cycles) : nop;
+        const econetStuff = this.econet
+            ? (cycles) => {
+                  const donmi = this.econet.polltime(cycles);
+                  if (donmi && this.econet.econetNMIEnabled) {
+                      this.NMI(true);
+                  }
+                  this.filestore.polltime(cycles);
+              }
+            : nop;
 
-    // Slow version allows video batching and cpu multipliers
-    polltimeSlow(cycles) {
-        cycles |= 0;
-        this.currentCycles += cycles;
-        this.peripheralCycles += cycles;
-        this.videoCycles += cycles;
-        cycles = (this.videoCycles / this.cpuMultiplier) | 0;
-        if (cycles > this.videoCyclesBatch) {
-            this.video.polltime(cycles);
-            this.videoCycles -= (cycles * this.cpuMultiplier) | 0;
-        }
-        cycles = (this.peripheralCycles / this.cpuMultiplier) | 0;
-        if (!cycles) return;
-        this.peripheralCycles -= (cycles * this.cpuMultiplier) | 0;
-        this.polltimeCommon(cycles);
-    }
+        const commonStuff = (cycles) => {
+            this.scheduler.polltime(cycles);
+            tubeStuff(cycles);
+            teletextStuff(cycles);
+            musicStuff(cycles);
+            econetStuff(cycles);
+        };
 
-    // Faster, but more limited version
-    polltimeFast(cycles) {
-        cycles |= 0;
-        this.currentCycles += cycles;
-        this.video.polltime(cycles);
-        this.polltimeCommon(cycles);
+        if (this.cpuMultiplier === 1 && this.videoCyclesBatch === 0) {
+            // Simplest, common case where multiplier is 1 and batching is off.
+            return (cycles) => {
+                cycles |= 0;
+                this.currentCycles += cycles;
+                this.video.polltime(cycles);
+                commonStuff(cycles);
+            };
+        } else {
+            // Handle speedup case.
+            return (cycles) => {
+                cycles |= 0;
+                this.currentCycles += cycles;
+                this.peripheralCycles += cycles;
+                this.videoCycles += cycles;
+                cycles = (this.videoCycles / this.cpuMultiplier) | 0;
+                if (cycles > this.videoCyclesBatch) {
+                    this.video.polltime(cycles);
+                    this.videoCycles -= (cycles * this.cpuMultiplier) | 0;
+                }
+                cycles = (this.peripheralCycles / this.cpuMultiplier) | 0;
+                if (!cycles) return;
+                this.peripheralCycles -= (cycles * this.cpuMultiplier) | 0;
+                commonStuff(cycles);
+            };
+        }
     }
 
     execute(numCyclesToRun) {
