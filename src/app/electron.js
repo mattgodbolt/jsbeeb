@@ -1,20 +1,52 @@
 "use strict";
 
 // Electron integration for jsbeeb desktop application.
-// Handles IPC communication for loading disc images from Electron's main process.
+// Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 export let initialise = function () {};
 
 function init(args) {
-    const { loadDiscImage, processor } = args;
-    const electron = window.nodeRequire("electron");
-    electron.ipcRenderer.on("load", async (event, message) => {
+    const { loadDiscImage, loadTapeImage, processor, modals, actions } = args;
+    const api = window.electronAPI;
+
+    api.onLoadDisc(async (message) => {
         const { drive, path } = message;
         const image = await loadDiscImage(path);
         processor.fdc.loadDisc(drive, image);
     });
+
+    api.onLoadTape(async (message) => {
+        const { path } = message;
+        const tape = await loadTapeImage(path);
+        processor.acia.setTape(tape);
+    });
+
+    api.onShowModal((message) => {
+        const { modalId, sthType } = message;
+        if (modals && modals.show) {
+            modals.show(modalId, sthType);
+        }
+    });
+
+    api.onAction((message) => {
+        if (actions && actions[message.actionId]) {
+            actions[message.actionId]();
+        }
+    });
+
+    // Observe model name changes and update window title
+    const modelElement = document.querySelector(".bbc-model");
+    if (modelElement) {
+        const updateTitle = () => api.setTitle(`jsbeeb - ${modelElement.textContent}`);
+        updateTitle();
+        new MutationObserver(updateTitle).observe(modelElement, {
+            childList: true,
+            characterData: true,
+            subtree: true,
+        });
+    }
 }
 
-if (typeof window.nodeRequire !== "undefined") {
+if (typeof window.electronAPI !== "undefined") {
     initialise = init;
 }

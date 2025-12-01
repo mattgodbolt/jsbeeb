@@ -1,8 +1,14 @@
 "use strict";
-import { app, BrowserWindow, dialog, Menu, shell, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, nativeImage } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 import { ArgumentParser } from "argparse";
+
+ipcMain.on("set-title", (event, title) => {
+    const webContents = event.sender;
+    const win = BrowserWindow.fromWebContents(webContents);
+    if (win) win.setTitle(title);
+});
 
 const isMac = process.platform === "darwin";
 
@@ -103,6 +109,36 @@ function makeLoader(drive) {
     };
 }
 
+function makeTapeLoader() {
+    return async (_, browserWindow) => {
+        const result = await dialog.showOpenDialog(browserWindow, {
+            title: "Load a tape image",
+            filters: [
+                { name: "Tape images", extensions: ["uef"] },
+                { name: "ZIPped tape images", extensions: ["zip"] },
+            ],
+            properties: ["openFile"],
+        });
+        if (!result.canceled) {
+            browserWindow.webContents.send("load-tape", {
+                path: getFileParam(result.filePaths[0]),
+            });
+        }
+    };
+}
+
+function showModal(modalId, options = {}) {
+    return (_, browserWindow) => {
+        browserWindow.webContents.send("show-modal", { modalId, ...options });
+    };
+}
+
+function sendAction(actionId) {
+    return (_, browserWindow) => {
+        browserWindow.webContents.send("action", { actionId });
+    };
+}
+
 const template = [
     // { role: 'appMenu' }
     ...(isMac
@@ -128,13 +164,32 @@ const template = [
         label: "File",
         submenu: [
             {
-                label: "Load disc 0",
+                label: "Load disc 0...",
                 click: makeLoader(0),
             },
             {
-                label: "Load disc 1",
+                label: "Load disc 1...",
                 click: makeLoader(1),
             },
+            { type: "separator" },
+            {
+                label: "Browse STH Disc Archive...",
+                click: showModal("sth", { sthType: "discs" }),
+            },
+            {
+                label: "Browse Example Discs...",
+                click: showModal("discs"),
+            },
+            { type: "separator" },
+            {
+                label: "Load Tape from File...",
+                click: makeTapeLoader(),
+            },
+            {
+                label: "Browse STH Tape Archive...",
+                click: showModal("sth", { sthType: "tapes" }),
+            },
+            { type: "separator" },
             isMac ? { role: "close" } : { role: "quit" },
         ],
     },
@@ -159,8 +214,35 @@ const template = [
         ],
     },
     {
+        label: "Machine",
+        submenu: [
+            {
+                label: "Configuration...",
+                click: showModal("configuration"),
+            },
+            { type: "separator" },
+            {
+                label: "Soft Reset",
+                click: sendAction("soft-reset"),
+            },
+            {
+                label: "Hard Reset",
+                click: sendAction("hard-reset"),
+            },
+        ],
+    },
+    {
         role: "help",
         submenu: [
+            {
+                label: "Help...",
+                click: showModal("help"),
+            },
+            {
+                label: "About jsbeeb...",
+                click: showModal("info"),
+            },
+            { type: "separator" },
             {
                 label: "Learn More",
                 click: async () => {

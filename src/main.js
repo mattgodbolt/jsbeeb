@@ -348,7 +348,7 @@ function swapCanvas(newFilterClass) {
     };
     canvas = newCanvas;
     displayModeFilter = newFilterClass;
-    window.setTimeout(() => window.onresize(), 1);
+    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
 }
 
 let canvas = createCanvasForFilter(displayModeFilter);
@@ -1027,7 +1027,8 @@ async function loadTapeImage(tapeImage) {
         }
 
         case "http":
-        case "https": {
+        case "https":
+        case "file": {
             const asUrl = `${schema}://${tapeImage}`;
             // url may end in query params etc, which can upset file handling
             tapeImage = new URL(asUrl).pathname;
@@ -1750,7 +1751,28 @@ window.m7dump = function () {
 };
 
 // Hooks for electron.
-electron({ loadDiscImage, processor });
+electron({
+    loadDiscImage,
+    loadTapeImage,
+    processor,
+    modals: {
+        show: (modalId, sthType) => {
+            if (modalId === "sth" && sthType) {
+                if (sthType === "discs") discSth.populate();
+                else if (sthType === "tapes") tapeSth.populate();
+            }
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        },
+    },
+    actions: {
+        "soft-reset": () => processor.reset(false),
+        "hard-reset": () => processor.reset(true),
+    },
+});
 
 // Display version in About dialog
 const versionElement = document.getElementById("jsbeeb-version");
