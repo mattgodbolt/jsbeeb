@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     onLoadTape: (callback) => ipcRenderer.on("load-tape", (event, message) => callback(message)),
     onShowModal: (callback) => ipcRenderer.on("show-modal", (event, message) => callback(message)),
     onAction: (callback) => ipcRenderer.on("action", (event, message) => callback(message)),
+    setTitle: (title) => ipcRenderer.send("set-title", title),
 });
 
 window.addEventListener("DOMContentLoaded", () => {

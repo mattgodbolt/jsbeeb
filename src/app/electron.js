@@ -4,6 +4,7 @@
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 export let initialise = function () {};
+export let setTitle = function () {};
 
 function init(args) {
     const { loadDiscImage, loadTapeImage, processor, modals, actions } = args;
@@ -37,4 +38,5 @@ function init(args) {
 
 if (typeof window.electronAPI !== "undefined") {
     initialise = init;
+    setTitle = (title) => window.electronAPI.setTitle(`jsbeeb - ${title}`);
 }

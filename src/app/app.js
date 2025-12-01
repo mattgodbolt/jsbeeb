@@ -1,8 +1,14 @@
 "use strict";
-import { app, BrowserWindow, dialog, Menu, shell, nativeImage } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, nativeImage } from "electron";
 import * as fs from "fs";
 import * as path from "path";
 import { ArgumentParser } from "argparse";
+
+ipcMain.on("set-title", (event, title) => {
+    const webContents = event.sender;
+    const win = BrowserWindow.fromWebContents(webContents);
+    if (win) win.setTitle(title);
+});
 
 const isMac = process.platform === "darwin";
 
