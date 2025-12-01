@@ -6,7 +6,7 @@
 export let initialise = function () {};
 
 function init(args) {
-    const { loadDiscImage, loadTapeImage, processor, modals, actions } = args;
+    const { loadDiscImage, loadTapeImage, processor, modals, actions, config } = args;
     const api = window.electronAPI;
 
     api.onLoadDisc(async (message) => {
@@ -43,6 +43,16 @@ function init(args) {
             childList: true,
             characterData: true,
             subtree: true,
+        });
+    }
+
+    // Save settings when they change
+    if (config) {
+        config.on("settings-changed", (settings) => {
+            api.saveSettings(settings);
+        });
+        config.on("media-changed", (media) => {
+            api.saveSettings(media);
         });
     }
 }

@@ -766,6 +766,13 @@ function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
     updateUrl();
+    config.emit("media-changed", { disc1: name });
+}
+
+function setTapeImage(name) {
+    parsedQuery.tape = name;
+    updateUrl();
+    config.emit("media-changed", { tape: name });
 }
 
 function sthClearList() {
@@ -804,8 +811,7 @@ async function discSthClick(item) {
 
 async function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
-    parsedQuery.tape = "sth:" + item;
-    updateUrl();
+    setTapeImage("sth:" + item);
 
     popupLoading("Loading " + item);
     try {
@@ -1755,6 +1761,7 @@ electron({
     loadDiscImage,
     loadTapeImage,
     processor,
+    config,
     modals: {
         show: (modalId, sthType) => {
             if (modalId === "sth" && sthType) {
