@@ -4,7 +4,6 @@
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 export let initialise = function () {};
-export let setTitle = function () {};
 
 function init(args) {
     const { loadDiscImage, loadTapeImage, processor, modals, actions } = args;
@@ -34,9 +33,20 @@ function init(args) {
             actions[message.actionId]();
         }
     });
+
+    // Observe model name changes and update window title
+    const modelElement = document.querySelector(".bbc-model");
+    if (modelElement) {
+        const updateTitle = () => api.setTitle(`jsbeeb - ${modelElement.textContent}`);
+        updateTitle();
+        new MutationObserver(updateTitle).observe(modelElement, {
+            childList: true,
+            characterData: true,
+            subtree: true,
+        });
+    }
 }
 
 if (typeof window.electronAPI !== "undefined") {
     initialise = init;
-    setTitle = (title) => window.electronAPI.setTitle(`jsbeeb - ${title}`);
 }

@@ -19,7 +19,7 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
-import { initialise as electron, setTitle as electronSetTitle } from "./app/electron.js";
+import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
 import { toSsdOrDsd } from "./disc.js";
@@ -271,7 +271,6 @@ const config = new Config(
 config.mapLegacyModels(parsedQuery);
 
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
-electronSetTitle(config.model.name);
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
 config.setEconet(parsedQuery.hasEconet);
