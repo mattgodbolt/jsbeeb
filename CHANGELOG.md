@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.1.1...v1.2.0) (2025-12-01)
+
+
+### Features
+
+* Add native menu support for web modals in Electron app ([#542](https://github.com/mattgodbolt/jsbeeb/issues/542)) ([8cdc6d0](https://github.com/mattgodbolt/jsbeeb/commit/8cdc6d0c791de2b1b0d4997b581f5c7bc6877b7b))
+* Optimised polltime routine ([#540](https://github.com/mattgodbolt/jsbeeb/issues/540)) ([72ca9f5](https://github.com/mattgodbolt/jsbeeb/commit/72ca9f50bd5e2346e8ecb04219b33f2a9af2832b))
+
 ## [1.1.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.1.0...v1.1.1) (2025-11-21)
 
 
