@@ -1,13 +1,21 @@
 "use strict";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, nativeImage } from "electron";
+import Store from "electron-store";
 import * as fs from "fs";
 import * as path from "path";
 import { ArgumentParser } from "argparse";
+
+const store = new Store();
 
 ipcMain.on("set-title", (event, title) => {
     const webContents = event.sender;
     const win = BrowserWindow.fromWebContents(webContents);
     if (win) win.setTitle(title);
+});
+
+ipcMain.on("save-settings", (event, settings) => {
+    const current = store.get("settings", {});
+    store.set("settings", { ...current, ...settings });
 });
 
 const isMac = process.platform === "darwin";
@@ -68,7 +76,9 @@ async function createWindow() {
         },
     });
 
-    const query = {};
+    // Load saved settings, then override with command-line args
+    const savedSettings = store.get("settings", {});
+    const query = { ...savedSettings };
     if (args.disc1 && !args.noboot) query.autoboot = true;
     if (args.disc1) query.disc1 = getFileParam(args.disc1);
     if (args.disc2) query.disc2 = getFileParam(args.disc2);
@@ -101,10 +111,9 @@ function makeLoader(drive) {
             properties: ["openFile"],
         });
         if (!result.canceled) {
-            browserWindow.webContents.send("load", {
-                drive,
-                path: getFileParam(result.filePaths[0]),
-            });
+            const filePath = getFileParam(result.filePaths[0]);
+            store.set(`settings.disc${drive + 1}`, filePath);
+            browserWindow.webContents.send("load", { drive, path: filePath });
         }
     };
 }
@@ -120,9 +129,9 @@ function makeTapeLoader() {
             properties: ["openFile"],
         });
         if (!result.canceled) {
-            browserWindow.webContents.send("load-tape", {
-                path: getFileParam(result.filePaths[0]),
-            });
+            const filePath = getFileParam(result.filePaths[0]);
+            store.set("settings.tape", filePath);
+            browserWindow.webContents.send("load-tape", { path: filePath });
         }
     };
 }

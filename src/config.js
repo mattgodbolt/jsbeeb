@@ -1,10 +1,12 @@
 "use strict";
 import $ from "jquery";
+import EventEmitter from "event-emitter-es6";
 import { findModel } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
 
-export class Config {
+export class Config extends EventEmitter {
     constructor(onChange, onClose) {
+        super();
         this.onChange = onChange;
         this.onClose = onClose;
         this.changed = {};
@@ -20,7 +22,12 @@ export class Config {
             this.setEconet(this.model.hasEconet);
         });
 
-        $configuration.addEventListener("hide.bs.modal", () => this.onClose(this.changed));
+        $configuration.addEventListener("hide.bs.modal", () => {
+            this.onClose(this.changed);
+            if (Object.keys(this.changed).length > 0) {
+                this.emit("settings-changed", this.changed);
+            }
+        });
 
         $(".model-menu a").on("click", (e) => {
             this.changed.model = $(e.target).attr("data-target");
