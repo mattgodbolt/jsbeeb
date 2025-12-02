@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.2.0...v1.3.0) (2025-12-01)
+
+
+### Features
+
+* Add settings persistence for Electron app ([#543](https://github.com/mattgodbolt/jsbeeb/issues/543)) ([ec153a0](https://github.com/mattgodbolt/jsbeeb/commit/ec153a062dd3f3e628fd69bea8c510d3c95e0055))
+
 ## [1.2.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.1.1...v1.2.0) (2025-12-01)
 
 
