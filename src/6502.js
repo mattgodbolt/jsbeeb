@@ -419,6 +419,7 @@ class Tube6502 extends Base6502 {
         this.romPaged = true;
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
+        this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
         this.tube.reset(hard);
     }
 
@@ -1181,6 +1182,7 @@ export class Cpu6502 extends Base6502 {
         }
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
+        this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
         this._nmiEdge = false;
         this._nmiLevel = false;
         this.halted = false;
