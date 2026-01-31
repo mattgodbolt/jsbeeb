@@ -42,7 +42,7 @@
   },
   "optionalDependencies": {
     "electron": "^39.0.0",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.6.0",
     "electron-store": "^11.0.2"
   },
   "license": "GPL-3.0-or-later",
