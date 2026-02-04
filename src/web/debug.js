@@ -22,7 +22,7 @@ class MemoryView {
         }
         template.remove();
 
-        widget.bind("wheel", (evt) => {
+        widget.on("wheel", (evt) => {
             const deltaY = evt.originalEvent.deltaY;
             if (deltaY === 0) return;
             const steps = (deltaY / 20) | 0;
@@ -111,7 +111,7 @@ export class Debugger {
 
         this.disass.find(".bp_gutter").click(this.bpClick.bind(this));
 
-        this.disass.bind("wheel", (evt) => {
+        this.disass.on("wheel", (evt) => {
             let deltaY = evt.originalEvent.deltaY;
             if (deltaY === 0) return;
             let addr = this.disassPc;
