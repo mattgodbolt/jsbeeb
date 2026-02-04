@@ -21,7 +21,7 @@
     "bootswatch": "^5.3.8",
     "event-emitter-es6": "^1.1.5",
     "fflate": "^0.8.2",
-    "jquery": "^3.7.1",
+    "jquery": "^4.0.0",
     "pako": "^2.1.0",
     "smoothie": "^1.36.1",
     "underscore": "^1.13.7"
@@ -41,7 +41,7 @@
     "vitest": "^4.0.10"
   },
   "optionalDependencies": {
-    "electron": "^39.5.1",
+    "electron": "^40.1.0",
     "electron-builder": "^26.7.0",
     "electron-store": "^11.0.2"
   },

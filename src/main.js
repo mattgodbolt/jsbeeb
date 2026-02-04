@@ -287,7 +287,7 @@ function sbBind(div, url, onload) {
     const img = div.find("img");
     img.hide();
     if (!url) return;
-    img.attr("src", url).bind("load", function () {
+    img.attr("src", url).on("load", function () {
         onload(div, img);
         img.show();
     });
