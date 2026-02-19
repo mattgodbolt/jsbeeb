@@ -26,7 +26,7 @@ export class GamepadSource extends AnalogueSource {
         const pad = pads[0];
         const pad2 = pads[1];
 
-        let rawValue = 0;
+        let rawValue;
 
         switch (channel) {
             case 0:

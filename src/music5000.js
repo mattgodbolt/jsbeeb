@@ -112,15 +112,7 @@ export class Music5000 {
     }
 
     polltime(cycles) {
-        let c4d,
-            freq,
-            offset,
-            wavetable,
-            amplitude,
-            control,
-            data,
-            sign,
-            pos = 0 >>> 0;
+        let c4d, freq, offset, wavetable, amplitude, control, data, sign, pos;
 
         // Convert 2MHz 6502 cycles to 6MHz Music5000 cycles
         this.cycleCount += cycles * 3;

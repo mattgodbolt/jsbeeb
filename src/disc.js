@@ -343,7 +343,7 @@ class Sector {
         let sectorSize = Sector.toSectorSize(sectorEndByte - sectorStartByte - 5);
 
         this.hasDataCrcError = true;
-        let seenIffyData = false;
+        let seenIffyData;
         do {
             const { crcOk, sectorData, iffyPulses } = this._tryLoadSectorData(dataMarker, sectorSize);
             seenIffyData = iffyPulses;
@@ -425,7 +425,7 @@ class Track {
         const top32of64b = 0xffffffff00000000n;
         const fmMarker = 0x8888888800000000n;
         const mfmMarker = 0xaaaa448944894489n;
-        let dataByte = 0;
+        let dataByte;
         let sector = null;
         for (let pulseIndex = 0; pulseIndex < bitLength; ++pulseIndex) {
             if ((pulseIndex & 31) === 0) pulses = this.pulses2Us[pulseIndex >>> 5];

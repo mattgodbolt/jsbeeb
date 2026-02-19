@@ -129,7 +129,7 @@ const emuKeyHandlers = {};
 let cpuMultiplier = 1;
 let fastAsPossible = false;
 let fastTape = false;
-let noSeek = false;
+let noSeek;
 let audioFilterFreq = 7000;
 let audioFilterQ = 5;
 let stationId = 101;

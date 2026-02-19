@@ -1,4 +1,4 @@
-/*global sampleRate, currentTime */
+/* global sampleRate, currentTime, registerProcessor, AudioWorkletProcessor */
 
 const lowPassFilterFreq = sampleRate / 2;
 const RC = 1 / (2 * Math.PI * lowPassFilterFreq);

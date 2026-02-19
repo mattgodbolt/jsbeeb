@@ -1,3 +1,4 @@
+/* global registerProcessor, AudioWorkletProcessor */
 const BUFFER_SIZE = 65536;
 
 registerProcessor(

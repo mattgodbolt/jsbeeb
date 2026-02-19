@@ -890,7 +890,7 @@ export function ungzip(data) {
     try {
         return pakoUngzip(data);
     } catch (e) {
-        throw new Error("Unable to ungzip: " + e.message);
+        throw new Error("Unable to ungzip: " + e.message, { cause: e });
     }
 }
 
@@ -1000,7 +1000,7 @@ function unzipImage(data, knownExtensions) {
     try {
         files = unzipSync(data instanceof Uint8Array ? data : new Uint8Array(data));
     } catch (e) {
-        throw new Error("Error unzipping " + e.message);
+        throw new Error("Error unzipping " + e.message, { cause: e });
     }
 
     let uncompressed = null;
