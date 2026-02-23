@@ -155,10 +155,17 @@ server.tool(
     {
         session_id: z.string().describe("Session ID from create_machine"),
         timeout_secs: z.number().default(60).describe("Max emulated seconds to run before giving up"),
+        clear: z
+            .boolean()
+            .default(true)
+            .describe(
+                "If true (default), clear the output buffer after returning it. " +
+                    "Pass false to peek at accumulated output without consuming it.",
+            ),
     },
-    async ({ session_id, timeout_secs }) => {
+    async ({ session_id, timeout_secs, clear }) => {
         const session = requireSession(session_id);
-        const output = await session.runUntilPrompt(timeout_secs);
+        const output = await session.runUntilPrompt(timeout_secs, { clear });
         return {
             content: [
                 {
@@ -286,11 +293,15 @@ server.tool(
     {
         session_id: z.string().describe("Session ID from create_machine"),
         cycles: z.number().int().min(1).describe("Number of 2MHz CPU cycles to execute"),
+        clear: z
+            .boolean()
+            .default(true)
+            .describe("If true (default), clear the output buffer after returning it. Pass false to peek."),
     },
-    async ({ session_id, cycles }) => {
+    async ({ session_id, cycles, clear }) => {
         const session = requireSession(session_id);
         await session.runFor(cycles);
-        const output = session.drainOutput();
+        const output = session.drainOutput({ clear });
         return {
             content: [
                 {

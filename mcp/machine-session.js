@@ -201,11 +201,15 @@ export class MachineSession {
 
     /**
      * Run the emulator until the OS is waiting at the keyboard prompt, or
-     * until timeoutSecs of emulated time elapses.  Returns drained output.
+     * until timeoutSecs of emulated time elapses.  Returns captured output.
+     *
+     * @param {number} [timeoutSecs=60]
+     * @param {Object} [opts]
+     * @param {boolean} [opts.clear=true] - Whether to clear the output buffer after returning it.
      */
-    async runUntilPrompt(timeoutSecs = 60) {
+    async runUntilPrompt(timeoutSecs = 60, { clear = true } = {}) {
         await this._machine.runUntilInput(timeoutSecs);
-        return this.drainOutput();
+        return this.drainOutput({ clear });
     }
 
     /**
@@ -229,13 +233,18 @@ export class MachineSession {
     }
 
     /**
-     * Drain and return all VDU text elements captured since the last drain.
+     * Return all VDU text elements captured so far.
+     *
+     * @param {Object} [opts]
+     * @param {boolean} [opts.clear=true] - If true (default), clear the buffer
+     *   after returning it.  Pass false to peek without consuming — the same
+     *   elements will be returned again on the next call.
      *
      * Each element: { x, y, text, foreground, background, mode }
      * Also includes a flat `screenText` reconstruction.
      */
-    drainOutput() {
-        const elements = this._pendingOutput.splice(0);
+    drainOutput({ clear = true } = {}) {
+        const elements = clear ? this._pendingOutput.splice(0) : [...this._pendingOutput];
         return {
             elements,
             screenText: reconstructScreenText(elements),
