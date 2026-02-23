@@ -40,6 +40,8 @@ export class MachineSession {
 
         // Accumulated VDU text output — drained by callers
         this._pendingOutput = [];
+
+        // (WRCHV tracking is done inside _installCaptureHook via direct ramRomOs reads)
     }
 
     /** Load ROMs and hardware — call once before anything else */
@@ -60,21 +62,44 @@ export class MachineSession {
     /**
      * Install the VDU character-output capture hook.
      *
-     * Rather than using TestMachine.captureText() — which reads WRCHV from
-     * 0x20E once at installation time — we read it dynamically on every
-     * instruction.  This means:
+     * Strategy for finding WRCHV:
+     *   RAM at 0x20E/0x20F initialises to 0xFFFF before the OS runs.  We
+     *   read it directly from the raw ramRomOs Uint8Array (two array lookups
+     *   — far cheaper than a readmem() dispatch) on every instruction until
+     *   the value changes from its initial 0xFFFF.  Once the OS has set a
+     *   real handler address we treat that as WRCHV for the lifetime of the
+     *   hook.  Programs that later install a custom VDU handler will change
+     *   0x20E automatically and the hook picks it up seamlessly.
      *
-     *   - We can install it before the OS has run (WRCHV == 0 → no false
-     *     fires), so we capture the boot banner as well as program output.
-     *   - Programs that install their own VDU handler (changing WRCHV) are
-     *     handled transparently.
+     * MODE 7 (Teletext) notes:
+     *   - Colour changes come through as VDU 17 + param, exactly as in other
+     *     modes.  Param 8 = flash on, 9 = steady (not a regular colour).
+     *   - Double-height arrives as raw byte 0x8D (VDU 141), single-height as
+     *     0x8C (VDU 140).  These have bit 7 set and bypass the normal VDU
+     *     dispatch, so we handle them explicitly.
+     *   - Teletext graphics characters (0xA0–0xFF) are mosaic/block glyphs.
+     *     We flush any pending text and skip them; screenshots show them
+     *     correctly via the real Video chip.
      *
-     * The VDU state machine below is a duplicate of the one in
-     * TestMachine.captureText() (tests/test-machine.js).  If that code
-     * changes, update this too — or better, extract a shared helper.
+     * Text elements emitted to _pendingOutput:
+     *   { x, y, text, foreground, background, mode, flash, doubleHeight }
      */
     _installCaptureHook() {
-        const attributes = { x: 0, y: 0, text: "", foreground: 7, background: 0, mode: 7 };
+        const cpu = this._machine.processor;
+        // Direct Uint8Array access — bypasses readmem() dispatch entirely.
+        const ram = cpu.ramRomOs;
+        const initialWrchv = ram[0x20e] | (ram[0x20f] << 8); // 0xFFFF pre-boot
+
+        const attributes = {
+            x: 0,
+            y: 0,
+            text: "",
+            foreground: 7,
+            background: 0,
+            mode: 7,
+            flash: false,
+            doubleHeight: false,
+        };
         let currentText = "";
         let params = [];
         let nextN = 0;
@@ -92,6 +117,7 @@ export class MachineSession {
         }
 
         function onChar(c) {
+            // Consume pending VDU parameter bytes first.
             if (nextN) {
                 params.push(c);
                 if (--nextN === 0) {
@@ -101,8 +127,32 @@ export class MachineSession {
                 }
                 return;
             }
+
+            // MODE 7 raw teletext control bytes (0x80–0x9F, bit 7 set).
+            // The OS sends 0x8C (single-height) and 0x8D (double-height)
+            // directly through WRCHV for MODE 7 programs.
+            if (c >= 0x80 && c <= 0x9f) {
+                const code = c & 0x7f; // teletext code 0–31
+                flush();
+                if (code === 12) attributes.doubleHeight = false; // VDU 140
+                if (code === 13) attributes.doubleHeight = true; // VDU 141
+                // Other teletext control codes (0x81–0x87 alpha colour,
+                // 0x91–0x97 graphics colour, etc.) don't appear at WRCHV
+                // level in practice — colour changes come via VDU 17 below.
+                return;
+            }
+
+            // MODE 7 mosaic/block graphics characters (0xA0–0xFF).
+            // These are visual glyphs; the screenshot shows them correctly.
+            // Skip here rather than emit unintelligible characters.
+            if (c >= 0xa0) {
+                flush();
+                return;
+            }
+
+            // Standard VDU control codes (0x00–0x1F).
             switch (c) {
-                case 1: // Next char to printer
+                case 1: // next char → printer only
                     nextN = 1;
                     break;
                 case 10: // LF
@@ -118,34 +168,51 @@ export class MachineSession {
                     flush();
                     attributes.x = 0;
                     break;
-                case 17: // COLOUR
+                case 17: // COLOUR n
                     nextN = 1;
                     vduProc = (p) => {
-                        if (p[0] & 0x80) attributes.background = p[0] & 0xf;
-                        else attributes.foreground = p[0] & 0xf;
+                        const n = p[0];
+                        if (n & 0x80) {
+                            // Background colour (bit 7 set); low 3 bits = colour.
+                            attributes.background = n & 0x7;
+                        } else if (n === 8) {
+                            // MODE 7 flash on (COLOUR 8).
+                            attributes.flash = true;
+                        } else if (n === 9) {
+                            // MODE 7 steady (COLOUR 9).
+                            attributes.flash = false;
+                        } else {
+                            // Foreground colour 0–7.
+                            attributes.foreground = n & 0xf;
+                        }
                     };
                     break;
                 case 18: // GCOL
                     nextN = 2;
                     break;
-                case 19: // logical colour
+                case 19: // define logical colour
                     nextN = 5;
                     break;
-                case 22: // MODE
+                case 22: // MODE n — reset all per-mode state
                     nextN = 1;
                     vduProc = (p) => {
+                        flush();
                         attributes.mode = p[0];
                         attributes.x = 0;
                         attributes.y = 0;
+                        attributes.foreground = 7;
+                        attributes.background = 0;
+                        attributes.flash = false;
+                        attributes.doubleHeight = false;
                     };
                     break;
                 case 25: // PLOT
                     nextN = 5;
                     break;
-                case 28: // text window
+                case 28: // define text window
                     nextN = 4;
                     break;
-                case 29: // origin
+                case 29: // define graphics origin
                     nextN = 4;
                     break;
                 case 31: // TAB(x,y)
@@ -166,12 +233,14 @@ export class MachineSession {
             }
         }
 
-        this._machine.processor.debugInstruction.add((addr) => {
-            // Read WRCHV dynamically: handles pre-boot (wrchv==0 → skip) and
-            // programs that install a custom VDU driver mid-run.
-            const wrchv = this._machine.readword(0x20e);
-            if (wrchv > 0 && addr === wrchv) {
-                onChar(this._machine.processor.a);
+        cpu.debugInstruction.add((addr) => {
+            // Two direct array reads — no function-call dispatch overhead.
+            // Once the OS sets WRCHV (it changes from 0xFFFF), we start
+            // capturing.  Programs that install a custom VDU driver mid-run
+            // are handled transparently because we re-read on every call.
+            const wrchv = ram[0x20e] | (ram[0x20f] << 8);
+            if (wrchv !== initialWrchv && addr === wrchv) {
+                onChar(cpu.a);
             }
             return false;
         });
