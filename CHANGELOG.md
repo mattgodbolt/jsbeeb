@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.1...v1.3.2) (2026-02-23)
+
+
+### Bug Fixes
+
+* use Node 24 in npm-publish job — npm v10 (Node 22) doesn't support OIDC trusted publishing ([#557](https://github.com/mattgodbolt/jsbeeb/issues/557)) ([f8ff684](https://github.com/mattgodbolt/jsbeeb/commit/f8ff6841afa30c88dd502bb8acd297db1ef299c9))
+
 ## [1.3.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.0...v1.3.1) (2026-02-23)
 
 
