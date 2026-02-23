@@ -22,7 +22,8 @@
   },
   "files": [
     "src/",
-    "tests/test-machine.js"
+    "tests/test-machine.js",
+    "public/roms/"
   ],
   "dependencies": {
     "@popperjs/core": "^2.11.8",
