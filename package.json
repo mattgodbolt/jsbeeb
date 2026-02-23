@@ -16,6 +16,7 @@
   "main": "./src/app/app.js",
   "exports": {
     ".": "./src/app/app.js",
+    "./machine-session": "./src/machine-session.js",
     "./src/*": "./src/*",
     "./tests/test-machine.js": "./tests/test-machine.js"
   },
@@ -33,6 +34,7 @@
     "jquery": "^4.0.0",
     "pako": "^2.1.0",
     "smoothie": "^1.36.1",
+    "sharp": "^0.34.5",
     "underscore": "^1.13.7"
   },
   "devDependencies": {
@@ -47,7 +49,6 @@
     "npm-run-all2": "^8.0.4",
     "pixelmatch": "^7.1.0",
     "prettier": "^3.8.1",
-    "sharp": "^0.34.5",
     "vite": "^7.3.1",
     "vitest": "^4.0.10"
   },
