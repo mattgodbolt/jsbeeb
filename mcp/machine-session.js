@@ -23,10 +23,12 @@ export class MachineSession {
     constructor(modelName = "B-DFS1.2") {
         this.modelName = modelName;
 
-        // Raw RGBA framebuffer — shared between Uint8Array (for PNG encoding)
-        // and Uint32Array (which Video writes into as ABGR uint32s on LE = RGBA bytes)
+        // Raw RGBA framebuffer — the Video chip renders into _fb32 (cleared each frame).
+        // _completeFb8 is a snapshot taken at paint time (the equivalent of the browser canvas)
+        // and is what screenshot() reads from — always a complete frame, never mid-render.
         this._fb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
         this._fb32 = new Uint32Array(this._fb8.buffer);
+        this._completeFb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
         this._lastPaint = { minx: 0, miny: 0, maxx: FB_WIDTH, maxy: FB_HEIGHT };
         this._frameDirty = false;
 
@@ -35,6 +37,9 @@ export class MachineSession {
         this._video = new Video(modelObj.isMaster, this._fb32, (minx, miny, maxx, maxy) => {
             this._lastPaint = { minx, miny, maxx, maxy };
             this._frameDirty = true;
+            // Snapshot the complete frame now, before clearPaintBuffer() wipes _fb32.
+            // This mirrors what the browser does: paint_ext fires → canvas updated → fb32 cleared.
+            this._completeFb8.set(this._fb8);
         });
 
         // TestMachine forwards opts.video to fake6502, which uses it instead of FakeVideo
@@ -302,8 +307,9 @@ export class MachineSession {
      *   y: topBorder  .. 625-bottomBorder
      */
     async screenshot() {
-        // fb8 is RGBA bytes (each pixel: [R, G, B, A] on little-endian)
-        return sharp(Buffer.from(this._fb8.buffer), {
+        // Read from _completeFb8 — the last fully-painted frame snapshotted in paint_ext.
+        // _fb8/_fb32 is the live render buffer (cleared and partially refilled each frame).
+        return sharp(Buffer.from(this._completeFb8.buffer), {
             raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
         })
             .png()
@@ -327,7 +333,7 @@ export class MachineSession {
         const w = FB_WIDTH - left - right;
         const h = FB_HEIGHT - top - bottom;
 
-        return sharp(Buffer.from(this._fb8.buffer), {
+        return sharp(Buffer.from(this._completeFb8.buffer), {
             raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
         })
             .extract({ left, top, width: w, height: h })
