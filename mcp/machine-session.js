@@ -5,7 +5,9 @@
  *   - clean lifecycle (boot, interact, screenshot, destroy)
  */
 
+import { readFileSync } from "fs";
 import { TestMachine } from "../tests/test-machine.js";
+import * as fdc from "../src/fdc.js";
 import { Video } from "../src/video.js";
 import { findModel } from "../src/models.js";
 import sharp from "sharp";
@@ -227,9 +229,15 @@ export class MachineSession {
         await this._machine.runUntilAddress(addr, timeoutSecs);
     }
 
-    /** Load a disc image (path to .ssd/.dsd file) */
-    async loadDisc(imagePath) {
-        await this._machine.loadDisc(imagePath);
+    /**
+     * Load a disc image (absolute or relative path to an .ssd or .dsd file).
+     *
+     * We read the file ourselves rather than delegating to TestMachine.loadDisc,
+     * which goes through utils.loadData and mangles absolute paths by prepending "./".
+     */
+    loadDisc(imagePath) {
+        const data = new Uint8Array(readFileSync(imagePath));
+        this._machine.processor.fdc.loadDisc(0, fdc.discFor(this._machine.processor.fdc, imagePath, data));
     }
 
     /**

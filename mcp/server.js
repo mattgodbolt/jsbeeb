@@ -106,6 +106,25 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool: load_disc
+// ---------------------------------------------------------------------------
+
+server.tool(
+    "load_disc",
+    "Insert a disc image (.ssd or .dsd file) into drive 0 of the emulator. " +
+        "After loading, use type_input to issue DFS commands (e.g. '*RUN hello', '*DIR', 'CHAIN\"\"').",
+    {
+        session_id: z.string().describe("Session ID from create_machine"),
+        image_path: z.string().describe("Absolute path to an .ssd or .dsd disc image file"),
+    },
+    async ({ session_id, image_path }) => {
+        const session = requireSession(session_id);
+        await session.loadDisc(image_path);
+        return { content: [{ type: "text", text: `Disc image loaded: ${image_path}` }] };
+    },
+);
+
+// ---------------------------------------------------------------------------
 // Tool: load_basic
 // ---------------------------------------------------------------------------
 

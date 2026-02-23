@@ -1,0 +1,23 @@
+\ Hello World in BeebAsm
+\ Assembles to hello.ssd, runnable with *RUN hello
+
+ORG &1100
+
+.start
+    LDX #0
+.loop
+    LDA message,X
+    BEQ done
+    JSR &FFEE           ; OSWRCH
+    INX
+    BNE loop
+.done
+    RTS
+
+.message
+    EQUS "HELLO FROM BEEBASM!", 13, 10
+    EQUB 0
+
+.end
+
+SAVE "hello", start, end
