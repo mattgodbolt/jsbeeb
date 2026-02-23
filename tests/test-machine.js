@@ -119,13 +119,10 @@ export class TestMachine {
 
         const typeChar = (ch) => {
             let shift = false;
-            // Map printable ASCII characters to BBC Micro key codes (UK layout, Node.js).
-            // The default case (toUpperCase().charCodeAt) only works for A-Z and 0-9,
-            // where ASCII values happen to coincide with DOM key codes.  All other
-            // printable characters need an explicit entry here.
-            // Key codes were verified empirically against the BBC B emulator.
+            // Map printable ASCII characters to BBC Micro key codes (UK layout).
+            // Characters not listed here fall through to the default case which
+            // uses toUpperCase().charCodeAt(0) — valid for A–Z and 0–9 only.
             switch (ch) {
-                // -- punctuation already correct in original code --
                 case '"':
                     ch = utils.keyCodes.K2;
                     shift = true;
@@ -133,7 +130,7 @@ export class TestMachine {
                 case "*":
                     ch = utils.keyCodes.APOSTROPHE;
                     shift = true;
-                    break; // APOSTROPHE(no-shift)=':'; +shift='*'
+                    break;
                 case "!":
                     ch = utils.keyCodes.K1;
                     shift = true;
@@ -157,7 +154,6 @@ export class TestMachine {
                 case " ":
                     ch = utils.keyCodes.SPACE;
                     break;
-                // -- previously broken: ASCII value ≠ DOM keyCode --
                 case "-":
                     ch = utils.keyCodes.MINUS;
                     break;
