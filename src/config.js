@@ -1,9 +1,14 @@
 "use strict";
 import $ from "jquery";
+import EventEmitter from "event-emitter-es6";
 import { findModel } from "./models.js";
+import { getFilterForMode } from "./canvas.js";
 
-export class Config {
-    constructor(onClose) {
+export class Config extends EventEmitter {
+    constructor(onChange, onClose) {
+        super();
+        this.onChange = onChange;
+        this.onClose = onClose;
         this.changed = {};
         this.model = null;
         this.coProcessor = null;
@@ -17,7 +22,12 @@ export class Config {
             this.setEconet(this.model.hasEconet);
         });
 
-        $configuration.addEventListener("hide.bs.modal", () => onClose(this.changed));
+        $configuration.addEventListener("hide.bs.modal", () => {
+            this.onClose(this.changed);
+            if (Object.keys(this.changed).length > 0) {
+                this.emit("settings-changed", this.changed);
+            }
+        });
 
         $(".model-menu a").on("click", (e) => {
             this.changed.model = $(e.target).attr("data-target");
@@ -56,6 +66,13 @@ export class Config {
         $("#mouseJoystickEnabled").on("click", () => {
             this.changed.mouseJoystickEnabled = $("#mouseJoystickEnabled").prop("checked");
         });
+
+        $(".display-mode-option").on("click", (e) => {
+            const mode = $(e.target).data("mode");
+            this.changed.displayMode = mode;
+            this.setDisplayMode(mode);
+            this.onChange({ displayMode: mode });
+        });
     }
 
     setMicrophoneChannel(channel) {
@@ -68,6 +85,11 @@ export class Config {
 
     setMouseJoystickEnabled(enabled) {
         $("#mouseJoystickEnabled").prop("checked", !!enabled);
+    }
+
+    setDisplayMode(mode) {
+        const config = getFilterForMode(mode).getDisplayConfig();
+        $(".display-mode-text").text(config.name);
     }
 
     setModel(modelName) {

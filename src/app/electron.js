@@ -1,20 +1,62 @@
 "use strict";
 
-// Left for posterity and the hope that one day Electron (the standalone app generator)
-// supports ES Modules. See https://github.com/electron/electron/issues/21457
+// Electron integration for jsbeeb desktop application.
+// Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 export let initialise = function () {};
 
 function init(args) {
-    const { loadDiscImage, processor } = args;
-    const electron = window.nodeRequire("electron");
-    electron.ipcRenderer.on("load", async (event, message) => {
+    const { loadDiscImage, loadTapeImage, processor, modals, actions, config } = args;
+    const api = window.electronAPI;
+
+    api.onLoadDisc(async (message) => {
         const { drive, path } = message;
         const image = await loadDiscImage(path);
         processor.fdc.loadDisc(drive, image);
     });
+
+    api.onLoadTape(async (message) => {
+        const { path } = message;
+        const tape = await loadTapeImage(path);
+        processor.acia.setTape(tape);
+    });
+
+    api.onShowModal((message) => {
+        const { modalId, sthType } = message;
+        if (modals && modals.show) {
+            modals.show(modalId, sthType);
+        }
+    });
+
+    api.onAction((message) => {
+        if (actions && actions[message.actionId]) {
+            actions[message.actionId]();
+        }
+    });
+
+    // Observe model name changes and update window title
+    const modelElement = document.querySelector(".bbc-model");
+    if (modelElement) {
+        const updateTitle = () => api.setTitle(`jsbeeb - ${modelElement.textContent}`);
+        updateTitle();
+        new MutationObserver(updateTitle).observe(modelElement, {
+            childList: true,
+            characterData: true,
+            subtree: true,
+        });
+    }
+
+    // Save settings when they change
+    if (config) {
+        config.on("settings-changed", (settings) => {
+            api.saveSettings(settings);
+        });
+        config.on("media-changed", (media) => {
+            api.saveSettings(media);
+        });
+    }
 }
 
-if (typeof window.nodeRequire !== "undefined") {
+if (typeof window.electronAPI !== "undefined") {
     initialise = init;
 }

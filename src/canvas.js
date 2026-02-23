@@ -1,23 +1,38 @@
 "use strict";
 import webglDebug from "./lib/webgl-debug.js";
+import { PALCompositeFilter } from "./video-filters/pal-composite.js";
+import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
+
+const DISPLAY_MODE_FILTERS = {
+    pal: PALCompositeFilter,
+    rgb: PassthroughFilter,
+};
+
+export function getFilterForMode(mode) {
+    return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
+}
 
 export class Canvas {
+    isWebGl() {
+        return false;
+    }
+
     constructor(canvas) {
-        this.ctx = canvas.getContext("2d");
+        this.ctx = canvas.getContext("2d", { alpha: false });
         if (this.ctx === null) throw new Error("Unable to get a 2D context");
         this.ctx.fillStyle = "black";
         this.ctx.fillRect(0, 0, 1024, 625);
         this.backBuffer = window.document.createElement("canvas");
         this.backBuffer.width = 1024;
         this.backBuffer.height = 625;
-        this.backCtx = this.backBuffer.getContext("2d");
+        this.backCtx = this.backBuffer.getContext("2d", { alpha: false });
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
         this.canvasWidth = canvas.width;
         this.canvasHeight = canvas.height;
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
-    paint(minx, miny, maxx, maxy) {
+    paint(minx, miny, maxx, maxy, _frameCount) {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
@@ -28,7 +43,11 @@ export class Canvas {
 const width = 1024;
 const height = 1024;
 export class GlCanvas {
-    constructor(canvas) {
+    isWebGl() {
+        return true;
+    }
+
+    constructor(canvas, filterClass) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
         // rendering, which is much worse than simply using a 2D canvas for
         // rendering.
@@ -51,35 +70,8 @@ export class GlCanvas {
 
         checkedGl.depthMask(false);
 
-        function compileShader(type, src) {
-            const shader = checkedGl.createShader(type);
-            checkedGl.shaderSource(shader, src.join("\n"));
-            checkedGl.compileShader(shader);
-            return shader;
-        }
-
-        const vertexShader = compileShader(checkedGl.VERTEX_SHADER, [
-            "attribute vec2 pos;",
-            "attribute vec2 uvIn;",
-            "varying vec2 uv;",
-            "void main() {",
-            "  uv = uvIn;",
-            "  gl_Position = vec4(2.0 * pos - 1.0, 0.0, 1.0);",
-            "}",
-        ]);
-        const fragmentShader = compileShader(checkedGl.FRAGMENT_SHADER, [
-            "precision mediump float;",
-            "uniform sampler2D tex;",
-            "varying vec2 uv;",
-            "void main() {",
-            "  gl_FragColor = texture2D(tex, uv).rgba;",
-            "}",
-        ]);
-
-        const program = checkedGl.createProgram();
-        checkedGl.attachShader(program, fragmentShader);
-        checkedGl.attachShader(program, vertexShader);
-        checkedGl.linkProgram(program);
+        this.filter = new filterClass(checkedGl);
+        const program = this.filter.program;
         checkedGl.useProgram(program);
 
         this.fb8 = new Uint8Array(width * height * 4);
@@ -104,8 +96,6 @@ export class GlCanvas {
         );
         checkedGl.bindTexture(checkedGl.TEXTURE_2D, null);
 
-        checkedGl.uniform1i(checkedGl.getUniformLocation(program, "tex"), 0);
-
         const vertexPositionAttrLoc = checkedGl.getAttribLocation(program, "pos");
         checkedGl.enableVertexAttribArray(vertexPositionAttrLoc);
         const vertexPositionBuffer = checkedGl.createBuffer();
@@ -128,7 +118,7 @@ export class GlCanvas {
         console.log("GL Canvas set up");
     }
 
-    paint(minx, miny, maxx, maxy) {
+    paint(minx, miny, maxx, maxy, frameCount) {
         const gl = this.gl;
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
@@ -167,15 +157,21 @@ export class GlCanvas {
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
 
+        this.filter.setUniforms({ width, height, frameCount });
+
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 }
 
-export function bestCanvas(canvas) {
+export function bestCanvas(canvas, filterClass) {
     try {
-        return new GlCanvas(canvas);
+        return new GlCanvas(canvas, filterClass);
     } catch (e) {
         console.log("Unable to use OpenGL: " + e);
+        if (filterClass.requiresGl()) {
+            const config = filterClass.getDisplayConfig();
+            console.warn(`${config.name} requires WebGL. Falling back to standard 2D canvas.`);
+        }
     }
     return new Canvas(canvas);
 }

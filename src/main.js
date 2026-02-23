@@ -1,6 +1,7 @@
 import $ from "jquery";
 import _ from "underscore";
 import * as bootstrap from "bootstrap";
+import { version } from "../package.json";
 
 import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
@@ -27,6 +28,7 @@ import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
+import { getFilterForMode } from "./canvas.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -113,6 +115,7 @@ const paramTypes = {
     tape: ParamTypes.STRING,
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
+    displayMode: ParamTypes.STRING,
 };
 
 // Parse the query string with parameter types
@@ -126,7 +129,7 @@ const emuKeyHandlers = {};
 let cpuMultiplier = 1;
 let fastAsPossible = false;
 let fastTape = false;
-let noSeek = false;
+let noSeek;
 let audioFilterFreq = 7000;
 let audioFilterQ = 5;
 let stationId = 101;
@@ -219,42 +222,50 @@ const emulationConfig = {
     },
 };
 
-const config = new Config(function (changed) {
-    parsedQuery = _.extend(parsedQuery, changed);
-    if (
-        changed.model ||
-        changed.coProcessor !== undefined ||
-        changed.hasMusic5000 !== undefined ||
-        changed.hasTeletextAdaptor !== undefined ||
-        changed.hasEconet !== undefined
-    ) {
-        areYouSure(
-            "Changing model requires a restart of the emulator. Restart now?",
-            "Yes, restart now",
-            "No, thanks",
-            function () {
-                updateUrl();
-                window.location.reload();
-            },
-        );
-    }
-    if (changed.keyLayout) {
-        window.localStorage.keyLayout = changed.keyLayout;
-        emulationConfig.keyLayout = changed.keyLayout;
-        keyboard.setKeyLayout(changed.keyLayout);
-    }
-    // Handle ADC source changes
-    if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
-        // Update sources based on new settings (parsedQuery already updated with changed values)
-        updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
-
-        // Handle microphone initialization if needed
-        if (changed.microphoneChannel !== undefined) {
-            setupMicrophone().then(() => {});
+const config = new Config(
+    function onChange(changed) {
+        if (changed.displayMode) {
+            displayModeFilter = getFilterForMode(changed.displayMode);
+            setCrtPic(displayModeFilter);
+            swapCanvas(displayModeFilter);
+            // Trigger window resize to recalculate layout with new dimensions
+            $(window).trigger("resize");
         }
-    }
-    updateUrl();
-});
+    },
+    function onClose(changed) {
+        parsedQuery = _.extend(parsedQuery, changed);
+        if (
+            changed.model ||
+            changed.coProcessor !== undefined ||
+            changed.hasMusic5000 !== undefined ||
+            changed.hasTeletextAdaptor !== undefined ||
+            changed.hasEconet !== undefined
+        ) {
+            areYouSure(
+                "Changing model requires a restart of the emulator. Restart now?",
+                "Yes, restart now",
+                "No, thanks",
+                function () {
+                    updateUrl();
+                    window.location.reload();
+                },
+            );
+        }
+        if (changed.keyLayout) {
+            window.localStorage.keyLayout = changed.keyLayout;
+            emulationConfig.keyLayout = changed.keyLayout;
+            keyboard.setKeyLayout(changed.keyLayout);
+        }
+        if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
+            updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
+
+            if (changed.microphoneChannel !== undefined) {
+                setupMicrophone().then(() => {});
+            }
+        }
+        updateUrl();
+    },
+);
 
 // Perform mapping of legacy models to the new format
 config.mapLegacyModels(parsedQuery);
@@ -267,6 +278,8 @@ config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
+let displayMode = parsedQuery.displayMode || "rgb";
+config.setDisplayMode(displayMode);
 
 model = config.model;
 
@@ -274,7 +287,7 @@ function sbBind(div, url, onload) {
     const img = div.find("img");
     img.hide();
     if (!url) return;
-    img.attr("src", url).bind("load", function () {
+    img.attr("src", url).on("load", function () {
         onload(div, img);
         img.show();
     });
@@ -302,12 +315,49 @@ if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
 const $screen = $("#screen");
-const canvas = tryGl ? canvasLib.bestCanvas($screen[0]) : new canvasLib.Canvas($screen[0]);
+
+const $errorDialog = $("#error-dialog");
+const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
+
+function showError(context, error) {
+    $errorDialog.find(".context").text(context);
+    $errorDialog.find(".error").text(error);
+    $errorDialogModal.show();
+}
+
+function createCanvasForFilter(filterClass) {
+    const newCanvas = tryGl ? canvasLib.bestCanvas($screen[0], filterClass) : new canvasLib.Canvas($screen[0]);
+
+    if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
+        const config = filterClass.getDisplayConfig();
+        showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
+    }
+
+    return newCanvas;
+}
+
+let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
+function swapCanvas(newFilterClass) {
+    const newCanvas = createCanvasForFilter(newFilterClass);
+    video.fb32 = newCanvas.fb32;
+    video.paint_ext = function paint(minx, miny, maxx, maxy) {
+        frames++;
+        if (frames < frameSkip) return;
+        frames = 0;
+        newCanvas.paint(minx, miny, maxx, maxy, this.frameCount);
+    };
+    canvas = newCanvas;
+    displayModeFilter = newFilterClass;
+    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
+}
+
+let canvas = createCanvasForFilter(displayModeFilter);
+
 video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
     frames++;
     if (frames < frameSkip) return;
     frames = 0;
-    canvas.paint(minx, miny, maxx, maxy);
+    canvas.paint(minx, miny, maxx, maxy, this.frameCount);
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
@@ -441,6 +491,16 @@ $cub.on("mousemove mousedown mouseup", function (evt) {
     evt.preventDefault();
 });
 
+function setCrtPic(filterMode) {
+    const config = filterMode.getDisplayConfig();
+    const $monitorPic = $("#cub-monitor-pic");
+    $monitorPic.attr("src", config.image);
+    $monitorPic.attr("alt", config.imageAlt);
+    $monitorPic.attr("width", config.imageWidth);
+    $monitorPic.attr("height", config.imageHeight);
+}
+setCrtPic(displayModeFilter);
+
 $(window).blur(function () {
     keyboard.clearKeys();
 });
@@ -462,22 +522,24 @@ $debugPlay.click(() => {
 
 // To lower chance of data loss, only accept drop events in the drop
 // zone in the menu bar.
-document.ondragover = function (event) {
+document.addEventListener("dragover", function (event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
-};
-document.ondrop = function (event) {
+});
+document.addEventListener("drop", function (event) {
     event.preventDefault();
-};
+});
 
-window.onbeforeunload = function () {
+window.addEventListener("beforeunload", function (event) {
     if (running && processor.sysvia.hasAnyKeyDown()) {
-        return (
+        const message =
             "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window."
-        );
+            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+        event.preventDefault();
+        event.returnValue = message;
+        return message;
     }
-};
+});
 
 if (model.hasEconet) {
     econet = new Econet(stationId);
@@ -692,18 +754,25 @@ keyboard.registerKeyHandler(
 );
 
 // Setup key handlers
-document.onkeydown = (evt) => {
+document.addEventListener("keydown", (evt) => {
     audioHandler.tryResume().then(() => {});
     ensureMicrophoneRunning().then(() => {});
     keyboard.keyDown(evt);
-};
-document.onkeypress = (evt) => keyboard.keyPress(evt);
-document.onkeyup = (evt) => keyboard.keyUp(evt);
+});
+document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
+document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
 
 function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
     updateUrl();
+    config.emit("media-changed", { disc1: name });
+}
+
+function setTapeImage(name) {
+    parsedQuery.tape = name;
+    updateUrl();
+    config.emit("media-changed", { tape: name });
 }
 
 function sthClearList() {
@@ -742,8 +811,7 @@ async function discSthClick(item) {
 
 async function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
-    parsedQuery.tape = "sth:" + item;
-    updateUrl();
+    setTapeImage("sth:" + item);
 
     popupLoading("Loading " + item);
     try {
@@ -886,15 +954,6 @@ function updateUrl() {
     window.history.pushState(null, null, url);
 }
 
-const $errorDialog = $("#error-dialog");
-const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
-
-function showError(context, error) {
-    $errorDialog.find(".context").text(context);
-    $errorDialog.find(".error").text(error);
-    $errorDialogModal.show();
-}
-
 function splitImage(image) {
     const match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
     const schema = match[2] || match[1] || "";
@@ -974,7 +1033,8 @@ async function loadTapeImage(tapeImage) {
         }
 
         case "http":
-        case "https": {
+        case "https":
+        case "file": {
             const asUrl = `${schema}://${tapeImage}`;
             // url may end in query params etc, which can upset file handling
             tapeImage = new URL(asUrl).pathname;
@@ -1594,18 +1654,27 @@ function stop(debug) {
 (function () {
     const $cubMonitor = $("#cub-monitor");
     const $cubMonitorPic = $("#cub-monitor-pic");
-    const cubOrigHeight = $cubMonitorPic.attr("height");
-    const cubOrigWidth = $cubMonitorPic.attr("width");
-    const cubToScreenHeightRatio = $screen.attr("height") / cubOrigHeight;
-    const cubToScreenWidthRatio = $screen.attr("width") / cubOrigWidth;
-    const desiredAspectRatio = cubOrigWidth / cubOrigHeight;
-    const minWidth = cubOrigWidth / 4;
-    const minHeight = cubOrigHeight / 4;
     const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
     const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
 
     function resizeTv() {
-        let navbarHeight = $("#header-bar").outerHeight();
+        // Get current display config (may change when display mode switches)
+        const displayConfig = displayModeFilter.getDisplayConfig();
+
+        const imageOrigHeight = displayConfig.imageHeight;
+        const imageOrigWidth = displayConfig.imageWidth;
+        const canvasOrigLeft = displayConfig.canvasLeft;
+        const canvasOrigTop = displayConfig.canvasTop;
+        const visibleWidth = displayConfig.visibleWidth;
+        const visibleHeight = displayConfig.visibleHeight;
+
+        const canvasNativeWidth = $screen.attr("width");
+        const canvasNativeHeight = $screen.attr("height");
+        const desiredAspectRatio = imageOrigWidth / imageOrigHeight;
+        const minWidth = imageOrigWidth / 4;
+        const minHeight = imageOrigHeight / 4;
+
+        let navbarHeight = $("#header-bar").outerHeight() || 0;
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
         if (width / height <= desiredAspectRatio) {
@@ -1613,12 +1682,31 @@ function stop(debug) {
         } else {
             width = height * desiredAspectRatio;
         }
+
+        const containerScale = width / imageOrigWidth;
+        const scaledVisibleWidth = visibleWidth * containerScale;
+        const scaledVisibleHeight = visibleHeight * containerScale;
+
+        const canvasAspect = canvasNativeWidth / canvasNativeHeight;
+        const visibleAspect = scaledVisibleWidth / scaledVisibleHeight;
+
+        let finalCanvasWidth, finalCanvasHeight;
+        if (canvasAspect > visibleAspect) {
+            finalCanvasWidth = scaledVisibleWidth;
+            finalCanvasHeight = scaledVisibleWidth / canvasAspect;
+        } else {
+            finalCanvasHeight = scaledVisibleHeight;
+            finalCanvasWidth = scaledVisibleHeight * canvasAspect;
+        }
+
         $cubMonitor.height(height).width(width);
         $cubMonitorPic.height(height).width(width);
-        $screen.height(height * cubToScreenHeightRatio).width(width * cubToScreenWidthRatio);
+        $screen.width(finalCanvasWidth).height(finalCanvasHeight);
+        $screen.css("left", canvasOrigLeft * containerScale + "px");
+        $screen.css("top", canvasOrigTop * containerScale + "px");
     }
 
-    window.onresize = resizeTv;
+    window.addEventListener("resize", resizeTv);
     window.setTimeout(resizeTv, 1);
     window.setTimeout(resizeTv, 500);
 })();
@@ -1669,4 +1757,32 @@ window.m7dump = function () {
 };
 
 // Hooks for electron.
-electron({ loadDiscImage, processor });
+electron({
+    loadDiscImage,
+    loadTapeImage,
+    processor,
+    config,
+    modals: {
+        show: (modalId, sthType) => {
+            if (modalId === "sth" && sthType) {
+                if (sthType === "discs") discSth.populate();
+                else if (sthType === "tapes") tapeSth.populate();
+            }
+            const modalEl = document.getElementById(modalId);
+            if (modalEl) {
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        },
+    },
+    actions: {
+        "soft-reset": () => processor.reset(false),
+        "hard-reset": () => processor.reset(true),
+    },
+});
+
+// Display version in About dialog
+const versionElement = document.getElementById("jsbeeb-version");
+if (versionElement) {
+    versionElement.textContent = `Version ${version}`;
+}

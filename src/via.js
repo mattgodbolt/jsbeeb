@@ -620,7 +620,7 @@ export class SysVia extends Via {
         this.capsLockLight = !(this.IC32 & 0x40);
         this.shiftLockLight = !(this.IC32 & 0x80);
 
-        this.video.setScreenAdd((this.IC32 & 16 ? 2 : 0) | (this.IC32 & 32 ? 1 : 0));
+        this.video.setScreenHwScroll((this.IC32 >> 4) & 3);
 
         if (this.isMaster) this.cmos.writeControl(portbpins, this.portapins, this.IC32);
 

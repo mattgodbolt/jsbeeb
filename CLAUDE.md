@@ -68,7 +68,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Minimise special case handling - prefer explicit over implicit behaviour
   - Consider adding tests first before implementing features
 - **When simplifying existing code**
-
   - Prefer helper functions for repetitive operations (like the `appendParam` function)
   - Remove unnecessary type checking where types are expected to be correct
   - Replace complex conditionals with more readable alternatives when possible
@@ -81,7 +80,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Ensure simplifications don't break existing behavior or assumptions
 
 - **Constants and Magic Numbers**:
-
   - Local un-exported properties should be used for shared constants
   - Local constants should be used for temporary values
   - Always use named constants instead of magic numbers in code
@@ -98,3 +96,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Git Workflow
 
 - When creating branches with Claude, use the `claude/` prefix (e.g., `claude/fix-esm-import-error`)
+
+### Conventional Commits
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/) for automated versioning and changelog generation via release-please.
+
+**Commit types for user-facing changes** (appear in changelog, affect version):
+
+- `fix:` - Bug fixes (bumps patch version: 0.0.7 → 0.0.8)
+- `feat:` - New features (bumps minor version: 0.0.7 → 0.1.0)
+- `fix!:` or `feat!:` - Breaking changes (bumps major version: 0.0.7 → 1.0.0)
+
+**Commit types for internal changes** (do NOT appear in changelog, do NOT affect version):
+
+- `chore:` - Maintenance tasks, tooling updates, dependency updates
+- `ci:` - CI/CD configuration changes (GitHub Actions, etc.)
+- `build:` - Build system changes (webpack, vite, electron-builder config)
+- `docs:` - Documentation-only changes
+- `style:` - Code style changes (formatting, whitespace)
+- `refactor:` - Code refactoring without behavior change
+- `test:` - Test additions or modifications
+
+**Guidelines**:
+
+- Use `fix:` and `feat:` ONLY for changes that affect end users
+- Use `chore:`, `ci:`, or `build:` for internal tooling/infrastructure changes
+- Example: A release-please workflow fix should be `ci:` or `chore:`, not `fix:`
+- Breaking changes must include `BREAKING CHANGE:` in the commit body or use `!` (e.g., `feat!:`)
+
+**Examples**:
+
+```
+fix: enable window scaling in Electron app
+feat: add joystick support for gamepads
+chore: update dependencies to latest versions
+ci: fix release-please workflow configuration
+build: configure electron-builder icon settings
+docs: update README with installation instructions
+```

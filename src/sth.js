@@ -23,7 +23,9 @@ async function _fetchAndParseCatalog(url) {
 
 export class StairwayToHell {
     constructor(onStart, onCat, onError, tape) {
-        this._baseUrl = `${document.location.protocol}//${sthArchive}/${tape ? "tape" : "disk"}images/`;
+        // Use https explicitly - document.location.protocol is 'file:' in Electron
+        const protocol = document.location.protocol === "file:" ? "https:" : document.location.protocol;
+        this._baseUrl = `${protocol}//${sthArchive}/${tape ? "tape" : "disk"}images/`;
         this._catalog = [];
         this._onStart = onStart;
         this._onCat = onCat;

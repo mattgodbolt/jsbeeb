@@ -206,6 +206,7 @@
     <div>
       <div id="outer">
         <div id="cub-monitor">
+          <!-- Image is dynamically swapped by config.js based on filter.displayImage -->
           <img
             id="cub-monitor-pic"
             width="896"
@@ -403,6 +404,7 @@
             </div>
           </div>
           <div class="modal-footer">
+            <span class="text-muted me-auto" id="jsbeeb-version"></span>
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
@@ -827,6 +829,35 @@
                     <a href="#" class="dropdown-item" data-target="gaming">Gaming: handy for games like Zalaga</a>
                   </li>
                 </ul>
+              </div>
+            </div>
+            <div id="displaySettings" style="margin-top: 15px">
+              <div class="row align-items-center">
+                <div class="col-sm-6">
+                  <label for="displayModeDropdown" class="col-form-label">Display mode:</label>
+                </div>
+                <div class="col-sm-6 dropdown">
+                  <button
+                    type="button"
+                    class="btn btn-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown"
+                    id="displayModeDropdown"
+                  >
+                    <span class="display-mode-text">CUB Monitor</span>
+                  </button>
+                  <ul
+                    class="dropdown-menu dropdown-menu-dark display-mode-menu"
+                    role="menu"
+                    aria-labelledby="displayModeDropdown"
+                  >
+                    <li>
+                      <a href="#" class="dropdown-item display-mode-option" data-mode="rgb">RGB Monitor</a>
+                    </li>
+                    <li>
+                      <a href="#" class="dropdown-item display-mode-option" data-mode="pal">PAL TV</a>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
             <div class="align-items-center">

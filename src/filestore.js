@@ -330,10 +330,7 @@ export class Filestore {
             this.pollCount = 0;
 
             // Decode and execute next instruction
-            let op,
-                i,
-                i2,
-                j = 0;
+            let op, i, i2, j;
 
             this.XPC = this.PC;
             if (this.PC >= 0xf800)

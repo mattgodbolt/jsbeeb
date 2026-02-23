@@ -293,6 +293,8 @@ export class FakeSoundChip {
 
     enable() {}
 
+    catchUp() {}
+
     mute() {}
 
     unmute() {}

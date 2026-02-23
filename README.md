@@ -11,6 +11,7 @@ and a 128K BBC Master, along with a number of different peripherals.
 
 - [Keyboard Mappings](#keyboard-mappings)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
+- [Running as a Desktop Application](#running-as-a-desktop-application)
 - [URL Parameters](#url-parameters)
 - [Patches](#patches)
 - [Loading BASIC Files from GitHub Gists](#loading-basic-files-from-github-gists)
@@ -66,6 +67,63 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 jsbeeb uses Node.js and vite to afford simple and standard web development tooling and third-party library access
 without lots of painful copy/paste or wheel-reinventing, as well as the ability to better run tests, and "pack" up the
 site to make it smaller and faster to load when it's deployed to [https://bbc.xania.org](https://bbc.xania.org).
+
+## Running as a Desktop Application
+
+jsbeeb can also run as a standalone desktop application using Electron:
+
+### Running in Development
+
+```sh
+npm run electron
+```
+
+This automatically builds the latest code before launching Electron.
+
+### Building Distributable Packages
+
+To build packages for Linux distribution:
+
+```sh
+npm run build
+npm run electron:build
+```
+
+This creates two package formats in `out/dist/`:
+
+- **Debian/Ubuntu**: `.deb` package
+- **Fedora/RHEL**: `.rpm` package
+
+**Why no Snap packages?** electron-builder's snap support uses the outdated `gnome-3-28-1804` platform (Ubuntu 18.04), which causes GPU driver incompatibilities on modern systems, resulting in MESA loader failures and segfaults. While we were able to work around the initial Wayland issues (electron-builder sets `DISABLE_WAYLAND=1` by default, fixed with `allowNativeWayland: true`), the GPU problems proved insurmountable. The snap builder hasn't been updated to support modern bases like `core22` or `core24`. The `.deb` package works perfectly on all Debian-based systems.
+
+**Note for Ubuntu/Debian users:** If you encounter RPM build errors, you may need to use the system FPM package manager instead of electron-builder's bundled version. First, install the required dependencies:
+
+```sh
+sudo apt-get install ruby rubygems build-essential
+sudo gem install fpm
+```
+
+Then build with:
+
+```sh
+USE_SYSTEM_FPM=true npm run electron:build
+```
+
+### Installing the Packaged Application
+
+**Debian/Ubuntu:**
+
+```sh
+sudo apt install ./out/dist/jsbeeb_1.0.1_amd64.deb
+```
+
+**Fedora/RHEL/CentOS:**
+
+```sh
+sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
+```
+
+**Note:** Electron support was re-enabled in November 2024 after being disabled during the ESM migration in 2021. It now works with Electron 28+ which added full ES Modules support.
 
 ## URL Parameters
 
