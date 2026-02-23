@@ -201,6 +201,30 @@ export class MachineSession {
         });
     }
 
+    /**
+     * Press a key (by browser keyCode).
+     * Use utils.keyCodes for named keys, or ASCII charCode for letters/digits.
+     */
+    keyDown(keyCode, shiftDown = false) {
+        this._machine.processor.sysvia.keyDown(keyCode, shiftDown);
+    }
+
+    /**
+     * Release a key (by browser keyCode).
+     */
+    keyUp(keyCode) {
+        this._machine.processor.sysvia.keyUp(keyCode);
+    }
+
+    /**
+     * Reset the machine.
+     * @param {boolean} [hard=true] - true for power-on reset, false for soft reset
+     */
+    reset(hard = true) {
+        this._machine.processor.reset(hard);
+        this._pendingOutput = [];
+    }
+
     /** Tokenise BBC BASIC source and write it into PAGE */
     async loadBasic(source) {
         await this._machine.loadBasic(source);
