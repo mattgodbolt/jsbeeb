@@ -40,33 +40,140 @@ export class MachineSession {
 
         // Accumulated VDU text output — drained by callers
         this._pendingOutput = [];
-        this._captureInstalled = false;
     }
 
     /** Load ROMs and hardware — call once before anything else */
     async initialise() {
         await this._machine.initialise();
+        this._installCaptureHook();
     }
 
     /**
-     * Boot the machine (run until the BASIC prompt), then install the VDU
-     * text capture hook.  Returns the boot-screen text.
+     * Boot the machine (run until the BASIC prompt).
+     * Returns captured boot-screen text (the OS banner etc.).
      */
     async boot(timeoutSecs = 30) {
         await this._machine.runUntilInput(timeoutSecs);
-        this._installCaptureHook();
         return this.drainOutput();
     }
 
     /**
-     * Install the VDU character-output hook.  Safe to call only after the OS
-     * has booted (WRCHV at 0x20E must be valid).
+     * Install the VDU character-output capture hook.
+     *
+     * Rather than using TestMachine.captureText() — which reads WRCHV from
+     * 0x20E once at installation time — we read it dynamically on every
+     * instruction.  This means:
+     *
+     *   - We can install it before the OS has run (WRCHV == 0 → no false
+     *     fires), so we capture the boot banner as well as program output.
+     *   - Programs that install their own VDU handler (changing WRCHV) are
+     *     handled transparently.
+     *
+     * The VDU state machine below is a duplicate of the one in
+     * TestMachine.captureText() (tests/test-machine.js).  If that code
+     * changes, update this too — or better, extract a shared helper.
      */
     _installCaptureHook() {
-        if (this._captureInstalled) return;
-        this._captureInstalled = true;
-        this._machine.captureText((elem) => {
-            this._pendingOutput.push({ ...elem });
+        const attributes = { x: 0, y: 0, text: "", foreground: 7, background: 0, mode: 7 };
+        let currentText = "";
+        let params = [];
+        let nextN = 0;
+        let vduProc = null;
+
+        const onElement = (elem) => this._pendingOutput.push({ ...elem });
+
+        function flush() {
+            if (currentText.length) {
+                attributes.text = currentText;
+                onElement({ ...attributes });
+                attributes.x += currentText.length;
+            }
+            currentText = "";
+        }
+
+        function onChar(c) {
+            if (nextN) {
+                params.push(c);
+                if (--nextN === 0) {
+                    if (vduProc) vduProc(params);
+                    params = [];
+                    vduProc = null;
+                }
+                return;
+            }
+            switch (c) {
+                case 1: // Next char to printer
+                    nextN = 1;
+                    break;
+                case 10: // LF
+                    flush();
+                    attributes.y++;
+                    break;
+                case 12: // CLS
+                    flush();
+                    attributes.x = 0;
+                    attributes.y = 0;
+                    break;
+                case 13: // CR
+                    flush();
+                    attributes.x = 0;
+                    break;
+                case 17: // COLOUR
+                    nextN = 1;
+                    vduProc = (p) => {
+                        if (p[0] & 0x80) attributes.background = p[0] & 0xf;
+                        else attributes.foreground = p[0] & 0xf;
+                    };
+                    break;
+                case 18: // GCOL
+                    nextN = 2;
+                    break;
+                case 19: // logical colour
+                    nextN = 5;
+                    break;
+                case 22: // MODE
+                    nextN = 1;
+                    vduProc = (p) => {
+                        attributes.mode = p[0];
+                        attributes.x = 0;
+                        attributes.y = 0;
+                    };
+                    break;
+                case 25: // PLOT
+                    nextN = 5;
+                    break;
+                case 28: // text window
+                    nextN = 4;
+                    break;
+                case 29: // origin
+                    nextN = 4;
+                    break;
+                case 31: // TAB(x,y)
+                    nextN = 2;
+                    vduProc = (p) => {
+                        flush();
+                        attributes.x = p[0];
+                        attributes.y = p[1];
+                    };
+                    break;
+                default:
+                    if (c >= 32 && c < 0x7f) {
+                        currentText += String.fromCharCode(c);
+                    } else {
+                        flush();
+                    }
+                    break;
+            }
+        }
+
+        this._machine.processor.debugInstruction.add((addr) => {
+            // Read WRCHV dynamically: handles pre-boot (wrchv==0 → skip) and
+            // programs that install a custom VDU driver mid-run.
+            const wrchv = this._machine.readword(0x20e);
+            if (wrchv > 0 && addr === wrchv) {
+                onChar(this._machine.processor.a);
+            }
+            return false;
         });
     }
 
