@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.0...v1.3.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* decrement SP by 3 during reset sequence ([#547](https://github.com/mattgodbolt/jsbeeb/issues/547)) ([#549](https://github.com/mattgodbolt/jsbeeb/issues/549)) ([a08f9ff](https://github.com/mattgodbolt/jsbeeb/commit/a08f9ff9c0513d84792138b1a2c6e5d01912de07))
+
 ## [1.3.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.2.0...v1.3.0) (2025-12-01)
 
 
