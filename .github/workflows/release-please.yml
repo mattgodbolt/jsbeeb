@@ -9,6 +9,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  id-token: write # for OIDC
 
 jobs:
   release-please:
@@ -73,3 +74,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ needs.release-please.outputs.tag_name }} out/dist/*.exe
+  npm-publish:
+    needs: release-please
+    runs-on: ubuntu-24.04
+    if: ${{ needs.release-please.outputs.release_created }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+      - run: npm ci
+      - run: npm build
+      - run: npm publish
