@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.3...v1.4.0) (2026-02-23)
+
+
+### Features
+
+* add keyDown, keyUp, and reset methods to MachineSession ([fea06b8](https://github.com/mattgodbolt/jsbeeb/commit/fea06b8f87a0fc8ad822972635d008ae6b329a3b))
+
 ## [1.3.3](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.2...v1.3.3) (2026-02-23)
 
 
