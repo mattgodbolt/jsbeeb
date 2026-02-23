@@ -15,6 +15,7 @@
   "type": "module",
   "main": "./src/app/app.js",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@popperjs/core": "^2.11.8",
     "argparse": "^2.0.1",
     "bootstrap": "^5.3.8",
@@ -92,7 +93,8 @@
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
-    "electron:build": "electron-builder"
+    "electron:build": "electron-builder",
+    "mcp": "node mcp/server.js"
   },
   "lint-staged": {
     "*.js": [
