@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.2...v1.3.3) (2026-02-23)
+
+
+### Bug Fixes
+
+* chdir to public/ so ROM loader finds public/roms/ when installed from npm ([#560](https://github.com/mattgodbolt/jsbeeb/issues/560)) ([593b819](https://github.com/mattgodbolt/jsbeeb/commit/593b81914d8969d9f699812c66fda4c40e5b32b8))
+
 ## [1.3.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.1...v1.3.2) (2026-02-23)
 
 
