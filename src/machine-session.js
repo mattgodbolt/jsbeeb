@@ -6,7 +6,15 @@
  */
 
 import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import path from "path";
 import { TestMachine } from "../tests/test-machine.js";
+
+// Resolve the jsbeeb package root at module load time using our own location
+// (src/machine-session.js → go up one level).  We chdir here during
+// initialise() so jsbeeb's ROM loader ("roms/os.rom" etc.) always resolves
+// correctly, regardless of where the calling process was started from.
+const _jsbeebRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 import * as fdc from "./fdc.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
@@ -51,6 +59,10 @@ export class MachineSession {
 
     /** Load ROMs and hardware — call once before anything else */
     async initialise() {
+        // jsbeeb's ROM loader uses paths relative to cwd ("roms/os.rom" etc.).
+        // Chdir to the package root so it works regardless of where the
+        // calling process was launched from.
+        process.chdir(_jsbeebRoot);
         await this._machine.initialise();
         this._installCaptureHook();
     }
