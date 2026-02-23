@@ -14,6 +14,15 @@
   },
   "type": "module",
   "main": "./src/app/app.js",
+  "exports": {
+    ".": "./src/app/app.js",
+    "./src/*": "./src/*",
+    "./tests/test-machine.js": "./tests/test-machine.js"
+  },
+  "files": [
+    "src/",
+    "tests/test-machine.js"
+  ],
   "dependencies": {
     "@popperjs/core": "^2.11.8",
     "argparse": "^2.0.1",
