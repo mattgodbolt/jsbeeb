@@ -840,6 +840,12 @@ function loadDataHttp(url) {
     });
 }
 
+let _nodeBasePath = null;
+
+export function setNodeBasePath(basePath) {
+    _nodeBasePath = basePath;
+}
+
 async function loadDataNode(url) {
     if (typeof readbuffer !== "undefined") {
         // d8 shell
@@ -852,6 +858,12 @@ async function loadDataNode(url) {
     } else {
         // Node
         const fs = await import("fs");
+        const nodePath = await import("path");
+        if (_nodeBasePath) {
+            const publicPath = nodePath.join(_nodeBasePath, "public", url);
+            if (fs.existsSync(publicPath)) return fs.readFileSync(publicPath);
+            return fs.readFileSync(nodePath.join(_nodeBasePath, url));
+        }
         if (url[0] === "/") url = "." + url;
         if (fs.existsSync("public/" + url)) return fs.readFileSync("public/" + url);
         return fs.readFileSync(url);
