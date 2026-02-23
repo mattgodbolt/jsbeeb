@@ -119,9 +119,12 @@ export class TestMachine {
 
         const typeChar = (ch) => {
             let shift = false;
+            // Map printable ASCII characters to BBC Micro key codes (UK layout).
+            // Characters not listed here fall through to the default case which
+            // uses toUpperCase().charCodeAt(0) — valid for A–Z and 0–9 only.
             switch (ch) {
                 case '"':
-                    ch = 50;
+                    ch = utils.keyCodes.K2;
                     shift = true;
                     break;
                 case "*":
@@ -148,7 +151,85 @@ export class TestMachine {
                     ch = utils.keyCodes.K6;
                     shift = true;
                     break;
+                case " ":
+                    ch = utils.keyCodes.SPACE;
+                    break;
+                case "-":
+                    ch = utils.keyCodes.MINUS;
+                    break;
+                case "=":
+                    ch = utils.keyCodes.MINUS;
+                    shift = true;
+                    break;
+                case "+":
+                    ch = utils.keyCodes.SEMICOLON;
+                    shift = true;
+                    break;
+                case "^":
+                    ch = utils.keyCodes.EQUALS;
+                    break;
+                case "~":
+                    ch = utils.keyCodes.EQUALS;
+                    shift = true;
+                    break;
+                case "[":
+                    ch = utils.keyCodes.LEFT_SQUARE_BRACKET;
+                    break;
+                case "]":
+                    ch = utils.keyCodes.RIGHT_SQUARE_BRACKET;
+                    break;
+                case "{":
+                    ch = utils.keyCodes.LEFT_SQUARE_BRACKET;
+                    shift = true;
+                    break;
+                case "}":
+                    ch = utils.keyCodes.HASH;
+                    shift = true;
+                    break;
+                case "\\":
+                    ch = utils.keyCodes.BACKSLASH;
+                    break;
+                case "/":
+                    ch = utils.keyCodes.SLASH;
+                    break;
+                case "?":
+                    ch = utils.keyCodes.SLASH;
+                    shift = true;
+                    break;
+                case "<":
+                    ch = utils.keyCodes.COMMA;
+                    shift = true;
+                    break;
+                case ">":
+                    ch = utils.keyCodes.PERIOD;
+                    shift = true;
+                    break;
+                case "(":
+                    ch = utils.keyCodes.K8;
+                    shift = true;
+                    break;
+                case ")":
+                    ch = utils.keyCodes.K9;
+                    shift = true;
+                    break;
+                case "@":
+                    ch = utils.keyCodes.BACK_QUOTE;
+                    break;
+                case "#":
+                    ch = utils.keyCodes.K3;
+                    shift = true;
+                    break;
+                case "$":
+                    ch = utils.keyCodes.K4;
+                    shift = true;
+                    break;
+                case "%":
+                    ch = utils.keyCodes.K5;
+                    shift = true;
+                    break;
                 default:
+                    // A-Z and 0-9: ASCII value == DOM keyCode — works as-is.
+                    // Anything else (e.g. '_', '£', '`') is not yet mapped.
                     ch = ch.toUpperCase().charCodeAt(0);
                     break;
             }
