@@ -5,6 +5,7 @@ import { FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
 import { findModel, TEST_6502, TEST_65C02, TEST_65C12 } from "./models.js";
 import { FakeDdNoise } from "./ddnoise.js";
+import { FakeRelayNoise } from "./relaynoise.js";
 import { Cpu6502 } from "./6502.js";
 import { Cmos } from "./cmos.js";
 import { FakeMusic5000 } from "./music5000.js";
@@ -20,7 +21,16 @@ export function fake6502(model, opts) {
     const video = opts.video || fakeVideo;
     model = model || TEST_6502;
     if (opts.tube) model.tube = findModel("Tube65c02");
-    return new Cpu6502(model, dbgr, video, soundChip, new FakeDdNoise(), new FakeMusic5000(), new Cmos());
+    return new Cpu6502(
+        model,
+        dbgr,
+        video,
+        soundChip,
+        new FakeDdNoise(),
+        new FakeRelayNoise(),
+        new FakeMusic5000(),
+        new Cmos(),
+    );
 }
 
 export function fake65C02() {

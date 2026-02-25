@@ -5,10 +5,11 @@
 // http://www.classiccmp.org/dunfield/r/6850.pdf
 
 export class Acia {
-    constructor(cpu, toneGen, scheduler, rs423Handler) {
+    constructor(cpu, toneGen, scheduler, rs423Handler, relayNoise) {
         this.cpu = cpu;
         this.toneGen = toneGen;
         this.rs423Handler = rs423Handler;
+        this.relayNoise = relayNoise;
 
         this.sr = 0x00;
         this.cr = 0x00;
@@ -58,10 +59,16 @@ export class Acia {
     setMotor(on) {
         if (on && !this.motorOn) {
             this.runTape();
+            if (this.relayNoise) {
+                this.relayNoise.motorOn();
+            }
         } else if (!on && this.motorOn) {
             this.toneGen.mute();
             this.runTapeTask.cancel();
             this.setTapeCarrier(false);
+            if (this.relayNoise) {
+                this.relayNoise.motorOff();
+            }
         }
         this.motorOn = on;
     }
