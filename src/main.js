@@ -761,10 +761,13 @@ keyboard.registerKeyHandler(
         else if (bit === 1) processor.sysvia.setJoystickButton(1, down);
     };
 
-    const noMod = { alt: false, ctrl: false };
+    // Alt+1–8 and Alt+F1–F8 trigger the switches.  Using Alt means the underlying
+    // key is never forwarded to the BBC Micro (keyboard.js bails out early when a
+    // handler fires), so typing numbers or using function keys works normally.
+    const altMod = { alt: true, ctrl: false };
     for (let i = 0; i < 8; i++) {
-        keyboard.registerKeyHandler(utils.keyCodes.K1 + i, handleSwitch(i), noMod);
-        keyboard.registerKeyHandler(utils.keyCodes.F1 + i, handleSwitch(i), noMod);
+        keyboard.registerKeyHandler(utils.keyCodes.K1 + i, handleSwitch(i), altMod);
+        keyboard.registerKeyHandler(utils.keyCodes.F1 + i, handleSwitch(i), altMod);
     }
 }
 

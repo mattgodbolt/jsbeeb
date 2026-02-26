@@ -214,14 +214,17 @@ export class Keyboard extends EventEmitter {
         const isSpecialHandled = this._handleSpecialKeys(code);
         if (isSpecialHandled) return;
 
-        // Always pass the key to the BBC Micro (unless it was a special key)
-        this.processor.sysvia.keyDown(code, evt.shiftKey);
-
-        // Check for registered handlers
+        // Check for registered handlers first; if one fires, don't also send to the BBC.
+        // This lets Alt+key and Ctrl+key handlers cleanly own their keys without the
+        // underlying key leaking through to the emulated machine.
         const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
         if (handler) {
             handler.handler(true, code);
+            return;
         }
+
+        // No handler claimed the key — pass it to the BBC Micro.
+        this.processor.sysvia.keyDown(code, evt.shiftKey);
     }
 
     /**
