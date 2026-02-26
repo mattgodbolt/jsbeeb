@@ -26,6 +26,7 @@ import { toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
+import { KeyboardSwitchSource } from "./keyboard-switch-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
@@ -125,7 +126,6 @@ let keyLayout = window.localStorage.keyLayout || "physical";
 
 const BBC = utils.BBC;
 const keyCodes = utils.keyCodes;
-const emuKeyHandlers = {};
 let cpuMultiplier = 1;
 let fastAsPossible = false;
 let fastTape = false;
@@ -181,28 +181,16 @@ const printerPort = {
     },
 };
 
-let userPort = null;
+// Accessibility switch state — bits 0-7 correspond to switches 1-8.
+// Active low: 0xff = no switches pressed; clearing a bit = that switch is pressed.
+let switchState = 0xff;
 
-const keyswitch = true;
-if (keyswitch) {
-    let switchState = 0xff;
-
-    const switchKey = function (down, code) {
-        const bit = 1 << (code - utils.keyCodes.K1);
-        if (down) switchState &= 0xff ^ bit;
-        else switchState |= bit;
-    };
-
-    for (let idx = utils.keyCodes.K1; idx <= utils.keyCodes.K8; ++idx) {
-        emuKeyHandlers[idx] = switchKey;
-    }
-    userPort = {
-        write: function () {},
-        read: function () {
-            return switchState;
-        },
-    };
-}
+const userPort = {
+    write() {},
+    read() {
+        return switchState;
+    },
+};
 
 const emulationConfig = {
     keyLayout: keyLayout,
@@ -592,6 +580,7 @@ processor = new Cpu6502(
 
 // Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
+const keyboardSwitchSource = new KeyboardSwitchSource(gamepadSource);
 
 // Create MicrophoneInput but don't enable by default
 const microphoneInput = new MicrophoneInput();
@@ -605,9 +594,10 @@ const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 
 // Helper to manage ADC source configuration
 function updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
-    // Default all channels to gamepad
+    // Default all channels to the keyboard switch source (which wraps the
+    // gamepad source and passes through to it when no switch is pressed).
     for (let ch = 0; ch < 4; ch++) {
-        processor.adconverter.setChannelSource(ch, gamepadSource);
+        processor.adconverter.setChannelSource(ch, keyboardSwitchSource);
     }
 
     // Apply mouse joystick if enabled (takes priority on channels 0 & 1)
@@ -752,6 +742,31 @@ keyboard.registerKeyHandler(
     },
     { alt: false, ctrl: true },
 );
+
+// Register accessibility switch key handlers.
+// Keys 1-8 (K1-K8) and function keys F1-F8 both map to user port bits 0-7
+// (active low: pressing the key clears the corresponding bit in &FE60).
+// F1/F2 and K1/K2 additionally drive the joystick fire buttons on the System
+// VIA (PB4/PB5), so ADVAL(-1) and ADVAL(-2) reflect the switch state.
+// ADC channels 0-3 are deflected to 0x0000 while a switch is pressed, so
+// ADVAL(1)-ADVAL(4) also respond for games that poll the analogue port.
+{
+    const handleSwitch = (bit) => (down) => {
+        if (down) switchState &= ~(1 << bit);
+        else switchState |= 1 << bit;
+
+        if (bit < 4) keyboardSwitchSource.setSwitch(bit, down);
+
+        if (bit === 0) processor.sysvia.setJoystickButton(0, down);
+        else if (bit === 1) processor.sysvia.setJoystickButton(1, down);
+    };
+
+    const noMod = { alt: false, ctrl: false };
+    for (let i = 0; i < 8; i++) {
+        keyboard.registerKeyHandler(utils.keyCodes.K1 + i, handleSwitch(i), noMod);
+        keyboard.registerKeyHandler(utils.keyCodes.F1 + i, handleSwitch(i), noMod);
+    }
+}
 
 // Setup key handlers
 document.addEventListener("keydown", (evt) => {
