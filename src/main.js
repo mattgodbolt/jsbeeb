@@ -26,7 +26,6 @@ import { toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
-import { KeyboardSwitchSource } from "./keyboard-switch-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
@@ -580,8 +579,6 @@ processor = new Cpu6502(
 
 // Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
-const keyboardSwitchSource = new KeyboardSwitchSource(gamepadSource);
-
 // Create MicrophoneInput but don't enable by default
 const microphoneInput = new MicrophoneInput();
 microphoneInput.setErrorCallback((message) => {
@@ -594,10 +591,9 @@ const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 
 // Helper to manage ADC source configuration
 function updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
-    // Default all channels to the keyboard switch source (which wraps the
-    // gamepad source and passes through to it when no switch is pressed).
+    // Default all channels to the gamepad source.
     for (let ch = 0; ch < 4; ch++) {
-        processor.adconverter.setChannelSource(ch, keyboardSwitchSource);
+        processor.adconverter.setChannelSource(ch, gamepadSource);
     }
 
     // Apply mouse joystick if enabled (takes priority on channels 0 & 1)
@@ -744,21 +740,17 @@ keyboard.registerKeyHandler(
 );
 
 // Register accessibility switch key handlers.
-// Keys 1-8 (K1-K8) and function keys F1-F8 both map to user port bits 0-7
+// Keys 1–8 (K1–K8) and function keys F1–F8 both map to user port bits 0–7
 // (active low: pressing the key clears the corresponding bit in &FE60).
-// F1/F2 and K1/K2 additionally drive the joystick fire buttons on the System
-// VIA (PB4/PB5), so ADVAL(-1) and ADVAL(-2) reflect the switch state.
-// ADC channels 0-3 are deflected to 0x0000 while a switch is pressed, so
-// ADVAL(1)-ADVAL(4) also respond for games that poll the analogue port.
+//
+// On real hardware, the Brilliant Computing switch interface box and special-ed
+// joystick connect to the User Port only — they do not touch the analogue port
+// or the System VIA fire buttons (PB4/PB5), which belong to the standard
+// analogue joystick connector.  So we only update switchState here.
 {
     const handleSwitch = (bit) => (down) => {
         if (down) switchState &= ~(1 << bit);
         else switchState |= 1 << bit;
-
-        if (bit < 4) keyboardSwitchSource.setSwitch(bit, down);
-
-        if (bit === 0) processor.sysvia.setJoystickButton(0, down);
-        else if (bit === 1) processor.sysvia.setJoystickButton(1, down);
     };
 
     // Alt+1–8 and Alt+F1–F8 trigger the switches.  Using Alt means the underlying
