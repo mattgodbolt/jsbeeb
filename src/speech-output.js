@@ -23,8 +23,13 @@
  * Note: LF (0x0A) is NOT a flush trigger on the real TNT — it is null data.
  * Only CR (0x0D) flushes the buffer.
  */
-export const MAX_BUFFER = 128;
-const TIMER_MS = 3500;
+// From the TNT Operator's Manual: "The input buffer can hold more than 750
+// characters".  The output queue (phonemes waiting for the SC-01) is 128
+// entries, which is a different thing entirely.
+export const MAX_BUFFER = 750;
+
+// The manual says "approximately 4 seconds" for the inactivity timer.
+const TIMER_MS = 4000;
 
 export class SpeechOutput {
     constructor() {
