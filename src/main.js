@@ -211,6 +211,11 @@ const emulationConfig = {
     },
 };
 
+// Speech output: reads from localStorage on startup; can be toggled at runtime.
+// Must be created before Config so the onClose callback and setSpeechOutput() call can reference it.
+const speechOutput = new SpeechOutput();
+speechOutput.enabled = !!(parsedQuery.speechOutput ?? window.localStorage.speechOutput === "true");
+
 const config = new Config(
     function onChange(changed) {
         if (changed.displayMode) {
@@ -595,10 +600,6 @@ microphoneInput.setErrorCallback((message) => {
 // Create MouseJoystickSource but don't enable by default
 const screenCanvas = document.getElementById("screen");
 const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
-
-// Speech output: reads from localStorage on startup; can be toggled at runtime.
-const speechOutput = new SpeechOutput();
-speechOutput.enabled = !!(parsedQuery.speechOutput ?? window.localStorage.speechOutput === "true");
 
 /**
  * Attach an RS-423 composite handler to the ACIA that combines the touchscreen
