@@ -67,6 +67,10 @@ export class Config extends EventEmitter {
             this.changed.mouseJoystickEnabled = $("#mouseJoystickEnabled").prop("checked");
         });
 
+        $("#speechOutput").on("click", () => {
+            this.changed.speechOutput = $("#speechOutput").prop("checked");
+        });
+
         $(".display-mode-option").on("click", (e) => {
             const mode = $(e.target).data("mode");
             this.changed.displayMode = mode;
@@ -85,6 +89,10 @@ export class Config extends EventEmitter {
 
     setMouseJoystickEnabled(enabled) {
         $("#mouseJoystickEnabled").prop("checked", !!enabled);
+    }
+
+    setSpeechOutput(enabled) {
+        $("#speechOutput").prop("checked", !!enabled);
     }
 
     setDisplayMode(mode) {

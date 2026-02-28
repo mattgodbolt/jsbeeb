@@ -27,6 +27,7 @@ import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
+import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
 import {
@@ -97,6 +98,7 @@ const paramTypes = {
     logFdcStateChanges: ParamTypes.BOOL,
     coProcessor: ParamTypes.BOOL,
     mouseJoystickEnabled: ParamTypes.BOOL,
+    speechOutput: ParamTypes.BOOL,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -250,6 +252,10 @@ const config = new Config(
                 setupMicrophone().then(() => {});
             }
         }
+        if (changed.speechOutput !== undefined) {
+            speechOutput.enabled = !!changed.speechOutput;
+            window.localStorage.speechOutput = changed.speechOutput ? "true" : "false";
+        }
         updateUrl();
     },
 );
@@ -265,6 +271,7 @@ config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
+config.setSpeechOutput(speechOutput.enabled);
 let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
 
@@ -588,6 +595,29 @@ microphoneInput.setErrorCallback((message) => {
 // Create MouseJoystickSource but don't enable by default
 const screenCanvas = document.getElementById("screen");
 const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
+
+// Speech output: reads from localStorage on startup; can be toggled at runtime.
+const speechOutput = new SpeechOutput();
+speechOutput.enabled = !!(parsedQuery.speechOutput ?? window.localStorage.speechOutput === "true");
+
+/**
+ * Attach an RS-423 composite handler to the ACIA that combines the touchscreen
+ * (which sends position data to the BBC) with the speech output (which speaks
+ * text the BBC sends out).  Call this once after processor.initialise() and
+ * again whenever speechOutput.enabled changes.
+ */
+function setupRs423Handler() {
+    const touchScreen = processor.touchScreen;
+    processor.acia.setRs423Handler({
+        onTransmit(val) {
+            touchScreen.onTransmit(val);
+            speechOutput.onTransmit(val);
+        },
+        tryReceive(rts) {
+            return touchScreen.tryReceive(rts);
+        },
+    });
+}
 
 // Helper to manage ADC source configuration
 function updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
@@ -1349,6 +1379,9 @@ syncLights = function () {
 
 const startPromise = (async () => {
     await Promise.all([audioHandler.initialise(), processor.initialise()]);
+
+    // Wire up the composite RS-423 handler now that the touchscreen exists.
+    setupRs423Handler();
 
     // Ideally would start the loads first. But their completion needs the FDC from the processor
     const imageLoads = [];

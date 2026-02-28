@@ -118,18 +118,32 @@ export class Acia {
     selectRs423(selected) {
         this.rs423Selected = !!selected;
         if (this.rs423Selected) {
-            // RS423 selected.
-            // CTS is always high, meaning not Clear To Send. This is
-            // because we don't yet emulate anything on the "other end",
-            // so there is nothing to pull CTS low.
-            this.sr |= 0x08;
+            // When a handler is present it acts as the remote device and is
+            // always ready to receive, so CTS is low (active = clear to send).
+            // Without a handler there is nothing on the other end and CTS
+            // stays high, which inhibits TDRE so the OS output buffer drains
+            // silently rather than hanging.
+            if (this.rs423Handler) {
+                this.sr &= ~0x08; // CTS low — clear to send
+            } else {
+                this.sr |= 0x08; // CTS high — not connected
+            }
         } else {
-            // Cassette selected.
-            // CTS is always low, meaning actually Clear To Send.
+            // Cassette selected — CTS is always low (clear to send).
             this.sr &= ~0x08;
         }
         this.dcdLineUpdated();
         this.runRs423Task.ensureScheduled(this.rs423Selected, this.serialReceiveCyclesPerByte);
+    }
+
+    /**
+     * Attach or detach an RS-423 peripheral handler at runtime.
+     * The handler must implement onTransmit(byte) and tryReceive(rts).
+     * If RS-423 is already selected, the CTS line is updated immediately.
+     */
+    setRs423Handler(handler) {
+        this.rs423Handler = handler;
+        if (this.rs423Selected) this.selectRs423(true);
     }
 
     dcdLineUpdated() {
