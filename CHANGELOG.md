@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.4.0...v1.5.0) (2026-02-28)
+
+
+### Features
+
+* Web Speech API output via RS-423 serial port (*FX3,1) ([#569](https://github.com/mattgodbolt/jsbeeb/issues/569)) ([2f01b04](https://github.com/mattgodbolt/jsbeeb/commit/2f01b041a8147d1138aa3a7e9795cbc72dd28c3c))
+* wire up accessibility switch keys for user port, ADC, and fire buttons ([#565](https://github.com/mattgodbolt/jsbeeb/issues/565)) ([faa63b9](https://github.com/mattgodbolt/jsbeeb/commit/faa63b93e520c0e08c7254668e861687996fa962))
+
+
+### Bug Fixes
+
+* speak each CR-terminated line immediately, queue without cancel ([#570](https://github.com/mattgodbolt/jsbeeb/issues/570)) ([6c2bd37](https://github.com/mattgodbolt/jsbeeb/commit/6c2bd37b5321c23d48588f4f13937a8338c49af9))
+
 ## [1.4.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.3...v1.4.0) (2026-02-23)
 
 
