@@ -7,22 +7,24 @@
  * serial port, which on real hardware fed a Votrax Type 'N Talk synthesiser.
  * We intercept at the ACIA hardware boundary and route to speechSynthesis.
  *
- * Byte handling (RS-423 input):
+ * Byte handling is based on the Votrax Type 'N Talk Operator's Manual (1981):
  *  - Printable ASCII 0x20–0x7E: accumulated into the text buffer.
- *  - CR (0x0D): treated as a word boundary (space appended); starts the
- *    flush countdown timer.  Unlike the real Votrax TNT ("TALK-CLR" on CR),
- *    we do NOT speak immediately on CR — rapid multi-line output (e.g. a
- *    text adventure room description) would otherwise cancel each line before
- *    it can be heard.
- *  - LF (0x0A): ignored (null data on the real TNT).
- *  - BS (0x08): deletes the last character from the buffer.
- *  - ESC (0x1B): mode/unit-select prefix — the following byte is consumed
- *    silently as a control code.
- *  - All other bytes: null data, ignored.
+ *  - CR (0x0D): "TALK-CLR" in the manual — triggers speech and clears the
+ *    buffer.  We instead treat it as a word boundary (space appended) and
+ *    start a short flush timer, so that rapid multi-line output accumulates
+ *    into one utterance rather than each line cancelling the previous.
+ *  - LF (0x0A): explicitly listed as null data in the manual; ignored.
+ *  - ESC (0x1B): unit-select prefix.  The TNT manual describes daisy-chaining
+ *    multiple TNT units on a single serial line; ESC followed by a unit-select
+ *    byte routes subsequent text to the addressed unit.  We consume the byte
+ *    after ESC silently so it isn't passed to speechSynthesis as text.
+ *  - All other bytes (including control codes such as BS): null data, ignored.
+ *    The manual lists only CR, LF, and ESC as having defined behaviour; all
+ *    other non-printable bytes are explicitly "null data".
  *
  * Speech is triggered when:
- *  - FLUSH_DELAY_MS of silence (no new bytes) — accumulates a whole burst
- *    of output (e.g. a room description) into one utterance.
+ *  - FLUSH_DELAY_MS of silence (no new bytes) elapses — accumulates a whole
+ *    burst of output (e.g. a room description) into one utterance.
  *  - Buffer reaches MAX_BUFFER characters (hard safety limit).
  */
 
@@ -60,14 +62,15 @@ export class SpeechOutput {
     onTransmit(byte) {
         if (!this._enabled) return;
 
-        // ESC prefix: consume the following byte as a mode/unit-select code.
+        // ESC prefix (unit-select, TNT manual §daisy-chain): consume the
+        // following byte silently so it isn't treated as speech text.
         if (this._escapeNext) {
             this._escapeNext = false;
             return;
         }
 
         switch (byte) {
-            case 0x1b: // ESC — next byte is a mode control, not text.
+            case 0x1b: // ESC — next byte is a unit-select code, not text.
                 this._escapeNext = true;
                 return;
 
@@ -75,11 +78,6 @@ export class SpeechOutput {
                 if (this._buffer.length > 0 && !this._buffer.endsWith(" ")) {
                     this._buffer += " ";
                 }
-                this._scheduleFlush();
-                return;
-
-            case 0x08: // BS: delete last character from buffer.
-                this._buffer = this._buffer.slice(0, -1);
                 this._scheduleFlush();
                 return;
 
@@ -93,7 +91,8 @@ export class SpeechOutput {
                         this._scheduleFlush();
                     }
                 }
-            // Everything else is null data — silently ignored.
+            // All other bytes (LF, BS, control codes, high bytes) are null
+            // data per the TNT manual and are silently ignored.
         }
     }
 
@@ -130,8 +129,8 @@ export class SpeechOutput {
     _speak(text) {
         if (typeof speechSynthesis === "undefined") return;
         // Cancel any in-progress utterance: this is a new burst of output
-        // (the timer has fired, meaning there was a gap in the byte stream),
-        // so the previous burst is now stale.
+        // (the timer has fired after a gap in the byte stream), so the
+        // previous burst is now stale.
         speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         speechSynthesis.speak(utterance);

@@ -116,17 +116,21 @@ describe("SpeechOutput", () => {
         expect(mockSpeak.mock.calls[0][0].text).toBe("DING");
     });
 
-    it("handles BS (0x08) — deletes last character from buffer", () => {
+    it("BS (0x08) is null data — ignored, does not modify buffer", () => {
+        // The TNT manual lists only CR, LF, and ESC as defined commands.
+        // All other control codes including BS are null data and are ignored.
         transmit(speech, "HI!");
-        speech.onTransmit(0x08); // delete "!"
+        speech.onTransmit(0x08); // BS — null data, must not delete "!"
         vi.advanceTimersByTime(FLUSH_DELAY_MS);
-        expect(mockSpeak.mock.calls[0][0].text).toBe("HI");
+        expect(mockSpeak.mock.calls[0][0].text).toBe("HI!");
     });
 
-    it("handles ESC (0x1B) — next byte is a mode control, not text", () => {
+    it("ESC (0x1B) — next byte is a unit-select code and is consumed silently", () => {
+        // TNT manual: ESC introduces a unit-select byte for daisy-chained units.
+        // Neither the ESC nor the following byte should appear in speech output.
         transmit(speech, "TEST");
         speech.onTransmit(0x1b); // ESC
-        speech.onTransmit(0x11); // DC1 = PSEND ON — consumed as mode code
+        speech.onTransmit(0x41); // 'A' — unit-select byte, consumed silently
         vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak.mock.calls[0][0].text).toBe("TEST");
     });
