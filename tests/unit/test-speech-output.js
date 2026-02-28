@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { SpeechOutput } from "../../src/speech-output.js";
+import { SpeechOutput, MAX_BUFFER } from "../../src/speech-output.js";
 
 // Stub out speechSynthesis so tests run in Node without a browser.
 const mockSpeak = vi.fn();
@@ -34,9 +34,11 @@ describe("SpeechOutput", () => {
         expect(mockSpeak.mock.calls[0][0].text).toBe("HELLO");
     });
 
-    it("speaks buffered text on LF", () => {
+    it("does NOT flush on LF (LF is null data per Votrax spec)", () => {
         for (const ch of "WORLD") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(10); // LF
+        speech.onTransmit(10); // LF — null data, must not trigger speech
+        expect(mockSpeak).not.toHaveBeenCalled();
+        speech.onTransmit(13); // CR — the real flush trigger
         expect(mockSpeak).toHaveBeenCalledOnce();
         expect(mockSpeak.mock.calls[0][0].text).toBe("WORLD");
     });
@@ -57,36 +59,31 @@ describe("SpeechOutput", () => {
         expect(mockSpeak).not.toHaveBeenCalled(); // buffer was cleared
     });
 
-    it("strips VDU 22 (MODE change) and its one parameter byte", () => {
-        speech.onTransmit(22); // VDU 22 — MODE
-        speech.onTransmit(7); // parameter byte — should be swallowed
-        for (const ch of "TEXT") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
-        expect(mockSpeak.mock.calls[0][0].text).toBe("TEXT");
-    });
-
-    it("strips VDU 31 (cursor position) and its two parameter bytes", () => {
-        speech.onTransmit(31); // VDU 31
-        speech.onTransmit(10); // X param — must not trigger LF flush
-        speech.onTransmit(5); // Y param
-        for (const ch of "OK") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
-        expect(mockSpeak.mock.calls[0][0].text).toBe("OK");
-    });
-
-    it("strips VDU 23 (program character) and its nine parameter bytes", () => {
-        speech.onTransmit(23);
-        for (let i = 0; i < 9; i++) speech.onTransmit(0xff);
-        for (const ch of "AFTER") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
-        expect(mockSpeak.mock.calls[0][0].text).toBe("AFTER");
-    });
-
-    it("ignores other control codes (< 32) without swallowing extra bytes", () => {
-        speech.onTransmit(7); // BEL — 0 params, ignored
+    it("ignores non-printable bytes (< 0x20) other than CR, BS, ESC", () => {
+        // Per Votrax manual: non-printable bytes that aren't specified commands
+        // are null data and are ignored.  This means BBC VDU codes, BEL,
+        // LF, etc. are all silently dropped.
+        speech.onTransmit(7); // BEL
+        speech.onTransmit(22); // VDU 22 (MODE)
+        speech.onTransmit(7); // would-be VDU param byte — treated as null data, not VDU
         for (const ch of "DING") speech.onTransmit(ch.charCodeAt(0));
         speech.onTransmit(13);
         expect(mockSpeak.mock.calls[0][0].text).toBe("DING");
+    });
+
+    it("handles BS (0x08) — deletes last character from buffer", () => {
+        for (const ch of "HI!") speech.onTransmit(ch.charCodeAt(0));
+        speech.onTransmit(0x08); // delete "!"
+        speech.onTransmit(0x0d);
+        expect(mockSpeak.mock.calls[0][0].text).toBe("HI");
+    });
+
+    it("handles ESC (0x1B) — next byte is a mode control, not text", () => {
+        for (const ch of "TEST") speech.onTransmit(ch.charCodeAt(0));
+        speech.onTransmit(0x1b); // ESC
+        speech.onTransmit(0x11); // DC1 = PSEND ON — consumed as mode code
+        speech.onTransmit(0x0d);
+        expect(mockSpeak.mock.calls[0][0].text).toBe("TEST");
     });
 
     it("ignores DEL (127) and high bytes", () => {
@@ -106,8 +103,10 @@ describe("SpeechOutput", () => {
         expect(mockSpeak).toHaveBeenCalledTimes(2);
     });
 
-    it("safety-flushes after 200 characters without a newline", () => {
-        const longText = "A".repeat(200);
+    it("auto-speaks when input buffer reaches MAX_BUFFER bytes (buffer-full condition)", () => {
+        // The Votrax manual says "input buffer full" is a TALK-CLR trigger.
+        // Our MAX_BUFFER is 128 bytes.
+        const longText = "A".repeat(MAX_BUFFER);
         for (const ch of longText) speech.onTransmit(ch.charCodeAt(0));
         expect(mockSpeak).toHaveBeenCalledOnce();
         expect(mockSpeak.mock.calls[0][0].text).toBe(longText);
