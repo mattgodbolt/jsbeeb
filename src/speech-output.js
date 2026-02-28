@@ -10,7 +10,11 @@
  * Byte handling is based on the Votrax Type 'N Talk Operator's Manual (1981):
  *  - Printable ASCII 0x20–0x7E: accumulated into the text buffer.
  *  - CR (0x0D): "TALK-CLR" — speaks the buffer and clears it.  Multiple CR-
- *    terminated lines queue naturally via speechSynthesis.speak().
+ *    terminated lines queue naturally via speechSynthesis.speak().  A future
+ *    improvement could heuristically combine lines that arrive within a single
+ *    frame (~20 ms) into one utterance, which would give modern TTS engines a
+ *    better sentence to work with — but the simple per-line queue works well
+ *    enough and has no surprising pauses or dropped output.
  *  - LF (0x0A): explicitly listed as null data in the manual; ignored.
  *  - ESC (0x1B): unit-select prefix for daisy-chained TNT units.  ESC plus
  *    the following byte are consumed silently (not passed to speechSynthesis).
