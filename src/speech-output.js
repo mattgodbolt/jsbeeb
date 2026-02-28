@@ -9,10 +9,9 @@
  *
  * Byte handling is based on the Votrax Type 'N Talk Operator's Manual (1981):
  *  - Printable ASCII 0x20–0x7E: accumulated into the text buffer.
- *  - CR (0x0D): "TALK-CLR" in the manual — triggers speech and clears the
- *    buffer.  We instead treat it as a word boundary (space appended) and
- *    start a short flush timer, so that rapid multi-line output accumulates
- *    into one utterance rather than each line cancelling the previous.
+ *  - CR (0x0D): "TALK-CLR" in the manual — speaks the current buffer and
+ *    clears it.  Each CR-terminated line is queued as a separate utterance;
+ *    lines within the same response play in sequence without interruption.
  *  - LF (0x0A): explicitly listed as null data in the manual; ignored.
  *  - ESC (0x1B): unit-select prefix.  The TNT manual describes daisy-chaining
  *    multiple TNT units on a single serial line; ESC followed by a unit-select
@@ -22,27 +21,30 @@
  *    The manual lists only CR, LF, and ESC as having defined behaviour; all
  *    other non-printable bytes are explicitly "null data".
  *
- * Speech is triggered when:
- *  - FLUSH_DELAY_MS of silence (no new bytes) elapses — accumulates a whole
- *    burst of output (e.g. a room description) into one utterance.
- *  - Buffer reaches MAX_BUFFER characters (hard safety limit).
+ * Queuing vs cancellation:
+ *  Each CR queues a new utterance without cancelling the previous one, so a
+ *  multi-line response (e.g. a text adventure room description) starts
+ *  speaking immediately and plays through in order.  If new output arrives
+ *  after a gap of NEW_RESPONSE_GAP_MS or more — meaning the player has typed
+ *  a command and the game is responding — any queued speech from the previous
+ *  response is cancelled so the new response starts without delay.
  */
 
 // From the TNT Operator's Manual: "The input buffer can hold more than 750
 // characters".
 export const MAX_BUFFER = 750;
 
-// How long to wait after the last byte before speaking accumulated text.
-// Short enough to feel responsive; long enough for a multi-line burst to
-// arrive in full before we start speaking.
-export const FLUSH_DELAY_MS = 400;
+// Gap after which new output is treated as a fresh response.  Anything
+// longer than a typical inter-line gap (near-zero in emulated time) but
+// shorter than the time a player takes to type a command (~1–2 s minimum).
+export const NEW_RESPONSE_GAP_MS = 1000;
 
 export class SpeechOutput {
     constructor() {
         this._buffer = "";
         this._escapeNext = false;
         this._enabled = false;
-        this._timer = null;
+        this._lastSpeakTime = null;
     }
 
     get enabled() {
@@ -52,7 +54,6 @@ export class SpeechOutput {
     set enabled(value) {
         this._enabled = !!value;
         if (!this._enabled) {
-            this._cancelTimer();
             this._buffer = "";
             this._cancelSpeech();
         }
@@ -74,11 +75,8 @@ export class SpeechOutput {
                 this._escapeNext = true;
                 return;
 
-            case 0x0d: // CR — word boundary; schedule flush but don't speak yet.
-                if (this._buffer.length > 0 && !this._buffer.endsWith(" ")) {
-                    this._buffer += " ";
-                }
-                this._scheduleFlush();
+            case 0x0d: // CR — TALK-CLR: speak current buffer and clear it.
+                this._flushNow();
                 return;
 
             default:
@@ -87,8 +85,6 @@ export class SpeechOutput {
                     this._buffer += String.fromCharCode(byte);
                     if (this._buffer.length >= MAX_BUFFER) {
                         this._flushNow(); // hard buffer-full limit
-                    } else {
-                        this._scheduleFlush();
                     }
                 }
             // All other bytes (LF, BS, control codes, high bytes) are null
@@ -103,23 +99,7 @@ export class SpeechOutput {
 
     // ------------------------------------------------------------------
 
-    _scheduleFlush() {
-        this._cancelTimer();
-        this._timer = setTimeout(() => {
-            this._timer = null;
-            this._flushNow();
-        }, FLUSH_DELAY_MS);
-    }
-
-    _cancelTimer() {
-        if (this._timer !== null) {
-            clearTimeout(this._timer);
-            this._timer = null;
-        }
-    }
-
     _flushNow() {
-        this._cancelTimer();
         const text = this._buffer.trim();
         this._buffer = "";
         if (!text) return;
@@ -128,12 +108,14 @@ export class SpeechOutput {
 
     _speak(text) {
         if (typeof speechSynthesis === "undefined") return;
-        // Cancel any in-progress utterance: this is a new burst of output
-        // (the timer has fired after a gap in the byte stream), so the
-        // previous burst is now stale.
-        speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        speechSynthesis.speak(utterance);
+        const now = Date.now();
+        // If this output arrives well after the last line, it's a new response
+        // (the player has typed a command).  Cancel any stale queued speech.
+        if (this._lastSpeakTime !== null && now - this._lastSpeakTime > NEW_RESPONSE_GAP_MS) {
+            speechSynthesis.cancel();
+        }
+        this._lastSpeakTime = now;
+        speechSynthesis.speak(new SpeechSynthesisUtterance(text));
     }
 
     _cancelSpeech() {
