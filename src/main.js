@@ -211,10 +211,10 @@ const emulationConfig = {
     },
 };
 
-// Speech output: reads from localStorage on startup; can be toggled at runtime.
+// Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
 // Must be created before Config so the onClose callback and setSpeechOutput() call can reference it.
 const speechOutput = new SpeechOutput();
-speechOutput.enabled = !!(parsedQuery.speechOutput ?? window.localStorage.speechOutput === "true");
+speechOutput.enabled = !!parsedQuery.speechOutput;
 
 const config = new Config(
     function onChange(changed) {
@@ -259,7 +259,6 @@ const config = new Config(
         }
         if (changed.speechOutput !== undefined) {
             speechOutput.enabled = !!changed.speechOutput;
-            window.localStorage.speechOutput = changed.speechOutput ? "true" : "false";
         }
         updateUrl();
     },
