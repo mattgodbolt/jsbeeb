@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { SpeechOutput, MAX_BUFFER } from "../../src/speech-output.js";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { SpeechOutput, MAX_BUFFER, FLUSH_DELAY_MS } from "../../src/speech-output.js";
 
 // Stub out speechSynthesis so tests run in Node without a browser.
 const mockSpeak = vi.fn();
@@ -11,14 +11,24 @@ global.SpeechSynthesisUtterance = class {
     }
 };
 
+// Helper: send an ASCII string byte-by-byte.
+function transmit(speech, str) {
+    for (const ch of str) speech.onTransmit(ch.charCodeAt(0));
+}
+
 describe("SpeechOutput", () => {
     let speech;
 
     beforeEach(() => {
+        vi.useFakeTimers();
         speech = new SpeechOutput();
         speech.enabled = true;
         mockSpeak.mockClear();
         mockCancel.mockClear();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it("tryReceive always returns -1", () => {
@@ -26,88 +36,130 @@ describe("SpeechOutput", () => {
         expect(speech.tryReceive(true)).toBe(-1);
     });
 
-    it("speaks buffered text on CR", () => {
-        for (const ch of "HELLO") speech.onTransmit(ch.charCodeAt(0));
+    it("speaks buffered text after flush delay (not immediately)", () => {
+        transmit(speech, "HELLO");
         expect(mockSpeak).not.toHaveBeenCalled();
-        speech.onTransmit(13); // CR
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak).toHaveBeenCalledOnce();
         expect(mockSpeak.mock.calls[0][0].text).toBe("HELLO");
     });
 
-    it("does NOT flush on LF (LF is null data per Votrax spec)", () => {
-        for (const ch of "WORLD") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(10); // LF — null data, must not trigger speech
+    it("CR schedules flush but does not speak immediately", () => {
+        transmit(speech, "HELLO");
+        speech.onTransmit(0x0d); // CR
+        expect(mockSpeak).not.toHaveBeenCalled(); // not yet
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
+        expect(mockSpeak).toHaveBeenCalledOnce();
+    });
+
+    it("multiple CRs in rapid succession accumulate into one utterance", () => {
+        // Simulates a text adventure room description: several lines printed
+        // quickly, each ending in CR.  All should be spoken as one utterance.
+        transmit(speech, "Welcome to the castle.");
+        speech.onTransmit(0x0d);
+        transmit(speech, "There is a sword here.");
+        speech.onTransmit(0x0d);
+        transmit(speech, "What now?");
+        speech.onTransmit(0x0d);
+
+        // Nothing spoken yet — all within the flush window.
         expect(mockSpeak).not.toHaveBeenCalled();
-        speech.onTransmit(13); // CR — the real flush trigger
+
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
+
+        expect(mockSpeak).toHaveBeenCalledOnce();
+        const spoken = mockSpeak.mock.calls[0][0].text;
+        // All three lines should be present, separated by spaces.
+        expect(spoken).toContain("Welcome to the castle.");
+        expect(spoken).toContain("There is a sword here.");
+        expect(spoken).toContain("What now?");
+    });
+
+    it("LF alone does not schedule flush (it is null data)", () => {
+        // With no printable text in the buffer, LF should not start a timer.
+        speech.onTransmit(0x0a); // LF only
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
+        expect(mockSpeak).not.toHaveBeenCalled();
+    });
+
+    it("LF within text output is ignored — text still spoken after delay", () => {
+        transmit(speech, "WORLD");
+        speech.onTransmit(0x0a); // LF — ignored, timer still runs from "WORLD"
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak).toHaveBeenCalledOnce();
         expect(mockSpeak.mock.calls[0][0].text).toBe("WORLD");
     });
 
     it("does nothing when disabled", () => {
         speech.enabled = false;
-        for (const ch of "TEST") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
+        transmit(speech, "TEST");
+        speech.onTransmit(0x0d);
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak).not.toHaveBeenCalled();
     });
 
     it("cancels speech and clears buffer when disabled mid-buffer", () => {
-        for (const ch of "PARTIAL") speech.onTransmit(ch.charCodeAt(0));
+        transmit(speech, "PARTIAL");
         speech.enabled = false;
         expect(mockCancel).toHaveBeenCalled();
         speech.enabled = true;
-        speech.onTransmit(13);
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak).not.toHaveBeenCalled(); // buffer was cleared
     });
 
     it("ignores non-printable bytes (< 0x20) other than CR, BS, ESC", () => {
-        // Per Votrax manual: non-printable bytes that aren't specified commands
-        // are null data and are ignored.  This means BBC VDU codes, BEL,
-        // LF, etc. are all silently dropped.
         speech.onTransmit(7); // BEL
         speech.onTransmit(22); // VDU 22 (MODE)
-        speech.onTransmit(7); // would-be VDU param byte — treated as null data, not VDU
-        for (const ch of "DING") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
+        speech.onTransmit(7); // would-be VDU param — treated as null data
+        transmit(speech, "DING");
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak.mock.calls[0][0].text).toBe("DING");
     });
 
     it("handles BS (0x08) — deletes last character from buffer", () => {
-        for (const ch of "HI!") speech.onTransmit(ch.charCodeAt(0));
+        transmit(speech, "HI!");
         speech.onTransmit(0x08); // delete "!"
-        speech.onTransmit(0x0d);
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak.mock.calls[0][0].text).toBe("HI");
     });
 
     it("handles ESC (0x1B) — next byte is a mode control, not text", () => {
-        for (const ch of "TEST") speech.onTransmit(ch.charCodeAt(0));
+        transmit(speech, "TEST");
         speech.onTransmit(0x1b); // ESC
         speech.onTransmit(0x11); // DC1 = PSEND ON — consumed as mode code
-        speech.onTransmit(0x0d);
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak.mock.calls[0][0].text).toBe("TEST");
     });
 
     it("ignores DEL (127) and high bytes", () => {
         speech.onTransmit(127);
         speech.onTransmit(200);
-        for (const ch of "HI") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
+        transmit(speech, "HI");
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
         expect(mockSpeak.mock.calls[0][0].text).toBe("HI");
     });
 
-    it("cancels in-progress speech before starting new utterance", () => {
-        for (const ch of "ONE") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
-        for (const ch of "TWO") speech.onTransmit(ch.charCodeAt(0));
-        speech.onTransmit(13);
-        expect(mockCancel).toHaveBeenCalledTimes(2);
-        expect(mockSpeak).toHaveBeenCalledTimes(2);
+    it("cancels in-progress speech when a new burst arrives after a gap", () => {
+        // First burst: "ONE"
+        transmit(speech, "ONE");
+        vi.advanceTimersByTime(FLUSH_DELAY_MS); // timer fires → speaks "ONE"
+        expect(mockSpeak).toHaveBeenCalledOnce();
+
+        mockSpeak.mockClear();
+        mockCancel.mockClear();
+
+        // Second burst (after gap): "TWO" — should cancel stale "ONE" speech.
+        transmit(speech, "TWO");
+        vi.advanceTimersByTime(FLUSH_DELAY_MS);
+        expect(mockCancel).toHaveBeenCalled(); // stale speech cancelled
+        expect(mockSpeak).toHaveBeenCalledOnce();
+        expect(mockSpeak.mock.calls[0][0].text).toBe("TWO");
     });
 
-    it("auto-speaks when input buffer reaches MAX_BUFFER bytes (buffer-full condition)", () => {
-        // The Votrax manual says "input buffer full" is a TALK-CLR trigger.
-        // Our MAX_BUFFER is 128 bytes.
+    it("auto-speaks immediately when buffer reaches MAX_BUFFER bytes", () => {
         const longText = "A".repeat(MAX_BUFFER);
-        for (const ch of longText) speech.onTransmit(ch.charCodeAt(0));
+        transmit(speech, longText);
+        // Should speak without waiting for the timer.
         expect(mockSpeak).toHaveBeenCalledOnce();
         expect(mockSpeak.mock.calls[0][0].text).toBe(longText);
     });

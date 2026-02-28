@@ -1,35 +1,39 @@
 "use strict";
 
 /**
- * RS-423 handler that routes transmitted bytes to the Web Speech API,
- * following the Votrax Type 'N Talk protocol (TNT Operator's Manual, 1981).
+ * RS-423 handler that routes transmitted bytes to the Web Speech API.
  *
- * Protocol summary (from the manual):
- *  - Printable ASCII 0x20–0x7E: accumulated in the input buffer.
- *    (On real hardware only A–Z, a–z, 0–9, and "." produce audible speech;
- *    other printable chars produce silence.  We pass the full buffer to the
- *    browser TTS engine, which handles spaces and punctuation well.)
- *  - CR (0x0D) = TALK-CLR: speak the buffer contents, then clear it.
- *  - BS (0x08): delete the last character from the buffer.
+ * BBC programs use *FX3,1 (or *FX3,3) to send OSWRCH output to the RS-423
+ * serial port, which on real hardware fed a Votrax Type 'N Talk synthesiser.
+ * We intercept at the ACIA hardware boundary and route to speechSynthesis.
+ *
+ * Byte handling (RS-423 input):
+ *  - Printable ASCII 0x20–0x7E: accumulated into the text buffer.
+ *  - CR (0x0D): treated as a word boundary (space appended); starts the
+ *    flush countdown timer.  Unlike the real Votrax TNT ("TALK-CLR" on CR),
+ *    we do NOT speak immediately on CR — rapid multi-line output (e.g. a
+ *    text adventure room description) would otherwise cancel each line before
+ *    it can be heard.
+ *  - LF (0x0A): ignored (null data on the real TNT).
+ *  - BS (0x08): deletes the last character from the buffer.
  *  - ESC (0x1B): mode/unit-select prefix — the following byte is consumed
- *    as a control code and not treated as text.
- *  - All other bytes (< 0x20 or > 0x7E, except the above): null data — ignored.
- *  - Buffer-full: auto-speak when the buffer reaches MAX_BUFFER bytes.
- *    (The manual mentions this condition but gives no explicit count.  128 bytes
- *    is a conservative estimate given the TNT's 2 KB of onboard RAM.)
- *  - Timer: after TIMER_MS of inactivity the buffer is spoken automatically,
- *    emulating the TNT's optional TIMER mode ("about 3–4 seconds").
+ *    silently as a control code.
+ *  - All other bytes: null data, ignored.
  *
- * Note: LF (0x0A) is NOT a flush trigger on the real TNT — it is null data.
- * Only CR (0x0D) flushes the buffer.
+ * Speech is triggered when:
+ *  - FLUSH_DELAY_MS of silence (no new bytes) — accumulates a whole burst
+ *    of output (e.g. a room description) into one utterance.
+ *  - Buffer reaches MAX_BUFFER characters (hard safety limit).
  */
+
 // From the TNT Operator's Manual: "The input buffer can hold more than 750
-// characters".  The output queue (phonemes waiting for the SC-01) is 128
-// entries, which is a different thing entirely.
+// characters".
 export const MAX_BUFFER = 750;
 
-// The manual says "approximately 4 seconds" for the inactivity timer.
-const TIMER_MS = 4000;
+// How long to wait after the last byte before speaking accumulated text.
+// Short enough to feel responsive; long enough for a multi-line burst to
+// arrive in full before we start speaking.
+export const FLUSH_DELAY_MS = 400;
 
 export class SpeechOutput {
     constructor() {
@@ -67,13 +71,16 @@ export class SpeechOutput {
                 this._escapeNext = true;
                 return;
 
-            case 0x0d: // CR = TALK-CLR: speak and clear.
-                this._flush();
+            case 0x0d: // CR — word boundary; schedule flush but don't speak yet.
+                if (this._buffer.length > 0 && !this._buffer.endsWith(" ")) {
+                    this._buffer += " ";
+                }
+                this._scheduleFlush();
                 return;
 
             case 0x08: // BS: delete last character from buffer.
                 this._buffer = this._buffer.slice(0, -1);
-                this._resetTimer();
+                this._scheduleFlush();
                 return;
 
             default:
@@ -81,9 +88,9 @@ export class SpeechOutput {
                     // Printable ASCII — accumulate.
                     this._buffer += String.fromCharCode(byte);
                     if (this._buffer.length >= MAX_BUFFER) {
-                        this._flush(); // buffer-full condition
+                        this._flushNow(); // hard buffer-full limit
                     } else {
-                        this._resetTimer();
+                        this._scheduleFlush();
                     }
                 }
             // Everything else is null data — silently ignored.
@@ -97,20 +104,12 @@ export class SpeechOutput {
 
     // ------------------------------------------------------------------
 
-    _flush() {
-        this._cancelTimer();
-        const text = this._buffer.trim();
-        this._buffer = "";
-        if (!text) return;
-        this._speak(text);
-    }
-
-    _resetTimer() {
+    _scheduleFlush() {
         this._cancelTimer();
         this._timer = setTimeout(() => {
             this._timer = null;
-            this._flush();
-        }, TIMER_MS);
+            this._flushNow();
+        }, FLUSH_DELAY_MS);
     }
 
     _cancelTimer() {
@@ -120,8 +119,19 @@ export class SpeechOutput {
         }
     }
 
+    _flushNow() {
+        this._cancelTimer();
+        const text = this._buffer.trim();
+        this._buffer = "";
+        if (!text) return;
+        this._speak(text);
+    }
+
     _speak(text) {
         if (typeof speechSynthesis === "undefined") return;
+        // Cancel any in-progress utterance: this is a new burst of output
+        // (the timer has fired, meaning there was a gap in the byte stream),
+        // so the previous burst is now stale.
         speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         speechSynthesis.speak(utterance);
