@@ -337,6 +337,40 @@ describe("Keyboard", () => {
         keyboard.keyDown(event);
 
         expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.Q);
+        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+    });
+
+    test("registered handler suppresses sysvia.keyDown for that key", () => {
+        // When a handler claims a key, the BBC Micro should NOT also receive it.
+        const mockHandler = vi.fn();
+        keyboard.registerKeyHandler(utils.keyCodes.K1, mockHandler, { alt: true, ctrl: false });
+
+        keyboard.setRunning(true);
+        keyboard.keyDown({
+            which: utils.keyCodes.K1,
+            location: 0,
+            preventDefault: vi.fn(),
+            altKey: true,
+            ctrlKey: false,
+            shiftKey: false,
+        });
+
+        expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.K1);
+        expect(mockSysvia.keyDown).not.toHaveBeenCalled();
+    });
+
+    test("unhandled keys still reach sysvia.keyDown", () => {
+        keyboard.setRunning(true);
+        keyboard.keyDown({
+            which: utils.keyCodes.A,
+            location: 0,
+            preventDefault: vi.fn(),
+            altKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+        });
+
+        expect(mockSysvia.keyDown).toHaveBeenCalledWith(utils.keyCodes.A, false);
     });
 
     test("registerKeyHandler should add a handler for a key with Ctrl modifier", () => {
