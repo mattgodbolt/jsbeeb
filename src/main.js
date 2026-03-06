@@ -865,6 +865,9 @@ async function tapeSthClick(item) {
 }
 
 const $sthModal = new bootstrap.Modal(document.getElementById("sth"));
+document.getElementById("sth").addEventListener("shown.bs.modal", () => {
+    document.getElementById("sth-filter").focus();
+});
 
 function makeOnCat(onClick) {
     return function (cat) {
