@@ -55,6 +55,8 @@ class Ula {
         this.attributeMode = 0;
         this.attributeText = 0;
         // Note: disabled is NOT cleared by reset (matches b-em behaviour).
+        // Recompute rendered palette so any custom NULA colours are flushed.
+        this._recomputeUlaPal(!!(this.video.ulactrl & 1));
     }
 
     write(addr, val) {
@@ -145,12 +147,14 @@ class Ula {
                 this.flash[1] = param & 4 ? 1 : 0;
                 this.flash[2] = param & 2 ? 1 : 0;
                 this.flash[3] = param & 1 ? 1 : 0;
+                this._recomputeUlaPal(!!(this.video.ulactrl & 1));
                 break;
             case 9:
                 this.flash[4] = param & 8 ? 1 : 0;
                 this.flash[5] = param & 4 ? 1 : 0;
                 this.flash[6] = param & 2 ? 1 : 0;
                 this.flash[7] = param & 1 ? 1 : 0;
+                this._recomputeUlaPal(!!(this.video.ulactrl & 1));
                 break;
             // Regs 14 (border colour) and 15 (blank colour) are stubbed - rendering not yet implemented.
         }
