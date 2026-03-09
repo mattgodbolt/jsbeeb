@@ -15,7 +15,7 @@ export const OPAQUE_BLACK = 0xff000000;
 export const OPAQUE_WHITE = 0xffffffff;
 
 ////////////////////
-// VideoNULA — programmable 12-bit RGB palette extension (RobC hardware mod).
+// VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
 // Reference: b-em src/video.c (stardot/b-em).
 // Addresses &FE22 (control) and &FE23 (palette) via 2-byte write protocol.
 
@@ -25,9 +25,12 @@ const NulaDefaultPalette = new Uint32Array([
     0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
 ]);
 
-export class VideoNula {
+////////////////////
+// ULA interface (includes NULA programmable palette support)
+class Ula {
     constructor(video) {
         this.video = video;
+        // NULA state
         this.collook = new Uint32Array(16);
         this.flash = new Uint8Array(8);
         this.paletteWriteFlag = false;
@@ -54,7 +57,65 @@ export class VideoNula {
         // Note: disabled is NOT cleared by reset (matches b-em behaviour).
     }
 
-    writeControl(val) {
+    write(addr, val) {
+        addr |= 0;
+        val |= 0;
+        let reg = addr & 3;
+
+        // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
+        if (reg >= 2 && this.disabled) {
+            reg &= ~2;
+        }
+
+        switch (reg) {
+            case 0:
+                this._writeControl(val);
+                break;
+            case 1:
+                this._writePalette(val);
+                break;
+            case 2:
+                this._writeNulaControl(val);
+                break;
+            case 3:
+                this._writeNulaPalette(val);
+                break;
+        }
+    }
+
+    // ULA control register (&FE20).
+    _writeControl(val) {
+        if ((this.video.ulactrl ^ val) & 1) {
+            // Flash state has changed - recompute all palette entries.
+            this._recomputeUlaPal(!!(val & 1));
+        }
+        this.video.ulactrl = val;
+        this.video.pixelsPerChar = val & 0x10 ? 8 : 16;
+        this.video.halfClock = !(val & 0x10);
+        const newMode = (val >>> 2) & 3;
+        if (newMode !== this.video.ulaMode) {
+            this.video.ulaMode = newMode;
+        }
+        this.video.teletextMode = !!(val & 2);
+    }
+
+    // ULA palette register (&FE21).
+    _writePalette(val) {
+        const index = (val >>> 4) & 0xf;
+        this.video.actualPal[index] = val & 0xf;
+        // Default: XOR lower 3 bits with 7 for steady colour.
+        let colour = this.collook[(val & 0xf) ^ 7];
+        // Flash override: if flash bit set, flash globally enabled, and per-colour flash active.
+        if (val & 8 && this.video.ulactrl & 1 && this.flash[(val & 7) ^ 7]) {
+            colour = this.collook[val & 0xf];
+        }
+        if (this.video.ulaPal[index] !== colour) {
+            this.video.ulaPal[index] = colour;
+        }
+    }
+
+    // NULA control register (&FE22).
+    _writeNulaControl(val) {
         const reg = (val >>> 4) & 0xf;
         const param = val & 0xf;
         switch (reg) {
@@ -91,11 +152,12 @@ export class VideoNula {
                 this.flash[6] = param & 2 ? 1 : 0;
                 this.flash[7] = param & 1 ? 1 : 0;
                 break;
-            // Regs 14 (border colour) and 15 (blank colour) are stubbed — rendering not yet implemented.
+            // Regs 14 (border colour) and 15 (blank colour) are stubbed - rendering not yet implemented.
         }
     }
 
-    writePalette(val) {
+    // NULA palette register (&FE23) - 2-byte write protocol.
+    _writeNulaPalette(val) {
         if (this.paletteWriteFlag) {
             const c = (this.paletteFirstByte >>> 4) & 0xf;
             const r = this.paletteFirstByte & 0x0f;
@@ -104,104 +166,29 @@ export class VideoNula {
             // Expand 4-bit channels to 8-bit by duplicating the nibble.
             // Store in ABGR format (Uint32Array on little-endian = canvas RGBA).
             this.collook[c] = 0xff000000 | ((b | (b << 4)) << 16) | ((g | (g << 4)) << 8) | (r | (r << 4));
-            // Colours 8–15 default to solid (non-flashing) when programmed.
+            // Colours 8-15 default to solid (non-flashing) when programmed.
             if (c >= 8) this.flash[c - 8] = 0;
             // Recompute all rendered palette entries from current state.
-            this.recomputeUlaPal();
+            this._recomputeUlaPal(!!(this.video.ulactrl & 1));
         } else {
             this.paletteFirstByte = val;
         }
         this.paletteWriteFlag = !this.paletteWriteFlag;
     }
 
-    write(addr, val) {
-        if ((addr & 3) === 2) {
-            this.writeControl(val);
-        } else {
-            this.writePalette(val);
-        }
-    }
-
     // Recompute all 16 ulaPal entries from actualPal + NULA collook + flash state.
     // Follows b-em's palette recomputation logic exactly.
-    recomputeUlaPal() {
+    _recomputeUlaPal(flashEnabled) {
         const video = this.video;
-        const flashEnabled = !!(video.ulactrl & 1);
         for (let i = 0; i < 16; ++i) {
             const palVal = video.actualPal[i];
-            video.ulaPal[i] = this.collook[(palVal & 0xf) ^ 7];
+            let colour = this.collook[(palVal & 0xf) ^ 7];
             if (palVal & 8 && flashEnabled && this.flash[(palVal & 7) ^ 7]) {
-                video.ulaPal[i] = this.collook[palVal & 0xf];
+                colour = this.collook[palVal & 0xf];
             }
-        }
-    }
-
-    getColour(index) {
-        return this.collook[index];
-    }
-}
-
-////////////////////
-// ULA interface
-class Ula {
-    constructor(video) {
-        this.video = video;
-    }
-
-    write(addr, val) {
-        addr |= 0;
-        val |= 0;
-        const reg = addr & 3;
-
-        // When NULA is disabled, mask off bit 1 so &FE22/&FE23 become &FE20/&FE21.
-        // When enabled, route NULA addresses to the VideoNula handler.
-        if (reg >= 2) {
-            if (this.video.nula.disabled) {
-                return this.write(addr & ~2, val);
+            if (video.ulaPal[i] !== colour) {
+                video.ulaPal[i] = colour;
             }
-            this.video.nula.write(addr, val);
-            return;
-        }
-
-        if (reg === 1) {
-            // Palette register (&FE21).
-            const index = (val >>> 4) & 0xf;
-            this.video.actualPal[index] = val & 0xf;
-            const nula = this.video.nula;
-            // Default: XOR lower 3 bits with 7 for steady colour.
-            let colour = nula.collook[(val & 0xf) ^ 7];
-            // Flash override: if flash bit set, flash globally enabled, and per-colour flash active.
-            if (val & 8 && this.video.ulactrl & 1 && nula.flash[(val & 7) ^ 7]) {
-                colour = nula.collook[val & 0xf];
-            }
-            if (this.video.ulaPal[index] !== colour) {
-                this.video.ulaPal[index] = colour;
-            }
-        } else {
-            // Control register (&FE20).
-            if ((this.video.ulactrl ^ val) & 1) {
-                // Flash colour has changed — recompute all palette entries.
-                const flashEnabled = !!(val & 1);
-                const nula = this.video.nula;
-                for (let i = 0; i < 16; ++i) {
-                    const palVal = this.video.actualPal[i];
-                    let colour = nula.collook[(palVal & 0xf) ^ 7];
-                    if (flashEnabled && palVal & 8 && nula.flash[(palVal & 7) ^ 7]) {
-                        colour = nula.collook[palVal & 0xf];
-                    }
-                    if (this.video.ulaPal[i] !== colour) {
-                        this.video.ulaPal[i] = colour;
-                    }
-                }
-            }
-            this.video.ulactrl = val;
-            this.video.pixelsPerChar = val & 0x10 ? 8 : 16;
-            this.video.halfClock = !(val & 0x10);
-            const newMode = (val >>> 2) & 3;
-            if (newMode !== this.video.ulaMode) {
-                this.video.ulaMode = newMode;
-            }
-            this.video.teletextMode = !!(val & 2);
         }
     }
 }
@@ -392,7 +379,6 @@ export class Video {
         })();
 
         this.crtc = new Crtc(this);
-        this.nula = new VideoNula(this);
         this.ula = new Ula(this);
 
         this.reset(null);
@@ -928,13 +914,20 @@ export class Video {
 
 export class FakeVideo {
     constructor() {
-        this.ula = this.crtc = {
+        this.crtc = {
             read: function () {
                 return 0xff;
             },
             write: utils.noop,
         };
-        this.nula = { write: utils.noop, reset: utils.noop, disabled: false };
+        this.ula = {
+            read: function () {
+                return 0xff;
+            },
+            write: utils.noop,
+            reset: utils.noop,
+            disabled: false,
+        };
         this.regs = new Uint8Array(32);
     }
 
