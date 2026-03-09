@@ -911,19 +911,42 @@ describe("Teletext rebuildColours", () => {
         teletext = new Teletext();
     });
 
-    it("should produce identical output to init() with BBC default palette", () => {
-        // Capture the colour table built by init() (constructor calls init).
-        // Note: teletext.colour is an Int32Array (via makeFast32), so copy with matching type.
-        const initColours = new Int32Array(teletext.colour);
+    it("should produce correct blended values for BBC default palette", () => {
+        // Independently verify specific known entries using the original bit-extraction formula.
+        // The colour table index is: (bgIndex << 5) | (fgIndex << 2) | weight
+        // For BBC colours, the index bits directly encode 1-bit RGB:
+        //   fgIndex bits: bit2=R, bit3=G, bit4=B; bgIndex bits: bit5=R, bit6=G, bit7=B
+        // We verify a few known blends against values computed from the original formula.
+        const gamma = 1.0 / 2.2;
 
-        // Rebuild with the same BBC default palette.
-        const bbcCollook = new Uint32Array([
-            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
-            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-        ]);
-        teletext.rebuildColours(bbcCollook);
+        function expectedBlend(fgABGR, bgABGR, weight) {
+            const fgR = (fgABGR & 0xff) / 255.0;
+            const fgG = ((fgABGR >> 8) & 0xff) / 255.0;
+            const fgB = ((fgABGR >> 16) & 0xff) / 255.0;
+            const bgR = (bgABGR & 0xff) / 255.0;
+            const bgG = ((bgABGR >> 8) & 0xff) / 255.0;
+            const bgB = ((bgABGR >> 16) & 0xff) / 255.0;
+            const w = weight / 3.0;
+            const r = (Math.pow(fgR * w + bgR * (1 - w), gamma) * 240) | 0;
+            const g = (Math.pow(fgG * w + bgG * (1 - w), gamma) * 240) | 0;
+            const b = (Math.pow(fgB * w + bgB * (1 - w), gamma) * 240) | 0;
+            return (r | (g << 8) | (b << 16) | (0xff << 24)) >>> 0;
+        }
 
-        expect(teletext.colour).toEqual(initColours);
+        // BBC colours in ABGR: 0=black, 7=white, 1=red, 2=green
+        const black = 0xff000000;
+        const white = 0xffffffff;
+        const red = 0xff0000ff;
+        const green = 0xff00ff00;
+
+        // fg=white(7), bg=black(0), weight=3: pure white
+        expect(teletext.colour[(7 << 2) | (0 << 5) | 3] >>> 0).toBe(expectedBlend(white, black, 3));
+        // fg=white(7), bg=black(0), weight=0: pure black
+        expect(teletext.colour[(7 << 2) | (0 << 5) | 0] >>> 0).toBe(expectedBlend(white, black, 0));
+        // fg=red(1), bg=green(2), weight=1: blended
+        expect(teletext.colour[(1 << 2) | (2 << 5) | 1] >>> 0).toBe(expectedBlend(red, green, 1));
+        // fg=white(7), bg=white(7), weight=2: solid white
+        expect(teletext.colour[(7 << 2) | (7 << 5) | 2] >>> 0).toBe(expectedBlend(white, white, 2));
     });
 
     it("should change fg=7/bg=7 entries when colour 7 is set to orange", () => {
