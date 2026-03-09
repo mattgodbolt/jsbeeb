@@ -2,13 +2,7 @@
 import { makeChars } from "./teletext_data.js";
 import { makeFast32 } from "./utils.js";
 
-// Default BBC Micro colours in ABGR format for the MODE 7 colour table.
-// Must match NulaDefaultPalette in video.js - a shared module would avoid the
-// duplication but video.js already imports teletext.js so cannot be imported here.
-const BbcDefaultCollook = new Uint32Array([
-    0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
-    0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-]);
+import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";
 
 export class Teletext {
     constructor() {

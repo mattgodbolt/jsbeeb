@@ -19,11 +19,8 @@ export const OPAQUE_WHITE = 0xffffffff;
 // Reference: b-em src/video.c (stardot/b-em).
 // Addresses &FE22 (control) and &FE23 (palette) via 2-byte write protocol.
 
-// Default NULA palette matches the standard BBC Micro colours (ABGR format).
-const NulaDefaultPalette = new Uint32Array([
-    0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
-    0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-]);
+// Default NULA palette - the standard BBC Micro colours (ABGR format).
+import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 
 ////////////////////
 // ULA interface (includes NULA programmable palette support)
