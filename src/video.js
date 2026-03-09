@@ -57,6 +57,8 @@ class Ula {
         // Note: disabled is NOT cleared by reset (matches b-em behaviour).
         // Recompute rendered palette so any custom NULA colours are flushed.
         this._recomputeUlaPal(!!(this.video.ulactrl & 1));
+        // Rebuild MODE 7 teletext colours from the restored default palette.
+        this.video.teletext.rebuildColours(this.collook);
     }
 
     write(addr, val) {
@@ -174,6 +176,8 @@ class Ula {
             if (c >= 8) this.flash[c - 8] = 0;
             // Recompute all rendered palette entries from current state.
             this._recomputeUlaPal(!!(this.video.ulactrl & 1));
+            // MODE 7 teletext uses its own colour lookup; rebuild when a base colour changes.
+            if (c < 8) this.video.teletext.rebuildColours(this.collook);
         } else {
             this.paletteFirstByte = val;
         }

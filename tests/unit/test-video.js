@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
+import { Teletext } from "../../src/teletext.js";
 import * as utils from "../../src/utils.js";
 
 // Setup with focus on testing behavior rather than implementation details
@@ -900,5 +901,170 @@ describe("VideoNula (Ula)", () => {
             ula.reset();
             expect(ula.paletteWriteFlag).toBe(false);
         });
+    });
+});
+
+describe("Teletext rebuildColours", () => {
+    let teletext;
+
+    beforeEach(() => {
+        teletext = new Teletext();
+    });
+
+    it("should produce identical output to init() with BBC default palette", () => {
+        // Capture the colour table built by init() (constructor calls init).
+        // Note: teletext.colour is an Int32Array (via makeFast32), so copy with matching type.
+        const initColours = new Int32Array(teletext.colour);
+
+        // Rebuild with the same BBC default palette.
+        const bbcCollook = new Uint32Array([
+            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
+            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
+        ]);
+        teletext.rebuildColours(bbcCollook);
+
+        expect(teletext.colour).toEqual(initColours);
+    });
+
+    it("should change fg=7/bg=7 entries when colour 7 is set to orange", () => {
+        // Orange in ABGR: R=0xFF, G=0x80, B=0x00 -> 0xff0080ff
+        const collook = new Uint32Array([
+            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xff0080ff, 0xff000000,
+            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xff0080ff,
+        ]);
+        teletext.rebuildColours(collook);
+
+        // Index for fg=7, bg=7, weight=3 (full foreground): (7<<5)|(7<<2)|3 = 0xFF
+        const fullFgIndex = (7 << 5) | (7 << 2) | 3;
+        const colour = teletext.colour[fullFgIndex];
+        // Should be orange (gamma-corrected, scaled to 240).
+        const r = colour & 0xff;
+        const g = (colour >> 8) & 0xff;
+        const b = (colour >> 16) & 0xff;
+        // R channel should be high (near 240), G mid-range, B zero.
+        expect(r).toBeGreaterThan(200);
+        expect(g).toBeGreaterThan(50);
+        expect(g).toBeLessThan(180);
+        expect(b).toBe(0);
+    });
+
+    it("should return background colour at weight=0", () => {
+        // Set fg=1 (red), bg=2 (green), weight=0 -> pure background.
+        const collook = new Uint32Array([
+            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
+            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
+        ]);
+        teletext.rebuildColours(collook);
+
+        // fg=1, bg=2, weight=0: (2<<5)|(1<<2)|0 = 68
+        const index = (2 << 5) | (1 << 2) | 0;
+        const colour = teletext.colour[index];
+        // Pure bg=2 (green: R=0, G=0xFF, B=0). Gamma-corrected 1.0^(1/2.2)*240 = 240.
+        const r = colour & 0xff;
+        const g = (colour >> 8) & 0xff;
+        expect(r).toBe(0);
+        expect(g).toBe(240);
+    });
+
+    it("should return foreground colour at weight=3", () => {
+        const collook = new Uint32Array([
+            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
+            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
+        ]);
+        teletext.rebuildColours(collook);
+
+        // fg=1 (red), bg=2 (green), weight=3: (2<<5)|(1<<2)|3 = 71
+        const index = (2 << 5) | (1 << 2) | 3;
+        const colour = teletext.colour[index];
+        // Pure fg=1 (red: R=0xFF, G=0, B=0). Gamma-corrected: 240.
+        const r = colour & 0xff;
+        const g = (colour >> 8) & 0xff;
+        expect(r).toBe(240);
+        expect(g).toBe(0);
+    });
+
+    it("should produce solid colour when fg equals bg", () => {
+        const collook = new Uint32Array([
+            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
+            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
+        ]);
+        teletext.rebuildColours(collook);
+
+        // fg=3 (yellow), bg=3 (yellow) — all 4 weight values should be the same.
+        const base = (3 << 5) | (3 << 2);
+        const c0 = teletext.colour[base | 0];
+        const c1 = teletext.colour[base | 1];
+        const c2 = teletext.colour[base | 2];
+        const c3 = teletext.colour[base | 3];
+        expect(c0).toBe(c1);
+        expect(c1).toBe(c2);
+        expect(c2).toBe(c3);
+    });
+});
+
+describe("MODE 7 NULA integration", () => {
+    let video;
+    let ula;
+    let mockFb32;
+    let mockPaintExt;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockFb32 = new Uint32Array(1024 * 768);
+        mockPaintExt = vi.fn();
+        vi.spyOn(utils, "makeFast32").mockImplementation((arr) => arr);
+
+        video = new Video(false, mockFb32, mockPaintExt);
+        ula = video.ula;
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("should update teletext colours when NULA palette writes to colours 0-7", () => {
+        // Capture teletext colour table before.
+        const before = new Uint32Array(video.teletext.colour);
+
+        // Set NULA colour 7 to orange (R=0xF, G=0x8, B=0x0).
+        ula.write(0xfe23, 0x7f); // colour 7, red=F
+        ula.write(0xfe23, 0x80); // green=8, blue=0
+
+        // Teletext colours should have changed for entries involving colour 7.
+        const fullFgIndex = (7 << 5) | (7 << 2) | 3; // fg=7, bg=7, weight=3
+        expect(video.teletext.colour[fullFgIndex]).not.toBe(before[fullFgIndex]);
+    });
+
+    it("should not update teletext colours when NULA palette writes to colours 8-15", () => {
+        const before = new Uint32Array(video.teletext.colour);
+
+        // Set NULA colour 8 (above the base 8 colours).
+        ula.write(0xfe23, 0x8f); // colour 8, red=F
+        ula.write(0xfe23, 0x00); // green=0, blue=0
+
+        // Teletext colours should be unchanged — only colours 0-7 matter for MODE 7.
+        for (let i = 0; i < 256; i++) {
+            expect(video.teletext.colour[i]).toBe(before[i]);
+        }
+    });
+
+    it("should restore teletext colours to BBC defaults on ULA reset", () => {
+        // Capture initial teletext colour table.
+        const initial = new Uint32Array(video.teletext.colour);
+
+        // Set NULA colour 1 to something different.
+        ula.write(0xfe23, 0x1f); // colour 1, red=F
+        ula.write(0xfe23, 0xf0); // green=F, blue=0
+
+        // Verify it changed.
+        expect(video.teletext.colour).not.toEqual(initial);
+
+        // Reset ULA (via control register 4).
+        ula.write(0xfe22, 0x40);
+
+        // Teletext colours should be back to BBC defaults.
+        for (let i = 0; i < 256; i++) {
+            expect(video.teletext.colour[i]).toBe(initial[i]);
+        }
     });
 });

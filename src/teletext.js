@@ -2,6 +2,12 @@
 import { makeChars } from "./teletext_data.js";
 import { makeFast32 } from "./utils.js";
 
+// Default BBC Micro colours in ABGR format, used for MODE 7 palette at init.
+const BbcDefaultCollook = new Uint32Array([
+    0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
+    0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
+]);
+
 export class Teletext {
     constructor() {
         this.prevCol = 0;
@@ -35,22 +41,8 @@ export class Teletext {
     init() {
         const charData = makeChars();
 
-        // Build palette
-        const gamma = 1.0 / 2.2;
-        for (let i = 0; i < 256; ++i) {
-            const alpha = (i & 3) / 3.0;
-            const foregroundR = !!(i & 4);
-            const foregroundG = !!(i & 8);
-            const foregroundB = !!(i & 16);
-            const backgroundR = !!(i & 32);
-            const backgroundG = !!(i & 64);
-            const backgroundB = !!(i & 128);
-            // Gamma-corrected blending
-            const blendedR = Math.pow(foregroundR * alpha + backgroundR * (1.0 - alpha), gamma) * 240;
-            const blendedG = Math.pow(foregroundG * alpha + backgroundG * (1.0 - alpha), gamma) * 240;
-            const blendedB = Math.pow(foregroundB * alpha + backgroundB * (1.0 - alpha), gamma) * 240;
-            this.colour[i] = blendedR | (blendedG << 8) | (blendedB << 16) | (0xff << 24);
-        }
+        // Build palette from BBC default colours.
+        this.rebuildColours(BbcDefaultCollook);
 
         function getLoResGlyphRow(c, row) {
             if (row < 0 || row >= 20) {
@@ -133,6 +125,34 @@ export class Teletext {
         }
 
         makeHiResGlyphs(this.separatedGlyphs, true);
+    }
+
+    /**
+     * Rebuild the 256-entry colour lookup from a 16-entry ABGR collook palette.
+     * Each entry encodes: bits 7-5 = background colour index (0-7),
+     * bits 4-2 = foreground colour index (0-7), bits 1-0 = blend weight.
+     * Reference: b-em mode7_gen_nula_lookup().
+     * @param {Uint32Array} collook - 16-entry palette in ABGR format (0xffBBGGRR).
+     */
+    rebuildColours(collook) {
+        const gamma = 1.0 / 2.2;
+        for (let i = 0; i < 256; ++i) {
+            const weight = (i & 3) / 3.0;
+            const fgIndex = (i >> 2) & 7;
+            const bgIndex = (i >> 5) & 7;
+            const fgColour = collook[fgIndex];
+            const bgColour = collook[bgIndex];
+            const fgR = (fgColour & 0xff) / 255;
+            const fgG = ((fgColour >> 8) & 0xff) / 255;
+            const fgB = ((fgColour >> 16) & 0xff) / 255;
+            const bgR = (bgColour & 0xff) / 255;
+            const bgG = ((bgColour >> 8) & 0xff) / 255;
+            const bgB = ((bgColour >> 16) & 0xff) / 255;
+            const blendedR = Math.pow(fgR * weight + bgR * (1.0 - weight), gamma) * 240;
+            const blendedG = Math.pow(fgG * weight + bgG * (1.0 - weight), gamma) * 240;
+            const blendedB = Math.pow(fgB * weight + bgB * (1.0 - weight), gamma) * 240;
+            this.colour[i] = blendedR | 0 | ((blendedG | 0) << 8) | ((blendedB | 0) << 16) | (0xff << 24);
+        }
     }
 
     setNextChars() {
