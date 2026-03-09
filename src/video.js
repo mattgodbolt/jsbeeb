@@ -1,6 +1,7 @@
 "use strict";
 import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
+import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -18,12 +19,6 @@ export const OPAQUE_WHITE = 0xffffffff;
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
 // Reference: b-em src/video.c (stardot/b-em).
 // Addresses &FE22 (control) and &FE23 (palette) via 2-byte write protocol.
-
-// Default NULA palette matches the standard BBC Micro colours (ABGR format).
-const NulaDefaultPalette = new Uint32Array([
-    0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
-    0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-]);
 
 ////////////////////
 // ULA interface (includes NULA programmable palette support)
@@ -57,6 +52,8 @@ class Ula {
         // Note: disabled is NOT cleared by reset (matches b-em behaviour).
         // Recompute rendered palette so any custom NULA colours are flushed.
         this._recomputeUlaPal(!!(this.video.ulactrl & 1));
+        // Rebuild MODE 7 teletext colours from the restored default palette.
+        this.video.teletext.rebuildColours(this.collook);
     }
 
     write(addr, val) {
@@ -174,6 +171,8 @@ class Ula {
             if (c >= 8) this.flash[c - 8] = 0;
             // Recompute all rendered palette entries from current state.
             this._recomputeUlaPal(!!(this.video.ulactrl & 1));
+            // MODE 7 teletext uses its own colour lookup; rebuild when a base colour changes.
+            if (c < 8) this.video.teletext.rebuildColours(this.collook);
         } else {
             this.paletteFirstByte = val;
         }
