@@ -1,6 +1,7 @@
 "use strict";
 import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
+import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -18,9 +19,6 @@ export const OPAQUE_WHITE = 0xffffffff;
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
 // Reference: b-em src/video.c (stardot/b-em).
 // Addresses &FE22 (control) and &FE23 (palette) via 2-byte write protocol.
-
-// Default NULA palette - the standard BBC Micro colours (ABGR format).
-import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 
 ////////////////////
 // ULA interface (includes NULA programmable palette support)
