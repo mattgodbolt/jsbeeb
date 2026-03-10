@@ -804,7 +804,12 @@ export class WdFdc {
         if (this._indexPulseCount < 6) return;
         if (this._commandType === 1) this._statusRegister |= Status.typeISpinUpDone;
         if (this._isCommandSettle) {
-            const settleMs = this._is1772 ? 15 : 30;
+            // The WD1770 datasheet specifies 30ms head settle, but empirical testing
+            // against b-em (which uses 15ms for all WD1770/2 variants) shows 15ms is
+            // correct for BBC hardware. Using 30ms causes disc streaming demos (e.g.
+            // STNICC-beeb on Master 128) to hang because sectors don't arrive before
+            // the first vsync IRQ. The WD1772 also uses 15ms per its datasheet.
+            const settleMs = 15;
             this._startTimer(TimerState.settle, settleMs * 1000);
         } else {
             this._dispatchCommand();
