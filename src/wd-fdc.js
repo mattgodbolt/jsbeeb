@@ -136,12 +136,7 @@ export class WdFdc {
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
 
         this._isMaster = cpu.model.isMaster;
-        // The BBC Master uses a WD1770, but its step rates and settle time match
-        // the WD1772 constants (6ms step / 15ms settle) rather than the slower
-        // WD1770 defaults (30ms step / 30ms settle). Using the wrong timing causes
-        // disc loads to be too slow, breaking demos that depend on streaming data
-        // arriving before the first vsync (e.g. STNICC-beeb on Master 128).
-        this._is1772 = this._isMaster; // TODO - also set for Master Compact when supported
+        this._is1772 = false; // TODO - if we ever support Master Compact
         this._isOpus = false; // TODO - if we ever support Opus
 
         this._controlRegister = 0;
@@ -809,7 +804,12 @@ export class WdFdc {
         if (this._indexPulseCount < 6) return;
         if (this._commandType === 1) this._statusRegister |= Status.typeISpinUpDone;
         if (this._isCommandSettle) {
-            const settleMs = this._is1772 ? 15 : 30;
+            // The WD1770 datasheet specifies 30ms head settle, but empirical testing
+            // against b-em (which uses 15ms for all WD1770/2 variants) shows 15ms is
+            // correct for BBC hardware. Using 30ms causes disc streaming demos (e.g.
+            // STNICC-beeb on Master 128) to hang because sectors don't arrive before
+            // the first vsync IRQ. The WD1772 also uses 15ms per its datasheet.
+            const settleMs = 15;
             this._startTimer(TimerState.settle, settleMs * 1000);
         } else {
             this._dispatchCommand();
