@@ -136,7 +136,12 @@ export class WdFdc {
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
 
         this._isMaster = cpu.model.isMaster;
-        this._is1772 = false; // TODO - if we ever support Master Compact
+        // The BBC Master uses a WD1770, but its step rates and settle time match
+        // the WD1772 constants (6ms step / 15ms settle) rather than the slower
+        // WD1770 defaults (30ms step / 30ms settle). Using the wrong timing causes
+        // disc loads to be too slow, breaking demos that depend on streaming data
+        // arriving before the first vsync (e.g. STNICC-beeb on Master 128).
+        this._is1772 = this._isMaster; // TODO - also set for Master Compact when supported
         this._isOpus = false; // TODO - if we ever support Opus
 
         this._controlRegister = 0;
