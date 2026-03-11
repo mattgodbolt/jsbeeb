@@ -847,6 +847,14 @@ export class Video {
                 }
             }
 
+            // IC37/IC36: during H blanking with V display active, always feed
+            // the SAA5050 pipeline with the video bus data, forcing bit 6 high.
+            // On real hardware IC37/IC36 operates regardless of ULA mode —
+            // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
+            if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
+                this.teletext.fetchData(this.readVideoMem() | 0x40);
+            }
+
             // CRTC MA always increments, inside display border or not.
             this.addr = (this.addr + 1) & 0x3fff;
 
