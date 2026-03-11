@@ -796,15 +796,9 @@ export class Video {
                 // Read data from address pointer if both horizontal and vertical display enabled.
                 const dat = this.readVideoMem();
                 if (insideBorder) {
-                    // Always feed the SAA5050 teletext chip with bus data,
-                    // even in graphics mode. On real hardware the SAA5050's
-                    // data inputs are always connected to the video bus, so
-                    // its pipeline always tracks the current character position.
-                    // This matters for the "TTX trick" used by some demos
-                    // (briefly enabling teletext mode for a few cycles to hide
-                    // per-frame garbage): without this, the chip's pipeline
-                    // holds stale data from previous TTX windows and renders
-                    // visible characters instead of the expected black output.
+                    // Always feed the SAA5050 pipeline: on real hardware IC15
+                    // permanently connects the video bus to the SAA5050 inputs
+                    // regardless of ULA mode. Required for the "TTX trick".
                     this.teletext.fetchData(dat);
 
                     // Check cursor start.
