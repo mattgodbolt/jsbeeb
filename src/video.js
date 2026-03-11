@@ -796,9 +796,11 @@ export class Video {
                 // Read data from address pointer if both horizontal and vertical display enabled.
                 const dat = this.readVideoMem();
                 if (insideBorder) {
-                    if (this.teletextMode) {
-                        this.teletext.fetchData(dat);
-                    }
+                    // Always feed the SAA5050 pipeline: on real hardware IC15
+                    // permanently connects the video bus to the SAA5050 inputs
+                    // regardless of ULA mode. Required for the "TTX trick".
+                    // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                    this.teletext.fetchData(dat);
 
                     // Check cursor start.
                     if (
