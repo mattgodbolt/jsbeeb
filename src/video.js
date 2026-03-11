@@ -95,7 +95,15 @@ class Ula {
         if (newMode !== this.video.ulaMode) {
             this.video.ulaMode = newMode;
         }
+        const wasTeletext = this.video.teletextMode;
         this.video.teletextMode = !!(val & 2);
+        // On real hardware, row 0 of the SAA5050 font ROM is blank for
+        // all characters, so stale pipeline contents are invisible when
+        // demos switch into TTX mode at a character row boundary.
+        // Clear the pipeline on entry to match the visual result.
+        if (!wasTeletext && this.video.teletextMode) {
+            this.video.teletext.dataQueue = [0x20, 0x20, 0x20, 0x20];
+        }
     }
 
     // ULA palette register (&FE21).
