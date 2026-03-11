@@ -847,6 +847,15 @@ export class Video {
                 }
             }
 
+            // During H blanking with V display active, continue feeding
+            // the SAA5050 pipeline so stale display bytes are flushed
+            // before the next scanline begins. On real hardware IC37/IC36
+            // force bit 6 high when DISPEN is low, preventing control
+            // codes from being latched during blanking.
+            if (this.teletextMode && this.dispEnabled & VDISPENABLE && !(this.dispEnabled & HDISPENABLE)) {
+                this.teletext.fetchData(this.readVideoMem() | 0x40);
+            }
+
             // CRTC MA always increments, inside display border or not.
             this.addr = (this.addr + 1) & 0x3fff;
 
