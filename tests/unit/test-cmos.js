@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { Cmos } from "../../src/cmos.js";
+import { Cmos, defaultCmos } from "../../src/cmos.js";
 
 describe("CMOS", () => {
     // Mock persistence
@@ -222,6 +222,19 @@ describe("CMOS", () => {
 
             // Read back minutes
             expect(readRtcRegister(CMOS_ADDR.MINUTES)).toBe(0x45);
+        });
+    });
+
+    describe("Default CMOS values", () => {
+        it("should default FDRIVE to 0 (6ms step rate) at CMOS address 0x19 (storage byte 11)", () => {
+            // CMOS layout: bytes 0-13 are RTC internals; bytes 14+ are user storage.
+            // Storage byte 11 = CMOS address 25 (0x19) holds the DFS configuration
+            // byte whose bits [1:0] are the WD1770 *CONFIGURE FDRIVE step rate:
+            //   0b00 = 6ms, 0b01 = 12ms, 0b10 = 20ms, 0b11 = 30ms
+            // FDRIVE 0 (6ms) is required for disc-streaming demos to complete
+            // seeks within the vsync window on the Master 128.
+            const fdriveBits = defaultCmos[25] & 0x03;
+            expect(fdriveBits).toBe(0); // FDRIVE 0 = 6ms
         });
     });
 
