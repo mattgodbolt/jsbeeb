@@ -460,16 +460,20 @@ export class Video {
         destOffset |= 0;
         const offset = table4bppOffset(this.ulaMode, dat);
         const fb32 = this.fb32;
-        const ulaPal = this.ulaPal;
+        // In NULA palette mode, bypass the ULA palette (ulaPal) and look up
+        // pixel colours directly from the NULA 12-bit colour table (collook).
+        // This skips the XOR-7 logical↔physical colour mapping that the
+        // standard ULA applies.  Reference: b-em src/video.c lines 1083, 1117.
+        const colourLookup = this.ula.paletteMode ? this.ula.collook : this.ulaPal;
         const table4bpp = this.table4bpp;
         // Take advantage of numPixels being either 8 or 16
         if (numPixels === 8) {
             for (let i = 0; i < 8; ++i) {
-                fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
+                fb32[destOffset + i] = colourLookup[table4bpp[offset + i]];
             }
         } else {
             for (let i = 0; i < 16; ++i) {
-                fb32[destOffset + i] = ulaPal[table4bpp[offset + i]];
+                fb32[destOffset + i] = colourLookup[table4bpp[offset + i]];
             }
         }
     }
