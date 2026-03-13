@@ -463,6 +463,110 @@ describe("Video", () => {
         });
     });
 
+    describe("NULA palette mode", () => {
+        it("should use ulaPal (with XOR-7 mapping) when paletteMode is off", () => {
+            // Set up Mode 3 (8 pixels, 4 colours per pixel)
+            video.ula.write(0, 0x1c); // bits 4+3+2 set = high freq, mode 3
+
+            // Set distinct colours in ulaPal and collook so we can tell which is used
+            const ulaColour = 0xffaa0000;
+            const nulaDirect = 0xff0000bb;
+            video.ulaPal.fill(ulaColour);
+            video.ula.collook.fill(nulaDirect);
+
+            // Ensure palette mode is OFF (default)
+            expect(video.ula.paletteMode).toBe(0);
+
+            // Render byte 0xFF — all palette indices will be 15
+            video.blitFb(0xff, TEST_FB_OFFSET, 8);
+
+            // Should use ulaPal, not collook
+            for (let i = 0; i < 8; i++) {
+                expect(mockFb32[TEST_FB_OFFSET + i]).toBe(ulaColour);
+            }
+        });
+
+        it("should use collook directly (bypassing XOR-7) when paletteMode is on", () => {
+            video.ula.write(0, 0x1c); // high freq, mode 3
+
+            const ulaColour = 0xffaa0000;
+            const nulaDirect = 0xff0000bb;
+            video.ulaPal.fill(ulaColour);
+            video.ula.collook.fill(nulaDirect);
+
+            // Enable NULA palette mode via control register &FE22
+            // Register 1, param 1 => value 0x11
+            video.ula.write(2, 0x11);
+            expect(video.ula.paletteMode).toBe(1);
+
+            video.blitFb(0xff, TEST_FB_OFFSET, 8);
+
+            // Should use collook directly
+            for (let i = 0; i < 8; i++) {
+                expect(mockFb32[TEST_FB_OFFSET + i]).toBe(nulaDirect);
+            }
+        });
+
+        it("should switch back to ulaPal when paletteMode is turned off", () => {
+            video.ula.write(0, 0x1c);
+
+            const ulaColour = 0xffaa0000;
+            const nulaDirect = 0xff0000bb;
+            video.ulaPal.fill(ulaColour);
+            video.ula.collook.fill(nulaDirect);
+
+            // Turn palette mode on then off
+            video.ula.write(2, 0x11); // on
+            video.ula.write(2, 0x10); // off (register 1, param 0)
+            expect(video.ula.paletteMode).toBe(0);
+
+            video.blitFb(0xff, TEST_FB_OFFSET, 8);
+
+            for (let i = 0; i < 8; i++) {
+                expect(mockFb32[TEST_FB_OFFSET + i]).toBe(ulaColour);
+            }
+        });
+
+        it("should work correctly in 16-pixel mode with paletteMode on", () => {
+            video.ula.write(0, 0x08); // low freq, mode 2
+
+            const nulaDirect = 0xff00cc00;
+            video.ula.collook.fill(nulaDirect);
+
+            video.ula.write(2, 0x11); // palette mode on
+
+            video.blitFb(0xff, TEST_FB_OFFSET, 16);
+
+            for (let i = 0; i < 16; i++) {
+                expect(mockFb32[TEST_FB_OFFSET + i]).toBe(nulaDirect);
+            }
+        });
+
+        it("should produce different output with paletteMode on vs off for same data", () => {
+            // Mode 3 (4bpp), high freq
+            video.ula.write(0, 0x1c);
+
+            // Set collook and ulaPal to completely different colour sets
+            for (let i = 0; i < 16; i++) {
+                video.ula.collook[i] = 0xff000000 | (i * 17); // dark greys
+                video.ulaPal[i] = 0xff000000 | ((15 - i) * 17); // reversed greys
+            }
+
+            // Render with palette mode OFF
+            video.ula.write(2, 0x10); // palette mode off
+            video.blitFb(0xff, TEST_FB_OFFSET, 8);
+            const offPixels = Array.from(mockFb32.slice(TEST_FB_OFFSET, TEST_FB_OFFSET + 8));
+
+            // Render with palette mode ON
+            video.ula.write(2, 0x11); // palette mode on
+            video.blitFb(0xff, TEST_FB_OFFSET, 8);
+            const onPixels = Array.from(mockFb32.slice(TEST_FB_OFFSET, TEST_FB_OFFSET + 8));
+
+            // The outputs must differ since collook and ulaPal have different mappings
+            expect(onPixels).not.toEqual(offPixels);
+        });
+    });
+
     describe("Hardware scrolling address translation", () => {
         beforeEach(() => {
             // Set up for graphics mode (non-teletext)
