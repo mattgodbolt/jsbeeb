@@ -27,9 +27,12 @@ const FB_HEIGHT = 625;
 export class MachineSession {
     /**
      * @param {string} modelName - e.g. "B-DFS1.2", "Master"
+     * @param {Object} [opts]
+     * @param {string} [opts.discImage] - path to an .ssd or .dsd disc image to load on boot
      */
-    constructor(modelName = "B-DFS1.2") {
+    constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
+        this._opts = opts;
 
         // Raw RGBA framebuffer — the Video chip renders into _fb32 (cleared each frame).
         // _completeFb8 is a snapshot taken at paint time (the equivalent of the browser canvas)
@@ -61,6 +64,9 @@ export class MachineSession {
     async initialise() {
         setNodeBasePath(_jsbeebRoot);
         await this._machine.initialise();
+        if (this._opts.discImage) {
+            this.loadDisc(this._opts.discImage);
+        }
         this._installCaptureHook();
     }
 

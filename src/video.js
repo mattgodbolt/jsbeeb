@@ -833,7 +833,17 @@ export class Video {
 
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                         if (this.teletextMode) {
-                            this.teletext.render(this.fb32, offset);
+                            if (this.halfClock) {
+                                // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
+                                this.teletext.render(this.fb32, offset);
+                            } else {
+                                // 2MHz clock + teletext bit set (the "TTX trick"): the Video ULA
+                                // forces DISPEN to the SAA5050 to 0 in 2MHz modes (0/1/2/3), so
+                                // the SAA5050 outputs black. Confirmed by Rich Talbot-Watkins (RTW)
+                                // at ABUG 2026-03-13.
+                                // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                                this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
+                            }
                         } else {
                             this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
                         }
@@ -845,6 +855,14 @@ export class Video {
                         this.handleCursor(offset, doubledLines);
                     }
                 }
+            }
+
+            // IC37/IC36: during H blanking with V display active, always feed
+            // the SAA5050 pipeline with the video bus data, forcing bit 6 high.
+            // On real hardware IC37/IC36 operates regardless of ULA mode —
+            // it is wired to the CRTC DISPEN signal, not the ULA teletext bit.
+            if (!(this.dispEnabled & HDISPENABLE) && this.dispEnabled & VDISPENABLE) {
+                this.teletext.fetchData(this.readVideoMem() | 0x40);
             }
 
             // CRTC MA always increments, inside display border or not.
