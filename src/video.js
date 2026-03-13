@@ -833,7 +833,17 @@ export class Video {
 
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                         if (this.teletextMode) {
-                            this.teletext.render(this.fb32, offset);
+                            if (this.halfClock) {
+                                // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
+                                this.teletext.render(this.fb32, offset);
+                            } else {
+                                // 2MHz clock + teletext bit set (the "TTX trick"): the Video ULA
+                                // forces DISPEN to the SAA5050 to 0 in 2MHz modes (0/1/2/3), so
+                                // the SAA5050 outputs black. Confirmed by Rich Talbot-Watkins (RTW)
+                                // at ABUG 2026-03-13.
+                                // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                                this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
+                            }
                         } else {
                             this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
                         }
