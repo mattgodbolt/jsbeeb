@@ -101,12 +101,12 @@ class Flags {
 }
 
 class Base6502 {
-    constructor(model) {
+    constructor(model, { cycleAccurate = true } = {}) {
         this.model = model;
         this.a = this.x = this.y = this.s = 0;
         this.p = new Flags();
         this.pc = 0;
-        this.opcodes = model.opcodesFactory(this);
+        this.opcodes = model.opcodesFactory(this, { cycleAccurate });
         this.disassembler = this.opcodes.disassembler;
         this.forceTracing = false;
         this.runner = this.opcodes.runInstruction;
@@ -405,7 +405,7 @@ class Base6502 {
 
 class Tube6502 extends Base6502 {
     constructor(model, cpu) {
-        super(model);
+        super(model, { cycleAccurate: false });
 
         this.cycles = 0;
         this.cpuMultiplier = 2;
@@ -571,8 +571,19 @@ function is1MHzAccess(addr) {
 }
 
 export class Cpu6502 extends Base6502 {
-    constructor(model, dbgr, video_, soundChip_, ddNoise_, music5000_, cmos, config, econet_) {
-        super(model);
+    constructor(
+        model,
+        dbgr,
+        video_,
+        soundChip_,
+        ddNoise_,
+        music5000_,
+        cmos,
+        config,
+        econet_,
+        { cycleAccurate = true } = {},
+    ) {
+        super(model, { cycleAccurate });
         this.config = fixUpConfig(config);
         this.debugFlags = this.config.debugFlags;
         this.cmos = cmos;

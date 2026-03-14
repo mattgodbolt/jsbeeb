@@ -4,6 +4,7 @@ import _ from "underscore";
 import { describe, it } from "vitest";
 import * as utils from "../../src/utils.js";
 import { fake6502, fake65C02, fake65C12 } from "../../src/fake6502.js";
+import { TEST_65C02, TEST_65C12 } from "../../src/models.js";
 
 import assert from "assert";
 
@@ -97,5 +98,23 @@ describe("dormann tests", { timeout: 30000 }, function () {
         const cpu = fake65C12();
         await cpu.initialise();
         assert(await runTest(cpu, "65C12_extended_opcodes_test", "65C12"));
+    });
+});
+
+describe("dormann tests (non-cycle-accurate)", { timeout: 30000 }, function () {
+    it("should pass 6502 functional tests", async () => {
+        const cpu = fake6502(undefined, { cycleAccurate: false });
+        await cpu.initialise();
+        assert(await runTest(cpu, "6502_functional_test", "6502 (non-cycle-accurate)"));
+    });
+    it("should pass 65c02 extended opcode tests", async () => {
+        const cpu = fake6502(TEST_65C02, { cycleAccurate: false });
+        await cpu.initialise();
+        assert(await runTest(cpu, "65C02_extended_opcodes_test", "65C02 (non-cycle-accurate)"));
+    });
+    it("should pass 65c12 extended opcode tests", async () => {
+        const cpu = fake6502(TEST_65C12, { cycleAccurate: false });
+        await cpu.initialise();
+        assert(await runTest(cpu, "65C12_extended_opcodes_test", "65C12 (non-cycle-accurate)"));
     });
 });

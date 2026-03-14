@@ -20,7 +20,19 @@ export function fake6502(model, opts) {
     const video = opts.video || fakeVideo;
     model = model || TEST_6502;
     if (opts.tube) model.tube = findModel("Tube65c02");
-    return new Cpu6502(model, dbgr, video, soundChip, new FakeDdNoise(), new FakeMusic5000(), new Cmos());
+    const cpuOpts = opts.cycleAccurate !== undefined ? { cycleAccurate: opts.cycleAccurate } : {};
+    return new Cpu6502(
+        model,
+        dbgr,
+        video,
+        soundChip,
+        new FakeDdNoise(),
+        new FakeMusic5000(),
+        new Cmos(),
+        undefined,
+        undefined,
+        cpuOpts,
+    );
 }
 
 export function fake65C02() {
