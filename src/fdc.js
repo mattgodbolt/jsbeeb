@@ -13,16 +13,17 @@ export function load(name) {
  */
 export class DiscType {
     /**
-     * Create a new disc type
-     * @param {string} extension - File extension for this disc type (e.g. ".ssd", ".hfe")
-     * @param {function(Disc, Uint8Array, function?): Disc} loader - Function to load this disc type
-     * @param {function(Disc): Uint8Array} saver - Function to save this disc type
-     * @param {function(Uint8Array, string): void|null} nameSetter - Function to set the name/label in the disc image
-     * @param {boolean} isDoubleSided - Whether the disc format is double-sided
-     * @param {boolean} isDoubleDensity - Whether the disc format is double density
-     * @param {number|undefined} byteSize - The size in bytes of this disc format, or undefined if variable
+     * Create a new disc type.
+     * @param {Object} [options] - Configuration options for this disc type.
+     * @param {string} options.extension - File extension for this disc type (e.g. ".ssd", ".hfe").
+     * @param {function(Disc, Uint8Array, function?): Disc} options.loader - Function to load this disc type.
+     * @param {function(Disc): Uint8Array} options.saver - Function to save this disc type.
+     * @param {function(Uint8Array, string): void|null} [options.nameSetter] - Function to set the name/label in the disc image, or null if not supported.
+     * @param {boolean} [options.isDoubleSided] - Whether the disc format is double-sided.
+     * @param {boolean} [options.isDoubleDensity] - Whether the disc format is double density.
+     * @param {number|undefined} [options.byteSize] - The size in bytes of this disc format, or undefined if variable.
      */
-    constructor(extension, loader, saver, nameSetter, isDoubleSided, isDoubleDensity, byteSize) {
+    constructor({ extension, loader, saver, nameSetter, isDoubleSided, isDoubleDensity, byteSize } = {}) {
         this._extension = extension;
         this._loader = loader;
         this._saver = saver;
@@ -128,69 +129,65 @@ function setDfsDiscName(data, name) {
 }
 
 // HFE disc type - variable size
-const hfeDiscType = new DiscType(
-    ".hfe",
-    loadHfe,
-    toHfe,
-    null, // no name setter function yet
-    true, // double-sided
-    true, // double density
-    undefined, // variable size
-);
+const hfeDiscType = new DiscType({
+    extension: ".hfe",
+    loader: loadHfe,
+    saver: toHfe,
+    isDoubleSided: true,
+    isDoubleDensity: true,
+});
 
 // ADFS (Large) discs are double density, double sided
-const adlDiscType = new DiscType(
-    ".adl",
-    (disc, data, _onChange) => {
+const adlDiscType = new DiscType({
+    extension: ".adl",
+    loader: (disc, data, _onChange) => {
         // TODO handle onChange
         return loadAdf(disc, data, true);
     },
-    (_data) => {
+    saver: (_data) => {
         throw new Error("ADL unsupported");
     },
-    null, // no name setter function yet
-    true, // double-sided
-    true, // double density
-    AdfsLargeByteSize,
-);
+    isDoubleSided: true,
+    isDoubleDensity: true,
+    byteSize: AdfsLargeByteSize,
+});
 
 // ADFS (Small) discs are standard ADFS (non-double) density, single sided
-const adfDiscType = new DiscType(
-    ".adf",
-    (disc, data, _onChange) => {
+const adfDiscType = new DiscType({
+    extension: ".adf",
+    loader: (disc, data, _onChange) => {
         // TODO handle onChange
         return loadAdf(disc, data, false);
     },
-    (_data) => {
+    saver: (_data) => {
         throw new Error("ADF unsupported");
     },
-    null, // no name setter function yet
-    false, // single-sided
-    true, // double density
-    AdfsSmallByteSize,
-);
+    isDoubleSided: false,
+    isDoubleDensity: true,
+    byteSize: AdfsSmallByteSize,
+});
 
 // DSD (Double-sided disc)
-const dsdDiscType = new DiscType(
-    ".dsd",
-    (disc, data, onChange) => loadSsd(disc, data, true, onChange),
-    toSsdOrDsd,
-    setDfsDiscName, // supports setting catalogue name
-    true, // double-sided
-    false, // standard density
-    DsdByteSize,
-);
+const dsdDiscType = new DiscType({
+    extension: ".dsd",
+    loader: (disc, data, onChange) => loadSsd(disc, data, true, onChange),
+    saver: toSsdOrDsd,
+    nameSetter: setDfsDiscName,
+    isDoubleSided: true,
+    isDoubleDensity: false,
+    byteSize: DsdByteSize,
+});
 
 // SSD (Single-sided disc)
-const ssdDiscType = new DiscType(
-    ".ssd",
-    (disc, data, onChange) => loadSsd(disc, data, false, onChange),
-    toSsdOrDsd,
-    setDfsDiscName, // supports setting catalogue name
-    false, // single-sided
-    false, // standard density
-    SsdByteSize,
-);
+const ssdDiscType = new DiscType({
+    extension: ".ssd",
+    loader: (disc, data, onChange) => loadSsd(disc, data, false, onChange),
+    saver: toSsdOrDsd,
+    nameSetter: setDfsDiscName,
+    isDoubleSided: false,
+    isDoubleDensity: false,
+    byteSize: SsdByteSize,
+});
 /**
  * Determine the disc type based on the file name extension
  * @param {string} name - The file name with extension

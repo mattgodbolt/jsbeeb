@@ -370,7 +370,13 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
 const audioStatsNode = document.getElementById("audio-stats");
-const audioHandler = new AudioHandler($("#audio-warning"), audioStatsNode, audioFilterFreq, audioFilterQ, noSeek);
+const audioHandler = new AudioHandler({
+    warningNode: $("#audio-warning"),
+    statsNode: audioStatsNode,
+    audioFilterFreq,
+    audioFilterQ,
+    noSeek,
+});
 if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
@@ -586,17 +592,16 @@ function checkPrinterWindow() {
     processor.uservia.setca1(true);
 }
 
-processor = new Cpu6502(
-    model,
+processor = new Cpu6502(model, {
     dbgr,
     video,
-    audioHandler.soundChip,
-    audioHandler.ddNoise,
-    model.hasMusic5000 ? audioHandler.music5000 : null,
+    soundChip: audioHandler.soundChip,
+    ddNoise: audioHandler.ddNoise,
+    music5000: model.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
-    emulationConfig,
+    config: emulationConfig,
     econet,
-);
+});
 
 // Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);

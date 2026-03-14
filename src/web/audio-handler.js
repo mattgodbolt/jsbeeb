@@ -9,7 +9,7 @@ const rendererUrl = new URL("./audio-renderer.js", import.meta.url).href;
 const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
 
 export class AudioHandler {
-    constructor(warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek) {
+    constructor({ warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek } = {}) {
         this.warningNode = warningNode;
         this.warningNode.toggle(false);
         this.chart = new SmoothieChart({

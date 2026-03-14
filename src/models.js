@@ -11,7 +11,7 @@ const CpuModel = Object.freeze({
 });
 
 class Model {
-    constructor(name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride } = {}) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -97,77 +97,81 @@ const masterSwram = [
 ];
 
 export const allModels = [
-    new Model(
-        "BBC B with DFS 1.2",
-        ["B-DFS1.2"],
-        ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
-        CpuModel.MOS6502,
-        false,
-        beebSwram,
-        NoiseAwareIntelFdc,
-    ),
-    new Model(
-        "BBC B with DFS 0.9",
-        ["B-DFS0.9", "B"],
-        ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
-        CpuModel.MOS6502,
-        false,
-        beebSwram,
-        NoiseAwareIntelFdc,
-    ),
-    new Model(
-        "BBC B with 1770 (DFS)",
-        ["B1770"],
-        ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
-        CpuModel.MOS6502,
-        false,
-        beebSwram,
-        NoiseAwareWdFdc,
-    ),
+    new Model({
+        name: "BBC B with DFS 1.2",
+        synonyms: ["B-DFS1.2"],
+        os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc,
+    }),
+    new Model({
+        name: "BBC B with DFS 0.9",
+        synonyms: ["B-DFS0.9", "B"],
+        os: ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc,
+    }),
+    new Model({
+        name: "BBC B with 1770 (DFS)",
+        synonyms: ["B1770"],
+        os: ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareWdFdc,
+    }),
     // putting ADFS in a higher ROM slot gives it priority
-    new Model(
-        "BBC B with 1770 (ADFS)",
-        ["B1770A"],
-        ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
-        CpuModel.MOS6502,
-        false,
-        beebSwram,
-        NoiseAwareWdFdc,
-    ),
-    new Model(
-        "BBC Master 128 (DFS)",
-        ["Master"],
-        ["master/mos3.20"],
-        CpuModel.CMOS65C12,
-        true,
-        masterSwram,
-        NoiseAwareWdFdc,
-        null,
-        pickDfs,
-    ),
-    new Model(
-        "BBC Master 128 (ADFS)",
-        ["MasterADFS"],
-        ["master/mos3.20"],
-        CpuModel.CMOS65C12,
-        true,
-        masterSwram,
-        NoiseAwareWdFdc,
-        null,
-        pickAdfs,
-    ),
-    new Model(
-        "BBC Master 128 (ANFS)",
-        ["MasterANFS"],
-        ["master/mos3.20"],
-        CpuModel.CMOS65C12,
-        true,
-        masterSwram,
-        NoiseAwareWdFdc,
-        null,
-        pickAnfs,
-    ),
-    new Model("Tube65C02", [], ["tube/6502Tube.rom"], CpuModel.CMOS65C02, false), // Although this can not be explicitly selected as a model, it is required by the configuration builder later
+    new Model({
+        name: "BBC B with 1770 (ADFS)",
+        synonyms: ["B1770A"],
+        os: ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareWdFdc,
+    }),
+    new Model({
+        name: "BBC Master 128 (DFS)",
+        synonyms: ["Master"],
+        os: ["master/mos3.20"],
+        cpuModel: CpuModel.CMOS65C12,
+        isMaster: true,
+        swram: masterSwram,
+        fdc: NoiseAwareWdFdc,
+        cmosOverride: pickDfs,
+    }),
+    new Model({
+        name: "BBC Master 128 (ADFS)",
+        synonyms: ["MasterADFS"],
+        os: ["master/mos3.20"],
+        cpuModel: CpuModel.CMOS65C12,
+        isMaster: true,
+        swram: masterSwram,
+        fdc: NoiseAwareWdFdc,
+        cmosOverride: pickAdfs,
+    }),
+    new Model({
+        name: "BBC Master 128 (ANFS)",
+        synonyms: ["MasterANFS"],
+        os: ["master/mos3.20"],
+        cpuModel: CpuModel.CMOS65C12,
+        isMaster: true,
+        swram: masterSwram,
+        fdc: NoiseAwareWdFdc,
+        cmosOverride: pickAnfs,
+    }),
+    // Although this can not be explicitly selected as a model, it is required by the configuration builder later
+    new Model({
+        name: "Tube65C02",
+        synonyms: [],
+        os: ["tube/6502Tube.rom"],
+        cpuModel: CpuModel.CMOS65C02,
+        isMaster: false,
+    }),
 ];
 
 export function findModel(name) {
@@ -182,19 +186,43 @@ export function findModel(name) {
     return null;
 }
 
-export const TEST_6502 = new Model("TEST", ["TEST"], [], CpuModel.MOS6502, false, beebSwram, NoiseAwareIntelFdc);
+export const TEST_6502 = new Model({
+    name: "TEST",
+    synonyms: ["TEST"],
+    os: [],
+    cpuModel: CpuModel.MOS6502,
+    isMaster: false,
+    swram: beebSwram,
+    fdc: NoiseAwareIntelFdc,
+});
 TEST_6502.isTest = true;
-export const TEST_65C02 = new Model("TEST", ["TEST"], [], CpuModel.CMOS65C02, false, masterSwram, NoiseAwareIntelFdc);
+export const TEST_65C02 = new Model({
+    name: "TEST",
+    synonyms: ["TEST"],
+    os: [],
+    cpuModel: CpuModel.CMOS65C02,
+    isMaster: false,
+    swram: masterSwram,
+    fdc: NoiseAwareIntelFdc,
+});
 TEST_65C02.isTest = true;
-export const TEST_65C12 = new Model("TEST", ["TEST"], [], CpuModel.CMOS65C12, false, masterSwram, NoiseAwareIntelFdc);
+export const TEST_65C12 = new Model({
+    name: "TEST",
+    synonyms: ["TEST"],
+    os: [],
+    cpuModel: CpuModel.CMOS65C12,
+    isMaster: false,
+    swram: masterSwram,
+    fdc: NoiseAwareIntelFdc,
+});
 TEST_65C12.isTest = true;
 
-export const basicOnly = new Model(
-    "Basic only",
-    ["Basic only"],
-    ["master/mos3.20"],
-    CpuModel.CMOS65C12,
-    true,
-    masterSwram,
-    NoiseAwareWdFdc,
-);
+export const basicOnly = new Model({
+    name: "Basic only",
+    synonyms: ["Basic only"],
+    os: ["master/mos3.20"],
+    cpuModel: CpuModel.CMOS65C12,
+    isMaster: true,
+    swram: masterSwram,
+    fdc: NoiseAwareWdFdc,
+});
