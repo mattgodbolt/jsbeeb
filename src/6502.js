@@ -408,6 +408,7 @@ class Tube6502 extends Base6502 {
         super(model);
 
         this.cycles = 0;
+        this.cpuMultiplier = 2;
         this.romPaged = true;
         this.memory = new Uint8Array(65536);
         this.rom = new Uint8Array(4096);
@@ -468,7 +469,7 @@ class Tube6502 extends Base6502 {
     }
 
     execute(cycles) {
-        this.cycles += cycles * 2;
+        this.cycles += (cycles * this.cpuMultiplier) | 0;
         if (this.cycles < 3) return;
         while (this.cycles > 0) {
             const opcode = this.readmem(this.pc);
@@ -602,6 +603,9 @@ export class Cpu6502 extends Base6502 {
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
         this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
         this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
+        if (model.tube && this.config.tubeCpuMultiplier) {
+            this.tube.cpuMultiplier = this.config.tubeCpuMultiplier;
+        }
         this.music5000PageSel = 0;
         this.econet = econet_;
 

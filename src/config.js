@@ -17,6 +17,7 @@ export class Config extends EventEmitter {
             this.changed = {};
             this.setDropdownText(this.model.name);
             this.set65c02(this.model.tube);
+            this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
             this.setTeletext(this.model.hasTeletextAdaptor);
             this.setMusic5000(this.model.hasMusic5000);
             this.setEconet(this.model.hasEconet);
@@ -36,6 +37,13 @@ export class Config extends EventEmitter {
 
         $("#65c02").on("click", () => {
             this.changed.coProcessor = $("#65c02").prop("checked");
+            $("#tubeCpuMultiplier").prop("disabled", !$("#65c02").prop("checked"));
+        });
+
+        $("#tubeCpuMultiplier").on("input", () => {
+            const val = parseInt($("#tubeCpuMultiplier").val(), 10);
+            $("#tubeCpuMultiplierValue").text(val);
+            this.changed.tubeCpuMultiplier = val;
         });
 
         $("#hasTeletextAdaptor").on("click", () => {
@@ -113,6 +121,13 @@ export class Config extends EventEmitter {
         enabled = !!enabled;
         $("#65c02").prop("checked", enabled);
         this.model.tube = enabled ? findModel("Tube65c02") : null;
+        $("#tubeCpuMultiplier").prop("disabled", !enabled);
+    }
+
+    setTubeCpuMultiplier(value) {
+        this.tubeCpuMultiplier = value;
+        $("#tubeCpuMultiplier").val(value);
+        $("#tubeCpuMultiplierValue").text(value);
     }
 
     setEconet(enabled) {

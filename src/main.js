@@ -107,6 +107,7 @@ const paramTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
+    tubeCpuMultiplier: ParamTypes.INT,
     microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)
@@ -197,6 +198,7 @@ const emulationConfig = {
     keyLayout: keyLayout,
     coProcessor: parsedQuery.coProcessor,
     cpuMultiplier: cpuMultiplier,
+    tubeCpuMultiplier: parsedQuery.tubeCpuMultiplier || 2,
     videoCyclesBatch: parsedQuery.videoCyclesBatch,
     extraRoms: extraRoms,
     userPort: userPort,
@@ -260,6 +262,13 @@ const config = new Config(
         if (changed.speechOutput !== undefined) {
             speechOutput.enabled = !!changed.speechOutput;
         }
+        if (changed.tubeCpuMultiplier !== undefined) {
+            emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
+            config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
+            if (processor.tube && processor.tube.cpuMultiplier !== undefined) {
+                processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
+            }
+        }
         updateUrl();
     },
 );
@@ -270,6 +279,7 @@ config.mapLegacyModels(parsedQuery);
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
+config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 2);
 config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
