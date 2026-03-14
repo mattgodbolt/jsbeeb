@@ -41,8 +41,9 @@ function push(reg) {
 }
 
 class InstructionGen {
-    constructor(is65c12) {
+    constructor(is65c12, cycleAccurate = true) {
         this.is65c12 = is65c12;
+        this.cycleAccurate = cycleAccurate;
         this.ops = {};
         this.cycle = 0;
     }
@@ -106,6 +107,10 @@ class InstructionGen {
     }
 
     spuriousOp(addr, reg) {
+        if (!this.cycleAccurate) {
+            this.cycle++;
+            return;
+        }
         if (this.is65c12) {
             this.readOp(addr, "", true);
         } else {
@@ -122,7 +127,7 @@ class InstructionGen {
                 toSkip++;
                 continue;
             }
-            if (toSkip && this.ops[i].exact) {
+            if (this.cycleAccurate && toSkip && this.ops[i].exact) {
                 if (this.ops[i].addr) {
                     out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[i].addr});`);
                 } else {
@@ -134,7 +139,7 @@ class InstructionGen {
             toSkip++;
         }
         if (toSkip) {
-            if (this.ops[this.cycle] && this.ops[this.cycle].addr) {
+            if (this.cycleAccurate && this.ops[this.cycle] && this.ops[this.cycle].addr) {
                 out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[this.cycle].addr});`);
             } else {
                 out.push(`cpu.polltime(${toSkip});`);
@@ -145,17 +150,17 @@ class InstructionGen {
     }
 
     split(condition) {
-        return new SplitInstruction(this, condition, this.is65c12);
+        return new SplitInstruction(this, condition, this.is65c12, this.cycleAccurate);
     }
 }
 
 class SplitInstruction {
-    constructor(preamble, condition, is65c12) {
+    constructor(preamble, condition, is65c12, cycleAccurate = true) {
         this.preamble = preamble;
         this.condition = condition;
-        this.ifTrue = new InstructionGen(is65c12);
+        this.ifTrue = new InstructionGen(is65c12, cycleAccurate);
         this.ifTrue.tick(preamble.cycle);
-        this.ifFalse = new InstructionGen(is65c12);
+        this.ifFalse = new InstructionGen(is65c12, cycleAccurate);
         this.ifFalse.tick(preamble.cycle);
 
         ["append", "prepend", "readOp", "writeOp", "spuriousOp"].forEach((op) => {
@@ -1052,7 +1057,7 @@ class Disassemble6502 {
     }
 }
 
-function makeCpuFunctions(cpu, opcodes, is65c12) {
+function makeCpuFunctions(cpu, opcodes, is65c12, cycleAccurate = true) {
     function getInstruction(opcodeString, needsReg) {
         const split = opcodeString.split(" ");
         const opcode = split[0];
@@ -1060,7 +1065,7 @@ function makeCpuFunctions(cpu, opcodes, is65c12) {
         const op = getOp(opcode, arg);
         if (!op) return null;
 
-        let ig = new InstructionGen(is65c12);
+        let ig = new InstructionGen(is65c12, cycleAccurate);
         if (needsReg) ig.append("let REG = 0|0;");
 
         switch (arg) {
@@ -1398,14 +1403,14 @@ ${indent}`)
     };
 }
 
-export function Cpu6502(cpu) {
-    return makeCpuFunctions(cpu, opcodes6502, false);
+export function Cpu6502(cpu, { cycleAccurate = true } = {}) {
+    return makeCpuFunctions(cpu, opcodes6502, false, cycleAccurate);
 }
 
-export function Cpu65c12(cpu) {
-    return makeCpuFunctions(cpu, opcodes65c12, true);
+export function Cpu65c12(cpu, { cycleAccurate = true } = {}) {
+    return makeCpuFunctions(cpu, opcodes65c12, true, cycleAccurate);
 }
 
-export function Cpu65c02(cpu) {
-    return makeCpuFunctions(cpu, opcodes65c02, true);
+export function Cpu65c02(cpu, { cycleAccurate = true } = {}) {
+    return makeCpuFunctions(cpu, opcodes65c02, true, cycleAccurate);
 }
