@@ -460,7 +460,7 @@ class Via {
 }
 
 export class SysVia extends Via {
-    constructor(cpu, scheduler, video, soundChip, cmos, isMaster, initialLayout, getGamepads) {
+    constructor(cpu, scheduler, { video, soundChip, cmos, isMaster, initialLayout, getGamepads } = {}) {
         super(cpu, scheduler, 0x01);
 
         this.IC32 = 0;

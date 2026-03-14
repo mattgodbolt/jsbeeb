@@ -573,15 +573,7 @@ function is1MHzAccess(addr) {
 export class Cpu6502 extends Base6502 {
     constructor(
         model,
-        dbgr,
-        video_,
-        soundChip_,
-        ddNoise_,
-        music5000_,
-        cmos,
-        config,
-        econet_,
-        { cycleAccurate = true } = {},
+        { dbgr, video, soundChip, ddNoise, music5000, cmos, config, econet, cycleAccurate = true } = {},
     ) {
         super(model, { cycleAccurate });
         this.config = fixUpConfig(config);
@@ -589,12 +581,12 @@ export class Cpu6502 extends Base6502 {
         this.cmos = cmos;
         this.debugger = dbgr;
 
-        this.video = video_;
+        this.video = video;
         this.crtc = this.video.crtc;
         this.ula = this.video.ula;
-        this.soundChip = soundChip_;
-        this.music5000 = music5000_;
-        this.ddNoise = ddNoise_;
+        this.soundChip = soundChip;
+        this.music5000 = music5000;
+        this.ddNoise = ddNoise;
         this.memStatOffsetByIFetchBank = 0;
         this.memStatOffset = 0;
         this.memStat = new Uint8Array(512);
@@ -618,7 +610,7 @@ export class Cpu6502 extends Base6502 {
             this.tube.cpuMultiplier = this.config.tubeCpuMultiplier;
         }
         this.music5000PageSel = 0;
-        this.econet = econet_;
+        this.econet = econet;
 
         this.peripheralCycles = 0;
         this.videoCycles = 0;
@@ -631,16 +623,14 @@ export class Cpu6502 extends Base6502 {
         this.debugWrite = new DebugHook(this, "_debugWrite");
 
         this.scheduler = new Scheduler();
-        this.sysvia = new via.SysVia(
-            this,
-            this.scheduler,
-            this.video,
-            this.soundChip,
-            this.cmos,
-            this.model.isMaster,
-            this.config.keyLayout,
-            this.config.getGamepads,
-        );
+        this.sysvia = new via.SysVia(this, this.scheduler, {
+            video: this.video,
+            soundChip: this.soundChip,
+            cmos: this.cmos,
+            isMaster: this.model.isMaster,
+            initialLayout: this.config.keyLayout,
+            getGamepads: this.config.getGamepads,
+        });
         this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
         this.serial = new Serial(this.acia);

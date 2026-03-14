@@ -17,22 +17,17 @@ const dbgr = {
 
 export function fake6502(model, opts) {
     opts = opts || {};
-    const video = opts.video || fakeVideo;
     model = model || TEST_6502;
     if (opts.tube) model.tube = findModel("Tube65c02");
-    const cpuOpts = opts.cycleAccurate !== undefined ? { cycleAccurate: opts.cycleAccurate } : {};
-    return new Cpu6502(
-        model,
+    return new Cpu6502(model, {
         dbgr,
-        video,
+        video: opts.video || fakeVideo,
         soundChip,
-        new FakeDdNoise(),
-        new FakeMusic5000(),
-        new Cmos(),
-        undefined,
-        undefined,
-        cpuOpts,
-    );
+        ddNoise: new FakeDdNoise(),
+        music5000: new FakeMusic5000(),
+        cmos: new Cmos(),
+        cycleAccurate: opts.cycleAccurate,
+    });
 }
 
 export function fake65C02() {
