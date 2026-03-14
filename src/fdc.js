@@ -13,14 +13,15 @@ export function load(name) {
  */
 export class DiscType {
     /**
-     * Create a new disc type
-     * @param {string} extension - File extension for this disc type (e.g. ".ssd", ".hfe")
-     * @param {function(Disc, Uint8Array, function?): Disc} loader - Function to load this disc type
-     * @param {function(Disc): Uint8Array} saver - Function to save this disc type
-     * @param {function(Uint8Array, string): void|null} nameSetter - Function to set the name/label in the disc image
-     * @param {boolean} isDoubleSided - Whether the disc format is double-sided
-     * @param {boolean} isDoubleDensity - Whether the disc format is double density
-     * @param {number|undefined} byteSize - The size in bytes of this disc format, or undefined if variable
+     * Create a new disc type.
+     * @param {Object} [options] - Configuration options for this disc type.
+     * @param {string} options.extension - File extension for this disc type (e.g. ".ssd", ".hfe").
+     * @param {function(Disc, Uint8Array, function?): Disc} options.loader - Function to load this disc type.
+     * @param {function(Disc): Uint8Array} options.saver - Function to save this disc type.
+     * @param {function(Uint8Array, string): void|null} [options.nameSetter] - Function to set the name/label in the disc image, or null if not supported.
+     * @param {boolean} [options.isDoubleSided] - Whether the disc format is double-sided.
+     * @param {boolean} [options.isDoubleDensity] - Whether the disc format is double density.
+     * @param {number|undefined} [options.byteSize] - The size in bytes of this disc format, or undefined if variable.
      */
     constructor({ extension, loader, saver, nameSetter, isDoubleSided, isDoubleDensity, byteSize } = {}) {
         this._extension = extension;
