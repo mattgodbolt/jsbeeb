@@ -70,7 +70,7 @@ describe("parseBemSnapshot", () => {
 
         expect(snapshot.format).toBe("jsbeeb-snapshot");
         expect(snapshot.version).toBe(1);
-        expect(snapshot.model).toBe("B");
+        expect(snapshot.model).toBe("BBC B with DFS 1.2");
         expect(snapshot.state.a).toBe(0x42);
         expect(snapshot.state.x).toBe(0x10);
         expect(snapshot.state.y).toBe(0x20);
@@ -140,6 +140,6 @@ describe("parseBemSnapshot", () => {
     it("should accept model 4 (BBC B with sideways RAM)", () => {
         const buffer = makeMinimalBemSnapshot({ model: 4 });
         const snapshot = parseBemSnapshot(buffer);
-        expect(snapshot.model).toBe("B");
+        expect(snapshot.model).toBe("BBC B with DFS 1.2");
     });
 });
