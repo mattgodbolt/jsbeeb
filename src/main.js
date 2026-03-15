@@ -31,6 +31,7 @@ import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON } from "./snapshot.js";
+import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -1383,11 +1384,26 @@ $("#load-state").on("change", async function (event) {
     const wasRunning = running;
     if (running) stop(false);
     try {
-        const text = await file.text();
-        const snapshot = snapshotFromJSON(text);
+        const arrayBuffer = await file.arrayBuffer();
+        let snapshot;
+        if (isBemSnapshot(arrayBuffer)) {
+            snapshot = parseBemSnapshot(arrayBuffer);
+            // BEM snapshots include ROMs - load them into the CPU
+            if (snapshot.state.roms) {
+                const romData = snapshot.state.roms;
+                for (let i = 0; i < 16; i++) {
+                    const bankData = romData.slice(i * 16384, (i + 1) * 16384);
+                    processor.ramRomOs.set(bankData, processor.romOffset + i * 16384);
+                }
+                delete snapshot.state.roms;
+            }
+        } else {
+            const text = new TextDecoder().decode(arrayBuffer);
+            snapshot = snapshotFromJSON(text);
+        }
         if (snapshot.model !== model.name) {
             // Model mismatch: stash state and reload with correct model
-            sessionStorage.setItem("jsbeeb-pending-state", text);
+            sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
             const newQuery = { ...parsedQuery, model: snapshot.model };
             const baseUrl = window.location.origin + window.location.pathname;
             window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
