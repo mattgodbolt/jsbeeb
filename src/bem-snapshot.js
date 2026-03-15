@@ -181,7 +181,7 @@ function convertSoundState(snLatch, snCount, snStat, snVol, snNoise, snShift) {
     };
 }
 
-function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook) {
+function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, crtcCounters) {
     const regs = new Uint8Array(32);
     regs.set(crtcRegs.slice(0, 18));
     const actualPal = new Uint8Array(16);
@@ -233,19 +233,19 @@ function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook) {
         hpulseCounter: 0,
         vpulseCounter: 0,
         dispEnabled: 0x3f,
-        horizCounter: 0,
-        vertCounter: 0,
-        scanlineCounter: 0,
+        horizCounter: crtcCounters ? crtcCounters.hc : 0,
+        vertCounter: crtcCounters ? crtcCounters.vc : 0,
+        scanlineCounter: crtcCounters ? crtcCounters.sc : 0,
         vertAdjustCounter: 0,
-        addr: (regs[13] | (regs[12] << 8)) & 0x3fff,
-        lineStartAddr: (regs[13] | (regs[12] << 8)) & 0x3fff,
-        nextLineStartAddr: (regs[13] | (regs[12] << 8)) & 0x3fff,
+        addr: crtcCounters ? crtcCounters.ma : (regs[13] | (regs[12] << 8)) & 0x3fff,
+        lineStartAddr: crtcCounters ? crtcCounters.maback : (regs[13] | (regs[12] << 8)) & 0x3fff,
+        nextLineStartAddr: crtcCounters ? crtcCounters.maback : (regs[13] | (regs[12] << 8)) & 0x3fff,
         ulactrl: ulaControl,
         pixelsPerChar: ulaControl & 0x10 ? 8 : 16,
         halfClock: !(ulaControl & 0x10),
         ulaMode: (ulaControl >>> 2) & 3,
         teletextMode: !!(ulaControl & 2),
-        displayEnableSkew: 0,
+        displayEnableSkew: Math.min((regs[8] & 0x30) >>> 4, 2),
         ulaPal,
         actualPal,
         cursorOn: false,
@@ -253,7 +253,7 @@ function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook) {
         cursorOnThisFrame: false,
         cursorDrawIndex: 0,
         cursorPos: (regs[15] | (regs[14] << 8)) & 0x3fff,
-        interlacedSyncAndVideo: false,
+        interlacedSyncAndVideo: (regs[8] & 3) === 3,
         screenSubtract: 0,
         ula: {
             collook: collook.slice(),
@@ -632,10 +632,21 @@ function finishV3Parse(modelName, cpuState, ram, roms, sections) {
         }
     }
 
-    // Parse CRTC
+    // Parse CRTC (18 regs + optional 7 counter bytes: vc, sc, hc, ma_lo, ma_hi, maback_lo, maback_hi)
     let crtcRegs = new Uint8Array(18);
+    let crtcCounters = null;
     if (sections["C"]) {
-        crtcRegs = sections["C"].data.slice(0, 18);
+        const data = sections["C"].data;
+        crtcRegs = data.slice(0, 18);
+        if (data.length >= 25) {
+            crtcCounters = {
+                vc: data[18],
+                sc: data[19],
+                hc: data[20],
+                ma: data[21] | (data[22] << 8),
+                maback: data[23] | (data[24] << 8),
+            };
+        }
     }
 
     // Parse sound
@@ -665,7 +676,7 @@ function finishV3Parse(modelName, cpuState, ram, roms, sections) {
         roms,
         sysvia,
         uservia,
-        buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook),
+        buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, crtcCounters),
         soundChip,
     );
 }
