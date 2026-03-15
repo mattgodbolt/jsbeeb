@@ -169,6 +169,80 @@ describe("Scheduler tests", function () {
         expect(epochAtCall - epochBefore).toBe(4);
     });
 
+    describe("cancelAll", () => {
+        it("should cancel all scheduled tasks", () => {
+            const s = new Scheduler();
+            const t1 = s.newTask(() => {});
+            const t2 = s.newTask(() => {});
+            const t3 = s.newTask(() => {});
+            t1.schedule(10);
+            t2.schedule(20);
+            t3.schedule(30);
+            expect(s.headroom()).toBe(10);
+
+            s.cancelAll();
+            expect(s.headroom()).toBe(Scheduler.MaxHeadroom);
+            expect(t1.scheduled()).toBe(false);
+            expect(t2.scheduled()).toBe(false);
+            expect(t3.scheduled()).toBe(false);
+        });
+
+        it("should handle empty scheduler", () => {
+            const s = new Scheduler();
+            s.cancelAll();
+            expect(s.headroom()).toBe(Scheduler.MaxHeadroom);
+        });
+    });
+
+    describe("snapshotState / restoreState", () => {
+        it("should snapshot and restore epoch", () => {
+            const s = new Scheduler();
+            s.polltime(12345);
+            const snapshot = s.snapshotState();
+            expect(snapshot.epoch).toBe(12345);
+
+            const s2 = new Scheduler();
+            s2.restoreState(snapshot);
+            expect(s2.epoch).toBe(12345);
+        });
+
+        it("should cancel existing tasks on restore", () => {
+            const s = new Scheduler();
+            const t = s.newTask(() => {});
+            t.schedule(100);
+            expect(t.scheduled()).toBe(true);
+
+            s.restoreState({ epoch: 5000 });
+            expect(t.scheduled()).toBe(false);
+            expect(s.epoch).toBe(5000);
+            expect(s.headroom()).toBe(Scheduler.MaxHeadroom);
+        });
+
+        it("should allow tasks to be re-registered after restore", () => {
+            const s = new Scheduler();
+            s.polltime(1000);
+
+            let called = false;
+            const t = s.newTask(() => {
+                called = true;
+            });
+            t.schedule(100);
+
+            // Restore to a different epoch
+            s.restoreState({ epoch: 5000 });
+            expect(t.scheduled()).toBe(false);
+
+            // Re-register the task
+            t.schedule(50);
+            expect(t.scheduled()).toBe(true);
+            expect(s.headroom()).toBe(50);
+
+            s.polltime(50);
+            expect(called).toBe(true);
+            expect(s.epoch).toBe(5050);
+        });
+    });
+
     it("allows you to reschedule from within a callback", function () {
         const s = new Scheduler();
         s.polltime(12346);
