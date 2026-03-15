@@ -7,11 +7,14 @@
  */
 export function typedArrayToBase64(typedArray) {
     const bytes = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    // Build binary string in chunks to avoid excessive string concatenation
+    const chunkSize = 8192;
+    const parts = [];
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const end = Math.min(i + chunkSize, bytes.length);
+        parts.push(String.fromCharCode(...bytes.subarray(i, end)));
     }
-    return btoa(binary);
+    return btoa(parts.join(""));
 }
 
 /**
