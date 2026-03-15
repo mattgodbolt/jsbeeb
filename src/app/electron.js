@@ -6,7 +6,7 @@
 export let initialise = function () {};
 
 function init(args) {
-    const { loadDiscImage, loadTapeImage, processor, modals, actions, config } = args;
+    const { loadDiscImage, loadTapeImage, loadStateFile, processor, modals, actions, config } = args;
     const api = window.electronAPI;
 
     api.onLoadDisc(async (message) => {
@@ -31,6 +31,15 @@ function init(args) {
     api.onAction((message) => {
         if (actions && actions[message.actionId]) {
             actions[message.actionId]();
+        }
+    });
+
+    api.onLoadState(async (message) => {
+        if (loadStateFile) {
+            const response = await fetch(message.path.startsWith("file://") ? message.path : `file://${message.path}`);
+            const blob = await response.blob();
+            const file = new File([blob], message.path.split("/").pop());
+            await loadStateFile(file);
         }
     });
 

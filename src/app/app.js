@@ -231,6 +231,30 @@ const template = [
             },
             { type: "separator" },
             {
+                label: "Save State...",
+                accelerator: "CmdOrCtrl+S",
+                click: sendAction("save-state"),
+            },
+            {
+                label: "Load State...",
+                accelerator: "CmdOrCtrl+O",
+                click: async (_, browserWindow) => {
+                    const result = await dialog.showOpenDialog(browserWindow, {
+                        title: "Load emulator state",
+                        filters: [
+                            { name: "Snapshot files", extensions: ["json.gz", "json", "snp", "gz"] },
+                            { name: "All files", extensions: ["*"] },
+                        ],
+                        properties: ["openFile"],
+                    });
+                    if (!result.canceled) {
+                        const filePath = result.filePaths[0];
+                        browserWindow.webContents.send("load-state", { path: filePath });
+                    }
+                },
+            },
+            { type: "separator" },
+            {
                 label: "Soft Reset",
                 click: sendAction("soft-reset"),
             },

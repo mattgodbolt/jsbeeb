@@ -487,7 +487,11 @@ $pastetext.on("dragover", function (event) {
 $pastetext.on("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.originalEvent.dataTransfer.files[0];
-    await loadHTMLFile(file);
+    if (isSnapshotFile(file.name)) {
+        await loadStateFromFile(file);
+    } else {
+        await loadHTMLFile(file);
+    }
 });
 
 const $cub = $("#cub-monitor");
@@ -1411,10 +1415,7 @@ $("#save-state").click(async function (event) {
     if (wasRunning) go();
 });
 
-$("#load-state").on("change", async function (event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    event.target.value = "";
+async function loadStateFromFile(file) {
     const wasRunning = running;
     if (running) stop(false);
     try {
@@ -1447,6 +1448,18 @@ $("#load-state").on("change", async function (event) {
         showError("loading state", e);
     }
     if (wasRunning) go();
+}
+
+function isSnapshotFile(filename) {
+    const lower = filename.toLowerCase();
+    return lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz");
+}
+
+$("#load-state").on("change", async function (event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    event.target.value = "";
+    await loadStateFromFile(file);
 });
 
 $("#tape-menu a").on("click", function (e) {
@@ -1952,9 +1965,11 @@ electron({
             }
         },
     },
+    loadStateFile: loadStateFromFile,
     actions: {
         "soft-reset": () => processor.reset(false),
         "hard-reset": () => processor.reset(true),
+        "save-state": () => $("#save-state").trigger("click"),
     },
 });
 
