@@ -476,14 +476,12 @@ function parseBemV3(buffer) {
     // Parse model section to determine jsbeeb model name.
     // Use jsbeeb synonyms (from models.js) so findModel() resolves them.
     let modelName = "B";
-    let isMaster = false;
     if (sections["m"]) {
         const pos = { offset: 0 };
         const data = sections["m"].data;
         readVar(data, pos); // curmodel index (skip)
         const name = readString(data, pos);
         if (name.includes("Master")) {
-            isMaster = true;
             if (name.includes("ADFS")) modelName = "MasterADFS";
             else if (name.includes("ANFS")) modelName = "MasterANFS";
             else modelName = "Master";
@@ -506,14 +504,17 @@ function parseBemV3(buffer) {
     let roms = null;
     const memSection = sections["M"];
     if (memSection) {
-        // Memory is zlib-compressed; decompression is async
-        // We'll return a promise-based result
+        // Memory is zlib-compressed; decompression is async.
+        // Decompressed layout: 2 bytes (fe30, fe34) + 64KB RAM + 256KB ROM
         return inflateRaw(memSection.data).then((memData) => {
-            const ramSize = isMaster ? 128 * 1024 : 65536;
-            ram.set(memData.slice(0, Math.min(ramSize, memData.length)));
-            // After RAM comes ROM data (256KB = 16 banks of 16KB)
-            if (memData.length > ramSize) {
-                roms = memData.slice(ramSize, ramSize + 262144);
+            cpuState.fe30 = memData[0];
+            cpuState.fe34 = memData[1];
+            const ramStart = 2;
+            const ramSize = 64 * 1024;
+            ram.set(memData.slice(ramStart, ramStart + ramSize));
+            const romStart = ramStart + ramSize;
+            if (memData.length > romStart) {
+                roms = memData.slice(romStart, romStart + 262144);
             }
             return finishV3Parse(modelName, cpuState, ram, roms, sections);
         });

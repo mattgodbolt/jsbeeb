@@ -1187,6 +1187,10 @@ export class Cpu6502 extends Base6502 {
 
         // 3. Memory
         this.ramRomOs.set(state.ram);
+        // Load ROMs if present (e.g. from BEM snapshot import)
+        if (state.roms) {
+            this.ramRomOs.set(state.roms.slice(0, 16 * 16384), this.romOffset);
+        }
         this.videoDisplayPage = state.videoDisplayPage;
         this.music5000PageSel = state.music5000PageSel;
 

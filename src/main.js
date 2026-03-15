@@ -1412,15 +1412,6 @@ $("#load-state").on("change", async function (event) {
         let snapshot;
         if (isBemSnapshot(arrayBuffer)) {
             snapshot = await parseBemSnapshot(arrayBuffer);
-            // BEM snapshots include ROMs - load them into the CPU
-            if (snapshot.state.roms) {
-                const romData = snapshot.state.roms;
-                for (let i = 0; i < 16; i++) {
-                    const bankData = romData.slice(i * 16384, (i + 1) * 16384);
-                    processor.ramRomOs.set(bankData, processor.romOffset + i * 16384);
-                }
-                delete snapshot.state.roms;
-            }
         } else {
             const text = new TextDecoder().decode(arrayBuffer);
             snapshot = snapshotFromJSON(text);
