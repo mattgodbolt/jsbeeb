@@ -613,4 +613,137 @@ describe("Video", () => {
             expect(mockCpu.videoRead).toHaveBeenCalledWith(0x4005);
         });
     });
+
+    describe("snapshotState / restoreState", () => {
+        // These tests use fresh (non-mocked) Video instances since snapshot
+        // needs the real Teletext with snapshotState/restoreState.
+        function makeRealVideo() {
+            const fb = new Uint32Array(1024 * 768);
+            const v = new Video(false, fb, () => {});
+            v.reset(mockCpu, mockVia);
+            return v;
+        }
+
+        it("should snapshot and restore scalar video state", () => {
+            const v = makeRealVideo();
+            v.bitmapX = 100;
+            v.bitmapY = 200;
+            v.oddClock = true;
+            v.frameCount = 42;
+            v.inHSync = true;
+            v.inVSync = true;
+            v.horizCounter = 63;
+            v.vertCounter = 31;
+            v.scanlineCounter = 7;
+            v.addr = 0x1234;
+            v.ulactrl = 0x1c;
+            v.ulaMode = 2;
+            v.teletextMode = false;
+            v.cursorPos = 0x2000;
+            v.screenSubtract = 5;
+
+            const snapshot = v.snapshotState();
+            const v2 = makeRealVideo();
+            v2.restoreState(snapshot);
+
+            expect(v2.bitmapX).toBe(100);
+            expect(v2.bitmapY).toBe(200);
+            expect(v2.oddClock).toBe(true);
+            expect(v2.frameCount).toBe(42);
+            expect(v2.inHSync).toBe(true);
+            expect(v2.inVSync).toBe(true);
+            expect(v2.horizCounter).toBe(63);
+            expect(v2.vertCounter).toBe(31);
+            expect(v2.scanlineCounter).toBe(7);
+            expect(v2.addr).toBe(0x1234);
+            expect(v2.ulactrl).toBe(0x1c);
+            expect(v2.ulaMode).toBe(2);
+            expect(v2.teletextMode).toBe(false);
+            expect(v2.cursorPos).toBe(0x2000);
+            expect(v2.screenSubtract).toBe(5);
+        });
+
+        it("should snapshot and restore CRTC registers", () => {
+            const v = makeRealVideo();
+            v.regs[0] = 127;
+            v.regs[1] = 80;
+            v.regs[6] = 25;
+            v.regs[7] = 28;
+            v.crtc.curReg = 12;
+
+            const snapshot = v.snapshotState();
+            const v2 = makeRealVideo();
+            v2.restoreState(snapshot);
+
+            expect(v2.regs[0]).toBe(127);
+            expect(v2.regs[1]).toBe(80);
+            expect(v2.regs[6]).toBe(25);
+            expect(v2.regs[7]).toBe(28);
+            expect(v2.crtc.curReg).toBe(12);
+        });
+
+        it("should snapshot and restore palette", () => {
+            const v = makeRealVideo();
+            v.ulaPal[0] = 0xff0000ff;
+            v.ulaPal[5] = 0xffff0000;
+            v.actualPal[0] = 0x0a;
+            v.actualPal[5] = 0x05;
+
+            const snapshot = v.snapshotState();
+            const v2 = makeRealVideo();
+            v2.restoreState(snapshot);
+
+            expect(v2.ulaPal[0]).toBe(0xff0000ff);
+            expect(v2.ulaPal[5]).toBe(0xffff0000);
+            expect(v2.actualPal[0]).toBe(0x0a);
+            expect(v2.actualPal[5]).toBe(0x05);
+        });
+
+        it("should snapshot and restore ULA NULA state", () => {
+            const v = makeRealVideo();
+            v.ula.paletteMode = 1;
+            v.ula.horizontalOffset = 3;
+            v.ula.disabled = true;
+            v.ula.collook[0] = 0xffaabbcc;
+
+            const snapshot = v.snapshotState();
+            const v2 = makeRealVideo();
+            v2.restoreState(snapshot);
+
+            expect(v2.ula.paletteMode).toBe(1);
+            expect(v2.ula.horizontalOffset).toBe(3);
+            expect(v2.ula.disabled).toBe(true);
+            expect(v2.ula.collook[0]).toBe(0xffaabbcc);
+        });
+
+        it("should snapshot and restore teletext state", () => {
+            const v = makeRealVideo();
+            v.teletext.col = 3;
+            v.teletext.bg = 2;
+            v.teletext.gfx = true;
+            v.teletext.sep = true;
+            v.teletext.flashTime = 32;
+            v.teletext.scanlineCounter = 5;
+
+            const snapshot = v.snapshotState();
+            const v2 = makeRealVideo();
+            v2.restoreState(snapshot);
+
+            expect(v2.teletext.col).toBe(3);
+            expect(v2.teletext.bg).toBe(2);
+            expect(v2.teletext.gfx).toBe(true);
+            expect(v2.teletext.sep).toBe(true);
+            expect(v2.teletext.flashTime).toBe(32);
+            expect(v2.teletext.scanlineCounter).toBe(5);
+        });
+
+        it("should produce isolated snapshots for typed arrays", () => {
+            const v = makeRealVideo();
+            v.ulaPal[0] = 0xdeadbeef;
+            const snapshot = v.snapshotState();
+            v.ulaPal[0] = 0x12345678;
+
+            expect(snapshot.ulaPal[0]).toBe(0xdeadbeef);
+        });
+    });
 });
