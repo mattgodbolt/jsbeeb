@@ -1411,7 +1411,7 @@ $("#load-state").on("change", async function (event) {
         const arrayBuffer = await file.arrayBuffer();
         let snapshot;
         if (isBemSnapshot(arrayBuffer)) {
-            snapshot = parseBemSnapshot(arrayBuffer);
+            snapshot = await parseBemSnapshot(arrayBuffer);
             // BEM snapshots include ROMs - load them into the CPU
             if (snapshot.state.roms) {
                 const romData = snapshot.state.roms;

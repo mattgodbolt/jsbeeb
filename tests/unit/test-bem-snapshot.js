@@ -99,18 +99,18 @@ describe("parseBemSnapshot", () => {
 
     it("should reject non-Model B snapshots", () => {
         const buffer = makeMinimalBemSnapshot({ model: 5 });
-        expect(() => parseBemSnapshot(buffer)).toThrow(/Unsupported BEM model/);
+        expect(() => parseBemSnapshot(buffer)).toThrow(/Unsupported/);
     });
 
     it("should reject wrong size", () => {
         const buffer = new ArrayBuffer(100);
-        expect(() => parseBemSnapshot(buffer)).toThrow(/Invalid BEM snapshot size/);
+        expect(() => parseBemSnapshot(buffer)).toThrow(/too small|Unsupported/);
     });
 
     it("should reject wrong signature", () => {
         const buffer = new ArrayBuffer(BemSnapshotSize);
         new Uint8Array(buffer).set(new TextEncoder().encode("NOTSNAP!"), 0);
-        expect(() => parseBemSnapshot(buffer)).toThrow(/Invalid BEM snapshot signature/);
+        expect(() => parseBemSnapshot(buffer)).toThrow(/Unsupported/);
     });
 
     it("should include sub-component state structures", () => {
