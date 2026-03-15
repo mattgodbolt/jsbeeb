@@ -30,7 +30,7 @@ import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
-import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON } from "./snapshot.js";
+import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, modelsCompatible } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import {
@@ -1425,7 +1425,7 @@ $("#load-state").on("change", async function (event) {
             const text = new TextDecoder().decode(arrayBuffer);
             snapshot = snapshotFromJSON(text);
         }
-        if (snapshot.model !== model.name) {
+        if (!modelsCompatible(snapshot.model, model.name)) {
             // Model mismatch: stash state and reload with correct model
             sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
             const newQuery = { ...parsedQuery, model: snapshot.model };

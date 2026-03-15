@@ -383,7 +383,7 @@ function parseBemV1(buffer) {
     const snShift = view.getUint16(soundOff + 53, true);
 
     return buildSnapshot(
-        "BBC B with DFS 1.2",
+        "B",
         cpuState,
         ram,
         roms,
@@ -473,8 +473,9 @@ function parseBemV3(buffer) {
         offset += headerSize + size;
     }
 
-    // Parse model section to determine jsbeeb model name
-    let modelName = "BBC B with DFS 1.2";
+    // Parse model section to determine jsbeeb model name.
+    // Use jsbeeb synonyms (from models.js) so findModel() resolves them.
+    let modelName = "B";
     let isMaster = false;
     if (sections["m"]) {
         const pos = { offset: 0 };
@@ -483,14 +484,14 @@ function parseBemV3(buffer) {
         const name = readString(data, pos);
         if (name.includes("Master")) {
             isMaster = true;
-            if (name.includes("ADFS")) modelName = "BBC Master 128 (ADFS)";
-            else if (name.includes("ANFS")) modelName = "BBC Master 128 (ANFS)";
-            else modelName = "BBC Master 128 (DFS)";
+            if (name.includes("ADFS")) modelName = "MasterADFS";
+            else if (name.includes("ANFS")) modelName = "MasterANFS";
+            else modelName = "Master";
         } else if (name.includes("1770")) {
-            if (name.includes("ADFS")) modelName = "BBC B with 1770 (ADFS)";
-            else modelName = "BBC B with 1770 (DFS)";
+            if (name.includes("ADFS")) modelName = "B1770A";
+            else modelName = "B1770";
         } else {
-            modelName = "BBC B with DFS 1.2";
+            modelName = "B";
         }
     }
 

@@ -64,7 +64,8 @@ describe("Snapshot coordinator", () => {
 
         it("should throw on model mismatch", () => {
             const snapshot = createSnapshot(cpu, model);
-            const otherModel = { name: "Master 128" };
+            // Use a name that findModel won't resolve and doesn't match
+            const otherModel = { name: "Completely Different Machine" };
 
             expect(() => restoreSnapshot(cpu, otherModel, snapshot)).toThrow(/Model mismatch/);
         });

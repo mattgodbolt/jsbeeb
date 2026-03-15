@@ -1,9 +1,28 @@
 "use strict";
 
 import { typedArrayToBase64, base64ToTypedArray } from "./state-utils.js";
+import { findModel } from "./models.js";
 
 const SnapshotFormat = "jsbeeb-snapshot";
 const SnapshotVersion = 1;
+
+/**
+ * Check if two model names are compatible for state restore.
+ * Resolves synonyms via findModel and compares base machine type,
+ * ignoring filesystem variant differences (DFS vs ADFS etc).
+ */
+export function modelsCompatible(snapshotModel, currentModel) {
+    if (snapshotModel === currentModel) return true;
+    const resolvedSnapshot = findModel(snapshotModel);
+    const resolvedCurrent = findModel(currentModel);
+    if (resolvedSnapshot && resolvedCurrent) {
+        // Same model object, or same base machine (strip filesystem suffix)
+        if (resolvedSnapshot === resolvedCurrent) return true;
+        const base = (name) => name.replace(/\s*\(.*\)$/, "");
+        return base(resolvedSnapshot.name) === base(resolvedCurrent.name);
+    }
+    return false;
+}
 
 // Map of TypedArray constructor names for deserialization
 const TypedArrayConstructors = {
@@ -45,7 +64,7 @@ export function restoreSnapshot(cpu, model, snapshot) {
     if (snapshot.version > SnapshotVersion) {
         throw new Error(`Snapshot version ${snapshot.version} is newer than supported version ${SnapshotVersion}`);
     }
-    if (snapshot.model !== model.name) {
+    if (!modelsCompatible(snapshot.model, model.name)) {
         throw new Error(`Model mismatch: snapshot is for "${snapshot.model}" but current model is "${model.name}"`);
     }
     cpu.restoreState(snapshot.state);
