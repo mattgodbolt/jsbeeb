@@ -150,6 +150,75 @@ export class Teletext {
         }
     }
 
+    snapshotState() {
+        // Encode glyph table references as strings for serialization
+        let nextGlyphsName, curGlyphsName, heldGlyphsName;
+        for (const [name, table] of [
+            ["normal", this.normalGlyphs],
+            ["graphics", this.graphicsGlyphs],
+            ["separated", this.separatedGlyphs],
+        ]) {
+            if (this.nextGlyphs === table) nextGlyphsName = name;
+            if (this.curGlyphs === table) curGlyphsName = name;
+            if (this.heldGlyphs === table) heldGlyphsName = name;
+        }
+        return {
+            prevCol: this.prevCol,
+            col: this.col,
+            bg: this.bg,
+            sep: this.sep,
+            dbl: this.dbl,
+            oldDbl: this.oldDbl,
+            secondHalfOfDouble: this.secondHalfOfDouble,
+            wasDbl: this.wasDbl,
+            gfx: this.gfx,
+            flash: this.flash,
+            flashOn: this.flashOn,
+            flashTime: this.flashTime,
+            heldChar: this.heldChar,
+            holdChar: this.holdChar,
+            dataQueue: [...this.dataQueue],
+            scanlineCounter: this.scanlineCounter,
+            levelDEW: this.levelDEW,
+            levelDISPTMG: this.levelDISPTMG,
+            levelRA0: this.levelRA0,
+            nextGlyphs: nextGlyphsName,
+            curGlyphs: curGlyphsName,
+            heldGlyphs: heldGlyphsName,
+        };
+    }
+
+    restoreState(state) {
+        this.prevCol = state.prevCol;
+        this.col = state.col;
+        this.bg = state.bg;
+        this.sep = state.sep;
+        this.dbl = state.dbl;
+        this.oldDbl = state.oldDbl;
+        this.secondHalfOfDouble = state.secondHalfOfDouble;
+        this.wasDbl = state.wasDbl;
+        this.gfx = state.gfx;
+        this.flash = state.flash;
+        this.flashOn = state.flashOn;
+        this.flashTime = state.flashTime;
+        this.heldChar = state.heldChar;
+        this.holdChar = state.holdChar;
+        this.dataQueue = [...state.dataQueue];
+        this.scanlineCounter = state.scanlineCounter;
+        this.levelDEW = state.levelDEW;
+        this.levelDISPTMG = state.levelDISPTMG;
+        this.levelRA0 = state.levelRA0;
+
+        const glyphMap = {
+            normal: this.normalGlyphs,
+            graphics: this.graphicsGlyphs,
+            separated: this.separatedGlyphs,
+        };
+        this.nextGlyphs = glyphMap[state.nextGlyphs] || this.normalGlyphs;
+        this.curGlyphs = glyphMap[state.curGlyphs] || this.normalGlyphs;
+        this.heldGlyphs = glyphMap[state.heldGlyphs] || this.normalGlyphs;
+    }
+
     setNextChars() {
         if (this.gfx) {
             if (this.sep) {

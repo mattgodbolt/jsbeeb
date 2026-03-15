@@ -135,6 +135,29 @@
               <a
                 href="#"
                 class="nav-link dropdown-toggle"
+                id="navbarState"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                >State</a
+              >
+              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarState">
+                <li><a href="#" id="save-state" class="dropdown-item">Save state</a></li>
+                <li>
+                  <label class="dropdown-item" style="cursor: pointer"
+                    >Load state<input
+                      type="file"
+                      id="load-state"
+                      accept=".json,.json.gz,.gz,.snp"
+                      style="display: none"
+                  /></label>
+                </li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown embed-hide">
+              <a
+                href="#"
+                class="nav-link dropdown-toggle"
                 id="navbarMore"
                 role="button"
                 data-bs-toggle="dropdown"

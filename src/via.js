@@ -402,6 +402,73 @@ class Via {
         this.portBUpdated();
     }
 
+    snapshotState() {
+        return {
+            ora: this.ora,
+            orb: this.orb,
+            ira: this.ira,
+            irb: this.irb,
+            ddra: this.ddra,
+            ddrb: this.ddrb,
+            sr: this.sr,
+            t1l: this.t1l,
+            t2l: this.t2l,
+            t1c: this.t1c,
+            t2c: this.t2c,
+            acr: this.acr,
+            pcr: this.pcr,
+            ifr: this.ifr,
+            ier: this.ier,
+            t1hit: this.t1hit,
+            t2hit: this.t2hit,
+            portapins: this.portapins,
+            portbpins: this.portbpins,
+            ca1: this.ca1,
+            ca2: this.ca2,
+            cb1: this.cb1,
+            cb2: this.cb2,
+            justhit: this.justhit,
+            t1_pb7: this.t1_pb7,
+            lastPolltime: this.lastPolltime,
+            taskOffset: this.task.scheduled() ? this.task.expireEpoch - this.scheduler.epoch : null,
+        };
+    }
+
+    restoreState(state) {
+        this.ora = state.ora;
+        this.orb = state.orb;
+        this.ira = state.ira;
+        this.irb = state.irb;
+        this.ddra = state.ddra;
+        this.ddrb = state.ddrb;
+        this.sr = state.sr;
+        this.t1l = state.t1l;
+        this.t2l = state.t2l;
+        this.t1c = state.t1c;
+        this.t2c = state.t2c;
+        this.acr = state.acr;
+        this.pcr = state.pcr;
+        this.ifr = state.ifr;
+        this.ier = state.ier;
+        this.t1hit = state.t1hit;
+        this.t2hit = state.t2hit;
+        this.portapins = state.portapins;
+        this.portbpins = state.portbpins;
+        this.ca1 = state.ca1;
+        this.ca2 = state.ca2;
+        this.cb1 = state.cb1;
+        this.cb2 = state.cb2;
+        this.justhit = state.justhit;
+        this.t1_pb7 = state.t1_pb7;
+        this.lastPolltime = state.lastPolltime;
+        this.updateIFR();
+        if (state.taskOffset !== null) {
+            this.task.reschedule(state.taskOffset);
+        } else {
+            this.task.cancel();
+        }
+    }
+
     setca1(level) {
         if (level === this.ca1) return;
         const pcrSet = !!(this.pcr & 1);
@@ -482,6 +549,30 @@ export class SysVia extends Via {
         this.getGamepadsFunc = getGamepads;
 
         this.reset();
+    }
+
+    snapshotState() {
+        return {
+            ...super.snapshotState(),
+            IC32: this.IC32,
+            capsLockLight: this.capsLockLight,
+            shiftLockLight: this.shiftLockLight,
+        };
+    }
+
+    restoreState(state) {
+        super.restoreState(state);
+        this.IC32 = state.IC32;
+        this.capsLockLight = state.capsLockLight;
+        this.shiftLockLight = state.shiftLockLight;
+        // Re-apply IC32 side effects (sound chip data bus, CMOS, port A)
+        // Must call portBUpdated directly (not recalculatePortBPins which
+        // overwrites IC32 based on portbpins) and then re-set IC32.
+        this.portBUpdated();
+        this.IC32 = state.IC32;
+        this.capsLockLight = state.capsLockLight;
+        this.shiftLockLight = state.shiftLockLight;
+        this.recalculatePortAPins();
     }
 
     setKeyLayout(map) {

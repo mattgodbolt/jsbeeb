@@ -88,6 +88,34 @@ export class Scheduler {
     }
 
     /**
+     * Cancel all scheduled tasks.
+     * Used during state restore - components will re-register their own tasks.
+     */
+    cancelAll() {
+        while (this.scheduled) {
+            this.scheduled.cancel();
+        }
+    }
+
+    /**
+     * Capture the scheduler's state for snapshotting.
+     * @returns {{epoch: number}}
+     */
+    snapshotState() {
+        return { epoch: this.epoch };
+    }
+
+    /**
+     * Restore the scheduler's state from a snapshot.
+     * Cancels all existing tasks - components must re-register theirs after this call.
+     * @param {{epoch: number}} state
+     */
+    restoreState(state) {
+        this.cancelAll();
+        this.epoch = state.epoch;
+    }
+
+    /**
      * Create a new task.
      * @param {function(): void} onExpire function to call when the task expires
      * @returns {ScheduledTask} a handle to the new task

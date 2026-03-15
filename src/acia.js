@@ -197,6 +197,48 @@ export class Acia {
         this.updateIrq();
     }
 
+    snapshotState() {
+        const scheduler = this.txCompleteTask.scheduler;
+        return {
+            sr: this.sr,
+            cr: this.cr,
+            dr: this.dr,
+            rs423Selected: this.rs423Selected,
+            motorOn: this.motorOn,
+            tapeCarrierCount: this.tapeCarrierCount,
+            tapeDcdLineLevel: this.tapeDcdLineLevel,
+            hadDcdHigh: this.hadDcdHigh,
+            serialReceiveRate: this.serialReceiveRate,
+            serialReceiveCyclesPerByte: this.serialReceiveCyclesPerByte,
+            txCompleteTaskOffset: this.txCompleteTask.scheduled()
+                ? this.txCompleteTask.expireEpoch - scheduler.epoch
+                : null,
+            runTapeTaskOffset: this.runTapeTask.scheduled() ? this.runTapeTask.expireEpoch - scheduler.epoch : null,
+            runRs423TaskOffset: this.runRs423Task.scheduled() ? this.runRs423Task.expireEpoch - scheduler.epoch : null,
+        };
+    }
+
+    restoreState(state) {
+        this.sr = state.sr;
+        this.cr = state.cr;
+        this.dr = state.dr;
+        this.rs423Selected = state.rs423Selected;
+        this.motorOn = state.motorOn;
+        this.tapeCarrierCount = state.tapeCarrierCount;
+        this.tapeDcdLineLevel = state.tapeDcdLineLevel;
+        this.hadDcdHigh = state.hadDcdHigh;
+        this.serialReceiveRate = state.serialReceiveRate;
+        this.serialReceiveCyclesPerByte = state.serialReceiveCyclesPerByte;
+        this.updateIrq();
+
+        this.txCompleteTask.cancel();
+        this.runTapeTask.cancel();
+        this.runRs423Task.cancel();
+        if (state.txCompleteTaskOffset !== null) this.txCompleteTask.schedule(state.txCompleteTaskOffset);
+        if (state.runTapeTaskOffset !== null) this.runTapeTask.schedule(state.runTapeTaskOffset);
+        if (state.runRs423TaskOffset !== null) this.runRs423Task.schedule(state.runRs423TaskOffset);
+    }
+
     setTape(tape) {
         this.tape = tape;
     }

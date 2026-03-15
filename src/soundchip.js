@@ -263,6 +263,45 @@ export class SoundChip {
         }
     }
 
+    snapshotState() {
+        return {
+            registers: this.registers.slice(),
+            counter: this.counter.slice(),
+            outputBit: [...this.outputBit],
+            volume: this.volume.slice(),
+            lfsr: this.lfsr,
+            latchedRegister: this.latchedRegister,
+            residual: this.residual,
+            sineOn: this.sineOn,
+            sineStep: this.sineStep,
+            sineTime: this.sineTime,
+        };
+    }
+
+    restoreState(state) {
+        this.registers.set(state.registers);
+        this.counter.set(state.counter);
+        this.outputBit[0] = state.outputBit[0];
+        this.outputBit[1] = state.outputBit[1];
+        this.outputBit[2] = state.outputBit[2];
+        this.outputBit[3] = state.outputBit[3];
+        this.volume.set(state.volume);
+        this.lfsr = state.lfsr;
+        this.latchedRegister = state.latchedRegister;
+        // Sync to current scheduler epoch to avoid a catch-up burst
+        this.lastRunEpoch = this.scheduler.epoch;
+        this.residual = state.residual;
+        this.sineOn = state.sineOn;
+        this.sineStep = state.sineStep;
+        this.sineTime = state.sineTime;
+        // Rebind the LFSR function based on noise register
+        this.shiftLfsr =
+            this.registers[3] & 4 ? this.shiftLfsrWhiteNoise.bind(this) : this.shiftLfsrPeriodicNoise.bind(this);
+        // Reset output buffer
+        this.position = 0;
+        this.buffer.fill(0);
+    }
+
     reset(hard) {
         if (!hard) return;
         for (let i = 0; i < 4; ++i) {

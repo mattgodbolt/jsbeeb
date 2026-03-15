@@ -93,6 +93,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Watch for unused variables and ensure proper error handling
   - YOU MUST NEVER bypass git commit hooks on checkins. This leads to failures in CI later on
 
+### Save State / Snapshots
+
+- The snapshot JSON format is documented in `docs/snapshot-format.md` — **keep it up to date** if you add new fields to any component's `snapshotState()` or change the format version
+- Each component owns its own `snapshotState()` / `restoreState()` methods
+- Scheduler tasks are not serialized directly — each component saves its task offset relative to `scheduler.epoch` and re-registers on restore
+- `interrupt` is not saved in the CPU snapshot — it is reconstructed by VIA/ACIA `restoreState()` calls
+- `soundChip.lastRunEpoch` is always synced to the scheduler epoch on restore, not saved
+
 ### Git Workflow
 
 - When creating branches with Claude, use the `claude/` prefix (e.g., `claude/fix-esm-import-error`)

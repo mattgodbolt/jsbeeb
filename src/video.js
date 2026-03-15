@@ -82,6 +82,36 @@ class Ula {
         }
     }
 
+    snapshotState() {
+        return {
+            collook: this.collook.slice(),
+            flash: this.flash.slice(),
+            paletteWriteFlag: this.paletteWriteFlag,
+            paletteFirstByte: this.paletteFirstByte,
+            paletteMode: this.paletteMode,
+            horizontalOffset: this.horizontalOffset,
+            leftBlank: this.leftBlank,
+            disabled: this.disabled,
+            attributeMode: this.attributeMode,
+            attributeText: this.attributeText,
+        };
+    }
+
+    restoreState(state) {
+        this.collook.set(state.collook);
+        this.flash.set(state.flash);
+        this.paletteWriteFlag = state.paletteWriteFlag;
+        this.paletteFirstByte = state.paletteFirstByte;
+        this.paletteMode = state.paletteMode;
+        this.horizontalOffset = state.horizontalOffset;
+        this.leftBlank = state.leftBlank;
+        this.disabled = state.disabled;
+        this.attributeMode = state.attributeMode;
+        this.attributeText = state.attributeText;
+        this._recomputeUlaPal(!!(this.video.ulactrl & 1));
+        this.video.teletext.rebuildColours(this.collook);
+    }
+
     // ULA control register (&FE20).
     _writeControl(val) {
         if ((this.video.ulactrl ^ val) & 1) {
@@ -206,6 +236,14 @@ class Crtc {
             0xff, 0xff, 0xff, 0xff, 0x7f, 0x1f, 0x7f, 0x7f, 0xf3, 0x1f, 0x7f, 0x1f, 0x3f, 0xff, 0x3f, 0xff, 0x3f, 0xff,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ]);
+    }
+
+    snapshotState() {
+        return { curReg: this.curReg };
+    }
+
+    restoreState(state) {
+        this.curReg = state.curReg;
     }
 
     read(addr) {
@@ -387,6 +425,111 @@ export class Video {
         this.reset(null);
         this.clearPaintBuffer();
         this.paint();
+    }
+
+    snapshotState() {
+        return {
+            regs: this.regs.slice(),
+            bitmapX: this.bitmapX,
+            bitmapY: this.bitmapY,
+            oddClock: this.oddClock,
+            frameCount: this.frameCount,
+            doEvenFrameLogic: this.doEvenFrameLogic,
+            isEvenRender: this.isEvenRender,
+            lastRenderWasEven: this.lastRenderWasEven,
+            firstScanline: this.firstScanline,
+            inHSync: this.inHSync,
+            inVSync: this.inVSync,
+            hadVSyncThisRow: this.hadVSyncThisRow,
+            checkVertAdjust: this.checkVertAdjust,
+            endOfMainLatched: this.endOfMainLatched,
+            endOfVertAdjustLatched: this.endOfVertAdjustLatched,
+            endOfFrameLatched: this.endOfFrameLatched,
+            inVertAdjust: this.inVertAdjust,
+            inDummyRaster: this.inDummyRaster,
+            hpulseWidth: this.hpulseWidth,
+            vpulseWidth: this.vpulseWidth,
+            hpulseCounter: this.hpulseCounter,
+            vpulseCounter: this.vpulseCounter,
+            dispEnabled: this.dispEnabled,
+            horizCounter: this.horizCounter,
+            vertCounter: this.vertCounter,
+            scanlineCounter: this.scanlineCounter,
+            vertAdjustCounter: this.vertAdjustCounter,
+            addr: this.addr,
+            lineStartAddr: this.lineStartAddr,
+            nextLineStartAddr: this.nextLineStartAddr,
+            ulactrl: this.ulactrl,
+            pixelsPerChar: this.pixelsPerChar,
+            halfClock: this.halfClock,
+            ulaMode: this.ulaMode,
+            teletextMode: this.teletextMode,
+            displayEnableSkew: this.displayEnableSkew,
+            ulaPal: this.ulaPal.slice(),
+            actualPal: this.actualPal.slice(),
+            cursorOn: this.cursorOn,
+            cursorOff: this.cursorOff,
+            cursorOnThisFrame: this.cursorOnThisFrame,
+            cursorDrawIndex: this.cursorDrawIndex,
+            cursorPos: this.cursorPos,
+            interlacedSyncAndVideo: this.interlacedSyncAndVideo,
+            screenSubtract: this.screenSubtract,
+            ula: this.ula.snapshotState(),
+            crtc: this.crtc.snapshotState(),
+            teletext: this.teletext.snapshotState(),
+        };
+    }
+
+    restoreState(state) {
+        this.regs.set(state.regs);
+        this.bitmapX = state.bitmapX;
+        this.bitmapY = state.bitmapY;
+        this.oddClock = state.oddClock;
+        this.frameCount = state.frameCount;
+        this.doEvenFrameLogic = state.doEvenFrameLogic;
+        this.isEvenRender = state.isEvenRender;
+        this.lastRenderWasEven = state.lastRenderWasEven;
+        this.firstScanline = state.firstScanline;
+        this.inHSync = state.inHSync;
+        this.inVSync = state.inVSync;
+        this.hadVSyncThisRow = state.hadVSyncThisRow;
+        this.checkVertAdjust = state.checkVertAdjust;
+        this.endOfMainLatched = state.endOfMainLatched;
+        this.endOfVertAdjustLatched = state.endOfVertAdjustLatched;
+        this.endOfFrameLatched = state.endOfFrameLatched;
+        this.inVertAdjust = state.inVertAdjust;
+        this.inDummyRaster = state.inDummyRaster;
+        this.hpulseWidth = state.hpulseWidth;
+        this.vpulseWidth = state.vpulseWidth;
+        this.hpulseCounter = state.hpulseCounter;
+        this.vpulseCounter = state.vpulseCounter;
+        this.dispEnabled = state.dispEnabled;
+        this.horizCounter = state.horizCounter;
+        this.vertCounter = state.vertCounter;
+        this.scanlineCounter = state.scanlineCounter;
+        this.vertAdjustCounter = state.vertAdjustCounter;
+        this.addr = state.addr;
+        this.lineStartAddr = state.lineStartAddr;
+        this.nextLineStartAddr = state.nextLineStartAddr;
+        this.ulactrl = state.ulactrl;
+        this.pixelsPerChar = state.pixelsPerChar;
+        this.halfClock = state.halfClock;
+        this.ulaMode = state.ulaMode;
+        this.teletextMode = state.teletextMode;
+        this.displayEnableSkew = state.displayEnableSkew;
+        this.actualPal.set(state.actualPal);
+        this.cursorOn = state.cursorOn;
+        this.cursorOff = state.cursorOff;
+        this.cursorOnThisFrame = state.cursorOnThisFrame;
+        this.cursorDrawIndex = state.cursorDrawIndex;
+        this.cursorPos = state.cursorPos;
+        this.interlacedSyncAndVideo = state.interlacedSyncAndVideo;
+        this.screenSubtract = state.screenSubtract;
+        this.ula.restoreState(state.ula);
+        this.crtc.restoreState(state.crtc);
+        this.teletext.restoreState(state.teletext);
+        // Restore ulaPal after ULA restore, since ULA recomputation may overwrite it
+        this.ulaPal.set(state.ulaPal);
     }
 
     reset(cpu, via) {

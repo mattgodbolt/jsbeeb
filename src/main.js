@@ -30,6 +30,9 @@ import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
+import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, modelsCompatible } from "./snapshot.js";
+import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
+import { RewindBuffer } from "./rewind.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -327,6 +330,16 @@ const $screen = $("#screen");
 const $errorDialog = $("#error-dialog");
 const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
 
+async function compressBlob(blob) {
+    const stream = blob.stream().pipeThrough(new CompressionStream("gzip"));
+    return new Response(stream).blob();
+}
+
+async function decompressBlob(blob) {
+    const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Response(stream).blob();
+}
+
 function showError(context, error) {
     $errorDialog.find(".context").text(context);
     $errorDialog.find(".error").text(error);
@@ -474,7 +487,11 @@ $pastetext.on("dragover", function (event) {
 $pastetext.on("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.originalEvent.dataTransfer.files[0];
-    await loadHTMLFile(file);
+    if (isSnapshotFile(file.name)) {
+        await loadStateFromFile(file);
+    } else {
+        await loadHTMLFile(file);
+    }
 });
 
 const $cub = $("#cub-monitor");
@@ -1354,6 +1371,101 @@ $("#soft-reset").click(function (event) {
     event.preventDefault();
 });
 
+// Expose rewind to the debugger/console for v1
+window.jsbeebRewind = {
+    step: function () {
+        const snapshot = rewindBuffer.pop();
+        if (!snapshot) {
+            console.log("Rewind buffer empty");
+            return;
+        }
+        const wasRunning = running;
+        if (wasRunning) stop(false);
+        processor.restoreState(snapshot);
+        // Force a repaint so the display updates even while paused
+        video.paint();
+        console.log(`Rewound 1 step (${rewindBuffer.length} remaining)`);
+        // Don't auto-resume - stay paused so user can inspect state
+    },
+    get length() {
+        return rewindBuffer.length;
+    },
+    clear: function () {
+        rewindBuffer.clear();
+        console.log("Rewind buffer cleared");
+    },
+};
+
+$("#save-state").click(async function (event) {
+    event.preventDefault();
+    const wasRunning = running;
+    if (running) stop(false);
+    try {
+        const snapshot = createSnapshot(processor, model);
+        const json = snapshotToJSON(snapshot);
+        const blob = await compressBlob(new Blob([json]));
+        const url = URL.createObjectURL(blob);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `jsbeeb-${model.name}-${timestamp}.json.gz`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        showError("saving state", e);
+    }
+    if (wasRunning) go();
+});
+
+async function loadStateFromFile(file) {
+    const wasRunning = running;
+    if (running) stop(false);
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        let snapshot;
+        if (isBemSnapshot(arrayBuffer)) {
+            snapshot = await parseBemSnapshot(arrayBuffer);
+        } else {
+            // Detect gzip (magic bytes 0x1f 0x8b) or plain JSON
+            const bytes = new Uint8Array(arrayBuffer);
+            let text;
+            if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+                const decompressed = await decompressBlob(new Blob([arrayBuffer]));
+                text = await decompressed.text();
+            } else {
+                text = new TextDecoder().decode(arrayBuffer);
+            }
+            snapshot = snapshotFromJSON(text);
+        }
+        if (!modelsCompatible(snapshot.model, model.name)) {
+            // Model mismatch: stash state and reload with correct model
+            sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
+            const newQuery = { ...parsedQuery, model: snapshot.model };
+            const baseUrl = window.location.origin + window.location.pathname;
+            window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
+            return;
+        }
+        restoreSnapshot(processor, model, snapshot);
+        // Force a repaint so the display updates even while paused
+        video.paint();
+    } catch (e) {
+        showError("loading state", e);
+    }
+    if (wasRunning) go();
+}
+
+function isSnapshotFile(filename) {
+    const lower = filename.toLowerCase();
+    return lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz");
+}
+
+$("#load-state").on("change", async function (event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    event.target.value = "";
+    await loadStateFromFile(file);
+});
+
 $("#tape-menu a").on("click", function (e) {
     const type = $(e.target).attr("data-id");
     if (type === undefined) return;
@@ -1509,6 +1621,19 @@ startPromise
             dbgr.setPatch(parsedQuery.patch);
         }
 
+        // Restore pending state from a cross-model load (sessionStorage)
+        const pendingState = sessionStorage.getItem("jsbeeb-pending-state");
+        if (pendingState) {
+            sessionStorage.removeItem("jsbeeb-pending-state");
+            try {
+                const snapshot = snapshotFromJSON(pendingState);
+                restoreSnapshot(processor, model, snapshot);
+                processor.execute(40000);
+            } catch (e) {
+                showError("restoring saved state", e);
+            }
+        }
+
         go();
     })
     .catch((error) => {
@@ -1603,6 +1728,10 @@ function VirtualSpeedUpdater() {
 
 const virtualSpeedUpdater = new VirtualSpeedUpdater();
 
+const rewindBuffer = new RewindBuffer(30);
+let rewindFrameCounter = 0;
+const RewindCaptureInterval = 50; // ~1 second at 50fps
+
 function draw(now) {
     if (!running) {
         last = 0;
@@ -1655,6 +1784,11 @@ function draw(now) {
             }
             const end = performance.now();
             virtualSpeedUpdater.update(cycles, end - now, speedy);
+            // Capture rewind snapshot periodically
+            if (++rewindFrameCounter >= RewindCaptureInterval) {
+                rewindFrameCounter = 0;
+                rewindBuffer.push(processor.snapshotState());
+            }
         } catch (e) {
             running = false;
             utils.noteEvent("exception", "thrown", e.stack);
@@ -1836,9 +1970,11 @@ electron({
             }
         },
     },
+    loadStateFile: loadStateFromFile,
     actions: {
         "soft-reset": () => processor.reset(false),
         "hard-reset": () => processor.reset(true),
+        "save-state": () => $("#save-state").trigger("click"),
     },
 });
 

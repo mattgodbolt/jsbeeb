@@ -99,6 +99,28 @@ export class Adc {
         }
     }
 
+    snapshotState() {
+        const scheduler = this.task.scheduler;
+        return {
+            status: this.status,
+            low: this.low,
+            high: this.high,
+            taskOffset: this.task.scheduled() ? this.task.expireEpoch - scheduler.epoch : null,
+        };
+    }
+
+    restoreState(state) {
+        this.status = state.status;
+        this.low = state.low;
+        this.high = state.high;
+        this.task.cancel();
+        if (state.taskOffset !== null) {
+            this.task.schedule(state.taskOffset);
+            // Conversion in progress: CB1 should be high (set by write(), cleared by onComplete())
+            this.sysvia.setcb1(true);
+        }
+    }
+
     /**
      * Read from the ADC registers
      * @param {number} addr - The address to read from
