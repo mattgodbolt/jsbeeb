@@ -166,19 +166,22 @@ describe("Via snapshotState / restoreState", () => {
 
         it("should snapshot and restore SysVia-specific fields", () => {
             const via = makeSysVia();
-            via.IC32 = 0xab;
+            // IC32 bits 6,7 control lock lights: 0 = on, 1 = off
+            // Set IC32=0x23 so both lights are on (bits 6,7 clear)
+            via.IC32 = 0x23;
             via.capsLockLight = true;
             via.shiftLockLight = true;
 
             const snapshot = via.snapshotState();
-            expect(snapshot.IC32).toBe(0xab);
+            expect(snapshot.IC32).toBe(0x23);
             expect(snapshot.capsLockLight).toBe(true);
             expect(snapshot.shiftLockLight).toBe(true);
 
             const via2 = makeSysVia();
             via2.restoreState(snapshot);
 
-            expect(via2.IC32).toBe(0xab);
+            expect(via2.IC32).toBe(0x23);
+            // Lock lights are derived from IC32 during portBUpdated
             expect(via2.capsLockLight).toBe(true);
             expect(via2.shiftLockLight).toBe(true);
         });

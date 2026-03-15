@@ -565,6 +565,14 @@ export class SysVia extends Via {
         this.IC32 = state.IC32;
         this.capsLockLight = state.capsLockLight;
         this.shiftLockLight = state.shiftLockLight;
+        // Re-apply IC32 side effects (sound chip data bus, CMOS, port A)
+        // Must call portBUpdated directly (not recalculatePortBPins which
+        // overwrites IC32 based on portbpins) and then re-set IC32.
+        this.portBUpdated();
+        this.IC32 = state.IC32;
+        this.capsLockLight = state.capsLockLight;
+        this.shiftLockLight = state.shiftLockLight;
+        this.recalculatePortAPins();
     }
 
     setKeyLayout(map) {

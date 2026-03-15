@@ -114,7 +114,11 @@ export class Adc {
         this.low = state.low;
         this.high = state.high;
         this.task.cancel();
-        if (state.taskOffset !== null) this.task.schedule(state.taskOffset);
+        if (state.taskOffset !== null) {
+            this.task.schedule(state.taskOffset);
+            // Conversion in progress: CB1 should be high (set by write(), cleared by onComplete())
+            this.sysvia.setcb1(true);
+        }
     }
 
     /**
