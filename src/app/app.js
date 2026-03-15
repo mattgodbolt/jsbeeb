@@ -242,13 +242,13 @@ const template = [
                     const result = await dialog.showOpenDialog(browserWindow, {
                         title: "Load emulator state",
                         filters: [
-                            { name: "Snapshot files", extensions: ["json.gz", "json", "snp", "gz"] },
+                            { name: "Snapshot files", extensions: ["gz", "json", "snp"] },
                             { name: "All files", extensions: ["*"] },
                         ],
                         properties: ["openFile"],
                     });
                     if (!result.canceled) {
-                        const filePath = result.filePaths[0];
+                        const filePath = getFileParam(result.filePaths[0]);
                         browserWindow.webContents.send("load-state", { path: filePath });
                     }
                 },

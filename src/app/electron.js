@@ -36,7 +36,7 @@ function init(args) {
 
     api.onLoadState(async (message) => {
         if (loadStateFile) {
-            const response = await fetch(message.path.startsWith("file://") ? message.path : `file://${message.path}`);
+            const response = await fetch(message.path);
             const blob = await response.blob();
             const file = new File([blob], message.path.split("/").pop());
             await loadStateFile(file);
