@@ -181,11 +181,33 @@ function convertSoundState(snLatch, snCount, snStat, snVol, snNoise, snShift) {
     };
 }
 
-function buildVideoState(ulaControl, ulaPalette, crtcRegs) {
+function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook) {
     const regs = new Uint8Array(32);
     regs.set(crtcRegs.slice(0, 18));
     const actualPal = new Uint8Array(16);
     for (let i = 0; i < 16; i++) actualPal[i] = ulaPalette[i] & 0x0f;
+
+    // Use NULA collook if provided, otherwise use default BBC palette
+    const collook =
+        nulaCollook ||
+        new Int32Array([
+            0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
+            0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
+        ]);
+
+    // Compute ulaPal from actualPal + collook, matching jsbeeb's Ula._recomputeUlaPal
+    const flashEnabled = !!(ulaControl & 1);
+    const defaultFlash = new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1]);
+    const flash = defaultFlash;
+    const ulaPal = new Int32Array(16);
+    for (let i = 0; i < 16; i++) {
+        const palVal = actualPal[i];
+        let colour = collook[(palVal & 0xf) ^ 7];
+        if (palVal & 8 && flashEnabled && flash[(palVal & 7) ^ 7]) {
+            colour = collook[palVal & 0xf];
+        }
+        ulaPal[i] = colour;
+    }
 
     return {
         regs,
@@ -224,7 +246,7 @@ function buildVideoState(ulaControl, ulaPalette, crtcRegs) {
         ulaMode: (ulaControl >>> 2) & 3,
         teletextMode: !!(ulaControl & 2),
         displayEnableSkew: 0,
-        ulaPal: new Int32Array(16),
+        ulaPal,
         actualPal,
         cursorOn: false,
         cursorOff: false,
@@ -234,10 +256,7 @@ function buildVideoState(ulaControl, ulaPalette, crtcRegs) {
         interlacedSyncAndVideo: false,
         screenSubtract: 0,
         ula: {
-            collook: new Int32Array([
-                0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-                0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-            ]),
+            collook: collook.slice(),
             flash: new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1]),
             paletteWriteFlag: false,
             paletteFirstByte: 0,
@@ -582,12 +601,36 @@ function finishV3Parse(modelName, cpuState, ram, roms, sections) {
     }
 
     // Parse Video ULA
+    // v3 section layout (97 bytes):
+    //   1: ula_ctrl
+    //  16: ula_palbak[16] (raw palette register values)
+    //  64: nula_collook[16] (4 bytes each: R, G, B, A in Allegro RGBA format)
+    //   1: nula_pal_write_flag
+    //   1: nula_pal_first_byte
+    //   8: nula_flash[8]
+    //   1: nula_palette_mode
+    //   ... (more NULA state follows)
     let ulaControl = 0;
     let ulaPalette = new Uint8Array(16);
+    let nulaCollook = null;
     if (sections["V"]) {
         const data = sections["V"].data;
         ulaControl = data[0];
         ulaPalette = data.slice(1, 17);
+        // Parse NULA collook if section is large enough (v3 has 97 bytes)
+        if (data.length >= 81) {
+            nulaCollook = new Int32Array(16);
+            for (let c = 0; c < 16; c++) {
+                const off = 17 + c * 4;
+                // b-em stores as R, G, B, A (Allegro format)
+                // jsbeeb uses ABGR format (Uint32 on little-endian = canvas RGBA)
+                const r = data[off];
+                const g = data[off + 1];
+                const b = data[off + 2];
+                const a = data[off + 3];
+                nulaCollook[c] = (a << 24) | (b << 16) | (g << 8) | r;
+            }
+        }
     }
 
     // Parse CRTC
@@ -623,7 +666,7 @@ function finishV3Parse(modelName, cpuState, ram, roms, sections) {
         roms,
         sysvia,
         uservia,
-        buildVideoState(ulaControl, ulaPalette, crtcRegs),
+        buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook),
         soundChip,
     );
 }
