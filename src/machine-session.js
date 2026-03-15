@@ -9,6 +9,7 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 import { TestMachine } from "../tests/test-machine.js";
+import { InstrumentedSoundChip } from "./soundchip.js";
 
 // Resolve the jsbeeb package root from our own location (src/machine-session.js
 // → go up one level).  Passed to setNodeBasePath() so the ROM loader resolves
@@ -53,8 +54,11 @@ export class MachineSession {
             this._completeFb8.set(this._fb8);
         });
 
-        // TestMachine forwards opts.video to fake6502, which uses it instead of FakeVideo
-        this._machine = new TestMachine(modelName, { video: this._video });
+        // Use a real (instrumented) sound chip so we can read registers and capture writes
+        this._soundChip = new InstrumentedSoundChip();
+
+        // TestMachine forwards opts.video and opts.soundChip to fake6502
+        this._machine = new TestMachine(modelName, { video: this._video, soundChip: this._soundChip });
 
         // Accumulated VDU text output — drained by callers
         this._pendingOutput = [];
