@@ -32,6 +32,7 @@ import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
+import { RewindBuffer } from "./rewind.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -1356,6 +1357,29 @@ $("#soft-reset").click(function (event) {
     event.preventDefault();
 });
 
+// Expose rewind to the debugger/console for v1
+window.jsbeebRewind = {
+    step: function () {
+        const snapshot = rewindBuffer.pop();
+        if (!snapshot) {
+            console.log("Rewind buffer empty");
+            return;
+        }
+        const wasRunning = running;
+        if (wasRunning) stop(false);
+        processor.restoreState(snapshot);
+        console.log(`Rewound 1 step (${rewindBuffer.length} remaining)`);
+        // Don't auto-resume - stay paused so user can inspect state
+    },
+    get length() {
+        return rewindBuffer.length;
+    },
+    clear: function () {
+        rewindBuffer.clear();
+        console.log("Rewind buffer cleared");
+    },
+};
+
 $("#save-state").click(function (event) {
     event.preventDefault();
     const wasRunning = running;
@@ -1677,6 +1701,10 @@ function VirtualSpeedUpdater() {
 
 const virtualSpeedUpdater = new VirtualSpeedUpdater();
 
+const rewindBuffer = new RewindBuffer(30);
+let rewindFrameCounter = 0;
+const RewindCaptureInterval = 50; // ~1 second at 50fps
+
 function draw(now) {
     if (!running) {
         last = 0;
@@ -1729,6 +1757,11 @@ function draw(now) {
             }
             const end = performance.now();
             virtualSpeedUpdater.update(cycles, end - now, speedy);
+            // Capture rewind snapshot periodically
+            if (++rewindFrameCounter >= RewindCaptureInterval) {
+                rewindFrameCounter = 0;
+                rewindBuffer.push(processor.snapshotState());
+            }
         } catch (e) {
             running = false;
             utils.noteEvent("exception", "thrown", e.stack);
