@@ -30,6 +30,7 @@ import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
+import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON } from "./snapshot.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -1354,6 +1355,51 @@ $("#soft-reset").click(function (event) {
     event.preventDefault();
 });
 
+$("#save-state").click(function (event) {
+    event.preventDefault();
+    const wasRunning = running;
+    if (running) stop(false);
+    try {
+        const snapshot = createSnapshot(processor, model);
+        const json = snapshotToJSON(snapshot);
+        const blob = new Blob([json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `jsbeeb-${model.name}-${timestamp}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error("Failed to save state:", e);
+    }
+    if (wasRunning) go();
+});
+
+$("#load-state").on("change", async function (event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    event.target.value = "";
+    const wasRunning = running;
+    if (running) stop(false);
+    try {
+        const text = await file.text();
+        const snapshot = snapshotFromJSON(text);
+        if (snapshot.model !== model.name) {
+            // Model mismatch: stash state and reload with correct model
+            sessionStorage.setItem("jsbeeb-pending-state", text);
+            const newQuery = { ...parsedQuery, model: snapshot.model };
+            const baseUrl = window.location.origin + window.location.pathname;
+            window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
+            return;
+        }
+        restoreSnapshot(processor, model, snapshot);
+    } catch (e) {
+        console.error("Failed to load state:", e);
+    }
+    if (wasRunning) go();
+});
+
 $("#tape-menu a").on("click", function (e) {
     const type = $(e.target).attr("data-id");
     if (type === undefined) return;
@@ -1507,6 +1553,18 @@ startPromise
 
         if (parsedQuery.patch) {
             dbgr.setPatch(parsedQuery.patch);
+        }
+
+        // Restore pending state from a cross-model load (sessionStorage)
+        const pendingState = sessionStorage.getItem("jsbeeb-pending-state");
+        if (pendingState) {
+            sessionStorage.removeItem("jsbeeb-pending-state");
+            try {
+                const snapshot = snapshotFromJSON(pendingState);
+                restoreSnapshot(processor, model, snapshot);
+            } catch (e) {
+                console.error("Failed to restore pending state:", e);
+            }
         }
 
         go();
