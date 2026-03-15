@@ -1382,8 +1382,8 @@ window.jsbeebRewind = {
         const wasRunning = running;
         if (wasRunning) stop(false);
         processor.restoreState(snapshot);
-        // Run one frame to regenerate the framebuffer from restored state
-        processor.execute(40000);
+        // Force a repaint so the display updates even while paused
+        video.paint();
         console.log(`Rewound 1 step (${rewindBuffer.length} remaining)`);
         // Don't auto-resume - stay paused so user can inspect state
     },
@@ -1446,8 +1446,8 @@ async function loadStateFromFile(file) {
             return;
         }
         restoreSnapshot(processor, model, snapshot);
-        // Run one frame to regenerate the framebuffer from restored state
-        processor.execute(40000);
+        // Force a repaint so the display updates even while paused
+        video.paint();
     } catch (e) {
         showError("loading state", e);
     }
