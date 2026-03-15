@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.5.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.4.0...v1.5.0) (2026-03-15)
+
+
+### Features
+
+* add configurable Tube CPU multiplier setting (issue [#134](https://github.com/mattgodbolt/jsbeeb/issues/134)) ([c19744a](https://github.com/mattgodbolt/jsbeeb/commit/c19744ad5e8037dcb87f1972660d91ad89872b2f))
+* add non-cycle-accurate mode for Tube 6502 instruction generation ([#584](https://github.com/mattgodbolt/jsbeeb/issues/584)) ([5455952](https://github.com/mattgodbolt/jsbeeb/commit/5455952557ad7ac7b38248ce5a1227b58234060d))
+* add VideoNULA palette support for MODE 7 teletext ([#575](https://github.com/mattgodbolt/jsbeeb/issues/575)) ([049bee8](https://github.com/mattgodbolt/jsbeeb/commit/049bee8a98b708bd2c1f02c485270232e6fd6428))
+* add VideoNULA programmable palette support ([#574](https://github.com/mattgodbolt/jsbeeb/issues/574)) ([05d7ca3](https://github.com/mattgodbolt/jsbeeb/commit/05d7ca33458ab81bb23928168167d819c98cb2b7))
+* Web Speech API output via RS-423 serial port (*FX3,1) ([#569](https://github.com/mattgodbolt/jsbeeb/issues/569)) ([2f01b04](https://github.com/mattgodbolt/jsbeeb/commit/2f01b041a8147d1138aa3a7e9795cbc72dd28c3c))
+* wire up accessibility switch keys for user port, ADC, and fire buttons ([#565](https://github.com/mattgodbolt/jsbeeb/issues/565)) ([faa63b9](https://github.com/mattgodbolt/jsbeeb/commit/faa63b93e520c0e08c7254668e861687996fa962))
+
+
+### Bug Fixes
+
+* always feed SAA5050 teletext pipeline from video bus ([#578](https://github.com/mattgodbolt/jsbeeb/issues/578)) ([7ff0e12](https://github.com/mattgodbolt/jsbeeb/commit/7ff0e1223b37571c26d07865b7daff0b672e8d1d))
+* apply NULA paletteMode in blitter to bypass ULA XOR-7 mapping ([#583](https://github.com/mattgodbolt/jsbeeb/issues/583)) ([49ae587](https://github.com/mattgodbolt/jsbeeb/commit/49ae587eebd0b131f10f3f5106c1b70baf2b741a))
+* correct default CMOS FDRIVE step rate for BBC Master ([#581](https://github.com/mattgodbolt/jsbeeb/issues/581)) ([b1f71dc](https://github.com/mattgodbolt/jsbeeb/commit/b1f71dc52f491545c67885b961aa382b9ee7cb7a))
+* emulate IC37/IC36 H-blanking feed for SAA5050 pipeline (issue [#546](https://github.com/mattgodbolt/jsbeeb/issues/546)) ([#580](https://github.com/mattgodbolt/jsbeeb/issues/580)) ([7399552](https://github.com/mattgodbolt/jsbeeb/commit/7399552f345e35d7ca4f3276a62dada36cdaed2c))
+* focus STH archive filter input when modal opens ([#573](https://github.com/mattgodbolt/jsbeeb/issues/573)) ([b0d5c74](https://github.com/mattgodbolt/jsbeeb/commit/b0d5c743321322fc82ff7b26538f8b492c9b4c86))
+* reduce WD1770 head settle time from 30ms to 15ms ([#577](https://github.com/mattgodbolt/jsbeeb/issues/577)) ([7b6a068](https://github.com/mattgodbolt/jsbeeb/commit/7b6a068603d66c2feb373beed8958bb7fd8f3639))
+* speak each CR-terminated line immediately, queue without cancel ([#570](https://github.com/mattgodbolt/jsbeeb/issues/570)) ([6c2bd37](https://github.com/mattgodbolt/jsbeeb/commit/6c2bd37b5321c23d48588f4f13937a8338c49af9))
+
 ## [1.4.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.3.3...v1.4.0) (2026-02-23)
 
 

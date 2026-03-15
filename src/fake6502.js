@@ -22,7 +22,7 @@ export function fake6502(model, opts) {
     return new Cpu6502(model, {
         dbgr,
         video: opts.video || fakeVideo,
-        soundChip,
+        soundChip: opts.soundChip || soundChip,
         ddNoise: new FakeDdNoise(),
         music5000: new FakeMusic5000(),
         cmos: new Cmos(),
