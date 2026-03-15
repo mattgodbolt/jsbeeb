@@ -1396,7 +1396,7 @@ $("#save-state").click(function (event) {
         a.click();
         URL.revokeObjectURL(url);
     } catch (e) {
-        console.error("Failed to save state:", e);
+        showError("saving state", e);
     }
     if (wasRunning) go();
 });
@@ -1435,7 +1435,7 @@ $("#load-state").on("change", async function (event) {
         }
         restoreSnapshot(processor, model, snapshot);
     } catch (e) {
-        console.error("Failed to load state:", e);
+        showError("loading state", e);
     }
     if (wasRunning) go();
 });
@@ -1603,7 +1603,7 @@ startPromise
                 const snapshot = snapshotFromJSON(pendingState);
                 restoreSnapshot(processor, model, snapshot);
             } catch (e) {
-                console.error("Failed to restore pending state:", e);
+                showError("restoring saved state", e);
             }
         }
 
