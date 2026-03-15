@@ -42,7 +42,7 @@ export function isBemSnapshot(buffer) {
  * @param {ArrayBuffer} buffer
  * @returns {object} jsbeeb snapshot
  */
-export function parseBemSnapshot(buffer) {
+export async function parseBemSnapshot(buffer) {
     if (buffer.byteLength < 8) throw new Error("File too small to be a b-em snapshot");
     const bytes = new Uint8Array(buffer);
     const sig = String.fromCharCode(...bytes.slice(0, 8));
@@ -173,7 +173,6 @@ function convertSoundState(snLatch, snCount, snStat, snVol, snNoise, snShift) {
         volume,
         lfsr: snShift,
         latchedRegister: 0,
-        lastRunEpoch: 0,
         residual: 0,
         sineOn: false,
         sineStep: 0,

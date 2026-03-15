@@ -271,7 +271,6 @@ export class SoundChip {
             volume: this.volume.slice(),
             lfsr: this.lfsr,
             latchedRegister: this.latchedRegister,
-            lastRunEpoch: this.lastRunEpoch,
             residual: this.residual,
             sineOn: this.sineOn,
             sineStep: this.sineStep,
@@ -289,7 +288,8 @@ export class SoundChip {
         this.volume.set(state.volume);
         this.lfsr = state.lfsr;
         this.latchedRegister = state.latchedRegister;
-        this.lastRunEpoch = state.lastRunEpoch;
+        // Sync to current scheduler epoch to avoid a catch-up burst
+        this.lastRunEpoch = this.scheduler.epoch;
         this.residual = state.residual;
         this.sineOn = state.sineOn;
         this.sineStep = state.sineStep;

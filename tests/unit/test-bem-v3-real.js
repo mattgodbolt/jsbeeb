@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
-import { resolve } from "path";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import { parseBemSnapshot, isBemSnapshot } from "../../src/bem-snapshot.js";
 
-const snpPath = resolve(import.meta.dirname, "../frogman.snp");
+const snpPath = resolve(dirname(fileURLToPath(import.meta.url)), "../frogman.snp");
 // Node's Buffer can share an ArrayBuffer with a non-zero byteOffset,
 // so slice to get a correctly-aligned copy.
 const nodeBuffer = readFileSync(snpPath);

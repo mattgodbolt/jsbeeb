@@ -56,7 +56,7 @@ describe("isBemSnapshot", () => {
 });
 
 describe("parseBemSnapshot", () => {
-    it("should parse CPU registers correctly", () => {
+    it("should parse CPU registers correctly", async () => {
         const buffer = makeMinimalBemSnapshot({
             a: 0x42,
             x: 0x10,
@@ -66,7 +66,7 @@ describe("parseBemSnapshot", () => {
             pc: 0xd940,
         });
 
-        const snapshot = parseBemSnapshot(buffer);
+        const snapshot = await parseBemSnapshot(buffer);
 
         expect(snapshot.format).toBe("jsbeeb-snapshot");
         expect(snapshot.version).toBe(1);
@@ -79,45 +79,44 @@ describe("parseBemSnapshot", () => {
         expect(snapshot.state.pc).toBe(0xd940);
     });
 
-    it("should parse NMI state", () => {
+    it("should parse NMI state", async () => {
         const buffer = makeMinimalBemSnapshot({ nmi: 1 });
-        const snapshot = parseBemSnapshot(buffer);
+        const snapshot = await parseBemSnapshot(buffer);
         expect(snapshot.state.nmiLevel).toBe(true);
     });
 
-    it("should parse ROM select register", () => {
+    it("should parse ROM select register", async () => {
         const buffer = makeMinimalBemSnapshot({ fe30: 0x05 });
-        const snapshot = parseBemSnapshot(buffer);
+        const snapshot = await parseBemSnapshot(buffer);
         expect(snapshot.state.romsel).toBe(0x05);
     });
 
-    it("should parse RAM contents", () => {
+    it("should parse RAM contents", async () => {
         const buffer = makeMinimalBemSnapshot({ ramAddr: 0x100, ramByte: 0xaa });
-        const snapshot = parseBemSnapshot(buffer);
+        const snapshot = await parseBemSnapshot(buffer);
         expect(snapshot.state.ram[0x100]).toBe(0xaa);
     });
 
-    it("should reject non-Model B snapshots", () => {
+    it("should reject non-Model B snapshots", async () => {
         const buffer = makeMinimalBemSnapshot({ model: 5 });
-        expect(() => parseBemSnapshot(buffer)).toThrow(/Unsupported/);
+        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Unsupported/);
     });
 
-    it("should reject wrong size", () => {
+    it("should reject wrong size", async () => {
         const buffer = new ArrayBuffer(100);
-        expect(() => parseBemSnapshot(buffer)).toThrow(/too small|Unsupported/);
+        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Unsupported/);
     });
 
-    it("should reject wrong signature", () => {
+    it("should reject wrong signature", async () => {
         const buffer = new ArrayBuffer(BemSnapshotSize);
         new Uint8Array(buffer).set(new TextEncoder().encode("NOTSNAP!"), 0);
-        expect(() => parseBemSnapshot(buffer)).toThrow(/Unsupported/);
+        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Unsupported/);
     });
 
-    it("should include sub-component state structures", () => {
+    it("should include sub-component state structures", async () => {
         const buffer = makeMinimalBemSnapshot();
-        const snapshot = parseBemSnapshot(buffer);
+        const snapshot = await parseBemSnapshot(buffer);
 
-        // Verify all expected sub-components exist
         expect(snapshot.state.scheduler).toBeDefined();
         expect(snapshot.state.sysvia).toBeDefined();
         expect(snapshot.state.uservia).toBeDefined();
@@ -126,20 +125,18 @@ describe("parseBemSnapshot", () => {
         expect(snapshot.state.acia).toBeDefined();
         expect(snapshot.state.adc).toBeDefined();
 
-        // VIA should have expected fields
         expect(snapshot.state.sysvia.ora).toBeDefined();
         expect(snapshot.state.sysvia.IC32).toBeDefined();
         expect(snapshot.state.uservia.ora).toBeDefined();
 
-        // Video should have nested state
         expect(snapshot.state.video.ula).toBeDefined();
         expect(snapshot.state.video.crtc).toBeDefined();
         expect(snapshot.state.video.teletext).toBeDefined();
     });
 
-    it("should accept model 4 (BBC B with sideways RAM)", () => {
+    it("should accept model 4 (BBC B with sideways RAM)", async () => {
         const buffer = makeMinimalBemSnapshot({ model: 4 });
-        const snapshot = parseBemSnapshot(buffer);
+        const snapshot = await parseBemSnapshot(buffer);
         expect(snapshot.model).toBe("B");
     });
 });

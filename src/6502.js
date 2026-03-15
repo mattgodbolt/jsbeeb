@@ -1210,7 +1210,6 @@ export class Cpu6502 extends Base6502 {
         this.uservia.restoreState(state.uservia);
         this.video.restoreState(state.video);
         this.soundChip.restoreState(state.soundChip);
-        this.soundChip.lastRunEpoch = this.scheduler.epoch;
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
     }

@@ -8,8 +8,11 @@ const SnapshotVersion = 1;
 
 /**
  * Check if two model names are compatible for state restore.
- * Resolves synonyms via findModel and compares base machine type,
- * ignoring filesystem variant differences (DFS vs ADFS etc).
+ * Resolves synonyms via findModel, then compares by stripping any
+ * trailing parenthesised suffix (e.g. treating "BBC Master 128 (DFS)"
+ * and "BBC Master 128 (ADFS)" as compatible). Does not treat
+ * differently-named models like "BBC B with DFS 0.9" vs "BBC B with DFS 1.2"
+ * as compatible — those are distinct models.
  */
 export function modelsCompatible(snapshotModel, currentModel) {
     if (snapshotModel === currentModel) return true;
