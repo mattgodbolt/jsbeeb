@@ -1130,6 +1130,87 @@ export class Cpu6502 extends Base6502 {
         this.resetLine = !resetOn;
     }
 
+    snapshotState() {
+        return {
+            // CPU registers
+            a: this.a,
+            x: this.x,
+            y: this.y,
+            s: this.s,
+            pc: this.pc,
+            p: this.p.asByte(),
+            nmiLevel: this._nmiLevel,
+            nmiEdge: this._nmiEdge,
+            halted: this.halted,
+            takeInt: this.takeInt,
+            // Memory control
+            romsel: this.romsel,
+            acccon: this.acccon,
+            videoDisplayPage: this.videoDisplayPage,
+            // Cycle tracking
+            currentCycles: this.currentCycles,
+            targetCycles: this.targetCycles,
+            cycleSeconds: this.cycleSeconds,
+            peripheralCycles: this.peripheralCycles,
+            videoCycles: this.videoCycles,
+            music5000PageSel: this.music5000PageSel,
+            // RAM only (ROMs don't change at runtime)
+            ram: this.ramRomOs.slice(0, this.romOffset),
+            // Sub-component state
+            scheduler: this.scheduler.snapshotState(),
+            sysvia: this.sysvia.snapshotState(),
+            uservia: this.uservia.snapshotState(),
+            video: this.video.snapshotState(),
+            soundChip: this.soundChip.snapshotState(),
+            acia: this.acia.snapshotState(),
+            adc: this.adconverter.snapshotState(),
+        };
+    }
+
+    restoreState(state) {
+        // 1. Scheduler epoch first (so task offsets resolve correctly)
+        this.scheduler.restoreState(state.scheduler);
+
+        // 2. CPU registers
+        this.a = state.a;
+        this.x = state.x;
+        this.y = state.y;
+        this.s = state.s;
+        this.pc = state.pc;
+        this.p.setFromByte(state.p);
+        // interrupt is rebuilt by sub-component restores (VIA updateIFR, ACIA updateIrq)
+        this.interrupt = 0;
+        this._nmiLevel = state.nmiLevel;
+        this._nmiEdge = state.nmiEdge;
+        this.halted = state.halted;
+        this.takeInt = state.takeInt;
+
+        // 3. Memory
+        this.ramRomOs.set(state.ram);
+        this.videoDisplayPage = state.videoDisplayPage;
+        this.music5000PageSel = state.music5000PageSel;
+
+        // 4. Rebuild memStat/memLook from romsel/acccon
+        this.romSelect(state.romsel);
+        if (this.model.isMaster) this.writeAcccon(state.acccon);
+
+        // 5. Cycle tracking
+        this.currentCycles = state.currentCycles;
+        this.targetCycles = state.targetCycles;
+        this.cycleSeconds = state.cycleSeconds;
+        this.peripheralCycles = state.peripheralCycles;
+        this.videoCycles = state.videoCycles;
+
+        // 6. Sub-components (these re-register scheduler tasks)
+        this.sysvia.restoreState(state.sysvia);
+        this.uservia.restoreState(state.uservia);
+        this.video.restoreState(state.video);
+        this.soundChip.restoreState(state.soundChip);
+        this.soundChip.lastRunEpoch = this.scheduler.epoch;
+        this.acia.restoreState(state.acia);
+        this.adconverter.restoreState(state.adc);
+    }
+
     reset(hard) {
         if (hard) {
             // On the Master, opcodes executing from 0xc000 - 0xdfff can optionally have their memory accesses
