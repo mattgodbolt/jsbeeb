@@ -330,6 +330,16 @@ const $screen = $("#screen");
 const $errorDialog = $("#error-dialog");
 const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
 
+async function compressBlob(blob) {
+    const stream = blob.stream().pipeThrough(new CompressionStream("gzip"));
+    return new Response(stream).blob();
+}
+
+async function decompressBlob(blob) {
+    const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Response(stream).blob();
+}
+
 function showError(context, error) {
     $errorDialog.find(".context").text(context);
     $errorDialog.find(".error").text(error);
@@ -1380,19 +1390,19 @@ window.jsbeebRewind = {
     },
 };
 
-$("#save-state").click(function (event) {
+$("#save-state").click(async function (event) {
     event.preventDefault();
     const wasRunning = running;
     if (running) stop(false);
     try {
         const snapshot = createSnapshot(processor, model);
         const json = snapshotToJSON(snapshot);
-        const blob = new Blob([json], { type: "application/json" });
+        const blob = await compressBlob(new Blob([json]));
         const url = URL.createObjectURL(blob);
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         const a = document.createElement("a");
         a.href = url;
-        a.download = `jsbeeb-${model.name}-${timestamp}.json`;
+        a.download = `jsbeeb-${model.name}-${timestamp}.json.gz`;
         a.click();
         URL.revokeObjectURL(url);
     } catch (e) {
@@ -1413,7 +1423,15 @@ $("#load-state").on("change", async function (event) {
         if (isBemSnapshot(arrayBuffer)) {
             snapshot = await parseBemSnapshot(arrayBuffer);
         } else {
-            const text = new TextDecoder().decode(arrayBuffer);
+            // Detect gzip (magic bytes 0x1f 0x8b) or plain JSON
+            const bytes = new Uint8Array(arrayBuffer);
+            let text;
+            if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+                const decompressed = await decompressBlob(new Blob([arrayBuffer]));
+                text = await decompressed.text();
+            } else {
+                text = new TextDecoder().decode(arrayBuffer);
+            }
             snapshot = snapshotFromJSON(text);
         }
         if (!modelsCompatible(snapshot.model, model.name)) {

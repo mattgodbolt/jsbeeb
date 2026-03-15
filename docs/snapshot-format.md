@@ -1,6 +1,6 @@
 # jsbeeb Snapshot Format (Version 1)
 
-jsbeeb saves emulator state as JSON files with the extension `.json`. TypedArrays (RAM, palette data, etc.) are encoded as base64 within the JSON.
+jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.json.gz`. TypedArrays (RAM, palette data, etc.) are encoded as base64 within the JSON. Uncompressed `.json` files are also accepted on load for backward compatibility.
 
 ## Top-level structure
 
