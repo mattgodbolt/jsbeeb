@@ -49,19 +49,16 @@ describe("RewindBuffer", () => {
         expect(buf.peek().id).toBe(2); // Still there
     });
 
-    it("should deep copy typed arrays on push", () => {
+    it("should store snapshots directly without copying", () => {
         const buf = new RewindBuffer(5);
         const snapshot = makeSnapshot(1, 0xaa);
         buf.push(snapshot);
 
-        // Mutate the original
-        snapshot.ram[0] = 0xff;
-        snapshot.cpu.a = 99;
-
-        // Buffer copy should be unaffected
+        // Buffer stores the same object (no deep copy — caller is
+        // responsible for providing pre-cloned snapshots)
         const stored = buf.peek();
+        expect(stored).toBe(snapshot);
         expect(stored.ram[0]).toBe(0xaa);
-        expect(stored.cpu.a).toBe(1);
     });
 
     it("should overwrite oldest when full", () => {

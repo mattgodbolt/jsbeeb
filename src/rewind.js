@@ -1,10 +1,9 @@
 "use strict";
 
-import { deepCopySnapshot } from "./state-utils.js";
-
 /**
  * Circular buffer of emulator state snapshots for rewind functionality.
- * Snapshots are deep-copied on push to ensure isolation from live state.
+ * Snapshots are stored directly without deep-copying, since
+ * snapshotState() already clones all TypedArrays via .slice().
  */
 export class RewindBuffer {
     /**
@@ -18,12 +17,14 @@ export class RewindBuffer {
     }
 
     /**
-     * Push a snapshot into the buffer, deep-copying all typed arrays.
+     * Push a snapshot into the buffer.
+     * The caller must ensure the snapshot's typed arrays are already
+     * independent copies (e.g. from snapshotState() which uses .slice()).
      * Overwrites the oldest snapshot when full.
-     * @param {object} snapshot - emulator state snapshot
+     * @param {object} snapshot - emulator state snapshot (already cloned)
      */
     push(snapshot) {
-        this.snapshots[this.writeIndex] = deepCopySnapshot(snapshot);
+        this.snapshots[this.writeIndex] = snapshot;
         this.writeIndex = (this.writeIndex + 1) % this.maxSnapshots;
         if (this.count < this.maxSnapshots) this.count++;
     }

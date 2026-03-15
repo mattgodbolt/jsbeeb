@@ -4,7 +4,10 @@ import { resolve } from "path";
 import { parseBemSnapshot, isBemSnapshot } from "../../src/bem-snapshot.js";
 
 const snpPath = resolve(import.meta.dirname, "../frogman.snp");
-const buffer = readFileSync(snpPath).buffer;
+// Node's Buffer can share an ArrayBuffer with a non-zero byteOffset,
+// so slice to get a correctly-aligned copy.
+const nodeBuffer = readFileSync(snpPath);
+const buffer = nodeBuffer.buffer.slice(nodeBuffer.byteOffset, nodeBuffer.byteOffset + nodeBuffer.byteLength);
 
 describe("BEMv3 real snapshot (frogman.snp)", () => {
     it("should detect as BEM snapshot", () => {

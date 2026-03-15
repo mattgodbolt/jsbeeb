@@ -435,7 +435,7 @@ function readString(data, pos) {
     return str;
 }
 
-function inflateRaw(compressedData) {
+async function inflateRaw(compressedData) {
     // Use DecompressionStream (available in modern browsers and Node 18+)
     if (typeof DecompressionStream !== "undefined") {
         const ds = new DecompressionStream("deflate");
@@ -452,19 +452,18 @@ function inflateRaw(compressedData) {
             }
         })();
 
-        writer.write(compressedData);
-        writer.close();
+        await writer.write(compressedData);
+        await writer.close();
+        await readPromise;
 
-        return readPromise.then(() => {
-            const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-            const result = new Uint8Array(totalLength);
-            let offset = 0;
-            for (const chunk of chunks) {
-                result.set(chunk, offset);
-                offset += chunk.length;
-            }
-            return result;
-        });
+        const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+        const result = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+            result.set(chunk, offset);
+            offset += chunk.length;
+        }
+        return result;
     }
     throw new Error("Zlib decompression not available (need DecompressionStream API)");
 }
