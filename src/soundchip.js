@@ -288,6 +288,84 @@ export class SoundChip {
     }
 }
 
+/**
+ * InstrumentedSoundChip - wraps a real SoundChip and captures all writes
+ * for debugging purposes. Provides the same interface as SoundChip.
+ */
+export class InstrumentedSoundChip extends SoundChip {
+    constructor() {
+        super(() => {}); // no audio output callback needed in headless mode
+        this._capturedWrites = [];
+        this._capturing = false;
+        this._totalCycles = 0;
+    }
+
+    poke(value) {
+        if (this._capturing) {
+            this._capturedWrites.push({ cycle: this._totalCycles, value });
+        }
+        super.poke(value);
+    }
+
+    /** Start capturing SN76489 writes. Clears any previous capture. */
+    startCapture() {
+        this._capturedWrites = [];
+        this._capturing = true;
+    }
+
+    /** Stop capturing and return the captured writes. */
+    stopCapture() {
+        this._capturing = false;
+        return this._capturedWrites;
+    }
+
+    /** Get the captured writes without stopping. */
+    getCapturedWrites() {
+        return this._capturedWrites;
+    }
+
+    /** Clear captured writes. */
+    clearCapture() {
+        this._capturedWrites = [];
+    }
+
+    /** Track total cycles for timestamps. Called by the scheduler. */
+    advance(cycles) {
+        this._totalCycles += cycles;
+        super.advance(cycles);
+    }
+
+    /** Read current SN76489 register state in a friendly format. */
+    getState() {
+        return {
+            tone: [
+                this.registers[0],
+                this.registers[1],
+                this.registers[2],
+            ],
+            noise: this.registers[3],
+            volume: [
+                this._attenuationFromVolume(0),
+                this._attenuationFromVolume(1),
+                this._attenuationFromVolume(2),
+                this._attenuationFromVolume(3),
+            ],
+            lfsr: this.lfsr,
+            latchedRegister: this.latchedRegister,
+        };
+    }
+
+    /** Convert internal float volume back to 0-15 attenuation. */
+    _attenuationFromVolume(channel) {
+        const v = this.volume[channel];
+        // volumeTable[15] = 0 (silent), volumeTable[0] = loudest
+        for (let i = 0; i < 16; i++) {
+            if (Math.abs(volumeTable[i] - v) < 0.001) return i;
+        }
+        return 15; // silent
+    }
+}
+
 export class FakeSoundChip {
     reset() {}
 
