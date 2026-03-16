@@ -37,6 +37,21 @@ export class TestMachine {
         });
     }
 
+    /**
+     * Run until the cursor blink reaches the desired state.
+     * This ensures deterministic screenshots regardless of how many
+     * cycles were consumed by prior type() or runFor() calls.
+     * @param {boolean} on - true for cursor visible, false for hidden
+     */
+    async runToCursorState(on) {
+        const video = this.processor.video;
+        for (let i = 0; i < 100; i++) {
+            if (video.cursorOnThisFrame === on) return;
+            await this.runFor(40000);
+        }
+        throw new Error(`Cursor did not reach state ${on} in time (cursorOnThisFrame=${video.cursorOnThisFrame})`);
+    }
+
     async runUntilVblank() {
         let hit = false;
         if (this.processor.isMaster) throw new Error("Not yet implemented");
@@ -186,16 +201,16 @@ export class TestMachine {
     async type(text) {
         const fullText = text + "\n"; // append RETURN
         const keys = fullText.split("").map((ch) => this._charToKey(ch));
-        const holdMillis = 40;
-        const clocksPerSecond = Math.floor(this.processor.cpuMultiplier * 2000000);
+        const holdCycles = 40000; // cycles between key events, matching old type() timing
         let index = 0;
         let phase = "idle"; // "idle" → "down" → "idle"
-        let nextEventMillis = 0;
+        let nextEventCycle = 0;
         let done = false;
 
+        const currentCycle = () => this.processor.cycleSeconds * 2000000 + this.processor.currentCycles;
+
         const hook = this.processor.debugInstruction.add(() => {
-            const millis = this.processor.cycleSeconds * 1000 + this.processor.currentCycles / (clocksPerSecond / 1000);
-            if (millis < nextEventMillis) return;
+            if (currentCycle() < nextEventCycle) return;
 
             if (phase === "down") {
                 // Release current key
@@ -204,7 +219,7 @@ export class TestMachine {
                 if (key.shift) this.processor.sysvia.keyUp(16);
                 index++;
                 phase = "idle";
-                nextEventMillis = millis + holdMillis;
+                nextEventCycle = currentCycle() + holdCycles;
                 return;
             }
 
@@ -220,16 +235,14 @@ export class TestMachine {
             if (key.shift) this.processor.sysvia.keyDown(16);
             this.processor.sysvia.keyDown(key.code);
             phase = "down";
-            nextEventMillis = millis + holdMillis;
+            nextEventCycle = currentCycle() + holdCycles;
         });
 
-        // Drive execution until all characters are typed or a breakpoint fires.
-        const cyclesPerChar = 80 * 1000;
-        const totalCycles = keys.length * cyclesPerChar;
-        const stopped = await this.runFor(totalCycles);
-        if (!done && !stopped) {
-            // Shouldn't happen if cycle budget is sufficient, but be safe
-            await this.runFor(totalCycles);
+        // Drive execution in chunks until all characters are typed or
+        // a breakpoint halts the CPU.
+        while (!done) {
+            const stopped = await this.runFor(holdCycles);
+            if (stopped) break;
         }
     }
 
