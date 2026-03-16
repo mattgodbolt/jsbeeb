@@ -108,6 +108,7 @@ describe("Test other teletext test pages", { timeout: 30000 }, () => {
         // https://github.com/mattgodbolt/jsbeeb/issues/316
         await testMachine.type("VDU &91,&61,&9E,&92,&93,&94,&81,&91,&91,10,13");
         await testMachine.runUntilInput();
+        await testMachine.runToCursorState(true);
         await compare(video, testMachine, `expected_hoglet_held_char.png`);
     });
     it("should work with the alternative engineer test page bug 469", async () => {
@@ -121,6 +122,7 @@ describe("Test other teletext test pages", { timeout: 30000 }, () => {
             "CLS:VDU &81,&80,&81,&A0,&80,&A0,&81,&9E,&A0,&9E,&A0,&97,&AC,&93,&93,&96,&96,&92,&92,&92,&95,&95,&91,&91,&94,&94,&94,&A0,&A0,&94,&80,&81,&80,&81,&80,&81,&80,&81,&B0,&B7",
         );
         await testMachine.runUntilInput();
+        await testMachine.runToCursorState(true);
         await compare(video, testMachine, `expected_bug_469.png`);
     });
 });

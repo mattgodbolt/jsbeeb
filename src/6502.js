@@ -1281,6 +1281,7 @@ export class Cpu6502 extends Base6502 {
         this._nmiEdge = false;
         this._nmiLevel = false;
         this.halted = false;
+        this.breakpointResume = false;
         this.music5000PageSel = 0;
         this.video.reset(this, this.sysvia, hard);
         this.soundChip.reset(hard);
@@ -1379,16 +1380,22 @@ export class Cpu6502 extends Base6502 {
     }
 
     executeInternal() {
-        let first = true;
+        // Skip the debug-instruction check on the very first instruction only
+        // when resuming from a previous breakpoint stop (so we don't immediately
+        // re-trigger the same breakpoint).  Previously this skipped the first
+        // instruction of every execute() chunk, which could miss breakpoints.
+        let skipNext = this.breakpointResume;
+        this.breakpointResume = false;
         while (!this.halted && this.currentCycles < this.targetCycles) {
             this.oldPcIndex = (this.oldPcIndex + 1) & 0xff;
             this.oldPcArray[this.oldPcIndex] = this.pc;
             this.memStatOffset = this.memStatOffsetByIFetchBank & (1 << (this.pc >>> 12)) ? 256 : 0;
             const opcode = this.readmem(this.pc);
-            if (this._debugInstruction && !first && this._debugInstruction(this.pc, opcode)) {
+            if (this._debugInstruction && !skipNext && this._debugInstruction(this.pc, opcode)) {
+                this.breakpointResume = true;
                 return false;
             }
-            first = false;
+            skipNext = false;
             this.incpc();
             this.runner.run(opcode);
             this.oldAArray[this.oldPcIndex] = this.a;
