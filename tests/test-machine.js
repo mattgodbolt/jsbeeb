@@ -30,7 +30,7 @@ export class TestMachine {
                 if (left && !stopped) {
                     setTimeout(runAnIter, 0);
                 } else {
-                    resolve();
+                    resolve(stopped);
                 }
             };
             runAnIter();
@@ -105,157 +105,132 @@ export class TestMachine {
         this.writebyte(0x13, endHigh);
     }
 
+    /**
+     * Convert an ASCII character to a {code, shift} pair for the BBC keyboard.
+     */
+    _charToKey(ch) {
+        switch (ch) {
+            case "\n":
+            case "\r":
+                return { code: 13, shift: false };
+            case '"':
+                return { code: utils.keyCodes.K2, shift: true };
+            case "*":
+                return { code: utils.keyCodes.APOSTROPHE, shift: true };
+            case "!":
+                return { code: utils.keyCodes.K1, shift: true };
+            case ".":
+                return { code: utils.keyCodes.PERIOD, shift: false };
+            case ";":
+                return { code: utils.keyCodes.SEMICOLON, shift: false };
+            case ":":
+                return { code: utils.keyCodes.APOSTROPHE, shift: false };
+            case ",":
+                return { code: utils.keyCodes.COMMA, shift: false };
+            case "&":
+                return { code: utils.keyCodes.K6, shift: true };
+            case " ":
+                return { code: utils.keyCodes.SPACE, shift: false };
+            case "-":
+                return { code: utils.keyCodes.MINUS, shift: false };
+            case "=":
+                return { code: utils.keyCodes.MINUS, shift: true };
+            case "+":
+                return { code: utils.keyCodes.SEMICOLON, shift: true };
+            case "^":
+                return { code: utils.keyCodes.EQUALS, shift: false };
+            case "~":
+                return { code: utils.keyCodes.EQUALS, shift: true };
+            case "[":
+                return { code: utils.keyCodes.LEFT_SQUARE_BRACKET, shift: false };
+            case "]":
+                return { code: utils.keyCodes.RIGHT_SQUARE_BRACKET, shift: false };
+            case "{":
+                return { code: utils.keyCodes.LEFT_SQUARE_BRACKET, shift: true };
+            case "}":
+                return { code: utils.keyCodes.HASH, shift: true };
+            case "\\":
+                return { code: utils.keyCodes.BACKSLASH, shift: false };
+            case "/":
+                return { code: utils.keyCodes.SLASH, shift: false };
+            case "?":
+                return { code: utils.keyCodes.SLASH, shift: true };
+            case "<":
+                return { code: utils.keyCodes.COMMA, shift: true };
+            case ">":
+                return { code: utils.keyCodes.PERIOD, shift: true };
+            case "(":
+                return { code: utils.keyCodes.K8, shift: true };
+            case ")":
+                return { code: utils.keyCodes.K9, shift: true };
+            case "@":
+                return { code: utils.keyCodes.BACK_QUOTE, shift: false };
+            case "#":
+                return { code: utils.keyCodes.K3, shift: true };
+            case "$":
+                return { code: utils.keyCodes.K4, shift: true };
+            case "%":
+                return { code: utils.keyCodes.K5, shift: true };
+            default:
+                return { code: ch.toUpperCase().charCodeAt(0), shift: false };
+        }
+    }
+
+    /**
+     * Type text by installing a debugInstruction hook that presses/releases
+     * keys at timed intervals during CPU execution.  The hook persists across
+     * runFor calls, so breakpoints naturally coexist: if a breakpoint halts
+     * execution mid-typing, the remaining characters are typed when execution
+     * resumes.
+     */
     async type(text) {
-        console.log("Typing '" + text + "'");
-        const cycles = 40 * 1000;
+        const fullText = text + "\n"; // append RETURN
+        const keys = fullText.split("").map((ch) => this._charToKey(ch));
+        const holdMillis = 40;
+        const clocksPerSecond = Math.floor(this.processor.cpuMultiplier * 2000000);
+        let index = 0;
+        let phase = "idle"; // "idle" → "down" → "idle"
+        let nextEventMillis = 0;
+        let done = false;
 
-        const kd = (ch) => {
-            this.processor.sysvia.keyDown(ch);
-            return this.runFor(cycles).then(() => {
-                this.processor.sysvia.keyUp(ch);
-                return this.runFor(cycles);
-            });
-        };
+        const hook = this.processor.debugInstruction.add(() => {
+            const millis = this.processor.cycleSeconds * 1000 + this.processor.currentCycles / (clocksPerSecond / 1000);
+            if (millis < nextEventMillis) return;
 
-        const typeChar = (ch) => {
-            let shift = false;
-            // Map printable ASCII characters to BBC Micro key codes (UK layout).
-            // Characters not listed here fall through to the default case which
-            // uses toUpperCase().charCodeAt(0) — valid for A–Z and 0–9 only.
-            switch (ch) {
-                case '"':
-                    ch = utils.keyCodes.K2;
-                    shift = true;
-                    break;
-                case "*":
-                    ch = utils.keyCodes.APOSTROPHE;
-                    shift = true;
-                    break;
-                case "!":
-                    ch = utils.keyCodes.K1;
-                    shift = true;
-                    break;
-                case ".":
-                    ch = utils.keyCodes.PERIOD;
-                    break;
-                case ";":
-                    ch = utils.keyCodes.SEMICOLON;
-                    break;
-                case ":":
-                    ch = utils.keyCodes.APOSTROPHE;
-                    break;
-                case ",":
-                    ch = utils.keyCodes.COMMA;
-                    break;
-                case "&":
-                    ch = utils.keyCodes.K6;
-                    shift = true;
-                    break;
-                case " ":
-                    ch = utils.keyCodes.SPACE;
-                    break;
-                case "-":
-                    ch = utils.keyCodes.MINUS;
-                    break;
-                case "=":
-                    ch = utils.keyCodes.MINUS;
-                    shift = true;
-                    break;
-                case "+":
-                    ch = utils.keyCodes.SEMICOLON;
-                    shift = true;
-                    break;
-                case "^":
-                    ch = utils.keyCodes.EQUALS;
-                    break;
-                case "~":
-                    ch = utils.keyCodes.EQUALS;
-                    shift = true;
-                    break;
-                case "[":
-                    ch = utils.keyCodes.LEFT_SQUARE_BRACKET;
-                    break;
-                case "]":
-                    ch = utils.keyCodes.RIGHT_SQUARE_BRACKET;
-                    break;
-                case "{":
-                    ch = utils.keyCodes.LEFT_SQUARE_BRACKET;
-                    shift = true;
-                    break;
-                case "}":
-                    ch = utils.keyCodes.HASH;
-                    shift = true;
-                    break;
-                case "\\":
-                    ch = utils.keyCodes.BACKSLASH;
-                    break;
-                case "/":
-                    ch = utils.keyCodes.SLASH;
-                    break;
-                case "?":
-                    ch = utils.keyCodes.SLASH;
-                    shift = true;
-                    break;
-                case "<":
-                    ch = utils.keyCodes.COMMA;
-                    shift = true;
-                    break;
-                case ">":
-                    ch = utils.keyCodes.PERIOD;
-                    shift = true;
-                    break;
-                case "(":
-                    ch = utils.keyCodes.K8;
-                    shift = true;
-                    break;
-                case ")":
-                    ch = utils.keyCodes.K9;
-                    shift = true;
-                    break;
-                case "@":
-                    ch = utils.keyCodes.BACK_QUOTE;
-                    break;
-                case "#":
-                    ch = utils.keyCodes.K3;
-                    shift = true;
-                    break;
-                case "$":
-                    ch = utils.keyCodes.K4;
-                    shift = true;
-                    break;
-                case "%":
-                    ch = utils.keyCodes.K5;
-                    shift = true;
-                    break;
-                default:
-                    // A-Z and 0-9: ASCII value == DOM keyCode — works as-is.
-                    // Anything else (e.g. '_', '£', '`') is not yet mapped.
-                    ch = ch.toUpperCase().charCodeAt(0);
-                    break;
+            if (phase === "down") {
+                // Release current key
+                const key = keys[index];
+                this.processor.sysvia.keyUp(key.code);
+                if (key.shift) this.processor.sysvia.keyUp(16);
+                index++;
+                phase = "idle";
+                nextEventMillis = millis + holdMillis;
+                return;
             }
-            if (shift) {
-                this.processor.sysvia.keyDown(16);
-                return this.runFor(cycles).then(() => {
-                    return kd(ch).then(() => {
-                        this.processor.sysvia.keyUp(16);
-                        return this.runFor(cycles);
-                    });
-                });
-            } else {
-                return kd(ch);
-            }
-        };
 
-        return text
-            .split("")
-            .reduce(function (p, char) {
-                return p.then(function () {
-                    return typeChar(char);
-                });
-            }, Promise.resolve())
-            .then(function () {
-                return kd(13);
-            });
+            // phase === "idle"
+            if (index >= keys.length) {
+                hook.remove();
+                done = true;
+                return;
+            }
+
+            // Press next key
+            const key = keys[index];
+            if (key.shift) this.processor.sysvia.keyDown(16);
+            this.processor.sysvia.keyDown(key.code);
+            phase = "down";
+            nextEventMillis = millis + holdMillis;
+        });
+
+        // Drive execution until all characters are typed or a breakpoint fires.
+        const cyclesPerChar = 80 * 1000;
+        const totalCycles = keys.length * cyclesPerChar;
+        const stopped = await this.runFor(totalCycles);
+        if (!done && !stopped) {
+            // Shouldn't happen if cycle budget is sufficient, but be safe
+            await this.runFor(totalCycles);
+        }
     }
 
     writebyte(addr, val) {
