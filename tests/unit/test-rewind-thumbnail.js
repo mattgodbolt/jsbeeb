@@ -38,9 +38,12 @@ function createMockProcessor(video) {
 }
 
 describe("renderThumbnails", () => {
+    let origCreateElement;
+
     beforeEach(() => {
+        origCreateElement = document.createElement.bind(document);
         vi.spyOn(document, "createElement").mockImplementation((tag) => {
-            if (tag !== "canvas") return document.createElement(tag);
+            if (tag !== "canvas") return origCreateElement(tag);
             const mock = createMockCanvas();
             return {
                 width: 0,

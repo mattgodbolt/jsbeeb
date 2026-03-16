@@ -1375,6 +1375,7 @@ $("#download-filestore-link").on("click", function () {
 });
 
 $("#hard-reset").click(function (event) {
+    if (rewindUI) rewindUI.close();
     processor.reset(true);
     rewindBuffer.clear();
     rewindUI.updateButtonState();

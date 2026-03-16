@@ -35,6 +35,7 @@ export class RewindUI {
         this.wasRunning = false;
         this.selectedIndex = -1;
         this.snapshots = [];
+        this.savedState = null;
 
         this._onKeyDown = this._onKeyDown.bind(this);
         this.closeBtn.addEventListener("click", () => this.close());
@@ -55,12 +56,14 @@ export class RewindUI {
         if (this.wasRunning) this.stop(false);
 
         this.isOpen = true;
+        this.savedState = this.processor.snapshotState();
 
         const thumbnails = renderThumbnails(this.processor, this.snapshots, this.video, this.captureInterval);
         this._populateFilmstrip(thumbnails);
 
         this.panel.hidden = false;
-        document.addEventListener("keydown", this._onKeyDown);
+        // Use capture phase so keys don't leak to the emulator's keyboard handler
+        document.addEventListener("keydown", this._onKeyDown, true);
 
         // Select the newest snapshot ("now") and jump to it
         this.selectedIndex = this.snapshots.length - 1;
@@ -69,18 +72,32 @@ export class RewindUI {
         this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
     }
 
-    /** Close the rewind panel and optionally resume. */
-    close() {
+    /**
+     * Close the rewind panel, committing the selected snapshot.
+     * Resumes the emulator if it was running before.
+     */
+    commit() {
         if (!this.isOpen) return;
-        this.isOpen = false;
-
-        this.panel.hidden = true;
-        this.filmstrip.innerHTML = "";
-        this.snapshots = [];
-
-        document.removeEventListener("keydown", this._onKeyDown);
-
+        this._closePanel();
         if (this.wasRunning) this.go();
+    }
+
+    /**
+     * Close the rewind panel, restoring the state from before it was opened.
+     * Resumes the emulator if it was running before.
+     */
+    cancel() {
+        if (!this.isOpen) return;
+        this.processor.restoreState(this.savedState);
+        executeUntilFrame(this.processor, this.video);
+        this.video.paint();
+        this._closePanel();
+        if (this.wasRunning) this.go();
+    }
+
+    /** Alias for cancel — closing the panel without explicit commit cancels. */
+    close() {
+        this.cancel();
     }
 
     /**
@@ -102,6 +119,15 @@ export class RewindUI {
         if (this.openBtn) {
             this.openBtn.classList.toggle("disabled", this.rewindBuffer.length === 0);
         }
+    }
+
+    _closePanel() {
+        this.isOpen = false;
+        this.panel.hidden = true;
+        this.filmstrip.innerHTML = "";
+        this.snapshots = [];
+        this.savedState = null;
+        document.removeEventListener("keydown", this._onKeyDown, true);
     }
 
     /** Restore a snapshot and run until vsync to produce a complete frame. */
@@ -146,21 +172,32 @@ export class RewindUI {
     _onKeyDown(e) {
         switch (e.key) {
             case "Escape":
+                e.preventDefault();
+                e.stopPropagation();
+                this.cancel();
+                break;
             case "Enter":
                 e.preventDefault();
-                this.close();
+                e.stopPropagation();
+                this.commit();
                 break;
             case "ArrowLeft":
                 e.preventDefault();
+                e.stopPropagation();
                 if (this.selectedIndex > 0) {
                     this.selectSnapshot(this.selectedIndex - 1);
                 }
                 break;
             case "ArrowRight":
                 e.preventDefault();
+                e.stopPropagation();
                 if (this.selectedIndex < this.snapshots.length - 1) {
                     this.selectSnapshot(this.selectedIndex + 1);
                 }
+                break;
+            default:
+                // Swallow all other keys while the panel is open
+                e.stopPropagation();
                 break;
         }
     }

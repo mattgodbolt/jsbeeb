@@ -4,26 +4,38 @@ const ThumbnailWidth = 160;
 const ThumbnailHeight = 128;
 const FramebufferWidth = 1024;
 const FramebufferHeight = 625;
+const VisiblePixels = FramebufferWidth * FramebufferHeight;
 const CyclesPerChunk = 8000;
 // Safety limit to prevent infinite loops if video state is broken
 const MaxChunks = 100;
 
+// Reusable offscreen canvas and ImageData for captureThumbnail to avoid
+// allocating a full 1024x625 buffer per thumbnail.
+let srcCanvas = null;
+let srcCtx = null;
+let srcImageData = null;
+
+function ensureSrcCanvas() {
+    if (srcCanvas) return;
+    srcCanvas = document.createElement("canvas");
+    srcCanvas.width = FramebufferWidth;
+    srcCanvas.height = FramebufferHeight;
+    srcCtx = srcCanvas.getContext("2d", { alpha: false });
+    srcImageData = srcCtx.createImageData(FramebufferWidth, FramebufferHeight);
+}
+
 /**
  * Render a single thumbnail canvas from a framebuffer Uint32Array.
- * Draws the 1024x625 fb32 data into a small offscreen canvas.
+ * Reuses a shared offscreen canvas for the full-size copy, then
+ * downscales into a new small canvas for the thumbnail.
  * @param {Uint32Array} fb32 - the framebuffer to capture
  * @returns {HTMLCanvasElement} a small canvas with the downscaled image
  */
 function captureThumbnail(fb32) {
+    ensureSrcCanvas();
     // fb32 may be 1024x1024 (WebGL) or 1024x625 (2D) — only copy the visible region
-    const srcCanvas = document.createElement("canvas");
-    srcCanvas.width = FramebufferWidth;
-    srcCanvas.height = FramebufferHeight;
-    const srcCtx = srcCanvas.getContext("2d", { alpha: false });
-    const imageData = srcCtx.createImageData(FramebufferWidth, FramebufferHeight);
-    const visiblePixels = FramebufferWidth * FramebufferHeight;
-    new Uint32Array(imageData.data.buffer).set(fb32.subarray(0, visiblePixels));
-    srcCtx.putImageData(imageData, 0, 0);
+    new Uint32Array(srcImageData.data.buffer).set(fb32.subarray(0, VisiblePixels));
+    srcCtx.putImageData(srcImageData, 0, 0);
 
     const thumb = document.createElement("canvas");
     thumb.width = ThumbnailWidth;
@@ -42,10 +54,6 @@ function captureThumbnail(fb32) {
  *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
-    // Snapshots are taken mid-frame, so the first vsync only completes the
-    // partial frame (bottom portion). We let that first vsync paint+clear
-    // normally, then suppress clearPaintBuffer on the second vsync so we
-    // capture a complete top-to-bottom frame.
     const startFrame = video.frameCount;
 
     // Phase 1: run to first vsync (completes partial frame, clears fb32)
