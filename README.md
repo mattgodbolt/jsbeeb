@@ -10,6 +10,8 @@ and a 128K BBC Master, along with a number of different peripherals.
 ## Table of Contents
 
 - [Keyboard Mappings](#keyboard-mappings)
+- [Emulator Shortcuts](#emulator-shortcuts)
+- [Save State and Rewind](#save-state-and-rewind)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
 - [Running as a Desktop Application](#running-as-a-desktop-application)
 - [URL Parameters](#url-parameters)
@@ -32,6 +34,26 @@ The BBC had a somewhat different-looking keyboard to a modern PC, and so it's us
 
 To play right now, visit [https://bbc.xania.org/](https://bbc.xania.org/). To load the default disc image (Elite in this
 case), press shift-F12 (which is shift-Break on the BBC).
+
+### Emulator Shortcuts
+
+| Shortcut       | Action                          |
+| -------------- | ------------------------------- |
+| `Ctrl+Home`    | Stop and enter debugger         |
+| `Ctrl+Insert`  | Toggle turbo (fast-as-possible) |
+| `Ctrl+End`     | Pause emulation                 |
+| `Alt+PageDown` | Open rewind scrubber            |
+
+### Save State and Rewind
+
+Save and load full emulator state snapshots from the **State** menu (or `Ctrl+S` / `Ctrl+O` in the Electron app).
+
+The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt+PageDown** to browse recent states as a visual filmstrip:
+
+- **Left/Right arrows** — navigate between snapshots (the main screen updates live)
+- **Click** a thumbnail to jump to that point
+- **Enter** — commit selection and close the panel
+- **Escape** — cancel and restore the original state
 
 ### Joystick Support
 
@@ -184,8 +206,6 @@ If you're looking to help:
   - Play lots of games and report issues either on [GitHub](https://github.com/mattgodbolt/jsbeeb/issues) or by email (
     matt@godbolt.org).
 - Core
-  - Save state ability
-    - Once we have this I'd love to get some "reverse step" debugging support
   - Get the "boo" of the boot "boo-beep" working (disabled currently as the JavaScript startup makes the sound
     dreadfully choppy on Chrome at least).
 - Save disc support

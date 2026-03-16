@@ -33,6 +33,7 @@ import { getFilterForMode } from "./canvas.js";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, modelsCompatible } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
+import { RewindUI } from "./rewind-ui.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -45,6 +46,7 @@ import {
 
 let processor;
 let video;
+let rewindUI;
 const dbgr = new Debugger();
 let frames = 0;
 let frameSkip = 0;
@@ -792,6 +794,17 @@ keyboard.registerKeyHandler(
 );
 
 keyboard.registerKeyHandler(
+    utils.keyCodes.PAGEDOWN,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "pagedown");
+            if (rewindUI) rewindUI.open();
+        }
+    },
+    { alt: true, ctrl: false },
+);
+
+keyboard.registerKeyHandler(
     utils.keyCodes.B,
     (down) => {
         if (down) {
@@ -1361,8 +1374,17 @@ $("#download-filestore-link").on("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
-$("#hard-reset").click(function (event) {
+function hardReset() {
+    if (rewindUI) {
+        rewindUI.close();
+        rewindBuffer.clear();
+        rewindUI.updateButtonState();
+    }
     processor.reset(true);
+}
+
+$("#hard-reset").click(function (event) {
+    hardReset();
     event.preventDefault();
 });
 
@@ -1370,31 +1392,6 @@ $("#soft-reset").click(function (event) {
     processor.reset(false);
     event.preventDefault();
 });
-
-// Expose rewind to the debugger/console for v1
-window.jsbeebRewind = {
-    step: function () {
-        const snapshot = rewindBuffer.pop();
-        if (!snapshot) {
-            console.log("Rewind buffer empty");
-            return;
-        }
-        const wasRunning = running;
-        if (wasRunning) stop(false);
-        processor.restoreState(snapshot);
-        // Force a repaint so the display updates even while paused
-        video.paint();
-        console.log(`Rewound 1 step (${rewindBuffer.length} remaining)`);
-        // Don't auto-resume - stay paused so user can inspect state
-    },
-    get length() {
-        return rewindBuffer.length;
-    },
-    clear: function () {
-        rewindBuffer.clear();
-        console.log("Rewind buffer cleared");
-    },
-};
 
 $("#save-state").click(async function (event) {
     event.preventDefault();
@@ -1732,6 +1729,17 @@ const rewindBuffer = new RewindBuffer(30);
 let rewindFrameCounter = 0;
 const RewindCaptureInterval = 50; // ~1 second at 50fps
 
+rewindUI = new RewindUI({
+    rewindBuffer,
+    processor,
+    video,
+    captureInterval: RewindCaptureInterval,
+    stop,
+    go,
+    isRunning: () => running,
+});
+rewindUI.updateButtonState();
+
 function draw(now) {
     if (!running) {
         last = 0;
@@ -1788,6 +1796,7 @@ function draw(now) {
             if (++rewindFrameCounter >= RewindCaptureInterval) {
                 rewindFrameCounter = 0;
                 rewindBuffer.push(processor.snapshotState());
+                rewindUI.updateButtonState();
             }
         } catch (e) {
             running = false;
@@ -1973,8 +1982,9 @@ electron({
     loadStateFile: loadStateFromFile,
     actions: {
         "soft-reset": () => processor.reset(false),
-        "hard-reset": () => processor.reset(true),
+        "hard-reset": hardReset,
         "save-state": () => $("#save-state").trigger("click"),
+        rewind: () => rewindUI.open(),
     },
 });
 

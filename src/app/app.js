@@ -255,6 +255,11 @@ const template = [
             },
             { type: "separator" },
             {
+                label: "Rewind...",
+                click: sendAction("rewind"),
+            },
+            { type: "separator" },
+            {
                 label: "Soft Reset",
                 click: sendAction("soft-reset"),
             },
