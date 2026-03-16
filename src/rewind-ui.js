@@ -58,8 +58,21 @@ export class RewindUI {
         this.isOpen = true;
         this.savedState = this.processor.snapshotState();
 
-        const thumbnails = renderThumbnails(this.processor, this.snapshots, this.video, this.captureInterval);
-        this._populateFilmstrip(thumbnails);
+        try {
+            const thumbnails = renderThumbnails(
+                this.processor,
+                this.snapshots,
+                this.video,
+                this.captureInterval,
+                this.savedState,
+            );
+            this._populateFilmstrip(thumbnails);
+        } catch (e) {
+            this.processor.restoreState(this.savedState);
+            this._closePanel();
+            if (this.wasRunning) this.go();
+            throw e;
+        }
 
         this.panel.hidden = false;
         // Use capture phase so keys don't leak to the emulator's keyboard handler
@@ -208,8 +221,8 @@ export class RewindUI {
                 }
                 break;
             default:
-                // Swallow all other keys while the panel is open
-                e.preventDefault();
+                // Block keys from reaching the emulator but allow browser
+                // shortcuts (Tab, accessibility keys, etc.) to work normally
                 e.stopPropagation();
                 break;
         }

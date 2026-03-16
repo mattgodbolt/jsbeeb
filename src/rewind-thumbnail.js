@@ -89,12 +89,13 @@ function executeUntilFrame(processor, video) {
  * @param {object[]} snapshots - array of snapshots (oldest first)
  * @param {object} video - the Video instance (used to access fb32)
  * @param {number} captureInterval - rewind capture interval in frames (~50)
+ * @param {object} [savedState] - pre-saved state to restore after rendering (avoids double snapshot)
  * @returns {{canvas: HTMLCanvasElement, index: number, ageSeconds: number}[]}
  */
-export function renderThumbnails(processor, snapshots, video, captureInterval) {
+export function renderThumbnails(processor, snapshots, video, captureInterval, savedState) {
     if (snapshots.length === 0) return [];
 
-    const savedState = processor.snapshotState();
+    if (!savedState) savedState = processor.snapshotState();
     const framesPerSecond = 50;
     const results = [];
 
