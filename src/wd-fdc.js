@@ -1301,9 +1301,106 @@ export class WdFdc {
         this._dataRegister = data;
     }
 
-    /// jsbeeb compatibility stuff TODO combine with the noise aware stuff?
+    snapshotState() {
+        const scheduler = this._timerTask.scheduler;
+        return {
+            controlRegister: this._controlRegister,
+            statusRegister: this._statusRegister,
+            trackRegister: this._trackRegister,
+            sectorRegister: this._sectorRegister,
+            dataRegister: this._dataRegister,
+            isIntRq: this._isIntRq,
+            isDrq: this._isDrq,
+            doRaiseIntRq: this._doRaiseIntRq,
+            isIndexPulse: this._isIndexPulse,
+            isInterruptOnIndexPulse: this._isInterruptOnIndexPulse,
+            isWriteTrackCrcSecondByte: this._isWriteTrackCrcSecondByte,
+            command: this._command,
+            commandType: this._commandType,
+            isCommandSettle: this._isCommandSettle,
+            isCommandWrite: this._isCommandWrite,
+            isCommandVerify: this._isCommandVerify,
+            isCommandMulti: this._isCommandMulti,
+            isCommandDeleted: this._isCommandDeleted,
+            commandStepRateMs: this._commandStepRateMs,
+            state: this._state,
+            timerState: this._timerState,
+            stateCount: this._stateCount,
+            indexPulseCount: this._indexPulseCount,
+            // BigInt must be converted to string for JSON serialization
+            markDetector: this._markDetector.toString(),
+            dataShifter: this._dataShifter,
+            dataShiftCount: this._dataShiftCount,
+            deliverData: this._deliverData,
+            deliverIsMarker: this._deliverIsMarker,
+            crc: this._crc,
+            onDiscTrack: this._onDiscTrack,
+            onDiscSector: this._onDiscSector,
+            onDiscLength: this._onDiscLength,
+            onDiscCrc: this._onDiscCrc,
+            lastMfmBit: this._lastMfmBit,
+            timerTaskOffset: this._timerTask.scheduled() ? this._timerTask.expireEpoch - scheduler.epoch : null,
+            drives: this._drives.map((d) => d.snapshotState()),
+        };
+    }
+
+    restoreState(state) {
+        this._controlRegister = state.controlRegister;
+        this._statusRegister = state.statusRegister;
+        this._trackRegister = state.trackRegister;
+        this._sectorRegister = state.sectorRegister;
+        this._dataRegister = state.dataRegister;
+        this._isIntRq = state.isIntRq;
+        this._isDrq = state.isDrq;
+        this._doRaiseIntRq = state.doRaiseIntRq;
+        this._isIndexPulse = state.isIndexPulse;
+        this._isInterruptOnIndexPulse = state.isInterruptOnIndexPulse;
+        this._isWriteTrackCrcSecondByte = state.isWriteTrackCrcSecondByte;
+        this._command = state.command;
+        this._commandType = state.commandType;
+        this._isCommandSettle = state.isCommandSettle;
+        this._isCommandWrite = state.isCommandWrite;
+        this._isCommandVerify = state.isCommandVerify;
+        this._isCommandMulti = state.isCommandMulti;
+        this._isCommandDeleted = state.isCommandDeleted;
+        this._commandStepRateMs = state.commandStepRateMs;
+        this._state = state.state;
+        this._timerState = state.timerState;
+        this._stateCount = state.stateCount;
+        this._indexPulseCount = state.indexPulseCount;
+        this._markDetector = BigInt(state.markDetector);
+        this._dataShifter = state.dataShifter;
+        this._dataShiftCount = state.dataShiftCount;
+        this._deliverData = state.deliverData;
+        this._deliverIsMarker = state.deliverIsMarker;
+        this._crc = state.crc;
+        this._onDiscTrack = state.onDiscTrack;
+        this._onDiscSector = state.onDiscSector;
+        this._onDiscLength = state.onDiscLength;
+        this._onDiscCrc = state.onDiscCrc;
+        this._lastMfmBit = state.lastMfmBit;
+
+        // Restore drives
+        for (let i = 0; i < this._drives.length; i++) {
+            this._drives[i].restoreState(state.drives[i]);
+        }
+
+        // Derive _currentDrive from _controlRegister
+        this._currentDrive = null;
+        if (this._controlRegister & Control.drive0 || this._controlRegister & Control.drive1) {
+            this._currentDrive = this._drives[this._controlRegister & Control.drive0 ? 0 : 1];
+        }
+
+        // Restore timer
+        this._timerTask.cancel();
+        if (state.timerTaskOffset !== null) this._timerTask.schedule(state.timerTaskOffset);
+
+        // NMI level is saved/restored by the CPU snapshot directly,
+        // so we don't reassert it here.
+    }
+
+    /// jsbeeb compatibility stuff
     /**
-     *
      * @param {Number} drive
      * @param {Disc} disc
      */

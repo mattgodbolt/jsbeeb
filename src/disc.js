@@ -747,6 +747,13 @@ export class Disc {
         this.writeTrackCallback = undefined;
         this.isWriteable = isWriteable;
 
+        // Track which tracks have been written since the last snapshot.
+        // Keys are numeric: (track | (isSideUpper ? 0x100 : 0)).
+        this._snapshotDirtyTracks = new Set();
+        // Cache of the previous snapshot's track data for structural sharing.
+        // Keys are "side:trackNum" strings, values are {pulses2Us, length} objects.
+        this._lastTrackSnapshots = Object.create(null);
+
         this.initSurface(0);
     }
 
@@ -797,7 +804,9 @@ export class Disc {
     writePulses(isSideUpper, track, position, pulses) {
         const trackObj = this.getTrack(isSideUpper, track);
         if (position >= trackObj.length)
-            throw new Error(`Attempt to write off end of track ${position} > ${track.length}`);
+            throw new Error(
+                `Attempt to write off end of track ${track}: position ${position} >= length ${trackObj.length}`,
+            );
         if (this.isDirty) {
             if (isSideUpper !== this.dirtySide || track !== this.dirtyTrack)
                 throw new Error("Switched dirty track or side");
@@ -805,6 +814,9 @@ export class Disc {
         this.isDirty = true;
         this.dirtySide = isSideUpper;
         this.dirtyTrack = track;
+        // Numeric key avoids string allocation on every pulse write.
+        // Upper bit encodes side, lower 8 bits encode track number.
+        this._snapshotDirtyTracks.add(track | (isSideUpper ? 0x100 : 0));
         trackObj.pulses2Us[position] = pulses;
         // TODO a debug log flag for this
         // console.log(`wrote to ${track}:${position * 32}`);
@@ -825,6 +837,73 @@ export class Disc {
         const trackObj = this.getTrack(dirtySide, dirtyTrack);
         this.writeTrackCallback(dirtySide, dirtyTrack, trackObj);
         this.setTrackUsed(dirtySide, dirtyTrack);
+    }
+
+    /**
+     * Create a snapshot of all track data with structural sharing.
+     * Clean tracks reuse references from the previous snapshot;
+     * dirty tracks get fresh copies.
+     */
+    snapshotState() {
+        const numSides = this.isDoubleSided ? 2 : 1;
+        // Use a plain object for JSON serialization compatibility.
+        // Keys are "side:trackNum" strings.
+        const tracks = Object.create(null);
+        for (let side = 0; side < numSides; ++side) {
+            for (let trackNum = 0; trackNum < this.tracksUsed; ++trackNum) {
+                const key = `${side === 1}:${trackNum}`;
+                const dirtyKey = trackNum | (side === 1 ? 0x100 : 0);
+                const trackObj = this.getTrack(side === 1, trackNum);
+                if (this._snapshotDirtyTracks.has(dirtyKey) || !this._lastTrackSnapshots[key]) {
+                    // Dirty or first snapshot: copy the track data
+                    tracks[key] = {
+                        pulses2Us: trackObj.pulses2Us.slice(),
+                        length: trackObj.length,
+                    };
+                } else {
+                    // Clean: reuse the previous snapshot's reference
+                    tracks[key] = this._lastTrackSnapshots[key];
+                }
+            }
+        }
+
+        this._snapshotDirtyTracks.clear();
+        this._lastTrackSnapshots = tracks;
+
+        return {
+            tracksUsed: this.tracksUsed,
+            isDoubleSided: this.isDoubleSided,
+            isWriteable: this.isWriteable,
+            name: this.name,
+            tracks,
+        };
+    }
+
+    /**
+     * Restore disc track data from a snapshot.
+     */
+    restoreState(state) {
+        this.tracksUsed = state.tracksUsed;
+        this.isDoubleSided = state.isDoubleSided;
+        this.isWriteable = state.isWriteable;
+        this.name = state.name;
+
+        // Reset write-in-progress state
+        this.isDirty = false;
+        this.dirtySide = -1;
+        this.dirtyTrack = -1;
+        this._snapshotDirtyTracks.clear();
+        this._lastTrackSnapshots = state.tracks;
+
+        for (const key of Object.keys(state.tracks)) {
+            const trackData = state.tracks[key];
+            const [sideStr, trackNumStr] = key.split(":");
+            const isSideUpper = sideStr === "true";
+            const trackNum = parseInt(trackNumStr, 10);
+            const trackObj = this.getTrack(isSideUpper, trackNum);
+            trackObj.pulses2Us.set(trackData.pulses2Us);
+            trackObj.length = trackData.length;
+        }
     }
 
     logSummary() {

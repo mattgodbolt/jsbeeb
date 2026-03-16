@@ -1670,6 +1670,71 @@ export class IntelFdc {
         this._doWriteRun(callContext, 0xff);
     }
 
+    snapshotState() {
+        const scheduler = this._timerTask.scheduler;
+        return {
+            regs: this._regs.slice(),
+            status: this._status,
+            isResultReady: this._isResultReady,
+            mmioData: this._mmioData,
+            mmioClocks: this._mmioClocks,
+            driveOut: this._driveOut,
+            shiftRegister: this._shiftRegister,
+            numShifts: this._numShifts,
+            state: this._state,
+            stateCount: this._stateCount,
+            stateIsIndexPulse: this._stateIsIndexPulse,
+            crc: this._crc,
+            onDiscCrc: this._onDiscCrc,
+            paramCallback: this._paramCallback,
+            indexPulseCallback: this._indexPulseCallback,
+            timerState: this._timerState,
+            callContext: this._callContext,
+            didSeekStep: this._didSeekStep,
+            timerTaskOffset: this._timerTask.scheduled() ? this._timerTask.expireEpoch - scheduler.epoch : null,
+            drives: this._drives.map((d) => d.snapshotState()),
+        };
+    }
+
+    restoreState(state) {
+        this._regs.set(state.regs);
+        this._status = state.status;
+        this._isResultReady = state.isResultReady;
+        this._mmioData = state.mmioData;
+        this._mmioClocks = state.mmioClocks;
+        this._driveOut = state.driveOut;
+        this._shiftRegister = state.shiftRegister;
+        this._numShifts = state.numShifts;
+        this._state = state.state;
+        this._stateCount = state.stateCount;
+        this._stateIsIndexPulse = state.stateIsIndexPulse;
+        this._crc = state.crc;
+        this._onDiscCrc = state.onDiscCrc;
+        this._paramCallback = state.paramCallback;
+        this._indexPulseCallback = state.indexPulseCallback;
+        this._timerState = state.timerState;
+        this._callContext = state.callContext;
+        this._didSeekStep = state.didSeekStep;
+
+        // Restore drives
+        for (let i = 0; i < this._drives.length; i++) {
+            this._drives[i].restoreState(state.drives[i]);
+        }
+
+        // Derive _currentDrive from _driveOut
+        this._currentDrive = null;
+        const selectBits = this._driveOut & DriveOut.selectFlags;
+        if (selectBits === DriveOut.select_0) this._currentDrive = this._drives[0];
+        else if (selectBits === DriveOut.select_1) this._currentDrive = this._drives[1];
+
+        // Restore timer
+        this._timerTask.cancel();
+        if (state.timerTaskOffset !== null) this._timerTask.schedule(state.timerTaskOffset);
+
+        // NMI level is saved/restored by the CPU snapshot directly,
+        // so we don't reassert it here.
+    }
+
     /// jsbeeb compatibility stuff
     /**
      *

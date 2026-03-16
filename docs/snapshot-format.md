@@ -1,4 +1,4 @@
-# jsbeeb Snapshot Format (Version 1)
+# jsbeeb Snapshot Format (Version 2)
 
 jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.json.gz`. TypedArrays (RAM, palette data, etc.) are encoded as base64 within the JSON. Uncompressed `.json` files are also accepted on load for backward compatibility.
 
@@ -7,9 +7,10 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 ```json
 {
   "format": "jsbeeb-snapshot",
-  "version": 1,
+  "version": 2,
   "model": "BBC B with DFS 1.2",
   "timestamp": "2026-03-15T12:00:00.000Z",
+  "media": { "disc1": "sth:Acornsoft/Drogna" },
   "state": { ... }
 }
 ```
@@ -17,10 +18,25 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 | Field       | Type   | Description                                                                     |
 | ----------- | ------ | ------------------------------------------------------------------------------- |
 | `format`    | string | Always `"jsbeeb-snapshot"`                                                      |
-| `version`   | number | Format version (currently `1`)                                                  |
+| `version`   | number | Format version (currently `2`)                                                  |
 | `model`     | string | jsbeeb model name or synonym (e.g. `"B"`, `"Master"`, `"BBC Master 128 (DFS)"`) |
 | `timestamp` | string | ISO 8601 timestamp of when the snapshot was created                             |
+| `media`     | object | _(Optional)_ Disc source references for reload on restore (see below)           |
 | `state`     | object | The full emulator state (see below)                                             |
+
+### Media references (`media`)
+
+| Field   | Type   | Description                                                      |
+| ------- | ------ | ---------------------------------------------------------------- |
+| `disc1` | string | _(Optional)_ Drive 0 disc source (e.g. `"sth:Acornsoft/Drogna"`) |
+| `disc2` | string | _(Optional)_ Drive 1 disc source                                 |
+
+On restore, discs are reloaded from these source references before the FDC state is applied. The source string uses the same schema as URL query parameters (`sth:`, `http://`, `gd:`, etc.). For locally-loaded files (via file input), no source is saved — the user must reload the disc manually.
+
+### Version history
+
+- **v1** — Initial release. CPU, memory, VIA, video, sound, ACIA, ADC.
+- **v2** — Added FDC, disc drive, and disc track data. v1 snapshots load with FDC state unchanged.
 
 ### Model compatibility
 
@@ -201,9 +217,119 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 | `high`       | number       | High byte of conversion result |
 | `taskOffset` | number\|null | Conversion task offset         |
 
-## Known limitations (v1)
+### FDC (`state.fdc`) — _v2+_
 
-- **FDC state not saved** — disc controller state is not captured. Saving during disc I/O will hang on restore. Save when the disc is idle.
-- **No disc data** — modified disc sector contents are not saved. The same disc image must be loaded when restoring.
+The FDC field is present in v2+ snapshots. When loading a v1 snapshot, `state.fdc` is absent and the FDC retains its current state.
+
+The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Master models.
+
+#### Intel 8271 (`state.fdc` when model is BBC B)
+
+| Field                | Type         | Description                                    |
+| -------------------- | ------------ | ---------------------------------------------- |
+| `regs`               | Uint8Array   | 32 internal registers                          |
+| `status`             | number       | Status register                                |
+| `isResultReady`      | boolean      | Result register has data                       |
+| `mmioData`           | number       | MMIO data register                             |
+| `mmioClocks`         | number       | MMIO clocks register                           |
+| `driveOut`           | number       | Drive output latch                             |
+| `shiftRegister`      | number       | Data shift register                            |
+| `numShifts`          | number       | Shift count                                    |
+| `state`              | number       | State machine state                            |
+| `stateCount`         | number       | State counter                                  |
+| `stateIsIndexPulse`  | boolean      | Index pulse seen in current state              |
+| `crc`                | number       | Running CRC                                    |
+| `onDiscCrc`          | number       | CRC read from disc                             |
+| `paramCallback`      | number       | Parameter acceptance state                     |
+| `indexPulseCallback` | number       | Index pulse callback state                     |
+| `timerState`         | number       | Timer state machine                            |
+| `callContext`        | number       | Call context state                             |
+| `didSeekStep`        | boolean      | Seek step taken flag                           |
+| `timerTaskOffset`    | number\|null | Timer task offset from scheduler epoch         |
+| `drives`             | object[]     | Array of 2 drive states (see Disc drive below) |
+
+`_currentDrive` is derived from `driveOut` select bits on restore.
+
+#### WD1770 (`state.fdc` when model is Master)
+
+| Field                       | Type         | Description                                    |
+| --------------------------- | ------------ | ---------------------------------------------- |
+| `controlRegister`           | number       | Drive control register                         |
+| `statusRegister`            | number       | Status register                                |
+| `trackRegister`             | number       | Track register                                 |
+| `sectorRegister`            | number       | Sector register                                |
+| `dataRegister`              | number       | Data register                                  |
+| `isIntRq`                   | boolean      | INTRQ line level                               |
+| `isDrq`                     | boolean      | DRQ line level                                 |
+| `doRaiseIntRq`              | boolean      | Pending INTRQ raise                            |
+| `isIndexPulse`              | boolean      | Index pulse state                              |
+| `isInterruptOnIndexPulse`   | boolean      | Interrupt on index pulse enabled               |
+| `isWriteTrackCrcSecondByte` | boolean      | Write track CRC second byte flag               |
+| `command`                   | number       | Current command                                |
+| `commandType`               | number       | Command type (1, 2, or 3)                      |
+| `isCommandSettle`           | boolean      | Command settle flag                            |
+| `isCommandWrite`            | boolean      | Command is a write                             |
+| `isCommandVerify`           | boolean      | Command verify flag                            |
+| `isCommandMulti`            | boolean      | Multi-sector command                           |
+| `isCommandDeleted`          | boolean      | Deleted data mark flag                         |
+| `commandStepRateMs`         | number       | Step rate in milliseconds                      |
+| `state`                     | number       | State machine state                            |
+| `timerState`                | number       | Timer state machine                            |
+| `stateCount`                | number       | State counter                                  |
+| `indexPulseCount`           | number       | Index pulse counter                            |
+| `markDetector`              | string       | Mark detector BigInt (serialized as string)    |
+| `dataShifter`               | number       | Data shift register                            |
+| `dataShiftCount`            | number       | Shift count                                    |
+| `deliverData`               | number       | Data byte to deliver                           |
+| `deliverIsMarker`           | boolean      | Delivered byte is a marker                     |
+| `crc`                       | number       | Running CRC                                    |
+| `onDiscTrack`               | number       | Track number read from disc                    |
+| `onDiscSector`              | number       | Sector number read from disc                   |
+| `onDiscLength`              | number       | Sector length read from disc                   |
+| `onDiscCrc`                 | number       | CRC read from disc                             |
+| `lastMfmBit`                | boolean      | Last MFM clock/data bit                        |
+| `timerTaskOffset`           | number\|null | Timer task offset from scheduler epoch         |
+| `drives`                    | object[]     | Array of 2 drive states (see Disc drive below) |
+
+`_currentDrive` is derived from `controlRegister` drive select bits on restore. `markDetector` is a BigInt stored as a decimal string.
+
+### Disc drive (`state.fdc.drives[n]`)
+
+| Field             | Type         | Description                            |
+| ----------------- | ------------ | -------------------------------------- |
+| `track`           | number       | Physical track position (0-83)         |
+| `isSideUpper`     | boolean      | Selected disc side                     |
+| `headPosition`    | number       | Head position within track             |
+| `pulsePosition`   | number       | Sub-pulse position (0 or 16)           |
+| `in32usMode`      | boolean      | Double density (MFM) mode              |
+| `spinning`        | boolean      | Drive motor spinning                   |
+| `is40Track`       | boolean      | 40-track disc mode                     |
+| `timerTaskOffset` | number\|null | Timer task offset from scheduler epoch |
+| `disc`            | object\|null | Disc state (null if no disc loaded)    |
+
+### Disc (`state.fdc.drives[n].disc`)
+
+| Field           | Type    | Description                                       |
+| --------------- | ------- | ------------------------------------------------- |
+| `tracksUsed`    | number  | Number of tracks with data                        |
+| `isDoubleSided` | boolean | Disc has data on both sides                       |
+| `isWriteable`   | boolean | Disc is writeable (not write-protected)           |
+| `name`          | string  | Disc name/label                                   |
+| `tracks`        | object  | Track data keyed by `"side:trackNum"` (see below) |
+
+Each entry in `tracks` has:
+
+| Field       | Type        | Description                         |
+| ----------- | ----------- | ----------------------------------- |
+| `pulses2Us` | Uint32Array | Raw pulse data (2µs resolution)     |
+| `length`    | number      | Active track length in 32-bit words |
+
+Track keys are strings like `"false:0"` (lower side, track 0) or `"true:5"` (upper side, track 5).
+
+**Save-to-file vs rewind:** When saving to a file, `tracks` is empty (`{}`) — disc pulse data is omitted since the same disc image must be loaded when restoring. The FDC and drive mechanical state (head position, motor, etc.) is still saved. For in-memory rewind snapshots, `tracks` contains full pulse data with structural sharing: clean tracks share `pulses2Us` references across snapshots, and only tracks written since the previous snapshot are freshly copied. This keeps rewind memory proportional to disc write activity rather than total disc size.
+
+## Known limitations (v2)
+
+- **Disc data not saved to file** — the same disc image must be loaded when restoring a save file. Modified disc sectors are not persisted. In-memory rewind does capture disc data.
 - **No tape position** — tape playback position is not saved.
 - **ROMs not saved** (in jsbeeb-native snapshots) — ROMs are loaded from files and don't change at runtime. Imported b-em snapshots include ROMs in the optional `roms` field.

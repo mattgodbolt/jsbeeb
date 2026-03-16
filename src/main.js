@@ -854,6 +854,12 @@ function setDisc1Image(name) {
     config.emit("media-changed", { disc1: name });
 }
 
+function setDisc2Image(name) {
+    parsedQuery.disc2 = name;
+    updateUrl();
+    config.emit("media-changed", { disc2: name });
+}
+
 function setTapeImage(name) {
     parsedQuery.tape = name;
     updateUrl();
@@ -1047,6 +1053,24 @@ function splitImage(image) {
     const schema = match[2] || match[1] || "";
     image = match[3];
     return { image: image, schema: schema };
+}
+
+async function reloadSnapshotMedia(media) {
+    if (!media) return;
+    if (media.disc1) {
+        const disc = await loadDiscImage(media.disc1);
+        if (disc) {
+            processor.fdc.loadDisc(0, disc);
+            setDisc1Image(media.disc1);
+        }
+    }
+    if (media.disc2) {
+        const disc = await loadDiscImage(media.disc2);
+        if (disc) {
+            processor.fdc.loadDisc(1, disc);
+            setDisc2Image(media.disc2);
+        }
+    }
 }
 
 async function loadDiscImage(discImage) {
@@ -1398,7 +1422,10 @@ $("#save-state").click(async function (event) {
     const wasRunning = running;
     if (running) stop(false);
     try {
-        const snapshot = createSnapshot(processor, model);
+        const media = {};
+        if (parsedQuery.disc1 || parsedQuery.disc) media.disc1 = parsedQuery.disc1 || parsedQuery.disc;
+        if (parsedQuery.disc2) media.disc2 = parsedQuery.disc2;
+        const snapshot = createSnapshot(processor, model, Object.keys(media).length > 0 ? media : undefined);
         const json = snapshotToJSON(snapshot);
         const blob = await compressBlob(new Blob([json]));
         const url = URL.createObjectURL(blob);
@@ -1442,6 +1469,7 @@ async function loadStateFromFile(file) {
             window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
             return;
         }
+        await reloadSnapshotMedia(snapshot.media);
         restoreSnapshot(processor, model, snapshot);
         // Force a repaint so the display updates even while paused
         video.paint();
@@ -1594,7 +1622,7 @@ const startPromise = (async () => {
 })();
 
 startPromise
-    .then(() => {
+    .then(async () => {
         switch (needsAutoboot) {
             case "boot":
                 $sthAutoboot.prop("checked", true);
@@ -1624,6 +1652,7 @@ startPromise
             sessionStorage.removeItem("jsbeeb-pending-state");
             try {
                 const snapshot = snapshotFromJSON(pendingState);
+                await reloadSnapshotMedia(snapshot.media);
                 restoreSnapshot(processor, model, snapshot);
                 processor.execute(40000);
             } catch (e) {

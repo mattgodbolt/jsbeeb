@@ -4,7 +4,7 @@ import { typedArrayToBase64, base64ToTypedArray } from "./state-utils.js";
 import { findModel } from "./models.js";
 
 const SnapshotFormat = "jsbeeb-snapshot";
-const SnapshotVersion = 1;
+const SnapshotVersion = 2;
 
 /**
  * Check if two model names are compatible for state restore.
@@ -38,19 +38,36 @@ const TypedArrayConstructors = {
 };
 
 /**
- * Create a snapshot of the emulator state.
+ * Create a snapshot of the emulator state for save-to-file.
+ * Disc track pulse data is stripped — on restore, the discs are reloaded
+ * from the source references in the `media` field. (The in-memory rewind
+ * path uses cpu.snapshotState() directly, which retains full disc data.)
  * @param {import('./6502.js').Cpu6502} cpu
  * @param {object} model - the model definition object
+ * @param {object} [media] - optional media source references (disc1, disc2)
  * @returns {object} snapshot object
  */
-export function createSnapshot(cpu, model) {
-    return {
+export function createSnapshot(cpu, model, media) {
+    const state = cpu.snapshotState();
+    // Strip disc track data from the save-to-file snapshot.
+    // The FDC/drive mechanical state is kept; only the bulky pulse
+    // data (which can be reloaded from the disc image) is removed.
+    if (state.fdc && state.fdc.drives) {
+        for (const drive of state.fdc.drives) {
+            if (drive.disc) {
+                drive.disc.tracks = {};
+            }
+        }
+    }
+    const snapshot = {
         format: SnapshotFormat,
         version: SnapshotVersion,
         model: model.name,
         timestamp: new Date().toISOString(),
-        state: cpu.snapshotState(),
+        state,
     };
+    if (media) snapshot.media = media;
+    return snapshot;
 }
 
 /**
