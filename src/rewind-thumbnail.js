@@ -2,6 +2,8 @@
 
 const ThumbnailWidth = 160;
 const ThumbnailHeight = 128;
+const FramebufferWidth = 1024;
+const FramebufferHeight = 625;
 const CyclesPerChunk = 8000;
 // Safety limit to prevent infinite loops if video state is broken
 const MaxChunks = 100;
@@ -15,11 +17,11 @@ const MaxChunks = 100;
 function captureThumbnail(fb32) {
     // fb32 may be 1024x1024 (WebGL) or 1024x625 (2D) — only copy the visible region
     const srcCanvas = document.createElement("canvas");
-    srcCanvas.width = 1024;
-    srcCanvas.height = 625;
+    srcCanvas.width = FramebufferWidth;
+    srcCanvas.height = FramebufferHeight;
     const srcCtx = srcCanvas.getContext("2d", { alpha: false });
-    const imageData = srcCtx.createImageData(1024, 625);
-    const visiblePixels = 1024 * 625;
+    const imageData = srcCtx.createImageData(FramebufferWidth, FramebufferHeight);
+    const visiblePixels = FramebufferWidth * FramebufferHeight;
     new Uint32Array(imageData.data.buffer).set(fb32.subarray(0, visiblePixels));
     srcCtx.putImageData(imageData, 0, 0);
 
@@ -27,28 +29,39 @@ function captureThumbnail(fb32) {
     thumb.width = ThumbnailWidth;
     thumb.height = ThumbnailHeight;
     const thumbCtx = thumb.getContext("2d", { alpha: false });
-    thumbCtx.drawImage(srcCanvas, 0, 0, 1024, 625, 0, 0, ThumbnailWidth, ThumbnailHeight);
+    thumbCtx.drawImage(srcCanvas, 0, 0, FramebufferWidth, FramebufferHeight, 0, 0, ThumbnailWidth, ThumbnailHeight);
     return thumb;
 }
 
 /**
- * Execute cycles until the video's frameCount advances, meaning a complete
- * vsync has occurred and fb32 contains a fully-rasterised frame.
+ * Execute cycles until a complete top-to-bottom frame is in fb32.
  *
- * To prevent the framebuffer being wiped after paint, we temporarily
- * suppress clearPaintBuffer so fb32 retains the completed frame for capture.
+ * Snapshots may be mid-frame, so we run through two vsyncs:
+ * 1. First vsync completes the partial frame and clears fb32 normally.
+ * 2. Second vsync rasterises a full frame; we suppress clearPaintBuffer
+ *    so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
-    // fb32 is NOT part of the snapshot, so it retains stale pixel data.
-    // Clear it before rasterising so partial overwrites don't show old frames.
-    video.fb32.fill(0xff000000); // OPAQUE_BLACK in ABGR
+    // Snapshots are taken mid-frame, so the first vsync only completes the
+    // partial frame (bottom portion). We let that first vsync paint+clear
+    // normally, then suppress clearPaintBuffer on the second vsync so we
+    // capture a complete top-to-bottom frame.
     const startFrame = video.frameCount;
+
+    // Phase 1: run to first vsync (completes partial frame, clears fb32)
+    for (let i = 0; i < MaxChunks; i++) {
+        processor.execute(CyclesPerChunk);
+        if (video.frameCount !== startFrame) break;
+    }
+
+    // Phase 2: run to second vsync with clear suppressed (full frame in fb32)
+    const secondFrame = video.frameCount;
     const origClear = video.clearPaintBuffer;
     video.clearPaintBuffer = function () {};
     try {
         for (let i = 0; i < MaxChunks; i++) {
             processor.execute(CyclesPerChunk);
-            if (video.frameCount !== startFrame) return;
+            if (video.frameCount !== secondFrame) return;
         }
     } finally {
         video.clearPaintBuffer = origClear;
@@ -93,4 +106,4 @@ export function renderThumbnails(processor, snapshots, video, captureInterval) {
     return results;
 }
 
-export { ThumbnailWidth, ThumbnailHeight, executeUntilFrame };
+export { executeUntilFrame };

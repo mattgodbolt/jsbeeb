@@ -1752,8 +1752,8 @@ rewindUI = new RewindUI({
     processor,
     video,
     captureInterval: RewindCaptureInterval,
-    stop: (debug) => stop(debug),
-    go: () => go(),
+    stop,
+    go,
     isRunning: () => running,
 });
 rewindUI.updateButtonState();

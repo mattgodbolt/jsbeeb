@@ -100,11 +100,7 @@ export class RewindUI {
     /** Update the disabled state of the Rewind menu item. */
     updateButtonState() {
         if (this.openBtn) {
-            if (this.rewindBuffer.length === 0) {
-                this.openBtn.classList.add("disabled");
-            } else {
-                this.openBtn.classList.remove("disabled");
-            }
+            this.openBtn.classList.toggle("disabled", this.rewindBuffer.length === 0);
         }
     }
 
@@ -145,34 +141,24 @@ export class RewindUI {
             wrapper.addEventListener("click", () => this.selectSnapshot(index));
             this.filmstrip.appendChild(wrapper);
         }
-
-        // Scroll to the right (newest) end
-        this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
     }
 
     _onKeyDown(e) {
         switch (e.key) {
             case "Escape":
-                e.preventDefault();
-                this.close();
-                break;
             case "Enter":
                 e.preventDefault();
                 this.close();
                 break;
             case "ArrowLeft":
                 e.preventDefault();
-                if (this.selectedIndex === -1) {
-                    this.selectSnapshot(this.snapshots.length - 1);
-                } else if (this.selectedIndex > 0) {
+                if (this.selectedIndex > 0) {
                     this.selectSnapshot(this.selectedIndex - 1);
                 }
                 break;
             case "ArrowRight":
                 e.preventDefault();
-                if (this.selectedIndex === -1) {
-                    this.selectSnapshot(this.snapshots.length - 1);
-                } else if (this.selectedIndex < this.snapshots.length - 1) {
+                if (this.selectedIndex < this.snapshots.length - 1) {
                     this.selectSnapshot(this.selectedIndex + 1);
                 }
                 break;
