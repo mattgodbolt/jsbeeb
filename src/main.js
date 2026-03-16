@@ -1049,6 +1049,21 @@ function splitImage(image) {
     return { image: image, schema: schema };
 }
 
+async function reloadSnapshotMedia(media) {
+    if (!media) return;
+    if (media.disc1) {
+        const disc = await loadDiscImage(media.disc1);
+        if (disc) {
+            processor.fdc.loadDisc(0, disc);
+            setDisc1Image(media.disc1);
+        }
+    }
+    if (media.disc2) {
+        const disc = await loadDiscImage(media.disc2);
+        if (disc) processor.fdc.loadDisc(1, disc);
+    }
+}
+
 async function loadDiscImage(discImage) {
     if (!discImage) return null;
     const split = splitImage(discImage);
@@ -1445,20 +1460,7 @@ async function loadStateFromFile(file) {
             window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
             return;
         }
-        // Reload discs from their source before restoring FDC state
-        if (snapshot.media) {
-            if (snapshot.media.disc1) {
-                const disc = await loadDiscImage(snapshot.media.disc1);
-                if (disc) {
-                    processor.fdc.loadDisc(0, disc);
-                    setDisc1Image(snapshot.media.disc1);
-                }
-            }
-            if (snapshot.media.disc2) {
-                const disc = await loadDiscImage(snapshot.media.disc2);
-                if (disc) processor.fdc.loadDisc(1, disc);
-            }
-        }
+        await reloadSnapshotMedia(snapshot.media);
         restoreSnapshot(processor, model, snapshot);
         // Force a repaint so the display updates even while paused
         video.paint();
@@ -1641,19 +1643,7 @@ startPromise
             sessionStorage.removeItem("jsbeeb-pending-state");
             try {
                 const snapshot = snapshotFromJSON(pendingState);
-                if (snapshot.media) {
-                    if (snapshot.media.disc1) {
-                        const disc = await loadDiscImage(snapshot.media.disc1);
-                        if (disc) {
-                            processor.fdc.loadDisc(0, disc);
-                            setDisc1Image(snapshot.media.disc1);
-                        }
-                    }
-                    if (snapshot.media.disc2) {
-                        const disc = await loadDiscImage(snapshot.media.disc2);
-                        if (disc) processor.fdc.loadDisc(1, disc);
-                    }
-                }
+                await reloadSnapshotMedia(snapshot.media);
                 restoreSnapshot(processor, model, snapshot);
                 processor.execute(40000);
             } catch (e) {

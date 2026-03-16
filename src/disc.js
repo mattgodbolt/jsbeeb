@@ -804,7 +804,9 @@ export class Disc {
     writePulses(isSideUpper, track, position, pulses) {
         const trackObj = this.getTrack(isSideUpper, track);
         if (position >= trackObj.length)
-            throw new Error(`Attempt to write off end of track ${position} > ${track.length}`);
+            throw new Error(
+                `Attempt to write off end of track ${track}: position ${position} >= length ${trackObj.length}`,
+            );
         if (this.isDirty) {
             if (isSideUpper !== this.dirtySide || track !== this.dirtyTrack)
                 throw new Error("Switched dirty track or side");
