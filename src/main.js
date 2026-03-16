@@ -1387,31 +1387,6 @@ $("#soft-reset").click(function (event) {
     event.preventDefault();
 });
 
-// Expose rewind to the debugger/console for v1
-window.jsbeebRewind = {
-    step: function () {
-        const snapshot = rewindBuffer.pop();
-        if (!snapshot) {
-            console.log("Rewind buffer empty");
-            return;
-        }
-        const wasRunning = running;
-        if (wasRunning) stop(false);
-        processor.restoreState(snapshot);
-        // Force a repaint so the display updates even while paused
-        video.paint();
-        console.log(`Rewound 1 step (${rewindBuffer.length} remaining)`);
-        // Don't auto-resume - stay paused so user can inspect state
-    },
-    get length() {
-        return rewindBuffer.length;
-    },
-    clear: function () {
-        rewindBuffer.clear();
-        console.log("Rewind buffer cleared");
-    },
-};
-
 $("#save-state").click(async function (event) {
     event.preventDefault();
     const wasRunning = running;
@@ -1758,9 +1733,6 @@ rewindUI = new RewindUI({
     isRunning: () => running,
 });
 rewindUI.updateButtonState();
-
-// Expose UI open to console
-window.jsbeebRewind.openUI = () => rewindUI.open();
 
 function draw(now) {
     if (!running) {
