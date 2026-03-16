@@ -452,10 +452,10 @@ function downloadDriveData(data, name, extension) {
 }
 
 async function loadHTMLFile(file) {
-    const binaryData = await readFileAsBinaryString(file);
-    const loadedDisc = disc.discFor(processor.fdc, file.name, binaryData);
+    const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
+    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData);
     // Local file: retain the image bytes for embedding in save-to-file snapshots.
-    loadedDisc.setOriginalImage(utils.stringToUint8Array(binaryData));
+    loadedDisc.setOriginalImage(imageData);
     processor.fdc.loadDisc(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;

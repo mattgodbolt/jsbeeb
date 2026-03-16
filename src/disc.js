@@ -772,15 +772,17 @@ export class Disc {
     }
 
     /**
-     * Store the original disc image bytes (and compute CRC32).
-     * Only call this for local-file discs that need their image embedded
-     * in save-to-file snapshots — URL-sourced discs should use
+     * Store the original disc image bytes for embedding in snapshots.
+     * Only call this for local-file discs — URL-sourced discs should use
      * setOriginalImageCrc32() instead to avoid retaining the full image.
+     * Computes CRC32 only if not already set (e.g. by discFor).
      * @param {Uint8Array} data - the raw disc image bytes
      */
     setOriginalImage(data) {
         this._originalImageData = data;
-        this._originalImageCrc32 = crc32(data);
+        if (this._originalImageCrc32 == null) {
+            this._originalImageCrc32 = crc32(data);
+        }
     }
 
     /** @returns {Uint8Array|null} the original disc image bytes, or null if not set */
