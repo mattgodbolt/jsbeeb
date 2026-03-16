@@ -292,24 +292,30 @@ export class MachineSession {
     addBreakpoint(type, address) {
         const id = this._nextBreakpointId++;
         const cpu = this._machine.processor;
-        const bp = { type, address, hit: false, id };
-
-        const onHit = () => {
-            bp.hit = true;
-            return true; // calls cpu.stop(), halts current runFor
-        };
+        const bp = { type, address, hit: false, id, value: undefined };
 
         if (type === "execute") {
             bp.hook = cpu.debugInstruction.add((pc) => {
-                if (pc === address) return onHit();
+                if (pc === address) {
+                    bp.hit = true;
+                    return true;
+                }
             });
         } else if (type === "read") {
-            bp.hook = cpu.debugRead.add((addr) => {
-                if (addr === address) return onHit();
+            bp.hook = cpu.debugRead.add((addr, val) => {
+                if (addr === address) {
+                    bp.hit = true;
+                    bp.value = val;
+                    return true;
+                }
             });
         } else if (type === "write") {
-            bp.hook = cpu.debugWrite.add((addr) => {
-                if (addr === address) return onHit();
+            bp.hook = cpu.debugWrite.add((addr, val) => {
+                if (addr === address) {
+                    bp.hit = true;
+                    bp.value = val;
+                    return true;
+                }
             });
         } else {
             throw new Error(`Unknown breakpoint type: ${type}`);
@@ -345,7 +351,9 @@ export class MachineSession {
     hitBreakpoint() {
         for (const bp of this._breakpoints.values()) {
             if (bp.hit) {
-                return { id: bp.id, type: bp.type, address: bp.address };
+                const result = { id: bp.id, type: bp.type, address: bp.address };
+                if (bp.value !== undefined) result.value = bp.value;
+                return result;
             }
         }
         return null;
