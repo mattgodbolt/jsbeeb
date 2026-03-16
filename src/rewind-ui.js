@@ -74,23 +74,25 @@ export class RewindUI {
 
     /**
      * Close the rewind panel, committing the selected snapshot.
-     * Resumes the emulator if it was running before.
+     * The emulator resumes from the exact snapshot state.
      */
     commit() {
         if (!this.isOpen) return;
+        // Re-restore the snapshot so the CPU resumes from the exact point,
+        // not from the state advanced by executeUntilFrame during preview.
+        if (this.selectedIndex >= 0 && this.selectedIndex < this.snapshots.length) {
+            this.processor.restoreState(this.snapshots[this.selectedIndex]);
+        }
         this._closePanel();
         if (this.wasRunning) this.go();
     }
 
     /**
      * Close the rewind panel, restoring the state from before it was opened.
-     * Resumes the emulator if it was running before.
      */
     cancel() {
         if (!this.isOpen) return;
-        this.processor.restoreState(this.savedState);
-        executeUntilFrame(this.processor, this.video);
-        this.video.paint();
+        this._renderState(this.savedState);
         this._closePanel();
         if (this.wasRunning) this.go();
     }
@@ -130,11 +132,21 @@ export class RewindUI {
         document.removeEventListener("keydown", this._onKeyDown, true);
     }
 
-    /** Restore a snapshot and run until vsync to produce a complete frame. */
+    /**
+     * Render a snapshot's frame to the display without advancing CPU state.
+     * Restores the snapshot, runs to vsync for a complete frame, paints it,
+     * then re-restores the snapshot so the CPU stays at the exact point.
+     */
     _restoreAndPaint(index) {
-        this.processor.restoreState(this.snapshots[index]);
+        this._renderState(this.snapshots[index]);
+    }
+
+    /** Render a state to the display, restoring it afterwards. */
+    _renderState(state) {
+        this.processor.restoreState(state);
         executeUntilFrame(this.processor, this.video);
         this.video.paint();
+        this.processor.restoreState(state);
     }
 
     _updateSelectionHighlight() {
@@ -197,6 +209,7 @@ export class RewindUI {
                 break;
             default:
                 // Swallow all other keys while the panel is open
+                e.preventDefault();
                 e.stopPropagation();
                 break;
         }

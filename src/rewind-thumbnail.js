@@ -58,7 +58,7 @@ function executeUntilFrame(processor, video) {
 
     // Phase 1: run to first vsync (completes partial frame, clears fb32)
     for (let i = 0; i < MaxChunks; i++) {
-        processor.execute(CyclesPerChunk);
+        if (processor.execute(CyclesPerChunk) === false) break;
         if (video.frameCount !== startFrame) break;
     }
 
@@ -68,7 +68,7 @@ function executeUntilFrame(processor, video) {
     video.clearPaintBuffer = function () {};
     try {
         for (let i = 0; i < MaxChunks; i++) {
-            processor.execute(CyclesPerChunk);
+            if (processor.execute(CyclesPerChunk) === false) return;
             if (video.frameCount !== secondFrame) return;
         }
     } finally {

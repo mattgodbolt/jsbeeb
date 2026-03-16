@@ -52,8 +52,8 @@ The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 pe
 
 - **Left/Right arrows** — navigate between snapshots (the main screen updates live)
 - **Click** a thumbnail to jump to that point
-- **Enter** — close the panel and continue from the selected state
-- **Escape** — close the panel and resume
+- **Enter** — commit selection and close the panel
+- **Escape** — cancel and restore the original state
 
 ### Joystick Support
 
