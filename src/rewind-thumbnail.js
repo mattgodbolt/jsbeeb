@@ -39,6 +39,9 @@ function captureThumbnail(fb32) {
  * suppress clearPaintBuffer so fb32 retains the completed frame for capture.
  */
 function executeUntilFrame(processor, video) {
+    // fb32 is NOT part of the snapshot, so it retains stale pixel data.
+    // Clear it before rasterising so partial overwrites don't show old frames.
+    video.fb32.fill(0xff000000); // OPAQUE_BLACK in ABGR
     const startFrame = video.frameCount;
     const origClear = video.clearPaintBuffer;
     video.clearPaintBuffer = function () {};
