@@ -152,6 +152,8 @@
                       style="display: none"
                   /></label>
                 </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li><a href="#" id="rewind-open" class="dropdown-item">Rewind</a></li>
               </ul>
             </li>
             <li class="nav-item dropdown embed-hide">
@@ -244,6 +246,13 @@
         </div>
       </div>
       <canvas id="audio-stats" width="400" height="100"></canvas>
+      <div id="rewind-panel" hidden>
+        <div class="rewind-header">
+          <button id="rewind-close" class="btn btn-sm btn-outline-light" title="Close (Escape)">Close</button>
+          <span class="rewind-title">Rewind</span>
+        </div>
+        <div class="rewind-filmstrip" id="rewind-filmstrip"></div>
+      </div>
       <div id="leds">
         <table>
           <thead>

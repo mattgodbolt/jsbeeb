@@ -352,6 +352,72 @@ small {
   pointer-events: auto;
 }
 
+/* Rewind scrubber panel */
+#rewind-panel {
+  position: fixed;
+  bottom: 40px;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.85);
+  border-top: 1px solid #555;
+  z-index: 10;
+  padding: 8px 12px;
+}
+
+.rewind-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.rewind-title {
+  color: #ccc;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.rewind-filmstrip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.rewind-thumb {
+  flex: 0 0 auto;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 3px;
+  position: relative;
+  transition: border-color 0.15s;
+}
+
+.rewind-thumb:hover {
+  border-color: #aaa;
+}
+
+.rewind-thumb.selected {
+  border-color: #4af;
+}
+
+.rewind-thumb canvas {
+  display: block;
+  border-radius: 2px;
+}
+
+.rewind-thumb-label {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 10px;
+  color: #fff;
+  text-shadow:
+    0 0 3px #000,
+    0 0 6px #000;
+  pointer-events: none;
+}
+
 div.smoothie-chart-tooltip {
   background: #444;
   padding: 1em;

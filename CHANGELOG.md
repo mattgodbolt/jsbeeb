@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.5.0...v1.6.0) (2026-03-16)
+
+
+### Features
+
+* add persistent breakpoint management to MachineSession ([#589](https://github.com/mattgodbolt/jsbeeb/issues/589)) ([465de85](https://github.com/mattgodbolt/jsbeeb/commit/465de85c2ef51c8448bfae315ce65f371f3be119))
+
 ## [1.5.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.4.0...v1.5.0) (2026-03-15)
 
 
