@@ -10,6 +10,7 @@ import { TEST_6502 } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { WdFdc } from "../../src/wd-fdc.js";
 
 function makeCpu() {
     const fb32 = new Uint32Array(1024 * 768);
@@ -189,6 +190,33 @@ describe("Snapshot coordinator", () => {
             expect(snapshot2.state.fdc.status).toBe(fdcState.status);
             expect(snapshot2.state.fdc.state).toBe(fdcState.state);
             expect(snapshot2.state.fdc.driveOut).toBe(fdcState.driveOut);
+        });
+    });
+
+    describe("WD1770 FDC snapshot", () => {
+        it("should round-trip WD1770 state including BigInt markDetector", () => {
+            const scheduler = new Scheduler();
+            const mockCpu = { model: { isMaster: true }, NMI: () => {} };
+            const fdc = new WdFdc(mockCpu, scheduler, undefined, {});
+
+            // Set markDetector to a non-zero BigInt to verify serialization
+            fdc._markDetector = 0xaaaa448944894489n;
+            fdc._trackRegister = 42;
+            fdc._sectorRegister = 7;
+            fdc._statusRegister = 0x80; // motor on
+
+            const state = fdc.snapshotState();
+            expect(typeof state.markDetector).toBe("string");
+            expect(BigInt(state.markDetector)).toBe(0xaaaa448944894489n);
+
+            // Restore into a fresh FDC
+            const fdc2 = new WdFdc(mockCpu, scheduler, undefined, {});
+            fdc2.restoreState(state);
+
+            expect(fdc2._markDetector).toBe(0xaaaa448944894489n);
+            expect(fdc2._trackRegister).toBe(42);
+            expect(fdc2._sectorRegister).toBe(7);
+            expect(fdc2._statusRegister).toBe(0x80);
         });
     });
 
