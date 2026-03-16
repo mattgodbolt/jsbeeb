@@ -368,4 +368,37 @@ export class DiscDrive extends BaseDiscDrive {
     _checkTrackNeedsWrite() {
         if (this.disc) this.disc.flushWrites();
     }
+
+    snapshotState() {
+        return {
+            track: this._track,
+            isSideUpper: this._isSideUpper,
+            headPosition: this._headPosition,
+            pulsePosition: this._pulsePosition,
+            in32usMode: this._in32usMode,
+            spinning: this._spinning,
+            is40Track: this._is40Track,
+            timerTaskOffset: this._timer.scheduled() ? this._timer.expireEpoch - this._scheduler.epoch : null,
+            disc: this._disc ? this._disc.snapshotState() : null,
+        };
+    }
+
+    restoreState(state) {
+        this._track = state.track;
+        this._isSideUpper = state.isSideUpper;
+        this._headPosition = state.headPosition;
+        this._pulsePosition = state.pulsePosition;
+        this._in32usMode = state.in32usMode;
+        this._is40Track = state.is40Track;
+
+        // Restore spinning state and timer
+        this._timer.cancel();
+        this._spinning = state.spinning;
+        if (state.timerTaskOffset !== null) this._timer.schedule(state.timerTaskOffset);
+
+        // Restore disc data if present
+        if (state.disc && this._disc) {
+            this._disc.restoreState(state.disc);
+        }
+    }
 }

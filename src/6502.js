@@ -1164,6 +1164,7 @@ export class Cpu6502 extends Base6502 {
             soundChip: this.soundChip.snapshotState(),
             acia: this.acia.snapshotState(),
             adc: this.adconverter.snapshotState(),
+            fdc: this.fdc.snapshotState(),
         };
     }
 
@@ -1212,6 +1213,11 @@ export class Cpu6502 extends Base6502 {
         this.soundChip.restoreState(state.soundChip);
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
+
+        // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
+        if (state.fdc) {
+            this.fdc.restoreState(state.fdc);
+        }
     }
 
     reset(hard) {

@@ -7,6 +7,9 @@ import { FakeDdNoise } from "../../src/ddnoise.js";
 import { Cmos } from "../../src/cmos.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { TEST_6502 } from "../../src/models.js";
+import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { DiscDrive } from "../../src/disc-drive.js";
+import { Scheduler } from "../../src/scheduler.js";
 
 function makeCpu() {
     const fb32 = new Uint32Array(1024 * 768);
@@ -37,7 +40,7 @@ describe("Snapshot coordinator", () => {
             const snapshot = createSnapshot(cpu, model);
 
             expect(snapshot.format).toBe("jsbeeb-snapshot");
-            expect(snapshot.version).toBe(1);
+            expect(snapshot.version).toBe(2);
             expect(snapshot.model).toBe(model.name);
             expect(snapshot.timestamp).toBeDefined();
             expect(snapshot.state).toBeDefined();
@@ -99,7 +102,7 @@ describe("Snapshot coordinator", () => {
 
             // Verify metadata survived
             expect(restored.format).toBe("jsbeeb-snapshot");
-            expect(restored.version).toBe(1);
+            expect(restored.version).toBe(2);
             expect(restored.model).toBe(model.name);
 
             // Verify TypedArrays were properly reconstructed
@@ -153,6 +156,119 @@ describe("Snapshot coordinator", () => {
             expect(cpu2.a).toBe(0x42);
             expect(cpu2.ramRomOs[0x200]).toBe(0xdd);
             expect(cpu2.sysvia.ora).toBe(0x55);
+        });
+    });
+
+    describe("v1 backward compatibility", () => {
+        it("should restore a v1 snapshot without FDC field", () => {
+            const snapshot = createSnapshot(cpu, model);
+            // Simulate a v1 snapshot by removing FDC and setting version to 1
+            snapshot.version = 1;
+            delete snapshot.state.fdc;
+
+            const cpu2 = makeCpu();
+            // Should not throw — FDC keeps its current state
+            expect(() => restoreSnapshot(cpu2, model, snapshot)).not.toThrow();
+        });
+    });
+
+    describe("FDC snapshot", () => {
+        it("should round-trip Intel FDC state", () => {
+            const snapshot = createSnapshot(cpu, model);
+            const fdcState = snapshot.state.fdc;
+
+            expect(fdcState).toBeDefined();
+            expect(fdcState.regs).toBeInstanceOf(Uint8Array);
+            expect(fdcState.drives).toHaveLength(2);
+
+            const cpu2 = makeCpu();
+            restoreSnapshot(cpu2, model, snapshot);
+
+            // Verify FDC scalar fields round-tripped
+            const snapshot2 = createSnapshot(cpu2, model);
+            expect(snapshot2.state.fdc.status).toBe(fdcState.status);
+            expect(snapshot2.state.fdc.state).toBe(fdcState.state);
+            expect(snapshot2.state.fdc.driveOut).toBe(fdcState.driveOut);
+        });
+    });
+
+    describe("DiscDrive snapshot", () => {
+        it("should round-trip drive state", () => {
+            const scheduler = new Scheduler();
+            const drive = new DiscDrive(0, scheduler);
+
+            const state = drive.snapshotState();
+            expect(state.track).toBe(0);
+            expect(state.spinning).toBe(false);
+            expect(state.disc).toBeNull();
+
+            const drive2 = new DiscDrive(1, scheduler);
+            drive2.restoreState(state);
+
+            expect(drive2.track).toBe(0);
+            expect(drive2.spinning).toBe(false);
+        });
+    });
+
+    describe("Disc snapshot", () => {
+        it("should round-trip disc track data", () => {
+            const disc = new Disc(true, new DiscConfig(), "test");
+            // Write some data via the SSD loader to populate tracks
+            const ssdData = new Uint8Array(256 * 10 * 2); // 2 tracks worth
+            ssdData[0] = 0x42;
+            loadSsd(disc, ssdData, false);
+
+            const state = disc.snapshotState();
+            expect(state.tracksUsed).toBeGreaterThan(0);
+
+            // Modify the disc after snapshot
+            const track0 = disc.getTrack(false, 0);
+            const originalPulse = track0.pulses2Us[0];
+            track0.pulses2Us[0] = 0xdeadbeef;
+
+            // Restore should revert the change
+            disc.restoreState(state);
+            expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(originalPulse);
+        });
+
+        it("should use structural sharing for clean tracks", () => {
+            const disc = new Disc(true, new DiscConfig(), "test");
+            const ssdData = new Uint8Array(256 * 10 * 2);
+            loadSsd(disc, ssdData, false);
+
+            // First snapshot copies all tracks
+            const state1 = disc.snapshotState();
+
+            // Second snapshot without any writes should share references
+            const state2 = disc.snapshotState();
+
+            const key = "false:0";
+            // Same reference because track wasn't written between snapshots
+            expect(state2.tracks[key]).toBe(state1.tracks[key]);
+        });
+
+        it("should copy dirty tracks in snapshot", () => {
+            const disc = new Disc(true, new DiscConfig(), "test");
+            const ssdData = new Uint8Array(256 * 10 * 2);
+            loadSsd(disc, ssdData, false);
+
+            const state1 = disc.snapshotState();
+
+            // Write to track 0 — mark it dirty
+            disc.writePulses(false, 0, 0, 0x12345678);
+            disc.flushWrites();
+
+            const state2 = disc.snapshotState();
+
+            const key = "false:0";
+            // Different reference because track was written
+            expect(state2.tracks[key]).not.toBe(state1.tracks[key]);
+            // But the new snapshot should have the written data
+            expect(state2.tracks[key].pulses2Us[0]).toBe(0x12345678);
+
+            // A clean track should still share
+            const cleanKey = "false:1";
+            expect(state2.tracks[cleanKey]).toBe(state1.tracks[cleanKey]);
         });
     });
 });
