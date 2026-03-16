@@ -3,30 +3,23 @@
 
 import * as utils from "./utils.js";
 
-/*
- * TODO: use in fingerprinting
-class Crc32Builder {
-    constructor() {
-        this._crc = 0xffffffff;
-    }
-
-    add(data) {
-        for (let i = 0; i < data.length; ++i) {
-            const byte = data[i];
-            this._crc ^= byte;
-            for (let j = 0; j < 8; ++j) {
-                const doEor = this._crc & 1;
-                this._crc = this._crc >>> 1;
-                if (doEor) this._crc ^= 0xedb88320;
-            }
+/**
+ * Compute CRC32 of a Uint8Array.
+ * @param {Uint8Array} data
+ * @returns {number} CRC32 as a signed 32-bit integer
+ */
+export function crc32(data) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < data.length; ++i) {
+        crc ^= data[i];
+        for (let j = 0; j < 8; ++j) {
+            const doEor = crc & 1;
+            crc = crc >>> 1;
+            if (doEor) crc ^= 0xedb88320;
         }
     }
-
-    get crc() {
-        return ~this._crc;
-    }
+    return ~crc;
 }
-*/
 class TrackBuilder {
     /**
      * @param {Track} track
@@ -750,15 +743,62 @@ export class Disc {
         // Track which tracks have been written since the last snapshot.
         // Keys are numeric: (track | (isSideUpper ? 0x100 : 0)).
         this._snapshotDirtyTracks = new Set();
+        // Cumulative set of all tracks ever written since disc load (never cleared by snapshots).
+        // Same key encoding as _snapshotDirtyTracks.
+        this._everDirtyTracks = new Set();
         // Cache of the previous snapshot's track data for structural sharing.
         // Keys are "side:trackNum" strings, values are {pulses2Us, length} objects.
         this._lastTrackSnapshots = Object.create(null);
+
+        // Original disc image data, stored for embedding in save-to-file snapshots
+        // and CRC32 verification on restore. _originalImageData is only set for
+        // local-file discs (not URL-sourced ones). _originalImageCrc32 is the CRC
+        // of the image bytes at load time — it is not updated if an onChange handler
+        // mutates the backing store. This is fine because the CRC is compared against
+        // the same source that would be reloaded (the original image or URL), not the
+        // mutated copy. If a mutable source URL were added in future, CRC verification
+        // should be skipped or the CRC updated accordingly.
+        this._originalImageData = null;
+        this._originalImageCrc32 = null;
 
         this.initSurface(0);
     }
 
     setWriteTrackCallback(callback) {
         this.writeTrackCallback = callback;
+    }
+
+    /**
+     * Record the CRC32 of the original disc image for verification on restore.
+     * Called by discFor() after loading. Does not retain the image bytes.
+     * @param {Uint8Array} data - the raw disc image bytes (used only to compute CRC32)
+     */
+    setOriginalImageCrc32(data) {
+        this._originalImageCrc32 = crc32(data);
+    }
+
+    /**
+     * Store the original disc image bytes for embedding in snapshots.
+     * Only call this for local-file discs — URL-sourced discs should use
+     * setOriginalImageCrc32() instead to avoid retaining the full image.
+     * Computes CRC32 only if not already set (e.g. by discFor).
+     * @param {Uint8Array} data - the raw disc image bytes
+     */
+    setOriginalImage(data) {
+        this._originalImageData = data;
+        if (this._originalImageCrc32 == null) {
+            this._originalImageCrc32 = crc32(data);
+        }
+    }
+
+    /** @returns {Uint8Array|null} the original disc image bytes, or null if not set */
+    get originalImageData() {
+        return this._originalImageData;
+    }
+
+    /** @returns {number|null} CRC32 of the original disc image, or null if not set */
+    get originalImageCrc32() {
+        return this._originalImageCrc32;
     }
 
     get writeProtected() {
@@ -816,7 +856,9 @@ export class Disc {
         this.dirtyTrack = track;
         // Numeric key avoids string allocation on every pulse write.
         // Upper bit encodes side, lower 8 bits encode track number.
-        this._snapshotDirtyTracks.add(track | (isSideUpper ? 0x100 : 0));
+        const dirtyKey = track | (isSideUpper ? 0x100 : 0);
+        this._snapshotDirtyTracks.add(dirtyKey);
+        this._everDirtyTracks.add(dirtyKey);
         trackObj.pulses2Us[position] = pulses;
         // TODO a debug log flag for this
         // console.log(`wrote to ${track}:${position * 32}`);
@@ -876,11 +918,20 @@ export class Disc {
             isWriteable: this.isWriteable,
             name: this.name,
             tracks,
+            // Expose for save-to-file snapshots to identify dirty tracks.
+            // This is a Set and won't survive JSON serialization — it's only
+            // used by createSnapshot() before the snapshot is serialized.
+            _everDirtyTracks: new Set(this._everDirtyTracks),
+            _originalImageData: this._originalImageData,
+            _originalImageCrc32: this._originalImageCrc32,
         };
     }
 
     /**
      * Restore disc track data from a snapshot.
+     * For save-to-file snapshots, `state.tracks` is empty and `state.dirtyTracks`
+     * contains only the tracks modified since disc load. The base disc data must
+     * already be loaded before calling this method.
      */
     restoreState(state) {
         this.tracksUsed = state.tracksUsed;
@@ -893,8 +944,17 @@ export class Disc {
         this.dirtySide = -1;
         this.dirtyTrack = -1;
         this._snapshotDirtyTracks.clear();
-        this._lastTrackSnapshots = state.tracks;
+        // Restore _everDirtyTracks from the snapshot if present (rewind path —
+        // the Set is carried in-memory but won't survive JSON serialization).
+        // For the save-to-file path, _everDirtyTracks is rebuilt from dirtyTracks below.
+        if (state._everDirtyTracks instanceof Set) {
+            this._everDirtyTracks = new Set(state._everDirtyTracks);
+        } else {
+            this._everDirtyTracks.clear();
+        }
 
+        // Restore full track data (rewind path — tracks contains all data)
+        this._lastTrackSnapshots = state.tracks;
         for (const key of Object.keys(state.tracks)) {
             const trackData = state.tracks[key];
             const [sideStr, trackNumStr] = key.split(":");
@@ -903,6 +963,21 @@ export class Disc {
             const trackObj = this.getTrack(isSideUpper, trackNum);
             trackObj.pulses2Us.set(trackData.pulses2Us);
             trackObj.length = trackData.length;
+        }
+
+        // Apply dirty track overlays (save-to-file path — base disc already loaded,
+        // overlay only the tracks that were written since disc load)
+        if (state.dirtyTracks) {
+            for (const key of Object.keys(state.dirtyTracks)) {
+                const trackData = state.dirtyTracks[key];
+                const [sideStr, trackNumStr] = key.split(":");
+                const isSideUpper = sideStr === "true";
+                const trackNum = parseInt(trackNumStr, 10);
+                const trackObj = this.getTrack(isSideUpper, trackNum);
+                trackObj.pulses2Us.set(trackData.pulses2Us);
+                trackObj.length = trackData.length;
+                this._everDirtyTracks.add(trackNum | (isSideUpper ? 0x100 : 0));
+            }
         }
     }
 

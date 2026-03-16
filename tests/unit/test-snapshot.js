@@ -7,7 +7,8 @@ import { FakeDdNoise } from "../../src/ddnoise.js";
 import { Cmos } from "../../src/cmos.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { TEST_6502 } from "../../src/models.js";
-import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, loadSsd, crc32 } from "../../src/disc.js";
+import { discFor } from "../../src/fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc } from "../../src/wd-fdc.js";
@@ -236,6 +237,32 @@ describe("Snapshot coordinator", () => {
             expect(drive2.track).toBe(0);
             expect(drive2.spinning).toBe(false);
         });
+
+        it("should round-trip drive state with disc loaded", () => {
+            const scheduler = new Scheduler();
+            const drive = new DiscDrive(0, scheduler);
+
+            const disc = new Disc(true, new DiscConfig(), "test-drive");
+            const ssdData = new Uint8Array(256 * 10);
+            ssdData[0] = 0xab;
+            loadSsd(disc, ssdData, false);
+            drive.setDisc(disc);
+
+            const state = drive.snapshotState();
+            expect(state.disc).not.toBeNull();
+            expect(state.disc.tracksUsed).toBeGreaterThan(0);
+
+            // Restore into a new drive with a fresh disc
+            const drive2 = new DiscDrive(1, scheduler);
+            const disc2 = new Disc(true, new DiscConfig(), "test-drive2");
+            loadSsd(disc2, new Uint8Array(256 * 10), false);
+            drive2.setDisc(disc2);
+
+            drive2.restoreState(state);
+            // Disc data should match original
+            const pulse = disc.getTrack(false, 0).pulses2Us[0];
+            expect(drive2.disc.getTrack(false, 0).pulses2Us[0]).toBe(pulse);
+        });
     });
 
     describe("Disc snapshot", () => {
@@ -344,6 +371,255 @@ describe("Snapshot coordinator", () => {
             // A clean track should still share
             const cleanKey = "false:1";
             expect(state2.tracks[cleanKey]).toBe(state1.tracks[cleanKey]);
+        });
+    });
+
+    describe("CRC32", () => {
+        it("should compute CRC32 for known data", () => {
+            // CRC32 of empty data is 0
+            expect(crc32(new Uint8Array(0))).toBe(0);
+            // CRC32 of "123456789" is 0xCBF43926
+            const data = new Uint8Array([0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39]);
+            expect(crc32(data)).toBe(0xcbf43926 | 0);
+        });
+
+        it("should produce different CRC32 for different data", () => {
+            const data1 = new Uint8Array([1, 2, 3]);
+            const data2 = new Uint8Array([1, 2, 4]);
+            expect(crc32(data1)).not.toBe(crc32(data2));
+        });
+    });
+
+    describe("Disc original image tracking", () => {
+        it("should store original image data and CRC32 with setOriginalImage", () => {
+            const disc = new Disc(true, new DiscConfig(), "test");
+            const ssdData = new Uint8Array(256 * 10);
+            ssdData[0] = 0x42;
+            disc.setOriginalImage(ssdData);
+
+            expect(disc.originalImageData).toBe(ssdData);
+            expect(disc.originalImageCrc32).toBe(crc32(ssdData));
+        });
+
+        it("should only store CRC32 (not image data) via discFor", () => {
+            const ssdData = new Uint8Array(256 * 10);
+            ssdData[0] = 0x42;
+            const loaded = discFor(null, "test.ssd", ssdData);
+
+            expect(loaded.originalImageCrc32).toBe(crc32(ssdData));
+            expect(loaded.originalImageData).toBeNull();
+        });
+
+        it("should track ever-dirty tracks cumulatively", () => {
+            const disc = new Disc(true, new DiscConfig(), "test");
+            const ssdData = new Uint8Array(256 * 10 * 3);
+            loadSsd(disc, ssdData, false);
+
+            // Write to track 0
+            disc.writePulses(false, 0, 0, 0x12345678);
+            disc.flushWrites();
+            expect(disc._everDirtyTracks.has(0)).toBe(true);
+
+            // Take a snapshot (clears _snapshotDirtyTracks but not _everDirtyTracks)
+            disc.snapshotState();
+            expect(disc._everDirtyTracks.has(0)).toBe(true);
+            expect(disc._snapshotDirtyTracks.size).toBe(0);
+
+            // Write to track 1
+            disc.writePulses(false, 1, 0, 0xabcdef00);
+            disc.flushWrites();
+
+            // Both tracks should be in _everDirtyTracks
+            expect(disc._everDirtyTracks.has(0)).toBe(true);
+            expect(disc._everDirtyTracks.has(1)).toBe(true);
+        });
+
+        it("should preserve _everDirtyTracks through rewind restore", () => {
+            const disc = new Disc(true, new DiscConfig(), "test-rewind");
+            const ssdData = new Uint8Array(256 * 10 * 2);
+            loadSsd(disc, ssdData, false);
+
+            // Write to track 0
+            disc.writePulses(false, 0, 0, 0x12345678);
+            disc.flushWrites();
+
+            // Take a rewind snapshot (in-memory, includes _everDirtyTracks)
+            const rewindState = disc.snapshotState();
+            expect(rewindState._everDirtyTracks).toBeInstanceOf(Set);
+            expect(rewindState._everDirtyTracks.has(0)).toBe(true);
+
+            // Restore from the rewind snapshot
+            disc.restoreState(rewindState);
+
+            // _everDirtyTracks should survive the restore
+            expect(disc._everDirtyTracks.has(0)).toBe(true);
+
+            // A subsequent save-to-file should include the dirty track
+            cpu.fdc.loadDisc(0, disc);
+            const snapshot = createSnapshot(cpu, model);
+            expect(Object.keys(snapshot.state.fdc.drives[0].disc.dirtyTracks)).toHaveLength(1);
+            expect(snapshot.state.fdc.drives[0].disc.dirtyTracks["false:0"]).toBeDefined();
+        });
+    });
+
+    describe("Dirty track persistence in save-to-file snapshots", () => {
+        it("should preserve dirty tracks in save-to-file snapshot", () => {
+            const disc = new Disc(true, new DiscConfig(), "test-dirty");
+            const ssdData = new Uint8Array(256 * 10 * 2);
+            loadSsd(disc, ssdData, false);
+            cpu.fdc.loadDisc(0, disc);
+
+            // Write to track 0
+            disc.writePulses(false, 0, 0, 0x12345678);
+            disc.flushWrites();
+
+            const snapshot = createSnapshot(cpu, model);
+            const json = snapshotToJSON(snapshot);
+            const restored = snapshotFromJSON(json);
+
+            const discState = restored.state.fdc.drives[0].disc;
+            // tracks should be empty (stripped for file save)
+            expect(Object.keys(discState.tracks)).toHaveLength(0);
+            // dirtyTracks should contain only track 0
+            expect(Object.keys(discState.dirtyTracks)).toHaveLength(1);
+            expect(discState.dirtyTracks["false:0"]).toBeDefined();
+            expect(discState.dirtyTracks["false:0"].pulses2Us[0]).toBe(0x12345678);
+        });
+
+        it("should not include clean tracks in dirtyTracks", () => {
+            const disc = new Disc(true, new DiscConfig(), "test-clean");
+            const ssdData = new Uint8Array(256 * 10 * 2);
+            loadSsd(disc, ssdData, false);
+            cpu.fdc.loadDisc(0, disc);
+
+            // No writes — snapshot should have empty dirtyTracks
+            const snapshot = createSnapshot(cpu, model);
+            const discState = snapshot.state.fdc.drives[0].disc;
+            expect(Object.keys(discState.dirtyTracks)).toHaveLength(0);
+        });
+
+        it("should restore dirty tracks as overlay on base disc", () => {
+            const disc = new Disc(true, new DiscConfig(), "test-overlay");
+            const ssdData = new Uint8Array(256 * 10 * 2);
+            ssdData[0] = 0xab;
+            loadSsd(disc, ssdData, false);
+            cpu.fdc.loadDisc(0, disc);
+
+            const cleanPulse = disc.getTrack(false, 1).pulses2Us[0];
+
+            // Write to track 0
+            disc.writePulses(false, 0, 0, 0xdeadbeef);
+            disc.flushWrites();
+
+            // Save and JSON round-trip
+            const snapshot = createSnapshot(cpu, model);
+            const json = snapshotToJSON(snapshot);
+            const restored = snapshotFromJSON(json);
+
+            // Pre-load a fresh disc (simulates reloadSnapshotMedia)
+            const cpu2 = makeCpu();
+            const disc2 = new Disc(true, new DiscConfig(), "test-overlay");
+            loadSsd(disc2, ssdData, false);
+            cpu2.fdc.loadDisc(0, disc2);
+
+            // Restore — dirty tracks should overlay the clean base
+            restoreSnapshot(cpu2, model, restored);
+            expect(cpu2.fdc.drives[0].disc.getTrack(false, 0).pulses2Us[0]).toBe(0xdeadbeef);
+            // Clean track should still have base disc data
+            expect(cpu2.fdc.drives[0].disc.getTrack(false, 1).pulses2Us[0]).toBe(cleanPulse);
+        });
+    });
+
+    describe("Double-sided disc snapshot", () => {
+        it("should round-trip dirty tracks on both sides", () => {
+            const disc = new Disc(true, new DiscConfig(), "test-dsd");
+            const dsdData = new Uint8Array(256 * 10 * 2 * 2); // 2 tracks, 2 sides
+            loadSsd(disc, dsdData, true);
+            cpu.fdc.loadDisc(0, disc);
+
+            // Write to lower side track 0 and upper side track 0
+            disc.writePulses(false, 0, 0, 0x11111111);
+            disc.flushWrites();
+            disc.writePulses(true, 0, 0, 0x22222222);
+            disc.flushWrites();
+
+            const snapshot = createSnapshot(cpu, model);
+            const json = snapshotToJSON(snapshot);
+            const restored = snapshotFromJSON(json);
+
+            const discState = restored.state.fdc.drives[0].disc;
+            expect(discState.dirtyTracks["false:0"]).toBeDefined();
+            expect(discState.dirtyTracks["true:0"]).toBeDefined();
+            expect(discState.dirtyTracks["false:0"].pulses2Us[0]).toBe(0x11111111);
+            expect(discState.dirtyTracks["true:0"].pulses2Us[0]).toBe(0x22222222);
+
+            // Restore onto a fresh disc
+            const cpu2 = makeCpu();
+            const disc2 = new Disc(true, new DiscConfig(), "test-dsd");
+            loadSsd(disc2, dsdData, true);
+            cpu2.fdc.loadDisc(0, disc2);
+
+            restoreSnapshot(cpu2, model, restored);
+            expect(cpu2.fdc.drives[0].disc.getTrack(false, 0).pulses2Us[0]).toBe(0x11111111);
+            expect(cpu2.fdc.drives[0].disc.getTrack(true, 0).pulses2Us[0]).toBe(0x22222222);
+        });
+    });
+
+    describe("Save-restore-write-save cycle", () => {
+        it("should accumulate dirty tracks across save-to-file boundaries", () => {
+            const ssdData = new Uint8Array(256 * 10 * 3);
+            const disc1 = new Disc(true, new DiscConfig(), "test-cycle");
+            loadSsd(disc1, ssdData, false);
+            cpu.fdc.loadDisc(0, disc1);
+
+            // Write to track 0, then save
+            disc1.writePulses(false, 0, 0, 0xaaaaaaaa);
+            disc1.flushWrites();
+            const snapshot1 = createSnapshot(cpu, model);
+            const json1 = snapshotToJSON(snapshot1);
+            const restored1 = snapshotFromJSON(json1);
+
+            // Restore onto a fresh CPU with base disc
+            const cpu2 = makeCpu();
+            const disc2 = new Disc(true, new DiscConfig(), "test-cycle");
+            loadSsd(disc2, ssdData, false);
+            cpu2.fdc.loadDisc(0, disc2);
+            restoreSnapshot(cpu2, model, restored1);
+
+            // Write to track 1 on the restored machine, then save again
+            cpu2.fdc.drives[0].disc.writePulses(false, 1, 0, 0xbbbbbbbb);
+            cpu2.fdc.drives[0].disc.flushWrites();
+            const snapshot2 = createSnapshot(cpu2, model);
+
+            const discState = snapshot2.state.fdc.drives[0].disc;
+            // Both the originally-dirty track 0 and newly-dirty track 1 should be present
+            expect(discState.dirtyTracks["false:0"]).toBeDefined();
+            expect(discState.dirtyTracks["false:1"]).toBeDefined();
+            expect(discState.dirtyTracks["false:0"].pulses2Us[0]).toBe(0xaaaaaaaa);
+            expect(discState.dirtyTracks["false:1"].pulses2Us[0]).toBe(0xbbbbbbbb);
+        });
+    });
+
+    describe("missing dirtyTracks graceful handling", () => {
+        it("should restore a snapshot without dirtyTracks field", () => {
+            const disc = new Disc(true, new DiscConfig(), "test-no-dirty");
+            const ssdData = new Uint8Array(256 * 10);
+            loadSsd(disc, ssdData, false);
+            cpu.fdc.loadDisc(0, disc);
+
+            const snapshot = createSnapshot(cpu, model);
+            // Remove dirtyTracks to simulate an older snapshot
+            for (const drive of snapshot.state.fdc.drives) {
+                if (drive.disc) delete drive.disc.dirtyTracks;
+            }
+
+            const cpu2 = makeCpu();
+            const disc2 = new Disc(true, new DiscConfig(), "test-v2");
+            loadSsd(disc2, ssdData, false);
+            cpu2.fdc.loadDisc(0, disc2);
+
+            // Should not throw
+            expect(() => restoreSnapshot(cpu2, model, snapshot)).not.toThrow();
         });
     });
 });

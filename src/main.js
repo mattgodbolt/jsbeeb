@@ -452,8 +452,11 @@ function downloadDriveData(data, name, extension) {
 }
 
 async function loadHTMLFile(file) {
-    const binaryData = await readFileAsBinaryString(file);
-    processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, binaryData));
+    const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
+    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData);
+    // Local file: retain the image bytes for embedding in save-to-file snapshots.
+    loadedDisc.setOriginalImage(imageData);
+    processor.fdc.loadDisc(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
     updateUrl();
@@ -1057,18 +1060,45 @@ function splitImage(image) {
 
 async function reloadSnapshotMedia(media) {
     if (!media) return;
-    if (media.disc1) {
-        const disc = await loadDiscImage(media.disc1);
-        if (disc) {
-            processor.fdc.loadDisc(0, disc);
-            setDisc1Image(media.disc1);
+    for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
+        const discKey = driveIndex === 0 ? "disc1" : "disc2";
+        const imageDataKey = discKey + "ImageData";
+        const crcKey = discKey + "Crc32";
+
+        let loadedDisc = null;
+        if (media[discKey]) {
+            // URL-based disc — reload from source
+            loadedDisc = await loadDiscImage(media[discKey]);
+        } else if (media[imageDataKey]) {
+            // Locally-loaded disc — reconstruct from embedded image data
+            const imageData =
+                media[imageDataKey] instanceof Uint8Array
+                    ? media[imageDataKey]
+                    : new Uint8Array(Object.values(media[imageDataKey]));
+            const discName = media[discKey + "Name"] || "snapshot.ssd";
+            loadedDisc = disc.discFor(processor.fdc, discName, imageData);
+            // Retain the image bytes so subsequent saves can re-embed them.
+            loadedDisc.setOriginalImage(imageData);
         }
-    }
-    if (media.disc2) {
-        const disc = await loadDiscImage(media.disc2);
-        if (disc) {
-            processor.fdc.loadDisc(1, disc);
-            setDisc2Image(media.disc2);
+        if (!loadedDisc) continue;
+
+        // Verify CRC32 if present
+        if (media[crcKey] != null && loadedDisc.originalImageCrc32 != null) {
+            if (loadedDisc.originalImageCrc32 !== media[crcKey]) {
+                showError(
+                    "loading state",
+                    "The disc image appears to have changed since this snapshot was saved. The restored state may not work correctly.",
+                );
+            }
+        }
+
+        processor.fdc.loadDisc(driveIndex, loadedDisc);
+        // Only update the URL/query for URL-sourced discs. For embedded
+        // (local-file) discs, setting parsedQuery would put a bogus source
+        // in the URL and break subsequent saves/reloads.
+        if (media[discKey]) {
+            if (driveIndex === 0) setDisc1Image(media[discKey]);
+            else setDisc2Image(media[discKey]);
         }
     }
 }
@@ -1425,6 +1455,22 @@ $("#save-state").click(async function (event) {
         const media = {};
         if (parsedQuery.disc1 || parsedQuery.disc) media.disc1 = parsedQuery.disc1 || parsedQuery.disc;
         if (parsedQuery.disc2) media.disc2 = parsedQuery.disc2;
+
+        // For each drive with a disc loaded, include CRC32 for verification
+        // and embed original image data if no URL source exists (local file).
+        const drives = processor.fdc.drives;
+        for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
+            const driveDisc = drives[driveIndex].disc;
+            if (!driveDisc || driveDisc.originalImageCrc32 == null) continue;
+            const discKey = driveIndex === 0 ? "disc1" : "disc2";
+            const crcKey = discKey + "Crc32";
+            media[crcKey] = driveDisc.originalImageCrc32;
+            if (!media[discKey] && driveDisc.originalImageData) {
+                media[discKey + "ImageData"] = driveDisc.originalImageData;
+                media[discKey + "Name"] = driveDisc.name;
+            }
+        }
+
         const snapshot = createSnapshot(processor, model, Object.keys(media).length > 0 ? media : undefined);
         const json = snapshotToJSON(snapshot);
         const blob = await compressBlob(new Blob([json]));
@@ -1469,6 +1515,8 @@ async function loadStateFromFile(file) {
             window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
             return;
         }
+        // Order matters: reload disc media first so the base disc is in the
+        // drive before restoreSnapshot applies dirty track overlays on top.
         await reloadSnapshotMedia(snapshot.media);
         restoreSnapshot(processor, model, snapshot);
         // Force a repaint so the display updates even while paused
@@ -1652,6 +1700,8 @@ startPromise
             sessionStorage.removeItem("jsbeeb-pending-state");
             try {
                 const snapshot = snapshotFromJSON(pendingState);
+                // Order matters: reload disc media first so the base disc is in the
+                // drive before restoreSnapshot applies dirty track overlays on top.
                 await reloadSnapshotMedia(snapshot.media);
                 restoreSnapshot(processor, model, snapshot);
                 processor.execute(40000);
