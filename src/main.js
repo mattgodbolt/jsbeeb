@@ -798,7 +798,7 @@ keyboard.registerKeyHandler(
     (down) => {
         if (down) {
             utils.noteEvent("keyboard", "press", "pagedown");
-            rewindUI.open();
+            if (rewindUI) rewindUI.open();
         }
     },
     { alt: true, ctrl: false },
@@ -1374,11 +1374,17 @@ $("#download-filestore-link").on("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
-$("#hard-reset").click(function (event) {
-    if (rewindUI) rewindUI.close();
+function hardReset() {
+    if (rewindUI) {
+        rewindUI.close();
+        rewindBuffer.clear();
+        rewindUI.updateButtonState();
+    }
     processor.reset(true);
-    rewindBuffer.clear();
-    rewindUI.updateButtonState();
+}
+
+$("#hard-reset").click(function (event) {
+    hardReset();
     event.preventDefault();
 });
 
@@ -1976,7 +1982,7 @@ electron({
     loadStateFile: loadStateFromFile,
     actions: {
         "soft-reset": () => processor.reset(false),
-        "hard-reset": () => processor.reset(true),
+        "hard-reset": hardReset,
         "save-state": () => $("#save-state").trigger("click"),
         rewind: () => rewindUI.open(),
     },
