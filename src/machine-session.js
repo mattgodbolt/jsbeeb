@@ -62,6 +62,10 @@ export class MachineSession {
 
         // Accumulated VDU text output — drained by callers
         this._pendingOutput = [];
+
+        // Breakpoint management — persistent hooks that survive across run calls
+        this._breakpoints = new Map(); // id → { hook, type, address, hit }
+        this._nextBreakpointId = 1;
     }
 
     /** Load ROMs and hardware — call once before anything else */
@@ -275,6 +279,85 @@ export class MachineSession {
      */
     async runUntilAddress(addr, timeoutSecs = 30) {
         await this._machine.runUntilAddress(addr, timeoutSecs);
+    }
+
+    /**
+     * Add a persistent breakpoint. Returns the breakpoint id.
+     * The hook stays active across run calls until removed.
+     * When the hook fires, cpu.stop() halts the current runFor.
+     * @param {"execute"|"read"|"write"} type
+     * @param {number} address
+     * @returns {number} breakpoint id
+     */
+    addBreakpoint(type, address) {
+        const id = this._nextBreakpointId++;
+        const cpu = this._machine.processor;
+        const bp = { type, address, hit: false, id };
+
+        const onHit = () => {
+            bp.hit = true;
+            return true; // calls cpu.stop(), halts current runFor
+        };
+
+        if (type === "execute") {
+            bp.hook = cpu.debugInstruction.add((pc) => {
+                if (pc === address) return onHit();
+            });
+        } else if (type === "read") {
+            bp.hook = cpu.debugRead.add((addr) => {
+                if (addr === address) return onHit();
+            });
+        } else if (type === "write") {
+            bp.hook = cpu.debugWrite.add((addr) => {
+                if (addr === address) return onHit();
+            });
+        } else {
+            throw new Error(`Unknown breakpoint type: ${type}`);
+        }
+
+        this._breakpoints.set(id, bp);
+        return id;
+    }
+
+    /**
+     * Remove a breakpoint by id.
+     */
+    removeBreakpoint(id) {
+        const bp = this._breakpoints.get(id);
+        if (!bp) throw new Error(`No breakpoint with id ${id}`);
+        bp.hook.remove();
+        this._breakpoints.delete(id);
+    }
+
+    /**
+     * Remove all breakpoints.
+     */
+    clearBreakpoints() {
+        for (const bp of this._breakpoints.values()) {
+            bp.hook.remove();
+        }
+        this._breakpoints.clear();
+    }
+
+    /**
+     * Return the first breakpoint that was hit since the last reset, or null.
+     */
+    hitBreakpoint() {
+        for (const bp of this._breakpoints.values()) {
+            if (bp.hit) {
+                return { id: bp.id, type: bp.type, address: bp.address };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reset all hit flags (call before starting a new run).
+     */
+    resetBreakpointHits() {
+        for (const bp of this._breakpoints.values()) {
+            bp.hit = false;
+        }
     }
 
     /**
