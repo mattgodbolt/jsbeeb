@@ -377,11 +377,7 @@ export class InstrumentedSoundChip extends SoundChip {
     /** Read current SN76489 register state in a friendly format. */
     getState() {
         return {
-            tone: [
-                this.registers[0],
-                this.registers[1],
-                this.registers[2],
-            ],
+            tone: [this.registers[0], this.registers[1], this.registers[2]],
             noise: this.registers[3],
             volume: [
                 this._attenuationFromVolume(0),
