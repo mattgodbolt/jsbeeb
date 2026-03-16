@@ -423,6 +423,33 @@ describe("Snapshot coordinator", () => {
             expect(disc._everDirtyTracks.has(0)).toBe(true);
             expect(disc._everDirtyTracks.has(1)).toBe(true);
         });
+
+        it("should preserve _everDirtyTracks through rewind restore", () => {
+            const disc = new Disc(true, new DiscConfig(), "test-rewind");
+            const ssdData = new Uint8Array(256 * 10 * 2);
+            loadSsd(disc, ssdData, false);
+
+            // Write to track 0
+            disc.writePulses(false, 0, 0, 0x12345678);
+            disc.flushWrites();
+
+            // Take a rewind snapshot (in-memory, includes _everDirtyTracks)
+            const rewindState = disc.snapshotState();
+            expect(rewindState._everDirtyTracks).toBeInstanceOf(Set);
+            expect(rewindState._everDirtyTracks.has(0)).toBe(true);
+
+            // Restore from the rewind snapshot
+            disc.restoreState(rewindState);
+
+            // _everDirtyTracks should survive the restore
+            expect(disc._everDirtyTracks.has(0)).toBe(true);
+
+            // A subsequent save-to-file should include the dirty track
+            cpu.fdc.loadDisc(0, disc);
+            const snapshot = createSnapshot(cpu, model);
+            expect(Object.keys(snapshot.state.fdc.drives[0].disc.dirtyTracks)).toHaveLength(1);
+            expect(snapshot.state.fdc.drives[0].disc.dirtyTracks["false:0"]).toBeDefined();
+        });
     });
 
     describe("Dirty track persistence in save-to-file snapshots", () => {

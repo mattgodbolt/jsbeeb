@@ -925,7 +925,14 @@ export class Disc {
         this.dirtySide = -1;
         this.dirtyTrack = -1;
         this._snapshotDirtyTracks.clear();
-        this._everDirtyTracks.clear();
+        // Restore _everDirtyTracks from the snapshot if present (rewind path —
+        // the Set is carried in-memory but won't survive JSON serialization).
+        // For the save-to-file path, _everDirtyTracks is rebuilt from dirtyTracks below.
+        if (state._everDirtyTracks instanceof Set) {
+            this._everDirtyTracks = new Set(state._everDirtyTracks);
+        } else {
+            this._everDirtyTracks.clear();
+        }
 
         // Restore full track data (rewind path — tracks contains all data)
         this._lastTrackSnapshots = state.tracks;

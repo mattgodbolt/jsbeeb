@@ -1450,7 +1450,7 @@ $("#save-state").click(async function (event) {
         const drives = processor.fdc.drives;
         for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
             const driveDisc = drives[driveIndex].disc;
-            if (!driveDisc || !driveDisc.originalImageCrc32) continue;
+            if (!driveDisc || driveDisc.originalImageCrc32 == null) continue;
             const discKey = driveIndex === 0 ? "disc1" : "disc2";
             const crcKey = discKey + "Crc32";
             media[crcKey] = driveDisc.originalImageCrc32;
