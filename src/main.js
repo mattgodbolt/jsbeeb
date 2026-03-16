@@ -33,6 +33,7 @@ import { getFilterForMode } from "./canvas.js";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, modelsCompatible } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
+import { RewindUI } from "./rewind-ui.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -45,6 +46,7 @@ import {
 
 let processor;
 let video;
+let rewindUI;
 const dbgr = new Debugger();
 let frames = 0;
 let frameSkip = 0;
@@ -792,6 +794,17 @@ keyboard.registerKeyHandler(
 );
 
 keyboard.registerKeyHandler(
+    utils.keyCodes.PAGEDOWN,
+    (down) => {
+        if (down) {
+            utils.noteEvent("keyboard", "press", "pagedown");
+            rewindUI.open();
+        }
+    },
+    { alt: true, ctrl: false },
+);
+
+keyboard.registerKeyHandler(
     utils.keyCodes.B,
     (down) => {
         if (down) {
@@ -1363,6 +1376,8 @@ $("#download-filestore-link").on("click", function () {
 
 $("#hard-reset").click(function (event) {
     processor.reset(true);
+    rewindBuffer.clear();
+    rewindUI.updateButtonState();
     event.preventDefault();
 });
 
@@ -1732,6 +1747,20 @@ const rewindBuffer = new RewindBuffer(30);
 let rewindFrameCounter = 0;
 const RewindCaptureInterval = 50; // ~1 second at 50fps
 
+rewindUI = new RewindUI({
+    rewindBuffer,
+    processor,
+    video,
+    captureInterval: RewindCaptureInterval,
+    stop: (debug) => stop(debug),
+    go: () => go(),
+    isRunning: () => running,
+});
+rewindUI.updateButtonState();
+
+// Expose UI open to console
+window.jsbeebRewind.openUI = () => rewindUI.open();
+
 function draw(now) {
     if (!running) {
         last = 0;
@@ -1788,6 +1817,7 @@ function draw(now) {
             if (++rewindFrameCounter >= RewindCaptureInterval) {
                 rewindFrameCounter = 0;
                 rewindBuffer.push(processor.snapshotState());
+                rewindUI.updateButtonState();
             }
         } catch (e) {
             running = false;
@@ -1975,6 +2005,7 @@ electron({
         "soft-reset": () => processor.reset(false),
         "hard-reset": () => processor.reset(true),
         "save-state": () => $("#save-state").trigger("click"),
+        rewind: () => rewindUI.open(),
     },
 });
 

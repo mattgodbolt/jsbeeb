@@ -62,6 +62,19 @@ export class RewindBuffer {
     }
 
     /**
+     * Return all snapshots in order from oldest to newest.
+     * @returns {object[]} array of snapshots
+     */
+    getAll() {
+        const result = new Array(this.count);
+        const start = (this.writeIndex - this.count + this.maxSnapshots) % this.maxSnapshots;
+        for (let i = 0; i < this.count; i++) {
+            result[i] = this.snapshots[(start + i) % this.maxSnapshots];
+        }
+        return result;
+    }
+
+    /**
      * Number of snapshots currently stored.
      * @returns {number}
      */

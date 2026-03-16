@@ -117,6 +117,46 @@ describe("RewindBuffer", () => {
         expect(buf.pop().id).toBe(10);
     });
 
+    describe("getAll", () => {
+        it("should return empty array when buffer is empty", () => {
+            const buf = new RewindBuffer(5);
+            expect(buf.getAll()).toEqual([]);
+        });
+
+        it("should return snapshots oldest to newest", () => {
+            const buf = new RewindBuffer(5);
+            buf.push(makeSnapshot(1));
+            buf.push(makeSnapshot(2));
+            buf.push(makeSnapshot(3));
+
+            const all = buf.getAll();
+            expect(all).toHaveLength(3);
+            expect(all[0].id).toBe(1);
+            expect(all[1].id).toBe(2);
+            expect(all[2].id).toBe(3);
+        });
+
+        it("should return correct order after wraparound", () => {
+            const buf = new RewindBuffer(3);
+            for (let i = 1; i <= 5; i++) buf.push(makeSnapshot(i));
+
+            const all = buf.getAll();
+            expect(all).toHaveLength(3);
+            expect(all[0].id).toBe(3);
+            expect(all[1].id).toBe(4);
+            expect(all[2].id).toBe(5);
+        });
+
+        it("should not modify the buffer", () => {
+            const buf = new RewindBuffer(5);
+            buf.push(makeSnapshot(1));
+            buf.push(makeSnapshot(2));
+            buf.getAll();
+            expect(buf.length).toBe(2);
+            expect(buf.peek().id).toBe(2);
+        });
+    });
+
     it("should handle alternating push/pop", () => {
         const buf = new RewindBuffer(5);
         buf.push(makeSnapshot(1));
