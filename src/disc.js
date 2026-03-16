@@ -748,10 +748,10 @@ export class Disc {
         this.isWriteable = isWriteable;
 
         // Track which tracks have been written since the last snapshot.
-        // Keys are "side:trackNum" strings.
+        // Keys are numeric: (track | (isSideUpper ? 0x100 : 0)).
         this._snapshotDirtyTracks = new Set();
         // Cache of the previous snapshot's track data for structural sharing.
-        // Keys are "side:trackNum", values are {pulses2Us, length} objects.
+        // Keys are "side:trackNum" strings, values are {pulses2Us, length} objects.
         this._lastTrackSnapshots = Object.create(null);
 
         this.initSurface(0);
@@ -883,6 +883,8 @@ export class Disc {
     restoreState(state) {
         this.tracksUsed = state.tracksUsed;
         this.isDoubleSided = state.isDoubleSided;
+        this.isWriteable = state.isWriteable;
+        this.name = state.name;
 
         // Reset write-in-progress state
         this.isDirty = false;

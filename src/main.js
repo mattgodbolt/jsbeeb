@@ -1401,7 +1401,7 @@ $("#save-state").click(async function (event) {
         const media = {};
         if (parsedQuery.disc1 || parsedQuery.disc) media.disc1 = parsedQuery.disc1 || parsedQuery.disc;
         if (parsedQuery.disc2) media.disc2 = parsedQuery.disc2;
-        const snapshot = createSnapshot(processor, model, media);
+        const snapshot = createSnapshot(processor, model, Object.keys(media).length > 0 ? media : undefined);
         const json = snapshotToJSON(snapshot);
         const blob = await compressBlob(new Blob([json]));
         const url = URL.createObjectURL(blob);
