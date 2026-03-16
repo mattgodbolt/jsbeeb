@@ -751,7 +751,13 @@ export class Disc {
         this._lastTrackSnapshots = Object.create(null);
 
         // Original disc image data, stored for embedding in save-to-file snapshots
-        // and CRC32 verification on restore.
+        // and CRC32 verification on restore. _originalImageData is only set for
+        // local-file discs (not URL-sourced ones). _originalImageCrc32 is the CRC
+        // of the image bytes at load time — it is not updated if an onChange handler
+        // mutates the backing store. This is fine because the CRC is compared against
+        // the same source that would be reloaded (the original image or URL), not the
+        // mutated copy. If a mutable source URL were added in future, CRC verification
+        // should be skipped or the CRC updated accordingly.
         this._originalImageData = null;
         this._originalImageCrc32 = null;
 
