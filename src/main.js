@@ -453,7 +453,10 @@ function downloadDriveData(data, name, extension) {
 
 async function loadHTMLFile(file) {
     const binaryData = await readFileAsBinaryString(file);
-    processor.fdc.loadDisc(0, disc.discFor(processor.fdc, file.name, binaryData));
+    const loadedDisc = disc.discFor(processor.fdc, file.name, binaryData);
+    // Local file: retain the image bytes for embedding in save-to-file snapshots.
+    loadedDisc.setOriginalImage(utils.stringToUint8Array(binaryData));
+    processor.fdc.loadDisc(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
     updateUrl();
@@ -1074,6 +1077,8 @@ async function reloadSnapshotMedia(media) {
                     : new Uint8Array(Object.values(media[imageDataKey]));
             const discName = media[discKey + "Name"] || "snapshot.ssd";
             loadedDisc = disc.discFor(processor.fdc, discName, imageData);
+            // Retain the image bytes so subsequent saves can re-embed them.
+            loadedDisc.setOriginalImage(imageData);
         }
         if (!loadedDisc) continue;
 

@@ -763,8 +763,19 @@ export class Disc {
     }
 
     /**
-     * Store the original disc image bytes and compute their CRC32.
-     * Called by loaders after populating the disc tracks.
+     * Record the CRC32 of the original disc image for verification on restore.
+     * Called by discFor() after loading. Does not retain the image bytes.
+     * @param {Uint8Array} data - the raw disc image bytes (used only to compute CRC32)
+     */
+    setOriginalImageCrc32(data) {
+        this._originalImageCrc32 = crc32(data);
+    }
+
+    /**
+     * Store the original disc image bytes (and compute CRC32).
+     * Only call this for local-file discs that need their image embedded
+     * in save-to-file snapshots — URL-sourced discs should use
+     * setOriginalImageCrc32() instead to avoid retaining the full image.
      * @param {Uint8Array} data - the raw disc image bytes
      */
     setOriginalImage(data) {

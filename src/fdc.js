@@ -213,7 +213,7 @@ export function guessDiscTypeFromName(name) {
 export function discFor(fdc, name, stringData, onChange) {
     const data = typeof stringData !== "string" ? stringData : utils.stringToUint8Array(stringData);
     const disc = guessDiscTypeFromName(name).loader(new Disc(true, new DiscConfig(), name), data, onChange);
-    disc.setOriginalImage(data instanceof Uint8Array ? data : new Uint8Array(data));
+    disc.setOriginalImageCrc32(data instanceof Uint8Array ? data : new Uint8Array(data));
     return disc;
 }
 

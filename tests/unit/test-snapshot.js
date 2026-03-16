@@ -8,6 +8,7 @@ import { Cmos } from "../../src/cmos.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { TEST_6502 } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd, crc32 } from "../../src/disc.js";
+import { discFor } from "../../src/fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc } from "../../src/wd-fdc.js";
@@ -390,14 +391,23 @@ describe("Snapshot coordinator", () => {
     });
 
     describe("Disc original image tracking", () => {
-        it("should store original image data and CRC32", () => {
+        it("should store original image data and CRC32 with setOriginalImage", () => {
             const disc = new Disc(true, new DiscConfig(), "test");
             const ssdData = new Uint8Array(256 * 10);
             ssdData[0] = 0x42;
             disc.setOriginalImage(ssdData);
 
-            expect(disc._originalImageData).toBe(ssdData);
-            expect(disc._originalImageCrc32).toBe(crc32(ssdData));
+            expect(disc.originalImageData).toBe(ssdData);
+            expect(disc.originalImageCrc32).toBe(crc32(ssdData));
+        });
+
+        it("should only store CRC32 (not image data) via discFor", () => {
+            const ssdData = new Uint8Array(256 * 10);
+            ssdData[0] = 0x42;
+            const loaded = discFor(null, "test.ssd", ssdData);
+
+            expect(loaded.originalImageCrc32).toBe(crc32(ssdData));
+            expect(loaded.originalImageData).toBeNull();
         });
 
         it("should track ever-dirty tracks cumulatively", () => {
