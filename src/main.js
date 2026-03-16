@@ -854,6 +854,12 @@ function setDisc1Image(name) {
     config.emit("media-changed", { disc1: name });
 }
 
+function setDisc2Image(name) {
+    parsedQuery.disc2 = name;
+    updateUrl();
+    config.emit("media-changed", { disc2: name });
+}
+
 function setTapeImage(name) {
     parsedQuery.tape = name;
     updateUrl();
@@ -1060,7 +1066,10 @@ async function reloadSnapshotMedia(media) {
     }
     if (media.disc2) {
         const disc = await loadDiscImage(media.disc2);
-        if (disc) processor.fdc.loadDisc(1, disc);
+        if (disc) {
+            processor.fdc.loadDisc(1, disc);
+            setDisc2Image(media.disc2);
+        }
     }
 }
 

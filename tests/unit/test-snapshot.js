@@ -259,41 +259,50 @@ describe("Snapshot coordinator", () => {
             expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(originalPulse);
         });
 
-        it("should round-trip disc track data through JSON serialization", () => {
-            // Load a disc with known data into the FDC
+        it("should round-trip disc Uint32Array through JSON base64 encoding", () => {
+            // This tests the rewind-like path: full disc data through JSON.
+            // snapshotState() retains tracks; snapshotToJSON encodes Uint32Arrays as base64.
             const disc = new Disc(true, new DiscConfig(), "test-json");
+            const ssdData = new Uint8Array(256 * 10);
+            ssdData[0] = 0xab;
+            loadSsd(disc, ssdData, false);
+
+            const discState = disc.snapshotState();
+            const json = snapshotToJSON({ tracks: discState.tracks });
+            const restored = snapshotFromJSON(json);
+
+            const track = restored.tracks["false:0"];
+            expect(track.pulses2Us).toBeInstanceOf(Uint32Array);
+            expect(track.pulses2Us[0]).toBe(discState.tracks["false:0"].pulses2Us[0]);
+        });
+
+        it("should restore FDC state from save-to-file snapshot with disc pre-loaded", () => {
+            // This tests the actual save-to-file path: createSnapshot strips tracks,
+            // disc is pre-loaded before restore (simulating reloadSnapshotMedia).
+            const disc = new Disc(true, new DiscConfig(), "test-save");
             const ssdData = new Uint8Array(256 * 10);
             ssdData[0] = 0xab;
             loadSsd(disc, ssdData, false);
             cpu.fdc.loadDisc(0, disc);
 
-            // Capture the pulse data before snapshot
-            const trackBefore = disc.getTrack(false, 0);
-            const pulseBefore = trackBefore.pulses2Us[0];
+            const pulseBefore = disc.getTrack(false, 0).pulses2Us[0];
 
-            // Full round-trip: snapshot → JSON (base64) → parse → restore
+            // createSnapshot strips disc tracks (as it would for save-to-file)
             const snapshot = createSnapshot(cpu, model);
-            // createSnapshot strips tracks for save-to-file, so use snapshotState directly
-            const fullState = cpu.snapshotState();
-            const fullSnapshot = { ...snapshot, state: fullState };
-            const json = snapshotToJSON(fullSnapshot);
+            const json = snapshotToJSON(snapshot);
             const restored = snapshotFromJSON(json);
 
-            // Verify the Uint32Array survived the base64 round-trip
-            const restoredDisc = restored.state.fdc.drives[0].disc;
-            expect(restoredDisc).toBeDefined();
-            const restoredTrack = restoredDisc.tracks["false:0"];
-            expect(restoredTrack).toBeDefined();
-            expect(restoredTrack.pulses2Us).toBeInstanceOf(Uint32Array);
-            expect(restoredTrack.pulses2Us[0]).toBe(pulseBefore);
+            // Verify tracks were stripped
+            expect(Object.keys(restored.state.fdc.drives[0].disc.tracks)).toHaveLength(0);
 
-            // Now actually restore into a CPU and verify the disc data is correct
+            // Pre-load the same disc (simulates reloadSnapshotMedia), then restore
             const cpu2 = makeCpu();
-            const disc2 = new Disc(true, new DiscConfig(), "test-json");
-            loadSsd(disc2, new Uint8Array(256 * 10), false);
+            const disc2 = new Disc(true, new DiscConfig(), "test-save");
+            loadSsd(disc2, ssdData, false);
             cpu2.fdc.loadDisc(0, disc2);
             restoreSnapshot(cpu2, model, restored);
 
+            // Disc data should come from the pre-loaded disc, not from the snapshot
             expect(cpu2.fdc.drives[0].disc.getTrack(false, 0).pulses2Us[0]).toBe(pulseBefore);
         });
 
