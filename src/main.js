@@ -1088,8 +1088,13 @@ async function reloadSnapshotMedia(media) {
         }
 
         processor.fdc.loadDisc(driveIndex, loadedDisc);
-        if (driveIndex === 0) setDisc1Image(media[discKey] || "(embedded)");
-        else setDisc2Image(media[discKey] || "(embedded)");
+        // Only update the URL/query for URL-sourced discs. For embedded
+        // (local-file) discs, setting parsedQuery would put a bogus source
+        // in the URL and break subsequent saves/reloads.
+        if (media[discKey]) {
+            if (driveIndex === 0) setDisc1Image(media[discKey]);
+            else setDisc2Image(media[discKey]);
+        }
     }
 }
 
