@@ -1301,12 +1301,6 @@ export class WdFdc {
         this._dataRegister = data;
     }
 
-    /// jsbeeb compatibility stuff TODO combine with the noise aware stuff?
-    /**
-     *
-     * @param {Number} drive
-     * @param {Disc} disc
-     */
     snapshotState() {
         const scheduler = this._timerTask.scheduler;
         return {
@@ -1405,6 +1399,11 @@ export class WdFdc {
         // so we don't reassert it here.
     }
 
+    /// jsbeeb compatibility stuff
+    /**
+     * @param {Number} drive
+     * @param {Disc} disc
+     */
     loadDisc(drive, disc) {
         this._drives[drive].setDisc(disc);
     }

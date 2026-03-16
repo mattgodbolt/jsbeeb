@@ -812,7 +812,9 @@ export class Disc {
         this.isDirty = true;
         this.dirtySide = isSideUpper;
         this.dirtyTrack = track;
-        this._snapshotDirtyTracks.add(`${isSideUpper}:${track}`);
+        // Numeric key avoids string allocation on every pulse write.
+        // Upper bit encodes side, lower 8 bits encode track number.
+        this._snapshotDirtyTracks.add(track | (isSideUpper ? 0x100 : 0));
         trackObj.pulses2Us[position] = pulses;
         // TODO a debug log flag for this
         // console.log(`wrote to ${track}:${position * 32}`);
@@ -848,8 +850,9 @@ export class Disc {
         for (let side = 0; side < numSides; ++side) {
             for (let trackNum = 0; trackNum < this.tracksUsed; ++trackNum) {
                 const key = `${side === 1}:${trackNum}`;
+                const dirtyKey = trackNum | (side === 1 ? 0x100 : 0);
                 const trackObj = this.getTrack(side === 1, trackNum);
-                if (this._snapshotDirtyTracks.has(key) || !this._lastTrackSnapshots[key]) {
+                if (this._snapshotDirtyTracks.has(dirtyKey) || !this._lastTrackSnapshots[key]) {
                     // Dirty or first snapshot: copy the track data
                     tracks[key] = {
                         pulses2Us: trackObj.pulses2Us.slice(),
