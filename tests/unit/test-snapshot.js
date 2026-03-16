@@ -259,6 +259,44 @@ describe("Snapshot coordinator", () => {
             expect(disc.getTrack(false, 0).pulses2Us[0]).toBe(originalPulse);
         });
 
+        it("should round-trip disc track data through JSON serialization", () => {
+            // Load a disc with known data into the FDC
+            const disc = new Disc(true, new DiscConfig(), "test-json");
+            const ssdData = new Uint8Array(256 * 10);
+            ssdData[0] = 0xab;
+            loadSsd(disc, ssdData, false);
+            cpu.fdc.loadDisc(0, disc);
+
+            // Capture the pulse data before snapshot
+            const trackBefore = disc.getTrack(false, 0);
+            const pulseBefore = trackBefore.pulses2Us[0];
+
+            // Full round-trip: snapshot → JSON (base64) → parse → restore
+            const snapshot = createSnapshot(cpu, model);
+            // createSnapshot strips tracks for save-to-file, so use snapshotState directly
+            const fullState = cpu.snapshotState();
+            const fullSnapshot = { ...snapshot, state: fullState };
+            const json = snapshotToJSON(fullSnapshot);
+            const restored = snapshotFromJSON(json);
+
+            // Verify the Uint32Array survived the base64 round-trip
+            const restoredDisc = restored.state.fdc.drives[0].disc;
+            expect(restoredDisc).toBeDefined();
+            const restoredTrack = restoredDisc.tracks["false:0"];
+            expect(restoredTrack).toBeDefined();
+            expect(restoredTrack.pulses2Us).toBeInstanceOf(Uint32Array);
+            expect(restoredTrack.pulses2Us[0]).toBe(pulseBefore);
+
+            // Now actually restore into a CPU and verify the disc data is correct
+            const cpu2 = makeCpu();
+            const disc2 = new Disc(true, new DiscConfig(), "test-json");
+            loadSsd(disc2, new Uint8Array(256 * 10), false);
+            cpu2.fdc.loadDisc(0, disc2);
+            restoreSnapshot(cpu2, model, restored);
+
+            expect(cpu2.fdc.drives[0].disc.getTrack(false, 0).pulses2Us[0]).toBe(pulseBefore);
+        });
+
         it("should use structural sharing for clean tracks", () => {
             const disc = new Disc(true, new DiscConfig(), "test");
             const ssdData = new Uint8Array(256 * 10 * 2);
