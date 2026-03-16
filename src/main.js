@@ -1080,8 +1080,9 @@ async function reloadSnapshotMedia(media) {
         // Verify CRC32 if present
         if (media[crcKey] != null && loadedDisc.originalImageCrc32 != null) {
             if (loadedDisc.originalImageCrc32 !== media[crcKey]) {
-                console.warn(
-                    `Disc image CRC32 mismatch for ${discKey}: expected ${media[crcKey]}, got ${loadedDisc.originalImageCrc32}. The disc image may have changed since the snapshot was saved.`,
+                showError(
+                    "loading state",
+                    "The disc image appears to have changed since this snapshot was saved. The restored state may not work correctly.",
                 );
             }
         }
