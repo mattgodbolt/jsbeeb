@@ -41,7 +41,7 @@ On restore, discs are reloaded from these source references before the FDC state
 
 For locally-loaded files (via file input), the original disc image bytes are embedded in `discNImageData` so the disc can be reconstructed on restore without requiring the user to reload the file manually.
 
-When `discNCrc32` is present, it is compared against the CRC32 of the reloaded disc image. A mismatch produces a console warning, indicating the disc image may have changed since the snapshot was saved.
+When `discNCrc32` is present, it is compared against the CRC32 of the reloaded disc image. A mismatch shows an error dialog warning that the disc image may have changed since the snapshot was saved.
 
 ### Version history
 
