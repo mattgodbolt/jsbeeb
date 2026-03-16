@@ -10,7 +10,7 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
   "version": 2,
   "model": "BBC B with DFS 1.2",
   "timestamp": "2026-03-15T12:00:00.000Z",
-  "media": { "disc1": "sth:Acornsoft/Drogna" },
+  "media": { "disc1": "sth:Acornsoft/Drogna", "disc1Crc32": -1234567890 },
   "state": { ... }
 }
 ```
@@ -26,17 +26,27 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 
 ### Media references (`media`)
 
-| Field   | Type   | Description                                                      |
-| ------- | ------ | ---------------------------------------------------------------- |
-| `disc1` | string | _(Optional)_ Drive 0 disc source (e.g. `"sth:Acornsoft/Drogna"`) |
-| `disc2` | string | _(Optional)_ Drive 1 disc source                                 |
+| Field            | Type       | Description                                                      |
+| ---------------- | ---------- | ---------------------------------------------------------------- |
+| `disc1`          | string     | _(Optional)_ Drive 0 disc source (e.g. `"sth:Acornsoft/Drogna"`) |
+| `disc2`          | string     | _(Optional)_ Drive 1 disc source                                 |
+| `disc1Crc32`     | number     | _(Optional)_ CRC32 of the original disc 1 image for verification |
+| `disc2Crc32`     | number     | _(Optional)_ CRC32 of the original disc 2 image for verification |
+| `disc1ImageData` | Uint8Array | _(Optional)_ Embedded original disc 1 image bytes (local files)  |
+| `disc2ImageData` | Uint8Array | _(Optional)_ Embedded original disc 2 image bytes (local files)  |
+| `disc1Name`      | string     | _(Optional)_ Original filename for embedded disc 1               |
+| `disc2Name`      | string     | _(Optional)_ Original filename for embedded disc 2               |
 
-On restore, discs are reloaded from these source references before the FDC state is applied. The source string uses the same schema as URL query parameters (`sth:`, `http://`, `gd:`, etc.). For locally-loaded files (via file input), no source is saved — the user must reload the disc manually.
+On restore, discs are reloaded from these source references before the FDC state is applied. The source string uses the same schema as URL query parameters (`sth:`, `http://`, `gd:`, etc.).
+
+For locally-loaded files (via file input), the original disc image bytes are embedded in `discNImageData` so the disc can be reconstructed on restore without requiring the user to reload the file manually.
+
+When `discNCrc32` is present, it is compared against the CRC32 of the reloaded disc image. A mismatch produces a console warning, indicating the disc image may have changed since the snapshot was saved.
 
 ### Version history
 
 - **v1** — Initial release. CPU, memory, VIA, video, sound, ACIA, ADC.
-- **v2** — Added FDC, disc drive, and disc track data. v1 snapshots load with FDC state unchanged.
+- **v2** — Added FDC, disc drive, and disc track data. Dirty track persistence, embedded disc image data for local files, and CRC32 verification. v1 snapshots load with FDC state unchanged.
 
 ### Model compatibility
 
@@ -309,15 +319,16 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 
 ### Disc (`state.fdc.drives[n].disc`)
 
-| Field           | Type    | Description                                       |
-| --------------- | ------- | ------------------------------------------------- |
-| `tracksUsed`    | number  | Number of tracks with data                        |
-| `isDoubleSided` | boolean | Disc has data on both sides                       |
-| `isWriteable`   | boolean | Disc is writeable (not write-protected)           |
-| `name`          | string  | Disc name/label                                   |
-| `tracks`        | object  | Track data keyed by `"side:trackNum"` (see below) |
+| Field           | Type    | Description                                                                      |
+| --------------- | ------- | -------------------------------------------------------------------------------- |
+| `tracksUsed`    | number  | Number of tracks with data                                                       |
+| `isDoubleSided` | boolean | Disc has data on both sides                                                      |
+| `isWriteable`   | boolean | Disc is writeable (not write-protected)                                          |
+| `name`          | string  | Disc name/label                                                                  |
+| `tracks`        | object  | Track data keyed by `"side:trackNum"` (see below)                                |
+| `dirtyTracks`   | object  | Modified track data overlay keyed by `"side:trackNum"` (empty `{}` if no writes) |
 
-Each entry in `tracks` has:
+Each entry in `tracks` or `dirtyTracks` has:
 
 | Field       | Type        | Description                         |
 | ----------- | ----------- | ----------------------------------- |
@@ -326,10 +337,9 @@ Each entry in `tracks` has:
 
 Track keys are strings like `"false:0"` (lower side, track 0) or `"true:5"` (upper side, track 5).
 
-**Save-to-file vs rewind:** When saving to a file, `tracks` is empty (`{}`) — disc pulse data is omitted since the same disc image must be loaded when restoring. The FDC and drive mechanical state (head position, motor, etc.) is still saved. For in-memory rewind snapshots, `tracks` contains full pulse data with structural sharing: clean tracks share `pulses2Us` references across snapshots, and only tracks written since the previous snapshot are freshly copied. This keeps rewind memory proportional to disc write activity rather than total disc size.
+**Save-to-file vs rewind:** When saving to a file, `tracks` is empty (`{}`) and `dirtyTracks` contains only tracks that have been written since the disc was loaded. On restore, the base disc is first reloaded from the media source (URL or embedded image data), then dirty track overlays are applied on top. This preserves disc writes (e.g. game saves) across save/restore cycles. For in-memory rewind snapshots, `tracks` contains full pulse data with structural sharing: clean tracks share `pulses2Us` references across snapshots, and only tracks written since the previous snapshot are freshly copied. This keeps rewind memory proportional to disc write activity rather than total disc size.
 
 ## Known limitations (v2)
 
-- **Disc data not saved to file** — the same disc image must be loaded when restoring a save file. Modified disc sectors are not persisted. In-memory rewind does capture disc data.
 - **No tape position** — tape playback position is not saved.
 - **ROMs not saved** (in jsbeeb-native snapshots) — ROMs are loaded from files and don't change at runtime. Imported b-em snapshots include ROMs in the optional `roms` field.

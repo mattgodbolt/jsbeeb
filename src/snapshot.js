@@ -49,13 +49,29 @@ const TypedArrayConstructors = {
  */
 export function createSnapshot(cpu, model, media) {
     const state = cpu.snapshotState();
-    // Strip disc track data from the save-to-file snapshot.
-    // The FDC/drive mechanical state is kept; only the bulky pulse
-    // data (which can be reloaded from the disc image) is removed.
+    // Strip clean disc track data from the save-to-file snapshot.
+    // The FDC/drive mechanical state is kept; only clean tracks
+    // (which can be reloaded from the disc image) are removed.
+    // Dirty tracks (written since disc load) are kept as an overlay.
     if (state.fdc && state.fdc.drives) {
         for (const drive of state.fdc.drives) {
             if (drive.disc) {
+                const dirtyTracks = {};
+                for (const key of Object.keys(drive.disc.tracks)) {
+                    const [sideStr, trackNumStr] = key.split(":");
+                    const isSideUpper = sideStr === "true";
+                    const trackNum = parseInt(trackNumStr, 10);
+                    const dirtyKey = trackNum | (isSideUpper ? 0x100 : 0);
+                    if (drive.disc._everDirtyTracks && drive.disc._everDirtyTracks.has(dirtyKey)) {
+                        dirtyTracks[key] = drive.disc.tracks[key];
+                    }
+                }
                 drive.disc.tracks = {};
+                drive.disc.dirtyTracks = dirtyTracks;
+                // Clean up internal-only fields not needed in serialized state
+                delete drive.disc._everDirtyTracks;
+                delete drive.disc._originalImageData;
+                delete drive.disc._originalImageCrc32;
             }
         }
     }
