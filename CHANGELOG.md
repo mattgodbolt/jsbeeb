@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.7.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.6.0...v1.7.0) (2026-03-22)
+
+
+### Features
+
+* add FDC, disc drive, and disc snapshot/restore (v2 format) ([#592](https://github.com/mattgodbolt/jsbeeb/issues/592)) ([e7ac8db](https://github.com/mattgodbolt/jsbeeb/commit/e7ac8db0199889c50cc9a30b43948c0c4607700c))
+* add rewind scrubber UI with thumbnail filmstrip ([#588](https://github.com/mattgodbolt/jsbeeb/issues/588)) ([78166cc](https://github.com/mattgodbolt/jsbeeb/commit/78166cc7f648b5a04a1a216d2db4fe21e0efc5a7))
+* Fix debugInstruction breakpoints and make type() hook-based ([#593](https://github.com/mattgodbolt/jsbeeb/issues/593)) ([00da081](https://github.com/mattgodbolt/jsbeeb/commit/00da081318fef96194373672618c99ef41396861))
+* persist dirty disc data and embedded images in snapshots ([#594](https://github.com/mattgodbolt/jsbeeb/issues/594)) ([c4fe340](https://github.com/mattgodbolt/jsbeeb/commit/c4fe34044345f8dae616878ed95e71fc51fe1570))
+
+
+### Bug Fixes
+
+* correct 65C12 timing for dead cycles, RMW spurious ops, and ACCCON TST ([#597](https://github.com/mattgodbolt/jsbeeb/issues/597)) ([f05826a](https://github.com/mattgodbolt/jsbeeb/commit/f05826a4e62b7391cfef78d5e1641e42be9d5825))
+
 ## [1.6.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.5.0...v1.6.0) (2026-03-16)
 
 
