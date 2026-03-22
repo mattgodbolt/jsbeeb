@@ -1307,13 +1307,14 @@ export class Cpu6502 extends Base6502 {
     }
 
     // Bake in the 1MHz bus check at construction time. On the Master, ACCCON
-    // TST (bit 6) remaps FRED/JIM reads to the internal 2MHz bus, but writes
-    // still go through the external 1MHz bus. Non-Master machines just use the
-    // static address check with no ACCCON awareness.
+    // TST (bit 6) remaps FRED, JIM, and SHEILA reads (&FC00-&FEFF) to the
+    // internal 2MHz bus, but writes still go through the external 1MHz bus.
+    // Non-Master machines just use the static address check with no ACCCON
+    // awareness.
     buildIs1MHzAccess() {
         if (this.model.isMaster) {
             return (addr, isWrite) => {
-                if (!isWrite && this.acccon & 0x40 && addr >= 0xfc00 && addr < 0xfe00) return false;
+                if (!isWrite && this.acccon & 0x40 && addr >= 0xfc00 && addr < 0xff00) return false;
                 return is1MHzAccess(addr);
             };
         }
