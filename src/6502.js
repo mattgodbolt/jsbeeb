@@ -616,6 +616,7 @@ export class Cpu6502 extends Base6502 {
         this.videoCycles = 0;
 
         this.polltime = this.buildPolltime();
+        this.is1MHzAccess = this.buildIs1MHzAccess();
 
         this._debugRead = this._debugWrite = this._debugInstruction = null;
         this.debugInstruction = new DebugHook(this, "_debugInstruction");
@@ -1297,15 +1298,30 @@ export class Cpu6502 extends Base6502 {
         this.sysvia.setKeyLayout(this.config.keyLayout);
     }
 
-    polltimeAddr(cycles, addr) {
+    polltimeAddr(cycles, addr, isWrite) {
         cycles = cycles | 0;
-        if (is1MHzAccess(addr)) {
+        if (this.is1MHzAccess(addr, isWrite)) {
             cycles += 1 + ((cycles ^ this.currentCycles) & 1);
         }
         this.polltime(cycles);
     }
 
-    // Builds commong code between polltimeSlow and polltimeFast
+    // Bake in the 1MHz bus check at construction time. On the Master, ACCCON
+    // TST (bit 6) remaps FRED, JIM, and SHEILA reads (&FC00-&FEFF) to the
+    // internal 2MHz bus, but writes still go through the external 1MHz bus.
+    // Non-Master machines just use the static address check with no ACCCON
+    // awareness.
+    buildIs1MHzAccess() {
+        if (this.model.isMaster) {
+            return (addr, isWrite) => {
+                if (!isWrite && this.acccon & 0x40 && addr >= 0xfc00 && addr < 0xff00) return false;
+                return is1MHzAccess(addr);
+            };
+        }
+        return is1MHzAccess;
+    }
+
+    // Builds common code between polltimeSlow and polltimeFast
     buildPolltime() {
         const nop = (_cycles) => {};
         const tubeStuff = (cycles) => (this.model.tube ? this.tube.execute(cycles) : nop);

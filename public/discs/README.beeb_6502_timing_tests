@@ -1,0 +1,7 @@
+6502/65C02 timing tests by Tom Seddon.
+Source: https://github.com/tom-seddon/beeb_6502_timing_tests
+License: GPL-3.0
+
+Tests edge cases in 6502 and 65C02 cycle timing, including dead cycles,
+page boundary crossing, and 1MHz bus access timing on BBC Micro hardware.
+See also: https://github.com/bitshifters/bbc-documents/blob/master/ICs/6502%20CPU/6502%20Dead%20Cycles.pdf
