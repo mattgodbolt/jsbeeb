@@ -88,6 +88,7 @@ class InstructionGen {
         let op = `cpu.writemem(${addr}, ${reg});`;
         if (spurious) op += " // spurious";
         this.append(this.cycle, op, true, addr);
+        this.ops[this.cycle].isWrite = true;
     }
 
     zpReadOp(addr, reg) {
@@ -129,7 +130,8 @@ class InstructionGen {
             }
             if (this.cycleAccurate && toSkip && this.ops[i].exact) {
                 if (this.ops[i].addr) {
-                    out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[i].addr});`);
+                    const isWrite = this.ops[i].isWrite ? "true" : "false";
+                    out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[i].addr}, ${isWrite});`);
                 } else {
                     out.push(`cpu.polltime(${toSkip});`);
                 }
@@ -140,7 +142,8 @@ class InstructionGen {
         }
         if (toSkip) {
             if (this.cycleAccurate && this.ops[this.cycle] && this.ops[this.cycle].addr) {
-                out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[this.cycle].addr});`);
+                const isWrite = this.ops[this.cycle].isWrite ? "true" : "false";
+                out.push(`cpu.polltimeAddr(${toSkip}, ${this.ops[this.cycle].addr}, ${isWrite});`);
             } else {
                 out.push(`cpu.polltime(${toSkip});`);
             }
@@ -1151,7 +1154,9 @@ function makeCpuFunctions(cpu, opcodes, is65c12, cycleAccurate = true) {
                         // so I read the non-carry here.
                         if (!op.rotate) ig.ifFalse.readOp("addrNonCarry", "REG");
                         ig.readOp("addrWithCarry", "REG");
-                        ig.writeOp("addrWithCarry", "REG");
+                        // 65c12 does "two reads and one write" for RMW (not the 6502's
+                        // "one read and two writes"). The spurious cycle is a read.
+                        ig.readOp("addrWithCarry", "", true);
                     } else {
                         // For RMW we always have a spurious read and then a spurious read or write
                         ig.readOp("addrNonCarry");
@@ -1236,11 +1241,19 @@ function makeCpuFunctions(cpu, opcodes, is65c12, cycleAccurate = true) {
                     ig.readOp("addrWithCarry", "REG");
                     ig.spuriousOp("addrWithCarry", "REG");
                 } else if (op.write) {
-                    // Pure stores still exhibit a read at the non-carried address.
-                    ig.readOp("addrNonCarry");
-                    if (op.zpQuirk) {
-                        // with this quirk on undocumented instructions, a page crossing writes to 00XX
-                        ig.append("if (addrWithCarry !== addrNonCarry) addrWithCarry &= 0xff;");
+                    if (is65c12) {
+                        // On the 65c12, the dead cycle reads the Previous Bus Address (PBA)
+                        // rather than the partially-formed or target address. Since PBA is
+                        // always a zero-page or instruction-fetch address (2MHz), it never
+                        // triggers 1MHz bus stretching. We model this as tick(1).
+                        ig.tick(1);
+                    } else {
+                        // Pure stores still exhibit a read at the non-carried address.
+                        ig.readOp("addrNonCarry");
+                        if (op.zpQuirk) {
+                            // with this quirk on undocumented instructions, a page crossing writes to 00XX
+                            ig.append("if (addrWithCarry !== addrNonCarry) addrWithCarry &= 0xff;");
+                        }
                     }
                 }
                 ig.append(op.op);
