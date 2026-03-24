@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.7.0...v1.8.0) (2026-03-24)
+
+
+### Features
+
+* TestMachine case handling, keyDown/keyUp, loadSidewaysRam ([#598](https://github.com/mattgodbolt/jsbeeb/issues/598)) ([ba6b656](https://github.com/mattgodbolt/jsbeeb/commit/ba6b6569921363cb59a5dfc143aa170cee2c08dd))
+
 ## [1.7.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.6.0...v1.7.0) (2026-03-22)
 
 
