@@ -186,8 +186,13 @@ export class TestMachine {
                 return { code: utils.keyCodes.K4, shift: true };
             case "%":
                 return { code: utils.keyCodes.K5, shift: true };
-            default:
-                return { code: ch.toUpperCase().charCodeAt(0), shift: false };
+            default: {
+                const upper = ch.toUpperCase();
+                const isLower = ch >= "a" && ch <= "z";
+                // With CAPS LOCK on (the boot default), SHIFT inverts
+                // case. So lowercase needs shift, uppercase doesn't.
+                return { code: upper.charCodeAt(0), shift: isLower };
+            }
         }
     }
 
@@ -198,10 +203,10 @@ export class TestMachine {
      * execution mid-typing, the remaining characters are typed when execution
      * resumes.
      */
-    async type(text) {
+    async type(text, opts) {
         const fullText = text + "\n"; // append RETURN
         const keys = fullText.split("").map((ch) => this._charToKey(ch));
-        const holdCycles = 40000; // cycles between key events, matching old type() timing
+        const holdCycles = (opts && opts.holdCycles) || 40000;
         let index = 0;
         let phase = "idle"; // "idle" → "down" → "idle"
         let nextEventCycle = 0;
@@ -243,6 +248,34 @@ export class TestMachine {
         while (!done) {
             const stopped = await this.runFor(holdCycles);
             if (stopped) break;
+        }
+    }
+
+    /**
+     * Press a key on the BBC keyboard.
+     * @param {number} code - BBC key code (e.g. utils.keyCodes.SPACE)
+     */
+    keyDown(code) {
+        this.processor.sysvia.keyDown(code);
+    }
+
+    /**
+     * Release a key on the BBC keyboard.
+     * @param {number} code - BBC key code
+     */
+    keyUp(code) {
+        this.processor.sysvia.keyUp(code);
+    }
+
+    /**
+     * Load a ROM image directly into a sideways RAM slot.
+     * @param {number} slot - slot number (0-15, typically 4-7 for SWRAM)
+     * @param {Uint8Array|Buffer} data - ROM data (up to 16384 bytes)
+     */
+    loadSidewaysRam(slot, data) {
+        const offset = this.processor.romOffset + slot * 16384;
+        for (let i = 0; i < data.length && i < 16384; i++) {
+            this.processor.ramRomOs[offset + i] = data[i];
         }
     }
 
