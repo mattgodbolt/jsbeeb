@@ -102,6 +102,22 @@ export class TestMachine {
         this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, "", data));
     }
 
+    /**
+     * Load a disc image from raw data (Uint8Array or Buffer).
+     * @param {Uint8Array|Buffer} data - raw disc image bytes
+     */
+    loadDiscData(data) {
+        this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, "", data));
+    }
+
+    /**
+     * Reset the machine.
+     * @param {boolean} hard - true for power-on reset, false for soft reset
+     */
+    reset(hard) {
+        this.processor.reset(hard);
+    }
+
     async loadBasic(source) {
         const tokeniser = await Tokeniser.create();
         const tokenised = tokeniser.tokenise(source);
