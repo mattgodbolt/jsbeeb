@@ -188,10 +188,16 @@ export class TestMachine {
                 return { code: utils.keyCodes.K5, shift: true };
             default: {
                 const upper = ch.toUpperCase();
-                const isLower = ch >= "a" && ch <= "z";
-                // With CAPS LOCK on (the boot default), SHIFT inverts
-                // case. So lowercase needs shift, uppercase doesn't.
-                return { code: upper.charCodeAt(0), shift: isLower };
+                const isLetter = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
+                if (isLetter) {
+                    const wantUpper = ch >= "A" && ch <= "Z";
+                    const capsOn = this.processor.sysvia.capsLockLight;
+                    // CAPS LOCK on: unshifted = upper, shifted = lower
+                    // CAPS LOCK off: unshifted = lower, shifted = upper
+                    const needShift = capsOn ? !wantUpper : wantUpper;
+                    return { code: upper.charCodeAt(0), shift: needShift };
+                }
+                return { code: ch.charCodeAt(0), shift: false };
             }
         }
     }
