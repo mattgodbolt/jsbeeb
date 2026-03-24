@@ -209,10 +209,10 @@ export class TestMachine {
      * execution mid-typing, the remaining characters are typed when execution
      * resumes.
      */
-    async type(text, opts) {
+    async type(text) {
         const fullText = text + "\n"; // append RETURN
         const keys = fullText.split("").map((ch) => this._charToKey(ch));
-        const holdCycles = (opts && opts.holdCycles) || 40000;
+        const holdCycles = 40000;
         let index = 0;
         let phase = "idle"; // "idle" → "down" → "idle"
         let nextEventCycle = 0;
