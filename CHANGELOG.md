@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.9.0...v1.9.1) (2026-03-26)
+
+
+### Bug Fixes
+
+* add snapshotState/restoreState to FakeVideo and FakeSoundChip ([#607](https://github.com/mattgodbolt/jsbeeb/issues/607)) ([e42271a](https://github.com/mattgodbolt/jsbeeb/commit/e42271aed863ef882eb72ec066f3abd0f7bcf2da))
+
 ## [1.9.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.8.0...v1.9.0) (2026-03-26)
 
 
