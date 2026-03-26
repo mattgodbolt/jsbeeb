@@ -274,7 +274,7 @@ describe("SysVia getJoysticks", () => {
     it("should combine mouse and gamepad button states with OR logic", () => {
         const pad = makeMockPad({});
         const via = makeSysViaWithGamepads([pad]);
-        via.mouseButton1 = true;
+        via.setJoystickButton(0, true);
         const result = via.getJoysticks();
         expect(result.button1).toBe(true);
     });
