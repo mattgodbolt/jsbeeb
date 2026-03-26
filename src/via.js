@@ -541,11 +541,9 @@ export class SysVia extends Via {
         this.mouseButton1 = false;
         this.mouseButton2 = false;
         this.keyboardEnabled = true;
-        // Shift override state for natural keyboard mappings where the BBC
-        // shift state must differ from the physical shift key (e.g. US Shift+6 → ^)
         this._physicalShiftDown = false;
         this._shiftOverrideActive = false;
-        this._shiftOverrideValue = false;
+        this._shiftOverrideDesiredShift = false;
         this.setKeyLayout(initialLayout);
         this.video = video;
         this.soundChip = soundChip;
@@ -596,7 +594,7 @@ export class SysVia extends Via {
         }
         this._physicalShiftDown = false;
         this._shiftOverrideActive = false;
-        this._shiftOverrideValue = false;
+        this._shiftOverrideDesiredShift = false;
         this.updateKeys();
     }
 
@@ -612,34 +610,32 @@ export class SysVia extends Via {
 
     set(key, val, shiftDown) {
         if (!this.keyboardEnabled) return;
-        const colrow = this.keycodeToRowCol[!!shiftDown][key];
-        if (!colrow) return;
+        const mapping = this.keycodeToRowCol[!!shiftDown][key];
+        if (!mapping) return;
 
-        this.keys[colrow[0]][colrow[1]] = val;
+        const [col, row, bbcShiftOverride] = mapping;
+        const [shiftCol, shiftRow] = utils.BBC.SHIFT;
 
-        const bbcShiftOverride = colrow[2];
-        // BBC SHIFT is at [0][0] in the keyboard matrix
-        const isShiftKey = colrow[0] === 0 && colrow[1] === 0 && bbcShiftOverride === undefined;
+        this.keys[col][row] = val;
 
-        if (isShiftKey) {
+        const isPhysicalShiftKey = col === shiftCol && row === shiftRow && bbcShiftOverride === undefined;
+
+        if (isPhysicalShiftKey) {
             this._physicalShiftDown = !!val;
         }
 
         if (bbcShiftOverride !== undefined) {
             this._shiftOverrideActive = !!val;
-            this._shiftOverrideValue = bbcShiftOverride;
+            this._shiftOverrideDesiredShift = bbcShiftOverride;
         }
 
-        // When a shift override is active, force the BBC SHIFT key to the
-        // override value; otherwise follow the physical shift state.
+        // When a shift override is active, force BBC SHIFT to the desired
+        // state; otherwise follow the physical shift key.
         // Note: keyDownRaw/keyUpRaw bypass this logic intentionally as they
         // are used by gamepad/paste code that manages shift independently.
-        if (this._shiftOverrideActive || isShiftKey || bbcShiftOverride !== undefined) {
-            if (this._shiftOverrideActive) {
-                this.keys[0][0] = this._shiftOverrideValue ? 1 : 0;
-            } else {
-                this.keys[0][0] = this._physicalShiftDown ? 1 : 0;
-            }
+        if (this._shiftOverrideActive || isPhysicalShiftKey || bbcShiftOverride !== undefined) {
+            const shiftPressed = this._shiftOverrideActive ? this._shiftOverrideDesiredShift : this._physicalShiftDown;
+            this.keys[shiftCol][shiftRow] = shiftPressed ? 1 : 0;
         }
 
         this.updateKeys();
