@@ -765,10 +765,11 @@ export class SysVia extends Via {
             const pad2 = pads[1];
 
             // Combine gamepad and mouse button states (OR logic)
-            button1 = button1 || pad.buttons[10].pressed;
-            // if two gamepads, use button from 2nd
-            // otherwise use 2nd button from first
-            button2 = button2 || (pad2 ? pad2.buttons[10].pressed : pad.buttons[11].pressed);
+            button1 = button1 || !!pad.buttons[10]?.pressed;
+            // FIRE2 on first gamepad always maps to button2
+            button2 = button2 || !!pad.buttons[11]?.pressed;
+            // If two gamepads, FIRE1 on second gamepad also maps to button2
+            if (pad2) button2 = button2 || !!pad2.buttons[10]?.pressed;
         }
 
         return { button1: button1, button2: button2 };
