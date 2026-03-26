@@ -437,6 +437,14 @@ export function getKeyMap(keyLayout) {
     // shift not pressed
     keys2[false] = {};
 
+    // Create a key map entry that overrides the BBC SHIFT state while held.
+    // Used in natural keyboard for keys where the PC and BBC shift states
+    // differ for the same character (e.g. US Shift+6 = ^ needs BBC HAT_TILDE
+    // without shift, even though the physical shift key is held).
+    function withShiftOverride(bbcKey, bbcShift) {
+        return [bbcKey[0], bbcKey[1], bbcShift];
+    }
+
     // shiftDown MUST be true or false (not undefined)
     function doMap(s, colRow, shiftDown) {
         if (keys2[shiftDown][s] && keys2[shiftDown][s] !== colRow) {
@@ -554,7 +562,8 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.K1, BBC.K1);
         map(keyCodes.K4, BBC.K4);
         map(keyCodes.K5, BBC.K5);
-        map(keyCodes.K6, BBC.K6);
+        map(keyCodes.K6, BBC.K6, false);
+        map(keyCodes.K6, withShiftOverride(BBC.HAT_TILDE, false), true);
 
         map(keyCodes.MINUS, BBC.MINUS);
 

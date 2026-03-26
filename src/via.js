@@ -541,6 +541,9 @@ export class SysVia extends Via {
         this.mouseButton1 = false;
         this.mouseButton2 = false;
         this.keyboardEnabled = true;
+        this._physicalShiftDown = false;
+        this._shiftOverrideActive = false;
+        this._shiftOverrideDesiredShift = false;
         this.setKeyLayout(initialLayout);
         this.video = video;
         this.soundChip = soundChip;
@@ -589,6 +592,9 @@ export class SysVia extends Via {
                 this.keys[i][j] = false;
             }
         }
+        this._physicalShiftDown = false;
+        this._shiftOverrideActive = false;
+        this._shiftOverrideDesiredShift = false;
         this.updateKeys();
     }
 
@@ -604,9 +610,34 @@ export class SysVia extends Via {
 
     set(key, val, shiftDown) {
         if (!this.keyboardEnabled) return;
-        const colrow = this.keycodeToRowCol[!!shiftDown][key];
-        if (!colrow) return;
-        this.keys[colrow[0]][colrow[1]] = val;
+        const mapping = this.keycodeToRowCol[!!shiftDown][key];
+        if (!mapping) return;
+
+        const [col, row, bbcShiftOverride] = mapping;
+        const [shiftCol, shiftRow] = utils.BBC.SHIFT;
+
+        this.keys[col][row] = val;
+
+        const isPhysicalShiftKey = col === shiftCol && row === shiftRow && bbcShiftOverride === undefined;
+
+        if (isPhysicalShiftKey) {
+            this._physicalShiftDown = !!val;
+        }
+
+        if (bbcShiftOverride !== undefined) {
+            this._shiftOverrideActive = !!val;
+            this._shiftOverrideDesiredShift = bbcShiftOverride;
+        }
+
+        // When a shift override is active, force BBC SHIFT to the desired
+        // state; otherwise follow the physical shift key.
+        // Note: keyDownRaw/keyUpRaw bypass this logic intentionally as they
+        // are used by gamepad/paste code that manages shift independently.
+        if (this._shiftOverrideActive || isPhysicalShiftKey || bbcShiftOverride !== undefined) {
+            const shiftPressed = this._shiftOverrideActive ? this._shiftOverrideDesiredShift : this._physicalShiftDown;
+            this.keys[shiftCol][shiftRow] = shiftPressed ? 1 : 0;
+        }
+
         this.updateKeys();
     }
 
