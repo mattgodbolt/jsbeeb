@@ -11,10 +11,58 @@ export class TestMachine {
     constructor(model, opts) {
         model = model || "B-DFS1.2";
         this.processor = fake6502(findModel(model), opts || {});
+        this._capturedChars = [];
+        this._captureHookInstalled = false;
     }
 
     async initialise() {
         await this.processor.initialise();
+    }
+
+    /**
+     * Install the character capture hook (once). All characters sent
+     * through WRCHV are accumulated and can be read with drainText().
+     * Safe to call multiple times — only installs one hook.
+     */
+    startCapture() {
+        if (this._captureHookInstalled) return;
+        this._captureHookInstalled = true;
+        this.processor.debugInstruction.add((addr) => {
+            const wrchv = this.readword(0x20e);
+            if (addr === wrchv) {
+                this._capturedChars.push(this.processor.a);
+            }
+            return false;
+        });
+    }
+
+    /**
+     * Return all captured characters since the last drain (or since
+     * startCapture was called), then clear the buffer.
+     * @returns {number[]} array of character codes
+     */
+    drainCapturedChars() {
+        const chars = this._capturedChars;
+        this._capturedChars = [];
+        return chars;
+    }
+
+    /**
+     * Return captured text as a string (printable chars only, with
+     * optional newline preservation), then clear the buffer.
+     * @param {Object} [opts]
+     * @param {boolean} [opts.raw=false] - if true, preserve newlines
+     */
+    drainText({ raw = false } = {}) {
+        const chars = this.drainCapturedChars();
+        return chars
+            .map((c) => {
+                if (raw && c === 10) return "\n";
+                if (c === 13) return "";
+                if (c >= 0x20 && c < 0x7f) return String.fromCharCode(c);
+                return "";
+            })
+            .join("");
     }
 
     runFor(cycles) {
@@ -116,6 +164,23 @@ export class TestMachine {
      */
     reset(hard) {
         this.processor.reset(hard);
+    }
+
+    /**
+     * Take a snapshot of the entire machine state (CPU, RAM, SWRAM,
+     * VIAs, video, FDC, etc). Returns an opaque state object that
+     * can be passed to restore().
+     */
+    snapshot() {
+        return this.processor.snapshotState();
+    }
+
+    /**
+     * Restore a previously saved snapshot. The machine will be in
+     * exactly the state it was when snapshot() was called.
+     */
+    restore(state) {
+        this.processor.restoreState(state);
     }
 
     async loadBasic(source) {

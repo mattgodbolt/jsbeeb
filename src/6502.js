@@ -1155,8 +1155,9 @@ export class Cpu6502 extends Base6502 {
             peripheralCycles: this.peripheralCycles,
             videoCycles: this.videoCycles,
             music5000PageSel: this.music5000PageSel,
-            // RAM only (ROMs don't change at runtime)
+            // RAM (ROMs loaded from disc don't change, but SWRAM does)
             ram: this.ramRomOs.slice(0, this.romOffset),
+            roms: this.ramRomOs.slice(this.romOffset, this.romOffset + 16 * 16384),
             // Sub-component state
             scheduler: this.scheduler.snapshotState(),
             sysvia: this.sysvia.snapshotState(),
