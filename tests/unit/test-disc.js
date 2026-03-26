@@ -203,6 +203,23 @@ describe(
                 expect(ssdSaved[i]).toBe(0);
             }
         });
+        it("should load an SSD whose size is not a multiple of sector size", () => {
+            // Create data that's not a multiple of 256 bytes (e.g., 2.5 sectors worth)
+            const sectorSize = 256;
+            const oddSize = sectorSize * 2 + 100;
+            const oddData = new Uint8Array(oddSize);
+            for (let i = 0; i < oddSize; i++) oddData[i] = i & 0xff;
+
+            const disc = new Disc(true, new DiscConfig(), "test.ssd");
+            loadSsd(disc, oddData, false);
+
+            const sectors = disc.getTrack(false, 0).findSectors();
+            expect(sectors.length).toBe(10);
+            for (const sector of sectors) {
+                expect(sector.hasHeaderCrcError).toBe(false);
+                expect(sector.hasDataCrcError).toBe(false);
+            }
+        });
         it("should have sane tracks", () => {
             const disc = new Disc(true, new DiscConfig(), "test.ssd");
             loadSsd(disc, data, false);
