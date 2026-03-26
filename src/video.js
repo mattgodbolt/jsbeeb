@@ -1106,4 +1106,10 @@ export class FakeVideo {
     polltime() {}
 
     setScreenHwScroll() {}
+
+    snapshotState() {
+        return {};
+    }
+
+    restoreState() {}
 }
