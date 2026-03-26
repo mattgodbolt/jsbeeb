@@ -424,4 +424,10 @@ export class FakeSoundChip {
             tone: () => {},
         };
     }
+
+    snapshotState() {
+        return {};
+    }
+
+    restoreState() {}
 }
