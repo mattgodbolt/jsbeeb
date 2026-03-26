@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.9.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.8.0...v1.9.0) (2026-03-26)
+
+
+### Features
+
+* snapshot SWRAM, add capture API to TestMachine ([#606](https://github.com/mattgodbolt/jsbeeb/issues/606)) ([08c20de](https://github.com/mattgodbolt/jsbeeb/commit/08c20dece7ee19a1807aa4cc637031dda2b53bbe))
+
+
+### Bug Fixes
+
+* consistent button2 mapping for gamepad fire buttons ([#604](https://github.com/mattgodbolt/jsbeeb/issues/604)) ([f5da9d6](https://github.com/mattgodbolt/jsbeeb/commit/f5da9d6cf9e7adaead93bcb68c6e849d8df09f5e)), closes [#503](https://github.com/mattgodbolt/jsbeeb/issues/503)
+* pad SSD/DSD disc images that aren't a multiple of sector size ([#602](https://github.com/mattgodbolt/jsbeeb/issues/602)) ([2b5e9e1](https://github.com/mattgodbolt/jsbeeb/commit/2b5e9e194a984ba600eb9e91a8899eecef1cf2d0)), closes [#601](https://github.com/mattgodbolt/jsbeeb/issues/601)
+* produce ^ from shift-6 in natural keyboard layout ([#605](https://github.com/mattgodbolt/jsbeeb/issues/605)) ([ff4388a](https://github.com/mattgodbolt/jsbeeb/commit/ff4388ae29762531d079d48190045529e791f032))
+
 ## [1.8.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.7.0...v1.8.0) (2026-03-24)
 
 
