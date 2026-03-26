@@ -632,14 +632,14 @@ export class SysVia extends Via {
 
         // When a shift override is active, force the BBC SHIFT key to the
         // override value; otherwise follow the physical shift state.
+        // Note: keyDownRaw/keyUpRaw bypass this logic intentionally as they
+        // are used by gamepad/paste code that manages shift independently.
         if (this._shiftOverrideActive || isShiftKey || bbcShiftOverride !== undefined) {
-            this.keys[0][0] = this._shiftOverrideActive
-                ? this._shiftOverrideValue
-                    ? 1
-                    : 0
-                : this._physicalShiftDown
-                  ? 1
-                  : 0;
+            if (this._shiftOverrideActive) {
+                this.keys[0][0] = this._shiftOverrideValue ? 1 : 0;
+            } else {
+                this.keys[0][0] = this._physicalShiftDown ? 1 : 0;
+            }
         }
 
         this.updateKeys();
