@@ -541,6 +541,11 @@ export class SysVia extends Via {
         this.mouseButton1 = false;
         this.mouseButton2 = false;
         this.keyboardEnabled = true;
+        // Shift override state for natural keyboard mappings where the BBC
+        // shift state must differ from the physical shift key (e.g. US Shift+6 → ^)
+        this._physicalShiftDown = false;
+        this._shiftOverrideActive = false;
+        this._shiftOverrideValue = false;
         this.setKeyLayout(initialLayout);
         this.video = video;
         this.soundChip = soundChip;
@@ -589,6 +594,9 @@ export class SysVia extends Via {
                 this.keys[i][j] = false;
             }
         }
+        this._physicalShiftDown = false;
+        this._shiftOverrideActive = false;
+        this._shiftOverrideValue = false;
         this.updateKeys();
     }
 
@@ -606,7 +614,34 @@ export class SysVia extends Via {
         if (!this.keyboardEnabled) return;
         const colrow = this.keycodeToRowCol[!!shiftDown][key];
         if (!colrow) return;
+
         this.keys[colrow[0]][colrow[1]] = val;
+
+        const bbcShiftOverride = colrow[2];
+        // BBC SHIFT is at [0][0] in the keyboard matrix
+        const isShiftKey = colrow[0] === 0 && colrow[1] === 0 && bbcShiftOverride === undefined;
+
+        if (isShiftKey) {
+            this._physicalShiftDown = !!val;
+        }
+
+        if (bbcShiftOverride !== undefined) {
+            this._shiftOverrideActive = !!val;
+            this._shiftOverrideValue = bbcShiftOverride;
+        }
+
+        // When a shift override is active, force the BBC SHIFT key to the
+        // override value; otherwise follow the physical shift state.
+        if (this._shiftOverrideActive || isShiftKey || bbcShiftOverride !== undefined) {
+            this.keys[0][0] = this._shiftOverrideActive
+                ? this._shiftOverrideValue
+                    ? 1
+                    : 0
+                : this._physicalShiftDown
+                  ? 1
+                  : 0;
+        }
+
         this.updateKeys();
     }
 

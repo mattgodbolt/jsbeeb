@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { SysVia, UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
+import * as utils from "../../src/utils.js";
 
 function makeFakeCpu() {
     return { interrupt: 0 };
@@ -196,5 +197,73 @@ describe("Via snapshotState / restoreState", () => {
             expect(snapshot.acr).toBe(0x40);
             expect(snapshot.IC32).toBeDefined();
         });
+    });
+});
+
+describe("SysVia natural keyboard shift override", () => {
+    let scheduler, cpu, via;
+    const keyCodes = utils.keyCodes;
+    const BBC = utils.BBC;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        cpu = makeFakeCpu();
+        via = new SysVia(cpu, scheduler, {
+            video: makeFakeVideo(),
+            soundChip: makeFakeSoundChip(),
+            cmos: makeFakeCmos(),
+            isMaster: false,
+            initialLayout: "natural",
+        });
+    });
+
+    function bbcKeyPressed(bbcKey) {
+        return via.keys[bbcKey[0]][bbcKey[1]] === 1;
+    }
+
+    it("should produce ^ (HAT_TILDE without shift) when shift+6 is pressed", () => {
+        // Simulate: user presses SHIFT, then 6
+        via.keyDown(keyCodes.SHIFT_LEFT, false);
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
+
+        via.keyDown(keyCodes.K6, true);
+        // HAT_TILDE should be pressed
+        expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(true);
+        // BBC SHIFT should be suppressed (override active)
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
+    });
+
+    it("should restore BBC SHIFT when the override key is released", () => {
+        via.keyDown(keyCodes.SHIFT_LEFT, false);
+        via.keyDown(keyCodes.K6, true);
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
+
+        // Release 6, keep shift held
+        via.keyUp(keyCodes.K6);
+        expect(bbcKeyPressed(BBC.HAT_TILDE)).toBe(false);
+        // BBC SHIFT should be restored since physical shift is still held
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(true);
+    });
+
+    it("should handle shift released before the override key", () => {
+        via.keyDown(keyCodes.SHIFT_LEFT, false);
+        via.keyDown(keyCodes.K6, true);
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
+
+        // Release shift while 6 is still held
+        via.keyUp(keyCodes.SHIFT_LEFT);
+        // Override is still active, so SHIFT stays suppressed
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
+
+        // Release 6
+        via.keyUp(keyCodes.K6);
+        // No override, no physical shift → SHIFT should be off
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
+    });
+
+    it("should produce 6 without shift override when 6 is pressed unshifted", () => {
+        via.keyDown(keyCodes.K6, false);
+        expect(bbcKeyPressed(BBC.K6)).toBe(true);
+        expect(bbcKeyPressed(BBC.SHIFT)).toBe(false);
     });
 });

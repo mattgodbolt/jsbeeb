@@ -554,7 +554,11 @@ export function getKeyMap(keyLayout) {
         map(keyCodes.K1, BBC.K1);
         map(keyCodes.K4, BBC.K4);
         map(keyCodes.K5, BBC.K5);
-        map(keyCodes.K6, BBC.K6);
+        map(keyCodes.K6, BBC.K6, false);
+        // US Shift+6 = ^, which is BBC HAT_TILDE without shift.
+        // The third element (false) tells the shift override to release
+        // BBC SHIFT while this key is held.
+        map(keyCodes.K6, [...BBC.HAT_TILDE, false], true);
 
         map(keyCodes.MINUS, BBC.MINUS);
 
