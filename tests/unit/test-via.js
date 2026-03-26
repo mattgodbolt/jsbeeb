@@ -200,6 +200,87 @@ describe("Via snapshotState / restoreState", () => {
     });
 });
 
+function makeMockButton(pressed) {
+    return { pressed };
+}
+
+function makeMockPad(buttonsState) {
+    const buttons = [];
+    for (let i = 0; i < 16; i++) {
+        buttons[i] = makeMockButton(buttonsState[i] || false);
+    }
+    return { buttons };
+}
+
+describe("SysVia getJoysticks", () => {
+    let scheduler, cpu;
+
+    beforeEach(() => {
+        scheduler = new Scheduler();
+        cpu = makeFakeCpu();
+    });
+
+    function makeSysViaWithGamepads(pads) {
+        return new SysVia(cpu, scheduler, {
+            video: makeFakeVideo(),
+            soundChip: makeFakeSoundChip(),
+            cmos: makeFakeCmos(),
+            isMaster: false,
+            initialLayout: "physical",
+            getGamepads: () => pads,
+        });
+    }
+
+    it("should return no buttons pressed when no gamepads connected", () => {
+        const via = makeSysViaWithGamepads(null);
+        const result = via.getJoysticks();
+        expect(result.button1).toBe(false);
+        expect(result.button2).toBe(false);
+    });
+
+    it("should detect FIRE1 (button 10) on first gamepad as button1", () => {
+        const pad = makeMockPad({ 10: true });
+        const via = makeSysViaWithGamepads([pad]);
+        const result = via.getJoysticks();
+        expect(result.button1).toBe(true);
+        expect(result.button2).toBe(false);
+    });
+
+    it("should detect FIRE2 (button 11) on first gamepad as button2 with single gamepad", () => {
+        const pad = makeMockPad({ 11: true });
+        const via = makeSysViaWithGamepads([pad]);
+        const result = via.getJoysticks();
+        expect(result.button1).toBe(false);
+        expect(result.button2).toBe(true);
+    });
+
+    it("should detect FIRE1 (button 10) on second gamepad as button2", () => {
+        const pad1 = makeMockPad({});
+        const pad2 = makeMockPad({ 10: true });
+        const via = makeSysViaWithGamepads([pad1, pad2]);
+        const result = via.getJoysticks();
+        expect(result.button1).toBe(false);
+        expect(result.button2).toBe(true);
+    });
+
+    it("should detect FIRE2 (button 11) on first gamepad as button2 even with two gamepads", () => {
+        const pad1 = makeMockPad({ 11: true });
+        const pad2 = makeMockPad({});
+        const via = makeSysViaWithGamepads([pad1, pad2]);
+        const result = via.getJoysticks();
+        expect(result.button1).toBe(false);
+        expect(result.button2).toBe(true);
+    });
+
+    it("should combine mouse and gamepad button states with OR logic", () => {
+        const pad = makeMockPad({});
+        const via = makeSysViaWithGamepads([pad]);
+        via.setJoystickButton(0, true);
+        const result = via.getJoysticks();
+        expect(result.button1).toBe(true);
+    });
+});
+
 describe("SysVia natural keyboard shift override", () => {
     let scheduler, cpu, via;
     const keyCodes = utils.keyCodes;
