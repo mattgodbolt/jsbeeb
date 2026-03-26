@@ -171,8 +171,8 @@ export class TestMachine {
      * VIAs, video, FDC, etc). Returns an opaque state object that
      * can be passed to restore().
      */
-    snapshot() {
-        return this.processor.snapshotState();
+    snapshot({ includeRoms = true } = {}) {
+        return this.processor.snapshotState({ includeRoms });
     }
 
     /**

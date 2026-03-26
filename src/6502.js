@@ -1131,7 +1131,7 @@ export class Cpu6502 extends Base6502 {
         this.resetLine = !resetOn;
     }
 
-    snapshotState() {
+    snapshotState({ includeRoms = false } = {}) {
         return {
             // CPU registers
             a: this.a,
@@ -1155,9 +1155,10 @@ export class Cpu6502 extends Base6502 {
             peripheralCycles: this.peripheralCycles,
             videoCycles: this.videoCycles,
             music5000PageSel: this.music5000PageSel,
-            // RAM (ROMs loaded from disc don't change, but SWRAM does)
+            // RAM only by default; pass includeRoms:true to also capture
+            // sideways ROM/RAM slots (adds ~256KB to the snapshot).
             ram: this.ramRomOs.slice(0, this.romOffset),
-            roms: this.ramRomOs.slice(this.romOffset, this.romOffset + 16 * 16384),
+            roms: includeRoms ? this.ramRomOs.slice(this.romOffset, this.romOffset + 16 * 16384) : undefined,
             // Sub-component state
             scheduler: this.scheduler.snapshotState(),
             sysvia: this.sysvia.snapshotState(),
