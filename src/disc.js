@@ -535,7 +535,10 @@ export function loadSsd(disc, data, isDsd, onChange) {
     const blankSector = new Uint8Array(SsdFormat.sectorSize);
     const numSides = isDsd ? 2 : 1;
     if (data.length % SsdFormat.sectorSize !== 0) {
-        throw new Error("SSD file size is not a multiple of sector size");
+        const paddedLength = Math.ceil(data.length / SsdFormat.sectorSize) * SsdFormat.sectorSize;
+        const padded = new Uint8Array(paddedLength);
+        padded.set(data);
+        data = padded;
     }
     const maxSize = SsdFormat.sectorSize * SsdFormat.sectorsPerTrack * SsdFormat.tracksPerDisc * numSides;
     if (data.length > maxSize) {
