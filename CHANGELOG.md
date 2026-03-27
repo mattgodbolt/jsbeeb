@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.9.1...v1.9.2) (2026-03-27)
+
+
+### Bug Fixes
+
+* replace debugInstruction hook with scheduler for paste ([#609](https://github.com/mattgodbolt/jsbeeb/issues/609)) ([f3a8216](https://github.com/mattgodbolt/jsbeeb/commit/f3a821685237ff2f2c05b840edc582d704678ce5))
+
 ## [1.9.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.9.0...v1.9.1) (2026-03-26)
 
 
