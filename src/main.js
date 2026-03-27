@@ -480,6 +480,7 @@ async function loadSCSIFile(file) {
 }
 
 const $pastetext = $("#paste-text");
+$pastetext.closest("form").on("submit", (event) => event.preventDefault());
 $pastetext.on("paste", function (event) {
     const text = event.originalEvent.clipboardData.getData("text/plain");
     sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
