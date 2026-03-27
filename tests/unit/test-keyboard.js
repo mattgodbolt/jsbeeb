@@ -1,5 +1,6 @@
 import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/keyboard.js";
+import { Scheduler } from "../../src/scheduler.js";
 import * as utils from "../../src/utils.js";
 
 describe("Keyboard", () => {
@@ -39,6 +40,7 @@ describe("Keyboard", () => {
 
         mockProcessor = {
             sysvia: mockSysvia,
+            scheduler: new Scheduler(),
             debugInstruction: {
                 add: vi.fn().mockReturnValue({
                     remove: vi.fn(),
@@ -392,11 +394,54 @@ describe("Keyboard", () => {
         expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.E);
     });
 
-    test("sendRawKeyboardToBBC should setup the keyboard input", () => {
+    test("sendRawKeyboardToBBC should disable keyboard and schedule paste task", () => {
         keyboard.sendRawKeyboardToBBC([utils.BBC.A], false);
 
         expect(mockSysvia.disableKeyboard).toHaveBeenCalled();
-        expect(mockProcessor.debugInstruction.add).toHaveBeenCalled();
+        expect(keyboard.isPasting).toBe(true);
+    });
+
+    test("sendRawKeyboardToBBC should deliver keys via scheduler and re-enable keyboard", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A], false);
+
+        // First scheduler fire: presses the key
+        mockProcessor.scheduler.polltime(1);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.A);
+        expect(keyboard.isPasting).toBe(true);
+
+        // Second scheduler fire after delay: releases key, sees empty queue, re-enables keyboard
+        const delayCycles = (50 * Math.floor(mockProcessor.cpuMultiplier * 2000000)) / 1000;
+        mockProcessor.scheduler.polltime(delayCycles);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
+        expect(keyboard.isPasting).toBe(false);
+    });
+
+    test("cancelPaste should stop paste and re-enable keyboard", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
+        mockProcessor.scheduler.polltime(1); // deliver first key
+
+        keyboard.cancelPaste();
+
+        expect(keyboard.isPasting).toBe(false);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
+    });
+
+    test("Escape should cancel paste during keyDown", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B], false);
+        keyboard.setRunning(true);
+
+        const escEvent = {
+            which: utils.keyCodes.ESCAPE,
+            location: 0,
+            preventDefault: vi.fn(),
+            altKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+        };
+        keyboard.keyDown(escEvent);
+
+        expect(keyboard.isPasting).toBe(false);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
     });
 
     test("postFrameShouldPause should handle single step", () => {
