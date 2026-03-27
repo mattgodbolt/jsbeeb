@@ -40,6 +40,13 @@ export class Keyboard extends EventEmitter {
         this.lastShiftLocation = 1;
         this.lastCtrlLocation = 1;
         this.lastAltLocation = 1;
+
+        // Paste state — uses a scheduler task instead of a debugInstruction
+        // hook so the CPU can remain on the fast execution path during paste.
+        this._pasteKeys = [];
+        this._pasteLastChar = undefined;
+        this._pasteClocksPerMs = 0;
+        this._pasteTask = this.processor.scheduler.newTask(() => this._deliverPasteKey());
     }
 
     /**
@@ -210,6 +217,11 @@ export class Keyboard extends EventEmitter {
         const code = this.keyCode(evt);
         evt.preventDefault();
 
+        if (this.isPasting && code === utils.keyCodes.ESCAPE) {
+            this.cancelPaste();
+            return;
+        }
+
         // Special handling cases that we always want to keep within keyboard.js
         const isSpecialHandled = this._handleSpecialKeys(code);
         if (isSpecialHandled) return;
@@ -314,10 +326,10 @@ export class Keyboard extends EventEmitter {
      * @param {boolean} checkCapsAndShiftLocks - Whether to check caps and shift locks
      */
     sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
-        let lastChar;
-        let nextKeyMillis = 0;
+        if (this.isPasting) this.cancelPaste();
+
         this.processor.sysvia.disableKeyboard();
-        const clocksPerSecond = Math.floor(this.processor.cpuMultiplier * 2000000);
+        this._pasteClocksPerMs = Math.floor(this.processor.cpuMultiplier * 2000000) / 1000;
 
         if (checkCapsAndShiftLocks) {
             let toggleKey = null;
@@ -329,45 +341,69 @@ export class Keyboard extends EventEmitter {
             }
         }
 
-        const sendCharHook = this.processor.debugInstruction.add(() => {
-            const millis = this.processor.cycleSeconds * 1000 + this.processor.currentCycles / (clocksPerSecond / 1000);
-            if (millis < nextKeyMillis) {
-                return;
-            }
+        this._pasteKeys = keysToSend;
+        this._pasteLastChar = undefined;
+        this._pasteTask.schedule(0);
+    }
 
-            if (lastChar && lastChar !== utils.BBC.SHIFT) {
-                this.processor.sysvia.keyToggleRaw(lastChar);
-            }
+    /**
+     * Scheduler callback that delivers one key per invocation, rescheduling
+     * itself for the next key. Replaces the old debugInstruction hook so the
+     * CPU stays on the fast execution path during paste.
+     * @private
+     */
+    _deliverPasteKey() {
+        if (this._pasteLastChar && this._pasteLastChar !== utils.BBC.SHIFT) {
+            this.processor.sysvia.keyToggleRaw(this._pasteLastChar);
+        }
 
-            if (keysToSend.length === 0) {
-                // Finished
-                this.processor.sysvia.enableKeyboard();
-                sendCharHook.remove();
-                return;
-            }
+        if (this._pasteKeys.length === 0) {
+            this._pasteLastChar = undefined;
+            this.processor.sysvia.enableKeyboard();
+            return;
+        }
 
-            const ch = keysToSend[0];
-            const debounce = lastChar === ch;
-            lastChar = ch;
-            if (debounce) {
-                lastChar = undefined;
-                nextKeyMillis = millis + 30;
-                return;
-            }
+        const ch = this._pasteKeys[0];
+        const debounce = this._pasteLastChar === ch;
+        this._pasteLastChar = ch;
+        if (debounce) {
+            this._pasteLastChar = undefined;
+            this._pasteTask.schedule(30 * this._pasteClocksPerMs);
+            return;
+        }
 
-            let time = 50;
-            if (typeof lastChar === "number") {
-                time = lastChar;
-                lastChar = undefined;
-            } else {
-                this.processor.sysvia.keyToggleRaw(lastChar);
-            }
+        let delayMs = 50;
+        if (typeof this._pasteLastChar === "number") {
+            delayMs = this._pasteLastChar;
+            this._pasteLastChar = undefined;
+        } else {
+            this.processor.sysvia.keyToggleRaw(this._pasteLastChar);
+        }
 
-            // remove first character
-            keysToSend.shift();
+        this._pasteKeys.shift();
+        this._pasteTask.schedule(delayMs * this._pasteClocksPerMs);
+    }
 
-            nextKeyMillis = millis + time;
-        });
+    /**
+     * Cancel any in-progress paste operation.
+     */
+    cancelPaste() {
+        if (!this.isPasting) return;
+        this._pasteTask.cancel();
+        if (this._pasteLastChar && this._pasteLastChar !== utils.BBC.SHIFT) {
+            this.processor.sysvia.keyToggleRaw(this._pasteLastChar);
+        }
+        this._pasteLastChar = undefined;
+        this._pasteKeys = [];
+        this.processor.sysvia.enableKeyboard();
+    }
+
+    /**
+     * Whether a paste operation is currently in progress.
+     * @returns {boolean}
+     */
+    get isPasting() {
+        return this._pasteKeys.length > 0 || this._pasteTask.scheduled();
     }
 
     /**

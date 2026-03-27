@@ -1,5 +1,6 @@
 import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/keyboard.js";
+import { Scheduler } from "../../src/scheduler.js";
 import * as utils from "../../src/utils.js";
 
 describe("Keyboard", () => {
@@ -39,11 +40,7 @@ describe("Keyboard", () => {
 
         mockProcessor = {
             sysvia: mockSysvia,
-            debugInstruction: {
-                add: vi.fn().mockReturnValue({
-                    remove: vi.fn(),
-                }),
-            },
+            scheduler: new Scheduler(),
             setReset: vi.fn(),
             cpuMultiplier: 1,
             cycleSeconds: 0,
@@ -392,11 +389,102 @@ describe("Keyboard", () => {
         expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.E);
     });
 
-    test("sendRawKeyboardToBBC should setup the keyboard input", () => {
+    test("sendRawKeyboardToBBC should disable keyboard and schedule paste task", () => {
         keyboard.sendRawKeyboardToBBC([utils.BBC.A], false);
 
         expect(mockSysvia.disableKeyboard).toHaveBeenCalled();
-        expect(mockProcessor.debugInstruction.add).toHaveBeenCalled();
+        expect(keyboard.isPasting).toBe(true);
+    });
+
+    test("sendRawKeyboardToBBC should deliver keys via scheduler and re-enable keyboard", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A], false);
+
+        // First scheduler fire: presses the key
+        mockProcessor.scheduler.polltime(1);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.A);
+        expect(keyboard.isPasting).toBe(true);
+
+        // Second scheduler fire after delay: releases key, sees empty queue, re-enables keyboard
+        const delayCycles = (50 * Math.floor(mockProcessor.cpuMultiplier * 2000000)) / 1000;
+        mockProcessor.scheduler.polltime(delayCycles);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
+        expect(keyboard.isPasting).toBe(false);
+    });
+
+    test("cancelPaste should stop paste and re-enable keyboard", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
+        mockProcessor.scheduler.polltime(1); // deliver first key
+
+        keyboard.cancelPaste();
+
+        expect(keyboard.isPasting).toBe(false);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
+    });
+
+    test("Escape should cancel paste during keyDown", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B], false);
+        keyboard.setRunning(true);
+
+        const escEvent = {
+            which: utils.keyCodes.ESCAPE,
+            location: 0,
+            preventDefault: vi.fn(),
+            altKey: false,
+            ctrlKey: false,
+            shiftKey: false,
+        };
+        keyboard.keyDown(escEvent);
+
+        expect(keyboard.isPasting).toBe(false);
+        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
+    });
+
+    test("sendRawKeyboardToBBC should handle numeric delay entries", () => {
+        keyboard.sendRawKeyboardToBBC([1000, utils.BBC.A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * 2000000) / 1000;
+
+        // First fire: numeric delay consumed, no key toggled yet
+        mockProcessor.scheduler.polltime(1);
+        expect(mockSysvia.keyToggleRaw).not.toHaveBeenCalled();
+        expect(keyboard.isPasting).toBe(true);
+
+        // After 1000ms delay: key A delivered
+        mockProcessor.scheduler.polltime(1000 * clocksPerMs);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.A);
+    });
+
+    test("sendRawKeyboardToBBC should debounce consecutive identical keys", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * 2000000) / 1000;
+
+        // First fire: press A
+        mockProcessor.scheduler.polltime(1);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledTimes(1);
+
+        // Second fire after 50ms: release A, then debounce (same char)
+        mockProcessor.scheduler.polltime(50 * clocksPerMs);
+        // keyToggleRaw called twice: once to release A, once because debounce path
+        // releases previous char then skips pressing
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledTimes(2);
+
+        // After 30ms debounce: press A again
+        mockProcessor.scheduler.polltime(30 * clocksPerMs);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledTimes(3);
+    });
+
+    test("sendRawKeyboardToBBC while already pasting should cancel previous paste", () => {
+        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
+        mockProcessor.scheduler.polltime(1); // deliver first key
+
+        // Start a new paste mid-stream
+        keyboard.sendRawKeyboardToBBC([utils.BBC.X], false);
+
+        // Old paste should be cancelled, new one in progress
+        expect(keyboard.isPasting).toBe(true);
+
+        // Deliver new paste
+        mockProcessor.scheduler.polltime(1);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.X);
     });
 
     test("postFrameShouldPause should handle single step", () => {
