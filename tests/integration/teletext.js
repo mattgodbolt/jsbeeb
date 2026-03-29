@@ -127,8 +127,8 @@ describe("Test other teletext test pages", { timeout: 30000 }, () => {
         // but pos 5 (Steady+held) and pos 6-7 should show red (Steady applies "Set At").
         await testMachine.type("CLS:VDU &91,&88,&BF,&BF,&9E,&89,&BF,&BF");
         await testMachine.runUntilInput();
-        await testMachine.runToCursorState(true);
         await testMachine.runToFlashState(true);
+        await testMachine.runToCursorState(true);
         await compare(video, testMachine, `expected_steady_set_at_flash_1.png`);
     });
     it("should work with the alternative engineer test page bug 469", async () => {
