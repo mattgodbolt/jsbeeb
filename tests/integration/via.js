@@ -2,8 +2,8 @@ import { describe, it } from "vitest";
 import { TestMachine } from "../test-machine.js";
 import assert from "assert";
 
-async function runViaProgram(source) {
-    const testMachine = new TestMachine();
+async function runViaProgram(source, model) {
+    const testMachine = new TestMachine(model);
     await testMachine.initialise();
     await testMachine.runUntilInput();
     await testMachine.loadBasic(source);
@@ -627,8 +627,10 @@ PRINT ?&FE6A
 ?R% = ?&FE6A`);
         expectArray(testMachine, [17]); // checked on a BBC Master
     });
-    // TODO: check on a real BBC and update the `[13]` if that's not right
-    it.skip("VIA.C4", async function () {
+    // ASL abs,X is a read-modify-write instruction. The 6502 writes back
+    // the original value before the modified value; the 65C12 doesn't.
+    // This gives different cycle counts on Model B vs Master.
+    it("VIA.C4 (Model B)", async function () {
         const testMachine = await runViaProgram(`
 DIM MC% 256
 R% = ${resultAddress}
@@ -651,6 +653,34 @@ RTS
 CALL MC%
 PRINT ?&FE6A
 ?R% = ?&FE6A`);
+        expectArray(testMachine, [12]);
+    });
+    it("VIA.C4 (Master)", async function () {
+        const testMachine = await runViaProgram(
+            `
+DIM MC% 256
+R% = ${resultAddress}
+P% = MC%
+[
+OPT 2
+SEI
+LDX #0
+LDY #0
+LDA #20
+STA &FE64
+LDA #0
+STA &FE65
+ASL &FE64,X
+LDA &FE64
+STA &FE6A
+CLI
+RTS
+]
+CALL MC%
+PRINT ?&FE6A
+?R% = ?&FE6A`,
+            "Master",
+        );
         expectArray(testMachine, [13]); // checked on a BBC Master
     });
     it("VIA.C5", async function () {
