@@ -395,7 +395,7 @@ export class Teletext {
         this.prevCol = this.col;
         this.curGlyphs = this.nextGlyphs;
 
-        const prevFlash = this.flash;
+        let prevFlash = this.flash;
         if (data < 0x20) {
             data = this.handleControlCode(data);
         } else if (this.gfx) {
@@ -414,6 +414,11 @@ export class Teletext {
             }
         }
         let chardef = this.curGlyphs[(data - 32) * 20 + scanline];
+
+        // Flash (code 8) is "Set After" — prevFlash retains the pre-control-code state.
+        // Steady (code 9) is "Set At" — update prevFlash to the new state so the
+        // cell containing the Steady code is not blanked during flash.
+        if (prevFlash && !this.flash) prevFlash = false;
 
         if ((prevFlash && this.flashOn) || (this.secondHalfOfDouble && !this.dbl)) {
             const backgroundColour = this.colour[(this.bg & 7) << 5];
