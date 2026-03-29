@@ -100,6 +100,19 @@ export class TestMachine {
         throw new Error(`Cursor did not reach state ${on} in time (cursorOnThisFrame=${video.cursorOnThisFrame})`);
     }
 
+    /**
+     * Run until the teletext flash state reaches the desired phase.
+     * @param {boolean} on - true for flash-on (flashing cells blanked), false for flash-off
+     */
+    async runToFlashState(on) {
+        const teletext = this.processor.video.teletext;
+        for (let i = 0; i < 100; i++) {
+            if (teletext.flashOn === on) return;
+            await this.runFor(40000);
+        }
+        throw new Error(`Flash did not reach state ${on} in time (flashOn=${teletext.flashOn})`);
+    }
+
     async runUntilVblank() {
         let hit = false;
         if (this.processor.isMaster) throw new Error("Not yet implemented");
