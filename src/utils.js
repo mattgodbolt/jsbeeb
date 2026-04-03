@@ -18,26 +18,39 @@ function readU32(buf, off) {
 }
 
 // Find the End of Central Directory record by scanning backwards.
+// EOCD is in the last 65557 bytes (22-byte fixed record + up to 65535-byte comment).
 function findEocd(buf) {
-    // EOCD is at least 22 bytes; search backwards for the signature.
-    for (let i = buf.length - 22; i >= 0; i--) {
+    const searchStart = Math.max(0, buf.length - 65557);
+    for (let i = buf.length - 22; i >= searchStart; i--) {
         if (readU32(buf, i) === ZipEocdSig) return i;
     }
     throw new Error("Not a ZIP file: EOCD not found");
 }
 
-async function inflateRaw(data) {
-    const ds = new DecompressionStream("deflate-raw");
+// Pipe data through a DecompressionStream and return the result.
+// Starts the read loop before writing to avoid backpressure deadlock.
+// On error, Node's DecompressionStream rejects multiple internal promises
+// (write, close, and closed); we catch the write side to prevent unhandled
+// rejections and let the error surface through the read side.
+export async function decompress(data, format) {
+    const ds = new DecompressionStream(format);
     const writer = ds.writable.getWriter();
-    writer.write(data);
-    writer.close();
     const reader = ds.readable.getReader();
     const chunks = [];
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-    }
+    const readPromise = (async () => {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+    })();
+    const writePromise = (async () => {
+        await writer.write(data);
+        await writer.close();
+    })().catch(() => {});
+    writer.closed.catch(() => {});
+    await readPromise;
+    await writePromise;
     if (chunks.length === 1) return chunks[0];
     const totalLen = chunks.reduce((s, c) => s + c.length, 0);
     const out = new Uint8Array(totalLen);
@@ -55,6 +68,7 @@ async function unzip(buf) {
     const eocdOff = findEocd(buf);
     const cdOff = readU32(buf, eocdOff + 16);
     const cdCount = readU16(buf, eocdOff + 10);
+    const decoder = new TextDecoder();
 
     const files = {};
     let pos = cdOff;
@@ -66,7 +80,7 @@ async function unzip(buf) {
         const extraLen = readU16(buf, pos + 30);
         const commentLen = readU16(buf, pos + 32);
         const localHeaderOff = readU32(buf, pos + 42);
-        const name = new TextDecoder().decode(buf.subarray(pos + 46, pos + 46 + nameLen));
+        const name = decoder.decode(buf.subarray(pos + 46, pos + 46 + nameLen));
         pos += 46 + nameLen + extraLen + commentLen;
 
         // Read local file header to find actual data offset.
@@ -74,12 +88,14 @@ async function unzip(buf) {
         const localNameLen = readU16(buf, localHeaderOff + 26);
         const localExtraLen = readU16(buf, localHeaderOff + 28);
         const dataOff = localHeaderOff + 30 + localNameLen + localExtraLen;
-        const raw = buf.subarray(dataOff, dataOff + compressedSize);
+        const dataEnd = dataOff + compressedSize;
+        if (dataEnd > buf.length) throw new Error(`Truncated ZIP entry data for ${name}`);
+        const raw = buf.subarray(dataOff, dataEnd);
 
         if (method === ZipMethodStored) {
             files[name] = raw.slice();
         } else if (method === ZipMethodDeflate) {
-            files[name] = await inflateRaw(raw);
+            files[name] = await decompress(raw, "deflate-raw");
         } else {
             throw new Error(`Unsupported ZIP compression method ${method} for ${name}`);
         }
@@ -995,28 +1011,7 @@ export function readFloat32(data, offset) {
 export async function ungzip(data) {
     // Use the browser/Node native DecompressionStream, which handles both
     // single-member and multi-member (concatenated) gzip streams correctly.
-    const ds = new DecompressionStream("gzip");
-    const writer = ds.writable.getWriter();
-    // Catch the writer side so errors don't surface as unhandled rejections;
-    // the read loop below will see the same error via the readable side.
-    writer.write(data).catch(() => {});
-    writer.close().catch(() => {});
-    const reader = ds.readable.getReader();
-    const chunks = [];
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-    }
-    if (chunks.length === 1) return chunks[0];
-    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-    const out = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const chunk of chunks) {
-        out.set(chunk, offset);
-        offset += chunk.length;
-    }
-    return out;
+    return decompress(data, "gzip");
 }
 
 export class DataStream {
