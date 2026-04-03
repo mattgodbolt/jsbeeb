@@ -3,6 +3,7 @@
 // Supports methods 0 (stored) and 8 (deflate), which covers essentially
 // all BBC Micro disc/ROM image archives.
 
+const ZipLocalHeaderSig = 0x04034b50;
 const ZipCentralDirSig = 0x02014b50;
 const ZipEocdSig = 0x06054b50;
 const ZipMethodStored = 0;
@@ -69,6 +70,7 @@ async function unzip(buf) {
         pos += 46 + nameLen + extraLen + commentLen;
 
         // Read local file header to find actual data offset.
+        if (readU32(buf, localHeaderOff) !== ZipLocalHeaderSig) throw new Error(`Bad local file header for ${name}`);
         const localNameLen = readU16(buf, localHeaderOff + 26);
         const localExtraLen = readU16(buf, localHeaderOff + 28);
         const dataOff = localHeaderOff + 30 + localNameLen + localExtraLen;
