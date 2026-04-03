@@ -10,7 +10,7 @@
   "version": "1.9.1",
   "//": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
-    "node": "22"
+    "node": ">=22.12.0"
   },
   "type": "module",
   "main": "./src/app/app.js",
