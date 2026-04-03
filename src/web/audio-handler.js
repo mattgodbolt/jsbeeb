@@ -121,9 +121,9 @@ export class AudioHandler {
     }
 
     checkStatus() {
-        if (!this.audioContext) return;
+        if (!this.audioContext && !this.audioContextM5000) return;
         const suspended =
-            this.audioContext.state === "suspended" ||
+            (this.audioContext && this.audioContext.state === "suspended") ||
             (this.audioContextM5000 && this.audioContextM5000.state === "suspended");
         if (suspended) this.warningNode.fadeIn();
         else this.warningNode.fadeOut();
