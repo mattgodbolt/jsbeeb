@@ -1,6 +1,5 @@
 "use strict";
-import { ungzip as pakoUngzip } from "pako";
-import { unzipSync } from "fflate";
+import { gunzipSync, inflateSync, unzipSync } from "fflate";
 
 export const runningInNode = typeof window === "undefined";
 
@@ -907,9 +906,71 @@ export function readFloat32(data, offset) {
     return tempBufF32[0];
 }
 
+// Skip past a gzip header (RFC 1952) starting at `pos`, returning the
+// offset of the first byte of the deflate payload.
+function skipGzipHeader(data, pos) {
+    const flags = data[pos + 3];
+    let i = pos + 10; // fixed header
+    if (flags & 0x04) i += 2 + (data[i] | (data[i + 1] << 8)); // FEXTRA
+    if (flags & 0x08) while (data[i++] !== 0); // FNAME
+    if (flags & 0x10) while (data[i++] !== 0); // FCOMMENT
+    if (flags & 0x02) i += 2; // FHCRC
+    return i;
+}
+
+// Decompress one gzip member at `pos`.  Returns { data, end } where `end`
+// is the byte offset immediately after the member's trailer.
+function gunzipMember(buf, pos) {
+    const hdr = skipGzipHeader(buf, pos);
+    const result = inflateSync(buf.subarray(hdr));
+    const isize = result.length >>> 0;
+    // Find the 8-byte trailer (CRC32 + ISIZE) by scanning for a position
+    // whose ISIZE field matches, followed by EOF or another gzip header.
+    for (let t = hdr; t <= buf.length - 8; t++) {
+        const s = buf[t + 4] | (buf[t + 5] << 8) | (buf[t + 6] << 16) | ((buf[t + 7] << 24) >>> 0);
+        if (s !== isize) continue;
+        const end = t + 8;
+        if (end === buf.length || (buf[end] === 0x1f && buf[end + 1] === 0x8b)) return { data: result, end };
+    }
+    return { data: result, end: buf.length };
+}
+
+const GzipMagic0 = 0x1f;
+const GzipMagic1 = 0x8b;
+
+function isGzipHeader(data, pos) {
+    return pos + 1 < data.length && data[pos] === GzipMagic0 && data[pos + 1] === GzipMagic1;
+}
+
 export function ungzip(data) {
     try {
-        return pakoUngzip(data);
+        // Fast path: single-member gzip (the common case).
+        // A gzip member is at least 18 bytes; check for a second header after that.
+        let multiMember = false;
+        for (let i = 18; i < data.length - 1; i++) {
+            if (isGzipHeader(data, i) && data[i + 2] === 0x08) {
+                multiMember = true;
+                break;
+            }
+        }
+        if (!multiMember) return gunzipSync(data);
+
+        // Multi-member: decompress each member and concatenate.
+        const chunks = [];
+        let pos = 0;
+        while (isGzipHeader(data, pos)) {
+            const member = gunzipMember(data, pos);
+            chunks.push(member.data);
+            pos = member.end;
+        }
+        const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+        const out = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const chunk of chunks) {
+            out.set(chunk, offset);
+            offset += chunk.length;
+        }
+        return out;
     } catch (e) {
         throw new Error("Unable to ungzip: " + e.message, { cause: e });
     }
