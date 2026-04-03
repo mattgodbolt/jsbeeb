@@ -32,6 +32,7 @@ import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, modelsCompatible } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
+import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
 import {
@@ -1497,6 +1498,8 @@ async function loadStateFromFile(file) {
         let snapshot;
         if (isBemSnapshot(arrayBuffer)) {
             snapshot = await parseBemSnapshot(arrayBuffer);
+        } else if (isUefSnapshot(arrayBuffer)) {
+            snapshot = parseUefSnapshot(arrayBuffer);
         } else {
             // Detect gzip (magic bytes 0x1f 0x8b) or plain JSON
             const bytes = new Uint8Array(arrayBuffer);
@@ -1531,7 +1534,13 @@ async function loadStateFromFile(file) {
 
 function isSnapshotFile(filename) {
     const lower = filename.toLowerCase();
-    return lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz");
+    return (
+        lower.endsWith(".snp") ||
+        lower.endsWith(".json") ||
+        lower.endsWith(".json.gz") ||
+        lower.endsWith(".gz") ||
+        lower.endsWith(".uef")
+    );
 }
 
 $("#load-state").on("change", async function (event) {
