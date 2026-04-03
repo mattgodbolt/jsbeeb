@@ -10,7 +10,7 @@
   "version": "1.9.1",
   "//": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
-    "node": "22"
+    "node": ">=22.12.0"
   },
   "type": "module",
   "main": "./src/app/app.js",
@@ -51,11 +51,11 @@
     "npm-run-all2": "^8.0.4",
     "pixelmatch": "^7.1.0",
     "prettier": "^3.8.1",
-    "vite": "^7.3.1",
+    "vite": "^8.0.3",
     "vitest": "^4.0.10"
   },
   "optionalDependencies": {
-    "electron": "^40.4.1",
+    "electron": "^41.1.1",
     "electron-builder": "^26.8.1",
     "electron-store": "^11.0.2"
   },
