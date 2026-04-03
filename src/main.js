@@ -620,6 +620,7 @@ processor = new Cpu6502(model, {
     video,
     soundChip: audioHandler.soundChip,
     ddNoise: audioHandler.ddNoise,
+    relayNoise: audioHandler.relayNoise,
     music5000: model.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
     config: emulationConfig,

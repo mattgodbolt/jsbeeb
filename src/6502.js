@@ -9,6 +9,7 @@ import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
+import { FakeRelayNoise } from "./relaynoise.js";
 
 const signExtend = utils.signExtend;
 
@@ -573,7 +574,18 @@ function is1MHzAccess(addr) {
 export class Cpu6502 extends Base6502 {
     constructor(
         model,
-        { dbgr, video, soundChip, ddNoise, music5000, cmos, config, econet, cycleAccurate = true } = {},
+        {
+            dbgr,
+            video,
+            soundChip,
+            ddNoise,
+            relayNoise = new FakeRelayNoise(),
+            music5000,
+            cmos,
+            config,
+            econet,
+            cycleAccurate = true,
+        } = {},
     ) {
         super(model, { cycleAccurate });
         this.config = fixUpConfig(config);
@@ -587,6 +599,7 @@ export class Cpu6502 extends Base6502 {
         this.soundChip = soundChip;
         this.music5000 = music5000;
         this.ddNoise = ddNoise;
+        this.relayNoise = relayNoise;
         this.memStatOffsetByIFetchBank = 0;
         this.memStatOffset = 0;
         this.memStat = new Uint8Array(512);
@@ -633,7 +646,7 @@ export class Cpu6502 extends Base6502 {
             getGamepads: this.config.getGamepads,
         });
         this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
-        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen);
+        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen, this.relayNoise);
         this.serial = new Serial(this.acia);
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.soundChip.setScheduler(this.scheduler);

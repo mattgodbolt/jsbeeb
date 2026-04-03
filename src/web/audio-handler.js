@@ -1,7 +1,9 @@
 import { SmoothieChart, TimeSeries } from "smoothie";
 import { FakeSoundChip, SoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
+import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
+import { createAudioContext } from "../audio-utils.js";
 
 // Using this approach means when jsbeeb is embedded in other projects, vite doesn't have a fit.
 // See https://github.com/vitejs/vite/discussions/6459
@@ -23,18 +25,16 @@ export class AudioHandler {
         this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
         this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
         this.chart.streamTo(statsNode, 100);
-        /*global webkitAudioContext*/
-        this.audioContext =
-            typeof AudioContext !== "undefined"
-                ? new AudioContext()
-                : typeof webkitAudioContext !== "undefined"
-                  ? new webkitAudioContext()
-                  : null;
+        this.audioContext = createAudioContext();
         this._jsAudioNode = null;
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
             this.soundChip = new SoundChip((buffer, time) => this._onBuffer(buffer, time));
-            this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext);
+            // Master gain node for all sample-based audio (disc, relay, etc.).
+            this.masterGain = this.audioContext.createGain();
+            this.masterGain.connect(this.audioContext.destination);
+            this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
+            this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
             this._setup(audioFilterFreq, audioFilterQ).then();
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
@@ -52,18 +52,14 @@ export class AudioHandler {
             }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
+            this.relayNoise = new FakeRelayNoise();
         }
 
         this.warningNode.on("mousedown", () => this.tryResume());
         this.warningNode.toggle(false);
 
         // Initialise Music 5000 audio context
-        this.audioContextM5000 =
-            typeof AudioContext !== "undefined"
-                ? new AudioContext({ sampleRate: 46875 })
-                : typeof webkitAudioContext !== "undefined"
-                  ? new webkitAudioContext({ sampleRate: 46875 })
-                  : null;
+        this.audioContextM5000 = createAudioContext({ sampleRate: 46875 });
 
         if (this.audioContextM5000 && this.audioContextM5000.audioWorklet) {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
@@ -125,22 +121,26 @@ export class AudioHandler {
     }
 
     checkStatus() {
-        if (!this.audioContext) return;
-        if (this.audioContext.state === "suspended") this.warningNode.fadeIn();
-        if (this.audioContext.state === "running") this.warningNode.fadeOut();
+        if (!this.audioContext && !this.audioContextM5000) return;
+        const suspended =
+            (this.audioContext && this.audioContext.state === "suspended") ||
+            (this.audioContextM5000 && this.audioContextM5000.state === "suspended");
+        if (suspended) this.warningNode.fadeIn();
+        else this.warningNode.fadeOut();
     }
 
     async initialise() {
         await this.ddNoise.initialise();
+        await this.relayNoise.initialise();
     }
 
     mute() {
         this.soundChip.mute();
-        this.ddNoise.mute();
+        if (this.masterGain) this.masterGain.gain.value = 0;
     }
 
     unmute() {
         this.soundChip.unmute();
-        this.ddNoise.unmute();
+        if (this.masterGain) this.masterGain.gain.value = 1;
     }
 }
