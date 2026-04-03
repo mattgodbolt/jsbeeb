@@ -121,10 +121,12 @@ export function firShaderPlugin() {
                 `[FIR Plugin] Generated ${params.taps}-tap filter @ ${params.cutoff} MHz for ${filePath.split("/").pop()}`,
             );
 
-            // Return as a JavaScript module exporting the string
+            // Return as a JavaScript module exporting the string.
+            // moduleType is required by Vite 8+ for non-.js file extensions.
             return {
                 code: `export default ${JSON.stringify(transformedCode)}`,
                 map: null,
+                moduleType: "js",
             };
         },
     };
