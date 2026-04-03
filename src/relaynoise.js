@@ -1,7 +1,6 @@
 "use strict";
 // Cassette motor relay click sound (issue #296).
-// The WAV files are placeholders — replace with recordings from a real BBC
-// Micro relay (Takamisawa VB-5STB-E) when available.
+// Audio samples recorded from a real BBC Master cassette motor relay.
 import * as utils from "./utils.js";
 
 const Volume = 0.4;
@@ -17,8 +16,8 @@ export class RelayNoise {
 
     async initialise() {
         const paths = {
-            motorOn: "sounds/tape/motor_on.wav",
-            motorOff: "sounds/tape/motor_off.wav",
+            motorOn: "sounds/tape/motor_on.mp3",
+            motorOff: "sounds/tape/motor_off.mp3",
         };
         for (const [key, path] of Object.entries(paths)) {
             const data = await utils.loadData(path);
