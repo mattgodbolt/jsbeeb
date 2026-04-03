@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.10.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.9.1...v1.10.0) (2026-04-03)
+
+
+### Features
+
+* cassette motor relay click sound with audio refactor ([#582](https://github.com/mattgodbolt/jsbeeb/issues/582)) ([05906c3](https://github.com/mattgodbolt/jsbeeb/commit/05906c380153e278e542da7336dfbac652a17710))
+
+
+### Bug Fixes
+
+* apply Steady teletext code as Set At, not Set After ([#613](https://github.com/mattgodbolt/jsbeeb/issues/613)) ([8625dc5](https://github.com/mattgodbolt/jsbeeb/commit/8625dc5ad62569ee10becf28ca25331584183b3a))
+* replace debugInstruction hook with scheduler for paste ([#609](https://github.com/mattgodbolt/jsbeeb/issues/609)) ([f3a8216](https://github.com/mattgodbolt/jsbeeb/commit/f3a821685237ff2f2c05b840edc582d704678ce5))
+
 ## [1.9.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.9.0...v1.9.1) (2026-03-26)
 
 
