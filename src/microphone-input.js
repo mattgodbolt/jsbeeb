@@ -40,6 +40,12 @@ export class MicrophoneInput extends AnalogueSource {
             try {
                 console.log("MicrophoneInput: Creating audio context");
                 this.audioContext = createAudioContext();
+                if (!this.audioContext) {
+                    this.errorMessage = "WebAudio is not available; could not create audio context";
+                    console.error("MicrophoneInput:", this.errorMessage);
+                    if (this.errorCallback) this.errorCallback(this.errorMessage);
+                    return false;
+                }
                 console.log("MicrophoneInput: Audio context created:", this.audioContext.state);
             } catch (error) {
                 console.error("MicrophoneInput: Error creating audio context:", error);

@@ -29,8 +29,12 @@ export class SamplePlayer {
             entries.map(async ([, path]) => {
                 const data = await utils.loadData(path);
                 // Safari doesn't support the promise form of decodeAudioData.
-                return new Promise((resolve) => {
-                    this.context.decodeAudioData(data.buffer, (buf) => resolve(buf));
+                return new Promise((resolve, reject) => {
+                    this.context.decodeAudioData(
+                        data.buffer,
+                        (buf) => resolve(buf),
+                        (err) => reject(err),
+                    );
                 });
             }),
         );

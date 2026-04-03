@@ -9,6 +9,7 @@ import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
+import { FakeRelayNoise } from "./relaynoise.js";
 
 const signExtend = utils.signExtend;
 
@@ -573,7 +574,18 @@ function is1MHzAccess(addr) {
 export class Cpu6502 extends Base6502 {
     constructor(
         model,
-        { dbgr, video, soundChip, ddNoise, relayNoise, music5000, cmos, config, econet, cycleAccurate = true } = {},
+        {
+            dbgr,
+            video,
+            soundChip,
+            ddNoise,
+            relayNoise = new FakeRelayNoise(),
+            music5000,
+            cmos,
+            config,
+            econet,
+            cycleAccurate = true,
+        } = {},
     ) {
         super(model, { cycleAccurate });
         this.config = fixUpConfig(config);
