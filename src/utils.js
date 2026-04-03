@@ -83,6 +83,8 @@ async function unzip(buf) {
     for (let i = 0; i < cdCount; i++) {
         if (pos + 46 > buf.length || readU32(buf, pos) !== ZipCentralDirSig)
             throw new Error("Bad central directory entry");
+        const flags = readU16(buf, pos + 8);
+        if (flags & 0x0001) throw new Error("Encrypted ZIP entries are not supported");
         const method = readU16(buf, pos + 10);
         const compressedSize = readU32(buf, pos + 20);
         const nameLen = readU16(buf, pos + 28);

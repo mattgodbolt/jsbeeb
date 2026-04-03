@@ -435,10 +435,6 @@ function readString(data, pos) {
     return str;
 }
 
-async function inflateRaw(compressedData) {
-    return decompress(compressedData, "deflate");
-}
-
 function parseBemV3(buffer) {
     const bytes = new Uint8Array(buffer);
     let offset = 8; // Skip "BEMSNAP3" signature
@@ -495,7 +491,7 @@ function parseBemV3(buffer) {
     if (memSection) {
         // Memory is zlib-compressed; decompression is async.
         // Decompressed layout: 2 bytes (fe30, fe34) + 64KB RAM + 256KB ROM
-        return inflateRaw(memSection.data).then((memData) => {
+        return decompress(memSection.data, "deflate").then((memData) => {
             cpuState.fe30 = memData[0];
             cpuState.fe34 = memData[1];
             const ramStart = 2;
