@@ -1,4 +1,5 @@
 import { AnalogueSource } from "./analogue-source.js";
+import { createAudioContext } from "./audio-utils.js";
 
 /**
  * Provides microphone input as an analogue source for the BBC Micro's ADC
@@ -38,7 +39,7 @@ export class MicrophoneInput extends AnalogueSource {
         if (!this.audioContext) {
             try {
                 console.log("MicrophoneInput: Creating audio context");
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.audioContext = createAudioContext();
                 console.log("MicrophoneInput: Audio context created:", this.audioContext.state);
             } catch (error) {
                 console.error("MicrophoneInput: Error creating audio context:", error);
