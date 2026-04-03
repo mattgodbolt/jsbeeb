@@ -7,10 +7,10 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function testOneFile(file) {
+async function testOneFile(file) {
     const compressed = new Uint8Array(fs.readFileSync(`${file}.gz`));
     const expected = new Uint8Array(fs.readFileSync(file));
-    expect(utils.ungzip(compressed)).toEqual(expected);
+    expect(await utils.ungzip(compressed)).toEqual(expected);
 }
 
 describe("gzip tests", function () {

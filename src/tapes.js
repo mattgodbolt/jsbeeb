@@ -245,8 +245,8 @@ class TapefileTape {
     }
 }
 
-export function loadTapeFromData(name, data) {
-    const stream = new utils.DataStream(name, data);
+export async function loadTapeFromData(name, data) {
+    const stream = await utils.DataStream.create(name, data);
     if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
         console.log("Detected a 'tapefile' tape");
         return new TapefileTape(stream);

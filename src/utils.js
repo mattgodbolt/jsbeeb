@@ -1,5 +1,89 @@
 "use strict";
-import { gunzipSync, inflateSync, unzipSync } from "fflate";
+// Minimal ZIP extractor using native DecompressionStream for deflate.
+// Supports methods 0 (stored) and 8 (deflate), which covers essentially
+// all BBC Micro disc/ROM image archives.
+
+const ZipCentralDirSig = 0x02014b50;
+const ZipEocdSig = 0x06054b50;
+const ZipMethodStored = 0;
+const ZipMethodDeflate = 8;
+
+function readU16(buf, off) {
+    return buf[off] | (buf[off + 1] << 8);
+}
+
+function readU32(buf, off) {
+    return (buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0;
+}
+
+// Find the End of Central Directory record by scanning backwards.
+function findEocd(buf) {
+    // EOCD is at least 22 bytes; search backwards for the signature.
+    for (let i = buf.length - 22; i >= 0; i--) {
+        if (readU32(buf, i) === ZipEocdSig) return i;
+    }
+    throw new Error("Not a ZIP file: EOCD not found");
+}
+
+async function inflateRaw(data) {
+    const ds = new DecompressionStream("deflate-raw");
+    const writer = ds.writable.getWriter();
+    writer.write(data);
+    writer.close();
+    const reader = ds.readable.getReader();
+    const chunks = [];
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    if (chunks.length === 1) return chunks[0];
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return out;
+}
+
+// Extract all files from a ZIP archive.  Returns {filename: Uint8Array}.
+async function unzip(buf) {
+    if (!(buf instanceof Uint8Array)) buf = new Uint8Array(buf);
+    const eocdOff = findEocd(buf);
+    const cdOff = readU32(buf, eocdOff + 16);
+    const cdCount = readU16(buf, eocdOff + 10);
+
+    const files = {};
+    let pos = cdOff;
+    for (let i = 0; i < cdCount; i++) {
+        if (readU32(buf, pos) !== ZipCentralDirSig) throw new Error("Bad central directory entry");
+        const method = readU16(buf, pos + 10);
+        const compressedSize = readU32(buf, pos + 20);
+        const nameLen = readU16(buf, pos + 28);
+        const extraLen = readU16(buf, pos + 30);
+        const commentLen = readU16(buf, pos + 32);
+        const localHeaderOff = readU32(buf, pos + 42);
+        const name = new TextDecoder().decode(buf.subarray(pos + 46, pos + 46 + nameLen));
+        pos += 46 + nameLen + extraLen + commentLen;
+
+        // Read local file header to find actual data offset.
+        const localNameLen = readU16(buf, localHeaderOff + 26);
+        const localExtraLen = readU16(buf, localHeaderOff + 28);
+        const dataOff = localHeaderOff + 30 + localNameLen + localExtraLen;
+        const raw = buf.subarray(dataOff, dataOff + compressedSize);
+
+        if (method === ZipMethodStored) {
+            files[name] = raw.slice();
+        } else if (method === ZipMethodDeflate) {
+            files[name] = await inflateRaw(raw);
+        } else {
+            throw new Error(`Unsupported ZIP compression method ${method} for ${name}`);
+        }
+    }
+    return files;
+}
 
 export const runningInNode = typeof window === "undefined";
 
@@ -906,89 +990,49 @@ export function readFloat32(data, offset) {
     return tempBufF32[0];
 }
 
-// Skip past a gzip header (RFC 1952) starting at `pos`, returning the
-// offset of the first byte of the deflate payload.
-function skipGzipHeader(data, pos) {
-    const flags = data[pos + 3];
-    let i = pos + 10; // fixed header
-    if (flags & 0x04) i += 2 + (data[i] | (data[i + 1] << 8)); // FEXTRA
-    if (flags & 0x08) while (data[i++] !== 0); // FNAME
-    if (flags & 0x10) while (data[i++] !== 0); // FCOMMENT
-    if (flags & 0x02) i += 2; // FHCRC
-    return i;
-}
-
-// Decompress one gzip member at `pos`.  Returns { data, end } where `end`
-// is the byte offset immediately after the member's trailer.
-function gunzipMember(buf, pos) {
-    const hdr = skipGzipHeader(buf, pos);
-    const result = inflateSync(buf.subarray(hdr));
-    const isize = result.length >>> 0;
-    // Find the 8-byte trailer (CRC32 + ISIZE) by scanning for a position
-    // whose ISIZE field matches, followed by EOF or another gzip header.
-    for (let t = hdr; t <= buf.length - 8; t++) {
-        const s = buf[t + 4] | (buf[t + 5] << 8) | (buf[t + 6] << 16) | ((buf[t + 7] << 24) >>> 0);
-        if (s !== isize) continue;
-        const end = t + 8;
-        if (end === buf.length || (buf[end] === 0x1f && buf[end + 1] === 0x8b)) return { data: result, end };
+export async function ungzip(data) {
+    // Use the browser/Node native DecompressionStream, which handles both
+    // single-member and multi-member (concatenated) gzip streams correctly.
+    const ds = new DecompressionStream("gzip");
+    const writer = ds.writable.getWriter();
+    writer.write(data);
+    writer.close();
+    const reader = ds.readable.getReader();
+    const chunks = [];
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
     }
-    return { data: result, end: buf.length };
-}
-
-const GzipMagic0 = 0x1f;
-const GzipMagic1 = 0x8b;
-
-function isGzipHeader(data, pos) {
-    return pos + 1 < data.length && data[pos] === GzipMagic0 && data[pos + 1] === GzipMagic1;
-}
-
-export function ungzip(data) {
-    try {
-        // Fast path: single-member gzip (the common case).
-        // A gzip member is at least 18 bytes; check for a second header after that.
-        let multiMember = false;
-        for (let i = 18; i < data.length - 1; i++) {
-            if (isGzipHeader(data, i) && data[i + 2] === 0x08) {
-                multiMember = true;
-                break;
-            }
-        }
-        if (!multiMember) return gunzipSync(data);
-
-        // Multi-member: decompress each member and concatenate.
-        const chunks = [];
-        let pos = 0;
-        while (isGzipHeader(data, pos)) {
-            const member = gunzipMember(data, pos);
-            chunks.push(member.data);
-            pos = member.end;
-        }
-        const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-        const out = new Uint8Array(totalLen);
-        let offset = 0;
-        for (const chunk of chunks) {
-            out.set(chunk, offset);
-            offset += chunk.length;
-        }
-        return out;
-    } catch (e) {
-        throw new Error("Unable to ungzip: " + e.message, { cause: e });
+    if (chunks.length === 1) return chunks[0];
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
     }
+    return out;
 }
 
 export class DataStream {
-    constructor(name, data, dontUnzip) {
+    constructor(name, data) {
         this.name = name;
         this.pos = 0;
         this.data = stringToUint8Array(data);
-        if (!dontUnzip && this.data && this.data.length > 4 && this.data[0] === 0x1f && this.data[1] === 0x8b) {
-            console.log("Ungzipping " + name);
-            this.data = ungzip(this.data);
-        }
         if (!this.data) {
             throw new Error("No data in " + name);
         }
         this.end = this.data.length;
+    }
+
+    static async create(name, data) {
+        const raw = stringToUint8Array(data);
+        if (raw && raw.length > 4 && raw[0] === 0x1f && raw[1] === 0x8b) {
+            console.log("Ungzipping " + name);
+            data = await ungzip(raw);
+        }
+        return new DataStream(name, data);
     }
 
     bytesLeft() {
@@ -1075,12 +1119,12 @@ const knownRomExtensions = {
     rom: true,
 };
 
-function unzipImage(data, knownExtensions) {
+async function unzipImage(data, knownExtensions) {
     console.log("Attempting to unzip");
 
     let files;
     try {
-        files = unzipSync(data instanceof Uint8Array ? data : new Uint8Array(data));
+        files = await unzip(data);
     } catch (e) {
         throw new Error("Error unzipping " + e.message, { cause: e });
     }
@@ -1110,11 +1154,11 @@ function unzipImage(data, knownExtensions) {
     return { data: uncompressed, name: loadedFile };
 }
 
-export function unzipDiscImage(data) {
+export async function unzipDiscImage(data) {
     return unzipImage(data, knownDiscExtensions);
 }
 
-export function unzipRomImage(data) {
+export async function unzipRomImage(data) {
     return unzipImage(data, knownRomExtensions);
 }
 

@@ -1138,7 +1138,7 @@ async function loadDiscImage(discImage) {
 
         case "data": {
             const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-            const { name, data } = utils.unzipDiscImage(arr);
+            const { name, data } = await utils.unzipDiscImage(arr);
             return disc.discFor(processor.fdc, name, data);
         }
         case "http":
@@ -1149,7 +1149,7 @@ async function loadDiscImage(discImage) {
             discImage = new URL(asUrl).pathname;
             let discData = await utils.loadData(asUrl);
             if (/\.zip/i.test(discImage)) {
-                const unzipped = utils.unzipDiscImage(discData);
+                const unzipped = await utils.unzipDiscImage(discData);
                 discData = unzipped.data;
                 discImage = unzipped.name;
             }
@@ -1168,12 +1168,12 @@ async function loadTapeImage(tapeImage) {
     switch (schema) {
         case "|":
         case "sth":
-            return loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
+            return await loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
 
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-            const { name, data } = utils.unzipDiscImage(arr);
-            return loadTapeFromData(name, data);
+            const { name, data } = await utils.unzipDiscImage(arr);
+            return await loadTapeFromData(name, data);
         }
 
         case "http":
@@ -1184,11 +1184,11 @@ async function loadTapeImage(tapeImage) {
             tapeImage = new URL(asUrl).pathname;
             let tapeData = await utils.loadData(asUrl);
             if (/\.zip/i.test(tapeImage)) {
-                const unzipped = utils.unzipDiscImage(tapeData);
+                const unzipped = await utils.unzipDiscImage(tapeData);
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
-            return loadTapeFromData(tapeImage, tapeData);
+            return await loadTapeFromData(tapeImage, tapeData);
         }
 
         default:
@@ -1218,7 +1218,7 @@ $("#tape_load").on("change", async function (evt) {
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
     const binaryData = await readFileAsBinaryString(file);
-    processor.acia.setTape(loadTapeFromData("local file", binaryData));
+    processor.acia.setTape(await loadTapeFromData("local file", binaryData));
     delete parsedQuery.tape;
     updateUrl();
     $("#tapes").modal("hide");

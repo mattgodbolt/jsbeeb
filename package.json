@@ -31,7 +31,6 @@
     "bootstrap": "^5.3.8",
     "bootswatch": "^5.3.8",
     "event-emitter-es6": "^1.1.5",
-    "fflate": "^0.8.2",
     "jquery": "^4.0.0",
     "sharp": "^0.34.5",
     "smoothie": "^1.36.1",

@@ -1106,7 +1106,7 @@ export class Cpu6502 extends Base6502 {
         const ramRomOs = this.ramRomOs;
         let data = await utils.loadData(name);
         if (/\.zip/i.test(name)) {
-            data = utils.unzipRomImage(data).data;
+            data = (await utils.unzipRomImage(data)).data;
         }
         ramRomOs.set(data, offset);
     }
