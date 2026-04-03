@@ -1011,7 +1011,11 @@ export function readFloat32(data, offset) {
 export async function ungzip(data) {
     // Use the browser/Node native DecompressionStream, which handles both
     // single-member and multi-member (concatenated) gzip streams correctly.
-    return decompress(data, "gzip");
+    try {
+        return await decompress(data, "gzip");
+    } catch (cause) {
+        throw new Error("Unable to ungzip", { cause });
+    }
 }
 
 export class DataStream {
