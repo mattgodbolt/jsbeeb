@@ -61,4 +61,22 @@ describe("zip tests", function () {
             .join("");
         expect(content).toBe("This is a deflate-compressed test SSD file\n");
     });
+
+    it("should throw for unsupported compression method", async () => {
+        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-bzip2.zip")));
+
+        await expect(utils.unzipDiscImage(zipData)).rejects.toThrow(/Unsupported ZIP compression method/);
+    });
+
+    it("should throw for truncated/corrupt ZIP files", async () => {
+        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-truncated.zip")));
+
+        await expect(utils.unzipDiscImage(zipData)).rejects.toThrow(/Not a ZIP file/);
+    });
+
+    it("should throw for non-ZIP data", async () => {
+        const notZip = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
+
+        await expect(utils.unzipDiscImage(notZip)).rejects.toThrow(/Not a ZIP file/);
+    });
 });

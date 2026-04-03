@@ -1,7 +1,7 @@
 "use strict";
 // Minimal ZIP extractor using native DecompressionStream for deflate.
-// Supports methods 0 (stored) and 8 (deflate), which covers essentially
-// all BBC Micro disc/ROM image archives.
+// Supports methods 0 (stored) and 8 (deflate); other methods (bzip2,
+// lzma, etc.) will throw an error with the method number.
 
 const ZipLocalHeaderSig = 0x04034b50;
 const ZipCentralDirSig = 0x02014b50;
@@ -997,8 +997,10 @@ export async function ungzip(data) {
     // single-member and multi-member (concatenated) gzip streams correctly.
     const ds = new DecompressionStream("gzip");
     const writer = ds.writable.getWriter();
-    writer.write(data);
-    writer.close();
+    // Catch the writer side so errors don't surface as unhandled rejections;
+    // the read loop below will see the same error via the readable side.
+    writer.write(data).catch(() => {});
+    writer.close().catch(() => {});
     const reader = ds.readable.getReader();
     const chunks = [];
     for (;;) {
