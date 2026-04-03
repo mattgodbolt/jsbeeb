@@ -17,12 +17,20 @@ function readU32(buf, off) {
     return (buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0;
 }
 
+function isValidEocd(buf, off) {
+    const commentLen = readU16(buf, off + 20);
+    if (off + 22 + commentLen !== buf.length) return false;
+    const cdOff = readU32(buf, off + 16);
+    const cdSize = readU32(buf, off + 12);
+    return cdOff <= off && cdSize <= off - cdOff;
+}
+
 // Find the End of Central Directory record by scanning backwards.
 // EOCD is in the last 65557 bytes (22-byte fixed record + up to 65535-byte comment).
 function findEocd(buf) {
     const searchStart = Math.max(0, buf.length - 65557);
     for (let i = buf.length - 22; i >= searchStart; i--) {
-        if (readU32(buf, i) === ZipEocdSig) return i;
+        if (readU32(buf, i) === ZipEocdSig && isValidEocd(buf, i)) return i;
     }
     throw new Error("Not a ZIP file: EOCD not found");
 }
@@ -70,10 +78,11 @@ async function unzip(buf) {
     const cdCount = readU16(buf, eocdOff + 10);
     const decoder = new TextDecoder();
 
-    const files = {};
+    const files = Object.create(null);
     let pos = cdOff;
     for (let i = 0; i < cdCount; i++) {
-        if (readU32(buf, pos) !== ZipCentralDirSig) throw new Error("Bad central directory entry");
+        if (pos + 46 > buf.length || readU32(buf, pos) !== ZipCentralDirSig)
+            throw new Error("Bad central directory entry");
         const method = readU16(buf, pos + 10);
         const compressedSize = readU32(buf, pos + 20);
         const nameLen = readU16(buf, pos + 28);
@@ -1012,7 +1021,7 @@ export async function ungzip(data) {
     try {
         return await decompress(data, "gzip");
     } catch (cause) {
-        throw new Error("Unable to ungzip", { cause });
+        throw new Error("Unable to ungzip: " + (cause.message || cause), { cause });
     }
 }
 
