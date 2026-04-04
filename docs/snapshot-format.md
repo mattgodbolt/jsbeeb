@@ -48,6 +48,19 @@ When `discNCrc32` is present, it is compared against the CRC32 of the reloaded d
 - **v1** — Initial release. CPU, memory, VIA, video, sound, ACIA, ADC.
 - **v2** — Added FDC, disc drive, and disc track data. Dirty track persistence, embedded disc image data for local files, and CRC32 verification. v1 snapshots load with FDC state unchanged.
 
+### Imported snapshots
+
+Snapshots can be imported from other emulators. The `importedFrom` field in the top-level object identifies the source:
+
+| Value          | Source                                           |
+| -------------- | ------------------------------------------------ |
+| `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
+| `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
+
+Imported snapshots use the same `jsbeeb-snapshot` format (version 2) and do not include FDC or disc state (`state.fdc` will be absent).
+
+B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots only include sideways RAM banks via the `swRamBanks` field (an object keyed by bank number, each value a `Uint8Array` of 16KB). On restore, `swRamBanks` selectively overwrites individual ROM banks without touching the ROMs jsbeeb has already loaded.
+
 ### Model compatibility
 
 When loading, the snapshot model is compared to the current model using `modelsCompatible()`. This resolves model synonyms (e.g. `"B"` matches `"BBC B with DFS 1.2"`) and treats filesystem variants as compatible (e.g. `"BBC Master 128 (DFS)"` and `"BBC Master 128 (ADFS)"`). If the base machine type differs, a page reload with the correct model is triggered.

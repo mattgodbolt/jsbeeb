@@ -30,6 +30,7 @@ import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, modelsCompatible } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
+import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
 import {
@@ -494,8 +495,12 @@ pastetext.addEventListener("dragover", function (event) {
 pastetext.addEventListener("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.dataTransfer.files[0];
-    if (isSnapshotFile(file.name)) {
-        await loadStateFromFile(file);
+    const arrayBuffer = await file.arrayBuffer();
+    if (isSnapshotFile(file.name, arrayBuffer)) {
+        await loadStateFromFile(file, arrayBuffer);
+    } else if (file.name.toLowerCase().endsWith(".uef")) {
+        // Regular UEF tape image (not a BeebEm save state)
+        processor.acia.setTape(loadTapeFromData(file.name, new Uint8Array(arrayBuffer)));
     } else {
         await loadHTMLFile(file);
     }
@@ -739,12 +744,12 @@ keyboard = new Keyboard({
     keyLayout,
     dbgr,
 });
-keyboard.on("showError", ({ context, error }) => showError(context, error));
-keyboard.on("pause", () => stop(false));
-keyboard.on("resume", () => go());
-keyboard.on("break", (pressed) => {
+keyboard.addEventListener("showError", (e) => showError(e.detail.context, e.detail.error));
+keyboard.addEventListener("pause", () => stop(false));
+keyboard.addEventListener("resume", () => go());
+keyboard.addEventListener("break", (e) => {
     // F12/Break: Reset processor
-    if (pressed) utils.noteEvent("keyboard", "press", "break");
+    if (e.detail) utils.noteEvent("keyboard", "press", "break");
 });
 
 // Register default key handlers
@@ -859,19 +864,19 @@ function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
     updateUrl();
-    config.emit("media-changed", { disc1: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
 }
 
 function setDisc2Image(name) {
     parsedQuery.disc2 = name;
     updateUrl();
-    config.emit("media-changed", { disc2: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
 }
 
 function setTapeImage(name) {
     parsedQuery.tape = name;
     updateUrl();
-    config.emit("media-changed", { tape: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
 }
 
 function sthClearList() {
@@ -1503,14 +1508,16 @@ document.getElementById("save-state").addEventListener("click", async function (
     if (wasRunning) go();
 });
 
-async function loadStateFromFile(file) {
+async function loadStateFromFile(file, preReadBuffer) {
     const wasRunning = running;
     if (running) stop(false);
     try {
-        const arrayBuffer = await file.arrayBuffer();
+        const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
         let snapshot;
         if (isBemSnapshot(arrayBuffer)) {
             snapshot = await parseBemSnapshot(arrayBuffer);
+        } else if (isUefSnapshot(arrayBuffer)) {
+            snapshot = parseUefSnapshot(arrayBuffer);
         } else {
             // Detect gzip (magic bytes 0x1f 0x8b) or plain JSON
             const bytes = new Uint8Array(arrayBuffer);
@@ -1543,9 +1550,13 @@ async function loadStateFromFile(file) {
     if (wasRunning) go();
 }
 
-function isSnapshotFile(filename) {
+function isSnapshotFile(filename, arrayBuffer) {
     const lower = filename.toLowerCase();
-    return lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz");
+    if (lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz"))
+        return true;
+    // .uef can be either a BeebEm save state or a regular tape image - check content
+    if (lower.endsWith(".uef") && arrayBuffer) return isUefSnapshot(arrayBuffer);
+    return false;
 }
 
 document.getElementById("load-state").addEventListener("change", async function (event) {

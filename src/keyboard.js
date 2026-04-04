@@ -1,6 +1,5 @@
 "use strict";
 import * as utils from "./utils.js";
-import EventEmitter from "event-emitter-es6";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 
@@ -15,7 +14,7 @@ const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.pl
 /**
  * Keyboard class that handles all keyboard related functionality
  */
-export class Keyboard extends EventEmitter {
+export class Keyboard extends EventTarget {
     /**
      * Create a new Keyboard instance with specified configuration
      * @param {KeyboardConfig} config - The configuration object
@@ -182,7 +181,7 @@ export class Keyboard extends EventEmitter {
         // Handle debugger 'g' key press
         if (this.dbgr.enabled() && code === LOWERCASE_G) {
             this.dbgr.hide();
-            this.emit("resume");
+            this.dispatchEvent(new Event("resume"));
             return;
         }
 
@@ -193,7 +192,7 @@ export class Keyboard extends EventEmitter {
                 return;
             } else if (code === LOWERCASE_N) {
                 this.requestStep();
-                this.emit("resume");
+                this.dispatchEvent(new Event("resume"));
                 return;
             }
         }
@@ -247,7 +246,7 @@ export class Keyboard extends EventEmitter {
      */
     _handleSpecialKeys(code) {
         if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-            this.emit("break", true);
+            this.dispatchEvent(new CustomEvent("break", { detail: true }));
             this.processor.setReset(true);
             return true;
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
@@ -278,7 +277,7 @@ export class Keyboard extends EventEmitter {
 
         // Handle special key cases
         if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
-            this.emit("break", false);
+            this.dispatchEvent(new CustomEvent("break", { detail: false }));
             this.processor.setReset(false);
             return;
         } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
@@ -308,14 +307,18 @@ export class Keyboard extends EventEmitter {
         setTimeout(() => this.processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (isMac && window.localStorage && !window.localStorage.getItem("warnedAboutRubbishMacs")) {
-            this.emit("showError", {
-                context: "handling caps lock on Mac OS X",
-                error: `Mac OS X does not generate key up events for caps lock presses. 
-                jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games 
-                that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play 
+            this.dispatchEvent(
+                new CustomEvent("showError", {
+                    detail: {
+                        context: "handling caps lock on Mac OS X",
+                        error: `Mac OS X does not generate key up events for caps lock presses.
+                jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games
+                that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play
                 such a game, please see the documentation about remapping keys.
                 Close this window to continue (you won't see this error again)`,
-            });
+                    },
+                }),
+            );
             window.localStorage.setItem("warnedAboutRubbishMacs", "true");
         }
     }
@@ -437,7 +440,7 @@ export class Keyboard extends EventEmitter {
      */
     pauseEmulation() {
         this.pauseEmu = true;
-        this.emit("pause");
+        this.dispatchEvent(new Event("pause"));
     }
 
     /**
@@ -445,6 +448,6 @@ export class Keyboard extends EventEmitter {
      */
     resumeEmulation() {
         this.pauseEmu = false;
-        this.emit("resume");
+        this.dispatchEvent(new Event("resume"));
     }
 }
