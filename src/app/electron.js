@@ -64,10 +64,8 @@ function init(args) {
     }
 }
 
-const isElectron = typeof window.electronAPI !== "undefined";
-
 export function initialise(args) {
-    if (isElectron) {
+    if (typeof window.electronAPI !== "undefined") {
         init(args);
     }
 }
