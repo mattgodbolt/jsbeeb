@@ -115,7 +115,8 @@ const masterSwram = [
 
 // Atom support is gated behind VITE_ATOM_ENABLED during incremental development.
 // Set VITE_ATOM_ENABLED=true in environment to enable (e.g. VITE_ATOM_ENABLED=true npm start).
-const atomEnabled = import.meta.env.VITE_ATOM_ENABLED === "true";
+// import.meta.env is provided by Vite; falls back to false when running under plain Node (e.g. test-suite.js).
+const atomEnabled = typeof import.meta.env !== "undefined" && import.meta.env.VITE_ATOM_ENABLED === "true";
 
 const _allModels = [
     new Model({
