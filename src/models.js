@@ -11,7 +11,7 @@ const CpuModel = Object.freeze({
 });
 
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride, compatGroup } = {}) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride } = {}) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -24,9 +24,6 @@ class Model {
         this.cmosOverride = cmosOverride;
         this.hasEconet = false;
         this.hasMusic5000 = false;
-        // Models in the same compatGroup can restore each other's snapshots
-        // (same hardware, different filesystem ROM).
-        this.compatGroup = compatGroup || name;
     }
 
     get nmos() {
@@ -108,7 +105,6 @@ export const allModels = [
         isMaster: false,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
-        compatGroup: "BBC B 8271",
     }),
     new Model({
         name: "BBC B with 8271 (DFS 0.9)",
@@ -118,7 +114,6 @@ export const allModels = [
         isMaster: false,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
-        compatGroup: "BBC B 8271",
     }),
     new Model({
         name: "BBC B with 1770 (DFS)",
@@ -128,7 +123,6 @@ export const allModels = [
         isMaster: false,
         swram: beebSwram,
         fdc: NoiseAwareWdFdc,
-        compatGroup: "BBC B 1770",
     }),
     // putting ADFS in a higher ROM slot gives it priority
     new Model({
@@ -139,7 +133,6 @@ export const allModels = [
         isMaster: false,
         swram: beebSwram,
         fdc: NoiseAwareWdFdc,
-        compatGroup: "BBC B 1770",
     }),
     new Model({
         name: "BBC Master 128 (DFS)",
@@ -150,7 +143,6 @@ export const allModels = [
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickDfs,
-        compatGroup: "BBC Master 128",
     }),
     new Model({
         name: "BBC Master 128 (ADFS)",
@@ -161,7 +153,6 @@ export const allModels = [
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAdfs,
-        compatGroup: "BBC Master 128",
     }),
     new Model({
         name: "BBC Master 128 (ANFS)",
@@ -172,7 +163,6 @@ export const allModels = [
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAnfs,
-        compatGroup: "BBC Master 128",
     }),
     // Although this can not be explicitly selected as a model, it is required by the configuration builder later
     new Model({

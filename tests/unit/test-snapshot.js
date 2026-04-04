@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import {
-    createSnapshot,
-    restoreSnapshot,
-    snapshotToJSON,
-    snapshotFromJSON,
-    modelsCompatible,
-} from "../../src/snapshot.js";
+import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "../../src/snapshot.js";
 import { Cpu6502 } from "../../src/6502.js";
 import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
@@ -630,39 +624,40 @@ describe("Snapshot coordinator", () => {
     });
 });
 
-describe("modelsCompatible", () => {
+describe("isSameModel", () => {
     it("should treat identical model names as compatible", () => {
-        expect(modelsCompatible("BBC B with 8271 (DFS 1.2)", "BBC B with 8271 (DFS 1.2)")).toBe(true);
+        expect(isSameModel("BBC B with 8271 (DFS 1.2)", "BBC B with 8271 (DFS 1.2)")).toBe(true);
     });
 
-    it("should treat BBC B 8271 DFS variants as compatible", () => {
-        expect(modelsCompatible("B-DFS1.2", "B-DFS0.9")).toBe(true);
+    it("should treat synonyms of the same model as compatible", () => {
+        expect(isSameModel("B-DFS1.2", "BBC B with DFS 1.2")).toBe(true);
+        expect(isSameModel("B-DFS0.9", "BBC B with DFS 0.9")).toBe(true);
+        expect(isSameModel("B-DFS0.9", "B")).toBe(true);
     });
 
-    it("should treat BBC B 1770 DFS/ADFS variants as compatible", () => {
-        expect(modelsCompatible("B1770", "B1770A")).toBe(true);
+    it("should not treat different BBC B 8271 DFS variants as compatible", () => {
+        expect(isSameModel("B-DFS1.2", "B-DFS0.9")).toBe(false);
     });
 
-    it("should treat BBC Master filesystem variants as compatible", () => {
-        expect(modelsCompatible("Master", "MasterADFS")).toBe(true);
-        expect(modelsCompatible("Master", "MasterANFS")).toBe(true);
-        expect(modelsCompatible("MasterADFS", "MasterANFS")).toBe(true);
+    it("should not treat different BBC B 1770 variants as compatible", () => {
+        expect(isSameModel("B1770", "B1770A")).toBe(false);
     });
 
-    it("should treat old model names (synonyms) as compatible with new names", () => {
-        expect(modelsCompatible("BBC B with DFS 1.2", "B-DFS1.2")).toBe(true);
-        expect(modelsCompatible("BBC B with DFS 0.9", "B-DFS0.9")).toBe(true);
+    it("should not treat different BBC Master variants as compatible", () => {
+        expect(isSameModel("Master", "MasterADFS")).toBe(false);
+        expect(isSameModel("Master", "MasterANFS")).toBe(false);
+        expect(isSameModel("MasterADFS", "MasterANFS")).toBe(false);
     });
 
     it("should not treat BBC B 8271 as compatible with BBC B 1770", () => {
-        expect(modelsCompatible("B-DFS1.2", "B1770")).toBe(false);
+        expect(isSameModel("B-DFS1.2", "B1770")).toBe(false);
     });
 
     it("should not treat BBC B as compatible with BBC Master", () => {
-        expect(modelsCompatible("B-DFS1.2", "Master")).toBe(false);
+        expect(isSameModel("B-DFS1.2", "Master")).toBe(false);
     });
 
     it("should not treat unknown models as compatible", () => {
-        expect(modelsCompatible("Nonexistent", "Master")).toBe(false);
+        expect(isSameModel("Nonexistent", "Master")).toBe(false);
     });
 });
