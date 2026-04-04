@@ -195,7 +195,7 @@ export function buildSnapshot(importedFrom, modelName, cpuState, ram, roms, sysv
             videoCycles: 0,
             music5000PageSel: 0,
             ram,
-            roms,
+            ...(roms instanceof Uint8Array ? { roms } : {}),
             scheduler: { epoch: 0 },
             sysvia,
             uservia,

@@ -1,6 +1,126 @@
 "use strict";
-import { ungzip as pakoUngzip } from "pako";
-import { unzipSync } from "fflate";
+// Minimal ZIP extractor using native DecompressionStream for deflate.
+// Supports methods 0 (stored) and 8 (deflate); other methods (bzip2,
+// lzma, etc.) will throw an error with the method number.
+
+const ZipLocalHeaderSig = 0x04034b50;
+const ZipCentralDirSig = 0x02014b50;
+const ZipEocdSig = 0x06054b50;
+const ZipMethodStored = 0;
+const ZipMethodDeflate = 8;
+
+function readU16(buf, off) {
+    return buf[off] | (buf[off + 1] << 8);
+}
+
+function readU32(buf, off) {
+    return (buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0;
+}
+
+function isValidEocd(buf, off) {
+    const commentLen = readU16(buf, off + 20);
+    if (off + 22 + commentLen !== buf.length) return false;
+    const cdOff = readU32(buf, off + 16);
+    const cdSize = readU32(buf, off + 12);
+    return cdOff <= off && cdSize <= off - cdOff;
+}
+
+// Find the End of Central Directory record by scanning backwards.
+// EOCD is in the last 65557 bytes (22-byte fixed record + up to 65535-byte comment).
+function findEocd(buf) {
+    const searchStart = Math.max(0, buf.length - 65557);
+    for (let i = buf.length - 22; i >= searchStart; i--) {
+        if (readU32(buf, i) === ZipEocdSig && isValidEocd(buf, i)) return i;
+    }
+    throw new Error("Not a ZIP file: EOCD not found");
+}
+
+// Pipe data through a DecompressionStream and return the result.
+// Starts the read loop before writing to avoid backpressure deadlock.
+// On error, Node's DecompressionStream rejects multiple internal promises
+// (write, close, and closed); we catch the write side to prevent unhandled
+// rejections and let the error surface through the read side.
+export async function decompress(data, format) {
+    const ds = new DecompressionStream(format);
+    const writer = ds.writable.getWriter();
+    const reader = ds.readable.getReader();
+    const chunks = [];
+    const readPromise = (async () => {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+    })();
+    const writePromise = (async () => {
+        await writer.write(data);
+        await writer.close();
+    })().catch(() => {});
+    writer.closed.catch(() => {});
+    await readPromise;
+    await writePromise;
+    if (chunks.length === 1) return chunks[0];
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return out;
+}
+
+// Extract all files from a ZIP archive.  Returns {filename: Uint8Array}.
+async function unzip(buf) {
+    if (!(buf instanceof Uint8Array)) buf = new Uint8Array(buf);
+    const eocdOff = findEocd(buf);
+    const cdOff = readU32(buf, eocdOff + 16);
+    const cdCount = readU16(buf, eocdOff + 10);
+    const decoder = new TextDecoder();
+
+    const files = Object.create(null);
+    let pos = cdOff;
+    for (let i = 0; i < cdCount; i++) {
+        if (pos + 46 > buf.length || readU32(buf, pos) !== ZipCentralDirSig)
+            throw new Error("Bad central directory entry");
+        const flags = readU16(buf, pos + 8);
+        if (flags & 0x0001) throw new Error("Encrypted ZIP entries are not supported");
+        const method = readU16(buf, pos + 10);
+        const compressedSize = readU32(buf, pos + 20);
+        const nameLen = readU16(buf, pos + 28);
+        const extraLen = readU16(buf, pos + 30);
+        const commentLen = readU16(buf, pos + 32);
+        const localHeaderOff = readU32(buf, pos + 42);
+        const name = decoder.decode(buf.subarray(pos + 46, pos + 46 + nameLen));
+        pos += 46 + nameLen + extraLen + commentLen;
+
+        // Read local file header to find actual data offset.
+        if (readU32(buf, localHeaderOff) !== ZipLocalHeaderSig) throw new Error(`Bad local file header for ${name}`);
+        const localNameLen = readU16(buf, localHeaderOff + 26);
+        const localExtraLen = readU16(buf, localHeaderOff + 28);
+        const dataOff = localHeaderOff + 30 + localNameLen + localExtraLen;
+        const dataEnd = dataOff + compressedSize;
+        if (dataEnd > buf.length) throw new Error(`Truncated ZIP entry data for ${name}`);
+        const raw = buf.subarray(dataOff, dataEnd);
+
+        if (method === ZipMethodStored) {
+            files[name] = raw.slice();
+        } else if (method === ZipMethodDeflate) {
+            files[name] = await decompress(raw, "deflate-raw");
+        } else {
+            throw new Error(`Unsupported ZIP compression method ${method} for ${name}`);
+        }
+    }
+    return files;
+}
+
+export function debounce(fn, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn.apply(this, args), wait);
+    };
+}
 
 export const runningInNode = typeof window === "undefined";
 
@@ -907,27 +1027,32 @@ export function readFloat32(data, offset) {
     return tempBufF32[0];
 }
 
-export function ungzip(data) {
+export async function ungzip(data) {
     try {
-        return pakoUngzip(data);
-    } catch (e) {
-        throw new Error("Unable to ungzip: " + e.message, { cause: e });
+        return await decompress(data, "gzip");
+    } catch (cause) {
+        throw new Error("Unable to ungzip: " + (cause.message || cause), { cause });
     }
 }
 
 export class DataStream {
-    constructor(name, data, dontUnzip) {
+    constructor(name, data) {
         this.name = name;
         this.pos = 0;
         this.data = stringToUint8Array(data);
-        if (!dontUnzip && this.data && this.data.length > 4 && this.data[0] === 0x1f && this.data[1] === 0x8b) {
-            console.log("Ungzipping " + name);
-            this.data = ungzip(this.data);
-        }
         if (!this.data) {
             throw new Error("No data in " + name);
         }
         this.end = this.data.length;
+    }
+
+    static async create(name, data) {
+        const raw = stringToUint8Array(data);
+        if (raw && raw.length > 4 && raw[0] === 0x1f && raw[1] === 0x8b) {
+            console.log("Ungzipping " + name);
+            data = await ungzip(raw);
+        }
+        return new DataStream(name, data);
     }
 
     bytesLeft() {
@@ -1014,12 +1139,12 @@ const knownRomExtensions = {
     rom: true,
 };
 
-function unzipImage(data, knownExtensions) {
+async function unzipImage(data, knownExtensions) {
     console.log("Attempting to unzip");
 
     let files;
     try {
-        files = unzipSync(data instanceof Uint8Array ? data : new Uint8Array(data));
+        files = await unzip(data);
     } catch (e) {
         throw new Error("Error unzipping " + e.message, { cause: e });
     }
@@ -1049,11 +1174,11 @@ function unzipImage(data, knownExtensions) {
     return { data: uncompressed, name: loadedFile };
 }
 
-export function unzipDiscImage(data) {
+export async function unzipDiscImage(data) {
     return unzipImage(data, knownDiscExtensions);
 }
 
-export function unzipRomImage(data) {
+export async function unzipRomImage(data) {
     return unzipImage(data, knownRomExtensions);
 }
 

@@ -4,6 +4,7 @@ import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
 import { createAudioContext } from "../audio-utils.js";
+import { toggle, fadeIn, fadeOut } from "../dom-utils.js";
 
 // Using this approach means when jsbeeb is embedded in other projects, vite doesn't have a fit.
 // See https://github.com/vitejs/vite/discussions/6459
@@ -13,7 +14,7 @@ const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).
 export class AudioHandler {
     constructor({ warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek } = {}) {
         this.warningNode = warningNode;
-        this.warningNode.toggle(false);
+        toggle(this.warningNode, false);
         this.chart = new SmoothieChart({
             tooltip: true,
             labels: { precision: 0 },
@@ -40,23 +41,21 @@ export class AudioHandler {
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
                 console.log("Unable to initialise audio: no audio worklet API");
-                this.warningNode.toggle(true);
+                toggle(this.warningNode, true);
                 const localhost = new URL(window.location);
                 localhost.hostname = "localhost";
-                this.warningNode.html(
-                    `No audio worklet API was found - there will be no audio. 
+                this.warningNode.innerHTML = `No audio worklet API was found - there will be no audio.
                     If you are running a local jsbeeb, you must either use a host of
-                    <a href="${localhost}">localhost</a>, 
-                    or serve the content over <em>https</em>.`,
-                );
+                    <a href="${localhost}">localhost</a>,
+                    or serve the content over <em>https</em>.`;
             }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
             this.relayNoise = new FakeRelayNoise();
         }
 
-        this.warningNode.on("mousedown", () => this.tryResume());
-        this.warningNode.toggle(false);
+        this.warningNode.addEventListener("mousedown", () => this.tryResume());
+        toggle(this.warningNode, false);
 
         // Initialise Music 5000 audio context
         this.audioContextM5000 = createAudioContext({ sampleRate: 46875 });
@@ -125,8 +124,8 @@ export class AudioHandler {
         const suspended =
             (this.audioContext && this.audioContext.state === "suspended") ||
             (this.audioContextM5000 && this.audioContextM5000.state === "suspended");
-        if (suspended) this.warningNode.fadeIn();
-        else this.warningNode.fadeOut();
+        if (suspended) fadeIn(this.warningNode);
+        else fadeOut(this.warningNode);
     }
 
     async initialise() {

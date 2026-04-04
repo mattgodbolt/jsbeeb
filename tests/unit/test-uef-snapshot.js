@@ -351,7 +351,7 @@ describe("parseUefSnapshot", () => {
     it("includes null roms when no sideways RAM chunks are present", () => {
         const buffer = makeUefSnapshot();
         const snap = parseUefSnapshot(buffer);
-        expect(snap.state.roms).toBeNull();
+        expect(snap.state.roms).toBeUndefined();
     });
 
     // ── Sideways RAM tests ──────────────────────────────────────────────

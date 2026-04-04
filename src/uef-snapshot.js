@@ -88,6 +88,9 @@ function parseChunks(bytes, view) {
  *   [21]    IC32State    (sys VIA only, absent for user VIA)
  */
 function convertViaChunk(data) {
+    const minLen = data[0] === 0 ? 22 : 21; // sys VIA needs IC32 byte
+    if (data.length < minLen) throw new Error(`VIA chunk too short: expected >= ${minLen} bytes, got ${data.length}`);
+
     const view = new DataView(data.buffer, data.byteOffset);
     const viaType = data[0];
 
@@ -107,7 +110,8 @@ function convertViaChunk(data) {
     // Derive CA2/CB2 from PCR, matching BeebEm's LoadViaUEF
     const ca2 = (pcr & 0x0e) === 0x0e;
     const cb2 = (pcr & 0xe0) === 0xe0;
-    const ic32 = viaType === 0 && data.length > 21 ? data[21] : undefined;
+    // Sys VIA (type 0) always needs IC32; default to 0xff if missing
+    const ic32 = viaType === 0 ? (data.length > 21 ? data[21] : 0xff) : undefined;
 
     const result = {
         ora: data[3],

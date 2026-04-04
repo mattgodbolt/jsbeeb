@@ -1,6 +1,5 @@
 "use strict";
 
-import _ from "underscore";
 import { describe, it } from "vitest";
 import * as utils from "../../src/utils.js";
 import { fake6502, fake65C02, fake65C12 } from "../../src/fake6502.js";
@@ -17,7 +16,7 @@ async function runTest(processor, test, name) {
         let expectedPc = null;
         let next = false;
         let successRe = /^\s*success\b\s*(;.*)?$/;
-        _.each(listing.split("\n"), function (line) {
+        for (const line of listing.split("\n")) {
             if (next) {
                 next = false;
                 expectedPc = parseInt(line.match(/^([0-9a-fA-F]+)/)[1], 16);
@@ -25,7 +24,7 @@ async function runTest(processor, test, name) {
             } else {
                 next = !!line.match(successRe);
             }
-        });
+        }
         if (expectedPc === null) throw "Unable to parse";
         return expectedPc;
     }

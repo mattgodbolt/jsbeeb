@@ -1,5 +1,3 @@
-import $ from "jquery";
-import _ from "underscore";
 import * as bootstrap from "bootstrap";
 import { version } from "../package.json";
 
@@ -163,8 +161,8 @@ if (parsedQuery.keyLayout) {
     keyLayout = (parsedQuery.keyLayout + "").toLowerCase();
 }
 if (parsedQuery.embed) {
-    $(".embed-hide").hide();
-    $("body").css("background-color", "transparent");
+    for (const el of document.querySelectorAll(".embed-hide")) el.style.display = "none";
+    document.body.style.backgroundColor = "transparent";
 }
 
 fastTape = !!parsedQuery.fasttape;
@@ -231,11 +229,11 @@ const config = new Config(
             setCrtPic(displayModeFilter);
             swapCanvas(displayModeFilter);
             // Trigger window resize to recalculate layout with new dimensions
-            $(window).trigger("resize");
+            window.dispatchEvent(new Event("resize"));
         }
     },
     function onClose(changed) {
-        parsedQuery = _.extend(parsedQuery, changed);
+        parsedQuery = Object.assign(parsedQuery, changed);
         if (
             changed.model ||
             changed.coProcessor !== undefined ||
@@ -298,23 +296,24 @@ config.setDisplayMode(displayMode);
 model = config.model;
 
 function sbBind(div, url, onload) {
-    const img = div.find("img");
-    img.hide();
+    const img = div.querySelector("img");
+    img.style.display = "none";
     if (!url) return;
-    img.attr("src", url).on("load", function () {
+    img.addEventListener("load", function () {
         onload(div, img);
-        img.show();
+        img.style.display = "";
     });
+    img.src = url;
 }
 
-sbBind($(".sidebar.left"), parsedQuery.sbLeft, function (div, img) {
-    div.css({ left: -img.width() - 5 });
+sbBind(document.querySelector(".sidebar.left"), parsedQuery.sbLeft, function (div, img) {
+    div.style.left = -img.naturalWidth - 5 + "px";
 });
-sbBind($(".sidebar.right"), parsedQuery.sbRight, function (div, img) {
-    div.css({ right: -img.width() - 5 });
+sbBind(document.querySelector(".sidebar.right"), parsedQuery.sbRight, function (div, img) {
+    div.style.right = -img.naturalWidth - 5 + "px";
 });
-sbBind($(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
-    div.css({ bottom: -img.height() });
+sbBind(document.querySelector(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
+    div.style.bottom = -img.naturalHeight + "px";
 });
 
 if (parsedQuery.cpuMultiplier !== undefined) {
@@ -328,10 +327,10 @@ let tryGl = true;
 if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
-const $screen = $("#screen");
+const screenCanvas = document.getElementById("screen");
 
-const $errorDialog = $("#error-dialog");
-const $errorDialogModal = new bootstrap.Modal($errorDialog[0]);
+const errorDialog = document.getElementById("error-dialog");
+const errorDialogModal = new bootstrap.Modal(errorDialog);
 
 async function compressBlob(blob) {
     const stream = blob.stream().pipeThrough(new CompressionStream("gzip"));
@@ -344,13 +343,13 @@ async function decompressBlob(blob) {
 }
 
 function showError(context, error) {
-    $errorDialog.find(".context").text(context);
-    $errorDialog.find(".error").text(error);
-    $errorDialogModal.show();
+    errorDialog.querySelector(".context").textContent = context;
+    errorDialog.querySelector(".error").textContent = error;
+    errorDialogModal.show();
 }
 
 function createCanvasForFilter(filterClass) {
-    const newCanvas = tryGl ? canvasLib.bestCanvas($screen[0], filterClass) : new canvasLib.Canvas($screen[0]);
+    const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
     if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
         const config = filterClass.getDisplayConfig();
@@ -387,7 +386,7 @@ if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
 const audioStatsNode = document.getElementById("audio-stats");
 const audioHandler = new AudioHandler({
-    warningNode: $("#audio-warning"),
+    warningNode: document.getElementById("audio-warning"),
     statsNode: audioStatsNode,
     audioFilterFreq,
     audioFilterQ,
@@ -399,7 +398,7 @@ if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
 
-$(".initially-hidden").removeClass("initially-hidden");
+for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
 
 const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
 const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
@@ -480,23 +479,23 @@ async function loadSCSIFile(file) {
     $fsModal.hide();
 }
 
-const $pastetext = $("#paste-text");
-$pastetext.closest("form").on("submit", (event) => event.preventDefault());
-$pastetext.on("paste", function (event) {
-    const text = event.originalEvent.clipboardData.getData("text/plain");
+const pastetext = document.getElementById("paste-text");
+pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
+pastetext.addEventListener("paste", function (event) {
+    const text = event.clipboardData.getData("text/plain");
     sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
 });
-$pastetext.on("dragover", function (event) {
+pastetext.addEventListener("dragover", function (event) {
     event.preventDefault();
     event.stopPropagation();
-    event.originalEvent.dataTransfer.dropEffect = "copy";
+    event.dataTransfer.dropEffect = "copy";
 });
-$pastetext.on("drop", async function (event) {
+pastetext.addEventListener("drop", async function (event) {
     utils.noteEvent("local", "drop");
-    const file = event.originalEvent.dataTransfer.files[0];
+    const file = event.dataTransfer.files[0];
     const arrayBuffer = await file.arrayBuffer();
     if (isSnapshotFile(file.name, arrayBuffer)) {
-        await loadStateFromFile(file);
+        await loadStateFromFile(file, arrayBuffer);
     } else if (file.name.toLowerCase().endsWith(".uef")) {
         // Regular UEF tape image (not a BeebEm save state)
         processor.acia.setTape(loadTapeFromData(file.name, new Uint8Array(arrayBuffer)));
@@ -505,14 +504,14 @@ $pastetext.on("drop", async function (event) {
     }
 });
 
-const $cub = $("#cub-monitor");
-$cub.on("mousemove mousedown mouseup", function (evt) {
+const cubMonitor = document.getElementById("cub-monitor");
+function onCubMouseEvent(evt) {
     audioHandler.tryResume().then(() => {});
     if (document.activeElement !== document.body) document.activeElement.blur();
-    const cubOffset = $cub.offset();
-    const screenOffset = $screen.offset();
-    const x = (evt.offsetX - cubOffset.left + screenOffset.left) / $screen.width();
-    const y = (evt.offsetY - cubOffset.top + screenOffset.top) / $screen.height();
+    const cubRect = cubMonitor.getBoundingClientRect();
+    const screenRect = screenCanvas.getBoundingClientRect();
+    const x = (evt.offsetX - cubRect.left + screenRect.left) / screenCanvas.offsetWidth;
+    const y = (evt.offsetY - cubRect.top + screenRect.top) / screenCanvas.offsetHeight;
 
     // Handle touchscreen
     if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
@@ -531,33 +530,36 @@ $cub.on("mousemove mousedown mouseup", function (evt) {
     }
 
     evt.preventDefault();
-});
+}
+for (const eventType of ["mousemove", "mousedown", "mouseup"]) {
+    cubMonitor.addEventListener(eventType, onCubMouseEvent);
+}
 
 function setCrtPic(filterMode) {
     const config = filterMode.getDisplayConfig();
-    const $monitorPic = $("#cub-monitor-pic");
-    $monitorPic.attr("src", config.image);
-    $monitorPic.attr("alt", config.imageAlt);
-    $monitorPic.attr("width", config.imageWidth);
-    $monitorPic.attr("height", config.imageHeight);
+    const monitorPic = document.getElementById("cub-monitor-pic");
+    monitorPic.src = config.image;
+    monitorPic.alt = config.imageAlt;
+    monitorPic.width = config.imageWidth;
+    monitorPic.height = config.imageHeight;
 }
 setCrtPic(displayModeFilter);
 
-$(window).blur(function () {
+window.addEventListener("blur", function () {
     keyboard.clearKeys();
 });
 
-$("#fs").click(function (event) {
-    $screen[0].requestFullscreen();
+document.getElementById("fs").addEventListener("click", function (event) {
+    screenCanvas.requestFullscreen();
     event.preventDefault();
 });
 
 let keyboard; // This will be initialised after the processor is created
 
-const $debugPause = $("#debug-pause");
-const $debugPlay = $("#debug-play");
-$debugPause.click(() => stop(true));
-$debugPlay.click(() => {
+const debugPause = document.getElementById("debug-pause");
+const debugPlay = document.getElementById("debug-play");
+debugPause.addEventListener("click", () => stop(true));
+debugPlay.addEventListener("click", () => {
     dbgr.hide();
     go();
 });
@@ -586,7 +588,7 @@ window.addEventListener("beforeunload", function (event) {
 if (model.hasEconet) {
     econet = new Econet(stationId);
 } else {
-    $("#fsmenuitem").hide();
+    document.getElementById("fsmenuitem").style.display = "none";
 }
 
 const cmos = new Cmos(
@@ -641,7 +643,6 @@ microphoneInput.setErrorCallback((message) => {
 });
 
 // Create MouseJoystickSource but don't enable by default
-const screenCanvas = document.getElementById("screen");
 const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 
 /**
@@ -699,14 +700,14 @@ async function ensureMicrophoneRunning() {
 }
 
 async function setupMicrophone() {
-    const $micPermissionStatus = $("#micPermissionStatus");
-    $micPermissionStatus.text("Requesting microphone access...");
+    const micPermissionStatus = document.getElementById("micPermissionStatus");
+    micPermissionStatus.textContent = "Requesting microphone access...";
 
     // Try to initialise the microphone
     const success = await microphoneInput.initialise();
     if (success) {
         // Note: Channel assignment is handled by updateAdcSources()
-        $micPermissionStatus.text("Microphone connected successfully");
+        micPermissionStatus.textContent = "Microphone connected successfully";
         await ensureMicrophoneRunning();
 
         // Try starting audio context from user gesture
@@ -715,7 +716,7 @@ async function setupMicrophone() {
         };
         document.addEventListener("click", tryAgain);
     } else {
-        $micPermissionStatus.text(`Error: ${microphoneInput.getErrorMessage() || "Unknown error"}`);
+        micPermissionStatus.textContent = `Error: ${microphoneInput.getErrorMessage() || "Unknown error"}`;
         config.setMicrophoneChannel(undefined);
         // Update URL to remove the parameter
         delete parsedQuery.microphoneChannel;
@@ -877,13 +878,13 @@ function setTapeImage(name) {
 }
 
 function sthClearList() {
-    $("#sth-list li:not(.template)").remove();
+    for (const el of document.querySelectorAll("#sth-list li:not(.template)")) el.remove();
 }
 
 function sthStartLoad() {
-    const $sth = $("#sth .loading");
-    $sth.text("Loading catalog from STH archive");
-    $sth.show();
+    const sthLoading = document.querySelector("#sth .loading");
+    sthLoading.textContent = "Loading catalog from STH archive";
+    sthLoading.style.display = "";
     sthClearList();
 }
 
@@ -933,26 +934,28 @@ document.getElementById("sth").addEventListener("shown.bs.modal", () => {
 function makeOnCat(onClick) {
     return function (cat) {
         sthClearList();
-        const sthList = $("#sth-list");
-        $("#sth .loading").hide();
-        const template = sthList.find(".template");
+        const sthList = document.getElementById("sth-list");
+        document.querySelector("#sth .loading").style.display = "none";
+        const template = sthList.querySelector(".template");
 
         function doSome(all) {
             const MaxAtATime = 100;
             const Delay = 30;
-            const cat = all.slice(0, MaxAtATime);
+            const batch = all.slice(0, MaxAtATime);
             const remaining = all.slice(MaxAtATime);
-            const filter = $("#sth-filter").val();
-            $.each(cat, function (_, cat) {
-                const row = template.clone().removeClass("template").appendTo(sthList);
-                row.find(".name").text(cat);
-                $(row).on("click", function () {
-                    onClick(cat);
+            const filter = document.getElementById("sth-filter").value;
+            for (const name of batch) {
+                const row = template.cloneNode(true);
+                row.classList.remove("template");
+                sthList.appendChild(row);
+                row.querySelector(".name").textContent = name;
+                row.addEventListener("click", function () {
+                    onClick(name);
                     $sthModal.hide();
                 });
-                row.toggle(cat.toLowerCase().indexOf(filter) >= 0);
-            });
-            if (all.length) _.delay(doSome, Delay, remaining);
+                row.style.display = name.toLowerCase().indexOf(filter) >= 0 ? "" : "none";
+            }
+            if (all.length) setTimeout(() => doSome(remaining), Delay);
         }
 
         doSome(cat);
@@ -960,18 +963,18 @@ function makeOnCat(onClick) {
 }
 
 function sthOnError() {
-    const $sthLoading = $("#sth .loading");
-    $sthLoading.text("There was an error accessing the STH archive");
-    $sthLoading.show();
+    const sthLoading = document.querySelector("#sth .loading");
+    sthLoading.textContent = "There was an error accessing the STH archive";
+    sthLoading.style.display = "";
     sthClearList();
 }
 
 discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
 
-const $sthAutoboot = $("#sth .autoboot");
-$sthAutoboot.click(function () {
-    if ($sthAutoboot.prop("checked")) {
+const sthAutoboot = document.querySelector("#sth .autoboot");
+sthAutoboot.addEventListener("click", function () {
+    if (sthAutoboot.checked) {
         parsedQuery.autoboot = "";
     } else {
         delete parsedQuery.autoboot;
@@ -979,8 +982,10 @@ $sthAutoboot.click(function () {
     updateUrl();
 });
 
-$(document).on("click", "a.sth", function () {
-    const type = $(this).data("id");
+document.addEventListener("click", function (e) {
+    const target = e.target.closest("a.sth");
+    if (!target) return;
+    const type = target.dataset.id;
     if (type === "discs") {
         discSth.populate();
     } else if (type === "tapes") {
@@ -992,15 +997,14 @@ $(document).on("click", "a.sth", function () {
 
 function setSthFilter(filter) {
     filter = filter.toLowerCase();
-    $("#sth-list li:not(.template)").each(function () {
-        const el = $(this);
-        el.toggle(el.text().toLowerCase().indexOf(filter) >= 0);
-    });
+    for (const el of document.querySelectorAll("#sth-list li:not(.template)")) {
+        el.style.display = el.textContent.toLowerCase().indexOf(filter) >= 0 ? "" : "none";
+    }
 }
 
-$("#sth-filter").on("change keyup", function () {
-    setSthFilter($("#sth-filter").val());
-});
+const sthFilter = document.getElementById("sth-filter");
+sthFilter.addEventListener("change", () => setSthFilter(sthFilter.value));
+sthFilter.addEventListener("keyup", () => setSthFilter(sthFilter.value));
 
 function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
@@ -1143,7 +1147,7 @@ async function loadDiscImage(discImage) {
 
         case "data": {
             const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-            const { name, data } = utils.unzipDiscImage(arr);
+            const { name, data } = await utils.unzipDiscImage(arr);
             return disc.discFor(processor.fdc, name, data);
         }
         case "http":
@@ -1154,7 +1158,7 @@ async function loadDiscImage(discImage) {
             discImage = new URL(asUrl).pathname;
             let discData = await utils.loadData(asUrl);
             if (/\.zip/i.test(discImage)) {
-                const unzipped = utils.unzipDiscImage(discData);
+                const unzipped = await utils.unzipDiscImage(discData);
                 discData = unzipped.data;
                 discImage = unzipped.name;
             }
@@ -1173,12 +1177,12 @@ async function loadTapeImage(tapeImage) {
     switch (schema) {
         case "|":
         case "sth":
-            return loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
+            return await loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
 
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-            const { name, data } = utils.unzipDiscImage(arr);
-            return loadTapeFromData(name, data);
+            const { name, data } = await utils.unzipDiscImage(arr);
+            return await loadTapeFromData(name, data);
         }
 
         case "http":
@@ -1189,11 +1193,11 @@ async function loadTapeImage(tapeImage) {
             tapeImage = new URL(asUrl).pathname;
             let tapeData = await utils.loadData(asUrl);
             if (/\.zip/i.test(tapeImage)) {
-                const unzipped = utils.unzipDiscImage(tapeData);
+                const unzipped = await utils.unzipDiscImage(tapeData);
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
-            return loadTapeFromData(tapeImage, tapeData);
+            return await loadTapeFromData(tapeImage, tapeData);
         }
 
         default:
@@ -1201,7 +1205,7 @@ async function loadTapeImage(tapeImage) {
     }
 }
 
-$("#disc_load").on("change", async function (evt) {
+document.getElementById("disc_load").addEventListener("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
@@ -1209,7 +1213,7 @@ $("#disc_load").on("change", async function (evt) {
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$("#fs_load").on("change", async function (evt) {
+document.getElementById("fs_load").addEventListener("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
@@ -1217,22 +1221,22 @@ $("#fs_load").on("change", async function (evt) {
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-$("#tape_load").on("change", async function (evt) {
+document.getElementById("tape_load").addEventListener("change", async function (evt) {
     if (evt.target.files.length === 0) return;
     const file = evt.target.files[0];
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
     const binaryData = await readFileAsBinaryString(file);
-    processor.acia.setTape(loadTapeFromData("local file", binaryData));
+    processor.acia.setTape(await loadTapeFromData("local file", binaryData));
     delete parsedQuery.tape;
     updateUrl();
-    $("#tapes").modal("hide");
+    bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
 
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
 function anyModalsVisible() {
-    return $(".modal:visible").length !== 0;
+    return document.querySelectorAll(".modal.show").length !== 0;
 }
 
 let modalSavedRunning = false;
@@ -1246,42 +1250,45 @@ document.addEventListener("hidden.bs.modal", function () {
     }
 });
 
-const $loadingDialog = $("#loading-dialog");
-const $loadingDialogModal = new bootstrap.Modal($loadingDialog[0]);
+const loadingDialog = document.getElementById("loading-dialog");
+const loadingDialogModal = new bootstrap.Modal(loadingDialog);
+const googleDriveAuth = document.getElementById("google-drive-auth");
 
 function popupLoading(msg) {
-    $loadingDialog.find(".loading").text(msg);
-    $("#google-drive-auth").hide();
-    $loadingDialogModal.show();
+    loadingDialog.querySelector(".loading").textContent = msg;
+    googleDriveAuth.style.display = "none";
+    loadingDialogModal.show();
 }
 
 function loadingFinished(error) {
-    $("#google-drive-auth").hide();
+    googleDriveAuth.style.display = "none";
     if (error) {
-        $loadingDialogModal.show();
-        $loadingDialog.find(".loading").text("Error: " + error);
+        loadingDialogModal.show();
+        loadingDialog.querySelector(".loading").textContent = "Error: " + error;
         setTimeout(function () {
-            $loadingDialogModal.hide();
+            loadingDialogModal.hide();
         }, 5000);
     } else {
-        $loadingDialogModal.hide();
+        loadingDialogModal.hide();
     }
 }
 
 const googleDrive = new GoogleDriveLoader();
+const googleDriveEl = document.getElementById("google-drive");
 
 async function gdAuth(imm) {
     try {
         return await googleDrive.authorize(imm);
     } catch (err) {
         console.log("Error handling google auth: " + err);
-        $googleDrive.find(".loading").text("There was an error accessing your Google Drive account: " + err);
+        googleDriveEl.querySelector(".loading").textContent =
+            "There was an error accessing your Google Drive account: " + err;
     }
 }
 
 let googleDriveLoadingResolve, googleDriveLoadingReject;
-$("#google-drive-auth form").on("submit", async function (e) {
-    $("#google-drive-auth").hide();
+document.querySelector("#google-drive-auth form").addEventListener("submit", async function (e) {
+    googleDriveAuth.style.display = "none";
     e.preventDefault();
     const authed = await gdAuth(false);
     if (authed) googleDriveLoadingResolve();
@@ -1308,7 +1315,7 @@ async function gdLoad(cat) {
             await new Promise(function (resolve, reject) {
                 googleDriveLoadingResolve = resolve;
                 googleDriveLoadingReject = reject;
-                $("#google-drive-auth").show();
+                googleDriveAuth.style.display = "";
             });
         }
 
@@ -1322,50 +1329,55 @@ async function gdLoad(cat) {
     }
 }
 
-$(".if-drive-available").hide();
+for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "none";
 (async () => {
     const available = await googleDrive.initialise();
     if (available) {
-        $(".if-drive-available").show();
+        for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
         await gdAuth(true);
     }
 })();
-const $googleDrive = $("#google-drive");
-const $googleDriveModal = new bootstrap.Modal($googleDrive[0]);
-$("#open-drive-link").on("click", async function () {
+const googleDriveModal = new bootstrap.Modal(googleDriveEl);
+document.getElementById("open-drive-link").addEventListener("click", async function () {
     const authed = await gdAuth(false);
     if (authed) {
-        $googleDriveModal.show();
+        googleDriveModal.show();
     }
     return false;
 });
-$googleDrive[0].addEventListener("show.bs.modal", async function () {
-    $googleDrive.find(".loading").text("Loading...").show();
-    $googleDrive.find("li").not(".template").remove();
+googleDriveEl.addEventListener("show.bs.modal", async function () {
+    const gdLoading = googleDriveEl.querySelector(".loading");
+    gdLoading.textContent = "Loading...";
+    gdLoading.style.display = "";
+    for (const el of googleDriveEl.querySelectorAll("li:not(.template)")) el.remove();
     const cat = await googleDrive.listFiles();
-    const dbList = $googleDrive.find(".list");
-    $googleDrive.find(".loading").hide();
-    const template = dbList.find(".template");
-    $.each(cat, function (_, cat) {
-        const row = template.clone().removeClass("template").appendTo(dbList);
-        row.find(".name").text(cat.name);
-        $(row).on("click", function () {
-            utils.noteEvent("google-drive", "click", cat.name);
-            setDisc1Image(`gd:${cat.id}/${cat.name}`);
-            gdLoad(cat).then(function (ssd) {
+    const dbList = googleDriveEl.querySelector(".list");
+    gdLoading.style.display = "none";
+    const template = dbList.querySelector(".template");
+    for (const item of cat) {
+        const row = template.cloneNode(true);
+        row.classList.remove("template");
+        dbList.appendChild(row);
+        row.querySelector(".name").textContent = item.name;
+        row.addEventListener("click", function () {
+            utils.noteEvent("google-drive", "click", item.name);
+            setDisc1Image(`gd:${item.id}/${item.name}`);
+            gdLoad(item).then(function (ssd) {
                 processor.fdc.loadDisc(0, ssd);
             });
-            $googleDriveModal.hide();
+            googleDriveModal.hide();
         });
-    });
+    }
 });
-const discList = $("#disc-list");
-const template = discList.find(".template");
-$.each(availableImages, function (i, image) {
-    const elem = template.clone().removeClass("template").appendTo(discList);
-    elem.find(".name").text(image.name);
-    elem.find(".description").text(image.desc);
-    $(elem).on("click", function () {
+const discList = document.getElementById("disc-list");
+const discTemplate = discList.querySelector(".template");
+for (const image of availableImages) {
+    const elem = discTemplate.cloneNode(true);
+    elem.classList.remove("template");
+    discList.appendChild(elem);
+    elem.querySelector(".name").textContent = image.name;
+    elem.querySelector(".description").textContent = image.desc;
+    elem.addEventListener("click", function () {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         loadDiscImage(parsedQuery.disc1).then(function (disc) {
@@ -1373,19 +1385,19 @@ $.each(availableImages, function (i, image) {
         });
         $discsModal.hide();
     });
-});
+}
 
-$("#google-drive form").on("submit", async function (e) {
+document.querySelector("#google-drive form").addEventListener("submit", async function (e) {
     e.preventDefault();
-    let name = $("#google-drive .disc-name").val();
+    let name = document.querySelector("#google-drive .disc-name").value;
     if (!name) return;
 
     popupLoading("Connecting to Google Drive");
-    $googleDriveModal.hide();
+    googleDriveModal.hide();
     popupLoading("Creating '" + name + "' on Google Drive");
 
     let data;
-    if ($("#google-drive .create-from-existing").prop("checked")) {
+    if (document.querySelector("#google-drive .create-from-existing").checked) {
         const discType = disc.guessDiscTypeFromName(name);
         data = discType.saver(processor.fdc.drives[0].disc);
         name = replaceOrAddExtension(name, discType.extension);
@@ -1414,7 +1426,7 @@ $("#google-drive form").on("submit", async function (e) {
     }
 });
 
-$("#download-drive-link").on("click", function () {
+document.getElementById("download-drive-link").addEventListener("click", function () {
     const disc = processor.fdc.drives[0].disc;
     const data = toSsdOrDsd(disc);
     const name = disc.name;
@@ -1423,7 +1435,7 @@ $("#download-drive-link").on("click", function () {
     downloadDriveData(data, name, extension);
 });
 
-$("#download-drive-hfe-link").on("click", function () {
+document.getElementById("download-drive-hfe-link").addEventListener("click", function () {
     const disc = processor.fdc.drives[0].disc;
     const data = toHfe(disc);
     const name = disc.name;
@@ -1431,7 +1443,7 @@ $("#download-drive-hfe-link").on("click", function () {
     downloadDriveData(data, name, ".hfe");
 });
 
-$("#download-filestore-link").on("click", function () {
+document.getElementById("download-filestore-link").addEventListener("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
@@ -1444,17 +1456,17 @@ function hardReset() {
     processor.reset(true);
 }
 
-$("#hard-reset").click(function (event) {
+document.getElementById("hard-reset").addEventListener("click", function (event) {
     hardReset();
     event.preventDefault();
 });
 
-$("#soft-reset").click(function (event) {
+document.getElementById("soft-reset").addEventListener("click", function (event) {
     processor.reset(false);
     event.preventDefault();
 });
 
-$("#save-state").click(async function (event) {
+document.getElementById("save-state").addEventListener("click", async function (event) {
     event.preventDefault();
     const wasRunning = running;
     if (running) stop(false);
@@ -1494,11 +1506,11 @@ $("#save-state").click(async function (event) {
     if (wasRunning) go();
 });
 
-async function loadStateFromFile(file) {
+async function loadStateFromFile(file, preReadBuffer) {
     const wasRunning = running;
     if (running) stop(false);
     try {
-        const arrayBuffer = await file.arrayBuffer();
+        const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
         let snapshot;
         if (isBemSnapshot(arrayBuffer)) {
             snapshot = await parseBemSnapshot(arrayBuffer);
@@ -1545,33 +1557,34 @@ function isSnapshotFile(filename, arrayBuffer) {
     return false;
 }
 
-$("#load-state").on("change", async function (event) {
+document.getElementById("load-state").addEventListener("change", async function (event) {
     const file = event.target.files[0];
     if (!file) return;
     event.target.value = "";
     await loadStateFromFile(file);
 });
 
-$("#tape-menu a").on("click", function (e) {
-    const type = $(e.target).attr("data-id");
-    if (type === undefined) return;
+for (const link of document.querySelectorAll("#tape-menu a")) {
+    link.addEventListener("click", function (e) {
+        const type = e.target.dataset.id;
+        if (type === undefined) return;
 
-    if (type === "rewind") {
-        console.log("Rewinding tape to the start");
-
-        processor.acia.rewindTape();
-    } else {
-        console.log("unknown type", type);
-    }
-});
+        if (type === "rewind") {
+            console.log("Rewinding tape to the start");
+            processor.acia.rewindTape();
+        } else {
+            console.log("unknown type", type);
+        }
+    });
+}
 
 function Light(name) {
-    const dom = $("#" + name);
+    const dom = document.getElementById(name);
     let on = false;
     this.update = function (val) {
         if (val === on) return;
         on = val;
-        dom.toggleClass("on", on);
+        dom.classList.toggle("on", on);
     };
 }
 
@@ -1686,7 +1699,7 @@ startPromise
     .then(async () => {
         switch (needsAutoboot) {
             case "boot":
-                $sthAutoboot.prop("checked", true);
+                sthAutoboot.checked = true;
                 autoboot(discImage);
                 break;
             case "type":
@@ -1699,7 +1712,7 @@ startPromise
                 autoRunTape();
                 break;
             default:
-                $sthAutoboot.prop("checked", false);
+                sthAutoboot.checked = false;
                 break;
         }
 
@@ -1730,18 +1743,22 @@ startPromise
         showError("initialising", error);
     });
 
-const $ays = $("#are-you-sure");
-const $aysModal = new bootstrap.Modal($ays[0]);
+const aysEl = document.getElementById("are-you-sure");
+const aysModal = new bootstrap.Modal(aysEl);
 
 function areYouSure(message, yesText, noText, yesFunc) {
-    $ays.find(".context").text(message);
-    $ays.find(".ays-yes").text(yesText);
-    $ays.find(".ays-no").text(noText);
-    $ays.find(".ays-yes").one("click", function () {
-        $aysModal.hide();
-        yesFunc();
-    });
-    $aysModal.show();
+    aysEl.querySelector(".context").textContent = message;
+    aysEl.querySelector(".ays-yes").textContent = yesText;
+    aysEl.querySelector(".ays-no").textContent = noText;
+    aysEl.querySelector(".ays-yes").addEventListener(
+        "click",
+        function () {
+            aysModal.hide();
+            yesFunc();
+        },
+        { once: true },
+    );
+    aysModal.show();
 }
 
 function benchmarkCpu(numCycles) {
@@ -1789,8 +1806,8 @@ let last = 0;
 function VirtualSpeedUpdater() {
     this.cycles = 0;
     this.time = 0;
-    this.v = $(".virtualMHz");
-    this.header = $("#virtual-mhz-header");
+    this.v = document.querySelector(".virtualMHz");
+    this.header = document.getElementById("virtual-mhz-header");
     this.speedy = false;
 
     this.update = function (cycles, time, speedy) {
@@ -1803,11 +1820,11 @@ function VirtualSpeedUpdater() {
         // MRG would be nice to graph instantaneous speed to get some idea where the time goes.
         if (this.cycles) {
             const thisMHz = this.cycles / this.time / 1000;
-            this.v.text(thisMHz.toFixed(1));
+            this.v.textContent = thisMHz.toFixed(1);
             if (this.cycles >= 10 * 2 * 1000 * 1000) {
                 this.cycles = this.time = 0;
             }
-            this.header.css("color", this.speedy ? "red" : "white");
+            this.header.style.color = this.speedy ? "red" : "white";
         }
         setTimeout(this.display.bind(this), 3333);
     };
@@ -1926,8 +1943,8 @@ function handleVisibilityChange() {
 document.addEventListener("visibilitychange", handleVisibilityChange, false);
 
 function updateDebugButtons() {
-    $debugPlay.attr("disabled", running);
-    $debugPause.attr("disabled", !running);
+    debugPlay.disabled = running;
+    debugPause.disabled = !running;
 }
 
 function go() {
@@ -1948,8 +1965,8 @@ function stop(debug) {
 }
 
 (function () {
-    const $cubMonitor = $("#cub-monitor");
-    const $cubMonitorPic = $("#cub-monitor-pic");
+    const resizeCubMonitor = document.getElementById("cub-monitor");
+    const resizeCubMonitorPic = document.getElementById("cub-monitor-pic");
     const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
     const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
 
@@ -1964,13 +1981,13 @@ function stop(debug) {
         const visibleWidth = displayConfig.visibleWidth;
         const visibleHeight = displayConfig.visibleHeight;
 
-        const canvasNativeWidth = $screen.attr("width");
-        const canvasNativeHeight = $screen.attr("height");
+        const canvasNativeWidth = screenCanvas.getAttribute("width");
+        const canvasNativeHeight = screenCanvas.getAttribute("height");
         const desiredAspectRatio = imageOrigWidth / imageOrigHeight;
         const minWidth = imageOrigWidth / 4;
         const minHeight = imageOrigHeight / 4;
 
-        let navbarHeight = $("#header-bar").outerHeight() || 0;
+        let navbarHeight = document.getElementById("header-bar")?.offsetHeight || 0;
         let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
         let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
         if (width / height <= desiredAspectRatio) {
@@ -1995,11 +2012,14 @@ function stop(debug) {
             finalCanvasWidth = scaledVisibleHeight * canvasAspect;
         }
 
-        $cubMonitor.height(height).width(width);
-        $cubMonitorPic.height(height).width(width);
-        $screen.width(finalCanvasWidth).height(finalCanvasHeight);
-        $screen.css("left", canvasOrigLeft * containerScale + "px");
-        $screen.css("top", canvasOrigTop * containerScale + "px");
+        resizeCubMonitor.style.height = height + "px";
+        resizeCubMonitor.style.width = width + "px";
+        resizeCubMonitorPic.style.height = height + "px";
+        resizeCubMonitorPic.style.width = width + "px";
+        screenCanvas.style.width = finalCanvasWidth + "px";
+        screenCanvas.style.height = finalCanvasHeight + "px";
+        screenCanvas.style.left = canvasOrigLeft * containerScale + "px";
+        screenCanvas.style.top = canvasOrigTop * containerScale + "px";
     }
 
     window.addEventListener("resize", resizeTv);
@@ -2019,10 +2039,10 @@ if (Object.hasOwn(parsedQuery, "pp-tos")) {
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
-window.benchmarkCpu = _.debounce(benchmarkCpu, 1);
-window.profileCpu = _.debounce(profileCpu, 1);
-window.benchmarkVideo = _.debounce(benchmarkVideo, 1);
-window.profileVideo = _.debounce(profileVideo, 1);
+window.benchmarkCpu = utils.debounce(benchmarkCpu, 1);
+window.profileCpu = utils.debounce(profileCpu, 1);
+window.benchmarkVideo = utils.debounce(benchmarkVideo, 1);
+window.profileVideo = utils.debounce(profileVideo, 1);
 window.go = go;
 window.stop = stop;
 window.soundChip = audioHandler.soundChip;
@@ -2075,7 +2095,7 @@ electron({
     actions: {
         "soft-reset": () => processor.reset(false),
         "hard-reset": hardReset,
-        "save-state": () => $("#save-state").trigger("click"),
+        "save-state": () => document.getElementById("save-state").click(),
         rewind: () => rewindUI.open(),
     },
 });
