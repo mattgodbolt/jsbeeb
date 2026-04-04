@@ -1,9 +1,10 @@
 "use strict";
 
-// based on the MAME version of Acorn Atom
-//-------------------------------------------------
-//  pal_square_fontdata8x12
-//-------------------------------------------------
+// MC6847 internal character ROM data (PAL square pixel variant, 8x12).
+// Derived from the MAME project's MC6847 VDG emulation:
+//   https://github.com/mamedev/mame/blob/master/src/devices/video/mc6847.cpp
+//   Copyright Nathan Woods, licensed under BSD-3-Clause.
+//   See https://github.com/mamedev/mame/blob/master/LICENSE.md
 export function makeCharsAtom() {
     return new Uint8Array([
         0x00, 0x00, 0x00, 0x1c, 0x22, 0x02, 0x1a, 0x2a, 0x2a, 0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x14, 0x22,
