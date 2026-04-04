@@ -55,7 +55,12 @@ export async function decompress(data, format) {
     const writePromise = (async () => {
         await writer.write(data);
         await writer.close();
-    })().catch(() => {});
+    })().catch(() => {
+        // Intentionally empty: Node's DecompressionStream rejects multiple
+        // promises on error (write, close, closed). The read side surfaces
+        // the same error with proper context — catching here just prevents
+        // unhandled rejections.
+    });
     writer.closed.catch(() => {});
     await readPromise;
     await writePromise;
