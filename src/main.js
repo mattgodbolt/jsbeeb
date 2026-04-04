@@ -383,7 +383,9 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
-const audioStatsNode = parsedQuery.audioDebug ? document.getElementById("audio-stats") : null;
+const audioStatsEl = document.getElementById("audio-stats");
+if (audioStatsEl) audioStatsEl.hidden = !parsedQuery.audioDebug;
+const audioStatsNode = parsedQuery.audioDebug ? audioStatsEl : null;
 const audioHandler = new AudioHandler({
     warningNode: document.getElementById("audio-warning"),
     statsNode: audioStatsNode,

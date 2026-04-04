@@ -16,7 +16,11 @@ export class AudioHandler {
         toggle(this.warningNode, false);
         this.stats = {};
         if (statsNode) {
-            this._initStats(statsNode);
+            this._initStats(statsNode).catch((error) => {
+                console.error("Unable to initialise audio stats", error);
+                this.stats = {};
+                toggle(statsNode, false);
+            });
         }
         this.audioContext = createAudioContext();
         this._jsAudioNode = null;
