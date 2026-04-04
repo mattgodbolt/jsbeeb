@@ -9,12 +9,11 @@ describe("Keyboard", () => {
     let mockSysvia;
     let mockInputEnabledFunction;
 
-    // Helper function to create an async event tester
+    // Helper function to create an async event tester.
+    // Resolves with the event itself so callers can access .detail if needed.
     const waitForEvent = (eventName) => {
         return new Promise((resolve) => {
-            keyboard.addEventListener(eventName, (e) => {
-                resolve(e.detail);
-            });
+            keyboard.addEventListener(eventName, resolve);
         });
     };
 
@@ -192,7 +191,7 @@ describe("Keyboard", () => {
 
         expect(mockProcessor.setReset).toHaveBeenCalledWith(true);
         expect(event.preventDefault).toHaveBeenCalled();
-        expect(breakState).toBe(true);
+        expect(breakState.detail).toBe(true);
     });
 
     test("keyUp should call sysvia.keyUp", () => {
@@ -245,7 +244,7 @@ describe("Keyboard", () => {
 
         expect(mockProcessor.setReset).toHaveBeenCalledWith(false);
         expect(event.preventDefault).toHaveBeenCalled();
-        expect(breakState).toBe(false);
+        expect(breakState.detail).toBe(false);
     });
 
     test("clearKeys should call sysvia.clearKeys", () => {
