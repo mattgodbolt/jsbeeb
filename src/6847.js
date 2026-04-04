@@ -150,9 +150,10 @@ export class Video6847 {
         // /* dark green 9 */
         // /* dark orange 10 */
 
-        // The Atom doesn't use interlace or doubled scanlines
         this.interlacedSyncAndVideo = false;
-        this.doubledScanlines = false;
+        // The 6847 blitters always write two framebuffer lines per pixel row,
+        // so Video.clearPaintBuffer() must clear both lines.
+        this.doubledScanlines = true;
 
         this.regs = new Uint8Array(32);
         this.bitmapX = 0;
@@ -278,7 +279,7 @@ export class Video6847 {
 
         // during a vdg cycle, cpu might be active
         if (this.vdg_cycles >= 0 && this.vdg_cycles < 1) {
-            if (cpuaddr > 0x8000 && cpuaddr <= 0x9800) {
+            if (cpuaddr >= 0x8000 && cpuaddr <= 0x9800) {
                 return this.cpu.videoRead(cpuaddr);
             }
         }
@@ -298,6 +299,9 @@ export class Video6847 {
 
     setValuesFromMode(mode) {
         mode = mode & 0xf0;
+        // In text mode (AG=0), the GM bits are ignored per MC6847 datasheet.
+        // Force mode to 0x00 so we don't index into undefined modes table entries.
+        if (!(mode & MODE_AG)) mode = 0x00;
 
         // if no change in mode then do nothing
         if (this.lastmode === mode) return;
