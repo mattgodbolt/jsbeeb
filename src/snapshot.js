@@ -8,21 +8,18 @@ const SnapshotVersion = 2;
 
 /**
  * Check if two model names are compatible for state restore.
- * Resolves synonyms via findModel, then compares by stripping any
- * trailing parenthesised suffix (e.g. treating "BBC Master 128 (DFS)"
- * and "BBC Master 128 (ADFS)" as compatible). Does not treat
- * differently-named models like "BBC B with DFS 0.9" vs "BBC B with DFS 1.2"
- * as compatible — those are distinct models.
+ * Resolves synonyms via findModel, then compares by compatGroup —
+ * models sharing the same hardware (e.g. Master DFS/ADFS/ANFS, or
+ * BBC B 8271 DFS 0.9/1.2) are compatible since they differ only
+ * in filesystem ROM.
  */
 export function modelsCompatible(snapshotModel, currentModel) {
     if (snapshotModel === currentModel) return true;
     const resolvedSnapshot = findModel(snapshotModel);
     const resolvedCurrent = findModel(currentModel);
     if (resolvedSnapshot && resolvedCurrent) {
-        // Same model object, or same base machine (strip filesystem suffix)
         if (resolvedSnapshot === resolvedCurrent) return true;
-        const base = (name) => name.replace(/\s*\(.*\)$/, "");
-        return base(resolvedSnapshot.name) === base(resolvedCurrent.name);
+        return resolvedSnapshot.compatGroup === resolvedCurrent.compatGroup;
     }
     return false;
 }

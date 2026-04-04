@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON } from "../../src/snapshot.js";
+import {
+    createSnapshot,
+    restoreSnapshot,
+    snapshotToJSON,
+    snapshotFromJSON,
+    modelsCompatible,
+} from "../../src/snapshot.js";
 import { Cpu6502 } from "../../src/6502.js";
 import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
@@ -621,5 +627,42 @@ describe("Snapshot coordinator", () => {
             // Should not throw
             expect(() => restoreSnapshot(cpu2, model, snapshot)).not.toThrow();
         });
+    });
+});
+
+describe("modelsCompatible", () => {
+    it("should treat identical model names as compatible", () => {
+        expect(modelsCompatible("BBC B with 8271 (DFS 1.2)", "BBC B with 8271 (DFS 1.2)")).toBe(true);
+    });
+
+    it("should treat BBC B 8271 DFS variants as compatible", () => {
+        expect(modelsCompatible("B-DFS1.2", "B-DFS0.9")).toBe(true);
+    });
+
+    it("should treat BBC B 1770 DFS/ADFS variants as compatible", () => {
+        expect(modelsCompatible("B1770", "B1770A")).toBe(true);
+    });
+
+    it("should treat BBC Master filesystem variants as compatible", () => {
+        expect(modelsCompatible("Master", "MasterADFS")).toBe(true);
+        expect(modelsCompatible("Master", "MasterANFS")).toBe(true);
+        expect(modelsCompatible("MasterADFS", "MasterANFS")).toBe(true);
+    });
+
+    it("should treat old model names (synonyms) as compatible with new names", () => {
+        expect(modelsCompatible("BBC B with DFS 1.2", "B-DFS1.2")).toBe(true);
+        expect(modelsCompatible("BBC B with DFS 0.9", "B-DFS0.9")).toBe(true);
+    });
+
+    it("should not treat BBC B 8271 as compatible with BBC B 1770", () => {
+        expect(modelsCompatible("B-DFS1.2", "B1770")).toBe(false);
+    });
+
+    it("should not treat BBC B as compatible with BBC Master", () => {
+        expect(modelsCompatible("B-DFS1.2", "Master")).toBe(false);
+    });
+
+    it("should not treat unknown models as compatible", () => {
+        expect(modelsCompatible("Nonexistent", "Master")).toBe(false);
     });
 });
