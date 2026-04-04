@@ -19,7 +19,7 @@ export function fadeIn(el, duration = 400) {
     el.style.transition = `opacity ${duration}ms`;
     el.style.opacity = "0";
     // Force reflow so the transition triggers.
-    el.offsetHeight;
+    void el.offsetHeight;
     el.style.opacity = "1";
 }
 

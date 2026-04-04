@@ -363,7 +363,11 @@ export class Debugger {
             }
             elem.querySelector(".bp_gutter").classList.toggle("active", !!this.breakpoints[address]);
             elem.dataset.addr = address;
-            elem.dataset.ref = result[2];
+            if (result[2] !== undefined) {
+                elem.dataset.ref = result[2];
+            } else {
+                delete elem.dataset.ref;
+            }
             return result[1];
         };
 
