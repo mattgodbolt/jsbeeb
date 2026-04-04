@@ -1,11 +1,21 @@
 "use strict";
-import $ from "jquery";
 import { hexbyte, hexword, noop, parseAddr } from "../utils.js";
+import { toggle } from "../dom-utils.js";
 
 const numToShow = 16;
 
 function labelHtml(addr) {
     return '<span class="addr">' + hexword(addr) + "</span>";
+}
+
+// Clone a template row, unhide it, append to parent, and remove the template class.
+function cloneTemplate(container) {
+    const template = container.querySelector(".template");
+    const clone = template.cloneNode(true);
+    clone.classList.remove("template");
+    clone.style.display = "";
+    container.appendChild(clone);
+    return clone;
 }
 
 class MemoryView {
@@ -16,14 +26,13 @@ class MemoryView {
         this._prevSnapshot = new Uint8Array(65536);
         this._rows = [];
 
-        const template = this._widget.find(".template");
         for (let i = 0; i < numToShow; i++) {
-            this._rows.push(template.clone().removeClass("template").appendTo(this._widget));
+            this._rows.push(cloneTemplate(this._widget));
         }
-        template.remove();
+        this._widget.querySelector(".template").remove();
 
-        widget.on("wheel", (evt) => {
-            const deltaY = evt.originalEvent.deltaY;
+        widget.addEventListener("wheel", (evt) => {
+            const deltaY = evt.deltaY;
             if (deltaY === 0) return;
             const steps = (deltaY / 20) | 0;
             this.update(this._addr + 8 * steps);
@@ -36,14 +45,16 @@ class MemoryView {
         let addr = this._addr - 8 * Math.floor(this._rows.length / 2);
         if (addr < 0) addr = 0;
         for (const row of this._rows) {
-            row.find(".dis_addr").html(labelHtml(addr));
-            row.toggleClass("highlight", addr === this._addr);
+            row.querySelector(".dis_addr").innerHTML = labelHtml(addr);
+            row.classList.toggle("highlight", addr === this._addr);
             const dump = this.dump(addr, addr + 8);
-            const bytes = row.find(".mem_bytes span");
-            const ascii = row.find(".mem_asc span");
+            const bytes = row.querySelectorAll(".mem_bytes span");
+            const ascii = row.querySelectorAll(".mem_asc span");
             for (let i = 0; i < 8; ++i) {
-                $(bytes[i]).text(dump.hex[i]).toggleClass("changed", dump.changed[i]);
-                $(ascii[i]).text(dump.asc[i]).toggleClass("changed", dump.changed[i]);
+                bytes[i].textContent = dump.hex[i];
+                bytes[i].classList.toggle("changed", dump.changed[i]);
+                ascii[i].textContent = dump.asc[i];
+                ascii[i].classList.toggle("changed", dump.changed[i]);
             }
             addr = (addr + 8) & 0xffff;
         }
@@ -82,37 +93,41 @@ export class Debugger {
     constructor() {
         this.patchInstructions = new Map();
         this._enabled = false;
-        this.disass = $("#disassembly");
-        this._memoryView = new MemoryView($("#memory"), (address) => (this.cpu ? this.cpu.peekmem(address) : 0));
-        this.debugNode = $("#debug, #hardware_debug, #crtc_debug");
+        this.disass = document.getElementById("disassembly");
+        this._memoryView = new MemoryView(document.getElementById("memory"), (address) =>
+            this.cpu ? this.cpu.peekmem(address) : 0,
+        );
+        this.debugNodes = document.querySelectorAll("#debug, #hardware_debug, #crtc_debug");
         this.disassPc = 0;
         this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = null;
         this.breakpoints = {};
 
         function setupGoto(form, func) {
-            const addr = form.find(".goto-addr");
-            form.on("submit", (e) => {
-                func(parseAddr(addr.val()));
-                addr.val("");
+            const addr = form.querySelector(".goto-addr");
+            form.addEventListener("submit", (e) => {
+                func(parseAddr(addr.value));
+                addr.value = "";
                 addr.blur();
                 e.preventDefault();
             });
         }
 
-        setupGoto($("#goto-mem-addr-form"), (address) => this._memoryView.update(address));
-        setupGoto($("#goto-dis-addr-form"), this.updateDisassembly.bind(this));
+        setupGoto(document.getElementById("goto-mem-addr-form"), (address) => this._memoryView.update(address));
+        setupGoto(document.getElementById("goto-dis-addr-form"), this.updateDisassembly.bind(this));
 
         this.enable(false);
 
         for (let i = 0; i < numToShow; i++) {
-            this.disass.find(".template").clone().removeClass("template").appendTo(this.disass);
+            cloneTemplate(this.disass);
         }
 
-        this.disass.find(".bp_gutter").click(this.bpClick.bind(this));
+        this.disass.addEventListener("click", (e) => {
+            if (e.target.closest(".bp_gutter")) this.bpClick(e);
+        });
 
-        this.disass.on("wheel", (evt) => {
-            let deltaY = evt.originalEvent.deltaY;
+        this.disass.addEventListener("wheel", (evt) => {
+            let deltaY = evt.deltaY;
             if (deltaY === 0) return;
             let addr = this.disassPc;
             const func = deltaY < 0 ? this.prevInstruction.bind(this) : this.nextInstruction.bind(this);
@@ -128,9 +143,9 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
-        this.sysvia = this.setupVia($("#sysvia"), cpu.sysvia);
-        this.uservia = this.setupVia($("#uservia"), cpu.uservia);
-        this.crtc = this.setupCrtc($("#crtc_debug"), cpu.video);
+        this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
+        this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
+        this.crtc = this.setupCrtc(document.getElementById("crtc_debug"), cpu.video);
     }
 
     disassemble(addr) {
@@ -140,14 +155,14 @@ export class Debugger {
     setupCrtc(node, video) {
         if (!video) return noop;
         const updates = [];
-        node.find("tr:not(.template)").remove();
+        for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
 
-        const regNode = node.find(".crtc_regs");
+        const regNode = node.querySelector(".crtc_regs");
 
-        function makeRow(node, text) {
-            const row = node.find(".template").clone().removeClass("template").appendTo(node);
-            row.find(".register").text(text);
-            return row.find(".value");
+        function makeRow(container, text) {
+            const row = cloneTemplate(container);
+            row.querySelector(".register").textContent = text;
+            return row.querySelector(".value");
         }
 
         for (let i = 0; i < 16; ++i) {
@@ -157,7 +172,7 @@ export class Debugger {
             });
         }
 
-        const stateNode = node.find(".crtc_state");
+        const stateNode = node.querySelector(".crtc_state");
         const others = [
             "bitmapX",
             "bitmapY",
@@ -214,12 +229,12 @@ export class Debugger {
             "portbpins",
             "IC32",
         ];
-        node.find("tr:not(.template)").remove();
+        for (const row of node.querySelectorAll("tr:not(.template)")) row.remove();
         for (const elem of regs) {
             if (via[elem] === undefined) continue;
-            const row = node.find(".template").clone().removeClass("template").appendTo(node);
-            row.find(".register").text(elem.toUpperCase());
-            const value = row.find(".value");
+            const row = cloneTemplate(node);
+            row.querySelector(".register").textContent = elem.toUpperCase();
+            const value = row.querySelector(".value");
             if (elem.match(/t[12][cl]/)) {
                 updates.push(() => {
                     const reg = via[elem];
@@ -242,21 +257,24 @@ export class Debugger {
     }
 
     updateElem(elem, val) {
-        const prevVal = elem.text();
+        const prevVal = elem.textContent;
         if (prevVal !== val) {
-            elem.text(val);
+            elem.textContent = val;
         }
-        elem.toggleClass("changed", prevVal !== val && prevVal !== "");
+        elem.classList.toggle("changed", prevVal !== val && prevVal !== "");
     }
 
     updateRegisters() {
-        this.updateElem($("#cpu6502_a"), hexbyte(this.cpu.a));
-        this.updateElem($("#cpu6502_x"), hexbyte(this.cpu.x));
-        this.updateElem($("#cpu6502_y"), hexbyte(this.cpu.y));
-        this.updateElem($("#cpu6502_s"), hexbyte(this.cpu.s));
-        this.updateElem($("#cpu6502_pc"), hexword(this.cpu.pc));
+        this.updateElem(document.getElementById("cpu6502_a"), hexbyte(this.cpu.a));
+        this.updateElem(document.getElementById("cpu6502_x"), hexbyte(this.cpu.x));
+        this.updateElem(document.getElementById("cpu6502_y"), hexbyte(this.cpu.y));
+        this.updateElem(document.getElementById("cpu6502_s"), hexbyte(this.cpu.s));
+        this.updateElem(document.getElementById("cpu6502_pc"), hexword(this.cpu.pc));
         for (const flag of ["c", "z", "i", "d", "v", "n"]) {
-            this.updateElem($("#cpu6502_flag_" + flag), this.cpu.p[flag] ? flag.toUpperCase() : flag);
+            this.updateElem(
+                document.getElementById("cpu6502_flag_" + flag),
+                this.cpu.p[flag] ? flag.toUpperCase() : flag,
+            );
         }
     }
 
@@ -314,7 +332,7 @@ export class Debugger {
             this.updatePrevMem();
         }
         this._enabled = e;
-        this.debugNode.toggle(this._enabled);
+        for (const node of this.debugNodes) toggle(node, this._enabled);
     }
 
     enabled() {
@@ -323,33 +341,43 @@ export class Debugger {
 
     updateDisassembly(address) {
         this.disassPc = address;
-        const elems = this.disass.children().filter(":visible");
+        const elems = Array.from(this.disass.children).filter(
+            (el) => el.style.display !== "none" && !el.classList.contains("template"),
+        );
 
         const updateDisElem = (elem, address) => {
             const result = this.disassemble(address);
             const dump = this._memoryView.dump(address, result[1]);
-            elem.find(".dis_addr").html(labelHtml(address));
-            elem.toggleClass("current", address === this.cpu.pc);
-            elem.toggleClass("highlight", address === this.disassPc);
-            elem.find(".instr_bytes").text(dump.hex.join(" "));
-            elem.find(".instr_asc").text(dump.asc.join(""));
-            const disNode = elem.find(".disassembly").html(result[0]);
-            disNode.find(".instr_mem_ref").click((e) => this.memClick(e));
-            disNode.find(".instr_instr_ref").click((e) => this.instrClick(e));
-            elem.find(".bp_gutter").toggleClass("active", !!this.breakpoints[address]);
-            elem.data({ addr: address, ref: result[2] });
+            elem.querySelector(".dis_addr").innerHTML = labelHtml(address);
+            elem.classList.toggle("current", address === this.cpu.pc);
+            elem.classList.toggle("highlight", address === this.disassPc);
+            elem.querySelector(".instr_bytes").textContent = dump.hex.join(" ");
+            elem.querySelector(".instr_asc").textContent = dump.asc.join("");
+            const disNode = elem.querySelector(".disassembly");
+            disNode.innerHTML = result[0];
+            for (const ref of disNode.querySelectorAll(".instr_mem_ref")) {
+                ref.addEventListener("click", (e) => this.memClick(e));
+            }
+            for (const ref of disNode.querySelectorAll(".instr_instr_ref")) {
+                ref.addEventListener("click", (e) => this.instrClick(e));
+            }
+            elem.querySelector(".bp_gutter").classList.toggle("active", !!this.breakpoints[address]);
+            elem.dataset.addr = address;
+            if (result[2] !== undefined) {
+                elem.dataset.ref = result[2];
+            } else {
+                delete elem.dataset.ref;
+            }
             return result[1];
         };
 
         for (let i = 0; i < numToShow / 2; ++i) {
-            const elem = $(elems[i + numToShow / 2]);
-            address = updateDisElem(elem, address);
+            address = updateDisElem(elems[i + numToShow / 2], address);
         }
         address = this.disassPc;
         for (let i = numToShow / 2 - 1; i >= 0; --i) {
             address = this.prevInstruction(address);
-            const elem = $(elems[i]);
-            updateDisElem(elem, address);
+            updateDisElem(elems[i], address);
         }
     }
 
@@ -452,14 +480,14 @@ export class Debugger {
     }
 
     instrClick(e) {
-        const info = $(e.target).data();
+        const ref = parseInt(e.target.closest("[data-ref]").dataset.ref, 10);
         this.disassStack.push(this.disassPc);
-        this.updateDisassembly(info.ref);
+        this.updateDisassembly(ref);
     }
 
     memClick(e) {
-        const info = $(e.target).data();
-        this._memoryView.update(info.ref);
+        const ref = parseInt(e.target.closest("[data-ref]").dataset.ref, 10);
+        this._memoryView.update(ref);
     }
 
     toggleBreakpoint(address) {
@@ -474,13 +502,14 @@ export class Debugger {
     }
 
     bpClick(e) {
-        const address = $(e.target).closest(".dis_elem").data().addr;
+        const disElem = e.target.closest(".dis_elem");
+        const address = parseInt(disElem.dataset.addr, 10);
         this.toggleBreakpoint(address);
-        $(e.target).toggleClass("active", !!this.breakpoints[address]);
+        e.target.closest(".bp_gutter").classList.toggle("active", !!this.breakpoints[address]);
     }
 
     keyPress(key) {
-        if ($(":focus").length > 0) {
+        if (document.activeElement && document.activeElement !== document.body) {
             return false;
         }
         switch (String.fromCharCode(key)) {

@@ -386,7 +386,7 @@ if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
 const audioStatsNode = document.getElementById("audio-stats");
 const audioHandler = new AudioHandler({
-    warningNode: $("#audio-warning"),
+    warningNode: document.getElementById("audio-warning"),
     statsNode: audioStatsNode,
     audioFilterFreq,
     audioFilterQ,
