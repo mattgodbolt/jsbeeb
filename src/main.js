@@ -1,5 +1,4 @@
 import $ from "jquery";
-import _ from "underscore";
 import * as bootstrap from "bootstrap";
 import { version } from "../package.json";
 
@@ -234,7 +233,7 @@ const config = new Config(
         }
     },
     function onClose(changed) {
-        parsedQuery = _.extend(parsedQuery, changed);
+        parsedQuery = Object.assign(parsedQuery, changed);
         if (
             changed.model ||
             changed.coProcessor !== undefined ||
@@ -947,7 +946,7 @@ function makeOnCat(onClick) {
                 });
                 row.toggle(cat.toLowerCase().indexOf(filter) >= 0);
             });
-            if (all.length) _.delay(doSome, Delay, remaining);
+            if (all.length) setTimeout(() => doSome(remaining), Delay);
         }
 
         doSome(cat);
@@ -2008,10 +2007,10 @@ if (Object.hasOwn(parsedQuery, "pp-tos")) {
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
-window.benchmarkCpu = _.debounce(benchmarkCpu, 1);
-window.profileCpu = _.debounce(profileCpu, 1);
-window.benchmarkVideo = _.debounce(benchmarkVideo, 1);
-window.profileVideo = _.debounce(profileVideo, 1);
+window.benchmarkCpu = utils.debounce(benchmarkCpu, 1);
+window.profileCpu = utils.debounce(profileCpu, 1);
+window.benchmarkVideo = utils.debounce(benchmarkVideo, 1);
+window.profileVideo = utils.debounce(profileVideo, 1);
 window.go = go;
 window.stop = stop;
 window.soundChip = audioHandler.soundChip;

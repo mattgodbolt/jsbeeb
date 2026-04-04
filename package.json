@@ -33,8 +33,7 @@
     "event-emitter-es6": "^1.1.5",
     "jquery": "^4.0.0",
     "sharp": "^0.34.5",
-    "smoothie": "^1.36.1",
-    "underscore": "^1.13.7"
+    "smoothie": "^1.36.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

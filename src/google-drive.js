@@ -1,7 +1,6 @@
 "use strict";
 
-import _ from "underscore";
-import * as utils from "./utils.js";
+import { debounce, uint8ArrayToString } from "./utils.js";
 import { discFor } from "./fdc.js";
 
 const MIME_TYPE = "application/vnd.jsbeeb.disc-image";
@@ -112,7 +111,7 @@ export class GoogleDriveLoader {
         const metadata = { name, mimeType: MIME_TYPE };
         if (!idOrNone) metadata.parents = [this.parentFolderId];
 
-        const base64Data = btoa(utils.uint8ArrayToString(data));
+        const base64Data = btoa(uint8ArrayToString(data));
         const multipartRequestBody =
             `${delimiter}Content-Type: application/json\r\n\r\n` +
             `${JSON.stringify(metadata)}${delimiter}` +
@@ -141,7 +140,7 @@ export class GoogleDriveLoader {
         const id = meta.id;
         if (meta.capabilities.canEdit) {
             console.log("Making editable disc");
-            flusher = _.debounce(async (changedData) => {
+            flusher = debounce(async (changedData) => {
                 console.log("Data changed...");
                 await this.saveFile(name, changedData, id);
                 console.log("Saved ok");
