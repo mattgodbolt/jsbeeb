@@ -8,6 +8,8 @@
 // 0x0460–0x047F range, identified by an initial 0x046C (BeebEm ID) chunk.
 // Reference: stardot/beebem-windows Src/UefState.cpp
 
+import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
+
 // Chunk IDs used in BeebEm UEF save states
 const ChunkId = {
     BeebEmID: 0x046c, // presence of this chunk identifies a BeebEm save state
@@ -62,17 +64,6 @@ function parseChunks(bytes, view) {
     }
     return chunks;
 }
-
-// Volume table matching soundchip.js (and bem-snapshot.js)
-const volumeTable = new Float32Array(16);
-(() => {
-    let f = 1.0;
-    for (let i = 0; i < 15; ++i) {
-        volumeTable[i] = f / 4;
-        f *= Math.pow(10, -0.1);
-    }
-    volumeTable[15] = 0;
-})();
 
 /**
  * Convert a BeebEm UEF VIA state (from chunk 0x0467) to jsbeeb VIA state.
@@ -156,127 +147,6 @@ function convertViaChunk(data) {
 }
 
 /**
- * Build jsbeeb video state from BeebEm UEF video chunk (0x0468).
- * The chunk layout matches SaveVideoUEF:
- *   [0-17]  CRTC registers (18 bytes)
- *   [18]    VideoULA_ControlReg
- *   [19-34] VideoULA_Palette[16] XOR'd with 7 (to recover: read ^ 7)
- *   [35-36] ActualScreenWidth (uint16, ignored)
- *   [37-40] ScreenAdjust (uint32, ignored)
- *   [41]    CRTCControlReg (ignored)
- *   [42]    TeletextStyle (ignored)
- *   (additional counters if version >= 13, not parsed here)
- */
-function buildVideoState(ulaControl, ulaPalette, crtcRegs) {
-    const regs = new Uint8Array(32);
-    regs.set(crtcRegs.slice(0, 18));
-    const actualPal = new Uint8Array(16);
-    for (let i = 0; i < 16; i++) actualPal[i] = ulaPalette[i] & 0x0f;
-
-    const collook = new Int32Array([
-        0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff, 0xff000000,
-        0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
-    ]);
-
-    const flashEnabled = !!(ulaControl & 1);
-    const flash = new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1]);
-    const ulaPal = new Int32Array(16);
-    for (let i = 0; i < 16; i++) {
-        const palVal = actualPal[i];
-        let colour = collook[(palVal & 0xf) ^ 7];
-        if (palVal & 8 && flashEnabled && flash[(palVal & 7) ^ 7]) {
-            colour = collook[palVal & 0xf];
-        }
-        ulaPal[i] = colour;
-    }
-
-    return {
-        regs,
-        bitmapX: 0,
-        bitmapY: 0,
-        oddClock: false,
-        frameCount: 0,
-        doEvenFrameLogic: false,
-        isEvenRender: true,
-        lastRenderWasEven: false,
-        firstScanline: true,
-        inHSync: false,
-        inVSync: false,
-        hadVSyncThisRow: false,
-        checkVertAdjust: false,
-        endOfMainLatched: false,
-        endOfVertAdjustLatched: false,
-        endOfFrameLatched: false,
-        inVertAdjust: false,
-        inDummyRaster: false,
-        hpulseWidth: regs[3] & 0x0f,
-        vpulseWidth: (regs[3] & 0xf0) >>> 4,
-        hpulseCounter: 0,
-        vpulseCounter: 0,
-        dispEnabled: 0x3f,
-        horizCounter: 0,
-        vertCounter: 0,
-        scanlineCounter: 0,
-        vertAdjustCounter: 0,
-        addr: (regs[13] | (regs[12] << 8)) & 0x3fff,
-        lineStartAddr: (regs[13] | (regs[12] << 8)) & 0x3fff,
-        nextLineStartAddr: (regs[13] | (regs[12] << 8)) & 0x3fff,
-        ulactrl: ulaControl,
-        pixelsPerChar: ulaControl & 0x10 ? 8 : 16,
-        halfClock: !(ulaControl & 0x10),
-        ulaMode: (ulaControl >>> 2) & 3,
-        teletextMode: !!(ulaControl & 2),
-        displayEnableSkew: Math.min((regs[8] & 0x30) >>> 4, 2),
-        ulaPal,
-        actualPal,
-        cursorOn: false,
-        cursorOff: false,
-        cursorOnThisFrame: false,
-        cursorDrawIndex: 0,
-        cursorPos: (regs[15] | (regs[14] << 8)) & 0x3fff,
-        interlacedSyncAndVideo: (regs[8] & 3) === 3,
-        screenSubtract: 0,
-        ula: {
-            collook: collook.slice(),
-            flash: new Uint8Array([1, 1, 1, 1, 1, 1, 1, 1]),
-            paletteWriteFlag: false,
-            paletteFirstByte: 0,
-            paletteMode: 0,
-            horizontalOffset: 0,
-            leftBlank: 0,
-            disabled: false,
-            attributeMode: 0,
-            attributeText: 0,
-        },
-        crtc: { curReg: 0 },
-        teletext: {
-            prevCol: 0,
-            col: 7,
-            bg: 0,
-            sep: false,
-            dbl: false,
-            oldDbl: false,
-            secondHalfOfDouble: false,
-            wasDbl: false,
-            gfx: false,
-            flash: false,
-            flashOn: false,
-            flashTime: 0,
-            heldChar: 0,
-            holdChar: false,
-            dataQueue: [0, 0, 0, 0],
-            scanlineCounter: 0,
-            levelDEW: false,
-            levelDISPTMG: false,
-            levelRA0: false,
-            nextGlyphs: "normal",
-            curGlyphs: "normal",
-            heldGlyphs: "normal",
-        },
-    };
-}
-
-/**
  * Convert BeebEm UEF sound chunk (0x046B) to jsbeeb sound chip state.
  *
  * SaveSoundUEF layout (byte offsets within the chunk):
@@ -299,6 +169,9 @@ function convertSoundChunk(data) {
 
     if (data && data.length >= 11) {
         const view = new DataView(data.buffer, data.byteOffset);
+        // BeebEm's ToneFreq array is indexed in reverse relative to SN76489 channels:
+        // ToneFreq[2] → SN76489 channel 0, ToneFreq[1] → channel 1, ToneFreq[0] → channel 2.
+        // Similarly, RealVolumes[3,2,1,0] map to channels [0,1,2,noise].
         registers[0] = view.getUint16(0, true); // ToneFreq[2] → ch 0
         registers[1] = view.getUint16(2, true); // ToneFreq[1] → ch 1
         registers[2] = view.getUint16(4, true); // ToneFreq[0] → ch 2
@@ -314,6 +187,8 @@ function convertSoundChunk(data) {
         volume[2] = volumeTable[vol2];
         volume[3] = volumeTable[vol3];
 
+        // Approximate outputBit from volume: if a channel is silent (volume register = 15),
+        // its output bit is off. Not cycle-accurate but produces a reasonable initial state.
         outputBit[0] = vol0 !== 15;
         outputBit[1] = vol1 !== 15;
         outputBit[2] = vol2 !== 15;
@@ -331,67 +206,6 @@ function convertSoundChunk(data) {
         sineOn: false,
         sineStep: 0,
         sineTime: 0,
-    };
-}
-
-const DefaultAcia = {
-    sr: 0x02,
-    cr: 0x00,
-    dr: 0x00,
-    rs423Selected: false,
-    motorOn: false,
-    tapeCarrierCount: 0,
-    tapeDcdLineLevel: false,
-    hadDcdHigh: false,
-    serialReceiveRate: 19200,
-    serialReceiveCyclesPerByte: 0,
-    txCompleteTaskOffset: null,
-    runTapeTaskOffset: null,
-    runRs423TaskOffset: null,
-};
-
-const DefaultAdc = { status: 0x40, low: 0x00, high: 0x00, taskOffset: null };
-
-/**
- * Build a jsbeeb snapshot object from the parsed BeebEm UEF components.
- */
-function buildSnapshot(modelName, cpuState, ram, roms, sysvia, uservia, video, soundChip) {
-    return {
-        format: "jsbeeb-snapshot",
-        version: 1,
-        model: modelName,
-        timestamp: new Date().toISOString(),
-        importedFrom: "beebem-uef",
-        state: {
-            a: cpuState.a,
-            x: cpuState.x,
-            y: cpuState.y,
-            s: cpuState.s,
-            pc: cpuState.pc,
-            p: cpuState.flags | 0x30,
-            nmiLevel: !!cpuState.nmi,
-            nmiEdge: false,
-            halted: false,
-            takeInt: false,
-            romsel: cpuState.fe30 ?? 0,
-            acccon: cpuState.fe34 ?? 0,
-            videoDisplayPage: 0,
-            currentCycles: 0,
-            targetCycles: 0,
-            cycleSeconds: 0,
-            peripheralCycles: 0,
-            videoCycles: 0,
-            music5000PageSel: 0,
-            ram,
-            roms,
-            scheduler: { epoch: 0 },
-            sysvia,
-            uservia,
-            video,
-            soundChip,
-            acia: { ...DefaultAcia },
-            adc: { ...DefaultAdc },
-        },
     };
 }
 
@@ -459,7 +273,7 @@ export function parseUefSnapshot(buffer) {
         if (machineType === 3 || machineType === 4) {
             modelName = "Master";
         } else if (machineType === 2) {
-            modelName = "BPlus";
+            modelName = "B"; // jsbeeb has no B+ model; BBC B is the closest match
         }
         // 0=B, 1=IntegraB → both treated as "B"
     }
@@ -499,6 +313,28 @@ export function parseUefSnapshot(buffer) {
         const mainRam = chunks.get(ChunkId.MainRam)[0];
         // Defensive: chunk is defined as exactly 32 KB; clamp in case of a malformed file
         ram.set(mainRam.slice(0, Math.min(32768, mainRam.length)));
+    }
+
+    // ── Shadow RAM (chunk 0x0463, Master/B+) ─────────────────────────────
+    // BeebEm saves 32 KB (full shadow bank). jsbeeb's LYNNE region is 20 KB
+    // at ram[0xB000-0xFFFF], covering addresses 0x3000-0x7FFF when ACCCON X bit is set.
+    // See 6502.js writeAcccon: memLook[i] = bitX ? 0x8000 : 0 for pages 0x30-0x7F.
+    if (chunks.has(ChunkId.ShadowRam)) {
+        const shadowData = chunks.get(ChunkId.ShadowRam)[0];
+        if (shadowData.length >= 0x8000) {
+            // Full 32 KB shadow bank — extract LYNNE region (file offsets 0x3000-0x7FFF)
+            ram.set(shadowData.slice(0x3000, 0x8000), 0xb000);
+        } else if (shadowData.length >= 0x5000) {
+            // 20 KB LYNNE-only dump
+            ram.set(shadowData.slice(0, 0x5000), 0xb000);
+        }
+    }
+
+    // ── Private RAM (chunk 0x0464, Master) ──────────────────────────────
+    // 12 KB: 4 KB ANDY (ram[0x8000-0x8FFF]) + 8 KB HAZEL (ram[0x9000-0xAFFF]).
+    if (chunks.has(ChunkId.PrivateRam)) {
+        const privData = chunks.get(ChunkId.PrivateRam)[0];
+        ram.set(privData.slice(0, Math.min(0x3000, privData.length)), 0x8000);
     }
 
     // ── Sideways RAM (chunk 0x0466) ─────────────────────────────────────
@@ -547,5 +383,5 @@ export function parseUefSnapshot(buffer) {
     const soundData = chunks.has(ChunkId.Sound) ? chunks.get(ChunkId.Sound)[0] : null;
     const soundChip = convertSoundChunk(soundData);
 
-    return buildSnapshot(modelName, cpuState, ram, roms, sysvia, uservia, video, soundChip);
+    return buildSnapshot("beebem-uef", modelName, cpuState, ram, roms, sysvia, uservia, video, soundChip);
 }

@@ -69,7 +69,7 @@ describe("parseBemSnapshot", () => {
         const snapshot = await parseBemSnapshot(buffer);
 
         expect(snapshot.format).toBe("jsbeeb-snapshot");
-        expect(snapshot.version).toBe(1);
+        expect(snapshot.version).toBe(2);
         expect(snapshot.model).toBe("B");
         expect(snapshot.state.a).toBe(0x42);
         expect(snapshot.state.x).toBe(0x10);

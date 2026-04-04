@@ -55,6 +55,26 @@ function makeUefSnapshot(opts = {}) {
     }
     addChunk(0x0462, mainRam);
 
+    // 0x0463 – Shadow RAM (optional, 32 KB)
+    if (opts.shadowRam) {
+        addChunk(0x0463, opts.shadowRam);
+    }
+
+    // 0x0464 – Private RAM (optional, up to 12 KB)
+    if (opts.privateRam) {
+        addChunk(0x0464, opts.privateRam);
+    }
+
+    // 0x0466 – Sideways RAM banks (optional, one chunk per bank)
+    if (opts.swRamBanks) {
+        for (const { bank, fill } of opts.swRamBanks) {
+            const bankData = new Uint8Array(1 + 16384);
+            bankData[0] = bank;
+            bankData.fill(fill, 1);
+            addChunk(0x0466, bankData);
+        }
+    }
+
     // 0x0467 – System VIA
     const sysVia = new Uint8Array(22);
     sysVia[0] = 0; // VIAType = sys
@@ -159,7 +179,7 @@ describe("parseUefSnapshot", () => {
         const buffer = makeUefSnapshot();
         const snap = parseUefSnapshot(buffer);
         expect(snap.format).toBe("jsbeeb-snapshot");
-        expect(snap.version).toBe(1);
+        expect(snap.version).toBe(2);
         expect(snap.importedFrom).toBe("beebem-uef");
     });
 
@@ -226,10 +246,10 @@ describe("parseUefSnapshot", () => {
         expect(snap.model).toBe("Master");
     });
 
-    it("maps machineType 2 (B+) to BPlus model", () => {
+    it("maps machineType 2 (B+) to B model (no B+ in jsbeeb)", () => {
         const buffer = makeUefSnapshot({ machineType: 2 });
         const snap = parseUefSnapshot(buffer);
-        expect(snap.model).toBe("BPlus");
+        expect(snap.model).toBe("B");
     });
 
     it("maps machineType 1 (IntegraB) to B model", () => {
@@ -332,5 +352,87 @@ describe("parseUefSnapshot", () => {
         const buffer = makeUefSnapshot();
         const snap = parseUefSnapshot(buffer);
         expect(snap.state.roms).toBeNull();
+    });
+
+    // ── Sideways RAM tests ──────────────────────────────────────────────
+
+    it("parses a single sideways RAM bank", () => {
+        const buffer = makeUefSnapshot({ swRamBanks: [{ bank: 4, fill: 0xaa }] });
+        const snap = parseUefSnapshot(buffer);
+        expect(snap.state.roms).not.toBeNull();
+        expect(snap.state.roms.length).toBe(16 * 16384);
+        expect(snap.state.roms[4 * 16384]).toBe(0xaa);
+        expect(snap.state.roms[4 * 16384 + 16383]).toBe(0xaa);
+        // Other banks should be zero
+        expect(snap.state.roms[0]).toBe(0);
+        expect(snap.state.roms[5 * 16384]).toBe(0);
+    });
+
+    it("parses multiple sideways RAM banks", () => {
+        const buffer = makeUefSnapshot({
+            swRamBanks: [
+                { bank: 4, fill: 0xaa },
+                { bank: 7, fill: 0xbb },
+            ],
+        });
+        const snap = parseUefSnapshot(buffer);
+        expect(snap.state.roms[4 * 16384]).toBe(0xaa);
+        expect(snap.state.roms[7 * 16384]).toBe(0xbb);
+    });
+
+    it("masks sideways RAM bank number to low nibble", () => {
+        const buffer = makeUefSnapshot({ swRamBanks: [{ bank: 0xf4, fill: 0xcc }] });
+        const snap = parseUefSnapshot(buffer);
+        // 0xF4 & 0x0F = 4
+        expect(snap.state.roms[4 * 16384]).toBe(0xcc);
+    });
+
+    // ── Shadow RAM tests ────────────────────────────────────────────────
+
+    it("parses 32 KB shadow RAM into LYNNE region", () => {
+        const shadowRam = new Uint8Array(0x8000);
+        shadowRam[0x3000] = 0xdd; // first byte of LYNNE region
+        shadowRam[0x7fff] = 0xee; // last byte of LYNNE region
+        const buffer = makeUefSnapshot({ shadowRam });
+        const snap = parseUefSnapshot(buffer);
+        // LYNNE lives at ram[0xB000-0xFFFF]
+        expect(snap.state.ram[0xb000]).toBe(0xdd);
+        expect(snap.state.ram[0xffff]).toBe(0xee);
+        // Bytes before LYNNE should be unaffected (main RAM region)
+        expect(snap.state.ram[0xafff]).toBe(0);
+    });
+
+    it("ignores shadow RAM bytes outside the LYNNE region", () => {
+        const shadowRam = new Uint8Array(0x8000);
+        shadowRam[0x0000] = 0xff; // below LYNNE — should be ignored
+        shadowRam[0x2fff] = 0xff; // just below LYNNE — should be ignored
+        const buffer = makeUefSnapshot({ shadowRam });
+        const snap = parseUefSnapshot(buffer);
+        // These addresses in the ram array should not be affected
+        expect(snap.state.ram[0x8000]).toBe(0); // ANDY region, not shadow
+    });
+
+    // ── Private RAM tests ───────────────────────────────────────────────
+
+    it("parses private RAM into ANDY and HAZEL regions", () => {
+        const privateRam = new Uint8Array(0x3000); // 12 KB
+        privateRam[0x0000] = 0x11; // ANDY start
+        privateRam[0x0fff] = 0x22; // ANDY end
+        privateRam[0x1000] = 0x33; // HAZEL start
+        privateRam[0x2fff] = 0x44; // HAZEL end
+        const buffer = makeUefSnapshot({ privateRam });
+        const snap = parseUefSnapshot(buffer);
+        expect(snap.state.ram[0x8000]).toBe(0x11); // ANDY
+        expect(snap.state.ram[0x8fff]).toBe(0x22);
+        expect(snap.state.ram[0x9000]).toBe(0x33); // HAZEL
+        expect(snap.state.ram[0xafff]).toBe(0x44);
+    });
+
+    it("leaves ANDY/HAZEL/LYNNE as zero when no shadow/private chunks present", () => {
+        const buffer = makeUefSnapshot();
+        const snap = parseUefSnapshot(buffer);
+        expect(snap.state.ram[0x8000]).toBe(0); // ANDY
+        expect(snap.state.ram[0x9000]).toBe(0); // HAZEL
+        expect(snap.state.ram[0xb000]).toBe(0); // LYNNE
     });
 });
