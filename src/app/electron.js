@@ -3,8 +3,6 @@
 // Electron integration for jsbeeb desktop application.
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
-export let initialise = function () {};
-
 function init(args) {
     const { loadDiscImage, loadTapeImage, loadStateFile, processor, modals, actions, config } = args;
     const api = window.electronAPI;
@@ -66,6 +64,10 @@ function init(args) {
     }
 }
 
-if (typeof window.electronAPI !== "undefined") {
-    initialise = init;
+const isElectron = typeof window.electronAPI !== "undefined";
+
+export function initialise(args) {
+    if (isElectron) {
+        init(args);
+    }
 }
