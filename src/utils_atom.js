@@ -1,9 +1,13 @@
 import { keyCodes, userKeymap } from "./utils.js";
 
-// Detect keyboard layout locally to avoid pulling in transitive dependencies
-// from utils.js. TODO: import isUKlayout from utils.js once it is exported.
+// Detect keyboard layout locally — mirrors the logic in utils.js but avoids
+// importing the non-exported isUKlayout. Should be replaced with an import
+// if utils.js ever exports it.
 function detectKeyboardLayout() {
     if (typeof navigator === "undefined") return "UK";
+    if (typeof localStorage !== "undefined" && localStorage.keyboardLayout) {
+        return localStorage.keyboardLayout === "US" ? "US" : "UK";
+    }
     if (navigator.language) {
         if (navigator.language.toLowerCase() === "en-gb") return "UK";
         if (navigator.language.toLowerCase() === "en-us") return "US";
@@ -140,7 +144,7 @@ export function stringToATOMKeys(str) {
                     atomKey = ATOM.RETURN;
                     break;
                 case "\t":
-                    atomKey = ATOM.TAB;
+                    atomKey = ATOM.SPACE; // Atom has no TAB key
                     break;
                 case " ":
                     atomKey = ATOM.SPACE;
@@ -366,7 +370,7 @@ export function getKeyMapAtom(keyLayout) {
 
         // 3rd row
 
-        map(keyCodes.HASH, ATOM.HASH); // OK for <Shift> at least
+        map(keyCodes.HASH, ATOM.BACKSLASH); // Atom has no # key; map to nearest
 
         map(keyCodes.MINUS, ATOM.MINUS_EQUALS);
 
@@ -398,7 +402,7 @@ export function getKeyMapAtom(keyLayout) {
         // gaming keyboard
 
         // 1st row
-        map(keyCodes.ESCAPE, ATOM.F0);
+        map(keyCodes.ESCAPE, ATOM.ESCAPE);
 
         // 2nd row
         map(keyCodes.BACK_QUOTE, ATOM.ESCAPE);
@@ -413,8 +417,8 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.K9, ATOM.K9);
         map(keyCodes.K0, ATOM.K0);
         map(keyCodes.MINUS, ATOM.MINUS_EQUALS);
-        map(keyCodes.EQUALS, ATOM.HAT_TILDE);
-        map(keyCodes.BACKSPACE, ATOM.PIPE_BACKSLASH);
+        map(keyCodes.EQUALS, ATOM.UP_ARROW);
+        map(keyCodes.BACKSPACE, ATOM.BACKSLASH);
         map(keyCodes.INSERT, ATOM.LEFT);
         map(keyCodes.HOME, ATOM.RIGHT);
 
@@ -435,15 +439,15 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.HASH, ATOM.RIGHT_SQUARE_BRACKET);
 
         // UK has extra key \| for SHIFT
-        map(keyCodes.SHIFT_LEFT, isUKlayout ? ATOM.SHIFTLOCK : ATOM.SHIFT);
+        map(keyCodes.SHIFT_LEFT, isUKlayout ? ATOM.LOCK : ATOM.SHIFT);
         // UK: key is between SHIFT and Z
         // US: key is above ENTER
-        map(keyCodes.BACKSLASH, isUKlayout ? ATOM.SHIFT : ATOM.UNDERSCORE_POUND);
+        map(keyCodes.BACKSLASH, isUKlayout ? ATOM.SHIFT : ATOM.BACKSLASH);
 
         // 5th row
 
-        // for Zalaga
-        map(keyCodes.CTRL_LEFT, ATOM.CAPSLOCK);
+        // Atom uses CTRL as shift, so map PC Ctrl to Atom's LOCK key
+        map(keyCodes.CTRL_LEFT, ATOM.LOCK);
         map(keyCodes.SHIFT, ATOM.CTRL);
 
         // should be 4th row, not enough keys
@@ -514,7 +518,7 @@ export function remapGamepad(gamepad) {
     gamepad.gamepadMapping[13] = ATOM.MINUS_EQUALS;
     gamepad.gamepadMapping[12] = ATOM.Q;
 
-    // often <Return> = "Fire"
+    // button 0 = right arrow key (fire in many Atom games)
     gamepad.gamepadMapping[0] = ATOM.RIGHT;
     // "start" (often <Space> to start game)
     gamepad.gamepadMapping[9] = ATOM.SPACE;
