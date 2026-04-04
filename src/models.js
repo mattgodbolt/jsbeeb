@@ -26,7 +26,6 @@ class Model {
         this.cmosOverride = cmosOverride;
         this.hasEconet = false;
         this.hasMusic5000 = false;
-        this.hasNoiseKiller = false;
     }
 
     get nmos() {
