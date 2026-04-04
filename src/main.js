@@ -1382,8 +1382,7 @@ for (const image of availableImages) {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         $discsModal.hide();
-        const disc = await loadDiscImage(parsedQuery.disc1);
-        processor.fdc.loadDisc(0, disc);
+        processor.fdc.loadDisc(0, await loadDiscImage(parsedQuery.disc1));
     });
 }
 
