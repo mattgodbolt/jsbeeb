@@ -1,5 +1,4 @@
 import $ from "jquery";
-import { debounce } from "./utils.js";
 import * as bootstrap from "bootstrap";
 import { version } from "../package.json";
 
@@ -2008,10 +2007,10 @@ if (Object.hasOwn(parsedQuery, "pp-tos")) {
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
-window.benchmarkCpu = debounce(benchmarkCpu, 1);
-window.profileCpu = debounce(profileCpu, 1);
-window.benchmarkVideo = debounce(benchmarkVideo, 1);
-window.profileVideo = debounce(profileVideo, 1);
+window.benchmarkCpu = utils.debounce(benchmarkCpu, 1);
+window.profileCpu = utils.debounce(profileCpu, 1);
+window.benchmarkVideo = utils.debounce(benchmarkVideo, 1);
+window.profileVideo = utils.debounce(profileVideo, 1);
 window.go = go;
 window.stop = stop;
 window.soundChip = audioHandler.soundChip;
