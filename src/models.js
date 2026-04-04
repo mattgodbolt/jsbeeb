@@ -11,17 +11,17 @@ const CpuModel = Object.freeze({
 });
 
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride, banks } = {}) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, tube, cmosOverride, banks } = {}) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
         this.banks = banks;
         this._cpuModel = cpuModel;
         this.isMaster = isMaster;
+        this.isAtom = isAtom || false;
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
-        this.isAtom = false;
         this.tube = tube;
         this.cmosOverride = cmosOverride;
         this.hasEconet = false;
@@ -62,18 +62,17 @@ function pickDfs(cmos) {
 }
 
 function atomModel({ name, synonyms, os, banks }) {
-    const m = new Model({
+    return new Model({
         name,
         synonyms,
         os,
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        isAtom: true,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
         banks,
     });
-    m.isAtom = true;
-    return m;
 }
 
 // TODO: semi-bplus-style to get swram for exile hardcoded here
@@ -114,7 +113,11 @@ const masterSwram = [
     false,
 ];
 
-export const allModels = [
+// Atom support is gated behind VITE_ATOM_ENABLED during incremental development.
+// Set VITE_ATOM_ENABLED=true in environment to enable (e.g. VITE_ATOM_ENABLED=true npm start).
+const atomEnabled = import.meta.env.VITE_ATOM_ENABLED === "true";
+
+const _allModels = [
     new Model({
         name: "BBC B with DFS 1.2",
         synonyms: ["B-DFS1.2"],
@@ -216,6 +219,8 @@ export const allModels = [
         isMaster: false,
     }),
 ];
+
+export const allModels = atomEnabled ? _allModels : _allModels.filter((m) => !m.isAtom);
 
 export function findModel(name) {
     name = name.toLowerCase();
