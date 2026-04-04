@@ -88,11 +88,12 @@ function parseChunks(bytes, view) {
  *   [21]    IC32State    (sys VIA only, absent for user VIA)
  */
 function convertViaChunk(data) {
-    const minLen = data[0] === 0 ? 22 : 21; // sys VIA needs IC32 byte
+    const viaType = data[0];
+    if (viaType !== 0 && viaType !== 1) throw new Error(`Unknown VIA type: ${viaType} (expected 0=sys or 1=user)`);
+    const minLen = viaType === 0 ? 22 : 21; // sys VIA needs IC32 byte
     if (data.length < minLen) throw new Error(`VIA chunk too short: expected >= ${minLen} bytes, got ${data.length}`);
 
     const view = new DataView(data.buffer, data.byteOffset);
-    const viaType = data[0];
 
     // BeebEm saves timer counters as counter/2 and loads them as file*2.
     // jsbeeb stores timer values in 2x peripheral cycles (same as BeebEm's internal),
@@ -292,6 +293,7 @@ export function parseUefSnapshot(buffer) {
     // Layout: uint16 PC, uint8 A, X, Y, SP, PSR, uint32 TotalCycles(ignored),
     //         uint8 intStatus, uint8 NMIStatus, uint8 NMILock(ignored)
     const d0460 = chunks.get(ChunkId.Cpu6502)[0];
+    if (d0460.length < 13) throw new Error(`CPU chunk too short: expected >= 13 bytes, got ${d0460.length}`);
     const v0460 = new DataView(d0460.buffer, d0460.byteOffset);
     const cpuState = {
         pc: v0460.getUint16(0, true),
