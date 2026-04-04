@@ -404,8 +404,8 @@ describe("parseUefSnapshot", () => {
 
     it("ignores shadow RAM bytes outside the LYNNE region", () => {
         const shadowRam = new Uint8Array(0x8000);
-        shadowRam[0x0000] = 0xff; // below LYNNE — should be ignored
-        shadowRam[0x2fff] = 0xff; // just below LYNNE — should be ignored
+        shadowRam[0x0000] = 0xff; // below LYNNE - should be ignored
+        shadowRam[0x2fff] = 0xff; // just below LYNNE - should be ignored
         const buffer = makeUefSnapshot({ shadowRam });
         const snap = parseUefSnapshot(buffer);
         // These addresses in the ram array should not be affected

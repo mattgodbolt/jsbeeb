@@ -5,7 +5,7 @@
 // that bem-snapshot.js converts B-em snapshots.
 //
 // BeebEm extends the UEF (Universal Emulator Format) with save-state chunks in the
-// 0x0460–0x047F range, identified by an initial 0x046C (BeebEm ID) chunk.
+// 0x0460-0x047F range, identified by an initial 0x046C (BeebEm ID) chunk.
 // Reference: stardot/beebem-windows Src/UefState.cpp
 
 import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
@@ -264,6 +264,11 @@ export function parseUefSnapshot(buffer) {
     const view = new DataView(buffer);
     const chunks = parseChunks(bytes, view);
 
+    // Validate that required chunks are present
+    if (!chunks.has(ChunkId.BeebEmID)) throw new Error("Truncated BeebEm UEF save state (missing BeebEmID chunk)");
+    if (!chunks.has(ChunkId.Cpu6502)) throw new Error("BeebEm UEF save state missing CPU chunk (0x0460)");
+    if (!chunks.has(ChunkId.MainRam)) throw new Error("BeebEm UEF save state missing main RAM chunk (0x0462)");
+
     // ── Model (from EmuState chunk 0x046A) ──────────────────────────────
     // BeebEm Model enum: 0=B, 1=IntegraB, 2=BPlus, 3=Master128, 4=MasterET
     let modelName = "B";
@@ -291,10 +296,10 @@ export function parseUefSnapshot(buffer) {
         cpuState.y = d[4];
         cpuState.s = d[5];
         cpuState.flags = d[6];
-        // bytes 7-10: TotalCycles (uint32) – ignored
+        // bytes 7-10: TotalCycles (uint32) - ignored
         cpuState.interrupt = d[11]; // intStatus
         cpuState.nmi = d[12]; // NMIStatus
-        // byte 13: NMILock – ignored
+        // byte 13: NMILock - ignored
     }
 
     // ── ROM registers (chunk 0x0461) ────────────────────────────────────
@@ -322,7 +327,7 @@ export function parseUefSnapshot(buffer) {
     if (chunks.has(ChunkId.ShadowRam)) {
         const shadowData = chunks.get(ChunkId.ShadowRam)[0];
         if (shadowData.length >= 0x8000) {
-            // Full 32 KB shadow bank — extract LYNNE region (file offsets 0x3000-0x7FFF)
+            // Full 32 KB shadow bank - extract LYNNE region (file offsets 0x3000-0x7FFF)
             ram.set(shadowData.slice(0x3000, 0x8000), 0xb000);
         } else if (shadowData.length >= 0x5000) {
             // 20 KB LYNNE-only dump

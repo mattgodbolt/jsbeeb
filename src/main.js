@@ -494,16 +494,12 @@ $pastetext.on("dragover", function (event) {
 $pastetext.on("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.originalEvent.dataTransfer.files[0];
-    if (isSnapshotFile(file.name)) {
+    const arrayBuffer = await file.arrayBuffer();
+    if (isSnapshotFile(file.name, arrayBuffer)) {
         await loadStateFromFile(file);
     } else if (file.name.toLowerCase().endsWith(".uef")) {
-        // .uef files can be either BeebEm save states or tape images — check content
-        const arrayBuffer = await file.arrayBuffer();
-        if (isUefSnapshot(arrayBuffer)) {
-            await loadStateFromFile(file);
-        } else {
-            processor.acia.setTape(loadTapeFromData(file.name, new Uint8Array(arrayBuffer)));
-        }
+        // Regular UEF tape image (not a BeebEm save state)
+        processor.acia.setTape(loadTapeFromData(file.name, new Uint8Array(arrayBuffer)));
     } else {
         await loadHTMLFile(file);
     }
@@ -1540,12 +1536,13 @@ async function loadStateFromFile(file) {
     if (wasRunning) go();
 }
 
-function isSnapshotFile(filename) {
+function isSnapshotFile(filename, arrayBuffer) {
     const lower = filename.toLowerCase();
-    // Note: .uef is not listed here — it's handled separately in the drop handler
-    // via content-based detection (isUefSnapshot) since .uef can be either a
-    // BeebEm save state or a regular tape image.
-    return lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz");
+    if (lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz"))
+        return true;
+    // .uef can be either a BeebEm save state or a regular tape image - check content
+    if (lower.endsWith(".uef") && arrayBuffer) return isUefSnapshot(arrayBuffer);
+    return false;
 }
 
 $("#load-state").on("change", async function (event) {
