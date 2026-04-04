@@ -116,7 +116,7 @@ function convertViaState(bemVia, ic32) {
         t2l: bemVia.t2l,
         t1c: bemVia.t1c,
         t2c: bemVia.t2c,
-        t1hit: !!bemVia.t1hit,
+        t1hit: bemVia.acr & 0x40 ? false : !!bemVia.t1hit,
         t2hit: !!bemVia.t2hit,
         portapins: 0xff,
         portbpins: 0xff,

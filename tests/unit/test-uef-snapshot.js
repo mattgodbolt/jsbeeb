@@ -75,29 +75,31 @@ function makeUefSnapshot(opts = {}) {
         }
     }
 
-    // 0x0467 – System VIA
-    const sysVia = new Uint8Array(22);
-    sysVia[0] = 0; // VIAType = sys
-    sysVia[1] = opts.sysvia?.orb ?? 0xff;
-    sysVia[3] = opts.sysvia?.ora ?? 0xff;
-    const svView = new DataView(sysVia.buffer);
-    svView.setUint16(7, opts.sysvia?.t1c ?? 0x7fff, true);
-    svView.setUint16(9, opts.sysvia?.t1l ?? 0xffff, true);
-    svView.setUint16(11, opts.sysvia?.t2c ?? 0x7fff, true);
-    svView.setUint16(13, opts.sysvia?.t2l ?? 0xffff, true);
-    sysVia[15] = opts.sysvia?.acr ?? 0x00;
-    sysVia[16] = opts.sysvia?.pcr ?? 0x00;
-    sysVia[17] = opts.sysvia?.ifr ?? 0x00;
-    sysVia[18] = opts.sysvia?.ier ?? 0x80;
-    sysVia[19] = opts.sysvia?.t1hit ?? 1;
-    sysVia[20] = opts.sysvia?.t2hit ?? 1;
-    sysVia[21] = opts.ic32 ?? 0x00; // IC32
-    addChunk(0x0467, sysVia);
+    // 0x0467 – System VIA (omit if opts.omitVia is set)
+    if (!opts.omitVia) {
+        const sysVia = new Uint8Array(22);
+        sysVia[0] = 0; // VIAType = sys
+        sysVia[1] = opts.sysvia?.orb ?? 0xff;
+        sysVia[3] = opts.sysvia?.ora ?? 0xff;
+        const svView = new DataView(sysVia.buffer);
+        svView.setUint16(7, opts.sysvia?.t1c ?? 0x7fff, true);
+        svView.setUint16(9, opts.sysvia?.t1l ?? 0xffff, true);
+        svView.setUint16(11, opts.sysvia?.t2c ?? 0x7fff, true);
+        svView.setUint16(13, opts.sysvia?.t2l ?? 0xffff, true);
+        sysVia[15] = opts.sysvia?.acr ?? 0x00;
+        sysVia[16] = opts.sysvia?.pcr ?? 0x00;
+        sysVia[17] = opts.sysvia?.ifr ?? 0x00;
+        sysVia[18] = opts.sysvia?.ier ?? 0x80;
+        sysVia[19] = opts.sysvia?.t1hit ?? 1;
+        sysVia[20] = opts.sysvia?.t2hit ?? 1;
+        sysVia[21] = opts.ic32 ?? 0x00; // IC32
+        addChunk(0x0467, sysVia);
 
-    // 0x0467 – User VIA
-    const userVia = new Uint8Array(21);
-    userVia[0] = 1; // VIAType = user
-    addChunk(0x0467, userVia);
+        // 0x0467 – User VIA
+        const userVia = new Uint8Array(21);
+        userVia[0] = 1; // VIAType = user
+        addChunk(0x0467, userVia);
+    }
 
     // 0x0468 – Video
     const videoChunk = new Uint8Array(35);
@@ -437,5 +439,101 @@ describe("parseUefSnapshot", () => {
         expect(snap.state.ram[0x8000]).toBe(0); // ANDY
         expect(snap.state.ram[0x9000]).toBe(0); // HAZEL
         expect(snap.state.ram[0xb000]).toBe(0); // LYNNE
+    });
+
+    // ── VIA edge cases ──────────────────────────────────────────────────
+
+    it("forces t1hit=false when ACR indicates free-running mode", () => {
+        const buffer = makeUefSnapshot({ sysvia: { acr: 0x40, t1hit: 1 } });
+        const snap = parseUefSnapshot(buffer);
+        expect(snap.state.sysvia.t1hit).toBe(false);
+    });
+
+    it("preserves t1hit=true in one-shot mode", () => {
+        const buffer = makeUefSnapshot({ sysvia: { acr: 0x00, t1hit: 1 } });
+        const snap = parseUefSnapshot(buffer);
+        expect(snap.state.sysvia.t1hit).toBe(true);
+    });
+
+    it("uses default VIA state when no VIA chunks present", () => {
+        const buffer = makeUefSnapshot({ omitVia: true });
+        const snap = parseUefSnapshot(buffer);
+        expect(snap.state.sysvia.IC32).toBe(0xff);
+        expect(snap.state.sysvia.ier).toBe(0x80);
+        expect(snap.state.sysvia.t1hit).toBe(true);
+        expect(snap.state.uservia.IC32).toBeUndefined();
+    });
+
+    // ── Error paths ─────────────────────────────────────────────────────
+
+    it("throws for a truncated VIA chunk", () => {
+        // Build a UEF with a sys VIA chunk that's too short (< 22 bytes)
+        const buffer = makeUefSnapshot();
+        // Find and truncate the sys VIA chunk in the buffer
+        const bytes = new Uint8Array(buffer);
+        // Overwrite the VIA chunk length to make it too short
+        for (let i = 12; i < bytes.length - 6; ) {
+            const chunkId = bytes[i] | (bytes[i + 1] << 8);
+            const chunkLen = bytes[i + 2] | (bytes[i + 3] << 8) | (bytes[i + 4] << 16) | (bytes[i + 5] << 24);
+            if (chunkId === 0x0467 && bytes[i + 6] === 0) {
+                // Sys VIA - set length to 10 (too short)
+                bytes[i + 2] = 10;
+                bytes[i + 3] = 0;
+                bytes[i + 4] = 0;
+                bytes[i + 5] = 0;
+                break;
+            }
+            i += 6 + chunkLen;
+        }
+        expect(() => parseUefSnapshot(buffer)).toThrow("VIA chunk too short");
+    });
+
+    it("throws when CPU chunk is missing", () => {
+        // Build a minimal buffer with BeebEmID + MainRam but no CPU chunk
+        const header = new Uint8Array(12);
+        new TextEncoder().encodeInto("UEF File!", header);
+        header[9] = 0;
+        const chunks = [];
+        function addChunk(id, data) {
+            const h = new Uint8Array(6);
+            new DataView(h.buffer).setUint16(0, id, true);
+            new DataView(h.buffer).setUint32(2, data.length, true);
+            chunks.push(h, data instanceof Uint8Array ? data : new Uint8Array(data));
+        }
+        addChunk(0x046c, new Uint8Array(16)); // BeebEmID
+        addChunk(0x0462, new Uint8Array(32768)); // MainRam but no CPU
+        const totalLen = 12 + chunks.reduce((s, c) => s + c.length, 0);
+        const result = new Uint8Array(totalLen);
+        result.set(header, 0);
+        let pos = 12;
+        for (const c of chunks) {
+            result.set(c, pos);
+            pos += c.length;
+        }
+        expect(() => parseUefSnapshot(result.buffer)).toThrow("missing CPU chunk");
+    });
+
+    it("throws when main RAM chunk is missing", () => {
+        const header = new Uint8Array(12);
+        new TextEncoder().encodeInto("UEF File!", header);
+        header[9] = 0;
+        const chunks = [];
+        function addChunk(id, data) {
+            const h = new Uint8Array(6);
+            new DataView(h.buffer).setUint16(0, id, true);
+            new DataView(h.buffer).setUint32(2, data.length, true);
+            chunks.push(h, data instanceof Uint8Array ? data : new Uint8Array(data));
+        }
+        addChunk(0x046c, new Uint8Array(16)); // BeebEmID
+        addChunk(0x0460, new Uint8Array(14)); // CPU but no MainRam
+        const totalLen = 12 + chunks.reduce((s, c) => s + c.length, 0);
+        const result = new Uint8Array(totalLen);
+        result.set(header, 0);
+        let pos = 12;
+        for (const c of chunks) {
+            result.set(c, pos);
+            pos += c.length;
+        }
+        expect(() => parseUefSnapshot(result.buffer)).toThrow("missing main RAM chunk");
     });
 });

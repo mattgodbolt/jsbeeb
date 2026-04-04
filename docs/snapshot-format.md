@@ -57,7 +57,9 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 2). They may include the optional `roms` field (sideways RAM/ROM bank contents) but do not include FDC or disc state (`state.fdc` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format (version 2) and do not include FDC or disc state (`state.fdc` will be absent).
+
+B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots only include sideways RAM banks via the `swRamBanks` field (an object keyed by bank number, each value a `Uint8Array` of 16KB). On restore, `swRamBanks` selectively overwrites individual ROM banks without touching the ROMs jsbeeb has already loaded.
 
 ### Model compatibility
 

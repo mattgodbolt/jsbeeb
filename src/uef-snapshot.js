@@ -270,8 +270,7 @@ export function parseUefSnapshot(buffer) {
     const view = new DataView(buffer);
     const chunks = parseChunks(bytes, view);
 
-    // Validate that required chunks are present
-    if (!chunks.has(ChunkId.BeebEmID)) throw new Error("Truncated BeebEm UEF save state (missing BeebEmID chunk)");
+    // Validate that required chunks are present (BeebEmID is guaranteed by isUefSnapshot above)
     if (!chunks.has(ChunkId.Cpu6502)) throw new Error("BeebEm UEF save state missing CPU chunk (0x0460)");
     if (!chunks.has(ChunkId.MainRam)) throw new Error("BeebEm UEF save state missing main RAM chunk (0x0462)");
 
@@ -291,22 +290,20 @@ export function parseUefSnapshot(buffer) {
 
     // ── CPU (chunk 0x0460) ──────────────────────────────────────────────
     // Layout: uint16 PC, uint8 A, X, Y, SP, PSR, uint32 TotalCycles(ignored),
-    //         uint8 intStatus, uint8 NMIStatus, uint8 NMILock(ignored), uint16 padding
-    let cpuState = { a: 0, x: 0, y: 0, flags: 0x30, s: 0xff, pc: 0, nmi: 0, interrupt: 0, fe30: 0, fe34: 0 };
-    if (chunks.has(ChunkId.Cpu6502)) {
-        const d = chunks.get(ChunkId.Cpu6502)[0];
-        const v = new DataView(d.buffer, d.byteOffset);
-        cpuState.pc = v.getUint16(0, true);
-        cpuState.a = d[2];
-        cpuState.x = d[3];
-        cpuState.y = d[4];
-        cpuState.s = d[5];
-        cpuState.flags = d[6];
-        // bytes 7-10: TotalCycles (uint32) - ignored
-        cpuState.interrupt = d[11]; // intStatus
-        cpuState.nmi = d[12]; // NMIStatus
-        // byte 13: NMILock - ignored
-    }
+    //         uint8 intStatus, uint8 NMIStatus, uint8 NMILock(ignored)
+    const d0460 = chunks.get(ChunkId.Cpu6502)[0];
+    const v0460 = new DataView(d0460.buffer, d0460.byteOffset);
+    const cpuState = {
+        pc: v0460.getUint16(0, true),
+        a: d0460[2],
+        x: d0460[3],
+        y: d0460[4],
+        s: d0460[5],
+        flags: d0460[6],
+        nmi: d0460[12],
+        fe30: 0,
+        fe34: 0,
+    };
 
     // ── ROM registers (chunk 0x0461) ────────────────────────────────────
     // Layout: uint8 PagedRomReg, uint8 ACCCON  (and more for non-B models)
