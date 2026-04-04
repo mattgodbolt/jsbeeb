@@ -331,7 +331,6 @@ export function getKeyMapAtom(keyLayout) {
 
     map(keyCodes.ESCAPE, ATOM.ESCAPE);
     map(keyCodes.TAB, ATOM.COPY);
-    map(keyCodes.F11, ATOM.UP_ARROW);
 
     map(keyCodes.F10, ATOM.REPT);
 
@@ -450,8 +449,7 @@ export function getKeyMapAtom(keyLayout) {
         map(keyCodes.CTRL_LEFT, ATOM.LOCK);
         map(keyCodes.SHIFT, ATOM.CTRL);
 
-        // should be 4th row, not enough keys
-        map(keyCodes.DELETE, ATOM.DELETE);
+        // ATOM.DELETE is covered by the common mapping above
         map(keyCodes.CTRL_RIGHT, ATOM.COPY);
     } else {
         // Physical, and default
