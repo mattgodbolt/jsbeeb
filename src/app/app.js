@@ -242,7 +242,7 @@ const template = [
                     const result = await dialog.showOpenDialog(browserWindow, {
                         title: "Load emulator state",
                         filters: [
-                            { name: "Snapshot files", extensions: ["gz", "json", "snp"] },
+                            { name: "Snapshot files", extensions: ["gz", "json", "snp", "uef"] },
                             { name: "All files", extensions: ["*"] },
                         ],
                         properties: ["openFile"],

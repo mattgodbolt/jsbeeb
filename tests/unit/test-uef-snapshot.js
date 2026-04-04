@@ -103,9 +103,9 @@ function makeUefSnapshot(opts = {}) {
     const videoChunk = new Uint8Array(35);
     // CRTC regs 0-17 (leave as zero / harmless defaults)
     videoChunk[18] = opts.ulaControl ?? 0x9c; // VideoULA_ControlReg
-    // Palette: stored as actual ^ 7; leave as zero (decoded = 0 ^ 7 = 7 for each)
+    // Palette: BeebEm stores raw VideoULA_Palette values (no XOR)
     if (opts.ulaPalette) {
-        for (let i = 0; i < 16; i++) videoChunk[19 + i] = opts.ulaPalette[i] ^ 7;
+        for (let i = 0; i < 16; i++) videoChunk[19 + i] = opts.ulaPalette[i];
     }
     addChunk(0x0468, videoChunk);
 
@@ -301,13 +301,14 @@ describe("parseUefSnapshot", () => {
         expect(snap.state.video.ulactrl).toBe(0x9c);
     });
 
-    it("decodes ULA palette (stored XOR'd with 7 in UEF)", () => {
-        // Set palette entry 0 to physical colour 3 (stored as 3^7 = 4 in file)
-        const ulaPalette = new Uint8Array(16).fill(7); // all entries = physical 7 (white)
-        ulaPalette[0] = 3; // entry 0 → physical 3 (yellow)
+    it("reads ULA palette values directly (no XOR)", () => {
+        // BeebEm stores raw VideoULA_Palette values; value 4 means
+        // bits 0-2 = 4, which the hardware XOR-7 maps to physical colour 3
+        const ulaPalette = new Uint8Array(16).fill(7);
+        ulaPalette[0] = 4;
         const buffer = makeUefSnapshot({ ulaPalette });
         const snap = parseUefSnapshot(buffer);
-        expect(snap.state.video.actualPal[0]).toBe(3);
+        expect(snap.state.video.actualPal[0]).toBe(4);
     });
 
     it("parses sound tone frequencies", () => {
@@ -348,24 +349,25 @@ describe("parseUefSnapshot", () => {
         expect(() => parseUefSnapshot(new ArrayBuffer(5))).toThrow();
     });
 
-    it("includes null roms when no sideways RAM chunks are present", () => {
+    it("does not include roms when no sideways RAM chunks are present", () => {
         const buffer = makeUefSnapshot();
         const snap = parseUefSnapshot(buffer);
         expect(snap.state.roms).toBeUndefined();
+        expect(snap.state.swRamBanks).toBeUndefined();
     });
 
     // ── Sideways RAM tests ──────────────────────────────────────────────
 
-    it("parses a single sideways RAM bank", () => {
+    it("parses a single sideways RAM bank into swRamBanks object", () => {
         const buffer = makeUefSnapshot({ swRamBanks: [{ bank: 4, fill: 0xaa }] });
         const snap = parseUefSnapshot(buffer);
-        expect(snap.state.roms).not.toBeNull();
-        expect(snap.state.roms.length).toBe(16 * 16384);
-        expect(snap.state.roms[4 * 16384]).toBe(0xaa);
-        expect(snap.state.roms[4 * 16384 + 16383]).toBe(0xaa);
-        // Other banks should be zero
-        expect(snap.state.roms[0]).toBe(0);
-        expect(snap.state.roms[5 * 16384]).toBe(0);
+        // Should NOT set roms (that would overwrite all ROM banks)
+        expect(snap.state.roms).toBeUndefined();
+        // Should set swRamBanks with only the specified bank
+        expect(snap.state.swRamBanks).toBeDefined();
+        expect(Object.keys(snap.state.swRamBanks)).toEqual(["4"]);
+        expect(snap.state.swRamBanks[4][0]).toBe(0xaa);
+        expect(snap.state.swRamBanks[4][16383]).toBe(0xaa);
     });
 
     it("parses multiple sideways RAM banks", () => {
@@ -376,15 +378,16 @@ describe("parseUefSnapshot", () => {
             ],
         });
         const snap = parseUefSnapshot(buffer);
-        expect(snap.state.roms[4 * 16384]).toBe(0xaa);
-        expect(snap.state.roms[7 * 16384]).toBe(0xbb);
+        expect(Object.keys(snap.state.swRamBanks).length).toBe(2);
+        expect(snap.state.swRamBanks[4][0]).toBe(0xaa);
+        expect(snap.state.swRamBanks[7][0]).toBe(0xbb);
     });
 
     it("masks sideways RAM bank number to low nibble", () => {
         const buffer = makeUefSnapshot({ swRamBanks: [{ bank: 0xf4, fill: 0xcc }] });
         const snap = parseUefSnapshot(buffer);
         // 0xF4 & 0x0F = 4
-        expect(snap.state.roms[4 * 16384]).toBe(0xcc);
+        expect(snap.state.swRamBanks[4][0]).toBe(0xcc);
     });
 
     // ── Shadow RAM tests ────────────────────────────────────────────────

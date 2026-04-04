@@ -129,7 +129,9 @@ function convertViaChunk(data) {
         t2l,
         t1c,
         t2c,
-        t1hit: !!data[19],
+        // In free-running mode (ACR bit 6), t1hit must be false or jsbeeb
+        // will never generate timer 1 interrupts (blocking the 100Hz tick).
+        t1hit: acr & 0x40 ? false : !!data[19],
         t2hit: !!data[20],
         portapins: 0xff,
         portbpins: 0xff,
@@ -348,14 +350,18 @@ export function parseUefSnapshot(buffer) {
 
     // ── Sideways RAM (chunk 0x0466) ─────────────────────────────────────
     // Each chunk: uint8 bank_number + 16384 bytes of data.
-    // Build a 256 KB roms array if any sideways RAM banks are present.
-    let roms = null;
+    // BeebEm only saves sideways RAM banks, not the actual ROMs (BASIC, DFS, OS).
+    // We must NOT pass a roms array to restoreState because that would overwrite
+    // all 16 ROM banks (including the ROMs jsbeeb has already loaded) with zeros.
+    // Instead, we record which banks have sideways RAM data so restoreState can
+    // selectively overwrite only those banks.
+    let swRamBanks = null;
     if (chunks.has(ChunkId.SwRam)) {
-        roms = new Uint8Array(16 * 16384);
+        swRamBanks = {};
         for (const d of chunks.get(ChunkId.SwRam)) {
             if (d.length >= 1 + 16384) {
-                const bank = d[0] & 0x0f; // mask to 0-15 to prevent out-of-bounds writes
-                roms.set(d.slice(1, 1 + 16384), bank * 16384);
+                const bank = d[0] & 0x0f;
+                swRamBanks[bank] = d.slice(1, 1 + 16384);
             }
         }
     }
@@ -373,7 +379,7 @@ export function parseUefSnapshot(buffer) {
     }
 
     // ── Video (chunk 0x0468) ─────────────────────────────────────────────
-    // Layout: 18 CRTC regs, 1 ULA ctrl, 16 ULA palette (each ^ 7 to decode)
+    // Layout: 18 CRTC regs, 1 ULA ctrl, 16 ULA palette
     let ulaControl = 0x9c; // mode 7 (sensible default)
     let ulaPalette = new Uint8Array(16);
     let crtcRegs = new Uint8Array(18);
@@ -382,8 +388,7 @@ export function parseUefSnapshot(buffer) {
         if (d.length >= 35) {
             crtcRegs = d.slice(0, 18);
             ulaControl = d[18];
-            // BeebEm stores palette as actual_value ^ 7, so read back with ^ 7
-            for (let i = 0; i < 16; i++) ulaPalette[i] = d[19 + i] ^ 7;
+            for (let i = 0; i < 16; i++) ulaPalette[i] = d[19 + i];
         }
     }
     const video = buildVideoState(ulaControl, ulaPalette, crtcRegs);
@@ -392,5 +397,7 @@ export function parseUefSnapshot(buffer) {
     const soundData = chunks.has(ChunkId.Sound) ? chunks.get(ChunkId.Sound)[0] : null;
     const soundChip = convertSoundChunk(soundData);
 
-    return buildSnapshot("beebem-uef", modelName, cpuState, ram, roms, sysvia, uservia, video, soundChip);
+    const snapshot = buildSnapshot("beebem-uef", modelName, cpuState, ram, null, sysvia, uservia, video, soundChip);
+    if (swRamBanks) snapshot.state.swRamBanks = swRamBanks;
+    return snapshot;
 }

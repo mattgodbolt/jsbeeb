@@ -1208,6 +1208,13 @@ export class Cpu6502 extends Base6502 {
         if (state.roms) {
             this.ramRomOs.set(state.roms.slice(0, 16 * 16384), this.romOffset);
         }
+        // Selectively overwrite individual sideways RAM banks (e.g. from BeebEm UEF import)
+        // without touching ROM banks that jsbeeb has already loaded.
+        if (state.swRamBanks) {
+            for (const [bank, data] of Object.entries(state.swRamBanks)) {
+                this.ramRomOs.set(data.slice(0, 16384), this.romOffset + Number(bank) * 16384);
+            }
+        }
         this.videoDisplayPage = state.videoDisplayPage;
         this.music5000PageSel = state.music5000PageSel;
 
