@@ -1364,9 +1364,9 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
         row.addEventListener("click", async function () {
             utils.noteEvent("google-drive", "click", item.name);
             setDisc1Image(`gd:${item.id}/${item.name}`);
+            googleDriveModal.hide();
             const ssd = await gdLoad(item);
             if (ssd) processor.fdc.loadDisc(0, ssd);
-            googleDriveModal.hide();
         });
     }
 });
@@ -1381,9 +1381,9 @@ for (const image of availableImages) {
     elem.addEventListener("click", async function () {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
+        $discsModal.hide();
         const disc = await loadDiscImage(parsedQuery.disc1);
         processor.fdc.loadDisc(0, disc);
-        $discsModal.hide();
     });
 }
 

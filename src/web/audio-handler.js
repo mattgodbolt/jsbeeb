@@ -122,9 +122,14 @@ export class AudioHandler {
     }
 
     // Recent browsers, particularly Safari and Chrome, require a user interaction in order to enable sound playback.
+    // Errors are swallowed — resume() can fail due to autoplay policy and callers can't do anything about it.
     async tryResume() {
-        if (this.audioContext) await this.audioContext.resume();
-        if (this.audioContextM5000) await this.audioContextM5000.resume();
+        try {
+            if (this.audioContext) await this.audioContext.resume();
+            if (this.audioContextM5000) await this.audioContextM5000.resume();
+        } catch {
+            // Autoplay policy prevented resume; will retry on next user gesture.
+        }
     }
 
     _onBufferMusic5000(buffer) {
