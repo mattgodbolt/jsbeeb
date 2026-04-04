@@ -11,19 +11,22 @@ const CpuModel = Object.freeze({
 });
 
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride } = {}) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride, banks } = {}) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
+        this.banks = banks;
         this._cpuModel = cpuModel;
         this.isMaster = isMaster;
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
+        this.isAtom = false;
         this.tube = tube;
         this.cmosOverride = cmosOverride;
         this.hasEconet = false;
         this.hasMusic5000 = false;
+        this.hasNoiseKiller = false;
     }
 
     get nmos() {
@@ -164,6 +167,47 @@ export const allModels = [
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAnfs,
     }),
+    new Model({
+        name: "Acorn Atom (MMC)", // (MMC) used to distinguish from Atom (DOS)
+        synonyms: ["Atom"],
+        // OS in Block F, then some extras in Block E (DOS), D (FP), C (BASIC).. can go down to B (IO) and A (Utility)
+        os: ["atom/Atom_Kernel_E.rom", "atom/ATMMC3E.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc, // not used
+        // utility rom can be in banks via an array here go into bank 0 and 1 of Block A
+        banks: ["atom/PCHARME.ROM", "atom/gags.rom"], // banks 0, 1, but can have up to 7 (i.e. 8 banks)
+        // bit 0 ... bit 3 -> bank at #A000 - #AFFF
+        // bit 6 ->  Branquart uses it as lock-bit
+    }),
+    new Model({
+        name: "Acorn Atom (Tape)",
+        synonyms: ["Atom-Tape"],
+        os: ["atom/Atom_Kernel.rom", "", "", "atom/Atom_Basic.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc, // not used
+    }),
+    new Model({
+        name: "Acorn Atom (Tape with FP)",
+        synonyms: ["Atom-Tape-FP"],
+        os: ["atom/Atom_Kernel.rom", "", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc, // not used
+    }),
+    new Model({
+        name: "Acorn Atom (DOS)",
+        synonyms: ["Atom-DOS"],
+        os: ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc,
+    }),
     // Although this can not be explicitly selected as a model, it is required by the configuration builder later
     new Model({
         name: "Tube65C02",
@@ -173,6 +217,13 @@ export const allModels = [
         isMaster: false,
     }),
 ];
+
+// Mark all Atom models
+for (const model of allModels) {
+    if (model.name.startsWith("Acorn Atom")) {
+        model.isAtom = true;
+    }
+}
 
 export function findModel(name) {
     name = name.toLowerCase();
