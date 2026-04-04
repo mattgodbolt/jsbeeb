@@ -114,6 +114,14 @@ async function unzip(buf) {
     return files;
 }
 
+export function debounce(fn, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => fn.apply(this, args), wait);
+    };
+}
+
 export const runningInNode = typeof window === "undefined";
 
 export function isFirefox() {
