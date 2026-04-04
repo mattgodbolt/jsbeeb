@@ -1,4 +1,3 @@
-import { SmoothieChart, TimeSeries } from "smoothie";
 import { FakeSoundChip, SoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
@@ -15,17 +14,10 @@ export class AudioHandler {
     constructor({ warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek } = {}) {
         this.warningNode = warningNode;
         toggle(this.warningNode, false);
-        this.chart = new SmoothieChart({
-            tooltip: true,
-            labels: { precision: 0 },
-            yRangeFunction: (range) => {
-                return { min: 0, max: range.max };
-            },
-        });
         this.stats = {};
-        this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
-        this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
-        this.chart.streamTo(statsNode, 100);
+        if (statsNode) {
+            this._initStats(statsNode);
+        }
         this.audioContext = createAudioContext();
         this._jsAudioNode = null;
         if (this.audioContext && this.audioContext.audioWorklet) {
@@ -75,6 +67,22 @@ export class AudioHandler {
         }
     }
 
+    // Lazily load smoothie and set up the audio stats chart.
+    async _initStats(statsNode) {
+        const { SmoothieChart, TimeSeries } = await import("smoothie");
+        this._TimeSeries = TimeSeries;
+        this.chart = new SmoothieChart({
+            tooltip: true,
+            labels: { precision: 0 },
+            yRangeFunction: (range) => {
+                return { min: 0, max: range.max };
+            },
+        });
+        this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
+        this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
+        this.chart.streamTo(statsNode, 100);
+    }
+
     async _setup(audioFilterFreq, audioFilterQ) {
         await this.audioContext.audioWorklet.addModule(rendererUrl);
         if (audioFilterFreq !== 0) {
@@ -99,7 +107,7 @@ export class AudioHandler {
     }
 
     _addStat(stat, info) {
-        const timeSeries = new TimeSeries();
+        const timeSeries = new this._TimeSeries();
         this.stats[stat] = timeSeries;
         info.tooltipLabel = stat;
         this.chart.addTimeSeries(timeSeries, info);

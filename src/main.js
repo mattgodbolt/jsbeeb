@@ -383,7 +383,7 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
-const audioStatsNode = document.getElementById("audio-stats");
+const audioStatsNode = parsedQuery.audioDebug ? document.getElementById("audio-stats") : null;
 const audioHandler = new AudioHandler({
     warningNode: document.getElementById("audio-warning"),
     statsNode: audioStatsNode,
@@ -391,7 +391,6 @@ const audioHandler = new AudioHandler({
     audioFilterQ,
     noSeek,
 });
-if (!parsedQuery.audioDebug) audioStatsNode.style.display = "none";
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
