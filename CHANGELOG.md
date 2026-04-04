@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.10.0...v1.10.1) (2026-04-04)
+
+
+### Bug Fixes
+
+* Electron menu actions broken by Rolldown's export let optimization ([#624](https://github.com/mattgodbolt/jsbeeb/issues/624)) ([26c50ce](https://github.com/mattgodbolt/jsbeeb/commit/26c50ce8f932e54b8fa6a04074d272ce32c7bbe3))
+
 ## [1.10.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.9.1...v1.10.0) (2026-04-03)
 
 
