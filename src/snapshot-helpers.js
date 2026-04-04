@@ -36,7 +36,7 @@ export const DefaultAdc = { status: 0x40, low: 0x00, high: 0x00, taskOffset: nul
 /**
  * Build jsbeeb video state from parsed CRTC, ULA, and palette data.
  * @param {number} ulaControl - VideoULA control register
- * @param {Uint8Array} ulaPalette - 16-entry palette (physical colour indices)
+ * @param {Uint8Array} ulaPalette - 16-entry raw ULA palette register values (lower nibble of &FE21 writes)
  * @param {Uint8Array} crtcRegs - CRTC registers (at least 18 bytes)
  * @param {Int32Array|null} [nulaCollook] - NULA colour lookup (16 ABGR entries), or null for default BBC palette
  * @param {object|null} [crtcCounters] - CRTC counter state {hc, vc, sc, ma, maback}, or null for defaults
