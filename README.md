@@ -177,7 +177,7 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
   Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom`
   file assumed to be within.
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
-- `audioDebug=true` turns on some audio debug graphs.
+- `audioDebug` - show audio queue stats chart.
 
 ## Patches
 
