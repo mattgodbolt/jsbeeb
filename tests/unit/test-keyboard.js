@@ -13,7 +13,7 @@ describe("Keyboard", () => {
     // Resolves with the event itself so callers can access .detail if needed.
     const waitForEvent = (eventName) => {
         return new Promise((resolve) => {
-            keyboard.addEventListener(eventName, resolve);
+            keyboard.addEventListener(eventName, resolve, { once: true });
         });
     };
 
