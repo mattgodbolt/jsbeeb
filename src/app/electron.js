@@ -55,11 +55,11 @@ function init(args) {
 
     // Save settings when they change
     if (config) {
-        config.on("settings-changed", (settings) => {
-            api.saveSettings(settings);
+        config.addEventListener("settings-changed", (e) => {
+            api.saveSettings(e.detail);
         });
-        config.on("media-changed", (media) => {
-            api.saveSettings(media);
+        config.addEventListener("media-changed", (e) => {
+            api.saveSettings(e.detail);
         });
     }
 }

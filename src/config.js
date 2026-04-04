@@ -1,9 +1,8 @@
 "use strict";
-import EventEmitter from "event-emitter-es6";
 import { findModel } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
 
-export class Config extends EventEmitter {
+export class Config extends EventTarget {
     constructor(onChange, onClose) {
         super();
         this.onChange = onChange;
@@ -25,7 +24,7 @@ export class Config extends EventEmitter {
         configuration.addEventListener("hide.bs.modal", () => {
             this.onClose(this.changed);
             if (Object.keys(this.changed).length > 0) {
-                this.emit("settings-changed", this.changed);
+                this.dispatchEvent(new CustomEvent("settings-changed", { detail: this.changed }));
             }
         });
 

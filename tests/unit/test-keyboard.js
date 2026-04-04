@@ -12,8 +12,8 @@ describe("Keyboard", () => {
     // Helper function to create an async event tester
     const waitForEvent = (eventName) => {
         return new Promise((resolve) => {
-            keyboard.on(eventName, (...args) => {
-                resolve(args);
+            keyboard.addEventListener(eventName, (e) => {
+                resolve(e.detail);
             });
         });
     };
@@ -186,7 +186,7 @@ describe("Keyboard", () => {
 
         keyboard.setRunning(true);
 
-        const [breakState] = await triggerAndWaitForEvent("break", () => {
+        const breakState = await triggerAndWaitForEvent("break", () => {
             keyboard.keyDown(event);
         });
 
@@ -239,7 +239,7 @@ describe("Keyboard", () => {
 
         keyboard.setRunning(true);
 
-        const [breakState] = await triggerAndWaitForEvent("break", () => {
+        const breakState = await triggerAndWaitForEvent("break", () => {
             keyboard.keyUp(event);
         });
 
@@ -270,7 +270,7 @@ describe("Keyboard", () => {
 
         // Add a resume event listener to check it's not called
         const resumeListener = vi.fn();
-        keyboard.on("resume", resumeListener);
+        keyboard.addEventListener("resume", resumeListener);
 
         keyboard.keyPress(event);
 
