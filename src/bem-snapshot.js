@@ -1,4 +1,5 @@
 "use strict";
+import { decompress } from "./utils.js";
 
 // B-em snapshot format parser (versions 1 and 3).
 // v1 (BEMSNAP1): Fixed-size 327,885 byte packed struct. Reference: beebjit state.c
@@ -434,39 +435,6 @@ function readString(data, pos) {
     return str;
 }
 
-async function inflateRaw(compressedData) {
-    // Use DecompressionStream (available in modern browsers and Node 18+)
-    if (typeof DecompressionStream !== "undefined") {
-        const ds = new DecompressionStream("deflate");
-        const writer = ds.writable.getWriter();
-        const reader = ds.readable.getReader();
-        const chunks = [];
-
-        // Start reading before writing to avoid backpressure deadlock
-        const readPromise = (async () => {
-            for (;;) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                chunks.push(value);
-            }
-        })();
-
-        await writer.write(compressedData);
-        await writer.close();
-        await readPromise;
-
-        const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-            result.set(chunk, offset);
-            offset += chunk.length;
-        }
-        return result;
-    }
-    throw new Error("Zlib decompression not available (need DecompressionStream API)");
-}
-
 function parseBemV3(buffer) {
     const bytes = new Uint8Array(buffer);
     let offset = 8; // Skip "BEMSNAP3" signature
@@ -523,7 +491,7 @@ function parseBemV3(buffer) {
     if (memSection) {
         // Memory is zlib-compressed; decompression is async.
         // Decompressed layout: 2 bytes (fe30, fe34) + 64KB RAM + 256KB ROM
-        return inflateRaw(memSection.data).then((memData) => {
+        return decompress(memSection.data, "deflate").then((memData) => {
             cpuState.fe30 = memData[0];
             cpuState.fe34 = memData[1];
             const ramStart = 2;

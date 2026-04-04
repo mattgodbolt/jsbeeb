@@ -52,7 +52,7 @@ export class StairwayToHell {
         const response = await fetch(name);
         if (!response.ok) throw new Error("Network response was not ok");
         try {
-            return utils.unzipDiscImage(new Uint8Array(await response.arrayBuffer())).data;
+            return (await utils.unzipDiscImage(new Uint8Array(await response.arrayBuffer()))).data;
         } catch (error) {
             console.error("Failed to fetch file:", error);
             throw error;
