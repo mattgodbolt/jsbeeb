@@ -120,8 +120,8 @@ const atomEnabled = typeof import.meta.env !== "undefined" && import.meta.env.VI
 
 const _allModels = [
     new Model({
-        name: "BBC B with DFS 1.2",
-        synonyms: ["B-DFS1.2"],
+        name: "BBC B with 8271 (DFS 1.2)",
+        synonyms: ["B-DFS1.2", "BBC B with DFS 1.2"],
         os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
@@ -129,8 +129,8 @@ const _allModels = [
         fdc: NoiseAwareIntelFdc,
     }),
     new Model({
-        name: "BBC B with DFS 0.9",
-        synonyms: ["B-DFS0.9", "B"],
+        name: "BBC B with 8271 (DFS 0.9)",
+        synonyms: ["B-DFS0.9", "B", "BBC B with DFS 0.9"],
         os: ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,

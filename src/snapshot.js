@@ -7,24 +7,15 @@ const SnapshotFormat = "jsbeeb-snapshot";
 const SnapshotVersion = 2;
 
 /**
- * Check if two model names are compatible for state restore.
- * Resolves synonyms via findModel, then compares by stripping any
- * trailing parenthesised suffix (e.g. treating "BBC Master 128 (DFS)"
- * and "BBC Master 128 (ADFS)" as compatible). Does not treat
- * differently-named models like "BBC B with DFS 0.9" vs "BBC B with DFS 1.2"
- * as compatible — those are distinct models.
+ * Check if two model names resolve to the same model (accounting for
+ * synonyms and old names). Used to decide whether a page reload is
+ * needed when loading a snapshot saved under a different model name.
  */
-export function modelsCompatible(snapshotModel, currentModel) {
-    if (snapshotModel === currentModel) return true;
-    const resolvedSnapshot = findModel(snapshotModel);
-    const resolvedCurrent = findModel(currentModel);
-    if (resolvedSnapshot && resolvedCurrent) {
-        // Same model object, or same base machine (strip filesystem suffix)
-        if (resolvedSnapshot === resolvedCurrent) return true;
-        const base = (name) => name.replace(/\s*\(.*\)$/, "");
-        return base(resolvedSnapshot.name) === base(resolvedCurrent.name);
-    }
-    return false;
+export function isSameModel(nameA, nameB) {
+    if (nameA === nameB) return true;
+    const a = findModel(nameA);
+    const b = findModel(nameB);
+    return a !== null && a === b;
 }
 
 // Map of TypedArray constructor names for deserialization
@@ -100,7 +91,7 @@ export function restoreSnapshot(cpu, model, snapshot) {
     if (snapshot.version > SnapshotVersion) {
         throw new Error(`Snapshot version ${snapshot.version} is newer than supported version ${SnapshotVersion}`);
     }
-    if (!modelsCompatible(snapshot.model, model.name)) {
+    if (!isSameModel(snapshot.model, model.name)) {
         throw new Error(`Model mismatch: snapshot is for "${snapshot.model}" but current model is "${model.name}"`);
     }
     cpu.restoreState(snapshot.state);

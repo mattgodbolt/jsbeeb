@@ -28,7 +28,7 @@ import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { getFilterForMode } from "./canvas.js";
-import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, modelsCompatible } from "./snapshot.js";
+import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
@@ -261,7 +261,7 @@ const config = new Config(
             updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
 
             if (changed.microphoneChannel !== undefined) {
-                setupMicrophone().then(() => {});
+                setupMicrophone();
             }
         }
         if (changed.speechOutput !== undefined) {
@@ -508,7 +508,7 @@ pastetext.addEventListener("drop", async function (event) {
 
 const cubMonitor = document.getElementById("cub-monitor");
 function onCubMouseEvent(evt) {
-    audioHandler.tryResume().then(() => {});
+    audioHandler.tryResume();
     if (document.activeElement !== document.body) document.activeElement.blur();
     const cubRect = cubMonitor.getBoundingClientRect();
     const screenRect = screenCanvas.getBoundingClientRect();
@@ -853,8 +853,8 @@ keyboard.registerKeyHandler(
 
 // Setup key handlers
 document.addEventListener("keydown", (evt) => {
-    audioHandler.tryResume().then(() => {});
-    ensureMicrophoneRunning().then(() => {});
+    audioHandler.tryResume();
+    ensureMicrophoneRunning();
     keyboard.keyDown(evt);
 });
 document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
@@ -1361,13 +1361,12 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
         row.classList.remove("template");
         dbList.appendChild(row);
         row.querySelector(".name").textContent = item.name;
-        row.addEventListener("click", function () {
+        row.addEventListener("click", async function () {
             utils.noteEvent("google-drive", "click", item.name);
             setDisc1Image(`gd:${item.id}/${item.name}`);
-            gdLoad(item).then(function (ssd) {
-                processor.fdc.loadDisc(0, ssd);
-            });
             googleDriveModal.hide();
+            const ssd = await gdLoad(item);
+            if (ssd) processor.fdc.loadDisc(0, ssd);
         });
     }
 });
@@ -1379,13 +1378,11 @@ for (const image of availableImages) {
     discList.appendChild(elem);
     elem.querySelector(".name").textContent = image.name;
     elem.querySelector(".description").textContent = image.desc;
-    elem.addEventListener("click", function () {
+    elem.addEventListener("click", async function () {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
-        loadDiscImage(parsedQuery.disc1).then(function (disc) {
-            processor.fdc.loadDisc(0, disc);
-        });
         $discsModal.hide();
+        processor.fdc.loadDisc(0, await loadDiscImage(parsedQuery.disc1));
     });
 }
 
@@ -1530,7 +1527,7 @@ async function loadStateFromFile(file, preReadBuffer) {
             }
             snapshot = snapshotFromJSON(text);
         }
-        if (!modelsCompatible(snapshot.model, model.name)) {
+        if (!isSameModel(snapshot.model, model.name)) {
             // Model mismatch: stash state and reload with correct model
             sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
             const newQuery = { ...parsedQuery, model: snapshot.model };
@@ -1697,8 +1694,10 @@ const startPromise = (async () => {
     return Promise.all(imageLoads);
 })();
 
-startPromise
-    .then(async () => {
+(async () => {
+    try {
+        await startPromise;
+
         switch (needsAutoboot) {
             case "boot":
                 sthAutoboot.checked = true;
@@ -1739,11 +1738,11 @@ startPromise
         }
 
         go();
-    })
-    .catch((error) => {
+    } catch (error) {
         console.error("Error initialising emulator:", error);
         showError("initialising", error);
-    });
+    }
+})();
 
 const aysEl = document.getElementById("are-you-sure");
 const aysModal = new bootstrap.Modal(aysEl);
