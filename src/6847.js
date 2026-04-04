@@ -150,6 +150,10 @@ export class Video6847 {
         // /* dark green 9 */
         // /* dark orange 10 */
 
+        // The Atom doesn't use interlace or doubled scanlines
+        this.interlacedSyncAndVideo = false;
+        this.doubledScanlines = false;
+
         this.regs = new Uint8Array(32);
         this.bitmapX = 0;
         this.bitmapY = 0;
@@ -241,9 +245,9 @@ export class Video6847 {
             this.paint();
             this.clearPaintBuffer();
         }
-        // this.dispEnabled &= ~FRAMESKIPENABLE;
+        this.dispEnabled &= ~FRAMESKIPENABLE;
         let enable = FRAMESKIPENABLE;
-        // if (this.frameCount % 5) enable = 0;
+        if (this.frameCount % 5) enable = 0;
         this.dispEnabled |= enable;
 
         this.bitmapY = 0;
@@ -274,7 +278,7 @@ export class Video6847 {
 
         // during a vdg cycle, cpu might be active
         if (this.vdg_cycles >= 0 && this.vdg_cycles < 1) {
-            if (cpuaddr > 0x8000 && this.cpuAddr <= 0x9800) {
+            if (cpuaddr > 0x8000 && cpuaddr <= 0x9800) {
                 return this.cpu.videoRead(cpuaddr);
             }
         }
@@ -355,7 +359,7 @@ export class Video6847 {
         // in vsync for 32 lines = bottomborder+vertretrace
         // out vsync for 230 lines = vertblank+topborder+displayV
 
-        while (this.vdg_cycles >= 0) {
+        while (this.vdg_cycles >= 1) {
             this.vdg_cycles -= 1;
             this.charTime -= 1;
 
@@ -482,9 +486,10 @@ export class Video6847 {
                     }
                 } else {
                     // draw BLACK in the border
-                    let offset = this.bitmapY;
-                    offset = offset * 1024 + this.bitmapX;
-                    this.blitBorder(this.video.fb32, this.bordercolour, offset, css);
+                    if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY >= 0 && this.bitmapY < 625) {
+                        const offset = this.bitmapY * 1024 + this.bitmapX;
+                        this.blitBorder(this.video.fb32, this.bordercolour, offset, css);
+                    }
                 }
 
                 this.addr = (this.addr + 1) & 0x1fff;
@@ -587,8 +592,8 @@ export class Video6847 {
             if (bpp === 1) {
                 // get a bit
                 const cval = (bitdef >>> j) & 0x1;
-                // - green / buff  & black
-                colour = cval !== 0 ? this.collook[css | 1] : this.collook[0];
+                // CSS=0: green foreground, CSS=1: buff foreground
+                colour = cval !== 0 ? this.collook[css ? 5 : 1] : this.collook[0];
 
                 // two bitmap lines per 1 pixel
                 fb32[destOffset + n + 1024] = fb32[destOffset + n] = colour;
