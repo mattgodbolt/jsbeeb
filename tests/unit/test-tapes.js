@@ -61,14 +61,16 @@ describe("tapes", () => {
             const uef = makeUef([{ id: 0x0100, data: [0x41] }]);
             const tape = await loadTapeFromData("test.uef", uef);
             expect(tape).not.toBeNull();
-            expect(tape.constructor.name).toBe("UefTape");
+            // UEF tapes have a curChunk from the constructor
+            expect(tape.curChunk).toBeDefined();
         });
 
         it("should detect tapefile format", async () => {
             const tapefile = makeTapefile();
             const tape = await loadTapeFromData("test.tape", tapefile);
             expect(tape).not.toBeNull();
-            expect(tape.constructor.name).toBe("TapefileTape");
+            // Tapefile's first poll reads the 0xFF 0x04 carrier header
+            expect(tape.poll(mockAcia())).toBe(5 * 2 * 1000 * 1000);
         });
 
         it("should return null for unknown format", async () => {
@@ -110,8 +112,9 @@ describe("tapes", () => {
         });
 
         it("should poll data chunk and receive bytes", async () => {
-            // Need two chunks: the constructor reads the first, poll processes it
-            // and then reads the second to check for more data.
+            // Include a leading chunk because UefTape pre-reads one in the
+            // constructor, and the first poll from the rewound state advances
+            // to the next chunk.
             const uef = makeUef([
                 { id: 0x0110, data: [0x01, 0x00] }, // carrier tone, count=1
                 { id: 0x0100, data: [0x41] },
@@ -218,10 +221,15 @@ describe("tapes", () => {
         });
 
         it("should return large cycle count at EOF", async () => {
-            const tapefile = makeTapefile([]);
+            const tapefile = makeTapefile([0x41, 0x42, 0x43]);
             const tape = await loadTapeFromData("test.tape", tapefile);
+            tape.rewind();
+            // Consume all data
+            while (!tape.stream.eof()) {
+                tape.poll(mockAcia());
+            }
             const cycles = tape.poll(mockAcia());
-            expect(cycles).toBeGreaterThan(0);
+            expect(cycles).toBe(100000);
         });
     });
 });
