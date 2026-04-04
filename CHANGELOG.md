@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.11.0...v1.12.0) (2026-04-04)
+
+
+### Features
+
+* load BeebEm UEF save state files ([#622](https://github.com/mattgodbolt/jsbeeb/issues/622)) ([92cb949](https://github.com/mattgodbolt/jsbeeb/commit/92cb9498fd0b6d63bee231b4b3d0c2223f37717d))
+
+
+### Bug Fixes
+
+* document intentional empty catch in decompress() ([#639](https://github.com/mattgodbolt/jsbeeb/issues/639)) ([2e5538f](https://github.com/mattgodbolt/jsbeeb/commit/2e5538f99c511c79b13c732b80d15ca52ead6faa))
+
 ## [1.11.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.10.1...v1.11.0) (2026-04-04)
 
 
