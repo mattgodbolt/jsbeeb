@@ -859,19 +859,19 @@ function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
     updateUrl();
-    config.emit("media-changed", { disc1: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
 }
 
 function setDisc2Image(name) {
     parsedQuery.disc2 = name;
     updateUrl();
-    config.emit("media-changed", { disc2: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
 }
 
 function setTapeImage(name) {
     parsedQuery.tape = name;
     updateUrl();
-    config.emit("media-changed", { tape: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
 }
 
 function sthClearList() {
