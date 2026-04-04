@@ -18,7 +18,7 @@ class Model {
         this.banks = banks;
         this._cpuModel = cpuModel;
         this.isMaster = isMaster;
-        this.isAtom = isAtom || false;
+        this.isAtom = !!isAtom;
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
