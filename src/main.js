@@ -102,6 +102,7 @@ const paramTypes = {
     coProcessor: ParamTypes.BOOL,
     mouseJoystickEnabled: ParamTypes.BOOL,
     speechOutput: ParamTypes.BOOL,
+    audioDebug: ParamTypes.BOOL,
 
     // Numeric parameters
     speed: ParamTypes.INT,
