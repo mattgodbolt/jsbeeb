@@ -744,12 +744,12 @@ keyboard = new Keyboard({
     keyLayout,
     dbgr,
 });
-keyboard.on("showError", ({ context, error }) => showError(context, error));
-keyboard.on("pause", () => stop(false));
-keyboard.on("resume", () => go());
-keyboard.on("break", (pressed) => {
+keyboard.addEventListener("showError", (e) => showError(e.detail.context, e.detail.error));
+keyboard.addEventListener("pause", () => stop(false));
+keyboard.addEventListener("resume", () => go());
+keyboard.addEventListener("break", (e) => {
     // F12/Break: Reset processor
-    if (pressed) utils.noteEvent("keyboard", "press", "break");
+    if (e.detail) utils.noteEvent("keyboard", "press", "break");
 });
 
 // Register default key handlers
@@ -864,19 +864,19 @@ function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
     updateUrl();
-    config.emit("media-changed", { disc1: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
 }
 
 function setDisc2Image(name) {
     parsedQuery.disc2 = name;
     updateUrl();
-    config.emit("media-changed", { disc2: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
 }
 
 function setTapeImage(name) {
     parsedQuery.tape = name;
     updateUrl();
-    config.emit("media-changed", { tape: name });
+    config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
 }
 
 function sthClearList() {
