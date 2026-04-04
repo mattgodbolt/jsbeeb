@@ -1,5 +1,5 @@
 "use strict";
-import { findModel } from "./models.js";
+import { allModels, findModel } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
 
 export class Config extends EventTarget {
@@ -28,12 +28,24 @@ export class Config extends EventTarget {
             }
         });
 
-        for (const link of document.querySelectorAll(".model-menu a")) {
-            link.addEventListener("click", (e) => {
-                this.changed.model = e.target.dataset.target;
-                this.setDropdownText(e.target.textContent);
-            });
+        const modelMenu = document.querySelector(".model-menu");
+        for (const model of allModels) {
+            if (model.synonyms.length === 0) continue; // skip non-selectable models (e.g. Tube65C02)
+            const li = document.createElement("li");
+            const a = document.createElement("a");
+            a.href = "#";
+            a.className = "dropdown-item";
+            a.dataset.target = model.synonyms[0];
+            a.textContent = model.name;
+            li.appendChild(a);
+            modelMenu.appendChild(li);
         }
+        modelMenu.addEventListener("click", (e) => {
+            const link = e.target.closest("a[data-target]");
+            if (!link) return;
+            this.changed.model = link.dataset.target;
+            this.setDropdownText(link.textContent);
+        });
 
         document.getElementById("65c02").addEventListener("click", () => {
             this.changed.coProcessor = document.getElementById("65c02").checked;
