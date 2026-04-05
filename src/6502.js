@@ -1724,25 +1724,26 @@ export class AtomCpu6502 extends Cpu6502 {
         this.ramRomOs.fill(0x00, this.osOffset, this.osOffset + 0x4000);
         this.ramRomOs.set(data.subarray(0, AtomRomBlockSize), this.osOffset);
 
-        // Load extra ROMs (BASIC, FP, DOS) into 4KB blocks counting down from romOffset+0x5000.
-        // These map at 0xE000, 0xD000, 0xC000 etc via the memLook offset set in reset().
+        // Load extra ROMs (BASIC, FP, DOS) into 4KB blocks.
+        // romIndex counts down from 5: slot 4 maps to 0xE000 (romOffset+0x4000),
+        // slot 3 to 0xD000 (romOffset+0x3000), slot 2 to 0xC000 (romOffset+0x2000).
         let romIndex = 5;
         const awaiting = [];
         for (const rom of extraRoms) {
             romIndex--;
+            if (romIndex < 0) throw new Error("Too many extra ROMs for Atom (max 5 slots)");
             if (rom !== "") {
                 awaiting.push(this.loadRom(rom, this.romOffset + romIndex * AtomRomBlockSize));
             }
         }
 
-        // Load Branquart bank ROMs
-        let bankIndex = 0;
-        for (const rom of bankRoms) {
-            if (rom !== "") {
-                awaiting.push(this.loadRom(rom, BranquartOffset + bankIndex * BranquartBankSize));
+        // Load Branquart bank ROMs (max 16 banks)
+        const numBanks = Math.min(bankRoms.length, NumBranquartBanks);
+        for (let bankIndex = 0; bankIndex < numBanks; bankIndex++) {
+            if (bankRoms[bankIndex] !== "") {
+                awaiting.push(this.loadRom(bankRoms[bankIndex], BranquartOffset + bankIndex * BranquartBankSize));
                 this.branquartRam[bankIndex] = false; // mark as ROM
             }
-            bankIndex++;
         }
 
         return await Promise.all(awaiting);

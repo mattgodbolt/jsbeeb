@@ -180,7 +180,7 @@ class PPIA {
                 return val;
             }
             default:
-                throw new Error(`Unknown PPIA read address: 0x${(addr & 0xf).toString(16)}`);
+                return addr >>> 8; // CREG and unmapped registers return open bus
         }
     }
 
