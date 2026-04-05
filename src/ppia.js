@@ -227,10 +227,11 @@ export class AtomPPIA extends PPIA {
 
         this.keyboardEnabled = true;
         this.lastSpeakerBit = 0;
-        // The Atom has no lock lights, but the keyboard adapter reads these
-        // during paste to decide whether to toggle caps/shift lock.
-        // Always false so the toggle is never triggered.
-        this.capsLockLight = false;
+        // The Atom has no lock lights. Report caps lock as "on" and shift
+        // lock as "off" so the paste routine's lock-toggle logic is never
+        // triggered (it toggles CAPSLOCK when !capsLockLight, and SHIFTLOCK
+        // when shiftLockLight).
+        this.capsLockLight = true;
         this.shiftLockLight = false;
         this.tapeCarrierCount = 0;
         this.tapeDcdLineLevel = false;

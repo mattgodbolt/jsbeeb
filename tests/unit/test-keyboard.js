@@ -584,11 +584,16 @@ describe("Keyboard Atom adapter", () => {
         expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith(65);
     });
 
-    test("sendRawKeyboardToBBC should skip lock toggle for Atom", () => {
-        keyboard.sendRawKeyboardToBBC([utils.BBC.A], true);
-        // Should not have tried to read capsLockLight/shiftLockLight
-        // (they don't exist on the PPIA mock)
+    test("sendRawKeyboardToBBC should not inject lock toggles for Atom", () => {
+        // PPIA reports capsLockLight=true, shiftLockLight=false,
+        // so the paste logic should not prepend/append any lock keys.
+        mockAtomPPIA.capsLockLight = true;
+        mockAtomPPIA.shiftLockLight = false;
+        const keys = [utils.BBC.A];
+        keyboard.sendRawKeyboardToBBC(keys, true);
         expect(mockAtomPPIA.disableKeyboard).toHaveBeenCalled();
+        // The keys array should not have been modified with lock toggles
+        expect(keys).toEqual([utils.BBC.A]);
     });
 
     test("setKeyLayout should call PPIA setKeyLayout", () => {
