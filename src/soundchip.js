@@ -41,6 +41,7 @@ export class SoundChip {
             this.toneChannel.bind(this),
             this.noiseChannel.bind(this),
             this.sineChannel.bind(this),
+            this.speakerChannel.bind(this), // Acorn Atom 1-bit speaker
         ];
 
         this.sineTable = makeSineTable(1 / this.generators.length);
@@ -75,6 +76,28 @@ export class SoundChip {
                 this.sineStep = (freq / sampleRate) * this.sineTable.length;
             },
         };
+
+        // Atom 1-bit speaker support.
+        // The PPIA drives this via pushBit() on each speaker bit transition.
+        this.isAtom = false;
+        this.speakerGenerator = {
+            mute: () => {
+                this.catchUp();
+                this.speakerReset();
+            },
+            pushBit: (bit, cycles, seconds) => {
+                this.catchUp();
+                this.updateSpeaker(bit, cycles, seconds);
+            },
+        };
+        this.secondsPerCycle = 1 / 1000000; // default 1 MHz (Atom)
+        this.bitChange = [];
+        this.currentSpeakerBit = 0.0;
+    }
+
+    setCPUSpeed(cpuSpeed) {
+        this.secondsPerCycle = 1 / cpuSpeed;
+        this.samplesPerCycle = this.soundchipFreq * this.secondsPerCycle;
     }
 
     sineChannel(channel, out, offset, length) {
@@ -168,6 +191,11 @@ export class SoundChip {
         }
         if (!this.enabled) return;
         for (let i = 0; i < this.generators.length; ++i) {
+            // TODO: consider an AtomSoundChip subclass that overrides generate()
+            // instead of branching on isAtom here. Would cleanly separate BBC
+            // (tone/noise/sine) from Atom (sine/speaker) channel sets.
+            if (this.isAtom && i < 4) continue;
+            if (!this.isAtom && i === 5) continue;
             this.generators[i](i, out, offset, length);
         }
     }
@@ -311,6 +339,7 @@ export class SoundChip {
             this.volume[i] = volumeTable[8];
         }
         this.noisePoked();
+        this.speakerReset();
         this.lastRunEpoch = this.scheduler.epoch;
     }
 
@@ -324,6 +353,37 @@ export class SoundChip {
 
     unmute() {
         this.enabled = true;
+    }
+
+    // Atom speaker: bit-transition FIFO queue.
+    // The CPU toggles a speaker bit via PPIA port C. Each transition is
+    // recorded with its cycle timestamp. speakerChannel then converts
+    // these transitions into audio samples at the output sample rate.
+    speakerReset() {
+        this.bitChange = [];
+        this.currentSpeakerBit = 0.0;
+    }
+
+    speakerChannel(channel, out, offset, length) {
+        let fromTime = this.scheduler.epoch - length;
+        let bitIndex = 0;
+
+        for (let i = 0; i < length; ++i) {
+            while (bitIndex < this.bitChange.length && this.bitChange[bitIndex].cycles <= fromTime + i) {
+                this.currentSpeakerBit = this.bitChange[bitIndex].bit;
+                bitIndex++;
+            }
+            out[i + offset] += this.currentSpeakerBit;
+        }
+
+        if (bitIndex > 0) {
+            this.bitChange.splice(0, bitIndex);
+        }
+    }
+
+    updateSpeaker(value, microCycle, seconds) {
+        const cycles = microCycle + seconds / this.secondsPerCycle;
+        this.bitChange.push({ bit: value ? 1.0 : 0.0, cycles });
     }
 }
 
@@ -422,6 +482,10 @@ export class FakeSoundChip {
         this.toneGenerator = {
             mute: () => {},
             tone: () => {},
+        };
+        this.speakerGenerator = {
+            mute: () => {},
+            pushBit: () => {},
         };
     }
 
