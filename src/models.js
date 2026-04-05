@@ -11,12 +11,14 @@ const CpuModel = Object.freeze({
 });
 
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, swram, fdc, tube, cmosOverride } = {}) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, tube, cmosOverride, banks } = {}) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
+        this.banks = banks;
         this._cpuModel = cpuModel;
         this.isMaster = isMaster;
+        this.isAtom = !!isAtom;
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
@@ -58,6 +60,20 @@ function pickDfs(cmos) {
     return cmos;
 }
 
+function atomModel({ name, synonyms, os, banks }) {
+    return new Model({
+        name,
+        synonyms,
+        os,
+        cpuModel: CpuModel.MOS6502,
+        isMaster: false,
+        isAtom: true,
+        swram: beebSwram,
+        fdc: NoiseAwareIntelFdc,
+        banks,
+    });
+}
+
 // TODO: semi-bplus-style to get swram for exile hardcoded here
 const beebSwram = [
     true,
@@ -96,7 +112,12 @@ const masterSwram = [
     false,
 ];
 
-export const allModels = [
+// Atom support is gated behind VITE_ATOM_ENABLED during incremental development.
+// Set VITE_ATOM_ENABLED=true in environment to enable (e.g. VITE_ATOM_ENABLED=true npm start).
+// import.meta.env is provided by Vite; falls back to false when running under plain Node (e.g. test-suite.js).
+const atomEnabled = typeof import.meta.env !== "undefined" && import.meta.env.VITE_ATOM_ENABLED === "true";
+
+const _allModels = [
     new Model({
         name: "BBC B with 8271 (DFS 1.2)",
         synonyms: ["B-DFS1.2", "BBC B with DFS 1.2"],
@@ -164,6 +185,31 @@ export const allModels = [
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAnfs,
     }),
+    // Atom OS ROM layout: Block F (kernel), E (DOS/MMC), D (FP), C (BASIC).
+    // Empty strings represent unpopulated ROM slots.
+    atomModel({
+        name: "Acorn Atom (MMC)",
+        synonyms: ["Atom"],
+        os: ["atom/Atom_Kernel_E.rom", "atom/ATMMC3E.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+        // Utility ROMs in banks 0 and 1 of Block A (0xA000-0xAFFF), up to 8 banks.
+        // Bank selected by Branquart latch at 0xBFFF (bits 0-3 = bank, bit 6 = lock).
+        banks: ["atom/PCHARME.ROM", "atom/gags.rom"],
+    }),
+    atomModel({
+        name: "Acorn Atom (Tape)",
+        synonyms: ["Atom-Tape"],
+        os: ["atom/Atom_Kernel.rom", "", "", "atom/Atom_Basic.rom"],
+    }),
+    atomModel({
+        name: "Acorn Atom (Tape with FP)",
+        synonyms: ["Atom-Tape-FP"],
+        os: ["atom/Atom_Kernel.rom", "", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+    }),
+    atomModel({
+        name: "Acorn Atom (DOS)",
+        synonyms: ["Atom-DOS"],
+        os: ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
+    }),
     // Although this can not be explicitly selected as a model, it is required by the configuration builder later
     new Model({
         name: "Tube65C02",
@@ -173,6 +219,8 @@ export const allModels = [
         isMaster: false,
     }),
 ];
+
+export const allModels = atomEnabled ? _allModels : _allModels.filter((m) => !m.isAtom);
 
 export function findModel(name) {
     name = name.toLowerCase();
