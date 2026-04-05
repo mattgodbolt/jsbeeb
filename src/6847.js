@@ -326,8 +326,11 @@ export class Video6847 {
     // this is usually called from 'video' so 'this'
     // is a reference to 'video'
     polltimeFacade(clocks) {
-        if (this.video6847 != undefined) this.video6847.polltime(clocks);
-        else throw new Error("should never get here");
+        if (this.video6847 != undefined) {
+            this.video6847.polltime(clocks);
+            return;
+        }
+        throw new Error("Video6847 not attached — polltimeFacade called before video.video6847 was initialised");
     }
 
     // ATOM uses 6847 chip
@@ -494,7 +497,7 @@ export class Video6847 {
                         }
                     }
                 } else {
-                    // draw BLACK in the border
+                    // draw border (black, or green/buff depending on bordercolour and CSS)
                     if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY >= 0 && this.bitmapY < 625) {
                         const offset = this.bitmapY * 1024 + this.bitmapX;
                         this.blitBorder(this.video.fb32, this.bordercolour, offset, css);
