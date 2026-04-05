@@ -1,25 +1,7 @@
 // Translated from beebjit by Chris Evans.
 // https://github.com/scarybeasts/beebjit
 
-import * as utils from "./utils.js";
-
-/**
- * Compute CRC32 of a Uint8Array.
- * @param {Uint8Array} data
- * @returns {number} CRC32 as a signed 32-bit integer
- */
-export function crc32(data) {
-    let crc = 0xffffffff;
-    for (let i = 0; i < data.length; ++i) {
-        crc ^= data[i];
-        for (let j = 0; j < 8; ++j) {
-            const doEor = crc & 1;
-            crc = crc >>> 1;
-            if (doEor) crc ^= 0xedb88320;
-        }
-    }
-    return ~crc;
-}
+import { hexbyte, crc32 } from "./utils.js";
 class TrackBuilder {
     /**
      * @param {Track} track
@@ -482,7 +464,7 @@ class Track {
                     }
                     break;
                 default:
-                    console.log(`Unknown marker byte ${utils.hexbyte(dataByte)} ${this.description}`);
+                    console.log(`Unknown marker byte ${hexbyte(dataByte)} ${this.description}`);
             }
         }
         return sectors;

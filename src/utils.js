@@ -120,6 +120,79 @@ export async function unzip(buf) {
     return files;
 }
 
+// Standard CRC-32/ISO-HDLC.
+export function crc32(data) {
+    let crc = 0xffffffff;
+    for (let i = 0; i < data.length; ++i) {
+        crc ^= data[i];
+        for (let j = 0; j < 8; ++j) {
+            const doEor = crc & 1;
+            crc = crc >>> 1;
+            if (doEor) crc ^= 0xedb88320;
+        }
+    }
+    return ~crc;
+}
+
+// Create a ZIP blob from an array of {name: string, data: Uint8Array} entries.
+// Uses stored method (no compression) with CRC-32 for maximum compatibility.
+export function createZipBlob(files) {
+    const encoder = new TextEncoder();
+    const localHeaders = [];
+    const centralHeaders = [];
+    let offset = 0;
+
+    for (const { name, data } of files) {
+        const nameBytes = encoder.encode(name);
+        const crc = crc32(data);
+        // Local file header (30 + nameLen + data)
+        const local = new Uint8Array(30 + nameBytes.length + data.length);
+        const lv = new DataView(local.buffer);
+        lv.setUint32(0, 0x04034b50, true); // signature
+        lv.setUint16(4, 20, true); // version needed
+        lv.setUint16(8, 0, true); // method: stored
+        lv.setUint32(14, crc, true); // CRC-32
+        lv.setUint32(18, data.length, true); // compressed size
+        lv.setUint32(22, data.length, true); // uncompressed size
+        lv.setUint16(26, nameBytes.length, true); // name length
+        local.set(nameBytes, 30);
+        local.set(data, 30 + nameBytes.length);
+        localHeaders.push(local);
+
+        // Central directory entry (46 + nameLen)
+        const central = new Uint8Array(46 + nameBytes.length);
+        const cv = new DataView(central.buffer);
+        cv.setUint32(0, 0x02014b50, true); // signature
+        cv.setUint16(4, 20, true); // version made by
+        cv.setUint16(6, 20, true); // version needed
+        cv.setUint16(10, 0, true); // method: stored
+        cv.setUint32(16, crc, true); // CRC-32
+        cv.setUint32(20, data.length, true); // compressed size
+        cv.setUint32(24, data.length, true); // uncompressed size
+        cv.setUint16(28, nameBytes.length, true); // name length
+        cv.setUint32(42, offset, true); // local header offset
+        central.set(nameBytes, 46);
+        centralHeaders.push(central);
+
+        offset += local.length;
+    }
+
+    const cdOffset = offset;
+    let cdSize = 0;
+    for (const c of centralHeaders) cdSize += c.length;
+
+    // End of central directory (22 bytes)
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true); // signature
+    ev.setUint16(8, files.length, true); // entries on this disc
+    ev.setUint16(10, files.length, true); // total entries
+    ev.setUint32(12, cdSize, true); // central directory size
+    ev.setUint32(16, cdOffset, true); // central directory offset
+
+    return new Blob([...localHeaders, ...centralHeaders, eocd], { type: "application/zip" });
+}
+
 export function debounce(fn, wait) {
     let timeout;
     return function (...args) {

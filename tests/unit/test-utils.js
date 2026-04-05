@@ -10,6 +10,9 @@ import {
     stringToUint8Array,
     uint8ArrayToString,
     debounce,
+    crc32,
+    createZipBlob,
+    unzip,
 } from "../../src/utils.js";
 
 describe("Utils tests", function () {
@@ -341,5 +344,52 @@ describe("Utils tests", function () {
             expect(stringToBBCKeys("a").length).toBe(3); // With CAPSLOCK toggles
             expect(stringToBBCKeys("!").length).toBe(3); // With SHIFT
         });
+    });
+});
+
+describe("crc32", () => {
+    it("should return 0 for empty input", () => {
+        expect(crc32(new Uint8Array(0))).toBe(0);
+    });
+
+    it("should compute correct CRC-32 for known input", () => {
+        // CRC-32 of "123456789" is 0xCBF43926
+        const data = new TextEncoder().encode("123456789");
+        expect((crc32(data) >>> 0).toString(16)).toBe("cbf43926");
+    });
+
+    it("should differ for different inputs", () => {
+        const a = crc32(new Uint8Array([1, 2, 3]));
+        const b = crc32(new Uint8Array([1, 2, 4]));
+        expect(a).not.toBe(b);
+    });
+});
+
+describe("createZipBlob and unzip round-trip", () => {
+    it("should create a valid ZIP that unzip can extract", async () => {
+        const blob = createZipBlob([
+            { name: "hello.txt", data: new TextEncoder().encode("Hello!") },
+            { name: "dir/nested.bin", data: new Uint8Array([0xca, 0xfe]) },
+        ]);
+        expect(blob).toBeInstanceOf(Blob);
+
+        const buf = new Uint8Array(await blob.arrayBuffer());
+        const files = await unzip(buf);
+
+        expect(Object.keys(files)).toHaveLength(2);
+        expect(new TextDecoder().decode(files["hello.txt"])).toBe("Hello!");
+        expect(files["dir/nested.bin"]).toEqual(new Uint8Array([0xca, 0xfe]));
+    });
+
+    it("should handle empty file list", () => {
+        const blob = createZipBlob([]);
+        expect(blob).toBeInstanceOf(Blob);
+        expect(blob.size).toBe(22); // just the EOCD
+    });
+
+    it("should handle empty file data", async () => {
+        const blob = createZipBlob([{ name: "empty", data: new Uint8Array(0) }]);
+        const files = await unzip(new Uint8Array(await blob.arrayBuffer()));
+        expect(files["empty"]).toEqual(new Uint8Array(0));
     });
 });
