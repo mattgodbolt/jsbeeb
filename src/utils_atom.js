@@ -456,7 +456,7 @@ export function getKeyMapAtom(keyLayout) {
         // Like a real ATOM
         // mainly the CTRL key is still CTRL (as CAPSLOCK locks on the MAC)
         // UP/DOWN/LEFT/RIGHT are using arrow keys
-        // REPT is using the RIGHT_ALT
+        // REPT is using RIGHT_SHIFT
         // note: LOCK is on LEFT_ALT
         map(keyCodes.K1, ATOM.K1);
         map(keyCodes.K2, ATOM.K2);
