@@ -196,14 +196,20 @@ describe("Atom speaker support", () => {
     });
 
     it("speaker channel should be skipped when isAtom is false", () => {
+        // Generate baseline output without any speaker transition queued
+        const { chip: baseline } = makeSoundChip();
+        baseline.isAtom = false;
+        const baselineOut = new Float32Array(32);
+        baseline.generate(baselineOut, 0, 32);
+
+        // Generate with a speaker transition queued — should be identical
         const { chip } = makeSoundChip();
         chip.isAtom = false;
-        // Push a speaker bit
         chip.bitChange.push({ bit: 1.0, cycles: 0 });
         const out = new Float32Array(32);
         chip.generate(out, 0, 32);
-        // Speaker channel should be silent (skipped)
-        expect(out.every((v) => v === 0.0)).toBe(true);
+
+        expect(Array.from(out)).toEqual(Array.from(baselineOut));
     });
 
     it("speakerChannel should produce output from bit transitions and consume them", () => {
