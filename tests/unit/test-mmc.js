@@ -77,11 +77,11 @@ describe("AtomMMC2", () => {
         expect(mmc.cpu).toBe(cpu);
     });
 
-    it("should return STATUS_BUSY from read before any command", () => {
+    it("should return MCU_BUSY status from STATUS_REG initially", () => {
         const mmc = new AtomMMC2(makeMockCpu());
-        // STATUS_REG is at offset 0x4
+        // STATUS_REG is at offset 0x4, MMC_MCU_BUSY = 0x01
         const status = mmc.read(0xb404);
-        expect(typeof status).toBe("number");
+        expect(status & 0x01).toBe(0x01);
     });
 
     it("should accept SetMMCData and GetMMCData", () => {

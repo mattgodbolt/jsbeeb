@@ -200,6 +200,8 @@ export async function extractSDFiles(data) {
     const result = [];
     for (const [name, fileData] of Object.entries(files)) {
         if (!/^[a-z0-9./_ -]+$/i.test(name)) continue;
+        if (name.endsWith("/")) continue; // skip directory entries
+        if (name.split("/").some((seg) => seg === "..")) continue;
         result.push(new WFNFile("/" + name, fileData));
     }
     return result;
@@ -718,21 +720,21 @@ class WFN {
             // Validate the name part
             if (namePart.length < 1 || namePart.length > 8) {
                 // Name not between 1 and 8 characters
-                return { error: "FR_INVALID_NAME" };
+                return { error: FR_INVALID_NAME };
             }
 
             // Validate the optional suffix part
             if (suffixIdx !== -1) {
                 // Reject multiple suffixes
                 if (suffixPart.includes(".")) {
-                    return { error: "FR_INVALID_NAME" };
+                    return { error: FR_INVALID_NAME };
                 }
                 if (suffixPart.length === 0) {
                     // Remove a dangling suffix
                     path = path.slice(0, path.length - 1);
                 } else if (suffixPart.length > 3) {
                     // Suffix too long
-                    return { error: "FR_INVALID_NAME" };
+                    return { error: FR_INVALID_NAME };
                 }
             }
         }
@@ -865,7 +867,7 @@ export class AtomMMC2 {
      * @returns
      */
     ClearMMCData() {
-        const fname = "README".padEnd(15, "\0");
+        const fname = "README".padEnd(16, "\0");
         const loadaddr = 0x2900;
         const basicstart = 0xb2c2;
         const flen = 0x003e;
