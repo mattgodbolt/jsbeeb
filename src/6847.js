@@ -252,6 +252,7 @@ export class Video6847 {
         if (this.frameCount % 5) enable = 0;
         this.dispEnabled |= enable;
 
+        this.frameCount++;
         this.bitmapY = 0;
     }
 
@@ -530,10 +531,6 @@ export class Video6847 {
                 this.horizCounter = 0;
             } else {
                 this.horizCounter = (this.horizCounter + 1) & 0xff;
-            }
-
-            if (this.vertCounter === vdgframelines) {
-                this.frameCount++;
             }
 
             // // dump some data to CSV
