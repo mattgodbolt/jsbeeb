@@ -121,7 +121,7 @@ class PPIA {
                 if (val & 0x80) break; // mode-set: no action needed
 
                 // BSR: set or clear a single port C output bit.
-                // NOTE: Simplified — only handles bits 2 (speaker) and 3 (CSS),
+                // NOTE: Simplified: only handles bits 2 (speaker) and 3 (CSS),
                 // and rebuilds the lower nibble. Works because the Atom ROM
                 // only BSR-toggles these two bits.
                 let speaker = this.latchc & 0x04;
@@ -180,7 +180,7 @@ class PPIA {
                 return val;
             }
             default:
-                throw new Error(`Unknown PPIA read address: 0x${(addr & 0xf).toString(16)}`);
+                return addr >>> 8; // CREG and unmapped registers return open bus
         }
     }
 

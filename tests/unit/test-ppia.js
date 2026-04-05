@@ -46,9 +46,11 @@ describe("AtomPPIA", () => {
             expect(val & 0xff).toBe(val); // 8-bit value
         });
 
-        it("should throw on invalid address read", () => {
+        it("should return open bus for unmapped register reads", () => {
             const { ppia } = makePPIA();
-            expect(() => ppia.read(0xb00f)).toThrow("Unknown PPIA read address");
+            // CREG (reg 3) is write-only; returns open bus (addr >>> 8)
+            const val = ppia.read(0xb003);
+            expect(val).toBe(0xb003 >>> 8);
         });
     });
 
