@@ -116,7 +116,7 @@ class PPIA {
                 break;
             case CREG: {
                 this.creg = val & 0xff;
-                // 8255 CREG: D7=1 is mode-set (ignored — Atom uses fixed port directions),
+                // 8255 CREG: D7=1 is mode-set (ignored; Atom uses fixed port directions),
                 // D7=0 is Bit Set/Reset (BSR) for individual port C output bits.
                 if (val & 0x80) break; // mode-set: no action needed
 
@@ -223,10 +223,16 @@ export class AtomPPIA extends PPIA {
             this.keys[i] = new Uint8Array(16);
         }
 
-        this.setKeyLayoutAtom(initialLayout);
+        this.setKeyLayout(initialLayout);
 
         this.keyboardEnabled = true;
         this.lastSpeakerBit = 0;
+        // The Atom has no lock lights. Report caps lock as "on" and shift
+        // lock as "off" so the paste routine's lock-toggle logic is never
+        // triggered (it toggles CAPSLOCK when !capsLockLight, and SHIFTLOCK
+        // when shiftLockLight).
+        this.capsLockLight = true;
+        this.shiftLockLight = false;
         this.tapeCarrierCount = 0;
         this.tapeDcdLineLevel = false;
 
@@ -236,8 +242,7 @@ export class AtomPPIA extends PPIA {
         this.runTapeTask = scheduler.newTask(() => this.runTape());
     }
 
-    // from SysVIA
-    setKeyLayoutAtom(map) {
+    setKeyLayout(map) {
         this.keycodeToRowCol = getKeyMapAtom(map);
     }
 

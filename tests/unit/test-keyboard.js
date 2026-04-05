@@ -38,6 +38,7 @@ describe("Keyboard", () => {
         };
 
         mockProcessor = {
+            model: { isAtom: false },
             sysvia: mockSysvia,
             scheduler: new Scheduler(),
             setReset: vi.fn(),
@@ -528,4 +529,75 @@ describe("Keyboard", () => {
     });
 
     // We don't test Mac-specific code as it requires global mocking
+});
+
+describe("Keyboard Atom adapter", () => {
+    let keyboard;
+    let mockAtomPPIA;
+    let mockProcessor;
+
+    beforeEach(() => {
+        mockAtomPPIA = {
+            keyDown: vi.fn(),
+            keyUp: vi.fn(),
+            clearKeys: vi.fn(),
+            disableKeyboard: vi.fn(),
+            enableKeyboard: vi.fn(),
+            keyToggleRaw: vi.fn(),
+            setKeyLayout: vi.fn(),
+        };
+
+        mockProcessor = {
+            model: { isAtom: true },
+            atomppia: mockAtomPPIA,
+            sysvia: { keyDown: vi.fn(), keyUp: vi.fn() },
+            scheduler: new Scheduler(),
+            setReset: vi.fn(),
+            cpuMultiplier: 1,
+            cycleSeconds: 0,
+            currentCycles: 0,
+        };
+
+        keyboard = new Keyboard({
+            processor: mockProcessor,
+            inputEnabledFunction: () => false,
+            keyLayout: "physical",
+            dbgr: { enabled: () => false },
+        });
+        keyboard.setRunning(true);
+    });
+
+    test("should select atomppia as keyInterface when isAtom is true", () => {
+        expect(keyboard.keyInterface).toBe(mockAtomPPIA);
+    });
+
+    test("keyDown should route to PPIA, not SysVia", () => {
+        const evt = { which: 65, location: 0, shiftKey: false, altKey: false, ctrlKey: false, preventDefault: vi.fn() };
+        keyboard.keyDown(evt);
+        expect(mockAtomPPIA.keyDown).toHaveBeenCalledWith(65, false);
+        expect(mockProcessor.sysvia.keyDown).not.toHaveBeenCalled();
+    });
+
+    test("keyUp should route to PPIA", () => {
+        const evt = { which: 65, location: 0, altKey: false, ctrlKey: false, preventDefault: vi.fn() };
+        keyboard.keyUp(evt);
+        expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith(65);
+    });
+
+    test("sendRawKeyboardToBBC should not inject lock toggles for Atom", () => {
+        // PPIA reports capsLockLight=true, shiftLockLight=false,
+        // so the paste logic should not prepend/append any lock keys.
+        mockAtomPPIA.capsLockLight = true;
+        mockAtomPPIA.shiftLockLight = false;
+        const keys = [utils.BBC.A];
+        keyboard.sendRawKeyboardToBBC(keys, true);
+        expect(mockAtomPPIA.disableKeyboard).toHaveBeenCalled();
+        // The keys array should not have been modified with lock toggles
+        expect(keys).toEqual([utils.BBC.A]);
+    });
+
+    test("setKeyLayout should call PPIA setKeyLayout", () => {
+        keyboard.setKeyLayout("natural");
+        expect(mockAtomPPIA.setKeyLayout).toHaveBeenCalledWith("natural");
+    });
 });

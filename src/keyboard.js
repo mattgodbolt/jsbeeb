@@ -28,6 +28,11 @@ export class Keyboard extends EventTarget {
         this.inputEnabledFunction = inputEnabledFunction;
         this.dbgr = dbgr;
 
+        // Key interface: routes key events to SysVia (BBC) or PPIA (Atom).
+        // Both provide keyDown, keyUp, keyToggleRaw, setKeyLayout,
+        // clearKeys, disableKeyboard, enableKeyboard.
+        this.keyInterface = processor.model.isAtom ? processor.atomppia : processor.sysvia;
+
         // State
         this.emuKeyHandlers = {};
         this.running = false;
@@ -133,7 +138,7 @@ export class Keyboard extends EventTarget {
      */
     setKeyLayout(layout) {
         this.keyLayout = layout;
-        this.processor.sysvia.setKeyLayout(layout);
+        this.keyInterface.setKeyLayout(layout);
     }
 
     /**
@@ -235,7 +240,7 @@ export class Keyboard extends EventTarget {
         }
 
         // No handler claimed the key — pass it to the BBC Micro.
-        this.processor.sysvia.keyDown(code, evt.shiftKey);
+        this.keyInterface.keyDown(code, evt.shiftKey);
     }
 
     /**
@@ -268,7 +273,7 @@ export class Keyboard extends EventTarget {
 
         // Always let the key ups come through to avoid sticky keys in the debugger
         const code = this.keyCode(evt);
-        this.processor.sysvia.keyUp(code);
+        this.keyInterface.keyUp(code);
 
         // No further special handling needed if not running
         if (!this.running) return;
@@ -301,10 +306,10 @@ export class Keyboard extends EventTarget {
 
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
-        this.processor.sysvia.keyDown(utils.keyCodes.CAPSLOCK);
+        this.keyInterface.keyDown(utils.keyCodes.CAPSLOCK);
 
         // Simulate a key release after a short delay
-        setTimeout(() => this.processor.sysvia.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
+        setTimeout(() => this.keyInterface.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (isMac && window.localStorage && !window.localStorage.getItem("warnedAboutRubbishMacs")) {
             this.dispatchEvent(
@@ -331,13 +336,13 @@ export class Keyboard extends EventTarget {
     sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
         if (this.isPasting) this.cancelPaste();
 
-        this.processor.sysvia.disableKeyboard();
+        this.keyInterface.disableKeyboard();
         this._pasteClocksPerMs = Math.floor(this.processor.cpuMultiplier * 2000000) / 1000;
 
         if (checkCapsAndShiftLocks) {
             let toggleKey = null;
-            if (!this.processor.sysvia.capsLockLight) toggleKey = utils.BBC.CAPSLOCK;
-            else if (this.processor.sysvia.shiftLockLight) toggleKey = utils.BBC.SHIFTLOCK;
+            if (!this.keyInterface.capsLockLight) toggleKey = utils.BBC.CAPSLOCK;
+            else if (this.keyInterface.shiftLockLight) toggleKey = utils.BBC.SHIFTLOCK;
             if (toggleKey) {
                 keysToSend.unshift(toggleKey);
                 keysToSend.push(toggleKey);
@@ -357,12 +362,12 @@ export class Keyboard extends EventTarget {
      */
     _deliverPasteKey() {
         if (this._pasteLastChar && this._pasteLastChar !== utils.BBC.SHIFT) {
-            this.processor.sysvia.keyToggleRaw(this._pasteLastChar);
+            this.keyInterface.keyToggleRaw(this._pasteLastChar);
         }
 
         if (this._pasteKeys.length === 0) {
             this._pasteLastChar = undefined;
-            this.processor.sysvia.enableKeyboard();
+            this.keyInterface.enableKeyboard();
             return;
         }
 
@@ -380,7 +385,7 @@ export class Keyboard extends EventTarget {
             delayMs = this._pasteLastChar;
             this._pasteLastChar = undefined;
         } else {
-            this.processor.sysvia.keyToggleRaw(this._pasteLastChar);
+            this.keyInterface.keyToggleRaw(this._pasteLastChar);
         }
 
         this._pasteKeys.shift();
@@ -394,11 +399,11 @@ export class Keyboard extends EventTarget {
         if (!this.isPasting) return;
         this._pasteTask.cancel();
         if (this._pasteLastChar && this._pasteLastChar !== utils.BBC.SHIFT) {
-            this.processor.sysvia.keyToggleRaw(this._pasteLastChar);
+            this.keyInterface.keyToggleRaw(this._pasteLastChar);
         }
         this._pasteLastChar = undefined;
         this._pasteKeys = [];
-        this.processor.sysvia.enableKeyboard();
+        this.keyInterface.enableKeyboard();
     }
 
     /**
@@ -413,7 +418,7 @@ export class Keyboard extends EventTarget {
      * Clears all pressed keys
      */
     clearKeys() {
-        this.processor.sysvia.clearKeys();
+        this.keyInterface.clearKeys();
     }
 
     /**
