@@ -52,6 +52,38 @@ describe("AtomPPIA", () => {
         });
     });
 
+    describe("CREG Bit Set/Reset", () => {
+        it("should set speaker bit via BSR write", () => {
+            const { ppia } = makePPIA();
+            // BSR: D7=0, bits 1-3 select pin, bit 0 = set/reset value
+            // Pin 2 (speaker) set: val = 0b0000_0101 = 0x05
+            ppia.write(0xb003, 0x05);
+            expect(ppia.portcpins & 0x04).toBe(0x04);
+        });
+
+        it("should clear speaker bit via BSR write", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb003, 0x05); // set speaker
+            ppia.write(0xb003, 0x04); // clear speaker
+            expect(ppia.portcpins & 0x04).toBe(0);
+        });
+
+        it("should preserve CSS when toggling speaker", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb003, 0x07); // set CSS (pin 3)
+            ppia.write(0xb003, 0x05); // set speaker (pin 2)
+            expect(ppia.portcpins & 0x08).toBe(0x08); // CSS still set
+            expect(ppia.portcpins & 0x04).toBe(0x04); // speaker set
+        });
+
+        it("should ignore mode-set writes (D7=1)", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb003, 0x05); // set speaker via BSR
+            ppia.write(0xb003, 0x80); // mode-set (should be ignored)
+            expect(ppia.portcpins & 0x04).toBe(0x04); // speaker unchanged
+        });
+    });
+
     describe("keyboard matrix", () => {
         it("should report no keys down initially", () => {
             const { ppia } = makePPIA();

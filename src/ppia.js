@@ -182,7 +182,7 @@ class PPIA {
                 //   0xfe6e, 0xfe9d, 0xfe69 - flyback/VSync routines
                 // Between each receiveBit, fcd2 is called ~6 times (33 cycles each).
                 const myPC = this.cpu.pc;
-                if (![0xfe6e, 0xfe9d, 0xfe69, 0xfcd2].includes(myPC)) {
+                if (myPC !== 0xfe6e && myPC !== 0xfe9d && myPC !== 0xfe69 && myPC !== 0xfcd2) {
                     const clocksPerSecond = (1 * 1000 * 1000) | 0;
                     const millis = this.cpu.cycleSeconds * 1000 + this.cpu.currentCycles / (clocksPerSecond / 1000);
                     this.lastTime = millis;
@@ -215,6 +215,14 @@ class PPIA {
         this.drivePortC();
         this.portCUpdated();
     }
+
+    // No-op hooks for subclass override
+    drivePortA() {}
+    drivePortB() {}
+    drivePortC() {}
+    portAUpdated() {}
+    portBUpdated() {}
+    portCUpdated() {}
 }
 
 // On the atom, the PPIA does the keyboard, speaker and tape.
@@ -232,6 +240,7 @@ export class AtomPPIA extends PPIA {
         this.setKeyLayoutAtom(initialLayout);
 
         this.keyboardEnabled = true;
+        this.lastSpeakerBit = 0;
 
         this.reset();
 
@@ -272,10 +281,7 @@ export class AtomPPIA extends PPIA {
     set(key, val, shiftDown) {
         if (!this.keyboardEnabled) return;
         const colrow = this.keycodeToRowCol[!!shiftDown][key];
-        if (!colrow) {
-            console.warn(`PPIA: unmapped key code: ${key}`);
-            return;
-        }
+        if (!colrow) return;
 
         this.keys[colrow[0]][colrow[1]] = val;
         this.updateKeys();
@@ -341,11 +347,11 @@ export class AtomPPIA extends PPIA {
     portBUpdated() {}
 
     portCUpdated() {
-        this.cpu.soundChip.speakerGenerator.pushBit(
-            (this.portcpins & 0x04) >>> 2,
-            this.cpu.currentCycles,
-            this.cpu.cycleSeconds,
-        );
+        const speakerBit = (this.portcpins & 0x04) >>> 2;
+        if (speakerBit !== this.lastSpeakerBit) {
+            this.lastSpeakerBit = speakerBit;
+            this.cpu.soundChip.speakerGenerator.pushBit(speakerBit, this.cpu.currentCycles, this.cpu.cycleSeconds);
+        }
     }
 
     drivePortA() {
