@@ -65,6 +65,8 @@ class UefTape {
         };
     }
 
+    // On BBC, acia is the ACIA (6850); on Atom, it's the PPIA (8255).
+    // Both provide setTapeCarrier(), tone(), and receive/receiveBit().
     poll(acia) {
         if (!this.curChunk) return;
 
@@ -96,7 +98,6 @@ class UefTape {
                     this.state = 0;
                     this.curByte = this.curChunk.stream.readByte();
                     acia.tone(this.baseFrequency); // Start bit
-                    if (this.isAtom) this.wavebits = Array.from(AtomBit0Pattern);
                 } else if (this.state < 9) {
                     if (this.state === 0) {
                         // Start bit
@@ -157,6 +158,7 @@ class UefTape {
                     let bit = parityOf(this.curByte);
                     if (this.parity === ParityN) bit = !bit;
                     acia.tone(bit ? 2 * this.baseFrequency : this.baseFrequency);
+                    if (this.isAtom) this.wavebits = Array.from(bit ? AtomBit1Pattern : AtomBit0Pattern);
                     this.state++;
                 } else if (this.state < 1 + this.numDataBits + this.numParityBits + this.numStopBits) {
                     acia.tone(2 * this.baseFrequency); // Stop bits
