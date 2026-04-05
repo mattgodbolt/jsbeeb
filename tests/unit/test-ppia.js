@@ -190,4 +190,42 @@ describe("AtomPPIA", () => {
             expect(ppia.latchc & 0x20).toBe(0); // bit 5 cleared
         });
     });
+
+    describe("snapshot/restore", () => {
+        it("should round-trip state through snapshot and restore", () => {
+            const { ppia } = makePPIA();
+            // Mutate state
+            ppia.write(0xb000, 0x35); // port A
+            ppia.keyDownRaw([6, 1]); // press a key
+            ppia.write(0xb003, 0x05); // BSR: set speaker bit
+
+            const snapshot = ppia.snapshotState();
+            expect(snapshot.latcha).toBe(0x35);
+            expect(snapshot.keyboardEnabled).toBe(true);
+
+            // Create a fresh PPIA and restore
+            const { ppia: ppia2 } = makePPIA();
+            ppia2.restoreState(snapshot);
+
+            expect(ppia2.latcha).toBe(0x35);
+            expect(ppia2.keyboardEnabled).toBe(true);
+            expect(ppia2.keys[6][1]).toBe(1);
+        });
+
+        it("should produce JSON-serializable state", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb000, 0x42);
+            ppia.keyDownRaw([3, 2]);
+            const snapshot = ppia.snapshotState();
+
+            // Round-trip through JSON
+            const json = JSON.stringify(snapshot);
+            const parsed = JSON.parse(json);
+
+            const { ppia: ppia2 } = makePPIA();
+            ppia2.restoreState(parsed);
+            expect(ppia2.latcha).toBe(0x42);
+            expect(ppia2.keys[3][2]).toBe(1);
+        });
+    });
 });
