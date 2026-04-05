@@ -143,3 +143,66 @@ describe("SoundChip snapshotState / restoreState", () => {
         expect(snapshot.registers[0]).toBe(0x123);
     });
 });
+
+describe("Atom speaker support", () => {
+    it("should have speakerGenerator with mute and pushBit", () => {
+        const { chip } = makeSoundChip();
+        expect(chip.speakerGenerator).toBeDefined();
+        expect(typeof chip.speakerGenerator.mute).toBe("function");
+        expect(typeof chip.speakerGenerator.pushBit).toBe("function");
+    });
+
+    it("should default isAtom to false", () => {
+        const { chip } = makeSoundChip();
+        expect(chip.isAtom).toBe(false);
+    });
+
+    it("setCPUSpeed should adjust samplesPerCycle", () => {
+        const { chip } = makeSoundChip();
+        const before = chip.samplesPerCycle;
+        chip.setCPUSpeed(1000000); // 1 MHz (Atom)
+        expect(chip.samplesPerCycle).not.toBe(before);
+        expect(chip.samplesPerCycle).toBeCloseTo(chip.soundchipFreq / 1000000);
+    });
+
+    it("speakerReset should clear the bit change queue", () => {
+        const { chip } = makeSoundChip();
+        chip.bitChange.push({ bit: 1.0, cycles: 100 });
+        chip.speakerReset();
+        expect(chip.bitChange).toHaveLength(0);
+        expect(chip.currentSpeakerBit).toBe(0.0);
+    });
+
+    it("updateSpeaker should record bit transitions", () => {
+        const { chip } = makeSoundChip();
+        chip.updateSpeaker(1, 100, 0);
+        chip.updateSpeaker(0, 200, 0);
+        expect(chip.bitChange).toHaveLength(2);
+        expect(chip.bitChange[0].bit).toBe(1.0);
+        expect(chip.bitChange[1].bit).toBe(0.0);
+    });
+
+    it("BBC channels should be skipped when isAtom is true", () => {
+        const { chip } = makeSoundChip();
+        chip.isAtom = true;
+        // Set BBC tone channel to produce sound
+        chip.registers[0] = 100;
+        chip.volume[0] = 0.25;
+        const out = new Float32Array(32);
+        chip.generate(out, 0, 32);
+        // BBC tone channel should be silent (skipped)
+        const allZeroOrSpeaker = out.every((v) => Math.abs(v) < 0.01);
+        expect(allZeroOrSpeaker).toBe(true);
+    });
+
+    it("speaker channel should be skipped when isAtom is false", () => {
+        const { chip } = makeSoundChip();
+        chip.isAtom = false;
+        // Push a speaker bit
+        chip.bitChange.push({ bit: 1.0, cycles: 0 });
+        const out = new Float32Array(32);
+        chip.generate(out, 0, 32);
+        // Speaker channel should be silent (skipped)
+        expect(out.every((v) => v === 0.0)).toBe(true);
+    });
+});
