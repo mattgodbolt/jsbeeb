@@ -205,4 +205,27 @@ describe("Atom speaker support", () => {
         // Speaker channel should be silent (skipped)
         expect(out.every((v) => v === 0.0)).toBe(true);
     });
+
+    it("speakerChannel should produce output from bit transitions and consume them", () => {
+        const { chip, scheduler } = makeSoundChip();
+        chip.speakerReset();
+        // Push transitions at known cycle timestamps
+        chip.bitChange.push({ bit: 1.0, cycles: 5 });
+        chip.bitChange.push({ bit: 0.0, cycles: 10 });
+        // Set epoch so the transitions fall within the render window
+        scheduler.epoch = 16;
+
+        const out = new Float32Array(16);
+        chip.speakerChannel(5, out, 0, 16);
+
+        // Before cycle 5: 0, from 5-9: 1.0, from 10+: 0
+        expect(out[0]).toBe(0.0);
+        expect(out[4]).toBe(0.0);
+        expect(out[5]).toBe(1.0);
+        expect(out[9]).toBe(1.0);
+        expect(out[10]).toBe(0.0);
+        expect(out[15]).toBe(0.0);
+        // Transitions should be consumed
+        expect(chip.bitChange).toHaveLength(0);
+    });
 });

@@ -90,14 +90,14 @@ export class SoundChip {
                 this.updateSpeaker(bit, cycles, seconds);
             },
         };
-        this.cpuFreq = 1 / 1000000; // default 1 MHz (Atom)
+        this.secondsPerCycle = 1 / 1000000; // default 1 MHz (Atom)
         this.bitChange = [];
         this.currentSpeakerBit = 0.0;
     }
 
     setCPUSpeed(cpuSpeed) {
-        this.cpuFreq = 1 / cpuSpeed;
-        this.samplesPerCycle = this.soundchipFreq * this.cpuFreq;
+        this.secondsPerCycle = 1 / cpuSpeed;
+        this.samplesPerCycle = this.soundchipFreq * this.secondsPerCycle;
     }
 
     sineChannel(channel, out, offset, length) {
@@ -382,7 +382,7 @@ export class SoundChip {
     }
 
     updateSpeaker(value, microCycle, seconds) {
-        const cycles = microCycle + seconds / this.cpuFreq;
+        const cycles = microCycle + seconds / this.secondsPerCycle;
         this.bitChange.push({ bit: value ? 1.0 : 0.0, cycles });
     }
 }
