@@ -313,12 +313,23 @@ describe("URL Parameters", () => {
                 discImage: "elite.ssd",
                 secondDiscImage: "games.ssd",
                 tapeImage: "welcome.uef",
+                mmcImage: undefined,
             });
 
             expect(parseMediaParams({ disc1: "disc1.ssd" })).toEqual({
                 discImage: "disc1.ssd",
                 secondDiscImage: undefined,
                 tapeImage: undefined,
+                mmcImage: undefined,
+            });
+        });
+
+        it("should extract mmc image for Atom", () => {
+            expect(parseMediaParams({ mmc: "sdcard.zip" })).toEqual({
+                discImage: undefined,
+                secondDiscImage: undefined,
+                tapeImage: undefined,
+                mmcImage: "sdcard.zip",
             });
         });
     });
@@ -332,6 +343,11 @@ describe("URL Parameters", () => {
         it("should return Master for hostnames starting with 'master'", () => {
             expect(guessModelFromHostname("master.example.com")).toBe("Master");
             expect(guessModelFromHostname("mastercompact.local")).toBe("Master");
+        });
+
+        it("should return Atom for hostnames starting with 'atom'", () => {
+            expect(guessModelFromHostname("atom.example.com")).toBe("Atom");
+            expect(guessModelFromHostname("atomulator.local")).toBe("Atom");
         });
 
         it("should return default model for other hostnames", () => {

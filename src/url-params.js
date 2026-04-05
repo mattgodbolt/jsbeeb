@@ -240,6 +240,7 @@ export function processAutobootParams(parsedQuery) {
 export function guessModelFromHostname(hostname) {
     if (hostname.startsWith("bbc")) return "B-DFS1.2";
     if (hostname.startsWith("master")) return "Master";
+    if (hostname.startsWith("atom")) return "Atom";
     return "B-DFS1.2";
 }
 
@@ -247,10 +248,14 @@ export function guessModelFromHostname(hostname) {
  * Parse disc or tape images from the query parameters
  * @param {Object} parsedQuery - The query parameters
  * @returns {Object} Object containing disc and tape information
+ *   - discImage: disc image URL (?disc= or ?disc1=)
+ *   - secondDiscImage: second disc URL (?disc2=)
+ *   - tapeImage: tape image URL (?tape=)
+ *   - mmcImage: MMC/SD card image URL (?mmc=, Atom only)
  */
 export function parseMediaParams(parsedQuery) {
-    const { disc, disc1, disc2, tape } = parsedQuery;
+    const { disc, disc1, disc2, tape, mmc } = parsedQuery;
     const discImage = disc || disc1;
 
-    return { discImage, secondDiscImage: disc2, tapeImage: tape };
+    return { discImage, secondDiscImage: disc2, tapeImage: tape, mmcImage: mmc };
 }
