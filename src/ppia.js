@@ -436,4 +436,36 @@ export class AtomPPIA extends PPIA {
     }
 
     updateIrq() {}
+
+    snapshotState() {
+        return {
+            latcha: this.latcha,
+            latchb: this.latchb,
+            latchc: this.latchc,
+            portapins: this.portapins,
+            portbpins: this.portbpins,
+            portcpins: this.portcpins,
+            creg: this.creg,
+            keys: this.keys.map((row) => Array.from(row)),
+            keyboardEnabled: this.keyboardEnabled,
+            lastSpeakerBit: this.lastSpeakerBit,
+        };
+    }
+
+    restoreState(state) {
+        this.latcha = state.latcha;
+        this.latchb = state.latchb;
+        this.latchc = state.latchc;
+        this.portapins = state.portapins;
+        this.portbpins = state.portbpins;
+        this.portcpins = state.portcpins;
+        this.creg = state.creg;
+        if (state.keys) {
+            for (let i = 0; i < state.keys.length; i++) {
+                this.keys[i].set(state.keys[i]);
+            }
+        }
+        this.keyboardEnabled = state.keyboardEnabled;
+        this.lastSpeakerBit = state.lastSpeakerBit;
+    }
 }

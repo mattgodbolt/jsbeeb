@@ -1763,4 +1763,36 @@ export class AtomCpu6502 extends Cpu6502 {
     updateKeyLayout() {
         this.atomppia.setKeyLayout(this.config.keyLayout);
     }
+
+    snapshotState(options) {
+        const state = super.snapshotState(options);
+        // Atom-specific state
+        state.branquartLatch = this.branquartLatch;
+        state.branquartRam = [...this.branquartRam];
+        // Save Branquart bank contents
+        state.branquartBanks = this.ramRomOs.slice(
+            BranquartOffset,
+            BranquartOffset + NumBranquartBanks * BranquartBankSize,
+        );
+        state.atomppia = this.atomppia.snapshotState();
+        return state;
+    }
+
+    // No-op: the Atom doesn't have BBC sideways ROM banking.
+    // This prevents super.restoreState() from corrupting the Atom memory map.
+    romSelect() {}
+
+    restoreState(state) {
+        super.restoreState(state);
+
+        // Restore Atom-specific state after the parent has handled
+        // CPU registers, memory, cycle tracking, and sub-components.
+        if (state.branquartRam) this.branquartRam = [...state.branquartRam];
+        if (state.branquartBanks) {
+            this.ramRomOs.set(state.branquartBanks, BranquartOffset);
+        }
+        this.branquartLatch = state.branquartLatch || 0;
+        this.selectBranquartBank(this.branquartLatch & 0x0f);
+        if (state.atomppia) this.atomppia.restoreState(state.atomppia);
+    }
 }
