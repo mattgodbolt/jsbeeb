@@ -71,7 +71,10 @@ class UefTape {
         // Atom: drain the wavebits queue first (one bit per poll)
         if (this.isAtom && this.wavebits.length > 0) {
             acia.receiveBit(this.wavebits.shift());
-            return this.cycles(1.0 / 15.5136); // ~3340 cycles between bits at 1 MHz
+            // ~53 cycles at 1 MHz between individual bit transitions.
+            // 16 bits per byte × 53 ≈ 848 cycles per byte character,
+            // with ~3340 cycles between complete bytes (including gaps).
+            return secsToClocks(1.0 / 15.5136 / this.baseFrequency, this.cpuSpeed);
         }
 
         if (this.state === -1) {
@@ -126,6 +129,7 @@ class UefTape {
                     this.numStopBits = this.curChunk.stream.readByte();
                     this.numParityBits = this.parity !== ParityN ? 1 : 0;
                     // Atom: negative stop bits (high bit set) means short wave
+                    this.shortWave = 0;
                     if (this.isAtom && this.numStopBits & 0x80) {
                         this.numStopBits = Math.abs(this.numStopBits - 256);
                         this.shortWave = 1;
