@@ -1247,53 +1247,69 @@ export class Cpu6502 extends Base6502 {
 
     reset(hard) {
         if (hard) {
-            // On the Master, opcodes executing from 0xc000 - 0xdfff can optionally have their memory accesses
-            // redirected to shadow RAM.
-            this.memStatOffsetByIFetchBank = this.model.isMaster ? (1 << 0xc) | (1 << 0xd) : 0x0000;
-            if (!this.model.isTest) {
-                for (let i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
-                for (let i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
-                for (let i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
-                for (let i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
-                for (let i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
-
-                for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
-            } else {
-                // Test sets everything as RAM.
-                for (let i = 0; i < 256; ++i) {
-                    this.memStat[i] = this.memStat[256 + i] = 1;
-                    this.memLook[i] = this.memLook[256 + i] = 0;
-                }
-            }
-            // DRAM content is not guaranteed to contain any particular
-            // value on start up, so we choose values that help avoid
-            // bugs in various games.
-            for (let i = 0; i < this.romOffset; ++i) {
-                if (i < 0x100) {
-                    // For Clogger.
-                    this.ramRomOs[i] = 0x00;
-                } else {
-                    // For Eagle Empire.
-                    this.ramRomOs[i] = 0xff;
-                }
-            }
-            this.videoDisplayPage = 0;
-            if (this.config.printerPort) this.uservia.ca2changecallback = this.config.printerPort.outputStrobe;
-
-            this.sysvia.reset();
-            this.uservia.reset();
-            this.acia.reset();
-            this.serial.reset();
-            this.ddNoise.spinDown();
-            this.fdc.powerOnReset();
-            this.adconverter.reset();
-
-            this.touchScreen = new TouchScreen(this.scheduler);
-            if (this.model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
-            if (this.econet) this.filestore = new Filestore(this, this.econet);
+            this.setupMemoryMap();
+            this.resetPeripherals(hard);
         } else {
             this.fdc.reset();
         }
+        this.resetCpuState(hard);
+    }
+
+    // Override in subclasses for different memory maps.
+    setupMemoryMap() {
+        // On the Master, opcodes executing from 0xc000 - 0xdfff can optionally have their memory accesses
+        // redirected to shadow RAM.
+        this.memStatOffsetByIFetchBank = this.model.isMaster ? (1 << 0xc) | (1 << 0xd) : 0x0000;
+        if (!this.model.isTest) {
+            for (let i = 0; i < 128; ++i) this.memStat[i] = this.memStat[256 + i] = 1;
+            for (let i = 128; i < 256; ++i) this.memStat[i] = this.memStat[256 + i] = 2;
+            for (let i = 0; i < 128; ++i) this.memLook[i] = this.memLook[256 + i] = 0;
+            for (let i = 128; i < 192; ++i) this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0x8000;
+            for (let i = 192; i < 256; ++i) this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xc000;
+
+            for (let i = 0xfc; i < 0xff; ++i) this.memStat[i] = this.memStat[256 + i] = 0;
+        } else {
+            // Test sets everything as RAM.
+            for (let i = 0; i < 256; ++i) {
+                this.memStat[i] = this.memStat[256 + i] = 1;
+                this.memLook[i] = this.memLook[256 + i] = 0;
+            }
+        }
+        // DRAM content is not guaranteed to contain any particular
+        // value on start up, so we choose values that help avoid
+        // bugs in various games.
+        for (let i = 0; i < this.romOffset; ++i) {
+            if (i < 0x100) {
+                // For Clogger.
+                this.ramRomOs[i] = 0x00;
+            } else {
+                // For Eagle Empire.
+                this.ramRomOs[i] = 0xff;
+            }
+        }
+        this.videoDisplayPage = 0;
+    }
+
+    // Override in subclasses for different peripheral sets.
+    // Only called on hard reset.
+    resetPeripherals() {
+        if (this.config.printerPort) this.uservia.ca2changecallback = this.config.printerPort.outputStrobe;
+
+        this.sysvia.reset();
+        this.uservia.reset();
+        this.acia.reset();
+        this.serial.reset();
+        this.ddNoise.spinDown();
+        this.fdc.powerOnReset();
+        this.adconverter.reset();
+
+        this.touchScreen = new TouchScreen(this.scheduler);
+        if (this.model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
+        if (this.econet) this.filestore = new Filestore(this, this.econet);
+    }
+
+    // Universal CPU state reset. Shared by all machine types.
+    resetCpuState(hard) {
         this.tube.reset(hard);
         if (hard) {
             this.targetCycles = 0;
@@ -1563,77 +1579,52 @@ export class AtomCpu6502 extends Cpu6502 {
         }
     }
 
-    reset(hard) {
-        if (hard) {
-            this.memStatOffsetByIFetchBank = 0; // no shadow RAM on Atom
+    setupMemoryMap() {
+        this.memStatOffsetByIFetchBank = 0; // no shadow RAM on Atom
 
-            // 0x0000-0x9FFF: RAM (including video RAM at 0x8000)
-            for (let i = 0; i < 0xa0; ++i) {
-                this.memStat[i] = this.memStat[256 + i] = 1;
-                this.memLook[i] = this.memLook[256 + i] = 0;
-            }
-
-            // 0xA000-0xAFFF: Branquart banked region (set up via selectBranquartBank)
-            this.branquartLatch = 0;
-            this.selectBranquartBank(0);
-
-            // 0xB000-0xBFFF: Device I/O (PPIA, MMC, VIA, bank latch)
-            for (let i = 0xb0; i < 0xc0; ++i) {
-                this.memStat[i] = this.memStat[256 + i] = 0;
-            }
-
-            // 0xC000-0xEFFF: ROM (4KB blocks loaded into romOffset area)
-            for (let i = 0xc0; i < 0xf0; ++i) {
-                this.memStat[i] = this.memStat[256 + i] = 2;
-                this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0xa000;
-            }
-
-            // 0xF000-0xFFFF: OS kernel ROM
-            for (let i = 0xf0; i < 0x100; ++i) {
-                this.memStat[i] = this.memStat[256 + i] = 2;
-                this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xf000;
-            }
-
-            // FDC at 0x0A00 (device hole in RAM, if model uses FDC)
-            if (this.model.Fdc) {
-                this.memStat[0x0a] = this.memStat[256 + 0x0a] = 0;
-            }
-
-            // Randomise video RAM and seed bytes
-            for (let i = 8; i < 13; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
-            for (let i = 0x8000; i < 0x9000; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
-
-            this.videoDisplayPage = 0;
-
-            this.sysvia.reset(); // unused on Atom but exists from parent constructor
-            this.uservia.reset();
-            this.acia.reset();
-            this.serial.reset();
-            this.ddNoise.spinDown();
-            this.fdc.powerOnReset();
-            this.adconverter.reset();
-
-            this.atomppia.reset();
-        } else {
-            this.fdc.reset();
+        // 0x0000-0x9FFF: RAM (including video RAM at 0x8000)
+        for (let i = 0; i < 0xa0; ++i) {
+            this.memStat[i] = this.memStat[256 + i] = 1;
+            this.memLook[i] = this.memLook[256 + i] = 0;
         }
 
-        this.tube.reset(hard);
-        if (hard) {
-            this.targetCycles = 0;
-            this.currentCycles = 0;
-            this.cycleSeconds = 0;
+        // 0xA000-0xAFFF: Branquart banked region (set up via selectBranquartBank)
+        this.branquartLatch = 0;
+        this.selectBranquartBank(0);
+
+        // 0xB000-0xBFFF: Device I/O (PPIA, MMC, VIA, bank latch)
+        for (let i = 0xb0; i < 0xc0; ++i) {
+            this.memStat[i] = this.memStat[256 + i] = 0;
         }
-        this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
-        this.p.i = true;
-        this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
-        this._nmiEdge = false;
-        this._nmiLevel = false;
-        this.halted = false;
-        this.breakpointResume = false;
-        this.music5000PageSel = 0;
-        this.video.reset(this, this.sysvia, hard);
-        this.soundChip.reset(hard);
+
+        // 0xC000-0xEFFF: ROM (4KB blocks loaded into romOffset area)
+        for (let i = 0xc0; i < 0xf0; ++i) {
+            this.memStat[i] = this.memStat[256 + i] = 2;
+            this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0xa000;
+        }
+
+        // 0xF000-0xFFFF: OS kernel ROM
+        for (let i = 0xf0; i < 0x100; ++i) {
+            this.memStat[i] = this.memStat[256 + i] = 2;
+            this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xf000;
+        }
+
+        // FDC at 0x0A00 (device hole in RAM, if model uses FDC)
+        if (this.model.Fdc) {
+            this.memStat[0x0a] = this.memStat[256 + 0x0a] = 0;
+        }
+
+        // Randomise video RAM and seed bytes
+        for (let i = 8; i < 13; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
+        for (let i = 0x8000; i < 0x9000; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
+
+        this.videoDisplayPage = 0;
+    }
+
+    resetPeripherals() {
+        // Reset peripherals inherited from parent (unused on Atom but harmless)
+        super.resetPeripherals();
+        this.atomppia.reset();
     }
 
     readDevice(addr) {
