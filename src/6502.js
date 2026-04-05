@@ -1559,9 +1559,7 @@ export class AtomCpu6502 extends Cpu6502 {
 
         // Atom runs at 1 MHz
         this.peripheralCyclesPerSecond = 1 * 1000 * 1000;
-
-        this.reset(true);
-        this.debugger.setCpu(this);
+        // reset() and debugger.setCpu() are called by initialise() after loadOs().
     }
 
     // Select which Branquart bank is visible at 0xA000-0xAFFF by
@@ -1625,6 +1623,7 @@ export class AtomCpu6502 extends Cpu6502 {
         // Reset peripherals inherited from parent (unused on Atom but harmless)
         super.resetPeripherals();
         this.atomppia.reset();
+        this.atommc.reset();
     }
 
     readDevice(addr) {
@@ -1731,7 +1730,8 @@ export class AtomCpu6502 extends Cpu6502 {
         const awaiting = [];
         for (const rom of extraRoms) {
             romIndex--;
-            if (romIndex < 0) throw new Error("Too many extra ROMs for Atom (max 5 slots)");
+            if (romIndex < 2)
+                throw new Error("Too many extra ROMs for Atom (max 3 addressable slots at 0xC000-0xEFFF)");
             if (rom !== "") {
                 awaiting.push(this.loadRom(rom, this.romOffset + romIndex * AtomRomBlockSize));
             }
