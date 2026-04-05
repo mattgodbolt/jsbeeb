@@ -10,6 +10,8 @@ import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
 import { FakeRelayNoise } from "./relaynoise.js";
+import { AtomPPIA } from "./ppia.js";
+import { AtomMMC2 } from "./mmc.js";
 
 const signExtend = utils.signExtend;
 
@@ -1493,5 +1495,280 @@ export class Cpu6502 extends Base6502 {
         }
         this.reset(true);
         this.debugger.setCpu(this);
+    }
+}
+
+// Acorn Atom memory map:
+//   0x0000-0x7FFF  RAM (32KB, or 40KB with extensions up to 0x9FFF)
+//   0x0A00-0x0AFF  FDC (8271) -- hole in RAM region
+//   0x8000-0x9FFF  Video RAM (shared with MC6847 VDG)
+//   0xA000-0xAFFF  Banked ROM/RAM (Branquart, 16 x 4KB banks via latch at 0xBFFF)
+//   0xB000-0xB003  PPIA (8255)
+//   0xB400-0xB40F  AtomMMC
+//   0xB800-0xB80F  VIA (6522)
+//   0xBFFF         Bank select latch (write-only)
+//   0xC000-0xEFFF  ROM (BASIC, FP, DOS in 4KB blocks)
+//   0xF000-0xFFFF  OS kernel ROM (4KB)
+//
+// Branquart banking: bits 0-3 of the latch at 0xBFFF select which 4KB
+// bank is visible at 0xA000-0xAFFF. Banks can contain ROM or RAM.
+// The latch is write-only; bit 6 is a lock bit.
+
+// Storage for Branquart banks starts after the BBC ROM area.
+const BranquartOffset = 128 * 1024 + 17 * 16 * 16384;
+const BranquartBankSize = 0x1000; // 4KB per bank
+const NumBranquartBanks = 16;
+const AtomRomBlockSize = 0x1000; // 4KB
+
+export class AtomCpu6502 extends Cpu6502 {
+    constructor(model, options) {
+        super(model, options);
+
+        // Atom peripherals
+        this.atomppia = new AtomPPIA(this, this.config.keyLayout, this.scheduler);
+        this.atommc = new AtomMMC2(this);
+
+        // Branquart bank selection
+        this.branquartLatch = 0;
+        // Track which banks are ROM (false) vs RAM (true) for write protection.
+        this.branquartRam = new Array(NumBranquartBanks).fill(true);
+
+        // Expand ramRomOs to include Branquart bank storage.
+        const expandedSize = BranquartOffset + NumBranquartBanks * BranquartBankSize;
+        if (this.ramRomOs.length < expandedSize) {
+            const expanded = new Uint8Array(expandedSize);
+            expanded.set(this.ramRomOs);
+            this.ramRomOs = expanded;
+        }
+
+        // Atom runs at 1 MHz
+        this.peripheralCyclesPerSecond = 1 * 1000 * 1000;
+
+        this.reset(true);
+        this.debugger.setCpu(this);
+    }
+
+    // Select which Branquart bank is visible at 0xA000-0xAFFF by
+    // updating the memLook table. This keeps reads on the fast path.
+    selectBranquartBank(bank) {
+        bank &= 0x0f;
+        const offset = BranquartOffset + bank * BranquartBankSize - 0xa000;
+        for (let i = 0xa0; i < 0xb0; ++i) {
+            this.memLook[i] = this.memLook[256 + i] = offset;
+        }
+        // ROM banks are read-only, RAM banks are writable
+        const stat = this.branquartRam[bank] ? 1 : 2;
+        for (let i = 0xa0; i < 0xb0; ++i) {
+            this.memStat[i] = this.memStat[256 + i] = stat;
+        }
+    }
+
+    reset(hard) {
+        if (hard) {
+            this.memStatOffsetByIFetchBank = 0; // no shadow RAM on Atom
+
+            // 0x0000-0x9FFF: RAM (including video RAM at 0x8000)
+            for (let i = 0; i < 0xa0; ++i) {
+                this.memStat[i] = this.memStat[256 + i] = 1;
+                this.memLook[i] = this.memLook[256 + i] = 0;
+            }
+
+            // 0xA000-0xAFFF: Branquart banked region (set up via selectBranquartBank)
+            this.branquartLatch = 0;
+            this.selectBranquartBank(0);
+
+            // 0xB000-0xBFFF: Device I/O (PPIA, MMC, VIA, bank latch)
+            for (let i = 0xb0; i < 0xc0; ++i) {
+                this.memStat[i] = this.memStat[256 + i] = 0;
+            }
+
+            // 0xC000-0xEFFF: ROM (4KB blocks loaded into romOffset area)
+            for (let i = 0xc0; i < 0xf0; ++i) {
+                this.memStat[i] = this.memStat[256 + i] = 2;
+                this.memLook[i] = this.memLook[256 + i] = this.romOffset - 0xa000;
+            }
+
+            // 0xF000-0xFFFF: OS kernel ROM
+            for (let i = 0xf0; i < 0x100; ++i) {
+                this.memStat[i] = this.memStat[256 + i] = 2;
+                this.memLook[i] = this.memLook[256 + i] = this.osOffset - 0xf000;
+            }
+
+            // FDC at 0x0A00 (device hole in RAM, if model uses FDC)
+            if (this.model.Fdc) {
+                this.memStat[0x0a] = this.memStat[256 + 0x0a] = 0;
+            }
+
+            // Randomise video RAM and seed bytes
+            for (let i = 8; i < 13; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
+            for (let i = 0x8000; i < 0x9000; ++i) this.ramRomOs[i] = (256 * Math.random()) | 0;
+
+            this.videoDisplayPage = 0;
+
+            this.sysvia.reset(); // unused on Atom but exists from parent constructor
+            this.uservia.reset();
+            this.acia.reset();
+            this.serial.reset();
+            this.ddNoise.spinDown();
+            this.fdc.powerOnReset();
+            this.adconverter.reset();
+
+            this.atomppia.reset();
+        } else {
+            this.fdc.reset();
+        }
+
+        this.tube.reset(hard);
+        if (hard) {
+            this.targetCycles = 0;
+            this.currentCycles = 0;
+            this.cycleSeconds = 0;
+        }
+        this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
+        this.p.i = true;
+        this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
+        this._nmiEdge = false;
+        this._nmiLevel = false;
+        this.halted = false;
+        this.breakpointResume = false;
+        this.music5000PageSel = 0;
+        this.video.reset(this, this.sysvia, hard);
+        this.soundChip.reset(hard);
+    }
+
+    readDevice(addr) {
+        addr &= 0xffff;
+        switch (addr & ~0x0003) {
+            case 0x0a00:
+            case 0x0a04:
+                return this.fdc.read(addr);
+            case 0xb000:
+            case 0xb004:
+                return this.atomppia.read(addr);
+            case 0xb008:
+            case 0xb00c:
+                return 0x00;
+            case 0xb400:
+            case 0xb404:
+            case 0xb408:
+            case 0xb40c:
+                return this.atommc.read(addr);
+            case 0xb800:
+            case 0xb804:
+            case 0xb808:
+            case 0xb80c:
+                return this.uservia.read(addr);
+        }
+        return addr >>> 8; // open bus
+    }
+
+    writeDevice(addr, b) {
+        addr &= 0xffff;
+        b |= 0;
+        switch (addr & ~0x0003) {
+            case 0x0a00:
+            case 0x0a04:
+                return this.fdc.write(addr, b);
+            case 0xb000:
+            case 0xb004:
+            case 0xb008:
+            case 0xb00c:
+                return this.atomppia.write(addr, b);
+            case 0xb400:
+            case 0xb404:
+            case 0xb408:
+            case 0xb40c:
+                return this.atommc.write(addr, b);
+            case 0xb800:
+            case 0xb804:
+            case 0xb808:
+            case 0xb80c:
+                return this.uservia.write(addr, b);
+            case 0xbffc:
+                if (addr === 0xbfff) {
+                    this.branquartLatch = b & 0xff;
+                    this.selectBranquartBank(b & 0x0f);
+                }
+                return;
+        }
+    }
+
+    writemem(addr, b) {
+        addr &= 0xffff;
+        b |= 0;
+        if (this._debugWrite) this._debugWrite(addr, b);
+        const statOffset = this.memStatOffset + (addr >>> 8);
+        const stat = this.memStat[statOffset];
+        if (stat === 1) {
+            // Notify VDG of CPU address bus activity for snow effect
+            if (this.video.video6847) {
+                this.video.video6847.cpuAddrAccess(addr);
+            }
+            const offset = this.memLook[statOffset];
+            this.ramRomOs[offset + addr] = b;
+            return;
+        }
+        if (stat === 2) return; // ROM: write ignored
+        // Device page
+        this.writeDevice(addr, b);
+    }
+
+    // Atom ROMs are 4KB, not 16KB like BBC.
+    // OS layout: osOffset holds 4KB kernel at 0xF000.
+    // Extra ROMs (BASIC, FP, DOS) are 4KB blocks at romOffset+0..romOffset+0x5000
+    // mapped at 0xC000, 0xD000, 0xE000 etc.
+    async loadOs(os) {
+        const extraRoms = Array.prototype.slice.call(arguments, 1).concat(this.config.extraRoms);
+        const bankRoms = this.model.banks || [];
+        os = "roms/" + os;
+        console.log(`Loading Atom OS from ${os}`);
+        const data = await utils.loadData(os);
+        const len = data.length;
+
+        if (len < AtomRomBlockSize || len % AtomRomBlockSize !== 0) {
+            throw new Error(`Broken Atom ROM file (length=${len})`);
+        }
+
+        // Clear the OS area and load the kernel at osOffset (mapped to 0xF000)
+        this.ramRomOs.fill(0x00, this.osOffset, this.osOffset + 0x4000);
+        this.ramRomOs.set(data.subarray(0, AtomRomBlockSize), this.osOffset);
+
+        // Load extra ROMs (BASIC, FP, DOS) into 4KB blocks counting down from romOffset+0x5000.
+        // These map at 0xE000, 0xD000, 0xC000 etc via the memLook offset set in reset().
+        let romIndex = 5;
+        const awaiting = [];
+        for (const rom of extraRoms) {
+            romIndex--;
+            if (rom !== "") {
+                awaiting.push(this.loadRom(rom, this.romOffset + romIndex * AtomRomBlockSize));
+            }
+        }
+
+        // Load Branquart bank ROMs
+        let bankIndex = 0;
+        for (const rom of bankRoms) {
+            if (rom !== "") {
+                awaiting.push(this.loadRom(rom, BranquartOffset + bankIndex * BranquartBankSize));
+                this.branquartRam[bankIndex] = false; // mark as ROM
+            }
+            bankIndex++;
+        }
+
+        return await Promise.all(awaiting);
+    }
+
+    // Override loadRom to accept 4KB ROMs
+    async loadRom(name, offset) {
+        const data = await utils.loadData("roms/" + name);
+        const len = data.length;
+        if (len !== 16384 && len !== 8192 && len !== 4096) {
+            throw new Error(`Broken ROM file ${name} (length=${len})`);
+        }
+        this.ramRomOs.set(data, offset);
+    }
+
+    // Atom key layout goes through PPIA, not SysVia
+    updateKeyLayout() {
+        this.atomppia.setKeyLayout(this.config.keyLayout);
     }
 }
