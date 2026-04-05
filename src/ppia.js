@@ -54,7 +54,6 @@ class PPIA {
         this.portcpins = 0;
         this.creg = 0;
         this.speaker = 0;
-        this.prevcas = 0;
     }
 
     reset() {
@@ -168,9 +167,6 @@ class PPIA {
                 // input bits 4-7 from pins, with REPT key overlay on bit 6.
                 let val = this.portcpins;
 
-                const casin = this.portcpins & 0x20;
-                const casbit = casin ? 1 : 0;
-
                 // REPT key: bit 6 is LOW when pressed
                 const rept_key = (!this.keys[1][6] << 6) & 0x40;
                 val = (val & ~0x40) | rept_key;
@@ -181,16 +177,6 @@ class PPIA {
                 //   0xfcc2 - count duration of tape pulse (<8 loops = '1', >=8 = '0')
                 //   0xfe6e, 0xfe9d, 0xfe69 - flyback/VSync routines
                 // Between each receiveBit, fcd2 is called ~6 times (33 cycles each).
-                const myPC = this.cpu.pc;
-                if (myPC !== 0xfe6e && myPC !== 0xfe9d && myPC !== 0xfe69 && myPC !== 0xfcd2) {
-                    const clocksPerSecond = (1 * 1000 * 1000) | 0;
-                    const millis = this.cpu.cycleSeconds * 1000 + this.cpu.currentCycles / (clocksPerSecond / 1000);
-                    this.lastTime = millis;
-
-                    if (casbit !== this.prevcas) {
-                        this.prevcas = casbit;
-                    }
-                }
                 return val;
             }
             default:
@@ -243,8 +229,6 @@ export class AtomPPIA extends PPIA {
         this.lastSpeakerBit = 0;
 
         this.reset();
-
-        this.lastTime = 0;
 
         // from ACIA
         this.runTapeTask = scheduler.newTask(() => this.runTape());
