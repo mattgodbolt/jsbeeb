@@ -77,7 +77,7 @@ export async function decompress(data, format) {
 }
 
 // Extract all files from a ZIP archive.  Returns {filename: Uint8Array}.
-async function unzip(buf) {
+export async function unzip(buf) {
     if (!(buf instanceof Uint8Array)) buf = new Uint8Array(buf);
     const eocdOff = findEocd(buf);
     const cdOff = readU32(buf, eocdOff + 16);
