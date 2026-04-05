@@ -26,9 +26,11 @@ function parityOf(curByte) {
 const ParityN = "N".charCodeAt(0);
 
 class UefTape {
-    constructor(stream) {
+    constructor(stream, isAtom = false) {
         this.stream = stream;
         this.baseFrequency = 1200;
+        this.isAtom = isAtom;
+        this.cpuSpeed = isAtom ? AtomCpuSpeed : BbcCpuSpeed;
         this.rewind();
 
         this.curChunk = this.readChunk();
@@ -45,10 +47,6 @@ class UefTape {
         this.numStopBits = 1;
         this.carrierBefore = 0;
         this.carrierAfter = 0;
-
-        // Atom tape state
-        this.isAtom = undefined; // detected on first poll
-        this.cpuSpeed = BbcCpuSpeed;
         this.wavebits = [];
         this.shortWave = 0;
 
@@ -69,12 +67,6 @@ class UefTape {
 
     poll(acia) {
         if (!this.curChunk) return;
-
-        // Detect Atom on first poll (acia is the PPIA on Atom, ACIA on BBC)
-        if (this.isAtom === undefined) {
-            this.isAtom = acia.processor !== undefined ? !!acia.processor.model?.isAtom : false;
-            if (this.isAtom) this.cpuSpeed = AtomCpuSpeed;
-        }
 
         // Atom: drain the wavebits queue first (one bit per poll)
         if (this.isAtom && this.wavebits.length > 0) {
@@ -289,7 +281,7 @@ class TapefileTape {
     }
 }
 
-export async function loadTapeFromData(name, data) {
+export async function loadTapeFromData(name, data, isAtom = false) {
     const stream = await utils.DataStream.create(name, data);
     if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
         console.log("Detected a 'tapefile' tape");
@@ -297,13 +289,13 @@ export async function loadTapeFromData(name, data) {
     }
     if (stream.readNulString(0) === "UEF File!") {
         console.log("Detected a UEF tape");
-        return new UefTape(stream);
+        return new UefTape(stream, isAtom);
     }
     console.log("Unknown tape format");
     return null;
 }
 
-export async function loadTape(name) {
+export async function loadTape(name, isAtom = false) {
     console.log("Loading tape from " + name);
-    return loadTapeFromData(name, await utils.loadData(name));
+    return loadTapeFromData(name, await utils.loadData(name), isAtom);
 }
