@@ -405,8 +405,8 @@ video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, 
 });
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
-// Atom: attach the MC6847 VDG to the video system
-if (model.isAtom) {
+// Atom: attach the MC6847 VDG to the video system (skip for fakeVideo)
+if (model.isAtom && parsedQuery.fakeVideo === undefined) {
     video.video6847 = new Video6847(video);
     video.polltime = video.video6847.polltimeFacade;
 }
@@ -532,7 +532,8 @@ pastetext.addEventListener("drop", async function (event) {
         await loadStateFromFile(file, arrayBuffer);
     } else if (file.name.toLowerCase().endsWith(".uef")) {
         // Regular UEF tape image (not a BeebEm save state)
-        setProcessorTape(loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model.isAtom));
+        const tape = await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model.isAtom);
+        if (tape) setProcessorTape(tape);
     } else {
         await loadHTMLFile(file);
     }
