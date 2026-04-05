@@ -176,6 +176,7 @@ export class Video6847 {
         this.bpp = 1;
 
         this.cpuAddr = 0;
+        this.dispEnabled = 0;
 
         //PAL based = 312 lines
         //NTSC based = 262 lines
@@ -338,7 +339,10 @@ export class Video6847 {
         // it doesn't draw the whole frame.  It regularly gives control back to the CPU.
 
         const vdgcharclock = this.pixelsPerChar / 2; // 4 or 8
-        const vdgclock = 3.638004; // This ought to be 3.579545, but this looks better with the INTs being used.
+        // The MC6847 datasheet specifies 3.579545 MHz, but 3.638004 is used here
+        // as an empirical correction to align VSync/interrupt timing with the Atom's
+        // 1 MHz CPU clock. TODO: revisit once full integration is testable.
+        const vdgclock = 3.638004;
         this.vdg_cycles += clocks * vdgclock;
 
         const vdgframelines = 262; //  312 PAL (but no pal on standard atom)  262; // NTSC
@@ -552,13 +556,11 @@ export class Video6847 {
         const bpp = this.bpp;
         const pixelsPerBit = this.pixelsPerBit / bpp;
         const numPixels = 8 * pixelsPerBit; //per char
-        let fb32 = buf;
+        const fb32 = buf;
+        const colour = data === 0x00 ? this.collook[0] : this.collook[css ? 5 : 1];
         for (let i = 0; i < numPixels; ++i) {
             const n = numPixels - 1 - i; // pixels in reverse order
-
-            const colour = data === 0x00 ? this.collook[0] : this.collook[css ? 5 : 1];
-            fb32[destOffset + n] = fb32[destOffset + n + 1024] = // two lines
-                colour;
+            fb32[destOffset + n] = fb32[destOffset + n + 1024] = colour;
         }
     }
 
