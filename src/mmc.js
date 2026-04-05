@@ -121,16 +121,23 @@ export class WFNFile {
     }
 }
 
+// Sanitize a WFNFile path for use as a ZIP entry name.
+function sanitizeZipEntryName(path) {
+    const name = path.startsWith("/") ? path.slice(1) : path;
+    if (!name || name.includes("\\") || name.split("/").some((seg) => seg === "..")) return null;
+    return name;
+}
+
 // Create a ZIP blob from an array of WFNFile entries (stored, no compression).
 export async function toMMCZipAsync(data) {
     const files = [];
     for (const entry of data) {
         if (entry.path.startsWith("§")) continue; // skip unlinked files
-        const name = entry.path.startsWith("/") ? entry.path.slice(1) : entry.path;
+        const name = sanitizeZipEntryName(entry.path);
+        if (!name) continue;
         files.push({ name, data: entry.data });
     }
-    const blob = createZipBlob(files);
-    return blob;
+    return createZipBlob(files);
 }
 
 // Extract all files from a ZIP archive into WFNFile entries.
@@ -205,30 +212,28 @@ class WFN {
         this.mmc.WriteDataPort(STATUS_COMPLETE);
     }
 
+    // Convert a glob pattern (with * and ?) to an anchored regex string.
+    static wildcardToRegex(pattern) {
+        // Escape regex metacharacters except * and ?, then convert glob wildcards.
+        const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+        return "^" + escaped.replace(/\*/g, ".*").replace(/\?/g, ".") + "$";
+    }
+
     GetWildcard() {
         // Extract the path from this.globalData (Uint8Array) until the first null byte
-        let path = this.trimToFilename(this.globalData);
-
-        // haswildcard is true if the path contains a wildcard character ('*' or '?')
-        let hasWildcard = path.includes("*") || path.includes("?");
-
-        path = path.replace(/\\/g, "/"); // Normalize path separators
-        let hasSlash = path.includes("/");
+        const path = this.trimToFilename(this.globalData).replace(/\\/g, "/");
+        const hasWildcard = path.includes("*") || path.includes("?");
 
         if (hasWildcard) {
-            if (hasSlash) {
-                // globaldata will have  everything up until the last slash
-                let lastSlashIndex = path.lastIndexOf("/");
+            const lastSlashIndex = path.lastIndexOf("/");
+            if (lastSlashIndex !== -1) {
                 this.globalData = new TextEncoder().encode(path.slice(0, lastSlashIndex + 1) + "\0");
-                this.WildPattern = path.slice(lastSlashIndex + 1);
+                this.WildPattern = WFN.wildcardToRegex(path.slice(lastSlashIndex + 1));
             } else {
-                // posix regex is .+ (1 or more characters) or . (exactly 1 character)
-                this.WildPattern = path.replace(/\*/g, ".+").replace(/\?/g, ".");
-
+                this.WildPattern = WFN.wildcardToRegex(path);
                 this.globalData = new TextEncoder().encode("\0");
             }
         } else {
-            // No wildcard, just return the path
             this.WildPattern = ".*";
         }
     }
