@@ -1623,7 +1623,7 @@ export class AtomCpu6502 extends Cpu6502 {
         // Reset peripherals inherited from parent (unused on Atom but harmless)
         super.resetPeripherals();
         this.atomppia.reset();
-        this.atommc.reset();
+        this.atommc.reset(true);
     }
 
     readDevice(addr) {

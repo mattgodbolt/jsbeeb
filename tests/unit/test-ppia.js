@@ -48,9 +48,9 @@ describe("AtomPPIA", () => {
 
         it("should return open bus for unmapped register reads", () => {
             const { ppia } = makePPIA();
-            // CREG (reg 3) and unmapped registers return open bus
+            // CREG (reg 3) is write-only; returns open bus (addr >>> 8)
             const val = ppia.read(0xb003);
-            expect(typeof val).toBe("number");
+            expect(val).toBe(0xb003 >>> 8);
         });
     });
 
