@@ -107,8 +107,7 @@ class PPIA {
                 break;
 
             case PORTB:
-                // cannot write to port B
-                console.warn("PPIA: cannot write to port B");
+                // Port B is input-only; writes are ignored.
                 break;
 
             case PORTC:
@@ -118,14 +117,16 @@ class PPIA {
                 break;
             case CREG: {
                 this.creg = val & 0xff;
-                // Bit Set/Reset (BSR) mode: quickly set/clear individual port C bits.
-                // NOTE: Not strictly correct — the 8255 BSR mode should set/reset a
-                // single bit via read-modify-write. This simplified version only handles
-                // bits 2 (speaker) and 3 (CSS), and rebuilds the lower nibble from
-                // scratch, which will zero the other output bit. Works in practice
-                // because the Atom ROM only BSR-toggles one bit at a time.
-                let speaker = 0;
-                let css = 0;
+                // 8255 CREG: D7=1 is mode-set (ignored — Atom uses fixed port directions),
+                // D7=0 is Bit Set/Reset (BSR) for individual port C output bits.
+                if (val & 0x80) break; // mode-set: no action needed
+
+                // BSR: set or clear a single port C output bit.
+                // NOTE: Simplified — only handles bits 2 (speaker) and 3 (CSS),
+                // and rebuilds the lower nibble. Works because the Atom ROM
+                // only BSR-toggles these two bits.
+                let speaker = this.latchc & 0x04;
+                let css = this.latchc & 0x08;
                 switch (val & 0xe) {
                     case 0x4: // port C pin 2 (speaker)
                         speaker = (val & 1) << 2;
@@ -134,8 +135,8 @@ class PPIA {
                         css = (val & 1) << 3;
                         break;
                 }
-                this.portcpins = (this.portcpins & 0xf0) | css | speaker;
-                this.portCUpdated();
+                this.latchc = (this.latchc & 0xf0) | css | speaker;
+                this.recalculatePortCPins();
                 break;
             }
         }
@@ -163,20 +164,16 @@ class PPIA {
                 // Force HZIN (bit 4) high
                 this.portcpins = (this.portcpins & 0xef) | (1 << 4);
 
-                // Read top 4 bits (input), merge with bottom 4 (output)
-                let val = this.portcpins & 0xf0;
+                // Read back full port C state: output bits 0-3 from latch,
+                // input bits 4-7 from pins, with REPT key overlay on bit 6.
+                let val = this.portcpins;
 
                 const casin = this.portcpins & 0x20;
                 const casbit = casin ? 1 : 0;
 
                 // REPT key: bit 6 is LOW when pressed
                 const rept_key = (!this.keys[1][6] << 6) & 0x40;
-                val |= rept_key;
-
-                // Include speaker (bit 2) and CSS (bit 3) output values
-                val |= 0x0f;
-                if (!(this.portcpins & 0x04)) val &= ~4; // speaker
-                if (!(this.portcpins & 0x08)) val &= ~8; // CSS
+                val = (val & ~0x40) | rept_key;
 
                 // Track cassette input transitions. The Atom ROM tape routines:
                 //   0xfc0a - OSBGET: get byte from tape (every 3.34ms)

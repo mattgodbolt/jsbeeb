@@ -34,8 +34,9 @@ describe("AtomPPIA", () => {
 
         it("should not modify port B on write", () => {
             const { ppia } = makePPIA();
+            const before = ppia.read(0xb001);
             ppia.write(0xb001, 0xff); // PORTB is input-only
-            // Port B reads keyboard matrix, not the written value
+            expect(ppia.read(0xb001)).toBe(before);
         });
 
         it("should read port C with VSync and REPT bits", () => {
