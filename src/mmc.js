@@ -479,8 +479,9 @@ class WFN {
         // used for *DELETE as files are deleted one by one
         if (this.dir_exists(newpath.path) == FR_OK) {
             // delete all the files within the folder
+            const dirPrefix = newpath.path.endsWith("/") ? newpath.path : newpath.path + "/";
             this.allfiles
-                .filter((file) => file.path.startsWith(newpath.path))
+                .filter((file) => file.path.startsWith(dirPrefix))
                 .forEach((file) => (file.path = "§" + file.path));
 
             return FR_OK;
@@ -855,6 +856,7 @@ export class AtomMMC2 {
         this.heartbeat = 0x55;
         this.MCUStatus = MMC_MCU_BUSY;
         this.configByte = 0;
+        this.lastaddr = CMD_REG; // address latch for reads
         this.byteValueLatch = 0;
         this.worker = null;
         this.seekpos = 0;
