@@ -1763,4 +1763,66 @@ export class AtomCpu6502 extends Cpu6502 {
     updateKeyLayout() {
         this.atomppia.setKeyLayout(this.config.keyLayout);
     }
+
+    snapshotState(options) {
+        const state = super.snapshotState(options);
+        // Atom-specific state
+        state.branquartLatch = this.branquartLatch;
+        state.branquartRam = [...this.branquartRam];
+        // Save Branquart bank contents
+        state.branquartBanks = this.ramRomOs.slice(
+            BranquartOffset,
+            BranquartOffset + NumBranquartBanks * BranquartBankSize,
+        );
+        state.atomppia = this.atomppia.snapshotState();
+        return state;
+    }
+
+    restoreState(state) {
+        // 1. Scheduler epoch first
+        this.scheduler.restoreState(state.scheduler);
+
+        // 2. CPU registers
+        this.a = state.a;
+        this.x = state.x;
+        this.y = state.y;
+        this.s = state.s;
+        this.pc = state.pc;
+        this.p.setFromByte(state.p);
+        this.interrupt = 0;
+        this._nmiLevel = state.nmiLevel;
+        this._nmiEdge = state.nmiEdge;
+        this.halted = state.halted;
+        this.takeInt = state.takeInt;
+
+        // 3. Memory (RAM only)
+        this.ramRomOs.set(state.ram);
+
+        // 4. Atom-specific: restore Branquart state and rebuild memory map
+        if (state.branquartRam) this.branquartRam = [...state.branquartRam];
+        if (state.branquartBanks) {
+            this.ramRomOs.set(state.branquartBanks, BranquartOffset);
+        }
+        this.branquartLatch = state.branquartLatch || 0;
+        this.selectBranquartBank(this.branquartLatch & 0x0f);
+        this.videoDisplayPage = state.videoDisplayPage;
+        this.music5000PageSel = state.music5000PageSel;
+
+        // 5. Cycle tracking
+        this.currentCycles = state.currentCycles;
+        this.targetCycles = state.targetCycles;
+        this.cycleSeconds = state.cycleSeconds;
+        this.peripheralCycles = state.peripheralCycles;
+        this.videoCycles = state.videoCycles;
+
+        // 6. Sub-components
+        this.sysvia.restoreState(state.sysvia);
+        this.uservia.restoreState(state.uservia);
+        this.video.restoreState(state.video);
+        this.soundChip.restoreState(state.soundChip);
+        this.acia.restoreState(state.acia);
+        this.adconverter.restoreState(state.adc);
+        if (state.fdc) this.fdc.restoreState(state.fdc);
+        if (state.atomppia) this.atomppia.restoreState(state.atomppia);
+    }
 }
