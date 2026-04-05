@@ -110,7 +110,7 @@ class PPIA {
                 break;
 
             case PORTC:
-                this.latchc = (this.portcpins & 0xf0) | (val & 0x0f);
+                this.latchc = (this.latchc & 0xf0) | (val & 0x0f);
 
                 this.recalculatePortCPins();
                 break;
@@ -227,6 +227,8 @@ export class AtomPPIA extends PPIA {
 
         this.keyboardEnabled = true;
         this.lastSpeakerBit = 0;
+        this.tapeCarrierCount = 0;
+        this.tapeDcdLineLevel = false;
 
         this.reset();
 
@@ -391,7 +393,8 @@ export class AtomPPIA extends PPIA {
     // Leader tone is a stream of '1' bits.
     receiveBit(bit) {
         bit |= 0;
-        this.latchc = (this.portcpins & 0xdf) | (bit << 5);
+        this.latchc = (this.latchc & 0xdf) | (bit << 5);
+        this.recalculatePortCPins();
     }
 
     // nothing on ATOM
