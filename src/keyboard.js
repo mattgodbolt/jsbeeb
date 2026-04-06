@@ -1,5 +1,6 @@
 "use strict";
 import * as utils from "./utils.js";
+import { ATOM } from "./utils_atom.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 
@@ -32,6 +33,9 @@ export class Keyboard extends EventTarget {
         // Both provide keyDown, keyUp, keyToggleRaw, setKeyLayout,
         // clearKeys, disableKeyboard, enableKeyboard.
         this.keyInterface = processor.model.isAtom ? processor.atomppia : processor.sysvia;
+        // The SHIFT key constant used by stringToMachineKeys in the paste key array.
+        // Compared by reference in _deliverPasteKey to avoid toggling shift off.
+        this._shiftKey = processor.model.isAtom ? ATOM.SHIFT : utils.BBC.SHIFT;
 
         // State
         this.emuKeyHandlers = {};
@@ -337,7 +341,8 @@ export class Keyboard extends EventTarget {
         if (this.isPasting) this.cancelPaste();
 
         this.keyInterface.disableKeyboard();
-        this._pasteClocksPerMs = Math.floor(this.processor.cpuMultiplier * 2000000) / 1000;
+        this._pasteClocksPerMs =
+            Math.floor(this.processor.cpuMultiplier * this.processor.peripheralCyclesPerSecond) / 1000;
 
         if (checkCapsAndShiftLocks) {
             let toggleKey = null;
@@ -361,7 +366,7 @@ export class Keyboard extends EventTarget {
      * @private
      */
     _deliverPasteKey() {
-        if (this._pasteLastChar && this._pasteLastChar !== utils.BBC.SHIFT) {
+        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey) {
             this.keyInterface.keyToggleRaw(this._pasteLastChar);
         }
 
@@ -398,7 +403,7 @@ export class Keyboard extends EventTarget {
     cancelPaste() {
         if (!this.isPasting) return;
         this._pasteTask.cancel();
-        if (this._pasteLastChar && this._pasteLastChar !== utils.BBC.SHIFT) {
+        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey) {
             this.keyInterface.keyToggleRaw(this._pasteLastChar);
         }
         this._pasteLastChar = undefined;

@@ -43,6 +43,7 @@ describe("Keyboard", () => {
             scheduler: new Scheduler(),
             setReset: vi.fn(),
             cpuMultiplier: 1,
+            peripheralCyclesPerSecond: 2000000,
             cycleSeconds: 0,
             currentCycles: 0,
         };
@@ -405,7 +406,8 @@ describe("Keyboard", () => {
         expect(keyboard.isPasting).toBe(true);
 
         // Second scheduler fire after delay: releases key, sees empty queue, re-enables keyboard
-        const delayCycles = (50 * Math.floor(mockProcessor.cpuMultiplier * 2000000)) / 1000;
+        const delayCycles =
+            (50 * Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond)) / 1000;
         mockProcessor.scheduler.polltime(delayCycles);
         expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
         expect(keyboard.isPasting).toBe(false);
@@ -441,7 +443,7 @@ describe("Keyboard", () => {
 
     test("sendRawKeyboardToBBC should handle numeric delay entries", () => {
         keyboard.sendRawKeyboardToBBC([1000, utils.BBC.A], false);
-        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * 2000000) / 1000;
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // First fire: numeric delay consumed, no key toggled yet
         mockProcessor.scheduler.polltime(1);
@@ -455,7 +457,7 @@ describe("Keyboard", () => {
 
     test("sendRawKeyboardToBBC should debounce consecutive identical keys", () => {
         keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.A], false);
-        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * 2000000) / 1000;
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // First fire: press A
         mockProcessor.scheduler.polltime(1);
@@ -554,6 +556,7 @@ describe("Keyboard Atom adapter", () => {
             scheduler: new Scheduler(),
             setReset: vi.fn(),
             cpuMultiplier: 1,
+            peripheralCyclesPerSecond: 1000000,
             cycleSeconds: 0,
             currentCycles: 0,
         };
