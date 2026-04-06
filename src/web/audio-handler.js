@@ -11,7 +11,9 @@ const rendererUrl = new URL("./audio-renderer.js", import.meta.url).href;
 const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
 
 export class AudioHandler {
-    constructor({ warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek } = {}) {
+    constructor({ warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek, cpuSpeed, isAtom } = {}) {
+        this.cpuSpeed = cpuSpeed;
+        this.isAtom = isAtom;
         this.warningNode = warningNode;
         toggle(this.warningNode, false);
         this.stats = {};
@@ -26,7 +28,10 @@ export class AudioHandler {
         this._jsAudioNode = null;
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
-            this.soundChip = new SoundChip((buffer, time) => this._onBuffer(buffer, time));
+            this.soundChip = new SoundChip((buffer, time) => this._onBuffer(buffer, time), {
+                cpuSpeed: this.cpuSpeed,
+                isAtom: this.isAtom,
+            });
             // Master gain node for all sample-based audio (disc, relay, etc.).
             this.masterGain = this.audioContext.createGain();
             this.masterGain.connect(this.audioContext.destination);

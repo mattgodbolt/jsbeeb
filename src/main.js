@@ -8,7 +8,6 @@ import * as utils from "./utils.js";
 import { FakeVideo, Video } from "./video.js";
 import { Debugger } from "./web/debug.js";
 import { Cpu6502, AtomCpu6502 } from "./6502.js";
-import { Video6847 } from "./6847.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
@@ -397,19 +396,18 @@ function swapCanvas(newFilterClass) {
 
 let canvas = createCanvasForFilter(displayModeFilter);
 
-video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
-    frames++;
-    if (frames < frameSkip) return;
-    frames = 0;
-    canvas.paint(minx, miny, maxx, maxy, this.frameCount);
-});
+video = new Video(
+    model.isMaster,
+    canvas.fb32,
+    function paint(minx, miny, maxx, maxy) {
+        frames++;
+        if (frames < frameSkip) return;
+        frames = 0;
+        canvas.paint(minx, miny, maxx, maxy, this.frameCount);
+    },
+    { isAtom: model.isAtom },
+);
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
-
-// Atom: attach the MC6847 VDG to the video system (skip for fakeVideo)
-if (model.isAtom && parsedQuery.fakeVideo === undefined) {
-    video.video6847 = new Video6847(video);
-    video.polltime = video.video6847.polltimeFacade;
-}
 
 const audioStatsEl = document.getElementById("audio-stats");
 if (audioStatsEl) audioStatsEl.hidden = !parsedQuery.audioDebug;
@@ -420,17 +418,13 @@ const audioHandler = new AudioHandler({
     audioFilterFreq,
     audioFilterQ,
     noSeek,
+    cpuSpeed,
+    isAtom: model.isAtom,
 });
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
-
-// Atom: configure soundchip for 1 MHz CPU and speaker output
-if (model.isAtom) {
-    audioHandler.soundChip.setCPUSpeed(cpuSpeed);
-    audioHandler.soundChip.isAtom = true;
-}
 
 for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
 
@@ -1676,7 +1670,7 @@ const startPromise = (async () => {
         );
     }
 
-    if (mmcImage && model.isAtom && processor.atommc) {
+    if (mmcImage && model.isAtom) {
         imageLoads.push(
             (async () => {
                 const files = await LoadSD(mmcImage);

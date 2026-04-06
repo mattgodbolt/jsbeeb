@@ -17,7 +17,7 @@ function makeSineTable(attenuation) {
 }
 
 export class SoundChip {
-    constructor(onBuffer) {
+    constructor(onBuffer, { cpuSpeed = 2000000, isAtom = false } = {}) {
         this._onBuffer = onBuffer;
         // 4MHz input signal. Internal divide-by-8
         this.soundchipFreq = 4000000.0 / 8;
@@ -28,7 +28,7 @@ export class SoundChip {
         // we generate a sample, we need to decrement the counters by this amount:
         this.sampleDecrement = this.waveDecrementPerSecond / sampleRate;
         // How many samples are generated per CPU cycle.
-        this.samplesPerCycle = sampleRate / 2000000;
+        this.samplesPerCycle = sampleRate / cpuSpeed;
         this.minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
         this.registers = new Uint16Array(4);
@@ -79,7 +79,7 @@ export class SoundChip {
 
         // Atom 1-bit speaker support.
         // The PPIA drives this via pushBit() on each speaker bit transition.
-        this.isAtom = false;
+        this.isAtom = !!isAtom;
         this.speakerGenerator = {
             mute: () => {
                 this.catchUp();
@@ -90,7 +90,7 @@ export class SoundChip {
                 this.updateSpeaker(bit, cycles, seconds);
             },
         };
-        this.secondsPerCycle = 1 / 1000000; // default 1 MHz (Atom)
+        this.secondsPerCycle = 1 / cpuSpeed;
         this.bitChange = [];
         this.currentSpeakerBit = 0.0;
     }

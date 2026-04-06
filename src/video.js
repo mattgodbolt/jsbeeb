@@ -2,6 +2,7 @@
 import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
+import { Video6847 } from "./6847.js";
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -326,7 +327,7 @@ function table4bppOffset(ulamode, byte) {
 ////////////////////
 // The video class
 export class Video {
-    constructor(isMaster, fb32_param, paint_ext_param) {
+    constructor(isMaster, fb32_param, paint_ext_param, { isAtom = false } = {}) {
         this.isMaster = isMaster;
         this.fb32 = utils.makeFast32(fb32_param);
         this.collook = utils.makeFast32(
@@ -421,6 +422,13 @@ export class Video {
 
         this.crtc = new Crtc(this);
         this.ula = new Ula(this);
+
+        // Atom: attach the MC6847 VDG and use its polltime
+        this.video6847 = null;
+        if (isAtom) {
+            this.video6847 = new Video6847(this);
+            this.polltime = this.video6847.polltimeFacade;
+        }
 
         this.reset(null);
         this.clearPaintBuffer();

@@ -4,7 +4,7 @@
 
 [![jsbeeb](public/images/jsbeeb-example.png)](https://bbc.xania.org/)
 
-A BBC Micro and Acorn Atom emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B
+A BBC Micro and other 8-bit Acorn emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B
 (with sideways RAM), a 128K BBC Master, and an Acorn Atom (with AtoMMC2 SD card interface), along with a number of
 different peripherals.
 
@@ -185,7 +185,7 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - `model=Atom` - select the Acorn Atom (MMC) model. Other Atom variants: `Atom-Tape`, `Atom-Tape-FP`, `Atom-DOS`.
 - `mmc=XXX` - load an MMC/SD card image (ZIP) for the Atom.
 
-Atom models can also be selected automatically by hostname: any hostname starting with `atom` (e.g. `atom.example.com`)
+Atom models can also be selected automatically by hostname: any hostname starting with `atom` (e.g. `atom.xania.org`)
 defaults to the Atom model.
 
 ## Patches
