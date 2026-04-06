@@ -544,6 +544,9 @@ export class Video {
         this.cpu = cpu;
         this.sysvia = via;
         if (via) via.cb2changecallback = this.cb2changed.bind(this);
+        if (this.video6847 && cpu) {
+            this.video6847.reset(cpu, cpu.atomppia);
+        }
     }
 
     paint() {

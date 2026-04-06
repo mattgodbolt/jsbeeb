@@ -1620,14 +1620,9 @@ export class AtomCpu6502 extends Cpu6502 {
     }
 
     resetPeripherals() {
-        // Reset peripherals inherited from parent (unused on Atom but harmless)
         super.resetPeripherals();
         this.atomppia.reset();
         this.atommc.reset(true);
-        // Wire the VDG to the CPU and PPIA (it reads graphics mode from port A)
-        if (this.video.video6847) {
-            this.video.video6847.reset(this, this.atomppia);
-        }
     }
 
     readDevice(addr) {

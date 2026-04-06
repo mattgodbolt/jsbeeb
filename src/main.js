@@ -526,8 +526,7 @@ pastetext.addEventListener("drop", async function (event) {
         await loadStateFromFile(file, arrayBuffer);
     } else if (file.name.toLowerCase().endsWith(".uef")) {
         // Regular UEF tape image (not a BeebEm save state)
-        const tape = await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model.isAtom);
-        if (tape) setProcessorTape(tape);
+        setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model.isAtom));
     } else {
         await loadHTMLFile(file);
     }
