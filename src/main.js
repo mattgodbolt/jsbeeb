@@ -7,7 +7,9 @@ import "./jsbeeb.css";
 import * as utils from "./utils.js";
 import { FakeVideo, Video } from "./video.js";
 import { Debugger } from "./web/debug.js";
-import { Cpu6502 } from "./6502.js";
+import { Cpu6502, AtomCpu6502 } from "./6502.js";
+import * as utils_atom from "./utils_atom.js";
+import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
 import { GamePad } from "./gamepads.js";
@@ -54,6 +56,21 @@ let discSth;
 let tapeSth;
 let running;
 let model;
+
+// Route tape to the correct interface (ACIA for BBC, PPIA for Atom)
+function setProcessorTape(tape) {
+    if (model.isAtom) {
+        processor.atomppia.setTape(tape);
+    } else {
+        processor.acia.setTape(tape);
+    }
+}
+
+// Convert text to machine-appropriate key sequences (BBC or Atom)
+function stringToMachineKeys(text) {
+    return model.isAtom ? utils_atom.stringToATOMKeys(text) : utils.stringToBBCKeys(text);
+}
+
 const gamepad = new GamePad();
 const availableImages = [
     {
@@ -121,6 +138,7 @@ const paramTypes = {
     disc1: ParamTypes.STRING,
     disc2: ParamTypes.STRING,
     tape: ParamTypes.STRING,
+    mmc: ParamTypes.STRING,
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
     displayMode: ParamTypes.STRING,
@@ -143,7 +161,7 @@ let stationId = 101;
 let econet = null;
 
 // Parse disc and tape images from query parameters
-const { discImage: queryDiscImage, secondDiscImage: querySecondDisc } = parseMediaParams(parsedQuery);
+const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
 
 // Only assign if values are provided
 if (queryDiscImage) discImage = queryDiscImage;
@@ -321,7 +339,8 @@ if (parsedQuery.cpuMultiplier !== undefined) {
     cpuMultiplier = parsedQuery.cpuMultiplier;
     console.log("CPU multiplier set to " + cpuMultiplier);
 }
-const clocksPerSecond = (cpuMultiplier * 2 * 1000 * 1000) | 0;
+const cpuSpeed = model.isAtom ? 1 * 1000 * 1000 : 2 * 1000 * 1000;
+const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 const MaxCyclesPerFrame = clocksPerSecond / 10;
 
 let tryGl = true;
@@ -377,12 +396,17 @@ function swapCanvas(newFilterClass) {
 
 let canvas = createCanvasForFilter(displayModeFilter);
 
-video = new Video(model.isMaster, canvas.fb32, function paint(minx, miny, maxx, maxy) {
-    frames++;
-    if (frames < frameSkip) return;
-    frames = 0;
-    canvas.paint(minx, miny, maxx, maxy, this.frameCount);
-});
+video = new Video(
+    model.isMaster,
+    canvas.fb32,
+    function paint(minx, miny, maxx, maxy) {
+        frames++;
+        if (frames < frameSkip) return;
+        frames = 0;
+        canvas.paint(minx, miny, maxx, maxy, this.frameCount);
+    },
+    { isAtom: model.isAtom },
+);
 if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
 
 const audioStatsEl = document.getElementById("audio-stats");
@@ -394,6 +418,8 @@ const audioHandler = new AudioHandler({
     audioFilterFreq,
     audioFilterQ,
     noSeek,
+    cpuSpeed,
+    isAtom: model.isAtom,
 });
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
@@ -485,7 +511,7 @@ const pastetext = document.getElementById("paste-text");
 pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
 pastetext.addEventListener("paste", function (event) {
     const text = event.clipboardData.getData("text/plain");
-    sendRawKeyboardToBBC(utils.stringToBBCKeys(text), true);
+    sendRawKeyboardToBBC(stringToMachineKeys(text), true);
 });
 pastetext.addEventListener("dragover", function (event) {
     event.preventDefault();
@@ -500,7 +526,7 @@ pastetext.addEventListener("drop", async function (event) {
         await loadStateFromFile(file, arrayBuffer);
     } else if (file.name.toLowerCase().endsWith(".uef")) {
         // Regular UEF tape image (not a BeebEm save state)
-        processor.acia.setTape(loadTapeFromData(file.name, new Uint8Array(arrayBuffer)));
+        setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model.isAtom));
     } else {
         await loadHTMLFile(file);
     }
@@ -624,7 +650,8 @@ function checkPrinterWindow() {
     processor.uservia.setca1(true);
 }
 
-processor = new Cpu6502(model, {
+const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
+processor = new CpuClass(model, {
     dbgr,
     video,
     soundChip: audioHandler.soundChip,
@@ -920,7 +947,7 @@ async function tapeSthClick(item) {
     popupLoading("Loading " + item);
     try {
         const tape = await loadTapeImage(parsedQuery.tape);
-        processor.acia.setTape(tape);
+        setProcessorTape(tape);
         loadingFinished();
     } catch (err) {
         console.error("Error loading tape image:", err);
@@ -1030,7 +1057,7 @@ function autoBootType(keys) {
     console.log("Auto typing '" + keys + "'");
     utils.noteEvent("init", "autochain");
 
-    const bbcKeys = utils.stringToBBCKeys(keys);
+    const bbcKeys = stringToMachineKeys(keys);
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -1038,7 +1065,7 @@ function autoChainTape() {
     console.log("Auto Chaining Tape");
     utils.noteEvent("init", "autochain");
 
-    const bbcKeys = utils.stringToBBCKeys('*TAPE\nCH.""\n');
+    const bbcKeys = stringToMachineKeys('*TAPE\nCH.""\n');
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -1046,7 +1073,7 @@ function autoRunTape() {
     console.log("Auto Running Tape");
     utils.noteEvent("init", "autorun");
 
-    const bbcKeys = utils.stringToBBCKeys("*TAPE\n*/\n");
+    const bbcKeys = stringToMachineKeys("*TAPE\n*/\n");
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -1054,7 +1081,7 @@ function autoRunBasic() {
     console.log("Auto Running basic");
     utils.noteEvent("init", "autorunbasic");
 
-    const bbcKeys = utils.stringToBBCKeys("RUN\n");
+    const bbcKeys = stringToMachineKeys("RUN\n");
     sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
 }
 
@@ -1175,16 +1202,17 @@ async function loadTapeImage(tapeImage) {
     const split = splitImage(tapeImage);
     tapeImage = split.image;
     const schema = split.schema;
+    const isAtom = model.isAtom;
 
     switch (schema) {
         case "|":
         case "sth":
-            return await loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage));
+            return await loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage), isAtom);
 
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
             const { name, data } = await utils.unzipDiscImage(arr);
-            return await loadTapeFromData(name, data);
+            return await loadTapeFromData(name, data, isAtom);
         }
 
         case "http":
@@ -1199,11 +1227,11 @@ async function loadTapeImage(tapeImage) {
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
-            return await loadTapeFromData(tapeImage, tapeData);
+            return await loadTapeFromData(tapeImage, tapeData, isAtom);
         }
 
         default:
-            return await loadTape("tapes/" + tapeImage);
+            return await loadTape("tapes/" + tapeImage, isAtom);
     }
 }
 
@@ -1229,7 +1257,7 @@ document.getElementById("tape_load").addEventListener("change", async function (
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
     const binaryData = await readFileAsBinaryString(file);
-    processor.acia.setTape(await loadTapeFromData("local file", binaryData));
+    setProcessorTape(await loadTapeFromData("local file", binaryData, model.isAtom));
     delete parsedQuery.tape;
     updateUrl();
     bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
@@ -1636,7 +1664,16 @@ const startPromise = (async () => {
         imageLoads.push(
             (async () => {
                 const tape = await loadTapeImage(parsedQuery.tape);
-                processor.acia.setTape(tape);
+                setProcessorTape(tape);
+            })(),
+        );
+    }
+
+    if (mmcImage && model.isAtom) {
+        imageLoads.push(
+            (async () => {
+                const files = await LoadSD(mmcImage);
+                processor.atommc.SetMMCData(files);
             })(),
         );
     }

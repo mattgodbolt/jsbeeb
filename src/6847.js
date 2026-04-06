@@ -113,7 +113,8 @@ const MODE_AG = 0x10; // graphics mode
 
 export class Video6847 {
     constructor(video) {
-        this.video = video; // this is the main handler - need to just use this class to create the image
+        this.video = video;
+        this.ppia = null; // set during reset
 
         this.levelDEW = false;
         this.levelDISPTMG = false;
