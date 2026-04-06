@@ -4,8 +4,9 @@
 
 [![jsbeeb](public/images/jsbeeb-example.png)](https://bbc.xania.org/)
 
-A BBC Micro emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B (with sideways RAM)
-and a 128K BBC Master, along with a number of different peripherals.
+A BBC Micro and Acorn Atom emulator written in JavaScript and running in modern browsers. Emulates a 32K BBC B
+(with sideways RAM), a 128K BBC Master, and an Acorn Atom (with AtoMMC2 SD card interface), along with a number of
+different peripherals.
 
 ## Table of Contents
 
@@ -179,6 +180,14 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `audioDebug` - show audio queue stats chart.
 
+### Atom-specific parameters
+
+- `model=Atom` - select the Acorn Atom (MMC) model. Other Atom variants: `Atom-Tape`, `Atom-Tape-FP`, `Atom-DOS`.
+- `mmc=XXX` - load an MMC/SD card image (ZIP) for the Atom.
+
+Atom models can also be selected automatically by hostname: any hostname starting with `atom` (e.g. `atom.example.com`)
+defaults to the Atom model.
+
 ## Patches
 
 Patches can be applied by making a `patch=P` URL parameter. `P` is a sequence of semicolon-separated patches of the form
@@ -257,6 +266,11 @@ real live BBCs.
 Cheers to [Ed Spittles](https://github.com/BigEd) for testing various interrupt timing code on a real BBC.
 
 Thanks to Chris Jordan for his thorough testing, bug reports, ideas and help.
+
+Huge thanks to [Andrew Sheridan](https://github.com/CommanderCoder) (CommanderCoder) for the Acorn Atom emulation
+support. Andrew developed the original Atom implementation including the MC6847 video chip, 8255 PPIA, AtoMMC2 SD card
+interface, Atom keyboard mapping, tape support, and speaker output. His work in [PR #505](https://github.com/mattgodbolt/jsbeeb/pull/505)
+was incrementally merged and refined into the codebase.
 
 A lot of the early development used the amazing [Visual 6502](http://visual6502.org/) as reference for intra-instruction
 timings. Amazing stuff.
