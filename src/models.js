@@ -112,12 +112,7 @@ const masterSwram = [
     false,
 ];
 
-// Atom support is gated behind VITE_ATOM_ENABLED during incremental development.
-// Set VITE_ATOM_ENABLED=true in environment to enable (e.g. VITE_ATOM_ENABLED=true npm start).
-// import.meta.env is provided by Vite; falls back to false when running under plain Node (e.g. test-suite.js).
-const atomEnabled = typeof import.meta.env !== "undefined" && import.meta.env.VITE_ATOM_ENABLED === "true";
-
-const _allModels = [
+export const allModels = [
     new Model({
         name: "BBC B with 8271 (DFS 1.2)",
         synonyms: ["B-DFS1.2", "BBC B with DFS 1.2"],
@@ -219,8 +214,6 @@ const _allModels = [
         isMaster: false,
     }),
 ];
-
-export const allModels = atomEnabled ? _allModels : _allModels.filter((m) => !m.isAtom);
 
 export function findModel(name) {
     name = name.toLowerCase();
