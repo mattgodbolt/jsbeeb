@@ -234,7 +234,7 @@ export class Keyboard extends EventTarget {
         const isSpecialHandled = this._handleSpecialKeys(code);
         if (isSpecialHandled) return;
 
-        // Check for registered handlers first; if one fires, don't also send to the BBC.
+        // Check for registered handlers first; if one fires, don't pass to the emulator.
         // This lets Alt+key and Ctrl+key handlers cleanly own their keys without the
         // underlying key leaking through to the emulated machine.
         const handler = this._findKeyHandler(code, evt.altKey, evt.ctrlKey);
@@ -243,7 +243,7 @@ export class Keyboard extends EventTarget {
             return;
         }
 
-        // No handler claimed the key — pass it to the BBC Micro.
+        // No handler claimed the key; pass it to the emulated machine.
         this.keyInterface.keyDown(code, evt.shiftKey);
     }
 
@@ -333,11 +333,11 @@ export class Keyboard extends EventTarget {
     }
 
     /**
-     * Send raw keyboard input to the BBC
-     * @param {Array} keysToSend - Array of keys to send
+     * Send raw keyboard input to the emulated machine (for paste/autotype).
+     * @param {Array} keysToSend - Array of machine-specific key codes to send
      * @param {boolean} checkCapsAndShiftLocks - Whether to check caps and shift locks
      */
-    sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
+    sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
         if (this.isPasting) this.cancelPaste();
 
         this.keyInterface.disableKeyboard();

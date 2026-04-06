@@ -511,7 +511,7 @@ const pastetext = document.getElementById("paste-text");
 pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
 pastetext.addEventListener("paste", function (event) {
     const text = event.clipboardData.getData("text/plain");
-    sendRawKeyboardToBBC(stringToMachineKeys(text), true);
+    sendRawKeyboard(stringToMachineKeys(text), true);
 });
 pastetext.addEventListener("dragover", function (event) {
     event.preventDefault();
@@ -1035,9 +1035,9 @@ const sthFilter = document.getElementById("sth-filter");
 sthFilter.addEventListener("change", () => setSthFilter(sthFilter.value));
 sthFilter.addEventListener("keyup", () => setSthFilter(sthFilter.value));
 
-function sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks) {
+function sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
-        keyboard.sendRawKeyboardToBBC(keysToSend, checkCapsAndShiftLocks);
+        keyboard.sendRawKeyboard(keysToSend, checkCapsAndShiftLocks);
     } else {
         console.warn("Tried to send keys before keyboard was initialised");
     }
@@ -1050,7 +1050,7 @@ function autoboot(image) {
     utils.noteEvent("init", "autoboot", image);
 
     // Shift-break simulation, hold SHIFT for 1000ms.
-    sendRawKeyboardToBBC([BBC.SHIFT, 1000], false);
+    sendRawKeyboard([BBC.SHIFT, 1000], false);
 }
 
 function autoBootType(keys) {
@@ -1058,7 +1058,7 @@ function autoBootType(keys) {
     utils.noteEvent("init", "autochain");
 
     const bbcKeys = stringToMachineKeys(keys);
-    sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
+    sendRawKeyboard([1000].concat(bbcKeys), false);
 }
 
 function autoChainTape() {
@@ -1066,7 +1066,7 @@ function autoChainTape() {
     utils.noteEvent("init", "autochain");
 
     const bbcKeys = stringToMachineKeys('*TAPE\nCH.""\n');
-    sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
+    sendRawKeyboard([1000].concat(bbcKeys), false);
 }
 
 function autoRunTape() {
@@ -1074,7 +1074,7 @@ function autoRunTape() {
     utils.noteEvent("init", "autorun");
 
     const bbcKeys = stringToMachineKeys("*TAPE\n*/\n");
-    sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
+    sendRawKeyboard([1000].concat(bbcKeys), false);
 }
 
 function autoRunBasic() {
@@ -1082,7 +1082,7 @@ function autoRunBasic() {
     utils.noteEvent("init", "autorunbasic");
 
     const bbcKeys = stringToMachineKeys("RUN\n");
-    sendRawKeyboardToBBC([1000].concat(bbcKeys), false);
+    sendRawKeyboard([1000].concat(bbcKeys), false);
 }
 
 function updateUrl() {
