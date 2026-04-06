@@ -43,6 +43,7 @@ describe("Keyboard", () => {
             scheduler: new Scheduler(),
             setReset: vi.fn(),
             cpuMultiplier: 1,
+            peripheralCyclesPerSecond: 2000000,
             cycleSeconds: 0,
             currentCycles: 0,
         };
@@ -389,15 +390,15 @@ describe("Keyboard", () => {
         expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.E);
     });
 
-    test("sendRawKeyboardToBBC should disable keyboard and schedule paste task", () => {
-        keyboard.sendRawKeyboardToBBC([utils.BBC.A], false);
+    test("sendRawKeyboard should disable keyboard and schedule paste task", () => {
+        keyboard.sendRawKeyboard([utils.BBC.A], false);
 
         expect(mockSysvia.disableKeyboard).toHaveBeenCalled();
         expect(keyboard.isPasting).toBe(true);
     });
 
-    test("sendRawKeyboardToBBC should deliver keys via scheduler and re-enable keyboard", () => {
-        keyboard.sendRawKeyboardToBBC([utils.BBC.A], false);
+    test("sendRawKeyboard should deliver keys via scheduler and re-enable keyboard", () => {
+        keyboard.sendRawKeyboard([utils.BBC.A], false);
 
         // First scheduler fire: presses the key
         mockProcessor.scheduler.polltime(1);
@@ -405,14 +406,15 @@ describe("Keyboard", () => {
         expect(keyboard.isPasting).toBe(true);
 
         // Second scheduler fire after delay: releases key, sees empty queue, re-enables keyboard
-        const delayCycles = (50 * Math.floor(mockProcessor.cpuMultiplier * 2000000)) / 1000;
+        const delayCycles =
+            (50 * Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond)) / 1000;
         mockProcessor.scheduler.polltime(delayCycles);
         expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
         expect(keyboard.isPasting).toBe(false);
     });
 
     test("cancelPaste should stop paste and re-enable keyboard", () => {
-        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
+        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
         mockProcessor.scheduler.polltime(1); // deliver first key
 
         keyboard.cancelPaste();
@@ -422,7 +424,7 @@ describe("Keyboard", () => {
     });
 
     test("Escape should cancel paste during keyDown", () => {
-        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B], false);
+        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.B], false);
         keyboard.setRunning(true);
 
         const escEvent = {
@@ -439,9 +441,9 @@ describe("Keyboard", () => {
         expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
     });
 
-    test("sendRawKeyboardToBBC should handle numeric delay entries", () => {
-        keyboard.sendRawKeyboardToBBC([1000, utils.BBC.A], false);
-        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * 2000000) / 1000;
+    test("sendRawKeyboard should handle numeric delay entries", () => {
+        keyboard.sendRawKeyboard([1000, utils.BBC.A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // First fire: numeric delay consumed, no key toggled yet
         mockProcessor.scheduler.polltime(1);
@@ -453,9 +455,9 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.A);
     });
 
-    test("sendRawKeyboardToBBC should debounce consecutive identical keys", () => {
-        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.A], false);
-        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * 2000000) / 1000;
+    test("sendRawKeyboard should debounce consecutive identical keys", () => {
+        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // First fire: press A
         mockProcessor.scheduler.polltime(1);
@@ -472,12 +474,12 @@ describe("Keyboard", () => {
         expect(mockSysvia.keyToggleRaw).toHaveBeenCalledTimes(3);
     });
 
-    test("sendRawKeyboardToBBC while already pasting should cancel previous paste", () => {
-        keyboard.sendRawKeyboardToBBC([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
+    test("sendRawKeyboard while already pasting should cancel previous paste", () => {
+        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
         mockProcessor.scheduler.polltime(1); // deliver first key
 
         // Start a new paste mid-stream
-        keyboard.sendRawKeyboardToBBC([utils.BBC.X], false);
+        keyboard.sendRawKeyboard([utils.BBC.X], false);
 
         // Old paste should be cancelled, new one in progress
         expect(keyboard.isPasting).toBe(true);
@@ -554,6 +556,7 @@ describe("Keyboard Atom adapter", () => {
             scheduler: new Scheduler(),
             setReset: vi.fn(),
             cpuMultiplier: 1,
+            peripheralCyclesPerSecond: 1000000,
             cycleSeconds: 0,
             currentCycles: 0,
         };
@@ -584,13 +587,13 @@ describe("Keyboard Atom adapter", () => {
         expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith(65);
     });
 
-    test("sendRawKeyboardToBBC should not inject lock toggles for Atom", () => {
+    test("sendRawKeyboard should not inject lock toggles for Atom", () => {
         // PPIA reports capsLockLight=true, shiftLockLight=false,
         // so the paste logic should not prepend/append any lock keys.
         mockAtomPPIA.capsLockLight = true;
         mockAtomPPIA.shiftLockLight = false;
         const keys = [utils.BBC.A];
-        keyboard.sendRawKeyboardToBBC(keys, true);
+        keyboard.sendRawKeyboard(keys, true);
         expect(mockAtomPPIA.disableKeyboard).toHaveBeenCalled();
         // The keys array should not have been modified with lock toggles
         expect(keys).toEqual([utils.BBC.A]);
