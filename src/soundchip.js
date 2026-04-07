@@ -344,6 +344,9 @@ export class AtomSoundChip extends SoundChip {
 
         // Replace the BBC tone/noise generators with just sine + speaker.
         this.generators = [this.sineChannel.bind(this), this.speakerChannel.bind(this)];
+        // Recompute sine attenuation for the Atom's 2-channel mix
+        // (parent computed it for 5 BBC channels).
+        this.sineTable = makeSineTable(1 / this.generators.length);
 
         this.speakerGenerator = {
             mute: () => {
