@@ -1,6 +1,6 @@
 // Atom speaker volume, scaled to be comparable with BBC tone channels.
 // The BBC volumeTable[0] (loudest) is 0.25 (1.0 / 4 channels).
-const SpeakerVolume = 0.5;
+const speakerVolume = 0.5;
 
 const volumeTable = new Float32Array(16);
 (() => {
@@ -376,17 +376,17 @@ export class SoundChip {
     speakerChannel(channel, out, offset, length) {
         let fromTime = this.scheduler.epoch - length;
         let bitIndex = 0;
-        // DC-blocking high-pass filter coefficient.
-        // y[n] = x[n] - x[n-1] + alpha * y[n-1]
-        // alpha close to 1 = very low cutoff (passes most audio, blocks DC).
-        const alpha = 0.995;
+        // DC-blocking high-pass filter: y[n] = x[n] - x[n-1] + alpha * y[n-1]
+        // The SoundChip runs at 500 kHz (4 MHz / 8). For a ~20 Hz cutoff:
+        // alpha = 1 - 2*pi*fc/fs = 1 - 2*pi*20/500000 ≈ 0.99975
+        const alpha = 0.99975;
 
         for (let i = 0; i < length; ++i) {
             while (bitIndex < this.bitChange.length && this.bitChange[bitIndex].cycles <= fromTime + i) {
                 this.currentSpeakerBit = this.bitChange[bitIndex].bit;
                 bitIndex++;
             }
-            const input = this.currentSpeakerBit * SpeakerVolume;
+            const input = this.currentSpeakerBit * speakerVolume;
             this._speakerPrevOut = input - this._speakerPrevIn + alpha * this._speakerPrevOut;
             this._speakerPrevIn = input;
             out[i + offset] += this._speakerPrevOut;
