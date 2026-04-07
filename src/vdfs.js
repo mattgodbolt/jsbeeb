@@ -93,8 +93,8 @@ export function hostToBbcFilename(filename) {
  * @param {Array<{
  *   name: string,
  *   dir?: string,
- *   loadAddr?: number,
- *   execAddr?: number,
+ *   loadAddr?: number,   - 18-bit load address (low 16 bits most significant; stored little-endian). Default 0xFFFF.
+ *   execAddr?: number,   - 18-bit exec address. Default 0xFFFF.
  *   data: Uint8Array
  * }>} files - Files to include on the disc
  * @param {string} [discTitle] - Disc title (max 8 chars, default "FILES")
@@ -170,7 +170,7 @@ export function buildSsd(files, discTitle = "FILES") {
             ssdData.set(data.subarray(0, bytesToCopy), fileOffset);
         }
 
-        currentSector += Math.ceil(fileLen / SectorSize) || 1;
+        currentSector += Math.ceil(fileLen / SectorSize);
     }
 
     return ssdData;

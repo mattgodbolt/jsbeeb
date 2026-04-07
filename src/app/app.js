@@ -140,7 +140,7 @@ function makeFolderLoader() {
             try {
                 const stat = fs.statSync(fullPath);
                 if (stat.isFile()) {
-                    const data = Array.from(fs.readFileSync(fullPath));
+                    const data = fs.readFileSync(fullPath).toJSON().data;
                     files.push({ name: entry, data });
                 }
             } catch {

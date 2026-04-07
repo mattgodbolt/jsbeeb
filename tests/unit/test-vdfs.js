@@ -36,7 +36,7 @@ describe("parseInfFile", () => {
     });
 
     it("ignores content after the third field", () => {
-        const result = parseInfFile("$.FILE 00001000 00001000 0000800 L");
+        const result = parseInfFile("$.FILE 00001000 00001000 00008000 L");
         expect(result).toEqual({ dir: "$", name: "FILE", loadAddr: 0x1000, execAddr: 0x1000 });
     });
 });
@@ -199,6 +199,23 @@ describe("buildSsd", () => {
         const s1Entry = SectorSize + 8;
         const len = ssd[s1Entry + 4] | (ssd[s1Entry + 5] << 8);
         expect(len).toBe(0);
+    });
+
+    it("zero-length files do not consume sectors for subsequent files", () => {
+        const files = [
+            { name: "EMPTY", data: new Uint8Array(0) },
+            { name: "NEXT", data: new Uint8Array(256) },
+        ];
+        const ssd = buildSsd(files);
+
+        function getStartSector(index) {
+            const off = SectorSize + 8 + index * 8;
+            return ((ssd[off + 6] >> 6) & 0x03) * 256 + ssd[off + 7];
+        }
+        // EMPTY starts at sector 2 and occupies 0 sectors
+        expect(getStartSector(0)).toBe(2);
+        // NEXT should also start at sector 2 (zero-length file took no space)
+        expect(getStartSector(1)).toBe(2);
     });
 });
 
