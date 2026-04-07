@@ -1,9 +1,11 @@
 "use strict";
 import webglDebug from "./lib/webgl-debug.js";
+import { HqxFilter } from "./video-filters/hqx-filter.js";
 import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
 
 const DISPLAY_MODE_FILTERS = {
+    hqx: HqxFilter,
     pal: PALCompositeFilter,
     rgb: PassthroughFilter,
 };
