@@ -21,7 +21,7 @@ function makeSineTable(attenuation) {
 }
 
 export class SoundChip {
-    constructor(onBuffer, { cpuSpeed = 2000000, isAtom = false } = {}) {
+    constructor(onBuffer) {
         this._onBuffer = onBuffer;
         // 4MHz input signal. Internal divide-by-8
         this.soundchipFreq = 4000000.0 / 8;
@@ -32,7 +32,7 @@ export class SoundChip {
         // we generate a sample, we need to decrement the counters by this amount:
         this.sampleDecrement = this.waveDecrementPerSecond / sampleRate;
         // How many samples are generated per CPU cycle.
-        this.samplesPerCycle = sampleRate / cpuSpeed;
+        this.samplesPerCycle = sampleRate / 2000000;
         this.minCyclesWELow = 14; // Somewhat empirically derived; Repton 2 has only 14 cycles between WE low and WE high (@0x2caa)
 
         this.registers = new Uint16Array(4);
@@ -45,7 +45,6 @@ export class SoundChip {
             this.toneChannel.bind(this),
             this.noiseChannel.bind(this),
             this.sineChannel.bind(this),
-            this.speakerChannel.bind(this), // Acorn Atom 1-bit speaker
         ];
 
         this.sineTable = makeSineTable(1 / this.generators.length);
@@ -80,31 +79,6 @@ export class SoundChip {
                 this.sineStep = (freq / sampleRate) * this.sineTable.length;
             },
         };
-
-        // Atom 1-bit speaker support.
-        // The PPIA drives this via pushBit() on each speaker bit transition.
-        this.isAtom = !!isAtom;
-        this.speakerGenerator = {
-            mute: () => {
-                this.catchUp();
-                this.speakerReset();
-            },
-            pushBit: (bit, cycles, seconds) => {
-                this.catchUp();
-                this.updateSpeaker(bit, cycles, seconds);
-            },
-        };
-        this.secondsPerCycle = 1 / cpuSpeed;
-        this.bitChange = [];
-        this.currentSpeakerBit = 0.0;
-        // DC-blocking high-pass filter state
-        this._speakerPrevIn = 0;
-        this._speakerPrevOut = 0;
-    }
-
-    setCPUSpeed(cpuSpeed) {
-        this.secondsPerCycle = 1 / cpuSpeed;
-        this.samplesPerCycle = this.soundchipFreq * this.secondsPerCycle;
     }
 
     sineChannel(channel, out, offset, length) {
@@ -198,11 +172,6 @@ export class SoundChip {
         }
         if (!this.enabled) return;
         for (let i = 0; i < this.generators.length; ++i) {
-            // TODO: consider an AtomSoundChip subclass that overrides generate()
-            // instead of branching on isAtom here. Would cleanly separate BBC
-            // (tone/noise/sine) from Atom (sine/speaker) channel sets.
-            if (this.isAtom && i < 4) continue;
-            if (!this.isAtom && i === 5) continue;
             this.generators[i](i, out, offset, length);
         }
     }
@@ -346,7 +315,6 @@ export class SoundChip {
             this.volume[i] = volumeTable[8];
         }
         this.noisePoked();
-        this.speakerReset();
         this.lastRunEpoch = this.scheduler.epoch;
     }
 
@@ -361,11 +329,47 @@ export class SoundChip {
     unmute() {
         this.enabled = true;
     }
+}
 
-    // Atom speaker: bit-transition FIFO queue.
-    // The CPU toggles a speaker bit via PPIA port C. Each transition is
-    // recorded with its cycle timestamp. speakerChannel then converts
-    // these transitions into audio samples at the output sample rate.
+/**
+ * AtomSoundChip -- Acorn Atom sound via a 1-bit speaker driven by the PPIA.
+ * Uses only the sine channel (shared with BBC for tape tones) and a speaker
+ * channel with DC-blocking filter.
+ */
+export class AtomSoundChip extends SoundChip {
+    constructor(onBuffer, { cpuSpeed = 1000000 } = {}) {
+        super(onBuffer);
+        this.samplesPerCycle = this.soundchipFreq / cpuSpeed;
+        this.secondsPerCycle = 1 / cpuSpeed;
+
+        // Replace the BBC tone/noise generators with just sine + speaker.
+        this.generators = [this.sineChannel.bind(this), this.speakerChannel.bind(this)];
+        // Recompute sine attenuation for the Atom's 2-channel mix
+        // (parent computed it for 5 BBC channels).
+        this.sineTable = makeSineTable(1 / this.generators.length);
+
+        this.speakerGenerator = {
+            mute: () => {
+                this.catchUp();
+                this.speakerReset();
+            },
+            pushBit: (bit, cycles, seconds) => {
+                this.catchUp();
+                this.updateSpeaker(bit, cycles, seconds);
+            },
+        };
+
+        this.bitChange = [];
+        this.currentSpeakerBit = 0.0;
+        this._speakerPrevIn = 0;
+        this._speakerPrevOut = 0;
+    }
+
+    reset(hard) {
+        super.reset(hard);
+        if (hard) this.speakerReset();
+    }
+
     speakerReset() {
         this.bitChange = [];
         this.currentSpeakerBit = 0.0;

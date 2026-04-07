@@ -1,10 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { SoundChip } from "../../src/soundchip.js";
+import { SoundChip, AtomSoundChip } from "../../src/soundchip.js";
 import { Scheduler } from "../../src/scheduler.js";
 
 function makeSoundChip() {
     const scheduler = new Scheduler();
     const chip = new SoundChip(() => {});
+    chip.setScheduler(scheduler);
+    return { chip, scheduler };
+}
+
+function makeAtomSoundChip() {
+    const scheduler = new Scheduler();
+    const chip = new AtomSoundChip(() => {});
     chip.setScheduler(scheduler);
     return { chip, scheduler };
 }
@@ -144,29 +151,21 @@ describe("SoundChip snapshotState / restoreState", () => {
     });
 });
 
-describe("Atom speaker support", () => {
+describe("AtomSoundChip", () => {
     it("should have speakerGenerator with mute and pushBit", () => {
-        const { chip } = makeSoundChip();
+        const { chip } = makeAtomSoundChip();
         expect(chip.speakerGenerator).toBeDefined();
         expect(typeof chip.speakerGenerator.mute).toBe("function");
         expect(typeof chip.speakerGenerator.pushBit).toBe("function");
     });
 
-    it("should default isAtom to false", () => {
-        const { chip } = makeSoundChip();
-        expect(chip.isAtom).toBe(false);
-    });
-
-    it("setCPUSpeed should adjust samplesPerCycle", () => {
-        const { chip } = makeSoundChip();
-        const before = chip.samplesPerCycle;
-        chip.setCPUSpeed(1000000); // 1 MHz (Atom)
-        expect(chip.samplesPerCycle).not.toBe(before);
+    it("should use 1 MHz samplesPerCycle by default", () => {
+        const { chip } = makeAtomSoundChip();
         expect(chip.samplesPerCycle).toBeCloseTo(chip.soundchipFreq / 1000000);
     });
 
     it("speakerReset should clear the bit change queue", () => {
-        const { chip } = makeSoundChip();
+        const { chip } = makeAtomSoundChip();
         chip.bitChange.push({ bit: 1.0, cycles: 100 });
         chip.speakerReset();
         expect(chip.bitChange).toHaveLength(0);
@@ -174,7 +173,7 @@ describe("Atom speaker support", () => {
     });
 
     it("updateSpeaker should record bit transitions", () => {
-        const { chip } = makeSoundChip();
+        const { chip } = makeAtomSoundChip();
         chip.updateSpeaker(1, 100, 0);
         chip.updateSpeaker(0, 200, 0);
         expect(chip.bitChange).toHaveLength(2);
@@ -182,47 +181,32 @@ describe("Atom speaker support", () => {
         expect(chip.bitChange[1].bit).toBe(0.0);
     });
 
-    it("BBC channels should be skipped when isAtom is true", () => {
-        const { chip } = makeSoundChip();
-        chip.isAtom = true;
-        // Set BBC tone channel to produce sound
+    it("should not run BBC tone/noise channels", () => {
+        const { chip } = makeAtomSoundChip();
         chip.registers[0] = 100;
         chip.volume[0] = 0.25;
         const out = new Float32Array(32);
         chip.generate(out, 0, 32);
-        // BBC tone channel should be silent (skipped)
-        const allZeroOrSpeaker = out.every((v) => Math.abs(v) < 0.01);
-        expect(allZeroOrSpeaker).toBe(true);
+        // No BBC tone output (only sine + speaker generators)
+        expect(out.every((v) => Math.abs(v) < 0.01)).toBe(true);
     });
 
-    it("speaker channel should be skipped when isAtom is false", () => {
-        // Generate baseline output without any speaker transition queued
-        const { chip: baseline } = makeSoundChip();
-        baseline.isAtom = false;
-        const baselineOut = new Float32Array(32);
-        baseline.generate(baselineOut, 0, 32);
-
-        // Generate with a speaker transition queued — should be identical
+    it("BBC SoundChip should not have speaker channel", () => {
         const { chip } = makeSoundChip();
-        chip.isAtom = false;
-        chip.bitChange.push({ bit: 1.0, cycles: 0 });
-        const out = new Float32Array(32);
-        chip.generate(out, 0, 32);
-
-        expect(Array.from(out)).toEqual(Array.from(baselineOut));
+        // BBC SoundChip has 5 generators (3 tone + noise + sine), no speaker
+        expect(chip.generators).toHaveLength(5);
+        expect(chip.speakerGenerator).toBeUndefined();
     });
 
     it("speakerChannel should produce output from bit transitions and consume them", () => {
-        const { chip, scheduler } = makeSoundChip();
+        const { chip, scheduler } = makeAtomSoundChip();
         chip.speakerReset();
-        // Push transitions at known cycle timestamps
         chip.bitChange.push({ bit: 1.0, cycles: 5 });
         chip.bitChange.push({ bit: 0.0, cycles: 10 });
-        // Set epoch so the transitions fall within the render window
         scheduler.epoch = 16;
 
         const out = new Float32Array(16);
-        chip.speakerChannel(5, out, 0, 16);
+        chip.speakerChannel(1, out, 0, 16);
 
         // Before cycle 5: silence (no transitions yet)
         expect(out[0]).toBeCloseTo(0.0, 2);
