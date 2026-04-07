@@ -1,4 +1,4 @@
-import { FakeSoundChip, SoundChip } from "../soundchip.js";
+import { FakeSoundChip, SoundChip, AtomSoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
@@ -28,10 +28,10 @@ export class AudioHandler {
         this._jsAudioNode = null;
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
-            this.soundChip = new SoundChip((buffer, time) => this._onBuffer(buffer, time), {
-                cpuSpeed: this.cpuSpeed,
-                isAtom: this.isAtom,
-            });
+            const onBuffer = (buffer, time) => this._onBuffer(buffer, time);
+            this.soundChip = this.isAtom
+                ? new AtomSoundChip(onBuffer, { cpuSpeed: this.cpuSpeed })
+                : new SoundChip(onBuffer);
             // Master gain node for all sample-based audio (disc, relay, etc.).
             this.masterGain = this.audioContext.createGain();
             this.masterGain.connect(this.audioContext.destination);
