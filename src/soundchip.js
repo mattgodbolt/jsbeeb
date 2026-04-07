@@ -1,3 +1,7 @@
+// Atom speaker volume, scaled to be comparable with BBC tone channels.
+// The BBC volumeTable[0] (loudest) is 0.25 (1.0 / 4 channels).
+const SpeakerVolume = 0.5;
+
 const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -93,6 +97,9 @@ export class SoundChip {
         this.secondsPerCycle = 1 / cpuSpeed;
         this.bitChange = [];
         this.currentSpeakerBit = 0.0;
+        // DC-blocking high-pass filter state
+        this._speakerPrevIn = 0;
+        this._speakerPrevOut = 0;
     }
 
     setCPUSpeed(cpuSpeed) {
@@ -362,18 +369,27 @@ export class SoundChip {
     speakerReset() {
         this.bitChange = [];
         this.currentSpeakerBit = 0.0;
+        this._speakerPrevIn = 0;
+        this._speakerPrevOut = 0;
     }
 
     speakerChannel(channel, out, offset, length) {
         let fromTime = this.scheduler.epoch - length;
         let bitIndex = 0;
+        // DC-blocking high-pass filter coefficient.
+        // y[n] = x[n] - x[n-1] + alpha * y[n-1]
+        // alpha close to 1 = very low cutoff (passes most audio, blocks DC).
+        const alpha = 0.995;
 
         for (let i = 0; i < length; ++i) {
             while (bitIndex < this.bitChange.length && this.bitChange[bitIndex].cycles <= fromTime + i) {
                 this.currentSpeakerBit = this.bitChange[bitIndex].bit;
                 bitIndex++;
             }
-            out[i + offset] += this.currentSpeakerBit;
+            const input = this.currentSpeakerBit * SpeakerVolume;
+            this._speakerPrevOut = input - this._speakerPrevIn + alpha * this._speakerPrevOut;
+            this._speakerPrevIn = input;
+            out[i + offset] += this._speakerPrevOut;
         }
 
         if (bitIndex > 0) {

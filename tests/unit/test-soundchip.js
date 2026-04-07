@@ -224,13 +224,15 @@ describe("Atom speaker support", () => {
         const out = new Float32Array(16);
         chip.speakerChannel(5, out, 0, 16);
 
-        // Before cycle 5: 0, from 5-9: 1.0, from 10+: 0
-        expect(out[0]).toBe(0.0);
-        expect(out[4]).toBe(0.0);
-        expect(out[5]).toBe(1.0);
-        expect(out[9]).toBe(1.0);
-        expect(out[10]).toBe(0.0);
-        expect(out[15]).toBe(0.0);
+        // Before cycle 5: silence (no transitions yet)
+        expect(out[0]).toBeCloseTo(0.0, 2);
+        expect(out[4]).toBeCloseTo(0.0, 2);
+        // At cycle 5: bit goes high, output jumps positive (DC-blocked)
+        expect(out[5]).toBeGreaterThan(0);
+        // At cycle 10: bit goes low, output changes sign
+        expect(out[10]).toBeLessThan(out[9]);
+        // After all transitions consumed, output decays toward 0
+        expect(Math.abs(out[15])).toBeLessThan(Math.abs(out[10]));
         // Transitions should be consumed
         expect(chip.bitChange).toHaveLength(0);
     });
