@@ -118,6 +118,42 @@ function makeLoader(drive) {
     };
 }
 
+function makeFolderLoader() {
+    return async (_, browserWindow) => {
+        const result = await dialog.showOpenDialog(browserWindow, {
+            title: "Load a folder of BBC files as a virtual disc",
+            properties: ["openDirectory"],
+        });
+        if (result.canceled) return;
+
+        const folderPath = result.filePaths[0];
+        let entries;
+        try {
+            entries = fs.readdirSync(folderPath);
+        } catch {
+            return;
+        }
+
+        const files = [];
+        for (const entry of entries) {
+            const fullPath = path.join(folderPath, entry);
+            try {
+                const stat = fs.statSync(fullPath);
+                if (stat.isFile()) {
+                    const data = Array.from(fs.readFileSync(fullPath));
+                    files.push({ name: entry, data });
+                }
+            } catch {
+                // skip unreadable entries
+            }
+        }
+
+        if (files.length > 0) {
+            browserWindow.webContents.send("load-folder", { files });
+        }
+    };
+}
+
 function makeTapeLoader() {
     return async (_, browserWindow) => {
         const result = await dialog.showOpenDialog(browserWindow, {
@@ -179,6 +215,10 @@ const template = [
             {
                 label: "Load disc 1...",
                 click: makeLoader(1),
+            },
+            {
+                label: "Load folder as disc...",
+                click: makeFolderLoader(),
             },
             { type: "separator" },
             {

@@ -4,7 +4,7 @@
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 function init(args) {
-    const { loadDiscImage, loadTapeImage, loadStateFile, processor, modals, actions, config } = args;
+    const { loadDiscImage, loadTapeImage, loadFolderAsDisc, loadStateFile, processor, modals, actions, config } = args;
     const api = window.electronAPI;
 
     api.onLoadDisc(async (message) => {
@@ -17,6 +17,13 @@ function init(args) {
         const { path } = message;
         const tape = await loadTapeImage(path);
         processor.acia.setTape(tape);
+    });
+
+    api.onLoadFolder(async (message) => {
+        // The main process sends serialised file data as an array of
+        // { name: string, data: number[] } objects.
+        const fileObjects = message.files.map(({ name, data }) => new File([new Uint8Array(data)], name));
+        await loadFolderAsDisc(fileObjects);
     });
 
     api.onShowModal((message) => {
