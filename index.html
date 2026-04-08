@@ -116,6 +116,29 @@
                 </li>
               </ul>
             </li>
+            <li class="nav-item dropdown embed-hide atom-only" style="display: none;">
+              <a
+                href="#"
+                class="nav-link dropdown-toggle"
+                id="navbarMMC"
+                role="button"
+                data-bs-toggle="dropdown"
+                aria-expanded="false"
+                >MMC Cards</a
+              >
+              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMMC">
+                <li>
+                  <a href="#mmc" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#mmc">
+                    Load MMC image
+                  </a>
+                </li>
+                <li>
+                  <a href="#" class="dropdown-item" id="clear-mmc">
+                    Clear MMC
+                  </a>
+                </li>
+              </ul>
+            </li>
             <li class="nav-item dropdown embed-hide">
               <a
                 href="#"
@@ -629,6 +652,33 @@
               <label
                 >Load local UEF file:
                 <input type="file" id="tape_load" accept=".uef,application/binary" />
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="mmc" tabindex="-1" aria-labelledby="mmcModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="mmcModalLabel">Load MMC image</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            To load an MMC/SD card image, get a ZIP file containing Atom files and load it below.
+            You can find MMC images at:
+            <ul>
+              <li><a href="https://github.com/hoglet67/AtomSoftwareArchive/releases" target="_blank">Hoglet's Atom Software Archive</a></li>
+            </ul>
+            <div class="mmc">
+              <label
+                >Load local ZIP file:
+                <input type="file" id="mmc_load" accept=".zip,application/zip" />
               </label>
             </div>
           </div>

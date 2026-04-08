@@ -126,6 +126,11 @@ export class Config extends EventTarget {
     setModel(modelName) {
         this.model = findModel(modelName);
         for (const el of document.querySelectorAll(".bbc-model")) el.textContent = this.model.name;
+        
+        // Show/hide Atom-specific UI elements
+        for (const el of document.querySelectorAll(".atom-only")) {
+            el.style.display = this.model.isAtom ? "block" : "none";
+        }
     }
 
     setKeyLayout(keyLayout) {

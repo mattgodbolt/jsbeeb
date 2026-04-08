@@ -1265,6 +1265,27 @@ document.getElementById("tape_load").addEventListener("change", async function (
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
+document.getElementById("mmc_load").addEventListener("change", async function (evt) {
+    if (evt.target.files.length === 0) return;
+    const file = evt.target.files[0];
+    utils.noteEvent("local", "clickMMC"); // NB no filename here
+
+    try {
+        const files = await LoadSD(file);
+        processor.atommc.SetMMCData(files);
+        bootstrap.Modal.getInstance(document.getElementById("mmc"))?.hide();
+    } catch (error) {
+        showError("loading MMC file", error);
+    }
+    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
+});
+
+document.getElementById("clear-mmc").addEventListener("click", function () {
+    if (processor.atommc) {
+        processor.atommc.ClearMMCData();
+    }
+});
+
 function anyModalsVisible() {
     return document.querySelectorAll(".modal.show").length !== 0;
 }

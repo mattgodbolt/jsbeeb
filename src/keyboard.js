@@ -381,11 +381,18 @@ export class Keyboard extends EventTarget {
         this._pasteLastChar = ch;
         if (debounce) {
             this._pasteLastChar = undefined;
-            this._pasteTask.schedule(30 * this._pasteClocksPerMs);
+            // Atom needs longer debounce time
+            const debounceMs = this.processor.model.isAtom ? 60 : 30;
+            this._pasteTask.schedule(debounceMs * this._pasteClocksPerMs);
             return;
         }
 
         let delayMs = 50;
+        // Atom needs slower timing to avoid character loss during paste
+        if (this.processor.model.isAtom) {
+            delayMs = 120;
+        }
+        
         if (typeof this._pasteLastChar === "number") {
             delayMs = this._pasteLastChar;
             this._pasteLastChar = undefined;
