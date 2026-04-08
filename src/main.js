@@ -369,10 +369,18 @@ function showError(context, error) {
 }
 
 function createCanvasForFilter(filterClass) {
+    const config = filterClass.getDisplayConfig();
+    // Use the explicit canvas size from the display config when provided (e.g.
+    // HQx renders at 2× native resolution).  Fall back to the original HTML
+    // canvas dimensions (896×600) so that switching *away* from HQx resets
+    // the drawing buffer correctly instead of keeping the enlarged size.
+    const cw = config.canvasWidth || 896;
+    const ch = config.canvasHeight || 600;
+    screenCanvas.width = cw;
+    screenCanvas.height = ch;
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
     if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
-        const config = filterClass.getDisplayConfig();
         showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
     }
 
