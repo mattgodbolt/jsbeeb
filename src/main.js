@@ -369,10 +369,14 @@ function showError(context, error) {
 }
 
 function createCanvasForFilter(filterClass) {
+    const config = filterClass.getDisplayConfig();
+    const cw = config.canvasWidth || parseInt(screenCanvas.getAttribute("width"));
+    const ch = config.canvasHeight || parseInt(screenCanvas.getAttribute("height"));
+    screenCanvas.width = cw;
+    screenCanvas.height = ch;
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
     if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
-        const config = filterClass.getDisplayConfig();
         showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
     }
 

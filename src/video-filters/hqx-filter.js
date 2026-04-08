@@ -19,6 +19,13 @@ export class HqxFilter {
             canvasTop: 8,
             visibleWidth: 896,
             visibleHeight: 600,
+            // Render at 2× the BBC content resolution so each source texel
+            // covers a 2×2 block of output pixels.  The hq2x algorithm needs
+            // multiple output pixels per source texel to produce visible
+            // anti-aliasing; at 1:1 all four corner blends collapse to the
+            // same value and the filter has no visible effect.
+            canvasWidth: 1792,
+            canvasHeight: 1200,
         };
     }
 
