@@ -114,17 +114,20 @@ void main() {
     vec3 H = texture2D(tex, cUv + vec2( 0.0,  1.0) * uTexelSize).rgb;
     vec3 I = texture2D(tex, cUv + vec2( 1.0,  1.0) * uTexelSize).rgb;
 
-    // Determine output quadrant from sub-pixel position and apply hq2x blend.
-    vec3 result;
-    if (subpix.x < 0.5 && subpix.y < 0.5) {
-        result = cornerBlend(E, D, B, A); // top-left
-    } else if (subpix.x >= 0.5 && subpix.y < 0.5) {
-        result = cornerBlend(E, F, B, C); // top-right
-    } else if (subpix.x < 0.5 && subpix.y >= 0.5) {
-        result = cornerBlend(E, D, H, G); // bottom-left
-    } else {
-        result = cornerBlend(E, F, H, I); // bottom-right
-    }
+    // Compute all four corner blends and bilinearly interpolate using the
+    // sub-pixel position.  Using a pure quadrant select would always land in
+    // one corner at 1:1 scale (subpix = 0.5 exactly) and would miss the
+    // diagonal anti-aliasing for three out of four cases.  Bilinear
+    // interpolation between all four corners gives symmetric coverage at
+    // every scale.
+    vec3 tlBlend = cornerBlend(E, D, B, A); // top-left
+    vec3 trBlend = cornerBlend(E, F, B, C); // top-right
+    vec3 blBlend = cornerBlend(E, D, H, G); // bottom-left
+    vec3 brBlend = cornerBlend(E, F, H, I); // bottom-right
+
+    vec3 topMix = mix(tlBlend, trBlend, subpix.x);
+    vec3 botMix = mix(blBlend, brBlend, subpix.x);
+    vec3 result = mix(topMix, botMix, subpix.y);
 
     gl_FragColor = vec4(result, 1.0);
 }
