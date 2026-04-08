@@ -370,8 +370,12 @@ function showError(context, error) {
 
 function createCanvasForFilter(filterClass) {
     const config = filterClass.getDisplayConfig();
-    const cw = config.canvasWidth || parseInt(screenCanvas.getAttribute("width"));
-    const ch = config.canvasHeight || parseInt(screenCanvas.getAttribute("height"));
+    // Use the explicit canvas size from the display config when provided (e.g.
+    // HQx renders at 2× native resolution).  Fall back to the original HTML
+    // canvas dimensions (896×600) so that switching *away* from HQx resets
+    // the drawing buffer correctly instead of keeping the enlarged size.
+    const cw = config.canvasWidth || 896;
+    const ch = config.canvasHeight || 600;
     screenCanvas.width = cw;
     screenCanvas.height = ch;
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);

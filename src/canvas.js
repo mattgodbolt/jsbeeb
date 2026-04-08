@@ -122,6 +122,11 @@ export class GlCanvas {
 
     paint(minx, miny, maxx, maxy, frameCount) {
         const gl = this.gl;
+        // Ensure the viewport always covers the full drawing buffer. The
+        // default viewport is set at context-creation time and is not
+        // automatically updated when canvas.width/height are later changed
+        // (e.g. when switching to the 2x HQx canvas size).
+        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
             gl.TEXTURE_2D,
