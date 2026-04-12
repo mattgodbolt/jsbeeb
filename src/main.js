@@ -1268,7 +1268,7 @@ document.getElementById("tape_load").addEventListener("change", async function (
     let tapeData = await readFileAsBinaryString(file);
     let tapeName = file.name;
     if (/\.zip/i.test(tapeName)) {
-        const unzipped = await utils.unzipDiscImage(tapeData);
+        const unzipped = await utils.unzipDiscImage(utils.stringToUint8Array(tapeData));
         tapeData = unzipped.data;
         tapeName = unzipped.name;
     }
@@ -1633,8 +1633,10 @@ const tapeControlCell = document.getElementById("tape-control-cell");
 function updateTapeButton() {
     if (!model.isAtom) return;
     const playing = processor.atomppia.motorOn;
+    const label = playing ? "Stop cassette" : "Play cassette";
     tapePlayStopBtn.textContent = playing ? "\u25A0" : "\u25B6";
-    tapePlayStopBtn.title = playing ? "Stop cassette" : "Play cassette";
+    tapePlayStopBtn.title = label;
+    tapePlayStopBtn.setAttribute("aria-label", label);
     tapePlayStopBtn.classList.toggle("playing", playing);
 }
 
