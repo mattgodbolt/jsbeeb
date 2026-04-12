@@ -643,6 +643,48 @@ describe("Keyboard Atom adapter", () => {
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
     });
+
+    test("paste should handle repeated characters with Atom debounce", () => {
+        const ATOM_A = [3, 3];
+        keyboard.sendRawKeyboard([ATOM_A, ATOM_A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // Press first A
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+
+        // After 80ms: release A, Atom debounce gap
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release only
+
+        // After 30ms Atom debounce: same-key debounce fires (not a double press)
+        mockProcessor.scheduler.polltime(30 * clocksPerMs);
+        // The Atom debounce cleared _pasteLastChar, so same-key debounce
+        // doesn't trigger — second A is pressed directly.
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
+    });
+
+    test("paste should debounce LOCK key like regular keys", () => {
+        const ATOM_A = [3, 3];
+        // Sequence: LOCK (toggle caps off), A, LOCK (toggle caps on)
+        keyboard.sendRawKeyboard([ATOM.LOCK, ATOM_A, ATOM.LOCK], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // Press LOCK
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.LOCK);
+
+        // After 80ms: release LOCK, Atom debounce (LOCK is not SHIFT)
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
+
+        // After 30ms debounce: press A
+        mockProcessor.scheduler.polltime(30 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
+    });
 });
 
 describe("stringToATOMKeys", () => {
