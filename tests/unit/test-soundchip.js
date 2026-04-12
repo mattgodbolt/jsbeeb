@@ -198,22 +198,44 @@ describe("AtomSoundChip", () => {
         expect(chip.speakerGenerator).toBeUndefined();
     });
 
+    it("speakerChannel should place transitions at the correct sample index", () => {
+        // The speaker bug: speakerChannel subtracted sample count from cycle
+        // epoch, mixing units. With samplesPerCycle=0.5, a bit change at CPU
+        // cycle 150 when generating 100 samples (=200 cycles) ending at
+        // epoch 200 should appear at sample 75 (= 150 * 0.5), not sample 50.
+        const { chip, scheduler } = makeAtomSoundChip();
+        chip.speakerReset();
+        scheduler.epoch = 200;
+        chip.bitChange.push({ bit: 1.0, cycles: 150 });
+
+        const out = new Float32Array(100);
+        chip.speakerChannel(1, out, 0, 100);
+
+        // Sample 74 should still be zero (before transition)
+        expect(out[74]).toBeCloseTo(0.0, 2);
+        // Sample 75 should be positive (transition happened)
+        expect(out[75]).toBeGreaterThan(0);
+    });
+
     it("speakerChannel should produce output from bit transitions and consume them", () => {
         const { chip, scheduler } = makeAtomSoundChip();
         chip.speakerReset();
-        chip.bitChange.push({ bit: 1.0, cycles: 5 });
-        chip.bitChange.push({ bit: 0.0, cycles: 10 });
-        scheduler.epoch = 16;
+        // At 0.5 samples/cycle, 16 samples = 32 cycles.
+        // Set epoch=32 so the buffer covers cycles 0-32.
+        // Bit changes at cycles 10 and 20 → samples 5 and 10.
+        chip.bitChange.push({ bit: 1.0, cycles: 10 });
+        chip.bitChange.push({ bit: 0.0, cycles: 20 });
+        scheduler.epoch = 32;
 
         const out = new Float32Array(16);
         chip.speakerChannel(1, out, 0, 16);
 
-        // Before cycle 5: silence (no transitions yet)
+        // Before sample 5: silence (no transitions yet)
         expect(out[0]).toBeCloseTo(0.0, 2);
         expect(out[4]).toBeCloseTo(0.0, 2);
-        // At cycle 5: bit goes high, output jumps positive (DC-blocked)
+        // At sample 5 (cycle 10): bit goes high, output jumps positive
         expect(out[5]).toBeGreaterThan(0);
-        // At cycle 10: bit goes low, output changes sign
+        // At sample 10 (cycle 20): bit goes low, output changes sign
         expect(out[10]).toBeLessThan(out[9]);
         // After all transitions consumed, output decays toward 0
         expect(Math.abs(out[15])).toBeLessThan(Math.abs(out[10]));
