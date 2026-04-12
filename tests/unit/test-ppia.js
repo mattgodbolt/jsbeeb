@@ -52,6 +52,16 @@ describe("AtomPPIA", () => {
             const val = ppia.read(0xb003);
             expect(val).toBe(0xb003 >>> 8);
         });
+
+        it("should ignore addresses 0xB008-0xB00F", () => {
+            const { ppia } = makePPIA();
+            // Addresses 8+ are outside the 8255's decode range.
+            // Writes should be ignored, reads should return open bus.
+            ppia.write(0xb000, 0x35);
+            ppia.write(0xb008, 0xff); // should be ignored
+            expect(ppia.read(0xb000)).toBe(0x35); // unchanged
+            expect(ppia.read(0xb008)).toBe(0xb008 >>> 8); // open bus
+        });
     });
 
     describe("CREG Bit Set/Reset", () => {
@@ -188,6 +198,39 @@ describe("AtomPPIA", () => {
             expect(ppia.latchc & 0x20).toBe(0x20); // bit 5 set
             ppia.receiveBit(0);
             expect(ppia.latchc & 0x20).toBe(0); // bit 5 cleared
+        });
+    });
+
+    describe("address mirroring", () => {
+        it("should read port A via mirrored address 0xB004", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb000, 0x35);
+            expect(ppia.read(0xb004)).toBe(0x35);
+        });
+
+        it("should read port B via mirrored address 0xB005", () => {
+            const { ppia } = makePPIA();
+            ppia.keyDownRaw([6, 1]);
+            ppia.write(0xb000, 6); // select row 6
+            expect(ppia.read(0xb005)).toBe(ppia.read(0xb001));
+        });
+
+        it("should read port C via mirrored address 0xB006", () => {
+            const { ppia } = makePPIA();
+            expect(ppia.read(0xb006)).toBe(ppia.read(0xb002));
+        });
+
+        it("should write port A via mirrored address 0xB004", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb004, 0x42);
+            expect(ppia.read(0xb000)).toBe(0x42);
+        });
+
+        it("should write CREG via mirrored address 0xB007", () => {
+            const { ppia } = makePPIA();
+            // BSR: set speaker (pin 2) via mirrored CREG address
+            ppia.write(0xb007, 0x05);
+            expect(ppia.portcpins & 0x04).toBe(0x04);
         });
     });
 

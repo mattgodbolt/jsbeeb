@@ -378,7 +378,7 @@ export class AtomSoundChip extends SoundChip {
     }
 
     speakerChannel(channel, out, offset, length) {
-        let fromTime = this.scheduler.epoch - length;
+        const fromCycle = this.scheduler.epoch - length / this.samplesPerCycle;
         let bitIndex = 0;
         // DC-blocking high-pass filter: y[n] = x[n] - x[n-1] + alpha * y[n-1]
         // The SoundChip runs at 500 kHz (4 MHz / 8). For a ~20 Hz cutoff:
@@ -386,7 +386,10 @@ export class AtomSoundChip extends SoundChip {
         const alpha = 0.99975;
 
         for (let i = 0; i < length; ++i) {
-            while (bitIndex < this.bitChange.length && this.bitChange[bitIndex].cycles <= fromTime + i) {
+            while (
+                bitIndex < this.bitChange.length &&
+                this.bitChange[bitIndex].cycles <= fromCycle + i / this.samplesPerCycle
+            ) {
                 this.currentSpeakerBit = this.bitChange[bitIndex].bit;
                 bitIndex++;
             }

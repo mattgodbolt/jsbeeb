@@ -99,7 +99,10 @@ class PPIA {
  */
     write(addr, val) {
         val |= 0;
-        switch (addr & 0xf) {
+        // The 8255 only decodes A0-A1; addresses 4-7 mirror 0-3.
+        // Addresses 8-15 are outside the 8255's decode range.
+        if ((addr & 0xf) >= 0x8) return;
+        switch (addr & 0x3) {
             case PORTA:
                 this.latcha = val;
                 this.recalculatePortAPins();
@@ -142,7 +145,8 @@ class PPIA {
     }
 
     read(addr) {
-        switch (addr & 0xf) {
+        if ((addr & 0xf) >= 0x8) return addr >>> 8; // open bus
+        switch (addr & 0x3) {
             case PORTA:
                 this.recalculatePortAPins();
                 return this.portapins;
