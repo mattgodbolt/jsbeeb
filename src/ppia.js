@@ -99,7 +99,7 @@ class PPIA {
  */
     write(addr, val) {
         val |= 0;
-        switch (addr & 0xf) {
+        switch (addr & 0x3) {
             case PORTA:
                 this.latcha = val;
                 this.recalculatePortAPins();
@@ -142,7 +142,7 @@ class PPIA {
     }
 
     read(addr) {
-        switch (addr & 0xf) {
+        switch (addr & 0x3) {
             case PORTA:
                 this.recalculatePortAPins();
                 return this.portapins;

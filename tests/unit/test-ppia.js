@@ -191,6 +191,39 @@ describe("AtomPPIA", () => {
         });
     });
 
+    describe("address mirroring", () => {
+        it("should read port A via mirrored address 0xB004", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb000, 0x35);
+            expect(ppia.read(0xb004)).toBe(0x35);
+        });
+
+        it("should read port B via mirrored address 0xB005", () => {
+            const { ppia } = makePPIA();
+            ppia.keyDownRaw([6, 1]);
+            ppia.write(0xb000, 6); // select row 6
+            expect(ppia.read(0xb005)).toBe(ppia.read(0xb001));
+        });
+
+        it("should read port C via mirrored address 0xB006", () => {
+            const { ppia } = makePPIA();
+            expect(ppia.read(0xb006)).toBe(ppia.read(0xb002));
+        });
+
+        it("should write port A via mirrored address 0xB004", () => {
+            const { ppia } = makePPIA();
+            ppia.write(0xb004, 0x42);
+            expect(ppia.read(0xb000)).toBe(0x42);
+        });
+
+        it("should write CREG via mirrored address 0xB007", () => {
+            const { ppia } = makePPIA();
+            // BSR: set speaker (pin 2) via mirrored CREG address
+            ppia.write(0xb007, 0x05);
+            expect(ppia.portcpins & 0x04).toBe(0x04);
+        });
+    });
+
     describe("snapshot/restore", () => {
         it("should round-trip state through snapshot and restore", () => {
             const { ppia } = makePPIA();
