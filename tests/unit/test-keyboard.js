@@ -646,25 +646,30 @@ describe("Keyboard Atom adapter", () => {
 });
 
 describe("stringToATOMKeys", () => {
-    test("should not produce LOCK key entries", () => {
-        const keys = stringToATOMKeys("Hello World");
-        const hasLock = keys.some((k) => k[0] === ATOM.LOCK[0] && k[1] === ATOM.LOCK[1]);
-        expect(hasLock).toBe(false);
+    test("should insert LOCK toggles for case transitions", () => {
+        // "Hello" = H (caps on), LOCK off, e, l, l, o, LOCK on
+        const keys = stringToATOMKeys("Hello");
+        expect(keys).toEqual([ATOM.H, ATOM.LOCK, ATOM.E, ATOM.L, ATOM.L, ATOM.O, ATOM.LOCK]);
     });
 
-    test("should convert lowercase to uppercase", () => {
-        const keys = stringToATOMKeys("abc");
+    test("should not insert LOCK for all-uppercase", () => {
+        const keys = stringToATOMKeys("ABC");
         expect(keys).toEqual([ATOM.A, ATOM.B, ATOM.C]);
-    });
-
-    test("should produce identical keys for mixed case", () => {
-        expect(stringToATOMKeys("Ab")).toEqual([ATOM.A, ATOM.B]);
-        expect(stringToATOMKeys("hELLO")).toEqual(stringToATOMKeys("Hello"));
     });
 
     test("should handle shifted characters with SHIFT toggles", () => {
         const keys = stringToATOMKeys("a'b");
-        // ' is SHIFT+7 on the Atom
-        expect(keys).toEqual([ATOM.A, ATOM.SHIFT, ATOM.K7, ATOM.SHIFT, ATOM.B]);
+        // ' is SHIFT+7 on the Atom. LOCK toggles surround the lowercase text.
+        expect(keys).toEqual([
+            ATOM.LOCK,
+            ATOM.A,
+            ATOM.SHIFT,
+            ATOM.LOCK,
+            ATOM.K7,
+            ATOM.SHIFT,
+            ATOM.LOCK,
+            ATOM.B,
+            ATOM.LOCK,
+        ]);
     });
 });

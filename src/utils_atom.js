@@ -115,18 +115,21 @@ export const ATOM = {
 export function stringToATOMKeys(str) {
     const array = [];
     let shiftState = false;
+    let capsLockState = true;
     for (let i = 0; i < str.length; ++i) {
         const c = str.charCodeAt(i);
         let charStr = str.charAt(i);
         let atomKey = null;
         let needsShift = false;
+        let needsCapsLock = true;
         if (c >= 65 && c <= 90) {
             // A-Z
             atomKey = ATOM[charStr];
         } else if (c >= 97 && c <= 122) {
-            // a-z → A-Z (Atom character set is uppercase only)
+            // a-z (LOCK toggles the ROM's internal caps lock state)
             charStr = String.fromCharCode(c - 32);
             atomKey = ATOM[charStr];
+            needsCapsLock = false;
         } else if (c >= 48 && c <= 57) {
             // 0-9
             atomKey = ATOM["K" + charStr];
@@ -209,10 +212,15 @@ export function stringToATOMKeys(str) {
             array.push(ATOM.SHIFT);
             shiftState = !shiftState;
         }
+        if ((needsCapsLock && !capsLockState) || (!needsCapsLock && capsLockState)) {
+            array.push(ATOM.LOCK);
+            capsLockState = !capsLockState;
+        }
         array.push(atomKey);
     }
 
     if (shiftState) array.push(ATOM.SHIFT);
+    if (!capsLockState) array.push(ATOM.LOCK);
     return array;
 }
 

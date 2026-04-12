@@ -410,7 +410,8 @@ export class TestMachine {
     /** Type text on the Atom using its key mapping and PPIA interface. */
     async _typeAtom(text) {
         // stringToATOMKeys returns a flat array of [col, row] pairs.
-        // SHIFT is inserted as a toggle that stays held until the next toggle.
+        // SHIFT is held across multiple characters; LOCK is tapped to
+        // toggle the ROM's internal caps lock state.
         const keySequence = utils_atom.stringToATOMKeys(text + "\n");
         const ppia = this.processor.atomppia;
         const holdCycles = 80000; // Atom at 1 MHz needs longer hold than BBC at 2 MHz
