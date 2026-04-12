@@ -2,6 +2,7 @@ import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import * as utils from "../../src/utils.js";
+import { ATOM, stringToATOMKeys } from "../../src/utils_atom.js";
 
 describe("Keyboard", () => {
     let keyboard;
@@ -602,5 +603,105 @@ describe("Keyboard Atom adapter", () => {
     test("setKeyLayout should call PPIA setKeyLayout", () => {
         keyboard.setKeyLayout("natural");
         expect(mockAtomPPIA.setKeyLayout).toHaveBeenCalledWith("natural");
+    });
+
+    test("paste should insert debounce gap between key release and next key press", () => {
+        keyboard.sendRawKeyboard([ATOM.A, ATOM.B], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // First fire: press A
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledWith(ATOM.A);
+
+        // After 80ms (Atom uses longer hold): release A, then debounce gap
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release A only
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A); // toggle off
+
+        // After 30ms debounce: press B
+        mockProcessor.scheduler.polltime(30 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.B);
+    });
+
+    test("paste should not insert debounce gap after SHIFT key", () => {
+        keyboard.sendRawKeyboard([ATOM.SHIFT, ATOM.A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // First fire: press SHIFT
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+
+        // After 80ms: SHIFT is not released (it's the shift key), and A should
+        // be pressed immediately — no debounce gap for SHIFT.
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
+    });
+
+    test("paste should handle repeated characters with Atom debounce", () => {
+        keyboard.sendRawKeyboard([ATOM.A, ATOM.A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // Press first A
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+
+        // After 80ms: release A, Atom debounce gap
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release only
+
+        // After 30ms Atom debounce: same-key debounce fires (not a double press)
+        mockProcessor.scheduler.polltime(30 * clocksPerMs);
+        // The Atom debounce cleared _pasteLastChar, so same-key debounce
+        // doesn't trigger — second A is pressed directly.
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
+    });
+
+    test("paste should debounce LOCK key like regular keys", () => {
+        keyboard.sendRawKeyboard([ATOM.LOCK, ATOM.A, ATOM.LOCK], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // Press LOCK
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.LOCK);
+
+        // After 80ms: release LOCK, Atom debounce (LOCK is not SHIFT)
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
+
+        // After 30ms debounce: press A
+        mockProcessor.scheduler.polltime(30 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
+    });
+});
+
+describe("stringToATOMKeys", () => {
+    test("should insert LOCK toggles only for case transitions", () => {
+        // "Hello" = H (caps on), LOCK off, e, l, l, o, LOCK on (restore)
+        const keys = stringToATOMKeys("Hello");
+        expect(keys).toEqual([ATOM.H, ATOM.LOCK, ATOM.E, ATOM.L, ATOM.L, ATOM.O, ATOM.LOCK]);
+    });
+
+    test("should not insert LOCK for all-uppercase", () => {
+        const keys = stringToATOMKeys("ABC");
+        expect(keys).toEqual([ATOM.A, ATOM.B, ATOM.C]);
+    });
+
+    test("should not toggle LOCK for non-letter characters", () => {
+        // Space and digits should not force LOCK back on between lowercase runs
+        const keys = stringToATOMKeys("a b");
+        expect(keys).toEqual([ATOM.LOCK, ATOM.A, ATOM.SPACE, ATOM.B, ATOM.LOCK]);
+    });
+
+    test("should handle shifted characters without extra LOCK toggles", () => {
+        // ' is SHIFT+7. Apostrophe doesn't care about caps lock state,
+        // so no LOCK toggle between the lowercase letters and the punctuation.
+        const keys = stringToATOMKeys("a'b");
+        expect(keys).toEqual([ATOM.LOCK, ATOM.A, ATOM.SHIFT, ATOM.K7, ATOM.SHIFT, ATOM.B, ATOM.LOCK]);
     });
 });

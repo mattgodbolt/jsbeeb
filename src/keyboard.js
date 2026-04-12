@@ -376,6 +376,15 @@ export class Keyboard extends EventTarget {
             return;
         }
 
+        // Atom's PPIA keyboard is polled, not interrupt-driven like the BBC's
+        // SysVIA. Insert a debounce gap after every key release so the ROM
+        // sees the key-up before the next key-down arrives.
+        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey && this.processor.model.isAtom) {
+            this._pasteLastChar = undefined;
+            this._pasteTask.schedule(30 * this._pasteClocksPerMs);
+            return;
+        }
+
         const ch = this._pasteKeys[0];
         const debounce = this._pasteLastChar === ch;
         this._pasteLastChar = ch;
@@ -385,7 +394,10 @@ export class Keyboard extends EventTarget {
             return;
         }
 
-        let delayMs = 50;
+        // Atom ROM polls the keyboard once per VSync (~16ms at 60 Hz).
+        // 80ms gives the ROM ~5 scan cycles to detect, debounce, and
+        // process each keypress.
+        let delayMs = this.processor.model.isAtom ? 80 : 50;
         if (typeof this._pasteLastChar === "number") {
             delayMs = this._pasteLastChar;
             this._pasteLastChar = undefined;

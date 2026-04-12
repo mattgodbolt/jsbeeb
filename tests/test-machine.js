@@ -25,6 +25,32 @@ export class TestMachine {
 
     async initialise() {
         await this.processor.initialise();
+        if (this.model.isAtom) this._startAtomVSync();
+    }
+
+    /**
+     * The Atom ROM's main loop waits for VSync (bit 7 of Port C) to
+     * toggle before scanning the keyboard.  The MC6847 video chip drives
+     * this in the real emulator, but fake6502 doesn't create one, so we
+     * simulate it with a scheduler task at ~60 Hz (NTSC).
+     */
+    _startAtomVSync() {
+        const ppia = this.processor.atomppia;
+        const VsyncPeriod = 16667; // 1 MHz / 60 Hz (NTSC 262-line frame)
+        const VsyncPulse = 800;
+        let inVsync = false;
+        const task = this.processor.scheduler.newTask(() => {
+            if (!inVsync) {
+                ppia.setVBlankInt(1);
+                inVsync = true;
+                task.reschedule(VsyncPulse);
+            } else {
+                ppia.setVBlankInt(0);
+                inVsync = false;
+                task.reschedule(VsyncPeriod - VsyncPulse);
+            }
+        });
+        task.schedule(VsyncPeriod);
     }
 
     /**
@@ -35,8 +61,10 @@ export class TestMachine {
     startCapture() {
         if (this._captureHookInstalled) return;
         this._captureHookInstalled = true;
+        // WRCHV is at 0x0208 on Atom, 0x020E on BBC.
+        const wrchvAddr = this.model.isAtom ? 0x0208 : 0x020e;
         this.processor.debugInstruction.add((addr) => {
-            const wrchv = this.readword(0x20e);
+            const wrchv = this.readword(wrchvAddr);
             if (addr === wrchv) {
                 this._capturedChars.push(this.processor.a);
             }
@@ -382,31 +410,29 @@ export class TestMachine {
     /** Type text on the Atom using its key mapping and PPIA interface. */
     async _typeAtom(text) {
         // stringToATOMKeys returns a flat array of [col, row] pairs.
-        // SHIFT and LOCK are inserted as toggle entries that stay held
-        // until the next toggle of the same key.
+        // SHIFT is held across multiple characters; LOCK is tapped to
+        // toggle the ROM's internal caps lock state.
         const keySequence = utils_atom.stringToATOMKeys(text + "\n");
         const ppia = this.processor.atomppia;
         const holdCycles = 80000; // Atom at 1 MHz needs longer hold than BBC at 2 MHz
         const SHIFT = utils_atom.ATOM.SHIFT;
-        const LOCK = utils_atom.ATOM.LOCK;
 
         let index = 0;
         let phase = "idle";
         let nextEventCycle = 0;
         let done = false;
-        const toggleState = new Set();
+        let shiftHeld = false;
 
         const currentCycle = () => this.processor.cycleSeconds * 1000000 + this.processor.currentCycles;
 
-        const isToggle = (entry) =>
-            (entry[0] === SHIFT[0] && entry[1] === SHIFT[1]) || (entry[0] === LOCK[0] && entry[1] === LOCK[1]);
+        const isShift = (entry) => entry[0] === SHIFT[0] && entry[1] === SHIFT[1];
 
         const hook = this.processor.debugInstruction.add(() => {
             if (currentCycle() < nextEventCycle) return;
 
             if (phase === "down") {
                 const entry = keySequence[index];
-                if (!isToggle(entry)) {
+                if (!isShift(entry)) {
                     ppia.keyUpRaw(entry);
                 }
                 index++;
@@ -416,25 +442,20 @@ export class TestMachine {
             }
 
             if (index >= keySequence.length) {
-                // Release any held toggles
-                for (const key of toggleState) {
-                    const [col, row] = key.split(",").map(Number);
-                    ppia.keyUpRaw([col, row]);
-                }
+                if (shiftHeld) ppia.keyUpRaw(SHIFT);
                 hook.remove();
                 done = true;
                 return;
             }
 
             const entry = keySequence[index];
-            if (isToggle(entry)) {
-                const key = `${entry[0]},${entry[1]}`;
-                if (toggleState.has(key)) {
-                    ppia.keyUpRaw(entry);
-                    toggleState.delete(key);
+            if (isShift(entry)) {
+                if (shiftHeld) {
+                    ppia.keyUpRaw(SHIFT);
+                    shiftHeld = false;
                 } else {
-                    ppia.keyDownRaw(entry);
-                    toggleState.add(key);
+                    ppia.keyDownRaw(SHIFT);
+                    shiftHeld = true;
                 }
                 index++;
                 nextEventCycle = currentCycle() + holdCycles;
@@ -449,10 +470,7 @@ export class TestMachine {
             const stopped = await this.runFor(holdCycles);
             if (stopped) {
                 hook.remove();
-                for (const key of toggleState) {
-                    const [col, row] = key.split(",").map(Number);
-                    ppia.keyUpRaw([col, row]);
-                }
+                if (shiftHeld) ppia.keyUpRaw(SHIFT);
                 break;
             }
         }

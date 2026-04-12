@@ -121,12 +121,15 @@ export function stringToATOMKeys(str) {
         let charStr = str.charAt(i);
         let atomKey = null;
         let needsShift = false;
-        let needsCapsLock = true;
+        // Only letters care about caps lock state; non-letter characters
+        // leave it wherever it is to avoid unnecessary LOCK toggles.
+        let needsCapsLock = capsLockState;
         if (c >= 65 && c <= 90) {
             // A-Z
             atomKey = ATOM[charStr];
+            needsCapsLock = true;
         } else if (c >= 97 && c <= 122) {
-            // a-z
+            // a-z (LOCK toggles the ROM's internal caps lock state)
             charStr = String.fromCharCode(c - 32);
             atomKey = ATOM[charStr];
             needsCapsLock = false;
@@ -156,30 +159,15 @@ export function stringToATOMKeys(str) {
                     atomKey = ATOM.MINUS_EQUALS;
                     needsShift = true;
                     break;
-                // case '^':
-                //     atomKey = ATOM.HAT_TILDE;
-                //     break;
-                // case '~':
-                //     atomKey = ATOM.HAT_TILDE; needsShift = true;
-                //     break;
                 case "\\":
                     atomKey = ATOM.BACKSLASH;
                     break;
-                // case '|':
-                //     atomKey = ATOM.PIPE_BACKSLASH; needsShift = true;
-                //     break;
                 case "@":
                     atomKey = ATOM.AT;
                     break;
                 case "[":
                     atomKey = ATOM.LEFT_SQUARE_BRACKET;
                     break;
-                // case '{':
-                //     atomKey = ATOM.LEFT_SQUARE_BRACKET; needsShift = true;
-                //     break;
-                // case '_':
-                //     atomKey = ATOM.UNDERSCORE_POUND;
-                //     break;
                 case ";":
                     atomKey = ATOM.SEMICOLON_PLUS;
                     break;
@@ -197,9 +185,6 @@ export function stringToATOMKeys(str) {
                 case "]":
                     atomKey = ATOM.RIGHT_SQUARE_BRACKET;
                     break;
-                // case '}':
-                //     atomKey = ATOM.RIGHT_SQUARE_BRACKET; needsShift = true;
-                //     break;
                 case ",":
                     atomKey = ATOM.COMMA_LESSTHAN;
                     break;
