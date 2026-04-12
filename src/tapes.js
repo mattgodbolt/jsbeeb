@@ -215,7 +215,7 @@ class UefTape {
                     this.count = this.curChunk.stream.readInt16();
                     // Each Atom carrier cycle expands to 16 wavebits, so
                     // divide the count to avoid 16x too many cycles.
-                    if (this.isAtom) this.count = (this.count / 16) | 0;
+                    if (this.isAtom) this.count = Math.max(1, (this.count / 16) | 0);
                 }
                 acia.setTapeCarrier(true);
                 acia.tone(2 * this.baseFrequency);
@@ -310,9 +310,4 @@ export async function loadTapeFromData(name, data, isAtom = false) {
     }
     console.log("Unknown tape format");
     return null;
-}
-
-export async function loadTape(name, isAtom = false) {
-    console.log("Loading tape from " + name);
-    return loadTapeFromData(name, await utils.loadData(name), isAtom);
 }

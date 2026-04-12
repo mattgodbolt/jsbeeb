@@ -1633,7 +1633,7 @@ const tapeControlCell = document.getElementById("tape-control-cell");
 function updateTapeButton() {
     if (!model.isAtom) return;
     const playing = processor.atomppia.motorOn;
-    tapePlayStopBtn.innerHTML = playing ? "\u25A0" : "\u25B6";
+    tapePlayStopBtn.textContent = playing ? "\u25A0" : "\u25B6";
     tapePlayStopBtn.title = playing ? "Stop cassette" : "Play cassette";
     tapePlayStopBtn.classList.toggle("playing", playing);
 }
