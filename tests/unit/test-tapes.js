@@ -137,6 +137,75 @@ describe("tapes", () => {
         });
     });
 
+    describe("Atom wavebit phase continuity", () => {
+        // Helper: create an Atom UEF with a carrier tone followed by a data byte.
+        // This exercises the '1'->'0' boundary (carrier -> start bit) and all
+        // data bit boundaries within the byte.
+        function makeAtomUef(dataByte) {
+            return makeUef([
+                { id: 0x0110, data: [0x01, 0x00] }, // carrier tone, count=1
+                { id: 0x0100, data: [dataByte] }, // implicit data
+            ]);
+        }
+
+        // Poll an Atom tape, collecting all wavebits delivered via receiveBit.
+        function collectWavebits(tape, maxPolls = 5000) {
+            const bits = [];
+            const acia = {
+                setTapeCarrier: () => {},
+                tone: () => {},
+                receive: () => {},
+                receiveBit: (b) => bits.push(b),
+            };
+            for (let i = 0; i < maxPolls; i++) {
+                const delay = tape.poll(acia);
+                if (delay === undefined) break;
+            }
+            return bits;
+        }
+
+        // Measure half-periods (runs of consecutive same-value wavebits)
+        // and return the count of wavebits in each half-period.
+        function halfPeriods(bits) {
+            const periods = [];
+            let run = 1;
+            for (let i = 1; i < bits.length; i++) {
+                if (bits[i] === bits[i - 1]) {
+                    run++;
+                } else {
+                    periods.push(run);
+                    run = 1;
+                }
+            }
+            periods.push(run);
+            return periods;
+        }
+
+        it("should produce only length-1 or length-2 half-periods across bit boundaries", async () => {
+            // 0x2A = 00101010: its alternating bits exercise every boundary type.
+            const uef = makeAtomUef(0x2a);
+            const tape = await loadTapeFromData("test.uef", uef, true);
+            const bits = collectWavebits(tape);
+            const periods = halfPeriods(bits);
+
+            // Half-periods must be 1 (fast/'1') or 2 (slow/'0') wavebits.
+            // Anything longer means a phase discontinuity at a bit boundary.
+            expect(bits.length).toBeGreaterThan(0);
+            for (const p of periods) {
+                expect(p).toBeLessThanOrEqual(2);
+            }
+        });
+
+        it("should produce the same waveform from two identical tapes", async () => {
+            const uef1 = makeAtomUef(0x55); // 01010101 = alternating bits
+            const uef2 = makeAtomUef(0x55);
+            const tape1 = await loadTapeFromData("test.uef", uef1, true);
+            const tape2 = await loadTapeFromData("test.uef", uef2, true);
+
+            expect(collectWavebits(tape1)).toEqual(collectWavebits(tape2));
+        });
+    });
+
     describe("TapefileTape", () => {
         it("should start with carrier from header", async () => {
             // Format detection uses readByte(0/1) without advancing the stream,
