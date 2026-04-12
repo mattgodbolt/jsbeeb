@@ -8,11 +8,11 @@ function secsToClocks(secs, cpuSpeed) {
     return (cpuSpeed * secs) | 0;
 }
 
-// Atom tape encoding: wavebits sent via receiveBit().
+// Atom tape encoding: wavebits sent one per poll via receiveBit().
 // '0' bit = 4 cycles at 1200 Hz (toggle every 2 wavebits).
 // '1' bit = 8 cycles at 2400 Hz (toggle every 1 wavebit).
 // Carrier = continuous '1' bits.
-const AtomWavebitsPerBit = 16;
+// Generated on-the-fly via atomPhase/atomSubCount to avoid allocations.
 
 function parityOf(curByte) {
     let parity = false;
@@ -47,11 +47,13 @@ class UefTape {
         this.numStopBits = 1;
         this.carrierBefore = 0;
         this.carrierAfter = 0;
-        this.wavebits = [];
         this.shortWave = 0;
-        // Phase-continuous Atom waveform state.
+        // Phase-continuous Atom waveform state — generated on the fly,
+        // no arrays allocated during execution.
         this.atomPhase = 0; // current output level (0 or 1)
         this.atomSubCount = 0; // wavebits since last toggle
+        this.atomWavebitsLeft = 0; // remaining wavebits to drain for current bit
+        this.atomToggleEvery = 1; // 1 for '1' bits (2400 Hz), 2 for '0' bits (1200 Hz)
 
         this.stream.seek(10);
         const minor = this.stream.readByte();
@@ -73,9 +75,14 @@ class UefTape {
     poll(acia) {
         if (!this.curChunk) return;
 
-        // Atom: drain the wavebits queue one bit per poll.
-        if (this.isAtom && this.wavebits.length > 0) {
-            acia.receiveBit(this.wavebits.shift());
+        // Atom: drain wavebits one per poll, generated on the fly.
+        if (this.isAtom && this.atomWavebitsLeft > 0) {
+            if (++this.atomSubCount >= this.atomToggleEvery) {
+                this.atomPhase ^= 1;
+                this.atomSubCount = 0;
+            }
+            acia.receiveBit(this.atomPhase);
+            this.atomWavebitsLeft--;
             return secsToClocks(0.25 / this.baseFrequency, this.cpuSpeed);
         }
 
@@ -102,17 +109,17 @@ class UefTape {
                     if (this.state === 0) {
                         // Start bit
                         acia.tone(this.baseFrequency);
-                        if (this.isAtom) this.wavebits = this.atomWavebits(false);
+                        if (this.isAtom) this.queueAtomBit(false);
                     } else {
                         const bit = this.curByte & (1 << (this.state - 1));
                         acia.tone(bit ? 2 * this.baseFrequency : this.baseFrequency);
-                        if (this.isAtom) this.wavebits = this.atomWavebits(!!bit);
+                        if (this.isAtom) this.queueAtomBit(!!bit);
                     }
                     this.state++;
                 } else {
                     acia.receive(this.curByte);
                     acia.tone(2 * this.baseFrequency); // Stop bit
-                    if (this.isAtom) this.wavebits = this.atomWavebits(true);
+                    if (this.isAtom) this.queueAtomBit(true);
                     if (this.curChunk.stream.eof()) {
                         this.state = -1;
                     } else {
@@ -146,23 +153,23 @@ class UefTape {
                     } else {
                         this.curByte = this.curChunk.stream.readByte() & ((1 << this.numDataBits) - 1);
                         acia.tone(this.baseFrequency); // Start bit
-                        if (this.isAtom) this.wavebits = this.atomWavebits(false);
+                        if (this.isAtom) this.queueAtomBit(false);
                         this.state++;
                     }
                 } else if (this.state < 1 + this.numDataBits) {
                     const bit = this.curByte & (1 << (this.state - 1));
                     acia.tone(bit ? 2 * this.baseFrequency : this.baseFrequency);
-                    if (this.isAtom) this.wavebits = this.atomWavebits(!!bit);
+                    if (this.isAtom) this.queueAtomBit(!!bit);
                     this.state++;
                 } else if (this.state < 1 + this.numDataBits + this.numParityBits) {
                     let bit = parityOf(this.curByte);
                     if (this.parity === ParityN) bit = !bit;
                     acia.tone(bit ? 2 * this.baseFrequency : this.baseFrequency);
-                    if (this.isAtom) this.wavebits = this.atomWavebits(!!bit);
+                    if (this.isAtom) this.queueAtomBit(!!bit);
                     this.state++;
                 } else if (this.state < 1 + this.numDataBits + this.numParityBits + this.numStopBits) {
                     acia.tone(2 * this.baseFrequency); // Stop bits
-                    if (this.isAtom) this.wavebits = this.atomWavebits(true);
+                    if (this.isAtom) this.queueAtomBit(true);
                     this.state++;
                 } else {
                     acia.receive(this.curByte);
@@ -181,13 +188,13 @@ class UefTape {
                 if (this.state === 0) {
                     acia.setTapeCarrier(true);
                     acia.tone(2 * this.baseFrequency);
-                    if (this.isAtom) this.wavebits = this.atomWavebits(true);
+                    if (this.isAtom) this.queueAtomBit(true);
                     this.carrierBefore--;
                     if (this.carrierBefore <= 0) this.state = 1;
                 } else if (this.state < 11) {
                     acia.setTapeCarrier(false);
                     acia.tone(this.dummyData[this.state - 1] ? this.baseFrequency : 2 * this.baseFrequency);
-                    if (this.isAtom) this.wavebits = this.atomWavebits(!this.dummyData[this.state - 1]);
+                    if (this.isAtom) this.queueAtomBit(!this.dummyData[this.state - 1]);
                     if (this.state === 10) {
                         acia.receive(0xaa);
                     }
@@ -195,7 +202,7 @@ class UefTape {
                 } else {
                     acia.setTapeCarrier(true);
                     acia.tone(2 * this.baseFrequency);
-                    if (this.isAtom) this.wavebits = this.atomWavebits(true);
+                    if (this.isAtom) this.queueAtomBit(true);
                     this.carrierAfter--;
                     if (this.carrierAfter <= 0) this.state = -1;
                 }
@@ -217,7 +224,7 @@ class UefTape {
                 }
                 acia.setTapeCarrier(true);
                 acia.tone(2 * this.baseFrequency);
-                if (this.isAtom) this.wavebits = this.atomWavebits(true);
+                if (this.isAtom) this.queueAtomBit(true);
                 this.count--;
                 if (this.count <= 0) this.state = -1;
                 if (this.isAtom) return 0;
@@ -246,20 +253,12 @@ class UefTape {
         return this.cycles(1);
     }
 
-    // Generate 16 phase-continuous wavebits for an Atom tape bit.
-    // Maintains atomPhase/atomSubCount across calls to avoid spurious
-    // transitions at bit boundaries that would break carrier detection.
-    atomWavebits(isOne) {
-        const toggleEvery = isOne ? 1 : 2;
-        const bits = new Array(AtomWavebitsPerBit);
-        for (let i = 0; i < AtomWavebitsPerBit; i++) {
-            if (++this.atomSubCount >= toggleEvery) {
-                this.atomPhase ^= 1;
-                this.atomSubCount = 0;
-            }
-            bits[i] = this.atomPhase;
-        }
-        return bits;
+    // Queue 16 wavebits for an Atom tape bit. Phase-continuous: atomPhase
+    // and atomSubCount carry across calls to avoid spurious transitions
+    // at bit boundaries that would break carrier detection.
+    queueAtomBit(isOne) {
+        this.atomWavebitsLeft = 16;
+        this.atomToggleEvery = isOne ? 1 : 2;
     }
 
     cycles(count) {
