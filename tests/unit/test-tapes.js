@@ -164,40 +164,25 @@ describe("tapes", () => {
             return bits;
         }
 
-        // Measure half-periods (runs of consecutive same-value wavebits)
-        // and return the count of wavebits in each half-period.
-        function halfPeriods(bits) {
-            const periods = [];
-            let run = 1;
-            for (let i = 1; i < bits.length; i++) {
-                if (bits[i] === bits[i - 1]) {
-                    run++;
-                } else {
-                    periods.push(run);
-                    run = 1;
-                }
-            }
-            periods.push(run);
-            return periods;
-        }
-
-        it("should produce only length-1 or length-2 half-periods across bit boundaries", async () => {
-            // 0x2A = 00101010: its alternating bits exercise every boundary type.
-            const uef = makeAtomUef(0x2a);
+        it("should not transition at a '1'-to-'0' bit boundary", async () => {
+            // The original fixed patterns always had a transition at the
+            // '1'->'0' boundary (carrier ending 1, start bit beginning 0).
+            // This created a spurious fast half-period that prevented the
+            // ROM's carrier detection from seeing 8 consecutive slow periods.
+            // With phase-continuous generation, the last wavebit of a '1' bit
+            // must equal the first wavebit of the following '0' bit.
+            const uef = makeAtomUef(0x00);
             const tape = await loadTapeFromData("test.uef", uef, true);
             const bits = collectWavebits(tape);
-            const periods = halfPeriods(bits);
 
-            // Half-periods must be 1 (fast/'1') or 2 (slow/'0') wavebits.
-            // Anything longer means a phase discontinuity at a bit boundary.
-            expect(bits.length).toBeGreaterThan(0);
-            for (const p of periods) {
-                expect(p).toBeLessThanOrEqual(2);
-            }
+            // Carrier is 16 wavebits. The 16th is the last carrier wavebit,
+            // the 17th is the first start-bit wavebit. They must match.
+            expect(bits.length).toBeGreaterThan(17);
+            expect(bits[15]).toBe(bits[16]);
         });
 
         it("should produce the same waveform from two identical tapes", async () => {
-            const uef1 = makeAtomUef(0x55); // 01010101 = alternating bits
+            const uef1 = makeAtomUef(0x55);
             const uef2 = makeAtomUef(0x55);
             const tape1 = await loadTapeFromData("test.uef", uef1, true);
             const tape2 = await loadTapeFromData("test.uef", uef2, true);
