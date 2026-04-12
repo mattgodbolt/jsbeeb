@@ -14,7 +14,7 @@ import { Cmos } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
-import { loadTape, loadTapeFromData } from "./tapes.js";
+import { loadTapeFromData } from "./tapes.js";
 import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
@@ -1230,8 +1230,17 @@ async function loadTapeImage(tapeImage) {
             return await loadTapeFromData(tapeImage, tapeData, isAtom);
         }
 
-        default:
-            return await loadTape("tapes/" + tapeImage, isAtom);
+        default: {
+            const tapePath = "tapes/" + tapeImage;
+            let tapeData = await utils.loadData(tapePath);
+            let tapeName = tapeImage;
+            if (/\.zip/i.test(tapeName)) {
+                const unzipped = await utils.unzipDiscImage(tapeData);
+                tapeData = unzipped.data;
+                tapeName = unzipped.name;
+            }
+            return await loadTapeFromData(tapeName, tapeData, isAtom);
+        }
     }
 }
 
@@ -1256,8 +1265,14 @@ document.getElementById("tape_load").addEventListener("change", async function (
     const file = evt.target.files[0];
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
-    const binaryData = await readFileAsBinaryString(file);
-    setProcessorTape(await loadTapeFromData("local file", binaryData, model.isAtom));
+    let tapeData = await readFileAsBinaryString(file);
+    let tapeName = file.name;
+    if (/\.zip/i.test(tapeName)) {
+        const unzipped = await utils.unzipDiscImage(tapeData);
+        tapeData = unzipped.data;
+        tapeName = unzipped.name;
+    }
+    setProcessorTape(await loadTapeFromData(tapeName, tapeData, model.isAtom));
     delete parsedQuery.tape;
     updateUrl();
     bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
@@ -1598,12 +1613,47 @@ for (const link of document.querySelectorAll("#tape-menu a")) {
 
         if (type === "rewind") {
             console.log("Rewinding tape to the start");
-            processor.acia.rewindTape();
+            if (model.isAtom) {
+                processor.atomppia.stopTape();
+                processor.atomppia.rewindTape();
+                updateTapeButton();
+            } else {
+                processor.acia.rewindTape();
+            }
         } else {
             console.log("unknown type", type);
         }
     });
 }
+
+const tapePlayStopBtn = document.getElementById("tape-play-stop");
+const tapeControlHeader = document.getElementById("tape-control-header");
+const tapeControlCell = document.getElementById("tape-control-cell");
+
+function updateTapeButton() {
+    if (!model.isAtom) return;
+    const playing = processor.atomppia.motorOn;
+    tapePlayStopBtn.innerHTML = playing ? "\u25A0" : "\u25B6";
+    tapePlayStopBtn.title = playing ? "Stop cassette" : "Play cassette";
+    tapePlayStopBtn.classList.toggle("playing", playing);
+}
+
+function showTapeControl(visible) {
+    const display = visible ? "" : "none";
+    tapeControlHeader.style.display = display;
+    tapeControlCell.style.display = display;
+}
+
+showTapeControl(model.isAtom);
+
+tapePlayStopBtn.addEventListener("click", () => {
+    if (processor.atomppia.motorOn) {
+        processor.atomppia.stopTape();
+    } else {
+        processor.atomppia.playTape();
+    }
+    updateTapeButton();
+});
 
 function Light(name) {
     const dom = document.getElementById(name);
@@ -1623,13 +1673,17 @@ const drive1 = new Light("drive1");
 const network = new Light("networklight");
 
 syncLights = function () {
-    caps.update(processor.sysvia.capsLockLight);
-    shift.update(processor.sysvia.shiftLockLight);
-    drive0.update(processor.fdc.motorOn[0]);
-    drive1.update(processor.fdc.motorOn[1]);
-    cassette.update(processor.acia.motorOn);
-    if (model.hasEconet) {
-        network.update(processor.econet.activityLight());
+    if (model.isAtom) {
+        cassette.update(processor.atomppia.motorOn);
+    } else {
+        caps.update(processor.sysvia.capsLockLight);
+        shift.update(processor.sysvia.shiftLockLight);
+        drive0.update(processor.fdc.motorOn[0]);
+        drive1.update(processor.fdc.motorOn[1]);
+        cassette.update(processor.acia.motorOn);
+        if (model.hasEconet) {
+            network.update(processor.econet.activityLight());
+        }
     }
 };
 

@@ -171,12 +171,6 @@ class PPIA {
                 const rept_key = (!this.keys[1][6] << 6) & 0x40;
                 val = (val & ~0x40) | rept_key;
 
-                // Track cassette input transitions. The Atom ROM tape routines:
-                //   0xfc0a - OSBGET: get byte from tape (every 3.34ms)
-                //   0xfcd2 - test tape input pulse (every 0.033ms / 33 cycles)
-                //   0xfcc2 - count duration of tape pulse (<8 loops = '1', >=8 = '0')
-                //   0xfe6e, 0xfe9d, 0xfe69 - flyback/VSync routines
-                // Between each receiveBit, fcd2 is called ~6 times (33 cycles each).
                 return val;
             }
             default:
@@ -235,6 +229,7 @@ export class AtomPPIA extends PPIA {
         this.shiftLockLight = false;
         this.tapeCarrierCount = 0;
         this.tapeDcdLineLevel = false;
+        this.motorOn = false;
 
         this.reset();
 
@@ -417,14 +412,15 @@ export class AtomPPIA extends PPIA {
 
     playTape() {
         if (this.tape) {
-            //start
+            this.motorOn = true;
             this.runTape();
         }
     }
 
     stopTape() {
+        this.motorOn = false;
         if (this.tape) {
-            let toneGen = this.cpu.soundChip.toneGenerator;
+            const toneGen = this.cpu.soundChip.toneGenerator;
             toneGen.mute();
             this.runTapeTask.cancel();
             this.setTapeCarrier(false);

@@ -258,6 +258,7 @@
           <thead>
             <tr>
               <th>cassette<br />motor</th>
+              <th id="tape-control-header" class="initially-hidden">tape<br />control</th>
               <th>caps<br />lock</th>
               <th>shift<br />lock</th>
               <th>drive<br />0/2</th>
@@ -270,6 +271,9 @@
             <tr>
               <td>
                 <div class="red led" id="motorlight"></div>
+              </td>
+              <td id="tape-control-cell" class="initially-hidden">
+                <button id="tape-play-stop" class="tape-btn" title="Play/Stop cassette">&#9654;</button>
               </td>
               <td>
                 <div class="red led" id="capslight"></div>
@@ -628,7 +632,7 @@
             <div class="tape">
               <label
                 >Load local UEF file:
-                <input type="file" id="tape_load" accept=".uef,application/binary" />
+                <input type="file" id="tape_load" accept=".uef,.zip,application/binary" />
               </label>
             </div>
           </div>

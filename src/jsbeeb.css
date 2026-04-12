@@ -188,6 +188,29 @@ div.led {
   background-image: url(/images/yellow-on-16.png);
 }
 
+.tape-btn {
+  background: #333;
+  color: #ccc;
+  border: 1px solid #666;
+  border-radius: 3px;
+  font-size: 10px;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  line-height: 18px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.tape-btn:hover {
+  background: #555;
+  color: #fff;
+}
+
+.tape-btn.playing {
+  color: #4c4;
+}
+
 #pages {
   margin-top: 10px;
 }

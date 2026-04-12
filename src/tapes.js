@@ -70,13 +70,14 @@ class UefTape {
     poll(acia) {
         if (!this.curChunk) return;
 
-        // Atom: drain the wavebits queue first (one bit per poll)
+        // Atom: drain the wavebits queue first (one bit per poll).
+        // Each wavebit represents one half-period of 2×baseFrequency (2400 Hz),
+        // so the delay is 1/(4×baseFrequency) seconds ≈ 208 cycles at 1 MHz.
+        // AtomBit1Pattern [0,1,0,1,...] toggles every wavebit → 208-cycle transitions → ROM counts ~6 → '1'.
+        // AtomBit0Pattern [0,0,1,1,...] toggles every 2 wavebits → 416-cycle transitions → ROM counts ~13 → '0'.
         if (this.isAtom && this.wavebits.length > 0) {
             acia.receiveBit(this.wavebits.shift());
-            // ~53 cycles at 1 MHz between individual bit transitions.
-            // 16 bits per byte × 53 ≈ 848 cycles per byte character,
-            // with ~3340 cycles between complete bytes (including gaps).
-            return secsToClocks(1.0 / 15.5136 / this.baseFrequency, this.cpuSpeed);
+            return secsToClocks(0.25 / this.baseFrequency, this.cpuSpeed);
         }
 
         if (this.state === -1) {
@@ -181,11 +182,14 @@ class UefTape {
                 if (this.state === 0) {
                     acia.setTapeCarrier(true);
                     acia.tone(2 * this.baseFrequency);
+                    if (this.isAtom) this.wavebits = Array.from(AtomBit1Pattern);
                     this.carrierBefore--;
                     if (this.carrierBefore <= 0) this.state = 1;
                 } else if (this.state < 11) {
                     acia.setTapeCarrier(false);
                     acia.tone(this.dummyData[this.state - 1] ? this.baseFrequency : 2 * this.baseFrequency);
+                    if (this.isAtom)
+                        this.wavebits = Array.from(this.dummyData[this.state - 1] ? AtomBit0Pattern : AtomBit1Pattern);
                     if (this.state === 10) {
                         acia.receive(0xaa);
                     }
@@ -193,9 +197,11 @@ class UefTape {
                 } else {
                     acia.setTapeCarrier(true);
                     acia.tone(2 * this.baseFrequency);
+                    if (this.isAtom) this.wavebits = Array.from(AtomBit1Pattern);
                     this.carrierAfter--;
                     if (this.carrierAfter <= 0) this.state = -1;
                 }
+                if (this.isAtom) return 0;
                 return this.cycles(1);
             case 0x0114:
                 console.log("Ignoring security cycles");
@@ -207,11 +213,16 @@ class UefTape {
                 if (this.state === -1) {
                     this.state = 0;
                     this.count = this.curChunk.stream.readInt16();
+                    // Each Atom carrier cycle expands to 16 wavebits, so
+                    // divide the count to avoid 16x too many cycles.
+                    if (this.isAtom) this.count = (this.count / 16) | 0;
                 }
                 acia.setTapeCarrier(true);
                 acia.tone(2 * this.baseFrequency);
+                if (this.isAtom) this.wavebits = Array.from(AtomBit1Pattern);
                 this.count--;
                 if (this.count <= 0) this.state = -1;
+                if (this.isAtom) return 0;
                 return this.cycles(1);
             case 0x0113:
                 this.baseFrequency = this.curChunk.stream.readFloat32();
