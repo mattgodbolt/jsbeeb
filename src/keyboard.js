@@ -376,6 +376,15 @@ export class Keyboard extends EventTarget {
             return;
         }
 
+        // Atom's PPIA keyboard is polled, not interrupt-driven like the BBC's
+        // SysVIA. Insert a debounce gap after every key release so the ROM
+        // sees the key-up before the next key-down arrives.
+        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey && this.processor.model.isAtom) {
+            this._pasteLastChar = undefined;
+            this._pasteTask.schedule(30 * this._pasteClocksPerMs);
+            return;
+        }
+
         const ch = this._pasteKeys[0];
         const debounce = this._pasteLastChar === ch;
         this._pasteLastChar = ch;

@@ -2,6 +2,7 @@ import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import * as utils from "../../src/utils.js";
+import { ATOM } from "../../src/utils_atom.js";
 
 describe("Keyboard", () => {
     let keyboard;
@@ -602,5 +603,44 @@ describe("Keyboard Atom adapter", () => {
     test("setKeyLayout should call PPIA setKeyLayout", () => {
         keyboard.setKeyLayout("natural");
         expect(mockAtomPPIA.setKeyLayout).toHaveBeenCalledWith("natural");
+    });
+
+    test("paste should insert debounce gap between key release and next key press", () => {
+        const ATOM_A = [3, 3]; // Atom 'A' key position
+        const ATOM_B = [3, 4]; // Atom 'B' key position
+        keyboard.sendRawKeyboard([ATOM_A, ATOM_B], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // First fire: press A
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledWith(ATOM_A);
+
+        // After 50ms: release A, then Atom debounce gap (don't press B yet)
+        mockProcessor.scheduler.polltime(50 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release A only
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A); // toggle off
+
+        // After 30ms debounce: press B
+        mockProcessor.scheduler.polltime(30 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_B);
+    });
+
+    test("paste should not insert debounce gap after SHIFT key", () => {
+        const ATOM_A = [3, 3];
+        // Simulate a shifted character: SHIFT held, then A pressed
+        keyboard.sendRawKeyboard([ATOM.SHIFT, ATOM_A], false);
+        const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
+
+        // First fire: press SHIFT
+        mockProcessor.scheduler.polltime(1);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
+
+        // After 50ms: SHIFT is not released (it's the shift key), and A should
+        // be pressed immediately — no debounce gap for SHIFT.
+        mockProcessor.scheduler.polltime(50 * clocksPerMs);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
     });
 });
