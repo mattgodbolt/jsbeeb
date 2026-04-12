@@ -394,9 +394,9 @@ export class Keyboard extends EventTarget {
             return;
         }
 
-        // Atom ROM polls the keyboard once per VSync (~20ms at 50 Hz).
-        // 50ms is only 2.5 scan cycles; 80ms gives the ROM a comfortable
-        // margin to detect, debounce, and process each keypress.
+        // Atom ROM polls the keyboard once per VSync (~16ms at 60 Hz).
+        // 80ms gives the ROM ~5 scan cycles to detect, debounce, and
+        // process each keypress.
         let delayMs = this.processor.model.isAtom ? 80 : 50;
         if (typeof this._pasteLastChar === "number") {
             delayMs = this._pasteLastChar;

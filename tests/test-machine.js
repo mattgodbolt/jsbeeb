@@ -32,11 +32,11 @@ export class TestMachine {
      * The Atom ROM's main loop waits for VSync (bit 7 of Port C) to
      * toggle before scanning the keyboard.  The MC6847 video chip drives
      * this in the real emulator, but fake6502 doesn't create one, so we
-     * simulate it with a scheduler task at 50 Hz.
+     * simulate it with a scheduler task at ~60 Hz (NTSC).
      */
     _startAtomVSync() {
         const ppia = this.processor.atomppia;
-        const VsyncPeriod = 20000; // 1 MHz / 50 Hz
+        const VsyncPeriod = 16667; // 1 MHz / 60 Hz (NTSC 262-line frame)
         const VsyncPulse = 800;
         let inVsync = false;
         const task = this.processor.scheduler.newTask(() => {

@@ -606,31 +606,27 @@ describe("Keyboard Atom adapter", () => {
     });
 
     test("paste should insert debounce gap between key release and next key press", () => {
-        const ATOM_A = [3, 3]; // Atom 'A' key position
-        const ATOM_B = [3, 4]; // Atom 'B' key position
-        keyboard.sendRawKeyboard([ATOM_A, ATOM_B], false);
+        keyboard.sendRawKeyboard([ATOM.A, ATOM.B], false);
         const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // First fire: press A
         mockProcessor.scheduler.polltime(1);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledWith(ATOM_A);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledWith(ATOM.A);
 
         // After 80ms (Atom uses longer hold): release A, then debounce gap
         mockProcessor.scheduler.polltime(80 * clocksPerMs);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release A only
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A); // toggle off
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A); // toggle off
 
         // After 30ms debounce: press B
         mockProcessor.scheduler.polltime(30 * clocksPerMs);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_B);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.B);
     });
 
     test("paste should not insert debounce gap after SHIFT key", () => {
-        const ATOM_A = [3, 3];
-        // Simulate a shifted character: SHIFT held, then A pressed
-        keyboard.sendRawKeyboard([ATOM.SHIFT, ATOM_A], false);
+        keyboard.sendRawKeyboard([ATOM.SHIFT, ATOM.A], false);
         const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // First fire: press SHIFT
@@ -641,12 +637,11 @@ describe("Keyboard Atom adapter", () => {
         // be pressed immediately — no debounce gap for SHIFT.
         mockProcessor.scheduler.polltime(80 * clocksPerMs);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
     });
 
     test("paste should handle repeated characters with Atom debounce", () => {
-        const ATOM_A = [3, 3];
-        keyboard.sendRawKeyboard([ATOM_A, ATOM_A], false);
+        keyboard.sendRawKeyboard([ATOM.A, ATOM.A], false);
         const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // Press first A
@@ -662,13 +657,11 @@ describe("Keyboard Atom adapter", () => {
         // The Atom debounce cleared _pasteLastChar, so same-key debounce
         // doesn't trigger — second A is pressed directly.
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
     });
 
     test("paste should debounce LOCK key like regular keys", () => {
-        const ATOM_A = [3, 3];
-        // Sequence: LOCK (toggle caps off), A, LOCK (toggle caps on)
-        keyboard.sendRawKeyboard([ATOM.LOCK, ATOM_A, ATOM.LOCK], false);
+        keyboard.sendRawKeyboard([ATOM.LOCK, ATOM.A, ATOM.LOCK], false);
         const clocksPerMs = Math.floor(mockProcessor.cpuMultiplier * mockProcessor.peripheralCyclesPerSecond) / 1000;
 
         // Press LOCK
@@ -683,7 +676,7 @@ describe("Keyboard Atom adapter", () => {
         // After 30ms debounce: press A
         mockProcessor.scheduler.polltime(30 * clocksPerMs);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
+        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
     });
 });
 
