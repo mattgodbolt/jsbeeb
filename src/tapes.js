@@ -12,7 +12,6 @@ function secsToClocks(secs, cpuSpeed) {
 // '0' bit = 4 cycles at 1200 Hz (toggle every 2 wavebits).
 // '1' bit = 8 cycles at 2400 Hz (toggle every 1 wavebit).
 // Carrier = continuous '1' bits.
-// Generated on-the-fly via atomPhase/atomSubCount to avoid allocations.
 
 function parityOf(curByte) {
     let parity = false;
@@ -48,12 +47,10 @@ class UefTape {
         this.carrierBefore = 0;
         this.carrierAfter = 0;
         this.shortWave = 0;
-        // Phase-continuous Atom waveform state — generated on the fly,
-        // no arrays allocated during execution.
-        this.atomPhase = 0; // current output level (0 or 1)
-        this.atomSubCount = 0; // wavebits since last toggle
-        this.atomWavebitsLeft = 0; // remaining wavebits to drain for current bit
-        this.atomToggleEvery = 1; // 1 for '1' bits (2400 Hz), 2 for '0' bits (1200 Hz)
+        this.atomPhase = 0;
+        this.atomSubCount = 0;
+        this.atomWavebitsLeft = 0;
+        this.atomToggleEvery = 1;
 
         this.stream.seek(10);
         const minor = this.stream.readByte();
@@ -75,7 +72,7 @@ class UefTape {
     poll(acia) {
         if (!this.curChunk) return;
 
-        // Atom: drain wavebits one per poll, generated on the fly.
+        // Atom: deliver one wavebit per poll.
         if (this.isAtom && this.atomWavebitsLeft > 0) {
             if (++this.atomSubCount >= this.atomToggleEvery) {
                 this.atomPhase ^= 1;
@@ -253,9 +250,8 @@ class UefTape {
         return this.cycles(1);
     }
 
-    // Queue 16 wavebits for an Atom tape bit. Phase-continuous: atomPhase
-    // and atomSubCount carry across calls to avoid spurious transitions
-    // at bit boundaries that would break carrier detection.
+    // Queue 16 wavebits for an Atom tape bit. atomPhase and atomSubCount
+    // carry across calls so bit boundaries don't break carrier detection.
     queueAtomBit(isOne) {
         this.atomWavebitsLeft = 16;
         this.atomToggleEvery = isOne ? 1 : 2;
