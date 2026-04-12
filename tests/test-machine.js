@@ -3,6 +3,7 @@ import { fake6502 } from "../src/fake6502.js";
 import { findModel } from "../src/models.js";
 import assert from "assert";
 import * as utils from "../src/utils.js";
+import * as utils_atom from "../src/utils_atom.js";
 import * as Tokeniser from "../src/basic-tokenise.js";
 
 const MaxCyclesPerIter = 100 * 1000;
@@ -10,9 +11,16 @@ const MaxCyclesPerIter = 100 * 1000;
 export class TestMachine {
     constructor(model, opts) {
         model = model || "B-DFS1.2";
-        this.processor = fake6502(findModel(model), opts || {});
+        const modelObj = findModel(model);
+        this.model = modelObj;
+        this.processor = fake6502(modelObj, opts || {});
         this._capturedChars = [];
         this._captureHookInstalled = false;
+    }
+
+    /** The keyboard interface for this machine (SysVia for BBC, PPIA for Atom). */
+    get _keyInterface() {
+        return this.model.isAtom ? this.processor.atomppia : this.processor.sysvia;
     }
 
     async initialise() {
@@ -130,6 +138,23 @@ export class TestMachine {
     async runUntilInput(secs) {
         if (!secs) secs = 120;
         console.log("Running until keyboard input requested");
+        if (this.model.isAtom) {
+            // The Atom kernel's keyboard read loop at $FE94 is entered when
+            // BASIC (or the OS) waits for a keypress.  We detect entry to
+            // this routine as the idle point.
+            const atomIdleAddr = 0xfe94;
+            let hit = false;
+            const hook = this.processor.debugInstruction.add((addr) => {
+                if (addr === atomIdleAddr) {
+                    hit = true;
+                    return true;
+                }
+            });
+            await this.runFor(secs * 1 * 1000 * 1000); // Atom is 1 MHz
+            hook.remove();
+            assert(hit, "Atom did not reach keyboard input in time");
+            return this.runFor(10 * 1000);
+        }
         const idleAddr = this.processor.model.isMaster ? 0xe7e6 : 0xe581;
         let hit = false;
         const hook = this.processor.debugInstruction.add((addr) => {
@@ -304,6 +329,9 @@ export class TestMachine {
      * resumes.
      */
     async type(text) {
+        if (this.model.isAtom) {
+            return this._typeAtom(text);
+        }
         const fullText = text + "\n"; // append RETURN
         const keys = fullText.split("").map((ch) => this._charToKey(ch));
         const holdCycles = 40000;
@@ -351,20 +379,92 @@ export class TestMachine {
         }
     }
 
-    /**
-     * Press a key on the BBC keyboard.
-     * @param {number} code - BBC key code (e.g. utils.keyCodes.SPACE)
-     */
-    keyDown(code) {
-        this.processor.sysvia.keyDown(code);
+    /** Type text on the Atom using its key mapping and PPIA interface. */
+    async _typeAtom(text) {
+        // stringToATOMKeys returns a flat array of [col, row] pairs.
+        // SHIFT and LOCK are inserted as toggle entries that stay held
+        // until the next toggle of the same key.
+        const keySequence = utils_atom.stringToATOMKeys(text + "\n");
+        const ppia = this.processor.atomppia;
+        const holdCycles = 80000; // Atom at 1 MHz needs longer hold than BBC at 2 MHz
+        const SHIFT = utils_atom.ATOM.SHIFT;
+        const LOCK = utils_atom.ATOM.LOCK;
+
+        let index = 0;
+        let phase = "idle";
+        let nextEventCycle = 0;
+        let done = false;
+        const toggleState = new Set();
+
+        const currentCycle = () => this.processor.cycleSeconds * 1000000 + this.processor.currentCycles;
+
+        const isToggle = (entry) =>
+            (entry[0] === SHIFT[0] && entry[1] === SHIFT[1]) || (entry[0] === LOCK[0] && entry[1] === LOCK[1]);
+
+        const hook = this.processor.debugInstruction.add(() => {
+            if (currentCycle() < nextEventCycle) return;
+
+            if (phase === "down") {
+                const entry = keySequence[index];
+                if (!isToggle(entry)) {
+                    ppia.keyUpRaw(entry);
+                }
+                index++;
+                phase = "idle";
+                nextEventCycle = currentCycle() + holdCycles;
+                return;
+            }
+
+            if (index >= keySequence.length) {
+                // Release any held toggles
+                for (const key of toggleState) {
+                    const [col, row] = key.split(",").map(Number);
+                    ppia.keyUpRaw([col, row]);
+                }
+                hook.remove();
+                done = true;
+                return;
+            }
+
+            const entry = keySequence[index];
+            if (isToggle(entry)) {
+                const key = `${entry[0]},${entry[1]}`;
+                if (toggleState.has(key)) {
+                    ppia.keyUpRaw(entry);
+                    toggleState.delete(key);
+                } else {
+                    ppia.keyDownRaw(entry);
+                    toggleState.add(key);
+                }
+                index++;
+                nextEventCycle = currentCycle() + holdCycles;
+            } else {
+                ppia.keyDownRaw(entry);
+                phase = "down";
+                nextEventCycle = currentCycle() + holdCycles;
+            }
+        });
+
+        while (!done) {
+            const stopped = await this.runFor(holdCycles);
+            if (stopped) break;
+        }
     }
 
     /**
-     * Release a key on the BBC keyboard.
-     * @param {number} code - BBC key code
+     * Press a key on the keyboard.
+     * @param {number} code - key code (BBC keyCode or Atom raw key)
+     */
+    keyDown(code) {
+        this._keyInterface.keyDown(code);
+    }
+
+    /**
+     * Release a key on the keyboard.
+     * @param {number} code - key code
      */
     keyUp(code) {
-        this.processor.sysvia.keyUp(code);
+        this._keyInterface.keyUp(code);
     }
 
     /**

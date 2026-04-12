@@ -9,7 +9,7 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 import { TestMachine } from "../tests/test-machine.js";
-import { InstrumentedSoundChip } from "./soundchip.js";
+import { InstrumentedSoundChip, FakeSoundChip } from "./soundchip.js";
 
 // Resolve the jsbeeb package root from our own location (src/machine-session.js
 // → go up one level).  Passed to setNodeBasePath() so the ROM loader resolves
@@ -46,16 +46,23 @@ export class MachineSession {
 
         // Create a real Video instance so we get pixel output
         const modelObj = findModel(modelName);
-        this._video = new Video(modelObj.isMaster, this._fb32, (minx, miny, maxx, maxy) => {
-            this._lastPaint = { minx, miny, maxx, maxy };
-            this._frameDirty = true;
-            // Snapshot the complete frame now, before clearPaintBuffer() wipes _fb32.
-            // This mirrors what the browser does: paint_ext fires → canvas updated → fb32 cleared.
-            this._completeFb8.set(this._fb8);
-        });
+        this._video = new Video(
+            modelObj.isMaster,
+            this._fb32,
+            (minx, miny, maxx, maxy) => {
+                this._lastPaint = { minx, miny, maxx, maxy };
+                this._frameDirty = true;
+                // Snapshot the complete frame now, before clearPaintBuffer() wipes _fb32.
+                // This mirrors what the browser does: paint_ext fires → canvas updated → fb32 cleared.
+                this._completeFb8.set(this._fb8);
+            },
+            { isAtom: modelObj.isAtom },
+        );
 
-        // Use a real (instrumented) sound chip so we can read registers and capture writes
-        this._soundChip = new InstrumentedSoundChip();
+        // Use a real (instrumented) sound chip so we can read registers and capture writes.
+        // Atom models use AtomSoundChip which has a different interface (speakerGenerator,
+        // toneGenerator); FakeSoundChip provides compatible no-op stubs for headless mode.
+        this._soundChip = modelObj.isAtom ? new FakeSoundChip() : new InstrumentedSoundChip();
 
         // TestMachine forwards opts.video and opts.soundChip to fake6502
         this._machine = new TestMachine(modelName, { video: this._video, soundChip: this._soundChip });
