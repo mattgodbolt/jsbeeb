@@ -616,8 +616,8 @@ describe("Keyboard Atom adapter", () => {
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledWith(ATOM_A);
 
-        // After 50ms: release A, then Atom debounce gap (don't press B yet)
-        mockProcessor.scheduler.polltime(50 * clocksPerMs);
+        // After 80ms (Atom uses longer hold): release A, then debounce gap
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release A only
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A); // toggle off
 
@@ -637,17 +637,17 @@ describe("Keyboard Atom adapter", () => {
         mockProcessor.scheduler.polltime(1);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
 
-        // After 50ms: SHIFT is not released (it's the shift key), and A should
+        // After 80ms: SHIFT is not released (it's the shift key), and A should
         // be pressed immediately — no debounce gap for SHIFT.
-        mockProcessor.scheduler.polltime(50 * clocksPerMs);
+        mockProcessor.scheduler.polltime(80 * clocksPerMs);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
     });
 });
 
 describe("stringToATOMKeys", () => {
-    test("should insert LOCK toggles for case transitions", () => {
-        // "Hello" = H (caps on), LOCK off, e, l, l, o, LOCK on
+    test("should insert LOCK toggles only for case transitions", () => {
+        // "Hello" = H (caps on), LOCK off, e, l, l, o, LOCK on (restore)
         const keys = stringToATOMKeys("Hello");
         expect(keys).toEqual([ATOM.H, ATOM.LOCK, ATOM.E, ATOM.L, ATOM.L, ATOM.O, ATOM.LOCK]);
     });
@@ -657,19 +657,16 @@ describe("stringToATOMKeys", () => {
         expect(keys).toEqual([ATOM.A, ATOM.B, ATOM.C]);
     });
 
-    test("should handle shifted characters with SHIFT toggles", () => {
+    test("should not toggle LOCK for non-letter characters", () => {
+        // Space and digits should not force LOCK back on between lowercase runs
+        const keys = stringToATOMKeys("a b");
+        expect(keys).toEqual([ATOM.LOCK, ATOM.A, ATOM.SPACE, ATOM.B, ATOM.LOCK]);
+    });
+
+    test("should handle shifted characters without extra LOCK toggles", () => {
+        // ' is SHIFT+7. Apostrophe doesn't care about caps lock state,
+        // so no LOCK toggle between the lowercase letters and the punctuation.
         const keys = stringToATOMKeys("a'b");
-        // ' is SHIFT+7 on the Atom. LOCK toggles surround the lowercase text.
-        expect(keys).toEqual([
-            ATOM.LOCK,
-            ATOM.A,
-            ATOM.SHIFT,
-            ATOM.LOCK,
-            ATOM.K7,
-            ATOM.SHIFT,
-            ATOM.LOCK,
-            ATOM.B,
-            ATOM.LOCK,
-        ]);
+        expect(keys).toEqual([ATOM.LOCK, ATOM.A, ATOM.SHIFT, ATOM.K7, ATOM.SHIFT, ATOM.B, ATOM.LOCK]);
     });
 });

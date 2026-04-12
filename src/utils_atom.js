@@ -121,10 +121,13 @@ export function stringToATOMKeys(str) {
         let charStr = str.charAt(i);
         let atomKey = null;
         let needsShift = false;
-        let needsCapsLock = true;
+        // Only letters care about caps lock state; non-letter characters
+        // leave it wherever it is to avoid unnecessary LOCK toggles.
+        let needsCapsLock = capsLockState;
         if (c >= 65 && c <= 90) {
             // A-Z
             atomKey = ATOM[charStr];
+            needsCapsLock = true;
         } else if (c >= 97 && c <= 122) {
             // a-z (LOCK toggles the ROM's internal caps lock state)
             charStr = String.fromCharCode(c - 32);
