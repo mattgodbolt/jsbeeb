@@ -46,6 +46,7 @@ export class MachineSession {
 
         // Create a real Video instance so we get pixel output
         const modelObj = findModel(modelName);
+        this._isAtom = modelObj.isAtom;
         this._video = new Video(
             modelObj.isMaster,
             this._fb32,
@@ -69,6 +70,7 @@ export class MachineSession {
 
         // Accumulated VDU text output — drained by callers
         this._pendingOutput = [];
+        this._flushCapture = () => {};
 
         // Breakpoint management — persistent hooks that survive across run calls
         this._breakpoints = new Map(); // id → { hook, type, address, hit }
@@ -97,8 +99,9 @@ export class MachineSession {
     /**
      * Install the VDU character-output capture hook.
      *
-     * WRCHV discovery: RAM at 0x20E/0x20F initialises to 0xFFFF before the
-     * OS runs.  We read directly from cpu.ramRomOs (two array lookups — no
+     * WRCHV discovery: RAM at the OS write-character vector (0x20E on BBC,
+     * 0x208 on Atom) initialises to 0x0000 before the OS runs.  We read
+     * directly from cpu.ramRomOs (two array lookups — no
      * readmem() dispatch overhead) on every instruction, waiting for the
      * value to change from its initial 0xFFFF.  Once the OS installs a real
      * handler we use that address for the lifetime of the session.  Programs
@@ -112,7 +115,9 @@ export class MachineSession {
     _installCaptureHook() {
         const cpu = this._machine.processor;
         const ram = cpu.ramRomOs; // direct Uint8Array — no dispatch overhead
-        const initialWrchv = ram[0x20e] | (ram[0x20f] << 8); // 0xFFFF pre-boot
+        // WRCHV vector: BBC at $020E, Atom at $0208.
+        const wrchvAddr = this._isAtom ? 0x208 : 0x20e;
+        const initialWrchv = ram[wrchvAddr] | (ram[wrchvAddr + 1] << 8); // 0xFFFF pre-boot
 
         const attributes = { x: 0, y: 0, text: "", foreground: 7, background: 0, mode: 7 };
         let currentText = "";
@@ -131,6 +136,12 @@ export class MachineSession {
             currentText = "";
         }
 
+        // Expose flush so drainOutput can capture trailing text
+        // that hasn't been terminated by a control character.
+        this._flushCapture = flush;
+
+        const isAtom = this._isAtom;
+
         function onChar(c) {
             if (nextN) {
                 params.push(c);
@@ -142,9 +153,6 @@ export class MachineSession {
                 return;
             }
             switch (c) {
-                case 1: // next char to printer only
-                    nextN = 1;
-                    break;
                 case 10: // LF
                     flush();
                     attributes.y++;
@@ -158,48 +166,58 @@ export class MachineSession {
                     flush();
                     attributes.x = 0;
                     break;
-                case 17: // COLOUR n
-                    nextN = 1;
-                    vduProc = (p) => {
-                        if (p[0] & 0x80) attributes.background = p[0] & 0xf;
-                        else attributes.foreground = p[0] & 0xf;
-                    };
-                    break;
-                case 18: // GCOL
-                    nextN = 2;
-                    break;
-                case 19: // define logical colour
-                    nextN = 5;
-                    break;
-                case 22: // MODE n
-                    nextN = 1;
-                    vduProc = (p) => {
-                        flush();
-                        attributes.mode = p[0];
-                        attributes.x = 0;
-                        attributes.y = 0;
-                        attributes.foreground = 7;
-                        attributes.background = 0;
-                    };
-                    break;
-                case 25: // PLOT
-                    nextN = 5;
-                    break;
-                case 28: // define text window
-                    nextN = 4;
-                    break;
-                case 29: // define graphics origin
-                    nextN = 4;
-                    break;
-                case 31: // TAB(x,y)
-                    nextN = 2;
-                    vduProc = (p) => {
-                        flush();
-                        attributes.x = p[0];
-                        attributes.y = p[1];
-                    };
-                    break;
                 default:
+                    // BBC VDU control codes (multi-byte sequences).
+                    // The Atom doesn't use these; skip them to avoid
+                    // swallowing printable characters.
+                    if (!isAtom) {
+                        switch (c) {
+                            case 1: // next char to printer only
+                                nextN = 1;
+                                return;
+                            case 17: // COLOUR n
+                                nextN = 1;
+                                vduProc = (p) => {
+                                    if (p[0] & 0x80) attributes.background = p[0] & 0xf;
+                                    else attributes.foreground = p[0] & 0xf;
+                                };
+                                return;
+                            case 18: // GCOL
+                                nextN = 2;
+                                return;
+                            case 19: // define logical colour
+                                nextN = 5;
+                                return;
+                            case 22: // MODE n
+                                nextN = 1;
+                                vduProc = (p) => {
+                                    flush();
+                                    attributes.mode = p[0];
+                                    attributes.x = 0;
+                                    attributes.y = 0;
+                                    attributes.foreground = 7;
+                                    attributes.background = 0;
+                                };
+                                return;
+                            case 25: // PLOT
+                                nextN = 5;
+                                return;
+                            case 28: // define text window
+                                nextN = 4;
+                                return;
+                            case 29: // define graphics origin
+                                nextN = 4;
+                                return;
+                            case 31: // TAB(x,y)
+                                nextN = 2;
+                                vduProc = (p) => {
+                                    flush();
+                                    attributes.x = p[0];
+                                    attributes.y = p[1];
+                                };
+                                return;
+                        }
+                    }
                     if (c >= 32 && c < 0x7f) {
                         currentText += String.fromCharCode(c);
                     } else {
@@ -214,7 +232,7 @@ export class MachineSession {
             // Once the OS sets WRCHV (it changes from 0xFFFF), we start
             // capturing.  Programs that install a custom VDU driver mid-run
             // are handled transparently because we re-read on every call.
-            const wrchv = ram[0x20e] | (ram[0x20f] << 8);
+            const wrchv = ram[wrchvAddr] | (ram[wrchvAddr + 1] << 8);
             if (wrchv !== initialWrchv && addr === wrchv) {
                 onChar(cpu.a);
             }
@@ -398,6 +416,7 @@ export class MachineSession {
      * Also includes a flat `screenText` reconstruction.
      */
     drainOutput({ clear = true } = {}) {
+        this._flushCapture();
         const elements = clear ? this._pendingOutput.splice(0) : [...this._pendingOutput];
         return {
             elements,

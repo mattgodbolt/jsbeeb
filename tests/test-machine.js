@@ -447,7 +447,14 @@ export class TestMachine {
 
         while (!done) {
             const stopped = await this.runFor(holdCycles);
-            if (stopped) break;
+            if (stopped) {
+                hook.remove();
+                for (const key of toggleState) {
+                    const [col, row] = key.split(",").map(Number);
+                    ppia.keyUpRaw([col, row]);
+                }
+                break;
+            }
         }
     }
 
