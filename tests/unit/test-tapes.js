@@ -137,6 +137,60 @@ describe("tapes", () => {
         });
     });
 
+    describe("Atom wavebit phase continuity", () => {
+        // Helper: create an Atom UEF with a carrier tone followed by a data byte.
+        // This exercises the '1'->'0' boundary (carrier -> start bit) and all
+        // data bit boundaries within the byte.
+        function makeAtomUef(dataByte) {
+            return makeUef([
+                { id: 0x0110, data: [0x01, 0x00] }, // carrier tone, count=1
+                { id: 0x0100, data: [dataByte] }, // implicit data
+            ]);
+        }
+
+        // Poll an Atom tape, collecting all wavebits delivered via receiveBit.
+        function collectWavebits(tape, maxPolls = 5000) {
+            const bits = [];
+            const acia = {
+                setTapeCarrier: () => {},
+                tone: () => {},
+                receive: () => {},
+                receiveBit: (b) => bits.push(b),
+            };
+            for (let i = 0; i < maxPolls; i++) {
+                const delay = tape.poll(acia);
+                if (delay === undefined) break;
+            }
+            return bits;
+        }
+
+        it("should not transition at a '1'-to-'0' bit boundary", async () => {
+            // The original fixed patterns always had a transition at the
+            // '1'->'0' boundary (carrier ending 1, start bit beginning 0).
+            // This created a spurious fast half-period that prevented the
+            // ROM's carrier detection from seeing 8 consecutive slow periods.
+            // With phase-continuous generation, the last wavebit of a '1' bit
+            // must equal the first wavebit of the following '0' bit.
+            const uef = makeAtomUef(0x00);
+            const tape = await loadTapeFromData("test.uef", uef, true);
+            const bits = collectWavebits(tape);
+
+            // Carrier is 16 wavebits. The 16th is the last carrier wavebit,
+            // the 17th is the first start-bit wavebit. They must match.
+            expect(bits.length).toBeGreaterThan(17);
+            expect(bits[15]).toBe(bits[16]);
+        });
+
+        it("should produce the same waveform from two identical tapes", async () => {
+            const uef1 = makeAtomUef(0x55);
+            const uef2 = makeAtomUef(0x55);
+            const tape1 = await loadTapeFromData("test.uef", uef1, true);
+            const tape2 = await loadTapeFromData("test.uef", uef2, true);
+
+            expect(collectWavebits(tape1)).toEqual(collectWavebits(tape2));
+        });
+    });
+
     describe("TapefileTape", () => {
         it("should start with carrier from header", async () => {
             // Format detection uses readByte(0/1) without advancing the stream,
