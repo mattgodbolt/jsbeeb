@@ -524,5 +524,7 @@ export class FakeSoundChip {
         return {};
     }
 
-    restoreState() {}
+    restoreState() {
+        this._speakerCycleOffset = 0;
+    }
 }
