@@ -2,7 +2,7 @@ import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import * as utils from "../../src/utils.js";
-import { ATOM } from "../../src/utils_atom.js";
+import { ATOM, stringToATOMKeys } from "../../src/utils_atom.js";
 
 describe("Keyboard", () => {
     let keyboard;
@@ -642,5 +642,29 @@ describe("Keyboard Atom adapter", () => {
         mockProcessor.scheduler.polltime(50 * clocksPerMs);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
         expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM_A);
+    });
+});
+
+describe("stringToATOMKeys", () => {
+    test("should not produce LOCK key entries", () => {
+        const keys = stringToATOMKeys("Hello World");
+        const hasLock = keys.some((k) => k[0] === ATOM.LOCK[0] && k[1] === ATOM.LOCK[1]);
+        expect(hasLock).toBe(false);
+    });
+
+    test("should convert lowercase to uppercase", () => {
+        const keys = stringToATOMKeys("abc");
+        expect(keys).toEqual([ATOM.A, ATOM.B, ATOM.C]);
+    });
+
+    test("should produce identical keys for mixed case", () => {
+        expect(stringToATOMKeys("Ab")).toEqual([ATOM.A, ATOM.B]);
+        expect(stringToATOMKeys("hELLO")).toEqual(stringToATOMKeys("Hello"));
+    });
+
+    test("should handle shifted characters with SHIFT toggles", () => {
+        const keys = stringToATOMKeys("a'b");
+        // ' is SHIFT+7 on the Atom
+        expect(keys).toEqual([ATOM.A, ATOM.SHIFT, ATOM.K7, ATOM.SHIFT, ATOM.B]);
     });
 });
