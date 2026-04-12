@@ -1644,7 +1644,15 @@ function showTapeControl(visible) {
     tapeControlCell.style.display = display;
 }
 
-showTapeControl(model.isAtom);
+function updateLedVisibility() {
+    const bbcDisplay = model.isAtom ? "none" : "";
+    for (const el of document.querySelectorAll(".bbc-only")) {
+        el.style.display = bbcDisplay;
+    }
+    showTapeControl(model.isAtom);
+}
+
+updateLedVisibility();
 
 tapePlayStopBtn.addEventListener("click", () => {
     if (processor.atomppia.motorOn) {
