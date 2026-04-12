@@ -52,6 +52,16 @@ describe("AtomPPIA", () => {
             const val = ppia.read(0xb003);
             expect(val).toBe(0xb003 >>> 8);
         });
+
+        it("should ignore addresses 0xB008-0xB00F", () => {
+            const { ppia } = makePPIA();
+            // Addresses 8+ are outside the 8255's decode range.
+            // Writes should be ignored, reads should return open bus.
+            ppia.write(0xb000, 0x35);
+            ppia.write(0xb008, 0xff); // should be ignored
+            expect(ppia.read(0xb000)).toBe(0x35); // unchanged
+            expect(ppia.read(0xb008)).toBe(0xb008 >>> 8); // open bus
+        });
     });
 
     describe("CREG Bit Set/Reset", () => {

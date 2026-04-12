@@ -32,9 +32,10 @@ describe("Atom hardware", { timeout: 30000 }, () => {
         it("should return to text mode after graphics", async () => {
             await bootAtom();
             await typeAndCapture("CLEAR 4");
-            // CLEAR 0 returns to text mode
+            // CLEAR 0 returns to text mode. Use a computed value (6*7=42)
+            // so the result can't come from input echo alone.
             await typeAndCapture("CLEAR 0");
-            const output = await typeAndCapture("PRINT 42");
+            const output = await typeAndCapture("PRINT 6*7");
             expect(output).toContain("42");
         });
     });
@@ -42,7 +43,8 @@ describe("Atom hardware", { timeout: 30000 }, () => {
     describe("memory layout", () => {
         it("should have video RAM accessible at 0x8000", async () => {
             await bootAtom();
-            // Write to video RAM and read back
+            // Write 66 to video RAM, read back. The result "66" can't come
+            // from the PRINT command echo since it only contains "?#8000".
             await typeAndCapture("?#8000=66");
             const output = await typeAndCapture("PRINT ?#8000");
             expect(output).toContain("66");
@@ -50,20 +52,20 @@ describe("Atom hardware", { timeout: 30000 }, () => {
 
         it("should have PPIA registers at 0xB000", async () => {
             await bootAtom();
-            // Port A is accessible and writable. Read back happens in
-            // the same command to avoid keyboard scanning changing it.
             const output = await typeAndCapture("PRINT ?#B000");
-            // Just verify we get a numeric value without error.
             expect(output).not.toContain("ERROR");
         });
 
         it("should mirror PPIA port C at 0xB006", async () => {
             await bootAtom();
             // The 8255 only decodes A0-A1, so 0xB006 mirrors 0xB002.
-            // Port C output bits (0-3) are stable between reads unlike Port A
-            // which changes during keyboard scanning.
-            const output = await typeAndCapture("PRINT ?#B006 AND 15");
-            expect(output).toContain("0"); // output bits default to 0
+            // Verify via computed comparison: if mirroring works, the
+            // two reads return the same value (result=1, BASIC true).
+            // If broken, 0xB006 returns open bus (0xB0) ≠ port C value.
+            await typeAndCapture("A=?#B006");
+            await typeAndCapture("B=?#B002");
+            const output = await typeAndCapture("PRINT A=B");
+            expect(output).toContain("1");
         });
     });
 
