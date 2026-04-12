@@ -235,6 +235,7 @@ export class AtomPPIA extends PPIA {
         this.shiftLockLight = false;
         this.tapeCarrierCount = 0;
         this.tapeDcdLineLevel = false;
+        this.motorOn = false;
 
         this.reset();
 
@@ -417,14 +418,15 @@ export class AtomPPIA extends PPIA {
 
     playTape() {
         if (this.tape) {
-            //start
+            this.motorOn = true;
             this.runTape();
         }
     }
 
     stopTape() {
+        this.motorOn = false;
         if (this.tape) {
-            let toneGen = this.cpu.soundChip.toneGenerator;
+            const toneGen = this.cpu.soundChip.toneGenerator;
             toneGen.mute();
             this.runTapeTask.cancel();
             this.setTapeCarrier(false);
