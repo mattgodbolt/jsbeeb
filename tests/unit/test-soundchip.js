@@ -198,6 +198,42 @@ describe("AtomSoundChip", () => {
         expect(chip.speakerGenerator).toBeUndefined();
     });
 
+    it("should place transitions correctly when advance() splits into chunks", () => {
+        // The buffer is 512 samples. Advancing 1200 cycles at 0.5 spc =
+        // 600 samples, which splits into chunk 1 (512 samples) and chunk 2
+        // (88 samples). A bit change at cycle 1100 falls in the second
+        // chunk (sample 550 = cycle 1100 * 0.5). If speakerChannel uses
+        // epoch - length for each chunk independently, it miscomputes the
+        // time window and places the transition in the wrong chunk.
+        const { chip, scheduler } = makeAtomSoundChip();
+        chip.speakerReset();
+        chip.enabled = true;
+
+        // Set lastRunEpoch = 0 (start of window), then advance to cycle 1200
+        chip.lastRunEpoch = 0;
+        scheduler.epoch = 1200;
+        chip.bitChange.push({ bit: 1.0, cycles: 1100 });
+
+        // Capture the buffer output callback
+        const buffers = [];
+        chip._onBuffer = (buf) => buffers.push(new Float32Array(buf));
+
+        chip.advance(1200);
+
+        // The bit change at cycle 1100 → sample 550 (in the second chunk).
+        // First buffer (512 samples) should be silent (all zero before DC filter).
+        // If the bug is present, the transition lands in the first chunk instead.
+        const firstBuf = buffers[0];
+        expect(firstBuf).toBeDefined();
+        expect(firstBuf[511]).toBeCloseTo(0.0, 2); // last sample of first chunk: silent
+
+        // Second chunk is in chip.buffer[0..87]. Check the transition is there.
+        // Cycle 1100 → sample 550. Chunk 2 starts at sample 512, so the
+        // transition is at local index 550 - 512 = 38.
+        expect(chip.buffer[37]).toBeCloseTo(0.0, 2); // before transition
+        expect(chip.buffer[38]).toBeGreaterThan(0); // transition happened
+    });
+
     it("speakerChannel should place transitions at the correct sample index", () => {
         // The speaker bug: speakerChannel subtracted sample count from cycle
         // epoch, mixing units. With samplesPerCycle=0.5, a bit change at CPU
