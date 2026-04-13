@@ -374,6 +374,7 @@ export class AtomSoundChip extends SoundChip {
     catchUp() {
         this._speakerCycleOffset = 0;
         super.catchUp();
+        this._speakerCycleOffset = 0;
     }
 
     speakerReset() {
