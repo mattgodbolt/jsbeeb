@@ -19,12 +19,22 @@ describe("Atom hardware", { timeout: 30000 }, () => {
     }
 
     describe("video modes", () => {
-        it("should switch to each graphics mode without crashing", async () => {
+        it("should switch to each 2-colour graphics mode without crashing", async () => {
             await bootAtom();
-            // Each mode is set via the top nibble of Port A (0xB000).
-            // CLEAR N sets the mode via BASIC.
+            // CLEAR N covers 2-colour modes: CLEAR 1 → 0x30, CLEAR 2 → 0x70,
+            // CLEAR 3 → 0xB0, CLEAR 4 → 0xF0.
             for (const cmd of ["CLEAR 1", "CLEAR 2", "CLEAR 3", "CLEAR 4"]) {
                 const output = await typeAndCapture(cmd);
+                expect(output).not.toContain("ERROR");
+            }
+        });
+
+        it("should switch to each 4-colour graphics mode via POKE", async () => {
+            await bootAtom();
+            // 4-colour modes (0x10, 0x50, 0x90, 0xD0) aren't reachable via
+            // CLEAR and must be set by writing to Port A directly.
+            for (const mode of ["#10", "#50", "#90", "#D0"]) {
+                const output = await typeAndCapture(`?#B000=${mode}`);
                 expect(output).not.toContain("ERROR");
             }
         });
