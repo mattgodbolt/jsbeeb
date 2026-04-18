@@ -44,6 +44,7 @@ import {
     processAutobootParams,
     processKeyboardParams,
 } from "./url-params.js";
+import { buildSsd, processHostFiles, discTitleFromFiles } from "./vdfs.js";
 
 let processor;
 let video;
@@ -484,6 +485,28 @@ async function loadHTMLFile(file) {
     const loadedDisc = disc.discFor(processor.fdc, file.name, imageData);
     // Local file: retain the image bytes for embedding in save-to-file snapshots.
     loadedDisc.setOriginalImage(imageData);
+    processor.fdc.loadDisc(0, loadedDisc);
+    delete parsedQuery.disc;
+    delete parsedQuery.disc1;
+    updateUrl();
+    $discsModal.hide();
+}
+
+/**
+ * Build a virtual DFS SSD from a list of host File objects (e.g. from a
+ * <input webkitdirectory> or Electron IPC) and mount it as drive 0.
+ *
+ * @param {File[]} files - Host files to pack onto the disc
+ */
+async function loadFolderAsDisc(files) {
+    const bbcFiles = await processHostFiles(files);
+    if (bbcFiles.length === 0) {
+        showError("No usable BBC files found in the selected folder.");
+        return;
+    }
+    const title = discTitleFromFiles(files);
+    const ssdData = buildSsd(bbcFiles, title || "FILES");
+    const loadedDisc = disc.discFor(processor.fdc, "virtual.ssd", ssdData);
     processor.fdc.loadDisc(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
@@ -1250,6 +1273,14 @@ document.getElementById("disc_load").addEventListener("change", async function (
     const file = evt.target.files[0];
     await loadHTMLFile(file);
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
+});
+
+document.getElementById("disc_folder").addEventListener("change", async function (evt) {
+    const files = Array.from(evt.target.files);
+    if (files.length === 0) return;
+    utils.noteEvent("local", "folder");
+    await loadFolderAsDisc(files);
+    evt.target.value = "";
 });
 
 document.getElementById("fs_load").addEventListener("change", async function (evt) {
@@ -2178,6 +2209,7 @@ window.m7dump = function () {
 electron({
     loadDiscImage,
     loadTapeImage,
+    loadFolderAsDisc,
     processor,
     config,
     modals: {

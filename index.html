@@ -584,6 +584,16 @@
                 <input type="file" id="disc_load" accept=".ssd,.dsd,.adf,.adm,.adl,.hfe,application/binary" />
               </label>
             </div>
+            <div class="disc">
+              <label
+                >Load a folder of BBC files as a virtual disc:
+                <input type="file" id="disc_folder" webkitdirectory multiple />
+              </label>
+              <small class="text-muted d-block mt-1"
+                >Select a folder containing BBC Micro files. Optional <code>.inf</code> sidecar files are used for
+                load/exec addresses. Files beyond the DFS limit of 31 are ignored.</small
+              >
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
