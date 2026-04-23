@@ -267,7 +267,7 @@ Cheers to [Ed Spittles](https://github.com/BigEd) for testing various interrupt 
 
 Thanks to Chris Jordan for his thorough testing, bug reports, ideas and help.
 
-Huge thanks to [Andrew Sheridan](https://github.com/CommanderCoder) (CommanderCoder) for the Acorn Atom emulation
+Huge thanks to [Andrew Hague](https://github.com/CommanderCoder) (CommanderCoder) for the Acorn Atom emulation
 support. Andrew developed the original Atom implementation including the MC6847 video chip, 8255 PPIA, AtoMMC2 SD card
 interface, Atom keyboard mapping, tape support, and speaker output. His work in [PR #505](https://github.com/mattgodbolt/jsbeeb/pull/505)
 was incrementally merged and refined into the codebase.
