@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.13.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.12.0...v1.13.0) (2026-04-23)
+
+
+### Features
+
+* add Acorn Atom model definitions and ROM assets ([#635](https://github.com/mattgodbolt/jsbeeb/issues/635)) ([388ca1a](https://github.com/mattgodbolt/jsbeeb/commit/388ca1aead8a54312424332919092578dd52940b))
+* add Atom 1-bit speaker channel to SoundChip ([#647](https://github.com/mattgodbolt/jsbeeb/issues/647)) ([0bd8f11](https://github.com/mattgodbolt/jsbeeb/commit/0bd8f1153a568699d5078aa1605fd704a1958cb0))
+* add Atom hostname detection and MMC URL parameter ([#650](https://github.com/mattgodbolt/jsbeeb/issues/650)) ([4c6be7a](https://github.com/mattgodbolt/jsbeeb/commit/4c6be7a80526bbf67866a36d8220e4717b6a7033))
+* add Atom keyboard mapping utilities ([#637](https://github.com/mattgodbolt/jsbeeb/issues/637)) ([a49afde](https://github.com/mattgodbolt/jsbeeb/commit/a49afdeabf334bc2afaceeff189ba601012131ad))
+* add Atom MMC/SD card interface ([#644](https://github.com/mattgodbolt/jsbeeb/issues/644)) ([6ec0361](https://github.com/mattgodbolt/jsbeeb/commit/6ec036126031e105a04b565bdee296493b23c0f4))
+* add Atom PPIA (8255 Peripheral Interface Adapter) ([#648](https://github.com/mattgodbolt/jsbeeb/issues/648)) ([1584bd3](https://github.com/mattgodbolt/jsbeeb/commit/1584bd3508dd7662e44c7ed08ed6d2990bb2e92c))
+* add Atom snapshot/restore support ([#653](https://github.com/mattgodbolt/jsbeeb/issues/653)) ([0708415](https://github.com/mattgodbolt/jsbeeb/commit/07084157fb1356f20ee9ccd14c8699172b927365))
+* add Atom support to MachineSession and emulator skill ([#677](https://github.com/mattgodbolt/jsbeeb/issues/677)) ([0c1de51](https://github.com/mattgodbolt/jsbeeb/commit/0c1de51b9e1ae232ef7669f50436b53968a82b74))
+* add AtomCpu6502 subclass for Atom memory map and devices ([#652](https://github.com/mattgodbolt/jsbeeb/issues/652)) ([a0bd4bc](https://github.com/mattgodbolt/jsbeeb/commit/a0bd4bcd0ada3614de40b56aea4b660729cc9e05))
+* add cassette play/stop control for Atom tape models ([#675](https://github.com/mattgodbolt/jsbeeb/issues/675)) ([efe0bdd](https://github.com/mattgodbolt/jsbeeb/commit/efe0bdddc8e4b2541d5cf6e80bacd389a17907de))
+* add keyboard adapter pattern for BBC/Atom routing ([#651](https://github.com/mattgodbolt/jsbeeb/issues/651)) ([3857d9e](https://github.com/mattgodbolt/jsbeeb/commit/3857d9e54de0d461f857a740b25ba81dfeb2d1f8))
+* add MC6847 video chip emulation for Acorn Atom ([#636](https://github.com/mattgodbolt/jsbeeb/issues/636)) ([a9b71b3](https://github.com/mattgodbolt/jsbeeb/commit/a9b71b36c05361fd6ee1fb2b8e0f35793ad1d957))
+* extend tape handling for Acorn Atom format ([#649](https://github.com/mattgodbolt/jsbeeb/issues/649)) ([91cd39e](https://github.com/mattgodbolt/jsbeeb/commit/91cd39e12d5eb1cb41d55ae864076d2a97b8b5c5))
+* remove VITE_ATOM_ENABLED gate ([#662](https://github.com/mattgodbolt/jsbeeb/issues/662)) ([21eada6](https://github.com/mattgodbolt/jsbeeb/commit/21eada6fcf885218fefcfacae8238e9e56631851))
+* wire Atom support into main.js ([#660](https://github.com/mattgodbolt/jsbeeb/issues/660)) ([df1381c](https://github.com/mattgodbolt/jsbeeb/commit/df1381c963dd7adcd203b227b0dd5da90d0218ac))
+
+
+### Bug Fixes
+
+* add DC-blocking filter to Atom speaker output ([#666](https://github.com/mattgodbolt/jsbeeb/issues/666)) ([8efe781](https://github.com/mattgodbolt/jsbeeb/commit/8efe78151c608f070709164513265ac0a101e231))
+* add debounce gap between paste key releases on Atom ([#679](https://github.com/mattgodbolt/jsbeeb/issues/679)) ([dae097a](https://github.com/mattgodbolt/jsbeeb/commit/dae097a3e9a88a2d16da7499cc6fb9480849df46))
+* Atom tests, PPIA mirroring, and speaker timing ([#680](https://github.com/mattgodbolt/jsbeeb/issues/680)) ([3276adf](https://github.com/mattgodbolt/jsbeeb/commit/3276adf1f34db2fe2c4efc42da88c82fd0be1058))
+* correct paste timing and SHIFT key for Atom ([#663](https://github.com/mattgodbolt/jsbeeb/issues/663)) ([bcb1a10](https://github.com/mattgodbolt/jsbeeb/commit/bcb1a10128e7f56bbb0ac60c7ae524d3181701fa))
+* speakerChannel epoch wrong when advance() splits into chunks ([#682](https://github.com/mattgodbolt/jsbeeb/issues/682)) ([a004d99](https://github.com/mattgodbolt/jsbeeb/commit/a004d99d6a2dcd3989285e2869f6aa034a08ea3f))
+* use phase-continuous wavebits for Atom tape loading ([#678](https://github.com/mattgodbolt/jsbeeb/issues/678)) ([d27b642](https://github.com/mattgodbolt/jsbeeb/commit/d27b6428f7c5e06a983bd1d5119c68fed7524e0e))
+
 ## [1.12.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.11.0...v1.12.0) (2026-04-04)
 
 
