@@ -1,29 +1,43 @@
 # Mirroring the Stairway to Hell archive
 
-`tools/mirror-sth.js` scrapes the public BBC Micro software archive at
-`https://www.stairwaytohell.com/bbc/` into a local directory tree that is
-sync'd into `s3://bbc.xania.org/archive/sth/` by
+`tools/mirror-sth.js` scrapes the public BBC Micro, Acorn Electron, and
+sideways-ROM areas of `https://www.stairwaytohell.com/` into a local
+directory tree that is sync'd into `s3://bbc.xania.org/archive/sth/` by
 `.github/workflows/mirror-sth.yml`.
 
 The mirror exists so jsbeeb's `sth:` URLs and the in-app archive browser
 keep working if the upstream site disappears. STH has been effectively
-frozen since around 2008 (see `meta/disklog.txt` and `meta/tapelog.txt` in
-the mirror), so this is a one-shot snapshot rather than a continuous sync.
+frozen since around 2008 (see `meta/bbc-disklog.txt` and
+`meta/bbc-tapelog.txt` in the mirror), so this is a one-shot snapshot
+rather than a continuous sync.
 
 ## What is mirrored
 
-| Category                | Source on STH                                              | Notes                          |
-| ----------------------- | ---------------------------------------------------------- | ------------------------------ |
-| `diskimages/`           | `bbc/archive/diskimages/reclist.php?sort=name&filter=.zip` | ~1,600 zips, ~26 MB            |
-| `tapeimages/`           | `bbc/archive/tapeimages/reclist.php?sort=name&filter=.zip` | ~1,500 zips, ~24 MB            |
-| `sthcollection/`        | `bbc/sthcollection.html`                                   | ~140 zips, magazine disk packs |
-| `other/educational/`    | `bbc/other/educational/reclist.php?...`                    | ~75 zips                       |
-| `meta/disklog.txt` etc. | `bbc/disklog.txt`, `bbc/tapelog.txt`                       | upstream changelogs            |
-| `meta/*.html`           | `bbc/homepage.html`, `bbc/diskimages.html`, etc.           | site index pages, provenance   |
+S3 paths mirror STH's upstream layout — `archive/sth/<id>/...` matches
+the natural URL structure on `stairwaytohell.com`.
 
-BBC sideways ROMs are not mirrored — STH does not host them (the linked
-`bbc/../roms/*.zip` URLs already 404). jsbeeb ships its own ROMs in
-`public/roms/`.
+| Category                 | Source on STH                                              | Notes                                 |
+| ------------------------ | ---------------------------------------------------------- | ------------------------------------- |
+| `diskimages/`            | `bbc/archive/diskimages/reclist.php?sort=name&filter=.zip` | ~1,600 zips, ~26 MB                   |
+| `tapeimages/`            | `bbc/archive/tapeimages/reclist.php?sort=name&filter=.zip` | ~1,500 zips, ~24 MB                   |
+| `sthcollection/`         | `bbc/sthcollection.html`                                   | ~140 zips, magazine disk packs        |
+| `other/educational/`     | `bbc/other/educational/reclist.php?...`                    | ~75 zips                              |
+| `roms/`                  | `roms/homepage.html`                                       | ~50 BBC + Electron sideways ROMs      |
+| `electron/uefarchive/`   | `electron/uefarchive/reclist.php?...`                      | ~890 Electron tape image zips, ~15 MB |
+| `electron/dfs/`          | `electron/dfs/homepage.html`                               | ~230 Electron DFS disk images         |
+| `electron/adfs/`         | `electron/adfs/homepage.html`                              | ~23 Electron ADFS disk images         |
+| `electron/multiplexing/` | `electron/multiplexing/homepage.html`                      | curiosity, 1 file                     |
+| `electron/t2p3/`         | `electron/t2p3/homepage.html`                              | curiosity, 4 files                    |
+| `meta/bbc-disklog.txt`   | `bbc/disklog.txt`, `bbc/tapelog.txt`                       | upstream changelogs                   |
+| `meta/*.html`            | `bbc/homepage.html`, `roms/homepage.html`, etc.            | site index pages, provenance          |
+
+Total ~4,500 zips, ~80 MB across 10 categories.
+
+The Electron categories are mirrored even though jsbeeb does not currently
+emulate the Electron — the goal is a complete archival snapshot, not just
+what the running app uses today. The `roms/` category similarly overlaps
+with what jsbeeb already ships in `public/roms/`; mirroring it is purely
+archival.
 
 ## Manifest format (schemaVersion 1)
 

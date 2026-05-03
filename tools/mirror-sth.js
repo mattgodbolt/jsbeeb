@@ -21,7 +21,7 @@ const USER_AGENT = "jsbeeb-mirror (+https://github.com/mattgodbolt/jsbeeb)";
 const SCHEMA_VERSION = 1;
 
 // Each "category" is one downloadable section of the STH archive.
-//   id       — directory name we use under archive/sth/
+//   id       — directory name we use under archive/sth/, mirrors upstream layout
 //   title    — human-friendly label for the top-level manifest
 //   indexUrl — page to fetch to enumerate files
 //   indexer  — function that turns the index page into [{ path, size, mtime }]
@@ -30,7 +30,7 @@ const SCHEMA_VERSION = 1;
 const CATEGORIES = [
     {
         id: "diskimages",
-        title: "Disk Images",
+        title: "BBC Disk Images",
         indexUrl: `${STH_ROOT}/bbc/archive/diskimages/reclist.php?sort=name&filter=.zip`,
         indexer: parseReclist,
         fileBase: `${STH_ROOT}/bbc/archive/diskimages/`,
@@ -38,7 +38,7 @@ const CATEGORIES = [
     },
     {
         id: "tapeimages",
-        title: "Tape Images",
+        title: "BBC Tape Images",
         indexUrl: `${STH_ROOT}/bbc/archive/tapeimages/reclist.php?sort=name&filter=.zip`,
         indexer: parseReclist,
         fileBase: `${STH_ROOT}/bbc/archive/tapeimages/`,
@@ -48,29 +48,80 @@ const CATEGORIES = [
         id: "sthcollection",
         title: "STH Collection",
         indexUrl: `${STH_ROOT}/bbc/sthcollection.html`,
-        indexer: parseSthCollection,
-        fileBase: `${STH_ROOT}/bbc/`,
+        indexer: (html) => parseHomepage(html, { stripPrefix: "sthcollection/" }),
+        fileBase: `${STH_ROOT}/bbc/sthcollection/`,
         source: `${STH_ROOT}/bbc/sthcollection.html`,
     },
     {
         id: "other/educational",
-        title: "Educational",
+        title: "BBC Educational",
         indexUrl: `${STH_ROOT}/bbc/other/educational/reclist.php?sort=name&filter=.zip`,
         indexer: parseReclist,
         fileBase: `${STH_ROOT}/bbc/other/educational/`,
         source: `${STH_ROOT}/bbc/other/educational/`,
     },
+    {
+        id: "roms",
+        title: "BBC and Electron ROMs",
+        indexUrl: `${STH_ROOT}/roms/homepage.html`,
+        indexer: parseHomepage,
+        fileBase: `${STH_ROOT}/roms/`,
+        source: `${STH_ROOT}/roms/homepage.html`,
+    },
+    {
+        id: "electron/uefarchive",
+        title: "Electron Tape Images",
+        indexUrl: `${STH_ROOT}/electron/uefarchive/reclist.php?sort=name&filter=.zip`,
+        indexer: parseReclist,
+        fileBase: `${STH_ROOT}/electron/uefarchive/`,
+        source: `${STH_ROOT}/electron/uefarchive/`,
+    },
+    {
+        id: "electron/dfs",
+        title: "Electron DFS Disk Images",
+        indexUrl: `${STH_ROOT}/electron/dfs/homepage.html`,
+        indexer: parseHomepage,
+        fileBase: `${STH_ROOT}/electron/dfs/`,
+        source: `${STH_ROOT}/electron/dfs/homepage.html`,
+    },
+    {
+        id: "electron/adfs",
+        title: "Electron ADFS Disk Images",
+        indexUrl: `${STH_ROOT}/electron/adfs/homepage.html`,
+        indexer: parseHomepage,
+        fileBase: `${STH_ROOT}/electron/adfs/`,
+        source: `${STH_ROOT}/electron/adfs/homepage.html`,
+    },
+    {
+        id: "electron/multiplexing",
+        title: "Electron Multiplexing",
+        indexUrl: `${STH_ROOT}/electron/multiplexing/homepage.html`,
+        indexer: parseHomepage,
+        fileBase: `${STH_ROOT}/electron/multiplexing/`,
+        source: `${STH_ROOT}/electron/multiplexing/homepage.html`,
+    },
+    {
+        id: "electron/t2p3",
+        title: "Electron T2P3",
+        indexUrl: `${STH_ROOT}/electron/t2p3/homepage.html`,
+        indexer: parseHomepage,
+        fileBase: `${STH_ROOT}/electron/t2p3/`,
+        source: `${STH_ROOT}/electron/t2p3/homepage.html`,
+    },
 ];
 
 // Small auxiliary files saved verbatim under meta/ for provenance.
 const META_FILES = [
-    { url: `${STH_ROOT}/bbc/disklog.txt`, dest: "meta/disklog.txt" },
-    { url: `${STH_ROOT}/bbc/tapelog.txt`, dest: "meta/tapelog.txt" },
-    { url: `${STH_ROOT}/bbc/homepage.html`, dest: "meta/homepage.html" },
-    { url: `${STH_ROOT}/bbc/diskimages.html`, dest: "meta/diskimages.html" },
-    { url: `${STH_ROOT}/bbc/tapeimages.html`, dest: "meta/tapeimages.html" },
-    { url: `${STH_ROOT}/bbc/sthcollection.html`, dest: "meta/sthcollection.html" },
-    { url: `${STH_ROOT}/bbc/other.html`, dest: "meta/other.html" },
+    { url: `${STH_ROOT}/bbc/disklog.txt`, dest: "meta/bbc-disklog.txt" },
+    { url: `${STH_ROOT}/bbc/tapelog.txt`, dest: "meta/bbc-tapelog.txt" },
+    { url: `${STH_ROOT}/bbc/homepage.html`, dest: "meta/bbc-homepage.html" },
+    { url: `${STH_ROOT}/bbc/diskimages.html`, dest: "meta/bbc-diskimages.html" },
+    { url: `${STH_ROOT}/bbc/tapeimages.html`, dest: "meta/bbc-tapeimages.html" },
+    { url: `${STH_ROOT}/bbc/sthcollection.html`, dest: "meta/bbc-sthcollection.html" },
+    { url: `${STH_ROOT}/bbc/other.html`, dest: "meta/bbc-other.html" },
+    { url: `${STH_ROOT}/roms/homepage.html`, dest: "meta/roms-homepage.html" },
+    { url: `${STH_ROOT}/electron/homepage.html`, dest: "meta/electron-homepage.html" },
+    { url: `${STH_ROOT}/electron/other.html`, dest: "meta/electron-other.html" },
 ];
 
 function parseArgs(args) {
@@ -167,17 +218,30 @@ function parseReclist(html) {
     return files;
 }
 
-// Parse bbc/sthcollection.html — a hand-rolled list of <a href="sthcollection/X.zip">.
-// No size/mtime in the index, so size is filled in later via HEAD requests.
-function parseSthCollection(html) {
-    const hrefs = [...html.matchAll(/href="(sthcollection\/[^"]+\.zip)"/gi)].map((m) => m[1]);
-    // Strip the leading "sthcollection/" so paths are relative to the category root,
-    // matching how parseReclist returns them.
-    return [...new Set(hrefs)].sort().map((href) => ({
-        path: href.replace(/^sthcollection\//, ""),
-        size: null,
-        mtime: null,
-    }));
+// Parse a hand-rolled HTML index page (e.g. roms/homepage.html, electron/dfs/homepage.html,
+// bbc/sthcollection.html). Picks up <a href="X.zip"> in the same directory tree, ignoring
+// external (http://...), absolute (/...), and upward (../...) references — those belong to
+// other categories or unrelated content.
+//
+// stripPrefix: optional path prefix to remove from each href (e.g. "sthcollection/" when the
+// index page sits one level above the files). Hrefs that don't start with the prefix are
+// rejected — this is what differentiates real download links from incidental anchors.
+//
+// No size/mtime in the index, so they're filled in later via HEAD requests.
+function parseHomepage(html, { stripPrefix = "" } = {}) {
+    const hrefs = [...html.matchAll(/href="([^"]+\.zip)"/gi)].map((m) => m[1]);
+    const filtered = [];
+    for (const href of new Set(hrefs)) {
+        if (/^(?:https?:|\/)/i.test(href)) continue;
+        if (href.startsWith("../")) continue;
+        if (stripPrefix) {
+            if (!href.startsWith(stripPrefix)) continue;
+            filtered.push(href.slice(stripPrefix.length));
+        } else {
+            filtered.push(href);
+        }
+    }
+    return filtered.sort().map((path) => ({ path, size: null, mtime: null }));
 }
 
 // URL-encode the path components in a STH-relative path, preserving slashes.
