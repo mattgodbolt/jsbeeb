@@ -536,10 +536,9 @@ const cubMonitor = document.getElementById("cub-monitor");
 function onCubMouseEvent(evt) {
     audioHandler.tryResume();
     if (document.activeElement !== document.body) document.activeElement.blur();
-    const cubRect = cubMonitor.getBoundingClientRect();
     const screenRect = screenCanvas.getBoundingClientRect();
-    const x = (evt.offsetX - cubRect.left + screenRect.left) / screenCanvas.offsetWidth;
-    const y = (evt.offsetY - cubRect.top + screenRect.top) / screenCanvas.offsetHeight;
+    const x = (evt.clientX - screenRect.left) / screenRect.width;
+    const y = (evt.clientY - screenRect.top) / screenRect.height;
 
     // Handle touchscreen
     if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
