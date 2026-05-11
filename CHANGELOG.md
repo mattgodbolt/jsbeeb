@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.13.0...v1.13.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* use process.defaultApp to detect packaged Electron app ([#692](https://github.com/mattgodbolt/jsbeeb/issues/692)) ([653a5f2](https://github.com/mattgodbolt/jsbeeb/commit/653a5f2c4a0c4b32dfcaf44f581520b43d117035))
+
 ## [1.13.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.12.0...v1.13.0) (2026-04-23)
 
 
