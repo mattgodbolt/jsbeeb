@@ -29,6 +29,7 @@ import { GamepadSource } from "./gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
+import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { getFilterForMode } from "./canvas.js";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
@@ -536,10 +537,8 @@ const cubMonitor = document.getElementById("cub-monitor");
 function onCubMouseEvent(evt) {
     audioHandler.tryResume();
     if (document.activeElement !== document.body) document.activeElement.blur();
-    const cubRect = cubMonitor.getBoundingClientRect();
     const screenRect = screenCanvas.getBoundingClientRect();
-    const x = (evt.offsetX - cubRect.left + screenRect.left) / screenCanvas.offsetWidth;
-    const y = (evt.offsetY - cubRect.top + screenRect.top) / screenCanvas.offsetHeight;
+    const { x, y } = calculateMouseCoordinates(evt, screenRect);
 
     // Handle touchscreen
     if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
