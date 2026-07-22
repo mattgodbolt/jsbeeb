@@ -2,6 +2,9 @@
 // The BBC volumeTable[0] (loudest) is 0.25 (1.0 / 4 channels).
 const speakerVolume = 0.5;
 
+// Samples per output chunk handed to the onBuffer callback.
+export const SoundBufferSamples = 512;
+
 const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -21,6 +24,11 @@ function makeSineTable(attenuation) {
 }
 
 export class SoundChip {
+    /**
+     * @param {function(Float32Array): void} onBuffer called with each full
+     *     SoundBufferSamples-sized buffer of output. Receives the same buffer
+     *     every call, overwritten afterwards: copy the contents if they are kept.
+     */
     constructor(onBuffer) {
         this._onBuffer = onBuffer;
         // 4MHz input signal. Internal divide-by-8
@@ -62,7 +70,7 @@ export class SoundChip {
 
         this.residual = 0;
         this.position = 0;
-        this.buffer = new Float32Array(512);
+        this.buffer = new Float32Array(SoundBufferSamples);
 
         this.latchedRegister = 0;
         this.slowDataBus = 0;
@@ -211,17 +219,27 @@ export class SoundChip {
         const num = cycles * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
         this.residual = num - rounded;
-        const bufferLength = this.buffer.length;
+        // The buffer is deliberately reused for the chip's whole life: the
+        // previous transfer-then-reallocate pattern is miscompiled by a V8
+        // optimiser bug (Chrome 150, crbug.com/537801199) which allocates the
+        // replacement with length 0, even when the reallocation is reordered
+        // before the transfer, wedging this loop forever. Reuse is also
+        // cheaper, so this needn't be reverted once the crbug is fixed. The
+        // guard fails loudly if the buffer is ever detached or the accounting
+        // goes bad.
         while (rounded > 0) {
-            const leftInBuffer = bufferLength - this.position;
+            const leftInBuffer = SoundBufferSamples - this.position;
             const numSamplesToGenerate = Math.min(rounded, leftInBuffer);
+            if (numSamplesToGenerate <= 0 || this.buffer.length !== SoundBufferSamples)
+                throw new Error(
+                    `Sound buffer accounting error (buffer=${this.buffer.length}, position=${this.position}, rounded=${rounded})`,
+                );
             this.generate(this.buffer, this.position, numSamplesToGenerate);
             this.position += numSamplesToGenerate;
             rounded -= numSamplesToGenerate;
 
-            if (this.position === bufferLength) {
+            if (this.position === SoundBufferSamples) {
                 this._onBuffer(this.buffer);
-                this.buffer = new Float32Array(bufferLength);
                 this.position = 0;
             }
         }
