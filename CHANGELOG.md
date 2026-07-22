@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.13.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.13.1...v1.13.2) (2026-07-22)
+
+
+### Bug Fixes
+
+* use clientX/Y for mouse coordinates ([#696](https://github.com/mattgodbolt/jsbeeb/issues/696)) ([8e87f9f](https://github.com/mattgodbolt/jsbeeb/commit/8e87f9ffbd8f1cfe9823639eb3430755cac9e18b))
+* work around Chrome 150 V8 bug that wedged the emulator after ~1 minute ([#704](https://github.com/mattgodbolt/jsbeeb/issues/704)) ([efc42cb](https://github.com/mattgodbolt/jsbeeb/commit/efc42cb730a8bbcf5e1f9e7cbfe28e2f7143e317))
+
 ## [1.13.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.13.0...v1.13.1) (2026-05-11)
 
 
