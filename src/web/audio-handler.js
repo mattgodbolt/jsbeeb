@@ -123,7 +123,11 @@ export class AudioHandler {
     }
 
     _onBuffer(buffer) {
-        if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer }, [buffer.buffer]);
+        // The sound chip reuses this buffer, so the worklet must get a copy:
+        // deliberately no transfer list, which would detach the chip's buffer
+        // and trip a V8 optimiser bug that wedges the emulator — see
+        // SoundChip.advance() and crbug.com/537801199 before "optimising" this.
+        if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer });
     }
 
     // Recent browsers, particularly Safari and Chrome, require a user interaction in order to enable sound playback.

@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { SoundChip, AtomSoundChip } from "../../src/soundchip.js";
+import { SoundChip, AtomSoundChip, SoundBufferSamples } from "../../src/soundchip.js";
 import { Scheduler } from "../../src/scheduler.js";
 
-function makeSoundChip() {
+function makeSoundChip(onBuffer = () => {}) {
     const scheduler = new Scheduler();
-    const chip = new SoundChip(() => {});
+    const chip = new SoundChip(onBuffer);
     chip.setScheduler(scheduler);
     return { chip, scheduler };
 }
@@ -15,6 +15,30 @@ function makeAtomSoundChip() {
     chip.setScheduler(scheduler);
     return { chip, scheduler };
 }
+
+describe("SoundChip advance", () => {
+    it("should reuse one full buffer for every onBuffer callback", () => {
+        // Pins the buffer-reuse contract that works around crbug.com/537801199
+        // — see the comment in SoundChip.advance().
+        let callbackCount = 0;
+        const { chip } = makeSoundChip((buffer) => {
+            callbackCount++;
+            expect(buffer).toBe(chip.buffer);
+        });
+
+        const cyclesToFillBufferThrice = Math.round((3 * SoundBufferSamples) / chip.samplesPerCycle);
+        chip.advance(cyclesToFillBufferThrice);
+        expect(callbackCount).toBe(3);
+        expect(chip.buffer.length).toBe(SoundBufferSamples);
+        expect(chip.position).toBe(0);
+    });
+
+    it("should throw rather than spin if the buffer position goes bad", () => {
+        const { chip } = makeSoundChip();
+        chip.position = SoundBufferSamples; // can never legitimately be at/past the end on entry
+        expect(() => chip.advance(1024)).toThrow("Sound buffer accounting error");
+    });
+});
 
 describe("SoundChip snapshotState / restoreState", () => {
     it("should snapshot and restore tone channel registers", () => {
