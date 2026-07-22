@@ -26,10 +26,8 @@ function makeSineTable(attenuation) {
 export class SoundChip {
     /**
      * @param {function(Float32Array): void} onBuffer called with each full
-     *     SoundBufferSamples-sized buffer of output. The chip passes the same
-     *     buffer every call and overwrites its contents immediately afterwards:
-     *     copy it if it is kept (a structured clone via postMessage suffices),
-     *     and never transfer/detach it — see the note in advance().
+     *     SoundBufferSamples-sized buffer of output. Receives the same buffer
+     *     every call, overwritten afterwards: copy the contents if they are kept.
      */
     constructor(onBuffer) {
         this._onBuffer = onBuffer;
@@ -221,17 +219,18 @@ export class SoundChip {
         const num = cycles * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
         this.residual = num - rounded;
-        // The single buffer is reused for the chip's whole life and is never
-        // transferred, detached, or reallocated. This is deliberate: the
-        // transfer-then-reallocate pattern used previously is miscompiled by a
-        // V8 optimiser bug (Chrome 150, crbug.com/537801199) that allocates the
-        // replacement with length 0, wedging this loop forever — and reordering
-        // the reallocation before the transfer did not avoid it. The guard below
-        // turns any recurrence into an error rather than a frozen page.
+        // The buffer is deliberately reused for the chip's whole life: the
+        // previous transfer-then-reallocate pattern is miscompiled by a V8
+        // optimiser bug (Chrome 150, crbug.com/537801199) which allocates the
+        // replacement with length 0, even when the reallocation is reordered
+        // before the transfer, wedging this loop forever. Reuse is also
+        // cheaper, so this needn't be reverted once the crbug is fixed. The
+        // guard fails loudly if the buffer is ever detached or the accounting
+        // goes bad.
         while (rounded > 0) {
             const leftInBuffer = SoundBufferSamples - this.position;
             const numSamplesToGenerate = Math.min(rounded, leftInBuffer);
-            if (numSamplesToGenerate <= 0)
+            if (numSamplesToGenerate <= 0 || this.buffer.length !== SoundBufferSamples)
                 throw new Error(
                     `Sound buffer accounting error (buffer=${this.buffer.length}, position=${this.position}, rounded=${rounded})`,
                 );

@@ -123,10 +123,9 @@ export class AudioHandler {
     }
 
     _onBuffer(buffer) {
-        // The sound chip reuses this buffer, so the worklet must get a copy:
-        // deliberately no transfer list, which would detach the chip's buffer
-        // and trip a V8 optimiser bug that wedges the emulator — see
-        // SoundChip.advance() and crbug.com/537801199 before "optimising" this.
+        // No transfer list, deliberately: the chip reuses this buffer, and
+        // transferring would detach it and trip crbug.com/537801199. The clone
+        // costs little (512 floats per 1.024ms of chip output, ~2MB/s).
         if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer });
     }
 
