@@ -30,6 +30,7 @@ export class MachineSession {
      * @param {string} modelName - e.g. "B-DFS1.2", "Master"
      * @param {Object} [opts]
      * @param {string} [opts.discImage] - path to an .ssd or .dsd disc image to load on boot
+     * @param {boolean} [opts.tube] - attach a 65C02 second processor (Tube co-processor)
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
@@ -65,8 +66,12 @@ export class MachineSession {
         // toneGenerator); FakeSoundChip provides compatible no-op stubs for headless mode.
         this._soundChip = modelObj.isAtom ? new FakeSoundChip() : new InstrumentedSoundChip();
 
-        // TestMachine forwards opts.video and opts.soundChip to fake6502
-        this._machine = new TestMachine(modelName, { video: this._video, soundChip: this._soundChip });
+        // TestMachine forwards opts.video, opts.soundChip and opts.tube to fake6502
+        this._machine = new TestMachine(modelName, {
+            video: this._video,
+            soundChip: this._soundChip,
+            tube: !!opts.tube,
+        });
 
         // Accumulated VDU text output — drained by callers
         this._pendingOutput = [];

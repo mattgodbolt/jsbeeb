@@ -19,7 +19,12 @@ const dbgr = {
 export function fake6502(model, opts) {
     opts = opts || {};
     model = model || TEST_6502;
-    if (opts.tube) model.tube = findModel("Tube65c02");
+    if (opts.tube !== undefined) {
+        // Don't mutate the shared Model from allModels — a later fake6502()
+        // for the same model name would inherit this session's tube setting.
+        model = Object.assign(Object.create(Object.getPrototypeOf(model)), model);
+        model.tube = opts.tube ? findModel("Tube65c02") : null;
+    }
     const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
     return new CpuClass(model, {
         dbgr,
