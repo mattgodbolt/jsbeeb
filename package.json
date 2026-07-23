@@ -98,6 +98,7 @@
     "coverage:unit": "vitest run tests/unit --coverage",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",
+    "mirror-sth": "node tools/mirror-sth.js --out mirror",
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder"
   },
