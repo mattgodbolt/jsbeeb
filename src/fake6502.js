@@ -32,6 +32,7 @@ export function fake6502(model, opts) {
         config: {
             tube: opts.tube ? TubeModel : null,
             tubeCpuMultiplier: opts.tubeCpuMultiplier,
+            hasTeletextAdaptor: opts.hasTeletextAdaptor,
         },
     });
 }
