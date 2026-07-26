@@ -167,8 +167,9 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - `autotype` - types whatever you put after. e.g. `&autotype=PRINT"Matt is cool"%0a` (return is URI escaped to `%0a`)
 - `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
   transparent (intended for use when running within an iframe in a third-party site).
-- `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc
-  loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
+- `cpuMultiplier=X` speeds up the CPU by a factor of `X` relative to the peripherals: video, sound and the VIAs keep
+  running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
+  unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
 - `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right
   should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into
   problems on smaller screens; bottom taller than 100 or so similarly.

@@ -362,7 +362,9 @@ export class TestMachine {
         }
         const fullText = text + "\n"; // append RETURN
         const keys = fullText.split("").map((ch) => this._charToKey(ch));
-        const holdCycles = 40000;
+        // Key hold is counted in CPU cycles, so scale it to keep the hold constant in
+        // real time: the OS scans the keyboard on a peripheral-rate interrupt.
+        const holdCycles = (40000 * this.processor.cpuMultiplier) | 0;
         let index = 0;
         let phase = "idle"; // "idle" → "down" → "idle"
         let nextEventCycle = 0;
@@ -414,7 +416,7 @@ export class TestMachine {
         // toggle the ROM's internal caps lock state.
         const keySequence = utils_atom.stringToATOMKeys(text + "\n");
         const ppia = this.processor.atomppia;
-        const holdCycles = 80000; // Atom at 1 MHz needs longer hold than BBC at 2 MHz
+        const holdCycles = (80000 * this.processor.cpuMultiplier) | 0; // Atom at 1 MHz needs longer hold than BBC at 2 MHz
         const SHIFT = utils_atom.ATOM.SHIFT;
 
         let index = 0;
