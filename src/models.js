@@ -274,9 +274,9 @@ export const basicOnly = new Model({
 });
 
 /**
- * The only second processor jsbeeb emulates. Machine-building code passes this (or
- * null) as the emulation config's `coProcessor`, so that 6502.js needn't import this
- * module and close an import cycle via the FDC modules.
+ * The only second processor jsbeeb emulates. Machine-building code passes this as the
+ * emulation config's `tube`, so that 6502.js needn't import this module and close an
+ * import cycle via the FDC modules.
  */
 export const TubeModel = findModel("Tube65C02");
 
