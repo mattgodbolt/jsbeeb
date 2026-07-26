@@ -243,23 +243,6 @@ const config = new Config(
     },
     function onClose(changed) {
         parsedQuery = Object.assign(parsedQuery, changed);
-        if (
-            changed.model ||
-            changed.coProcessor !== undefined ||
-            changed.hasMusic5000 !== undefined ||
-            changed.hasTeletextAdaptor !== undefined ||
-            changed.hasEconet !== undefined
-        ) {
-            areYouSure(
-                "Changing model requires a restart of the emulator. Restart now?",
-                "Yes, restart now",
-                "No, thanks",
-                function () {
-                    updateUrl();
-                    window.location.reload();
-                },
-            );
-        }
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
@@ -283,6 +266,18 @@ const config = new Config(
             }
         }
         updateUrl();
+    },
+    function onRestartRequired({ confirm, discard }) {
+        areYouSure(
+            "Changing model requires a restart of the emulator. Restart now?",
+            "Yes, restart now",
+            "No, thanks",
+            function () {
+                confirm();
+                window.location.reload();
+            },
+            discard,
+        );
     },
 );
 
@@ -1862,15 +1857,24 @@ const startPromise = (async () => {
 const aysEl = document.getElementById("are-you-sure");
 const aysModal = new bootstrap.Modal(aysEl);
 
-function areYouSure(message, yesText, noText, yesFunc) {
+function areYouSure(message, yesText, noText, yesFunc, noFunc) {
+    const yesButton = aysEl.querySelector(".ays-yes");
     aysEl.querySelector(".context").textContent = message;
-    aysEl.querySelector(".ays-yes").textContent = yesText;
     aysEl.querySelector(".ays-no").textContent = noText;
-    aysEl.querySelector(".ays-yes").addEventListener(
-        "click",
-        function () {
-            aysModal.hide();
-            yesFunc();
+    yesButton.textContent = yesText;
+    let confirmed = false;
+    const onYes = () => {
+        confirmed = true;
+        aysModal.hide();
+    };
+    yesButton.addEventListener("click", onYes, { once: true });
+    // The answer is decided on hiding, so the "no" button, Escape and a click outside all count as declining.
+    aysEl.addEventListener(
+        "hidden.bs.modal",
+        () => {
+            yesButton.removeEventListener("click", onYes);
+            if (confirmed) yesFunc();
+            else noFunc();
         },
         { once: true },
     );

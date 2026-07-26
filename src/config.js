@@ -16,11 +16,21 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
     ];
 }
 
+/** Settings that only take effect on a freshly built machine, so they are held until the user agrees to restart. */
+const RestartRequiredSettings = ["model", "coProcessor", "hasEconet", "hasMusic5000", "hasTeletextAdaptor"];
+
 export class Config extends EventTarget {
-    constructor(onChange, onClose) {
+    /**
+     * @param {function(object)} onChange called as soon as a setting the emulator can follow live changes
+     * @param {function(object)} onClose called with the settings to apply and persist
+     * @param {function({confirm: function, discard: function})} onRestartRequired called when closing the
+     *     dialog left changes that need a restart; exactly one of the two callbacks must be invoked
+     */
+    constructor(onChange, onClose, onRestartRequired) {
         super();
         this.onChange = onChange;
         this.onClose = onClose;
+        this.onRestartRequired = onRestartRequired;
         this.changed = {};
         this.model = null;
         this.coProcessor = false;
@@ -30,19 +40,25 @@ export class Config extends EventTarget {
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
-            this.setDropdownText(this.model.name);
-            this.set65c02(this.coProcessor);
-            this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
-            this.setTeletext(this.hasTeletextAdaptor);
-            this.setMusic5000(this.hasMusic5000);
-            this.setEconet(this.hasEconet);
+            this.showCurrentSettings();
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
-            this.onClose(this.changed);
-            if (Object.keys(this.changed).length > 0) {
-                this.dispatchEvent(new CustomEvent("settings-changed", { detail: this.changed }));
+            const needsRestart = {};
+            const live = {};
+            for (const [key, value] of Object.entries(this.changed)) {
+                if (RestartRequiredSettings.includes(key)) needsRestart[key] = value;
+                else live[key] = value;
             }
+            this.applyChanges(live);
+            if (Object.keys(needsRestart).length === 0) return;
+            this.onRestartRequired({
+                confirm: () => {
+                    this.adoptRestartSettings(needsRestart);
+                    this.applyChanges(needsRestart);
+                },
+                discard: () => this.showCurrentSettings(),
+            });
         });
 
         const modelMenu = document.querySelector(".model-menu");
@@ -119,6 +135,30 @@ export class Config extends EventTarget {
                 this.setDisplayMode(mode);
                 this.onChange({ displayMode: mode });
             });
+        }
+    }
+
+    showCurrentSettings() {
+        this.setDropdownText(this.model.name);
+        this.set65c02(this.coProcessor);
+        this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
+        this.setTeletext(this.hasTeletextAdaptor);
+        this.setMusic5000(this.hasMusic5000);
+        this.setEconet(this.hasEconet);
+    }
+
+    adoptRestartSettings(changed) {
+        if (changed.model !== undefined) this.setModel(changed.model);
+        if (changed.coProcessor !== undefined) this.set65c02(changed.coProcessor);
+        if (changed.hasEconet !== undefined) this.setEconet(changed.hasEconet);
+        if (changed.hasMusic5000 !== undefined) this.setMusic5000(changed.hasMusic5000);
+        if (changed.hasTeletextAdaptor !== undefined) this.setTeletext(changed.hasTeletextAdaptor);
+    }
+
+    applyChanges(changed) {
+        this.onClose(changed);
+        if (Object.keys(changed).length > 0) {
+            this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
         }
     }
 

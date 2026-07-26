@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { fittedRoms } from "../../src/config.js";
+// @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { Config, fittedRoms } from "../../src/config.js";
 import { findModel } from "../../src/models.js";
 
 describe("fittedRoms", () => {
@@ -31,5 +33,173 @@ describe("fittedRoms", () => {
         const all = { model: master, hasEconet: true, hasMusic5000: true, hasTeletextAdaptor: true };
 
         expect(fittedRoms(all)).toEqual(fittedRoms(all));
+    });
+});
+
+// The tests drive the shipped markup rather than a hand-written fixture, so they notice if the
+// dialog's ids or classes drift away from what Config expects.
+const indexHtml = readFileSync("index.html", "utf8");
+
+/** Drives the real settings dialog markup the way the browser and bootstrap would. */
+class Dialog {
+    constructor() {
+        this.onClose = vi.fn();
+        this.onRestartRequired = vi.fn();
+        this.settingsChanged = vi.fn();
+        this.config = new Config(
+            () => {},
+            (changed) => this.onClose(changed),
+            (restart) => this.onRestartRequired(restart),
+        );
+        this.config.addEventListener("settings-changed", (e) => this.settingsChanged(e.detail));
+        // Mirrors main.js applying the startup settings before the dialog is ever shown.
+        this.config.setModel("B-DFS1.2");
+        this.config.set65c02(false);
+        this.config.setTubeCpuMultiplier(2);
+        this.config.setEconet(false);
+        this.config.setMusic5000(false);
+        this.config.setTeletext(false);
+    }
+
+    open() {
+        document.getElementById("configuration").dispatchEvent(new Event("show.bs.modal"));
+    }
+
+    close() {
+        document.getElementById("configuration").dispatchEvent(new Event("hide.bs.modal"));
+    }
+
+    tick(id) {
+        document.getElementById(id).click();
+    }
+
+    chooseModel(name) {
+        document.querySelector(`.model-menu a[data-target="${name}"]`).click();
+    }
+
+    checkbox(id) {
+        return document.getElementById(id).checked;
+    }
+
+    get restartPrompt() {
+        expect(this.onRestartRequired).toHaveBeenCalledTimes(1);
+        return this.onRestartRequired.mock.calls[0][0];
+    }
+}
+
+describe("Config settings dialog", () => {
+    beforeEach(() => {
+        document.body.innerHTML = indexHtml;
+    });
+
+    describe("settings that need a restart", () => {
+        it("holds a co-processor change back until the restart is confirmed", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("65c02");
+            dialog.close();
+
+            expect(dialog.onClose).toHaveBeenCalledWith({});
+            expect(dialog.settingsChanged).not.toHaveBeenCalled();
+        });
+
+        it("applies a co-processor change once the restart is confirmed", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("65c02");
+            dialog.close();
+            dialog.restartPrompt.confirm();
+
+            expect(dialog.onClose).toHaveBeenCalledWith({ coProcessor: true });
+            expect(dialog.settingsChanged).toHaveBeenCalledWith({ coProcessor: true });
+            expect(dialog.config.coProcessor).toBe(true);
+            expect(dialog.checkbox("65c02")).toBe(true);
+        });
+
+        it("holds a model change back until the restart is confirmed", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.chooseModel("Master");
+            dialog.close();
+
+            expect(dialog.settingsChanged).not.toHaveBeenCalled();
+
+            dialog.restartPrompt.confirm();
+
+            expect(dialog.settingsChanged).toHaveBeenCalledWith({ model: "Master" });
+            expect(dialog.config.model).toBe(findModel("Master"));
+        });
+
+        it("leaves the machine, the checkboxes and the fields agreeing when the restart is declined", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("65c02");
+            dialog.tick("hasEconet");
+            dialog.close();
+            dialog.restartPrompt.discard();
+
+            expect(dialog.settingsChanged).not.toHaveBeenCalled();
+            expect(dialog.config.coProcessor).toBe(false);
+            expect(dialog.config.hasEconet).toBe(false);
+            expect(dialog.checkbox("65c02")).toBe(false);
+            expect(dialog.checkbox("hasEconet")).toBe(false);
+        });
+
+        it("forgets a declined change when the dialog is opened again", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("hasMusic5000");
+            dialog.close();
+            dialog.restartPrompt.discard();
+
+            dialog.open();
+            dialog.close();
+
+            expect(dialog.settingsChanged).not.toHaveBeenCalled();
+            expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
+        });
+
+        it("asks nothing when only live settings changed", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("speechOutput");
+            dialog.close();
+
+            expect(dialog.onRestartRequired).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("settings that apply live", () => {
+        it("applies them on close even while a restart is pending", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("speechOutput");
+            dialog.tick("65c02");
+            dialog.close();
+
+            expect(dialog.onClose).toHaveBeenCalledWith({ speechOutput: true });
+            expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true });
+        });
+
+        it("survives declining the restart", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("mouseJoystickEnabled");
+            dialog.tick("65c02");
+            dialog.close();
+            dialog.restartPrompt.discard();
+
+            expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
+            expect(dialog.settingsChanged).toHaveBeenCalledWith({ mouseJoystickEnabled: true });
+        });
+
+        it("says nothing changed when nothing did", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.close();
+
+            expect(dialog.settingsChanged).not.toHaveBeenCalled();
+            expect(dialog.onRestartRequired).not.toHaveBeenCalled();
+        });
     });
 });
