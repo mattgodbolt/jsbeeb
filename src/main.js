@@ -219,24 +219,6 @@ const userPort = {
     },
 };
 
-const emulationConfig = {
-    keyLayout: keyLayout,
-    cpuMultiplier: cpuMultiplier,
-    tubeCpuMultiplier: parsedQuery.tubeCpuMultiplier || 2,
-    videoCyclesBatch: parsedQuery.videoCyclesBatch,
-    extraRoms: extraRoms,
-    userPort: userPort,
-    printerPort: printerPort,
-    getGamepads: function () {
-        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
-        return navigator.getGamepads ? navigator.getGamepads() : [];
-    },
-    debugFlags: {
-        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
-        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
-    },
-};
-
 // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
 // Must be created before Config so the onClose callback and setSpeechOutput() call can reference it.
 const speechOutput = new SpeechOutput();
@@ -315,13 +297,29 @@ config.setDisplayMode(displayMode);
 
 model = config.model;
 
-// Resolved after the config.setX calls above have applied the URL parameters. ROM order
-// determines sideways bank allocation, and the fittings' ROMs claim banks before any
-// the user asked for with ?rom=.
-emulationConfig.coProcessor = config.coProcessor ? TubeModel : null;
-emulationConfig.hasMusic5000 = config.hasMusic5000;
-emulationConfig.hasTeletextAdaptor = config.hasTeletextAdaptor;
-emulationConfig.extraRoms = [...config.extraRoms, ...extraRoms];
+// Built here, once the config.setX calls above have applied the URL parameters.
+const emulationConfig = {
+    keyLayout: keyLayout,
+    cpuMultiplier: cpuMultiplier,
+    tubeCpuMultiplier: config.tubeCpuMultiplier,
+    videoCyclesBatch: parsedQuery.videoCyclesBatch,
+    coProcessor: config.coProcessor ? TubeModel : null,
+    hasMusic5000: config.hasMusic5000,
+    hasTeletextAdaptor: config.hasTeletextAdaptor,
+    // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
+    // before any the user asked for with ?rom=.
+    extraRoms: [...config.extraRoms, ...extraRoms],
+    userPort: userPort,
+    printerPort: printerPort,
+    getGamepads: function () {
+        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
+        return navigator.getGamepads ? navigator.getGamepads() : [];
+    },
+    debugFlags: {
+        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
+        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
+    },
+};
 
 function sbBind(div, url, onload) {
     const img = div.querySelector("img");
