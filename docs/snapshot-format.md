@@ -66,11 +66,11 @@ B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 
 
 ### Model compatibility
 
-When loading, the snapshot model is compared to the current model using `isSameModel()`. Names are resolved through `findModel()`, so synonyms and old names match (e.g. `"B"` matches `"BBC B with DFS 1.2"`), but the result must be the same model: filesystem variants are separate models and so are _not_ interchangeable (e.g. `"BBC Master 128 (DFS)"` does not match `"BBC Master 128 (ADFS)"`).
+When loading, the snapshot's model must match the current one. Names are resolved through the model list, so synonyms and old names match (e.g. `"B"` matches `"BBC B with DFS 1.2"`), but the result must be the same model: filesystem variants are separate models and so are _not_ interchangeable (e.g. `"BBC Master 128 (DFS)"` does not match `"BBC Master 128 (ADFS)"`).
 
-The co-processor is emulation config rather than part of the model, so the model name cannot tell a Master Turbo from a plain Master. The `coProcessor` flag is compared separately, and `restoreSnapshot()` throws if it does not match the running machine.
+The co-processor is emulation config rather than part of the model, so the model name cannot tell a Master Turbo from a plain Master. The `coProcessor` flag is therefore compared separately, and a mismatch is an error.
 
-If the models or co-processor settings differ, the snapshot is stashed in `sessionStorage` under `jsbeeb-pending-state` and the page reloads with the snapshot's model and co-processor setting in the query string, picking the state back up on the way in. `restoreSnapshot()` itself does not reload; given a mismatch it throws.
+If the models or co-processor settings differ, the snapshot is stashed in `sessionStorage` under `jsbeeb-pending-state` and the page reloads with the snapshot's model and co-processor setting in the query string, picking the state back up on the way in.
 
 Loading a pre-v3 snapshot while a co-processor is fitted therefore restarts the machine without one, since such a snapshot describes a host-only machine.
 
@@ -116,7 +116,7 @@ The `type` field is the constructor name: `Uint8Array`, `Uint16Array`, `Uint32Ar
 | `ram`              | Uint8Array | RAM contents (128KB, excludes ROMs)                                                               |
 | `roms`             | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em. |
 
-**Note:** `interrupt` is not saved — it is reconstructed by the VIA and ACIA `restoreState()` calls which reassert their interrupt lines.
+**Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
 
 ### Scheduler (`state.scheduler`)
 
@@ -363,7 +363,7 @@ Track keys are strings like `"false:0"` (lower side, track 0) or `"true:5"` (upp
 
 ### Second processor (`state.tube`) — _v3+_
 
-Present only when a co-processor was fitted; the top-level `coProcessor` flag says whether to expect it.
+Present only when a co-processor was fitted.
 
 | Field      | Type       | Description                                                     |
 | ---------- | ---------- | --------------------------------------------------------------- |
@@ -395,7 +395,7 @@ Present only when a co-processor was fitted; the top-level `coProcessor` flag sa
 | `parasiteToHostFifoByteCount3` | number       | Bytes waiting in the parasite-to-host R3 FIFO       |
 | `hostToParasiteFifoByteCount3` | number       | Bytes waiting in the host-to-parasite R3 FIFO       |
 
-The interrupt and reset lines are not saved. `Tube.restoreState()` derives them from the status registers and FIFO counts, in the same way the host's `interrupt` is rebuilt by the VIA and ACIA restores. It runs after the parasite's registers have been restored, so the edge-triggered NMI moves from its saved level to the one the ULA implies: a snapshot that agrees produces no edge, while an imported one whose idea of the line is out of date gets the rising edge it is owed.
+The interrupt and reset lines are not saved: they follow from the status registers and FIFO counts above, in the same way the host's `interrupt` follows from the VIA and ACIA state. The parasite's NMI is edge triggered, so `nmiLevel` and `nmiEdge` are saved, being the one part of it that cannot be recovered that way.
 
 ## Known limitations (v3)
 
