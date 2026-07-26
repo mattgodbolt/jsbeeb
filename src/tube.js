@@ -219,7 +219,7 @@ export class Tube {
                 if (this.hostStatus[TUBE_ULA_R3] & TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL) {
                     if (this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_2_BYTE_R3_DATA) {
                         if (this.hostToParasiteFifoByteCount3 < 2) {
-                            this.hostToParasiteData[this.hostToParasiteFifoByteCount3++] = value;
+                            this.hostToParasiteData[TUBE_ULA_R3][this.hostToParasiteFifoByteCount3++] = value;
                         }
                         if (this.hostToParasiteFifoByteCount3 === 2) {
                             this.parasiteStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
