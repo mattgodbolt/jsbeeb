@@ -19,6 +19,7 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
+import { TubeModel } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
@@ -220,7 +221,6 @@ const userPort = {
 
 const emulationConfig = {
     keyLayout: keyLayout,
-    coProcessor: parsedQuery.coProcessor,
     cpuMultiplier: cpuMultiplier,
     tubeCpuMultiplier: parsedQuery.tubeCpuMultiplier || 2,
     videoCyclesBatch: parsedQuery.videoCyclesBatch,
@@ -314,6 +314,14 @@ let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
 
 model = config.model;
+
+// Resolved after the config.setX calls above have applied the URL parameters. ROM order
+// determines sideways bank allocation, and the fittings' ROMs claim banks before any
+// the user asked for with ?rom=.
+emulationConfig.coProcessor = config.coProcessor ? TubeModel : null;
+emulationConfig.hasMusic5000 = config.hasMusic5000;
+emulationConfig.hasTeletextAdaptor = config.hasTeletextAdaptor;
+emulationConfig.extraRoms = [...config.extraRoms, ...extraRoms];
 
 function sbBind(div, url, onload) {
     const img = div.querySelector("img");
@@ -612,7 +620,7 @@ window.addEventListener("beforeunload", function (event) {
     }
 });
 
-if (model.hasEconet) {
+if (config.hasEconet) {
     econet = new Econet(stationId);
 } else {
     document.getElementById("fsmenuitem").style.display = "none";
@@ -656,7 +664,7 @@ processor = new CpuClass(model, {
     soundChip: audioHandler.soundChip,
     ddNoise: audioHandler.ddNoise,
     relayNoise: audioHandler.relayNoise,
-    music5000: model.hasMusic5000 ? audioHandler.music5000 : null,
+    music5000: config.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
     config: emulationConfig,
     econet,
@@ -1690,7 +1698,7 @@ syncLights = function () {
         drive0.update(processor.fdc.motorOn[0]);
         drive1.update(processor.fdc.motorOn[1]);
         cassette.update(processor.acia.motorOn);
-        if (model.hasEconet) {
+        if (config.hasEconet) {
             network.update(processor.econet.activityLight());
         }
     }

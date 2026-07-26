@@ -3,7 +3,7 @@
 
 import { FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
-import { TEST_6502, TEST_65C02, TEST_65C12 } from "./models.js";
+import { TEST_6502, TEST_65C02, TEST_65C12, TubeModel } from "./models.js";
 import { FakeDdNoise } from "./ddnoise.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { Cpu6502, AtomCpu6502 } from "./6502.js";
@@ -19,7 +19,6 @@ const dbgr = {
 export function fake6502(model, opts) {
     opts = opts || {};
     model = model || TEST_6502;
-    if (opts.tube) model = model.withTube();
     const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
     return new CpuClass(model, {
         dbgr,
@@ -30,6 +29,10 @@ export function fake6502(model, opts) {
         music5000: new FakeMusic5000(),
         cmos: new Cmos(),
         cycleAccurate: opts.cycleAccurate,
+        config: {
+            coProcessor: opts.tube ? TubeModel : null,
+            tubeCpuMultiplier: opts.tubeCpuMultiplier,
+        },
     });
 }
 

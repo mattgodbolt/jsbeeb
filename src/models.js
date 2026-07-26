@@ -10,12 +10,16 @@ const CpuModel = Object.freeze({
     CMOS65C12: 2,
 });
 
-// The only second processor jsbeeb emulates. Named here so the one place that
-// knows a "tube" means this particular model is the Model class itself.
-const TubeModelName = "Tube65C02";
-
+/**
+ * Describes what a machine *is*: which CPU, which ROMs, which disc controller.
+ * Anything a user can turn on and off for a session (second processor, Econet,
+ * Music 5000, teletext adaptor) belongs in the emulation config passed to Cpu6502.
+ *
+ * Instances are shared process-wide via `allModels` and frozen, so they can be handed
+ * to any number of machines without one session's settings leaking into the next.
+ */
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, tube, cmosOverride, banks } = {}) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, cmosOverride, banks } = {}) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -26,25 +30,7 @@ class Model {
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
-        this.tube = tube;
         this.cmosOverride = cmosOverride;
-        this.hasEconet = false;
-        this.hasMusic5000 = false;
-    }
-
-    /**
-     * Returns a copy of this model with the 65C02 second processor attached,
-     * leaving this model untouched.
-     *
-     * The models in `allModels` are shared singletons, so a machine must never set
-     * `tube` on one in place: a machine created later in the same process would
-     * inherit it. Copying with `Object.create` rather than the constructor keeps
-     * both the prototype getters below and any flags set after construction.
-     *
-     * @returns {Model}
-     */
-    withTube() {
-        return Object.assign(Object.create(Model.prototype), this, { tube: findModel(TubeModelName) });
     }
 
     get nmos() {
@@ -286,3 +272,18 @@ export const basicOnly = new Model({
     swram: masterSwram,
     fdc: NoiseAwareWdFdc,
 });
+
+/**
+ * The only second processor jsbeeb emulates. Machine-building code passes this (or
+ * null) as the emulation config's `coProcessor`, so that 6502.js needn't import this
+ * module and close an import cycle via the FDC modules.
+ */
+export const TubeModel = findModel("Tube65C02");
+
+// After the isTest assignments above, so those still apply.
+for (const model of [...allModels, TEST_6502, TEST_65C02, TEST_65C12, basicOnly]) {
+    Object.freeze(model.os);
+    Object.freeze(model.synonyms);
+    Object.freeze(model);
+}
+Object.freeze(allModels);
