@@ -296,7 +296,11 @@ async function parseBemTube(sections, tubeName) {
     if (!sections["T"] || !sections["P"]) {
         throw new Error("Truncated b-em snapshot: it holds only one of the two co-processor sections");
     }
-    if (tubeName && !BemSupportedTubes.includes(tubeName)) {
+    // b-em only writes these sections for a co-processor it started, which it always names.
+    if (!tubeName) {
+        throw new Error("Corrupt b-em snapshot: it holds co-processor state but names no co-processor");
+    }
+    if (!BemSupportedTubes.includes(tubeName)) {
         throw new Error(
             `Unsupported b-em co-processor "${tubeName}": jsbeeb only emulates the 64K 65C02 second processor`,
         );
@@ -306,6 +310,11 @@ async function parseBemTube(sections, tubeName) {
     if (ulaSection[0] !== BemTubeUlaVersion) {
         throw new Error(`Unsupported b-em tube ULA state version ${ulaSection[0]}`);
     }
+    if (ulaSection.length < 2 + BemTubeUlaSize) {
+        throw new Error(
+            `Truncated b-em tube ULA state: expected ${2 + BemTubeUlaSize} bytes, got ${ulaSection.length}`,
+        );
+    }
     const romPaged = !!ulaSection[1];
     const ula = ulaSection.slice(2, 2 + BemTubeUlaSize);
     const at = (field) => ula[BemTubeUlaOffsets[field]];
@@ -314,6 +323,10 @@ async function parseBemTube(sections, tubeName) {
     // the bytes have to be linearised into the order jsbeeb expects to read them.
     const ph1Count = at("ph1count");
     const ph1Head = at("ph1head");
+    // Out-of-range counts would restore a FIFO jsbeeb's own reads could never have produced.
+    if (ph1Count > BemPh1Size || ph1Head >= BemPh1Size || at("ph3pos") > 2 || at("hp3pos") > 2) {
+        throw new Error("Corrupt b-em tube ULA state: FIFO counts out of range");
+    }
     const ph1 = new Uint8Array(BemPh1Size);
     for (let i = 0; i < ph1Count; i++) {
         ph1[i] = ula[BemTubeUlaOffsets.ph1 + ((ph1Head + i) % BemPh1Size)];

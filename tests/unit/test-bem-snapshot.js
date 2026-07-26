@@ -186,6 +186,7 @@ async function makeBemV3WithTube({
     parasite = {},
     ramSize = 65536,
     romSize = 2048,
+    ulaBytes = 51,
 } = {}) {
     const model = [
         ...encodeVar(3),
@@ -203,10 +204,10 @@ async function makeBemV3WithTube({
         ...(tubeName ? [1, ...encodeString(tubeName)] : [0]),
     ];
 
-    const ulaBytes = new Uint8Array(51);
-    ulaBytes[0] = 2; // struct version
-    ulaBytes[1] = ula.romPaged ?? 1;
-    for (const [offset, value] of Object.entries(ula.fields ?? {})) ulaBytes[2 + Number(offset)] = value;
+    const ulaSection = new Uint8Array(ulaBytes);
+    ulaSection[0] = 2; // struct version
+    ulaSection[1] = ula.romPaged ?? 1;
+    for (const [offset, value] of Object.entries(ula.fields ?? {})) ulaSection[2 + Number(offset)] = value;
 
     const parasiteBytes = new Uint8Array(9 + ramSize + romSize);
     parasiteBytes[1] = parasite.oldnmi ?? 0;
@@ -222,7 +223,7 @@ async function makeBemV3WithTube({
     return new Uint8Array([
         ...new TextEncoder().encode("BEMSNAP3"),
         ...section("m", model),
-        ...section("T", ulaBytes),
+        ...section("T", ulaSection),
         ...section("P", await deflate(parasiteBytes), true),
     ]).buffer;
 }
@@ -299,6 +300,28 @@ describe("b-em tube import", () => {
         await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 16384 }))).rejects.toThrow(/parasite RAM/);
         // A renamed Turbo in b-em's config would get past the name check on size alone.
         await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 0x1000000 }))).rejects.toThrow(/parasite RAM/);
+    });
+
+    it("rejects a truncated ULA section", async () => {
+        const buffer = await makeBemV3WithTube({ ulaBytes: 20 });
+
+        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/Truncated b-em tube ULA/);
+    });
+
+    it("rejects FIFO counts a real machine could not have produced", async () => {
+        const tooManyBytesQueued = await makeBemV3WithTube({ ula: { fields: { 46: 30 } } }); // ph1count
+        const headPastTheEnd = await makeBemV3WithTube({ ula: { fields: { 45: 24 } } }); // ph1head
+        const overfullR3 = await makeBemV3WithTube({ ula: { fields: { 48: 3 } } }); // hp3pos
+
+        for (const buffer of [tooManyBytesQueued, headPastTheEnd, overfullR3]) {
+            await expect(parseBemSnapshot(buffer)).rejects.toThrow(/FIFO counts out of range/);
+        }
+    });
+
+    it("rejects co-processor state that names no co-processor", async () => {
+        const buffer = await makeBemV3WithTube({ tubeName: null });
+
+        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/names no co-processor/);
     });
 
     it("accepts a parasite whose ROM size b-em's config left unset", async () => {
