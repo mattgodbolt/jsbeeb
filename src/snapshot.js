@@ -4,7 +4,15 @@ import { typedArrayToBase64, base64ToTypedArray } from "./state-utils.js";
 import { findModel } from "./models.js";
 
 const SnapshotFormat = "jsbeeb-snapshot";
-const SnapshotVersion = 2;
+const SnapshotVersion = 3;
+
+/**
+ * Whether a snapshot was taken on a machine with a second processor fitted.
+ * Nothing before version 3 captured tube state, so those snapshots are always host-only.
+ */
+export function hasCoProcessor(snapshot) {
+    return !!snapshot.coProcessor;
+}
 
 /**
  * Check if two model names resolve to the same model (accounting for
@@ -70,6 +78,9 @@ export function createSnapshot(cpu, model, media) {
         format: SnapshotFormat,
         version: SnapshotVersion,
         model: model.name,
+        // The co-processor is emulation config rather than part of the model, so the model name
+        // cannot distinguish a Turbo from a plain Master. Recorded separately for that reason.
+        coProcessor: cpu.hasTube,
         timestamp: new Date().toISOString(),
         state,
     };
@@ -93,6 +104,13 @@ export function restoreSnapshot(cpu, model, snapshot) {
     }
     if (!isSameModel(snapshot.model, model.name)) {
         throw new Error(`Model mismatch: snapshot is for "${snapshot.model}" but current model is "${model.name}"`);
+    }
+    if (hasCoProcessor(snapshot) !== cpu.hasTube) {
+        const fitted = (yes) => (yes ? "with a second processor" : "without a second processor");
+        throw new Error(
+            `Co-processor mismatch: snapshot was taken ${fitted(hasCoProcessor(snapshot))} ` +
+                `but this machine is ${fitted(cpu.hasTube)}`,
+        );
     }
     cpu.restoreState(snapshot.state);
 }

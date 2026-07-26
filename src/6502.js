@@ -485,6 +485,49 @@ class Tube6502 extends Base6502 {
         }
     }
 
+    snapshotState({ includeRoms = false } = {}) {
+        return {
+            a: this.a,
+            x: this.x,
+            y: this.y,
+            s: this.s,
+            pc: this.pc,
+            p: this.p.asByte(),
+            nmiLevel: this._nmiLevel,
+            nmiEdge: this._nmiEdge,
+            takeInt: this.takeInt,
+            // Cycles owed to the parasite; it has no scheduler of its own, so nothing here is
+            // relative to the host's epoch.
+            cycles: this.cycles,
+            romPaged: this.romPaged,
+            memory: this.memory.slice(),
+            // The ROM is loaded from file at boot and never written, so it is only worth
+            // carrying for a self-contained snapshot.
+            rom: includeRoms ? this.rom.slice() : undefined,
+            ula: this.tube.snapshotState(),
+        };
+    }
+
+    restoreState(state) {
+        // Before the registers: restoring the ULA re-derives the interrupt lines, which can
+        // leave a spurious NMI edge that the saved register state below then corrects.
+        this.tube.restoreState(state.ula);
+
+        this.a = state.a;
+        this.x = state.x;
+        this.y = state.y;
+        this.s = state.s;
+        this.pc = state.pc;
+        this.p.setFromByte(state.p);
+        this._nmiLevel = state.nmiLevel;
+        this._nmiEdge = state.nmiEdge;
+        this.takeInt = state.takeInt;
+        this.cycles = state.cycles;
+        this.romPaged = state.romPaged;
+        this.memory.set(state.memory);
+        if (state.rom) this.rom.set(state.rom);
+    }
+
     async loadOs() {
         console.log("Loading tube rom from roms/" + this.model.os);
         const tubeRom = this.rom;
@@ -1188,6 +1231,7 @@ export class Cpu6502 extends Base6502 {
             acia: this.acia.snapshotState(),
             adc: this.adconverter.snapshotState(),
             fdc: this.fdc.snapshotState(),
+            tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
     }
 
@@ -1247,6 +1291,13 @@ export class Cpu6502 extends Base6502 {
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
         if (state.fdc) {
             this.fdc.restoreState(state.fdc);
+        }
+
+        // Tube state (v3+). A snapshot from a machine without a co-processor carries none, so
+        // reset the parasite rather than leave it running on state the host knows nothing about.
+        if (this.hasTube) {
+            if (state.tube) this.tube.restoreState(state.tube);
+            else this.tube.reset(true);
         }
     }
 

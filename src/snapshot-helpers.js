@@ -166,12 +166,25 @@ export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, c
  * @param {object} uservia - jsbeeb user VIA state
  * @param {object} video - jsbeeb video state (from buildVideoState)
  * @param {object} soundChip - jsbeeb sound chip state
+ * @param {object|null} [tube] - jsbeeb tube state, or null if no co-processor was fitted
  */
-export function buildSnapshot(importedFrom, modelName, cpuState, ram, roms, sysvia, uservia, video, soundChip) {
+export function buildSnapshot(
+    importedFrom,
+    modelName,
+    cpuState,
+    ram,
+    roms,
+    sysvia,
+    uservia,
+    video,
+    soundChip,
+    tube = null,
+) {
     return {
         format: "jsbeeb-snapshot",
-        version: 2,
+        version: 3,
         model: modelName,
+        coProcessor: !!tube,
         timestamp: new Date().toISOString(),
         importedFrom,
         state: {
@@ -203,6 +216,7 @@ export function buildSnapshot(importedFrom, modelName, cpuState, ram, roms, sysv
             soundChip,
             acia: { ...DefaultAcia },
             adc: { ...DefaultAdc },
+            ...(tube ? { tube } : {}),
         },
     };
 }

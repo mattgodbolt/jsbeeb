@@ -6,7 +6,7 @@ import { SoundChip } from "../../src/soundchip.js";
 import { FakeDdNoise } from "../../src/ddnoise.js";
 import { Cmos } from "../../src/cmos.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
-import { TEST_6502 } from "../../src/models.js";
+import { TEST_6502, TubeModel } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { crc32 } from "../../src/utils.js";
 import { discFor } from "../../src/fdc.js";
@@ -14,7 +14,7 @@ import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc } from "../../src/wd-fdc.js";
 
-function makeCpu() {
+function makeCpu(config = {}) {
     const fb32 = new Uint32Array(1024 * 768);
     const video = new Video(false, fb32, () => {});
     const soundChip = new SoundChip(() => {});
@@ -26,6 +26,7 @@ function makeCpu() {
         ddNoise: new FakeDdNoise(),
         music5000: new FakeMusic5000(),
         cmos: new Cmos(),
+        config,
     });
 }
 
@@ -43,7 +44,7 @@ describe("Snapshot coordinator", () => {
             const snapshot = createSnapshot(cpu, model);
 
             expect(snapshot.format).toBe("jsbeeb-snapshot");
-            expect(snapshot.version).toBe(2);
+            expect(snapshot.version).toBe(3);
             expect(snapshot.model).toBe(model.name);
             expect(snapshot.timestamp).toBeDefined();
             expect(snapshot.state).toBeDefined();
@@ -105,7 +106,7 @@ describe("Snapshot coordinator", () => {
 
             // Verify metadata survived
             expect(restored.format).toBe("jsbeeb-snapshot");
-            expect(restored.version).toBe(2);
+            expect(restored.version).toBe(3);
             expect(restored.model).toBe(model.name);
 
             // Verify TypedArrays were properly reconstructed
@@ -172,6 +173,42 @@ describe("Snapshot coordinator", () => {
             const cpu2 = makeCpu();
             // Should not throw — FDC keeps its current state
             expect(() => restoreSnapshot(cpu2, model, snapshot)).not.toThrow();
+        });
+    });
+
+    describe("co-processor", () => {
+        it("records that no co-processor was fitted", () => {
+            expect(createSnapshot(cpu, model).coProcessor).toBe(false);
+        });
+
+        it("records a fitted co-processor and its state", () => {
+            const tubeCpu = makeCpu({ tube: TubeModel });
+            const snapshot = createSnapshot(tubeCpu, model);
+
+            expect(snapshot.coProcessor).toBe(true);
+            expect(snapshot.state.tube.ula).toBeDefined();
+        });
+
+        it("refuses to restore a host-only snapshot into a machine with a co-processor", () => {
+            const snapshot = createSnapshot(cpu, model);
+
+            expect(() => restoreSnapshot(makeCpu({ tube: TubeModel }), model, snapshot)).toThrow(
+                /Co-processor mismatch/,
+            );
+        });
+
+        it("refuses to restore a co-processor snapshot into a machine without one", () => {
+            const snapshot = createSnapshot(makeCpu({ tube: TubeModel }), model);
+
+            expect(() => restoreSnapshot(cpu, model, snapshot)).toThrow(/Co-processor mismatch/);
+        });
+
+        it("still loads pre-v3 snapshots, which never recorded a co-processor", () => {
+            const snapshot = createSnapshot(cpu, model);
+            snapshot.version = 2;
+            delete snapshot.coProcessor;
+
+            expect(() => restoreSnapshot(makeCpu(), model, snapshot)).not.toThrow();
         });
     });
 

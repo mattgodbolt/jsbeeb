@@ -255,7 +255,125 @@ function readString(data, pos) {
     return str;
 }
 
-function parseBemV3(buffer) {
+// b-em writes the tube ULA as a raw struct dump. Version 2 is all single-byte fields, so it has
+// no padding and can be read directly; version 1 used native ints and is not supported here.
+const BemTubeUlaVersion = 2;
+const BemTubeUlaOffsets = {
+    ph1: 0, // 24-byte parasite-to-host R1 FIFO, held as a circular buffer
+    ph2: 24,
+    ph3: 25, // 2 bytes
+    ph4: 27,
+    hp1: 29, // phl (byte 28) is a latch jsbeeb does not model
+    hp2: 30,
+    hp3: 31, // 2 bytes
+    hp4: 33,
+    hstat: 35, // 4 bytes; hpl (byte 34) likewise unmodelled
+    pstat: 39, // 4 bytes
+    r1stat: 43,
+    ph1tail: 44,
+    ph1head: 45,
+    ph1count: 46,
+    ph3pos: 47,
+    hp3pos: 48,
+};
+const BemTubeUlaSize = 49;
+const BemPh1Size = 24;
+// 9 bytes of registers, then RAM, then ROM. Only the 64K 6502 parasites map onto jsbeeb's:
+// b-em's "6502 Turbo" has 16MB of RAM, and its other co-processors are different CPUs entirely.
+const BemTubeRegisterBytes = 9;
+const BemTubeRamSize = 65536;
+const BemSupportedTubes = ["6502 Internal", "6502 External"];
+
+/**
+ * Convert b-em's tube sections into jsbeeb tube state.
+ * @param {object} sections - parsed v3 sections
+ * @param {string|null} tubeName - co-processor name from the model section
+ * @returns {Promise<object|null>} jsbeeb tube state, or null if no usable co-processor
+ */
+async function parseBemTube(sections, tubeName) {
+    if (!sections["T"] || !sections["P"]) return null;
+    if (tubeName && !BemSupportedTubes.includes(tubeName)) {
+        throw new Error(
+            `Unsupported b-em co-processor "${tubeName}": jsbeeb only emulates the 64K 65C02 second processor`,
+        );
+    }
+
+    const ulaSection = sections["T"].data;
+    if (ulaSection[0] !== BemTubeUlaVersion) {
+        throw new Error(`Unsupported b-em tube ULA state version ${ulaSection[0]}`);
+    }
+    const romPaged = !!ulaSection[1];
+    const ula = ulaSection.slice(2, 2 + BemTubeUlaSize);
+    const at = (field) => ula[BemTubeUlaOffsets[field]];
+
+    // b-em keeps the R1 FIFO as a circular buffer; jsbeeb shifts its contents down on read, so
+    // the bytes have to be linearised into the order jsbeeb expects to read them.
+    const ph1Count = at("ph1count");
+    const ph1 = new Uint8Array(BemPh1Size);
+    for (let i = 0; i < ph1Count; i++) {
+        ph1[i] = ula[BemTubeUlaOffsets.ph1 + ((at("ph1head") + i) % BemPh1Size)];
+    }
+
+    const parasite = await decompress(sections["P"].data, "deflate");
+    const romSize = parasite.length - BemTubeRegisterBytes - BemTubeRamSize;
+    if (romSize < 0) {
+        throw new Error(
+            `Unsupported b-em co-processor: expected ${BemTubeRamSize} bytes of parasite RAM, ` +
+                `but the state section holds ${parasite.length - BemTubeRegisterBytes}`,
+        );
+    }
+
+    return {
+        a: parasite[2],
+        x: parasite[3],
+        y: parasite[4],
+        p: parasite[5] | 0x30,
+        s: parasite[6],
+        pc: parasite[7] | (parasite[8] << 8),
+        // b-em's oldnmi is the previous NMI level, used for the same edge detection jsbeeb does.
+        nmiLevel: !!parasite[1],
+        nmiEdge: false,
+        takeInt: false,
+        cycles: 0,
+        romPaged,
+        memory: parasite.slice(BemTubeRegisterBytes, BemTubeRegisterBytes + BemTubeRamSize),
+        // The parasite ROM is loaded from file at boot, so b-em's copy is not needed.
+        ula: {
+            internalStatusRegister: at("r1stat"),
+            hostStatus: ula.slice(BemTubeUlaOffsets.hstat, BemTubeUlaOffsets.hstat + 4),
+            parasiteStatus: ula.slice(BemTubeUlaOffsets.pstat, BemTubeUlaOffsets.pstat + 4),
+            parasiteToHostData: [
+                ph1,
+                Uint8Array.of(at("ph2")),
+                ula.slice(BemTubeUlaOffsets.ph3, BemTubeUlaOffsets.ph3 + 2),
+                Uint8Array.of(at("ph4")),
+            ],
+            hostToParasiteData: [
+                Uint8Array.of(at("hp1")),
+                Uint8Array.of(at("hp2")),
+                ula.slice(BemTubeUlaOffsets.hp3, BemTubeUlaOffsets.hp3 + 2),
+                Uint8Array.of(at("hp4")),
+            ],
+            parasiteToHostFifoByteCount1: ph1Count,
+            parasiteToHostFifoByteCount3: at("ph3pos"),
+            hostToParasiteFifoByteCount3: at("hp3pos"),
+        },
+    };
+}
+
+/**
+ * Read the co-processor name from b-em's model section, if one was fitted.
+ * The name follows the model strings and flag bytes, so those have to be stepped over first.
+ * @returns {string|null}
+ */
+function readBemTubeName(data, pos) {
+    for (let i = 0; i < 4; i++) readString(data, pos); // os, cmos, rom setup, fdc names
+    pos.offset += 6; // model flag bytes
+    const fitted = data[pos.offset++];
+    return fitted ? readString(data, pos) : null;
+}
+
+async function parseBemV3(buffer) {
     const bytes = new Uint8Array(buffer);
     let offset = 8; // Skip "BEMSNAP3" signature
 
@@ -281,11 +399,13 @@ function parseBemV3(buffer) {
     // Parse model section to determine jsbeeb model name.
     // Use jsbeeb synonyms (from models.js) so findModel() resolves them.
     let modelName = "B";
+    let tubeName = null;
     if (sections["m"]) {
         const pos = { offset: 0 };
         const data = sections["m"].data;
         readVar(data, pos); // curmodel index (skip)
         const name = readString(data, pos);
+        tubeName = readBemTubeName(data, pos);
         if (name.includes("Master")) {
             if (name.includes("ADFS")) modelName = "MasterADFS";
             else if (name.includes("ANFS")) modelName = "MasterANFS";
@@ -311,23 +431,21 @@ function parseBemV3(buffer) {
     if (memSection) {
         // Memory is zlib-compressed; decompression is async.
         // Decompressed layout: 2 bytes (fe30, fe34) + 64KB RAM + 256KB ROM
-        return decompress(memSection.data, "deflate").then((memData) => {
-            cpuState.fe30 = memData[0];
-            cpuState.fe34 = memData[1];
-            const ramStart = 2;
-            const ramSize = 64 * 1024;
-            ram.set(memData.slice(ramStart, ramStart + ramSize));
-            const romStart = ramStart + ramSize;
-            if (memData.length > romStart) {
-                roms = memData.slice(romStart, romStart + 262144);
-            }
-            return finishV3Parse(modelName, cpuState, ram, roms, sections);
-        });
+        const memData = await decompress(memSection.data, "deflate");
+        cpuState.fe30 = memData[0];
+        cpuState.fe34 = memData[1];
+        const ramStart = 2;
+        const ramSize = 64 * 1024;
+        ram.set(memData.slice(ramStart, ramStart + ramSize));
+        const romStart = ramStart + ramSize;
+        if (memData.length > romStart) {
+            roms = memData.slice(romStart, romStart + 262144);
+        }
     }
-    return finishV3Parse(modelName, cpuState, ram, roms, sections);
+    return finishV3Parse(modelName, cpuState, ram, roms, sections, await parseBemTube(sections, tubeName));
 }
 
-function finishV3Parse(modelName, cpuState, ram, roms, sections) {
+function finishV3Parse(modelName, cpuState, ram, roms, sections, tube) {
     // Parse system VIA
     let sysvia = convertViaState(
         {
@@ -466,5 +584,6 @@ function finishV3Parse(modelName, cpuState, ram, roms, sections) {
         uservia,
         buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, crtcCounters),
         soundChip,
+        tube,
     );
 }

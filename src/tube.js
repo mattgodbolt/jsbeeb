@@ -219,7 +219,7 @@ export class Tube {
                 if (this.hostStatus[TUBE_ULA_R3] & TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL) {
                     if (this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_2_BYTE_R3_DATA) {
                         if (this.hostToParasiteFifoByteCount3 < 2) {
-                            this.hostToParasiteData[this.hostToParasiteFifoByteCount3++] = value;
+                            this.hostToParasiteData[TUBE_ULA_R3][this.hostToParasiteFifoByteCount3++] = value;
                         }
                         if (this.hostToParasiteFifoByteCount3 === 2) {
                             this.parasiteStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
@@ -294,6 +294,40 @@ export class Tube {
         }
         return result;
     }
+    snapshotState() {
+        return {
+            internalStatusRegister: this.internalStatusRegister,
+            hostStatus: this.hostStatus.slice(),
+            parasiteStatus: this.parasiteStatus.slice(),
+            parasiteToHostData: this.parasiteToHostData.map((fifo) => fifo.slice()),
+            hostToParasiteData: this.hostToParasiteData.map((fifo) => fifo.slice()),
+            parasiteToHostFifoByteCount1: this.parasiteToHostFifoByteCount1,
+            parasiteToHostFifoByteCount3: this.parasiteToHostFifoByteCount3,
+            hostToParasiteFifoByteCount3: this.hostToParasiteFifoByteCount3,
+        };
+    }
+
+    /**
+     * The interrupt and reset lines are not saved: updateInterrupts() derives them from the
+     * status registers and FIFO counts, in the same way the host's `interrupt` is rebuilt by
+     * the VIA and ACIA restores. Because the parasite's NMI is edge triggered, this can leave
+     * a spurious edge behind; Tube6502.restoreState() restores the parasite's registers
+     * afterwards, which puts the true edge state back.
+     */
+    restoreState(state) {
+        this.internalStatusRegister = state.internalStatusRegister;
+        this.hostStatus.set(state.hostStatus);
+        this.parasiteStatus.set(state.parasiteStatus);
+        for (let i = 0; i < 4; i++) {
+            this.parasiteToHostData[i].set(state.parasiteToHostData[i]);
+            this.hostToParasiteData[i].set(state.hostToParasiteData[i]);
+        }
+        this.parasiteToHostFifoByteCount1 = state.parasiteToHostFifoByteCount1;
+        this.parasiteToHostFifoByteCount3 = state.parasiteToHostFifoByteCount3;
+        this.hostToParasiteFifoByteCount3 = state.hostToParasiteFifoByteCount3;
+        this.updateInterrupts();
+    }
+
     parasiteWrite(address, value) {
         //  Not implemented - needs to be integrated with the parasite CPU code:
         //  Boot mode is terminated by the software when it selects any one of the Tube addresses.
