@@ -33,6 +33,7 @@ export function fake6502(model, opts) {
             tube: opts.tube ? TubeModel : null,
             tubeCpuMultiplier: opts.tubeCpuMultiplier,
             cpuMultiplier: opts.cpuMultiplier,
+            hasTeletextAdaptor: opts.hasTeletextAdaptor,
         },
     });
 }

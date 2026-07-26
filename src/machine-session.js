@@ -32,6 +32,7 @@ export class MachineSession {
      * @param {string} [opts.discImage] - path to an .ssd or .dsd disc image to load on boot
      * @param {boolean} [opts.tube] - attach a 65C02 second processor (Tube co-processor)
      * @param {number} [opts.cpuMultiplier] - run the CPU this many times faster than the peripherals
+     * @param {boolean} [opts.hasTeletextAdaptor] - fit the Acorn teletext adaptor
      */
     constructor(modelName = "B-DFS1.2", opts = {}) {
         this.modelName = modelName;
@@ -73,6 +74,7 @@ export class MachineSession {
             soundChip: this._soundChip,
             tube: opts.tube,
             cpuMultiplier: opts.cpuMultiplier,
+            hasTeletextAdaptor: opts.hasTeletextAdaptor,
         });
 
         // Accumulated VDU text output — drained by callers
