@@ -623,7 +623,6 @@ export class Cpu6502 extends Base6502 {
         this.cpuMultiplier = this.config.cpuMultiplier;
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
         this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
-        // Resolved once rather than read per access; hasTube is checked every batch.
         this.hasTube = !!this.config.coProcessor;
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
@@ -1372,7 +1371,7 @@ export class Cpu6502 extends Base6502 {
     // Builds common code between polltimeSlow and polltimeFast
     buildPolltime() {
         const nop = (_cycles) => {};
-        const tubeStuff = (cycles) => (this.hasTube ? this.tube.execute(cycles) : nop);
+        const tubeStuff = this.hasTube ? (cycles) => this.tube.execute(cycles) : nop;
         const teletextStuff = this.teletextAdaptor ? (cycles) => this.teletextAdaptor.polltime(cycles) : nop;
         const musicStuff = this.music5000 ? (cycles) => this.music5000.polltime(cycles) : nop;
         const econetStuff = this.econet
