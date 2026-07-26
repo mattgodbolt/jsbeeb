@@ -2,6 +2,20 @@
 import { allModels, findModel } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
 
+/**
+ * The sideways ROMs the optional fittings need, in the order they claim banks.
+ *
+ * @param {{model: object, hasEconet: boolean, hasMusic5000: boolean, hasTeletextAdaptor: boolean}} settings
+ * @returns {string[]}
+ */
+export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor }) {
+    return [
+        ...(hasEconet && model.isMaster ? ["master/anfs-4.25.rom"] : []),
+        ...(hasMusic5000 ? ["ample.rom"] : []),
+        ...(hasTeletextAdaptor ? ["ats-3.0.rom"] : []),
+    ];
+}
+
 export class Config extends EventTarget {
     constructor(onChange, onClose) {
         super();
@@ -9,16 +23,19 @@ export class Config extends EventTarget {
         this.onClose = onClose;
         this.changed = {};
         this.model = null;
-        this.coProcessor = null;
+        this.coProcessor = false;
+        this.hasEconet = false;
+        this.hasMusic5000 = false;
+        this.hasTeletextAdaptor = false;
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
             this.setDropdownText(this.model.name);
-            this.set65c02(this.model.tube);
+            this.set65c02(this.coProcessor);
             this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
-            this.setTeletext(this.model.hasTeletextAdaptor);
-            this.setMusic5000(this.model.hasMusic5000);
-            this.setEconet(this.model.hasEconet);
+            this.setTeletext(this.hasTeletextAdaptor);
+            this.setMusic5000(this.hasMusic5000);
+            this.setEconet(this.hasEconet);
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
@@ -136,7 +153,7 @@ export class Config extends EventTarget {
     set65c02(enabled) {
         enabled = !!enabled;
         document.getElementById("65c02").checked = enabled;
-        this.model.tube = enabled ? findModel("Tube65c02") : null;
+        this.coProcessor = enabled;
         document.getElementById("tubeCpuMultiplier").disabled = !enabled;
     }
 
@@ -149,25 +166,19 @@ export class Config extends EventTarget {
     setEconet(enabled) {
         enabled = !!enabled;
         document.getElementById("hasEconet").checked = enabled;
-        this.model.hasEconet = enabled;
-
-        if (enabled && this.model.isMaster) {
-            this.addRemoveROM("master/anfs-4.25.rom", true);
-        }
+        this.hasEconet = enabled;
     }
 
     setMusic5000(enabled) {
         enabled = !!enabled;
         document.getElementById("hasMusic5000").checked = enabled;
-        this.model.hasMusic5000 = enabled;
-        this.addRemoveROM("ample.rom", enabled);
+        this.hasMusic5000 = enabled;
     }
 
     setTeletext(enabled) {
         enabled = !!enabled;
         document.getElementById("hasTeletextAdaptor").checked = enabled;
-        this.model.hasTeletextAdaptor = enabled;
-        this.addRemoveROM("ats-3.0.rom", enabled);
+        this.hasTeletextAdaptor = enabled;
     }
 
     setDropdownText(modelName) {
@@ -175,15 +186,8 @@ export class Config extends EventTarget {
         if (el) el.textContent = modelName;
     }
 
-    addRemoveROM(romName, required) {
-        if (required && !this.model.os.includes(romName)) {
-            this.model.os.push(romName);
-        } else {
-            let pos = this.model.os.indexOf(romName);
-            if (pos !== -1) {
-                this.model.os.splice(pos, 1);
-            }
-        }
+    get extraRoms() {
+        return fittedRoms(this);
     }
 
     mapLegacyModels(parsedQuery) {

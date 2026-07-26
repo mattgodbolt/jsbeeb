@@ -7,7 +7,7 @@ import "./jsbeeb.css";
 import * as utils from "./utils.js";
 import { FakeVideo, Video } from "./video.js";
 import { Debugger } from "./web/debug.js";
-import { Cpu6502, AtomCpu6502 } from "./6502.js";
+import { Cpu6502, AtomCpu6502, DefaultTubeCpuMultiplier } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
@@ -19,6 +19,7 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
+import { TubeModel } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
@@ -218,25 +219,6 @@ const userPort = {
     },
 };
 
-const emulationConfig = {
-    keyLayout: keyLayout,
-    coProcessor: parsedQuery.coProcessor,
-    cpuMultiplier: cpuMultiplier,
-    tubeCpuMultiplier: parsedQuery.tubeCpuMultiplier || 2,
-    videoCyclesBatch: parsedQuery.videoCyclesBatch,
-    extraRoms: extraRoms,
-    userPort: userPort,
-    printerPort: printerPort,
-    getGamepads: function () {
-        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
-        return navigator.getGamepads ? navigator.getGamepads() : [];
-    },
-    debugFlags: {
-        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
-        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
-    },
-};
-
 // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
 // Must be created before Config so the onClose callback and setSpeechOutput() call can reference it.
 const speechOutput = new SpeechOutput();
@@ -289,7 +271,7 @@ const config = new Config(
         if (changed.tubeCpuMultiplier !== undefined) {
             emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
             config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
-            if (processor.tube && processor.tube.cpuMultiplier !== undefined) {
+            if (processor.hasTube) {
                 processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
             }
         }
@@ -303,7 +285,7 @@ config.mapLegacyModels(parsedQuery);
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
-config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 2);
+config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || DefaultTubeCpuMultiplier);
 config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
@@ -314,6 +296,32 @@ let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
 
 model = config.model;
+
+// Depends on the config.setX calls above having applied the URL parameters. Note
+// cpuMultiplier is not one of them: it is read from the query string further down, and
+// this deliberately captures the value it has here.
+const emulationConfig = {
+    keyLayout,
+    cpuMultiplier,
+    tubeCpuMultiplier: config.tubeCpuMultiplier,
+    videoCyclesBatch: parsedQuery.videoCyclesBatch,
+    tube: config.coProcessor ? TubeModel : null,
+    hasMusic5000: config.hasMusic5000,
+    hasTeletextAdaptor: config.hasTeletextAdaptor,
+    // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
+    // before any the user asked for with ?rom=.
+    extraRoms: [...config.extraRoms, ...extraRoms],
+    userPort,
+    printerPort,
+    getGamepads: function () {
+        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
+        return navigator.getGamepads ? navigator.getGamepads() : [];
+    },
+    debugFlags: {
+        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
+        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
+    },
+};
 
 function sbBind(div, url, onload) {
     const img = div.querySelector("img");
@@ -612,7 +620,7 @@ window.addEventListener("beforeunload", function (event) {
     }
 });
 
-if (model.hasEconet) {
+if (config.hasEconet) {
     econet = new Econet(stationId);
 } else {
     document.getElementById("fsmenuitem").style.display = "none";
@@ -656,7 +664,7 @@ processor = new CpuClass(model, {
     soundChip: audioHandler.soundChip,
     ddNoise: audioHandler.ddNoise,
     relayNoise: audioHandler.relayNoise,
-    music5000: model.hasMusic5000 ? audioHandler.music5000 : null,
+    music5000: config.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
     config: emulationConfig,
     econet,
@@ -1690,7 +1698,7 @@ syncLights = function () {
         drive0.update(processor.fdc.motorOn[0]);
         drive1.update(processor.fdc.motorOn[1]);
         cassette.update(processor.acia.motorOn);
-        if (model.hasEconet) {
+        if (config.hasEconet) {
             network.update(processor.econet.activityLight());
         }
     }
