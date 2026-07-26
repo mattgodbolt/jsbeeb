@@ -70,7 +70,7 @@ export class MachineSession {
         this._machine = new TestMachine(modelName, {
             video: this._video,
             soundChip: this._soundChip,
-            tube: !!opts.tube,
+            tube: opts.tube,
         });
 
         // Accumulated VDU text output — drained by callers

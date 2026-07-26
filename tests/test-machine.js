@@ -11,9 +11,10 @@ const MaxCyclesPerIter = 100 * 1000;
 export class TestMachine {
     constructor(model, opts) {
         model = model || "B-DFS1.2";
-        const modelObj = findModel(model);
-        this.model = modelObj;
-        this.processor = fake6502(modelObj, opts || {});
+        this.processor = fake6502(findModel(model), opts || {});
+        // Read the model back from the processor: fake6502 may have derived its own
+        // copy (e.g. for opts.tube), and the two must not disagree.
+        this.model = this.processor.model;
         this._capturedChars = [];
         this._captureHookInstalled = false;
     }

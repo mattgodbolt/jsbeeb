@@ -10,6 +10,10 @@ const CpuModel = Object.freeze({
     CMOS65C12: 2,
 });
 
+// The only second processor jsbeeb emulates. Named here so the one place that
+// knows a "tube" means this particular model is the Model class itself.
+const TubeModelName = "Tube65C02";
+
 class Model {
     constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, tube, cmosOverride, banks } = {}) {
         this.name = name;
@@ -26,6 +30,21 @@ class Model {
         this.cmosOverride = cmosOverride;
         this.hasEconet = false;
         this.hasMusic5000 = false;
+    }
+
+    /**
+     * Returns a copy of this model with the 65C02 second processor attached,
+     * leaving this model untouched.
+     *
+     * The models in `allModels` are shared singletons, so a machine must never set
+     * `tube` on one in place: a machine created later in the same process would
+     * inherit it. Copying with `Object.create` rather than the constructor keeps
+     * both the prototype getters below and any flags set after construction.
+     *
+     * @returns {Model}
+     */
+    withTube() {
+        return Object.assign(Object.create(Model.prototype), this, { tube: findModel(TubeModelName) });
     }
 
     get nmos() {
