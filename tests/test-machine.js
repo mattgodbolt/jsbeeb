@@ -12,6 +12,7 @@ export class TestMachine {
     constructor(model, opts) {
         model = model || "B-DFS1.2";
         this.model = findModel(model);
+        if (!this.model) throw new Error(`Unknown model "${model}"`);
         this.processor = fake6502(this.model, opts || {});
         this._capturedChars = [];
         this._captureHookInstalled = false;

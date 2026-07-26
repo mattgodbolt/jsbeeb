@@ -7,7 +7,7 @@ import "./jsbeeb.css";
 import * as utils from "./utils.js";
 import { FakeVideo, Video } from "./video.js";
 import { Debugger } from "./web/debug.js";
-import { Cpu6502, AtomCpu6502 } from "./6502.js";
+import { Cpu6502, AtomCpu6502, DefaultTubeCpuMultiplier } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
@@ -271,7 +271,7 @@ const config = new Config(
         if (changed.tubeCpuMultiplier !== undefined) {
             emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
             config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
-            if (processor.tube && processor.tube.cpuMultiplier !== undefined) {
+            if (processor.hasTube) {
                 processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
             }
         }
@@ -285,7 +285,7 @@ config.mapLegacyModels(parsedQuery);
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
 config.set65c02(parsedQuery.coProcessor);
-config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 2);
+config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || DefaultTubeCpuMultiplier);
 config.setEconet(parsedQuery.hasEconet);
 config.setMusic5000(parsedQuery.hasMusic5000);
 config.setTeletext(parsedQuery.hasTeletextAdaptor);
@@ -297,20 +297,22 @@ config.setDisplayMode(displayMode);
 
 model = config.model;
 
-// Built here, once the config.setX calls above have applied the URL parameters.
+// Depends on the config.setX calls above having applied the URL parameters. Note
+// cpuMultiplier is not one of them: it is read from the query string further down, and
+// this deliberately captures the value it has here.
 const emulationConfig = {
-    keyLayout: keyLayout,
-    cpuMultiplier: cpuMultiplier,
+    keyLayout,
+    cpuMultiplier,
     tubeCpuMultiplier: config.tubeCpuMultiplier,
     videoCyclesBatch: parsedQuery.videoCyclesBatch,
-    coProcessor: config.coProcessor ? TubeModel : null,
+    tube: config.coProcessor ? TubeModel : null,
     hasMusic5000: config.hasMusic5000,
     hasTeletextAdaptor: config.hasTeletextAdaptor,
     // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
     // before any the user asked for with ?rom=.
     extraRoms: [...config.extraRoms, ...extraRoms],
-    userPort: userPort,
-    printerPort: printerPort,
+    userPort,
+    printerPort,
     getGamepads: function () {
         // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
         return navigator.getGamepads ? navigator.getGamepads() : [];

@@ -2,6 +2,20 @@
 import { allModels, findModel } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
 
+/**
+ * The sideways ROMs the optional fittings need, in the order they claim banks.
+ *
+ * @param {{model: object, hasEconet: boolean, hasMusic5000: boolean, hasTeletextAdaptor: boolean}} settings
+ * @returns {string[]}
+ */
+export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor }) {
+    return [
+        ...(hasEconet && model.isMaster ? ["master/anfs-4.25.rom"] : []),
+        ...(hasMusic5000 ? ["ample.rom"] : []),
+        ...(hasTeletextAdaptor ? ["ats-3.0.rom"] : []),
+    ];
+}
+
 export class Config extends EventTarget {
     constructor(onChange, onClose) {
         super();
@@ -13,7 +27,6 @@ export class Config extends EventTarget {
         this.hasEconet = false;
         this.hasMusic5000 = false;
         this.hasTeletextAdaptor = false;
-        this.extraRoms = [];
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
@@ -154,24 +167,18 @@ export class Config extends EventTarget {
         enabled = !!enabled;
         document.getElementById("hasEconet").checked = enabled;
         this.hasEconet = enabled;
-
-        if (enabled && this.model.isMaster) {
-            this.addRemoveROM("master/anfs-4.25.rom", true);
-        }
     }
 
     setMusic5000(enabled) {
         enabled = !!enabled;
         document.getElementById("hasMusic5000").checked = enabled;
         this.hasMusic5000 = enabled;
-        this.addRemoveROM("ample.rom", enabled);
     }
 
     setTeletext(enabled) {
         enabled = !!enabled;
         document.getElementById("hasTeletextAdaptor").checked = enabled;
         this.hasTeletextAdaptor = enabled;
-        this.addRemoveROM("ats-3.0.rom", enabled);
     }
 
     setDropdownText(modelName) {
@@ -179,13 +186,8 @@ export class Config extends EventTarget {
         if (el) el.textContent = modelName;
     }
 
-    addRemoveROM(romName, required) {
-        const pos = this.extraRoms.indexOf(romName);
-        if (required) {
-            if (pos === -1) this.extraRoms.push(romName);
-        } else if (pos !== -1) {
-            this.extraRoms.splice(pos, 1);
-        }
+    get extraRoms() {
+        return fittedRoms(this);
     }
 
     mapLegacyModels(parsedQuery) {

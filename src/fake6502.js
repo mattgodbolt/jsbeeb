@@ -30,7 +30,7 @@ export function fake6502(model, opts) {
         cmos: new Cmos(),
         cycleAccurate: opts.cycleAccurate,
         config: {
-            coProcessor: opts.tube ? TubeModel : null,
+            tube: opts.tube ? TubeModel : null,
             tubeCpuMultiplier: opts.tubeCpuMultiplier,
         },
     });

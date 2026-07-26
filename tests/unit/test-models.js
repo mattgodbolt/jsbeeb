@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allModels, findModel } from "../../src/models.js";
+import { allModels, basicOnly, findModel, TEST_6502, TEST_65C02, TEST_65C12 } from "../../src/models.js";
 import { fake6502 } from "../../src/fake6502.js";
 
 describe("Model", () => {
@@ -7,14 +7,14 @@ describe("Model", () => {
         const master = findModel("Master");
 
         expect(Object.isFrozen(master)).toBe(true);
-        expect(() => {
-            "use strict";
-            master.hasEconet = true;
-        }).toThrow(TypeError);
+        expect(() => (master.hasEconet = true)).toThrow(TypeError);
     });
 
-    it("freezes every model, not just the selectable ones", () => {
-        expect(allModels.every((model) => Object.isFrozen(model))).toBe(true);
+    it("freezes every model and its rom list", () => {
+        for (const model of [...allModels, TEST_6502, TEST_65C02, TEST_65C12, basicOnly]) {
+            expect(Object.isFrozen(model), `${model.name} should be frozen`).toBe(true);
+            expect(Object.isFrozen(model.os), `${model.name} os should be frozen`).toBe(true);
+        }
     });
 
     it("carries no per-session settings", () => {

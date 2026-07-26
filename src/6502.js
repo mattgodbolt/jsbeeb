@@ -16,7 +16,7 @@ import { AtomMMC2 } from "./mmc.js";
 const signExtend = utils.signExtend;
 
 // Speed of the second processor relative to the host, as fitted to a Master Turbo.
-const DefaultTubeCpuMultiplier = 2;
+export const DefaultTubeCpuMultiplier = 2;
 
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
@@ -623,13 +623,11 @@ export class Cpu6502 extends Base6502 {
         this.cpuMultiplier = this.config.cpuMultiplier;
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
         this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
-        this.hasTube = !!this.config.coProcessor;
+        this.hasTube = !!this.config.tube;
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
         this.tube = this.hasTube
-            ? new Tube6502(this.config.coProcessor, this, {
-                  cpuMultiplier: this.config.tubeCpuMultiplier || DefaultTubeCpuMultiplier,
-              })
+            ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
             : new FakeTube();
         this.music5000PageSel = 0;
         this.econet = econet;
