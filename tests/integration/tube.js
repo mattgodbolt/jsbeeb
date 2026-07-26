@@ -54,6 +54,26 @@ describe("Tube co-processor", () => {
         expect(cpu.tube.memory).toEqual(expected.memory);
     });
 
+    it("raises a parasite NMI the restored state was owed but had not seen", async () => {
+        const machine = new TestMachine("Master", { tube: true });
+        await machine.initialise();
+        const cpu = machine.processor;
+        cpu.execute(200 * 1000);
+        const state = cpu.snapshotState();
+
+        // As an imported snapshot can be: the ULA has R3 data pending with NMI enabled, but the
+        // parasite's own idea of the line predates it.
+        state.tube.nmiLevel = false;
+        state.tube.nmiEdge = false;
+        state.tube.ula.internalStatusRegister |= 0x08; // M: enable parasite NMI from R3
+        state.tube.ula.parasiteToHostFifoByteCount3 = 0;
+
+        cpu.restoreState(state);
+
+        expect(cpu.tube._nmiLevel).toBe(true);
+        expect(cpu.tube._nmiEdge).toBe(true);
+    });
+
     it("resets the parasite when restoring state that has none", async () => {
         const machine = new TestMachine("Master", { tube: true });
         await machine.initialise();

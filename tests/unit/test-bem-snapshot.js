@@ -290,8 +290,10 @@ describe("b-em tube import", () => {
     });
 
     it("rejects a parasite whose RAM is not the 64K jsbeeb emulates", async () => {
-        const buffer = await makeBemV3WithTube({ ramSize: 16384 });
-
-        await expect(parseBemSnapshot(buffer)).rejects.toThrow(/parasite RAM/);
+        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 16384 }))).rejects.toThrow(/parasite state/);
+        // A renamed Turbo in b-em's config would get past the name check on size alone.
+        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 0x1000000 }))).rejects.toThrow(
+            /parasite state/,
+        );
     });
 });

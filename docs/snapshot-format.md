@@ -72,6 +72,8 @@ The co-processor is emulation config rather than part of the model, so the model
 
 If the models or co-processor settings differ, the snapshot is stashed in `sessionStorage` under `jsbeeb-pending-state` and the page reloads with the snapshot's model and co-processor setting in the query string, picking the state back up on the way in. `restoreSnapshot()` itself does not reload; given a mismatch it throws.
 
+Loading a pre-v3 snapshot while a co-processor is fitted therefore restarts the machine without one, since such a snapshot describes a host-only machine.
+
 ## TypedArray encoding
 
 Any TypedArray in the state tree is serialized as:
@@ -393,7 +395,7 @@ Present only when a co-processor was fitted; the top-level `coProcessor` flag sa
 | `parasiteToHostFifoByteCount3` | number       | Bytes waiting in the parasite-to-host R3 FIFO       |
 | `hostToParasiteFifoByteCount3` | number       | Bytes waiting in the host-to-parasite R3 FIFO       |
 
-The interrupt and reset lines are not saved. `Tube.restoreState()` derives them from the status registers and FIFO counts, in the same way the host's `interrupt` is rebuilt by the VIA and ACIA restores. Because the parasite's NMI is edge triggered, this can leave a spurious edge behind, so the parasite's registers are restored afterwards to put the true edge state back.
+The interrupt and reset lines are not saved. `Tube.restoreState()` derives them from the status registers and FIFO counts, in the same way the host's `interrupt` is rebuilt by the VIA and ACIA restores. It runs after the parasite's registers have been restored, so the edge-triggered NMI moves from its saved level to the one the ULA implies: a snapshot that agrees produces no edge, while an imported one whose idea of the line is out of date gets the rising edge it is owed.
 
 ## Known limitations (v3)
 

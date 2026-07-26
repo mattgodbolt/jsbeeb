@@ -308,11 +308,9 @@ export class Tube {
     }
 
     /**
-     * The interrupt and reset lines are not saved: updateInterrupts() derives them from the
-     * status registers and FIFO counts, in the same way the host's `interrupt` is rebuilt by
-     * the VIA and ACIA restores. Because the parasite's NMI is edge triggered, this can leave
-     * a spurious edge behind; Tube6502.restoreState() restores the parasite's registers
-     * afterwards, which puts the true edge state back.
+     * The interrupt and reset lines are not saved: they are derived from the status registers
+     * and FIFO counts, in the same way the host's `interrupt` is rebuilt by the VIA and ACIA
+     * restores.
      */
     restoreState(state) {
         this.internalStatusRegister = state.internalStatusRegister;

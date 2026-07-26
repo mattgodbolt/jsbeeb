@@ -259,7 +259,7 @@ function readString(data, pos) {
 // no padding and can be read directly; version 1 used native ints and is not supported here.
 const BemTubeUlaVersion = 2;
 const BemTubeUlaOffsets = {
-    ph1: 0, // 24-byte parasite-to-host R1 FIFO, held as a circular buffer
+    ph1: 0, // 24 bytes
     ph2: 24,
     ph3: 25, // 2 bytes
     ph4: 27,
@@ -270,8 +270,7 @@ const BemTubeUlaOffsets = {
     hstat: 35, // 4 bytes; hpl (byte 34) likewise unmodelled
     pstat: 39, // 4 bytes
     r1stat: 43,
-    ph1tail: 44,
-    ph1head: 45,
+    ph1head: 45, // ph1tail (byte 44) matters only to b-em, which appends there
     ph1count: 46,
     ph3pos: 47,
     hp3pos: 48,
@@ -282,6 +281,7 @@ const BemPh1Size = 24;
 // b-em's "6502 Turbo" has 16MB of RAM, and its other co-processors are different CPUs entirely.
 const BemTubeRegisterBytes = 9;
 const BemTubeRamSize = 65536;
+const BemTubeRomSize = 2048;
 const BemSupportedTubes = ["6502 Internal", "6502 External"];
 
 /**
@@ -309,17 +309,20 @@ async function parseBemTube(sections, tubeName) {
     // b-em keeps the R1 FIFO as a circular buffer; jsbeeb shifts its contents down on read, so
     // the bytes have to be linearised into the order jsbeeb expects to read them.
     const ph1Count = at("ph1count");
+    const ph1Head = at("ph1head");
     const ph1 = new Uint8Array(BemPh1Size);
     for (let i = 0; i < ph1Count; i++) {
-        ph1[i] = ula[BemTubeUlaOffsets.ph1 + ((at("ph1head") + i) % BemPh1Size)];
+        ph1[i] = ula[BemTubeUlaOffsets.ph1 + ((ph1Head + i) % BemPh1Size)];
     }
 
+    // b-em builds its co-processor list from a config file, so the name alone cannot be trusted
+    // to mean the 64K parasite: check the section is exactly the size that implies.
     const parasite = await decompress(sections["P"].data, "deflate");
-    const romSize = parasite.length - BemTubeRegisterBytes - BemTubeRamSize;
-    if (romSize < 0) {
+    const expectedSize = BemTubeRegisterBytes + BemTubeRamSize + BemTubeRomSize;
+    if (parasite.length !== expectedSize) {
         throw new Error(
-            `Unsupported b-em co-processor: expected ${BemTubeRamSize} bytes of parasite RAM, ` +
-                `but the state section holds ${parasite.length - BemTubeRegisterBytes}`,
+            `Unsupported b-em co-processor: expected ${expectedSize} bytes of parasite state ` +
+                `(64K RAM and a 2K ROM), but the snapshot holds ${parasite.length}`,
         );
     }
 
@@ -330,7 +333,9 @@ async function parseBemTube(sections, tubeName) {
         p: parasite[5] | 0x30,
         s: parasite[6],
         pc: parasite[7] | (parasite[8] << 8),
-        // b-em's oldnmi is the previous NMI level, used for the same edge detection jsbeeb does.
+        // b-em's oldnmi is the NMI level as of the parasite's last instruction, which may lag the
+        // line the ULA state implies. Restoring the ULA afterwards settles the line and raises an
+        // edge if one is owed. b-em's skipint has no jsbeeb equivalent and is dropped.
         nmiLevel: !!parasite[1],
         nmiEdge: false,
         takeInt: false,
@@ -363,7 +368,6 @@ async function parseBemTube(sections, tubeName) {
 
 /**
  * Read the co-processor name from b-em's model section, if one was fitted.
- * The name follows the model strings and flag bytes, so those have to be stepped over first.
  * @returns {string|null}
  */
 function readBemTubeName(data, pos) {

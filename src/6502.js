@@ -496,23 +496,16 @@ class Tube6502 extends Base6502 {
             nmiLevel: this._nmiLevel,
             nmiEdge: this._nmiEdge,
             takeInt: this.takeInt,
-            // Cycles owed to the parasite; it has no scheduler of its own, so nothing here is
-            // relative to the host's epoch.
+            // The parasite has no scheduler of its own, so this is not relative to any epoch.
             cycles: this.cycles,
             romPaged: this.romPaged,
             memory: this.memory.slice(),
-            // The ROM is loaded from file at boot and never written, so it is only worth
-            // carrying for a self-contained snapshot.
             rom: includeRoms ? this.rom.slice() : undefined,
             ula: this.tube.snapshotState(),
         };
     }
 
     restoreState(state) {
-        // Before the registers: restoring the ULA re-derives the interrupt lines, which can
-        // leave a spurious NMI edge that the saved register state below then corrects.
-        this.tube.restoreState(state.ula);
-
         this.a = state.a;
         this.x = state.x;
         this.y = state.y;
@@ -526,6 +519,11 @@ class Tube6502 extends Base6502 {
         this.romPaged = state.romPaged;
         this.memory.set(state.memory);
         if (state.rom) this.rom.set(state.rom);
+
+        // After the registers, so that the NMI line moves from its saved level to the one the
+        // ULA implies. A restore that agrees produces no edge; an imported snapshot whose idea
+        // of the line is out of date gets the rising edge it is owed.
+        this.tube.restoreState(state.ula);
     }
 
     async loadOs() {
@@ -1293,7 +1291,8 @@ export class Cpu6502 extends Base6502 {
             this.fdc.restoreState(state.fdc);
         }
 
-        // Tube state (v3+). A snapshot from a machine without a co-processor carries none, so
+        // Tube state (v3+). restoreSnapshot() refuses a snapshot whose co-processor setting does
+        // not match, so state without a tube only reaches here from a direct restoreState call;
         // reset the parasite rather than leave it running on state the host knows nothing about.
         if (this.hasTube) {
             if (state.tube) this.tube.restoreState(state.tube);

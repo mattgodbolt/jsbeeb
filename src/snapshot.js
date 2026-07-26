@@ -78,8 +78,8 @@ export function createSnapshot(cpu, model, media) {
         format: SnapshotFormat,
         version: SnapshotVersion,
         model: model.name,
-        // The co-processor is emulation config rather than part of the model, so the model name
-        // cannot distinguish a Turbo from a plain Master. Recorded separately for that reason.
+        // The model name cannot distinguish a Turbo from a plain Master: the co-processor is
+        // emulation config rather than part of the model.
         coProcessor: cpu.hasTube,
         timestamp: new Date().toISOString(),
         state,
