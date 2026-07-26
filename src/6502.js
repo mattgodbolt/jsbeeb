@@ -427,6 +427,10 @@ class Tube6502 extends Base6502 {
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
         this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
+        // A latched NMI would otherwise survive the reset and be taken on the first instruction
+        // after it, defeating the empty R3 FIFO the ULA seeds for exactly that reason.
+        this._nmiLevel = this._nmiEdge = false;
+        this.takeInt = false;
         this.tube.reset(hard);
     }
 
@@ -520,9 +524,8 @@ class Tube6502 extends Base6502 {
         this.memory.set(state.memory);
         if (state.rom) this.rom.set(state.rom);
 
-        // After the registers, so that the NMI line moves from its saved level to the one the
-        // ULA implies. A restore that agrees produces no edge; an imported snapshot whose idea
-        // of the line is out of date gets the rising edge it is owed.
+        // After the registers, so the edge-triggered NMI moves from its saved level to the one
+        // the ULA implies: no edge if they agree, and the edge it is owed if they do not.
         this.tube.restoreState(state.ula);
     }
 
@@ -1291,9 +1294,8 @@ export class Cpu6502 extends Base6502 {
             this.fdc.restoreState(state.fdc);
         }
 
-        // Tube state (v3+). restoreSnapshot() refuses a snapshot whose co-processor setting does
-        // not match, so state without a tube only reaches here from a direct restoreState call;
-        // reset the parasite rather than leave it running on state the host knows nothing about.
+        // Tube state (v3+). Rather than leave the parasite running on state the host knows
+        // nothing about, reset it; restoreSnapshot() rejects such a pairing before reaching here.
         if (this.hasTube) {
             if (state.tube) this.tube.restoreState(state.tube);
             else this.tube.reset(true);

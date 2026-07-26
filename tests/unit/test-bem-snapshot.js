@@ -180,7 +180,13 @@ function section(key, data, compressed = false) {
  * Build a BEMSNAP3 carrying only the model and tube sections, which is all the tube import
  * needs. `ula` and `parasite` are sparse overrides applied to otherwise-zeroed state.
  */
-async function makeBemV3WithTube({ tubeName = "6502 External", ula = {}, parasite = {}, ramSize = 65536 } = {}) {
+async function makeBemV3WithTube({
+    tubeName = "6502 External",
+    ula = {},
+    parasite = {},
+    ramSize = 65536,
+    romSize = 2048,
+} = {}) {
     const model = [
         ...encodeVar(3),
         ...encodeString("BBC B"),
@@ -202,7 +208,7 @@ async function makeBemV3WithTube({ tubeName = "6502 External", ula = {}, parasit
     ulaBytes[1] = ula.romPaged ?? 1;
     for (const [offset, value] of Object.entries(ula.fields ?? {})) ulaBytes[2 + Number(offset)] = value;
 
-    const parasiteBytes = new Uint8Array(9 + ramSize + 2048);
+    const parasiteBytes = new Uint8Array(9 + ramSize + romSize);
     parasiteBytes[1] = parasite.oldnmi ?? 0;
     parasiteBytes[2] = parasite.a ?? 0;
     parasiteBytes[3] = parasite.x ?? 0;
@@ -290,10 +296,14 @@ describe("b-em tube import", () => {
     });
 
     it("rejects a parasite whose RAM is not the 64K jsbeeb emulates", async () => {
-        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 16384 }))).rejects.toThrow(/parasite state/);
+        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 16384 }))).rejects.toThrow(/parasite RAM/);
         // A renamed Turbo in b-em's config would get past the name check on size alone.
-        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 0x1000000 }))).rejects.toThrow(
-            /parasite state/,
-        );
+        await expect(parseBemSnapshot(await makeBemV3WithTube({ ramSize: 0x1000000 }))).rejects.toThrow(/parasite RAM/);
+    });
+
+    it("accepts a parasite whose ROM size b-em's config left unset", async () => {
+        const snapshot = await parseBemSnapshot(await makeBemV3WithTube({ romSize: 0 }));
+
+        expect(snapshot.coProcessor).toBe(true);
     });
 });

@@ -259,16 +259,16 @@ function readString(data, pos) {
 // no padding and can be read directly; version 1 used native ints and is not supported here.
 const BemTubeUlaVersion = 2;
 const BemTubeUlaOffsets = {
-    ph1: 0, // 24 bytes
+    ph1: 0,
     ph2: 24,
-    ph3: 25, // 2 bytes
+    ph3: 25,
     ph4: 27,
     hp1: 29, // phl (byte 28) is a latch jsbeeb does not model
     hp2: 30,
-    hp3: 31, // 2 bytes
+    hp3: 31,
     hp4: 33,
-    hstat: 35, // 4 bytes; hpl (byte 34) likewise unmodelled
-    pstat: 39, // 4 bytes
+    hstat: 35, // hpl (byte 34) likewise unmodelled
+    pstat: 39,
     r1stat: 43,
     ph1head: 45, // ph1tail (byte 44) matters only to b-em, which appends there
     ph1count: 46,
@@ -277,11 +277,10 @@ const BemTubeUlaOffsets = {
 };
 const BemTubeUlaSize = 49;
 const BemPh1Size = 24;
-// 9 bytes of registers, then RAM, then ROM. Only the 64K 6502 parasites map onto jsbeeb's:
-// b-em's "6502 Turbo" has 16MB of RAM, and its other co-processors are different CPUs entirely.
+// 9 bytes of registers, then RAM, then ROM.
 const BemTubeRegisterBytes = 9;
 const BemTubeRamSize = 65536;
-const BemTubeRomSize = 2048;
+// b-em's other co-processors are different CPUs, and its "6502 Turbo" has 16MB of RAM.
 const BemSupportedTubes = ["6502 Internal", "6502 External"];
 
 /**
@@ -291,7 +290,12 @@ const BemSupportedTubes = ["6502 Internal", "6502 External"];
  * @returns {Promise<object|null>} jsbeeb tube state, or null if no usable co-processor
  */
 async function parseBemTube(sections, tubeName) {
-    if (!sections["T"] || !sections["P"]) return null;
+    // b-em names the model's co-processor even when it failed to start one, so naming a tube but
+    // carrying no state for it is valid. Carrying only one of the two sections is not.
+    if (!sections["T"] && !sections["P"]) return null;
+    if (!sections["T"] || !sections["P"]) {
+        throw new Error("Truncated b-em snapshot: it holds only one of the two co-processor sections");
+    }
     if (tubeName && !BemSupportedTubes.includes(tubeName)) {
         throw new Error(
             `Unsupported b-em co-processor "${tubeName}": jsbeeb only emulates the 64K 65C02 second processor`,
@@ -315,14 +319,14 @@ async function parseBemTube(sections, tubeName) {
         ph1[i] = ula[BemTubeUlaOffsets.ph1 + ((ph1Head + i) % BemPh1Size)];
     }
 
-    // b-em builds its co-processor list from a config file, so the name alone cannot be trusted
-    // to mean the 64K parasite: check the section is exactly the size that implies.
+    // Those names come from a config file, so size is the real check. It cannot be exact: the
+    // trailing ROM's size comes from that same config, and b-em records it as zero if unset.
     const parasite = await decompress(sections["P"].data, "deflate");
-    const expectedSize = BemTubeRegisterBytes + BemTubeRamSize + BemTubeRomSize;
-    if (parasite.length !== expectedSize) {
+    const romBytes = parasite.length - BemTubeRegisterBytes - BemTubeRamSize;
+    if (romBytes < 0 || romBytes > BemTubeRamSize) {
         throw new Error(
-            `Unsupported b-em co-processor: expected ${expectedSize} bytes of parasite state ` +
-                `(64K RAM and a 2K ROM), but the snapshot holds ${parasite.length}`,
+            `Unsupported b-em co-processor: expected ${BemTubeRamSize} bytes of parasite RAM, ` +
+                `but the state section holds ${parasite.length - BemTubeRegisterBytes}`,
         );
     }
 
@@ -333,9 +337,8 @@ async function parseBemTube(sections, tubeName) {
         p: parasite[5] | 0x30,
         s: parasite[6],
         pc: parasite[7] | (parasite[8] << 8),
-        // b-em's oldnmi is the NMI level as of the parasite's last instruction, which may lag the
-        // line the ULA state implies. Restoring the ULA afterwards settles the line and raises an
-        // edge if one is owed. b-em's skipint has no jsbeeb equivalent and is dropped.
+        // b-em's oldnmi is the NMI level as of the parasite's last instruction, so it may lag the
+        // line its ULA state implies. b-em's skipint has no jsbeeb equivalent and is dropped.
         nmiLevel: !!parasite[1],
         nmiEdge: false,
         takeInt: false,

@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../test-machine.js";
 
+// The ULA's M flag, which lets pending R3 data raise the parasite's NMI.
+const TubeStatusEnableParasiteNmiFromR3 = 0x08;
+
 describe("Tube co-processor", () => {
     it("runs the parasite processor alongside the host", async () => {
         const machine = new TestMachine("Master", { tube: true });
@@ -65,13 +68,26 @@ describe("Tube co-processor", () => {
         // parasite's own idea of the line predates it.
         state.tube.nmiLevel = false;
         state.tube.nmiEdge = false;
-        state.tube.ula.internalStatusRegister |= 0x08; // M: enable parasite NMI from R3
+        state.tube.ula.internalStatusRegister |= TubeStatusEnableParasiteNmiFromR3;
         state.tube.ula.parasiteToHostFifoByteCount3 = 0;
 
         cpu.restoreState(state);
 
         expect(cpu.tube._nmiLevel).toBe(true);
         expect(cpu.tube._nmiEdge).toBe(true);
+    });
+
+    it("does not take a latched NMI across a parasite reset", async () => {
+        const machine = new TestMachine("Master", { tube: true });
+        await machine.initialise();
+        const parasite = machine.processor.tube;
+        parasite.NMI(true);
+        expect(parasite._nmiEdge).toBe(true);
+
+        parasite.reset(true);
+
+        expect(parasite._nmiEdge).toBe(false);
+        expect(parasite.takeInt).toBe(false);
     });
 
     it("resets the parasite when restoring state that has none", async () => {
