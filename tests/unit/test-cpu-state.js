@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Cpu6502 } from "../../src/6502.js";
-import { Video } from "../../src/video.js";
+import { fake6502 } from "../../src/fake6502.js";
+import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { FakeDdNoise } from "../../src/ddnoise.js";
 import { Cmos } from "../../src/cmos.js";
@@ -189,5 +190,64 @@ describe("Cpu6502 snapshotState / restoreState", () => {
 
         // The scheduler should have tasks registered (VIA timers at minimum)
         expect(cpu2.scheduler.headroom()).toBeLessThan(0xffffffff);
+    });
+});
+
+describe("Cpu6502 cpuMultiplier", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const makeMultipliedCpu = (cpuMultiplier) => {
+        const video = new FakeVideo();
+        const videoCycles = vi.spyOn(video, "polltime").mockImplementation(() => {});
+        const cpu = fake6502(null, { video, cpuMultiplier });
+        const totalVideoCycles = () => videoCycles.mock.calls.reduce((total, [cycles]) => total + cycles, 0);
+        return { cpu, totalVideoCycles };
+    };
+
+    it("runs peripherals and video at the CPU rate by default", () => {
+        const { cpu, totalVideoCycles } = makeMultipliedCpu(undefined);
+
+        cpu.polltime(1000);
+
+        expect(cpu.scheduler.epoch).toBe(1000);
+        expect(totalVideoCycles()).toBe(1000);
+    });
+
+    it("runs peripherals and video at half the CPU rate at multiplier 2", () => {
+        const { cpu, totalVideoCycles } = makeMultipliedCpu(2);
+
+        cpu.polltime(1000);
+
+        expect(cpu.scheduler.epoch).toBe(500);
+        expect(totalVideoCycles()).toBe(500);
+    });
+
+    it("runs peripherals and video at twice the CPU rate at multiplier 0.5", () => {
+        const { cpu, totalVideoCycles } = makeMultipliedCpu(0.5);
+
+        cpu.polltime(1000);
+
+        expect(cpu.scheduler.epoch).toBe(2000);
+        expect(totalVideoCycles()).toBe(2000);
+    });
+
+    it("takes the unscaled path at multiplier 1, passing every cycle straight through", () => {
+        const { cpu } = makeMultipliedCpu(1);
+
+        cpu.polltime(1);
+
+        expect(cpu.scheduler.epoch).toBe(1);
+    });
+
+    it("accumulates fractional peripheral cycles rather than losing them", () => {
+        const { cpu } = makeMultipliedCpu(2);
+
+        cpu.polltime(1);
+        expect(cpu.scheduler.epoch).toBe(0);
+
+        cpu.polltime(1);
+        expect(cpu.scheduler.epoch).toBe(1);
     });
 });

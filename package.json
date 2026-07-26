@@ -43,7 +43,7 @@
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "lint-staged": "^17.1.1",
-    "npm-run-all2": "^8.0.4",
+    "npm-run-all2": "^9.0.2",
     "pixelmatch": "^7.2.0",
     "prettier": "^3.9.6",
     "vite": "^8.1.5",

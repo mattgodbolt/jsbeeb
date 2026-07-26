@@ -1422,7 +1422,8 @@ export class Cpu6502 extends Base6502 {
     buildPolltime() {
         const nop = (_cycles) => {};
         const tubeStuff = this.hasTube ? (cycles) => this.tube.execute(cycles) : nop;
-        const teletextStuff = this.teletextAdaptor ? (cycles) => this.teletextAdaptor.polltime(cycles) : nop;
+        // The adaptor itself does not exist until reset() runs, so branch on the fitting, not the object.
+        const teletextStuff = this.hasTeletextAdaptor ? (cycles) => this.teletextAdaptor.polltime(cycles) : nop;
         const musicStuff = this.music5000 ? (cycles) => this.music5000.polltime(cycles) : nop;
         const econetStuff = this.econet
             ? (cycles) => {

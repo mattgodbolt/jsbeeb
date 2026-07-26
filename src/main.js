@@ -160,7 +160,7 @@ let keyLayout = window.localStorage.keyLayout || "physical";
 
 const BBC = utils.BBC;
 const keyCodes = utils.keyCodes;
-let cpuMultiplier = 1;
+const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 let fastAsPossible = false;
 let fastTape = false;
 let noSeek;
@@ -299,9 +299,7 @@ config.setDisplayMode(displayMode);
 
 model = config.model;
 
-// Depends on the config.setX calls above having applied the URL parameters. Note
-// cpuMultiplier is not one of them: it is read from the query string further down, and
-// this deliberately captures the value it has here.
+// Depends on the config.setX calls above having applied the URL parameters.
 const emulationConfig = {
     keyLayout,
     cpuMultiplier,
@@ -346,10 +344,7 @@ sbBind(document.querySelector(".sidebar.bottom"), parsedQuery.sbBottom, function
     div.style.bottom = -img.naturalHeight + "px";
 });
 
-if (parsedQuery.cpuMultiplier !== undefined) {
-    cpuMultiplier = parsedQuery.cpuMultiplier;
-    console.log("CPU multiplier set to " + cpuMultiplier);
-}
+if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.isAtom ? 1 * 1000 * 1000 : 2 * 1000 * 1000;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 const MaxCyclesPerFrame = clocksPerSecond / 10;
