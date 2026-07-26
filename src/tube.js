@@ -294,6 +294,38 @@ export class Tube {
         }
         return result;
     }
+    snapshotState() {
+        return {
+            internalStatusRegister: this.internalStatusRegister,
+            hostStatus: this.hostStatus.slice(),
+            parasiteStatus: this.parasiteStatus.slice(),
+            parasiteToHostData: this.parasiteToHostData.map((fifo) => fifo.slice()),
+            hostToParasiteData: this.hostToParasiteData.map((fifo) => fifo.slice()),
+            parasiteToHostFifoByteCount1: this.parasiteToHostFifoByteCount1,
+            parasiteToHostFifoByteCount3: this.parasiteToHostFifoByteCount3,
+            hostToParasiteFifoByteCount3: this.hostToParasiteFifoByteCount3,
+        };
+    }
+
+    /**
+     * The interrupt and reset lines are not saved: they are derived from the status registers
+     * and FIFO counts, in the same way the host's `interrupt` is rebuilt by the VIA and ACIA
+     * restores.
+     */
+    restoreState(state) {
+        this.internalStatusRegister = state.internalStatusRegister;
+        this.hostStatus.set(state.hostStatus);
+        this.parasiteStatus.set(state.parasiteStatus);
+        for (let i = 0; i < 4; i++) {
+            this.parasiteToHostData[i].set(state.parasiteToHostData[i]);
+            this.hostToParasiteData[i].set(state.hostToParasiteData[i]);
+        }
+        this.parasiteToHostFifoByteCount1 = state.parasiteToHostFifoByteCount1;
+        this.parasiteToHostFifoByteCount3 = state.parasiteToHostFifoByteCount3;
+        this.hostToParasiteFifoByteCount3 = state.hostToParasiteFifoByteCount3;
+        this.updateInterrupts();
+    }
+
     parasiteWrite(address, value) {
         //  Not implemented - needs to be integrated with the parasite CPU code:
         //  Boot mode is terminated by the software when it selects any one of the Tube addresses.

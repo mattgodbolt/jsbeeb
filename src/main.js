@@ -32,7 +32,14 @@ import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { getFilterForMode } from "./canvas.js";
-import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "./snapshot.js";
+import {
+    createSnapshot,
+    restoreSnapshot,
+    snapshotToJSON,
+    snapshotFromJSON,
+    isSameModel,
+    hasCoProcessor,
+} from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
@@ -1577,10 +1584,10 @@ async function loadStateFromFile(file, preReadBuffer) {
             }
             snapshot = snapshotFromJSON(text);
         }
-        if (!isSameModel(snapshot.model, model.name)) {
-            // Model mismatch: stash state and reload with correct model
+        if (!isSameModel(snapshot.model, model.name) || hasCoProcessor(snapshot) !== processor.hasTube) {
+            // Model or co-processor mismatch: stash state and reload with a matching machine
             sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
-            const newQuery = { ...parsedQuery, model: snapshot.model };
+            const newQuery = { ...parsedQuery, model: snapshot.model, coProcessor: hasCoProcessor(snapshot) };
             const baseUrl = window.location.origin + window.location.pathname;
             window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
             return;

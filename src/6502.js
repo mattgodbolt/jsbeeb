@@ -427,6 +427,10 @@ class Tube6502 extends Base6502 {
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
         this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
+        // A latched NMI would otherwise survive the reset and be taken on the first instruction
+        // after it, defeating the empty R3 FIFO the ULA seeds for exactly that reason.
+        this._nmiLevel = this._nmiEdge = false;
+        this.takeInt = false;
         this.tube.reset(hard);
     }
 
@@ -483,6 +487,46 @@ class Tube6502 extends Base6502 {
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
         }
+    }
+
+    snapshotState({ includeRoms = false } = {}) {
+        return {
+            a: this.a,
+            x: this.x,
+            y: this.y,
+            s: this.s,
+            pc: this.pc,
+            p: this.p.asByte(),
+            nmiLevel: this._nmiLevel,
+            nmiEdge: this._nmiEdge,
+            takeInt: this.takeInt,
+            // The parasite has no scheduler of its own, so this is not relative to any epoch.
+            cycles: this.cycles,
+            romPaged: this.romPaged,
+            memory: this.memory.slice(),
+            rom: includeRoms ? this.rom.slice() : undefined,
+            ula: this.tube.snapshotState(),
+        };
+    }
+
+    restoreState(state) {
+        this.a = state.a;
+        this.x = state.x;
+        this.y = state.y;
+        this.s = state.s;
+        this.pc = state.pc;
+        this.p.setFromByte(state.p);
+        this._nmiLevel = state.nmiLevel;
+        this._nmiEdge = state.nmiEdge;
+        this.takeInt = state.takeInt;
+        this.cycles = state.cycles;
+        this.romPaged = state.romPaged;
+        this.memory.set(state.memory);
+        if (state.rom) this.rom.set(state.rom);
+
+        // After the registers, so the edge-triggered NMI moves from its saved level to the one
+        // the ULA implies: no edge if they agree, and the edge it is owed if they do not.
+        this.tube.restoreState(state.ula);
     }
 
     async loadOs() {
@@ -1188,6 +1232,7 @@ export class Cpu6502 extends Base6502 {
             acia: this.acia.snapshotState(),
             adc: this.adconverter.snapshotState(),
             fdc: this.fdc.snapshotState(),
+            tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
     }
 
@@ -1247,6 +1292,13 @@ export class Cpu6502 extends Base6502 {
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
         if (state.fdc) {
             this.fdc.restoreState(state.fdc);
+        }
+
+        // Tube state (v3+). Rather than leave the parasite running on state the host knows
+        // nothing about, reset it; restoreSnapshot() rejects such a pairing before reaching here.
+        if (this.hasTube) {
+            if (state.tube) this.tube.restoreState(state.tube);
+            else this.tube.reset(true);
         }
     }
 
