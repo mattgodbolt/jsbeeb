@@ -63,7 +63,9 @@ B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 
 
 ### Model compatibility
 
-When loading, the snapshot model is compared to the current model using `modelsCompatible()`. This resolves model synonyms (e.g. `"B"` matches `"BBC B with DFS 1.2"`) and treats filesystem variants as compatible (e.g. `"BBC Master 128 (DFS)"` and `"BBC Master 128 (ADFS)"`). If the base machine type differs, a page reload with the correct model is triggered.
+When loading, the snapshot model is compared to the current model using `isSameModel()`. Names are resolved through `findModel()`, so synonyms and old names match (e.g. `"B"` matches `"BBC B with DFS 1.2"`), but the result must be the same model: filesystem variants are separate models and so are _not_ interchangeable (e.g. `"BBC Master 128 (DFS)"` does not match `"BBC Master 128 (ADFS)"`).
+
+If the models differ, the snapshot is stashed in `sessionStorage` under `jsbeeb-pending-state` and the page reloads with the snapshot's model in the query string, picking the state back up on the way in. `restoreSnapshot()` itself does not reload; given a mismatch it throws.
 
 ## TypedArray encoding
 
