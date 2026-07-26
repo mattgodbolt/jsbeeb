@@ -220,43 +220,6 @@ describe("TeletextAdaptor", () => {
     });
 
     describe("Update and polling", () => {
-        // Create a mock implementation of update() that doesn't access streamData
-        // This avoids trying to access the null streamData property
-        let originalUpdate;
-
-        beforeEach(() => {
-            // Save original update method
-            originalUpdate = teletext.update;
-
-            // Replace with mock that only updates the status and frame counter
-            teletext.update = function () {
-                // Set status latches
-                this.teletextStatus &= 0x0f;
-                this.teletextStatus |= 0xd0;
-
-                // Increment frame counter
-                if (this.currentFrame >= this.totalFrames - 1) {
-                    this.currentFrame = 0;
-                } else {
-                    this.currentFrame++;
-                }
-
-                // Reset pointers
-                this.rowPtr = 0;
-                this.colPtr = 0;
-
-                // Set interrupt if enabled
-                if (this.teletextInts) {
-                    this.cpu.interrupt |= 1 << TELETEXT_IRQ;
-                }
-            };
-        });
-
-        afterEach(() => {
-            // Restore original update method
-            teletext.update = originalUpdate;
-        });
-
         it("should update status and frame counter on update()", () => {
             // Set initial state
             teletext.teletextEnable = true;
@@ -277,16 +240,28 @@ describe("TeletextAdaptor", () => {
             expect(teletext.colPtr).toBe(0);
         });
 
-        it("should wrap to frame 0 when reaching end of frames", () => {
-            // Set to last frame
-            teletext.currentFrame = 4;
+        it("should wrap to the start of the stream past the last frame", () => {
+            // Past the end of a five frame stream
+            teletext.currentFrame = 5;
             teletext.totalFrames = 5;
 
             // Call update
             teletext.update();
 
-            // Check frame wrapped to 0
-            expect(teletext.currentFrame).toBe(0);
+            // Wrapped back to frame 0, which this update then consumed
+            expect(teletext.currentFrame).toBe(1);
+        });
+
+        it("should tolerate being enabled before the stream has loaded", () => {
+            // Teletext enable and interrupts, channel 0
+            teletext.write(0, 0x0c);
+
+            teletext.polltime(50001);
+
+            expect(teletext.streamData).toBe(null);
+            expect(teletext.teletextStatus & 0xd0).toBe(0xd0);
+            expect(teletext.frameBuffer[0][0]).toBe(0);
+            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
         });
 
         it("should generate interrupt if interrupts enabled", () => {
