@@ -4,6 +4,8 @@ import { TestMachine } from "../test-machine.js";
 const TeletextStatusRegister = 0xfc10;
 // INT, DOR and FSYN, all latched by the adaptor once a frame of broadcast data is ready.
 const TeletextStatusDataReady = 0xd0;
+const TeletextControlEnable = 0x04;
+const TeletextControlInterrupts = 0x08;
 
 describe("Teletext adaptor", () => {
     it("receives broadcast data as the machine runs", async () => {
@@ -15,6 +17,19 @@ describe("Teletext adaptor", () => {
 
         expect(machine.readbyte(TeletextStatusRegister) & TeletextStatusDataReady).toBe(TeletextStatusDataReady);
         expect(machine.processor.teletextAdaptor.currentFrame).toBeGreaterThan(1);
+    });
+
+    it("keeps running when enabled before the broadcast data has arrived", async () => {
+        const machine = new TestMachine("B-DFS1.2", { hasTeletextAdaptor: true });
+        await machine.initialise();
+        expect(machine.processor.teletextAdaptor.streamData).toBe(null);
+
+        // Synchronous execution, so the in-flight fetch cannot settle part way through.
+        machine.processor.writemem(TeletextStatusRegister, TeletextControlEnable | TeletextControlInterrupts);
+        machine.processor.execute(200 * 1000);
+
+        expect(machine.readbyte(TeletextStatusRegister) & TeletextStatusDataReady).toBe(TeletextStatusDataReady);
+        expect(machine.processor.teletextAdaptor.frameBuffer[0][0]).toBe(0);
     });
 
     it("leaves the adaptor absent when not fitted", async () => {

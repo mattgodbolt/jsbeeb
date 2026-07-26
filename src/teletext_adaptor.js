@@ -146,7 +146,8 @@ export class TeletextAdaptor {
         this.teletextStatus &= 0x0f;
         this.teletextStatus |= 0xd0; // data ready so latch INT, DOR, and FSYN
 
-        if (this.teletextEnable) {
+        // The stream arrives asynchronously, so software can enable us before there is anything to copy.
+        if (this.teletextEnable && this.streamData) {
             // Copy current stream position into the frame buffer
             for (let i = 0; i < 16; ++i) {
                 if (this.streamData[offset + i * 43] !== 0) {
