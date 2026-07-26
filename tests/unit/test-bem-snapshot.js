@@ -162,18 +162,11 @@ function encodeString(str) {
 }
 
 function section(key, data, compressed = false) {
-    const code = key.charCodeAt(0);
-    if (compressed) {
-        return [
-            code | 0x80,
-            data.length & 0xff,
-            (data.length >> 8) & 0xff,
-            (data.length >> 16) & 0xff,
-            data.length >>> 24,
-            ...data,
-        ];
-    }
-    return [code, data.length & 0xff, (data.length >> 8) & 0xff, ...data];
+    // Compressed sections flag the key and carry a 4-byte length rather than 2.
+    const lengthBytes = compressed ? 4 : 2;
+    const header = [key.charCodeAt(0) | (compressed ? 0x80 : 0)];
+    for (let i = 0; i < lengthBytes; i++) header.push((data.length >>> (i * 8)) & 0xff);
+    return [...header, ...data];
 }
 
 /**
@@ -182,6 +175,7 @@ function section(key, data, compressed = false) {
  */
 async function makeBemV3WithTube({
     tubeName = "6502 External",
+    tubeState = true,
     ula = {},
     parasite = {},
     ramSize = 65536,
@@ -190,17 +184,8 @@ async function makeBemV3WithTube({
 } = {}) {
     const model = [
         ...encodeVar(3),
-        ...encodeString("BBC B"),
-        ...encodeString("os12"),
-        ...encodeString(""),
-        ...encodeString("std"),
-        ...encodeString("none"),
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        ...["BBC B", "os12", "", "std", "none"].flatMap(encodeString),
+        ...new Array(6).fill(0), // model flag bytes
         ...(tubeName ? [1, ...encodeString(tubeName)] : [0]),
     ];
 
@@ -209,22 +194,16 @@ async function makeBemV3WithTube({
     ulaSection[1] = ula.romPaged ?? 1;
     for (const [offset, value] of Object.entries(ula.fields ?? {})) ulaSection[2 + Number(offset)] = value;
 
+    const { a = 0, x = 0, y = 0, s = 0, pc = 0, flags = 0, oldnmi = 0 } = parasite;
     const parasiteBytes = new Uint8Array(9 + ramSize + romSize);
-    parasiteBytes[1] = parasite.oldnmi ?? 0;
-    parasiteBytes[2] = parasite.a ?? 0;
-    parasiteBytes[3] = parasite.x ?? 0;
-    parasiteBytes[4] = parasite.y ?? 0;
-    parasiteBytes[5] = parasite.flags ?? 0;
-    parasiteBytes[6] = parasite.s ?? 0;
-    parasiteBytes[7] = (parasite.pc ?? 0) & 0xff;
-    parasiteBytes[8] = (parasite.pc ?? 0) >> 8;
+    parasiteBytes.set([0, oldnmi, a, x, y, flags, s, pc & 0xff, pc >> 8]);
     for (const [addr, value] of Object.entries(parasite.memory ?? {})) parasiteBytes[9 + Number(addr)] = value;
 
     return new Uint8Array([
         ...new TextEncoder().encode("BEMSNAP3"),
         ...section("m", model),
-        ...section("T", ulaSection),
-        ...section("P", await deflate(parasiteBytes), true),
+        ...(tubeState ? section("T", ulaSection) : []),
+        ...(tubeState ? section("P", await deflate(parasiteBytes), true) : []),
     ]).buffer;
 }
 
@@ -259,26 +238,7 @@ describe("b-em tube import", () => {
     });
 
     it("reports no co-processor when none was fitted", async () => {
-        const buffer = new Uint8Array([
-            ...new TextEncoder().encode("BEMSNAP3"),
-            ...section("m", [
-                ...encodeVar(3),
-                ...encodeString("BBC B"),
-                ...encodeString("os12"),
-                ...encodeString(""),
-                ...encodeString("std"),
-                ...encodeString("none"),
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            ]),
-        ]).buffer;
-
-        const snapshot = await parseBemSnapshot(buffer);
+        const snapshot = await parseBemSnapshot(await makeBemV3WithTube({ tubeName: null, tubeState: false }));
 
         expect(snapshot.coProcessor).toBe(false);
         expect(snapshot.state.tube).toBeUndefined();
