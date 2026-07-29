@@ -66,14 +66,11 @@ export class Config extends EventTarget {
             this.changed = {};
             // The startup settings are pushed in after construction, so what the running machine was
             // built with is only knowable from the first time the dialog is opened.
-            if (!this.runningSettings)
-                this.runningSettings = Object.fromEntries(RestartRequiredFields.map((field) => [field, this[field]]));
+            if (!this.runningSettings) this.runningSettings = this.proposedSettings();
             this.setDropdownText(this.model.name);
             this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
             this.setCheckboxes(this);
-            document
-                .getElementById("restart-pending")
-                .classList.toggle("d-none", !restartPending(this, this.runningSettings));
+            this.showRestartPending();
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
@@ -85,7 +82,8 @@ export class Config extends EventTarget {
             if (Object.keys(changed).length === 0) return;
             this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
             // changed records which controls were touched, so a value in it can be what is already running.
-            if (needsRestart(changed) && restartPending(this, this.runningSettings)) this.onRestartRequired();
+            if (needsRestart(changed) && restartPending(this.proposedSettings(), this.runningSettings))
+                this.onRestartRequired();
         });
 
         const modelMenu = document.querySelector(".model-menu");
@@ -105,6 +103,7 @@ export class Config extends EventTarget {
             if (!link) return;
             this.changed.model = link.dataset.target;
             this.setDropdownText(link.textContent);
+            this.showRestartPending();
         });
 
         for (const { id, field, enables } of CheckboxSettings) {
@@ -112,6 +111,7 @@ export class Config extends EventTarget {
                 const checked = document.getElementById(id).checked;
                 this.changed[field] = checked;
                 if (enables) document.getElementById(enables).disabled = !checked;
+                this.showRestartPending();
             });
         }
 
@@ -146,6 +146,25 @@ export class Config extends EventTarget {
                 this.onChange({ displayMode: mode });
             });
         }
+    }
+
+    /**
+     * The restart-required settings as they would be saved if the dialog were closed now, in the form the
+     * menu and the URL use: the model by synonym rather than resolved, the fittings as booleans.
+     *
+     * @returns {object}
+     */
+    proposedSettings() {
+        const settings = Object.fromEntries(RestartRequiredFields.map((field) => [field, this[field]]));
+        settings.model = this.model.synonyms[0];
+        for (const field of RestartRequiredFields)
+            if (this.changed[field] !== undefined) settings[field] = this.changed[field];
+        return settings;
+    }
+
+    showRestartPending() {
+        const pending = restartPending(this.proposedSettings(), this.runningSettings);
+        document.getElementById("restart-pending").classList.toggle("d-none", !pending);
     }
 
     /** Ticks the boxes named in `values` and adopts them, leaving any the object does not mention alone. */
