@@ -19,7 +19,6 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
-import { makeAreYouSure } from "./are-you-sure.js";
 import { TubeModel } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
@@ -1850,7 +1849,31 @@ const startPromise = (async () => {
 })();
 
 const aysEl = document.getElementById("are-you-sure");
-const areYouSure = makeAreYouSure(aysEl, new bootstrap.Modal(aysEl));
+const aysModal = new bootstrap.Modal(aysEl);
+
+function areYouSure(message, yesText, noText, yesFunc) {
+    const yesButton = aysEl.querySelector(".ays-yes");
+    aysEl.querySelector(".context").textContent = message;
+    aysEl.querySelector(".ays-no").textContent = noText;
+    yesButton.textContent = yesText;
+    let confirmed = false;
+    const onYes = () => {
+        confirmed = true;
+        aysModal.hide();
+    };
+    yesButton.addEventListener("click", onYes, { once: true });
+    // Acting on hiding rather than on the click means the "no" button, Escape and a click outside all
+    // come to the same thing, and that the modal is gone before yesFunc runs.
+    aysEl.addEventListener(
+        "hidden.bs.modal",
+        () => {
+            yesButton.removeEventListener("click", onYes);
+            if (confirmed) yesFunc();
+        },
+        { once: true },
+    );
+    aysModal.show();
+}
 
 function benchmarkCpu(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;

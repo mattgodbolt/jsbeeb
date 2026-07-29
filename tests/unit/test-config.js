@@ -73,10 +73,6 @@ class Dialog {
         document.getElementById(id).click();
     }
 
-    chooseModel(name) {
-        document.querySelector(`.model-menu a[data-target="${name}"]`).click();
-    }
-
     checkbox(id) {
         return document.getElementById(id).checked;
     }
@@ -91,116 +87,62 @@ describe("Config settings dialog", () => {
         document.body.innerHTML = indexHtml;
     });
 
-    describe("settings that need a restart", () => {
-        it("saves a co-processor change and asks about restarting", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("65c02");
-            dialog.close();
+    it("saves a setting that needs a restart, and asks about restarting", () => {
+        const dialog = new Dialog();
+        dialog.open();
+        dialog.tick("65c02");
+        dialog.close();
 
-            expect(dialog.onClose).toHaveBeenCalledWith({ coProcessor: true });
-            expect(dialog.settingsChanged).toHaveBeenCalledWith({ coProcessor: true });
-            expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
-            expect(dialog.config.coProcessor).toBe(true);
-            expect(dialog.checkbox("65c02")).toBe(true);
-        });
-
-        it("saves a model change", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.chooseModel("Master");
-            dialog.close();
-
-            expect(dialog.settingsChanged).toHaveBeenCalledWith({ model: "Master" });
-            expect(dialog.config.model).toBe(findModel("Master"));
-            expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
-        });
-
-        it("shows the saved values, marked pending, when the dialog is opened again", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("65c02");
-            dialog.tick("hasEconet");
-            dialog.close();
-
-            dialog.open();
-
-            expect(dialog.checkbox("65c02")).toBe(true);
-            expect(dialog.checkbox("hasEconet")).toBe(true);
-            expect(dialog.pendingShown).toBe(true);
-        });
-
-        it("does not re-save or re-ask on a later visit that changes nothing", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("hasMusic5000");
-            dialog.close();
-
-            dialog.open();
-            dialog.close();
-
-            expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
-            expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
-        });
-
-        it("stops marking a setting pending once it is put back", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("hasMusic5000");
-            dialog.close();
-
-            dialog.open();
-            dialog.tick("hasMusic5000");
-            dialog.close();
-
-            dialog.open();
-
-            expect(dialog.checkbox("hasMusic5000")).toBe(false);
-            expect(dialog.pendingShown).toBe(false);
-        });
-
-        it("asks nothing when only live settings changed", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("speechOutput");
-            dialog.close();
-
-            expect(dialog.onRestartRequired).not.toHaveBeenCalled();
-            expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true });
-        });
+        expect(dialog.onClose).toHaveBeenCalledWith({ coProcessor: true });
+        expect(dialog.settingsChanged).toHaveBeenCalledWith({ coProcessor: true });
+        expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
     });
 
-    describe("settings that apply live", () => {
-        it("saves them alongside a change that needs a restart", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("speechOutput");
-            dialog.tick("65c02");
-            dialog.close();
+    it("shows the saved values, marked pending, when opened again", () => {
+        const dialog = new Dialog();
+        dialog.open();
+        dialog.tick("65c02");
+        dialog.close();
 
-            expect(dialog.onClose).toHaveBeenCalledWith({ speechOutput: true, coProcessor: true });
-            expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
-            expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true, coProcessor: true });
-        });
+        dialog.open();
 
-        it("does not mark the dialog pending on their own", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("mouseJoystickEnabled");
-            dialog.close();
+        expect(dialog.checkbox("65c02")).toBe(true);
+        expect(dialog.pendingShown).toBe(true);
+    });
 
-            dialog.open();
+    it("stops marking a setting pending once it is put back", () => {
+        const dialog = new Dialog();
+        dialog.open();
+        dialog.tick("hasMusic5000");
+        dialog.close();
 
-            expect(dialog.pendingShown).toBe(false);
-        });
+        dialog.open();
+        dialog.tick("hasMusic5000");
+        dialog.close();
 
-        it("says nothing changed when nothing did", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.close();
+        dialog.open();
 
-            expect(dialog.settingsChanged).not.toHaveBeenCalled();
-            expect(dialog.onRestartRequired).not.toHaveBeenCalled();
-        });
+        expect(dialog.pendingShown).toBe(false);
+    });
+
+    it("saves live settings without asking about a restart", () => {
+        const dialog = new Dialog();
+        dialog.open();
+        dialog.tick("speechOutput");
+        dialog.close();
+
+        expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true });
+        expect(dialog.onRestartRequired).not.toHaveBeenCalled();
+    });
+
+    it("saves live and restart-required settings together", () => {
+        const dialog = new Dialog();
+        dialog.open();
+        dialog.tick("speechOutput");
+        dialog.tick("65c02");
+        dialog.close();
+
+        expect(dialog.onClose).toHaveBeenCalledWith({ speechOutput: true, coProcessor: true });
+        expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
     });
 });

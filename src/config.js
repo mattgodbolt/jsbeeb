@@ -16,8 +16,18 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
     ];
 }
 
-/** Settings that only take effect on a freshly built machine, so changing them leaves a restart pending. */
-const RestartRequiredSettings = ["model", "coProcessor", "hasEconet", "hasMusic5000", "hasTeletextAdaptor"];
+/**
+ * Settings that only take effect on a freshly built machine, so changing one leaves a restart pending,
+ * each paired with the setter that adopts it.
+ */
+const RestartRequiredSettings = {
+    model: "setModel",
+    coProcessor: "set65c02",
+    hasEconet: "setEconet",
+    hasMusic5000: "setMusic5000",
+    hasTeletextAdaptor: "setTeletext",
+};
+const RestartRequiredKeys = Object.keys(RestartRequiredSettings);
 
 export class Config extends EventTarget {
     /**
@@ -37,23 +47,31 @@ export class Config extends EventTarget {
         this.hasEconet = false;
         this.hasMusic5000 = false;
         this.hasTeletextAdaptor = false;
-        this.runningMachine = null;
+        this.runningSettings = null;
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
-            // The startup settings are pushed in after construction, so the machine that is actually running
-            // is only knowable from the first time the dialog is opened.
-            if (!this.runningMachine) this.runningMachine = this.restartRequiredSettings();
-            this.showCurrentSettings();
+            // The startup settings are pushed in after construction, so what the running machine was
+            // built with is only knowable from the first time the dialog is opened.
+            if (!this.runningSettings)
+                this.runningSettings = Object.fromEntries(RestartRequiredKeys.map((key) => [key, this[key]]));
+            this.setDropdownText(this.model.name);
+            this.set65c02(this.coProcessor);
+            this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
+            this.setTeletext(this.hasTeletextAdaptor);
+            this.setMusic5000(this.hasMusic5000);
+            this.setEconet(this.hasEconet);
+            document.getElementById("restart-pending").classList.toggle("d-none", !this.restartPending);
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
             const changed = this.changed;
-            this.adoptRestartSettings(changed);
+            for (const [key, setter] of Object.entries(RestartRequiredSettings))
+                if (changed[key] !== undefined) this[setter](changed[key]);
             this.onClose(changed);
             if (Object.keys(changed).length === 0) return;
             this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
-            if (RestartRequiredSettings.some((key) => key in changed)) this.onRestartRequired();
+            if (RestartRequiredKeys.some((key) => key in changed)) this.onRestartRequired();
         });
 
         const modelMenu = document.querySelector(".model-menu");
@@ -133,39 +151,10 @@ export class Config extends EventTarget {
         }
     }
 
-    restartRequiredSettings() {
-        return {
-            model: this.model,
-            coProcessor: this.coProcessor,
-            hasEconet: this.hasEconet,
-            hasMusic5000: this.hasMusic5000,
-            hasTeletextAdaptor: this.hasTeletextAdaptor,
-        };
-    }
-
     /** @returns {boolean} whether the saved settings differ from the machine that is running. */
     get restartPending() {
-        if (!this.runningMachine) return false;
-        const settings = this.restartRequiredSettings();
-        return RestartRequiredSettings.some((key) => settings[key] !== this.runningMachine[key]);
-    }
-
-    showCurrentSettings() {
-        this.setDropdownText(this.model.name);
-        this.set65c02(this.coProcessor);
-        this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
-        this.setTeletext(this.hasTeletextAdaptor);
-        this.setMusic5000(this.hasMusic5000);
-        this.setEconet(this.hasEconet);
-        document.getElementById("restart-pending").classList.toggle("d-none", !this.restartPending);
-    }
-
-    adoptRestartSettings(changed) {
-        if (changed.model !== undefined) this.setModel(changed.model);
-        if (changed.coProcessor !== undefined) this.set65c02(changed.coProcessor);
-        if (changed.hasEconet !== undefined) this.setEconet(changed.hasEconet);
-        if (changed.hasMusic5000 !== undefined) this.setMusic5000(changed.hasMusic5000);
-        if (changed.hasTeletextAdaptor !== undefined) this.setTeletext(changed.hasTeletextAdaptor);
+        if (!this.runningSettings) return false;
+        return RestartRequiredKeys.some((key) => this[key] !== this.runningSettings[key]);
     }
 
     setMicrophoneChannel(channel) {
