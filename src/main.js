@@ -1695,7 +1695,7 @@ syncLights = function () {
         drive0.update(processor.fdc.motorOn[0]);
         drive1.update(processor.fdc.motorOn[1]);
         cassette.update(processor.acia.motorOn);
-        // Asks the machine, not the settings, which can have moved on to a change awaiting a restart.
+        // Not config.hasEconet: that can be true before the machine has one, while a change awaits a restart.
         if (processor.econet) {
             network.update(processor.econet.activityLight());
         }
