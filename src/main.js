@@ -227,7 +227,7 @@ const userPort = {
 };
 
 // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
-// Must be created before Config so the onClose callback and setSpeechOutput() call can reference it.
+// Must be created before Config so the onClose callback and the initial checkbox state can reference it.
 const speechOutput = new SpeechOutput();
 speechOutput.enabled = !!parsedQuery.speechOutput;
 
@@ -284,14 +284,16 @@ config.mapLegacyModels(parsedQuery);
 
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
-config.set65c02(parsedQuery.coProcessor);
 config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || DefaultTubeCpuMultiplier);
-config.setEconet(parsedQuery.hasEconet);
-config.setMusic5000(parsedQuery.hasMusic5000);
-config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
-config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
-config.setSpeechOutput(speechOutput.enabled);
+config.setCheckboxes({
+    coProcessor: !!parsedQuery.coProcessor,
+    hasEconet: !!parsedQuery.hasEconet,
+    hasMusic5000: !!parsedQuery.hasMusic5000,
+    hasTeletextAdaptor: !!parsedQuery.hasTeletextAdaptor,
+    mouseJoystickEnabled: !!parsedQuery.mouseJoystickEnabled,
+    speechOutput: speechOutput.enabled,
+});
 let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
 

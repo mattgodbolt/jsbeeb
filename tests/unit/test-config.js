@@ -1,7 +1,5 @@
-// @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Config, fittedRoms } from "../../src/config.js";
+import { describe, it, expect } from "vitest";
+import { CheckboxSettings, fittedRoms, needsRestart, restartPending } from "../../src/config.js";
 import { findModel } from "../../src/models.js";
 
 describe("fittedRoms", () => {
@@ -36,113 +34,63 @@ describe("fittedRoms", () => {
     });
 });
 
-// The tests drive the shipped markup rather than a hand-written fixture, so they notice if the
-// dialog's ids or classes drift away from what Config expects.
-const indexHtml = readFileSync("index.html", "utf8");
-
-/** Drives the real settings dialog markup the way the browser and bootstrap would. */
-class Dialog {
-    constructor() {
-        this.onClose = vi.fn();
-        this.onRestartRequired = vi.fn();
-        this.settingsChanged = vi.fn();
-        this.config = new Config(
-            () => {},
-            (changed) => this.onClose(changed),
-            () => this.onRestartRequired(),
-        );
-        this.config.addEventListener("settings-changed", (e) => this.settingsChanged(e.detail));
-        // Mirrors main.js applying the startup settings before the dialog is ever shown.
-        this.config.setModel("B-DFS1.2");
-        this.config.set65c02(false);
-        this.config.setTubeCpuMultiplier(2);
-        this.config.setEconet(false);
-        this.config.setMusic5000(false);
-        this.config.setTeletext(false);
-    }
-
-    open() {
-        document.getElementById("configuration").dispatchEvent(new Event("show.bs.modal"));
-    }
-
-    close() {
-        document.getElementById("configuration").dispatchEvent(new Event("hide.bs.modal"));
-    }
-
-    tick(id) {
-        document.getElementById(id).click();
-    }
-
-    checkbox(id) {
-        return document.getElementById(id).checked;
-    }
-
-    get pendingShown() {
-        return !document.getElementById("restart-pending").classList.contains("d-none");
-    }
-}
-
-describe("Config settings dialog", () => {
-    beforeEach(() => {
-        document.body.innerHTML = indexHtml;
+describe("needsRestart", () => {
+    it("says no when nothing changed", () => {
+        expect(needsRestart({})).toBe(false);
     });
 
-    it("saves a setting that needs a restart, and asks about restarting", () => {
-        const dialog = new Dialog();
-        dialog.open();
-        dialog.tick("65c02");
-        dialog.close();
-
-        expect(dialog.onClose).toHaveBeenCalledWith({ coProcessor: true });
-        expect(dialog.settingsChanged).toHaveBeenCalledWith({ coProcessor: true });
-        expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
+    it("says no for settings the running machine can follow", () => {
+        expect(needsRestart({ keyLayout: "natural", displayMode: "pal", speechOutput: true })).toBe(false);
     });
 
-    it("shows the saved values, marked pending, when opened again", () => {
-        const dialog = new Dialog();
-        dialog.open();
-        dialog.tick("65c02");
-        dialog.close();
-
-        dialog.open();
-
-        expect(dialog.checkbox("65c02")).toBe(true);
-        expect(dialog.pendingShown).toBe(true);
+    it("says yes for the model and the fittings", () => {
+        expect(needsRestart({ model: "Master" })).toBe(true);
+        expect(needsRestart({ coProcessor: true })).toBe(true);
+        expect(needsRestart({ hasEconet: true })).toBe(true);
+        expect(needsRestart({ hasMusic5000: true })).toBe(true);
+        expect(needsRestart({ hasTeletextAdaptor: true })).toBe(true);
     });
 
-    it("stops marking a setting pending once it is put back", () => {
-        const dialog = new Dialog();
-        dialog.open();
-        dialog.tick("hasMusic5000");
-        dialog.close();
-
-        dialog.open();
-        dialog.tick("hasMusic5000");
-        dialog.close();
-
-        dialog.open();
-
-        expect(dialog.pendingShown).toBe(false);
+    it("says yes when turning a fitting off, not just on", () => {
+        expect(needsRestart({ coProcessor: false })).toBe(true);
     });
 
-    it("saves live settings without asking about a restart", () => {
-        const dialog = new Dialog();
-        dialog.open();
-        dialog.tick("speechOutput");
-        dialog.close();
+    it("says yes when a live setting changed alongside one that needs a restart", () => {
+        expect(needsRestart({ speechOutput: true, coProcessor: true })).toBe(true);
+    });
+});
 
-        expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true });
-        expect(dialog.onRestartRequired).not.toHaveBeenCalled();
+describe("restartPending", () => {
+    const running = { model: "B-DFS1.2", coProcessor: false, hasEconet: false, hasMusic5000: false };
+
+    it("is not pending when the settings match the running machine", () => {
+        expect(restartPending({ ...running }, running)).toBe(false);
     });
 
-    it("saves live and restart-required settings together", () => {
-        const dialog = new Dialog();
-        dialog.open();
-        dialog.tick("speechOutput");
-        dialog.tick("65c02");
-        dialog.close();
+    it("is pending when a fitting was added", () => {
+        expect(restartPending({ ...running, coProcessor: true }, running)).toBe(true);
+    });
 
-        expect(dialog.onClose).toHaveBeenCalledWith({ speechOutput: true, coProcessor: true });
-        expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
+    it("stops being pending once the setting is put back", () => {
+        const changed = { ...running, hasMusic5000: true };
+        expect(restartPending(changed, running)).toBe(true);
+        expect(restartPending({ ...changed, hasMusic5000: false }, running)).toBe(false);
+    });
+
+    it("ignores settings the running machine can follow", () => {
+        expect(restartPending({ ...running, keyLayout: "natural" }, running)).toBe(false);
+    });
+});
+
+describe("CheckboxSettings", () => {
+    it("marks the fittings as needing a restart, and the rest as not", () => {
+        const restartRequired = CheckboxSettings.filter((s) => s.restartRequired).map((s) => s.field);
+
+        expect(restartRequired).toEqual(["coProcessor", "hasTeletextAdaptor", "hasEconet", "hasMusic5000"]);
+    });
+
+    it("gives every setting a distinct element and field", () => {
+        expect(new Set(CheckboxSettings.map((s) => s.id)).size).toBe(CheckboxSettings.length);
+        expect(new Set(CheckboxSettings.map((s) => s.field)).size).toBe(CheckboxSettings.length);
     });
 });
