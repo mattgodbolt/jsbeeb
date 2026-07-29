@@ -16,15 +16,15 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
     ];
 }
 
-/** Settings that only take effect on a freshly built machine, so they are held until the user agrees to restart. */
+/** Settings that only take effect on a freshly built machine, so changing them leaves a restart pending. */
 const RestartRequiredSettings = ["model", "coProcessor", "hasEconet", "hasMusic5000", "hasTeletextAdaptor"];
 
 export class Config extends EventTarget {
     /**
      * @param {function(object)} onChange called as soon as a setting the emulator can follow live changes
      * @param {function(object)} onClose called with the settings to apply and persist
-     * @param {function({confirm: function, discard: function})} onRestartRequired called when closing the
-     *     dialog left changes that need a restart; exactly one of the two callbacks must be invoked
+     * @param {function()} onRestartRequired called after the settings have been saved, when some of them
+     *     will only take effect once the machine is rebuilt
      */
     constructor(onChange, onClose, onRestartRequired) {
         super();
@@ -37,28 +37,23 @@ export class Config extends EventTarget {
         this.hasEconet = false;
         this.hasMusic5000 = false;
         this.hasTeletextAdaptor = false;
+        this.runningMachine = null;
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
+            // The startup settings are pushed in after construction, so the machine that is actually running
+            // is only knowable from the first time the dialog is opened.
+            if (!this.runningMachine) this.runningMachine = this.restartRequiredSettings();
             this.showCurrentSettings();
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
-            const needsRestart = {};
-            const live = {};
-            for (const [key, value] of Object.entries(this.changed)) {
-                if (RestartRequiredSettings.includes(key)) needsRestart[key] = value;
-                else live[key] = value;
-            }
-            this.applyChanges(live);
-            if (Object.keys(needsRestart).length === 0) return;
-            this.onRestartRequired({
-                confirm: () => {
-                    this.adoptRestartSettings(needsRestart);
-                    this.applyChanges(needsRestart);
-                },
-                discard: () => this.showCurrentSettings(),
-            });
+            const changed = this.changed;
+            this.adoptRestartSettings(changed);
+            this.onClose(changed);
+            if (Object.keys(changed).length === 0) return;
+            this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
+            if (RestartRequiredSettings.some((key) => key in changed)) this.onRestartRequired();
         });
 
         const modelMenu = document.querySelector(".model-menu");
@@ -138,6 +133,23 @@ export class Config extends EventTarget {
         }
     }
 
+    restartRequiredSettings() {
+        return {
+            model: this.model,
+            coProcessor: this.coProcessor,
+            hasEconet: this.hasEconet,
+            hasMusic5000: this.hasMusic5000,
+            hasTeletextAdaptor: this.hasTeletextAdaptor,
+        };
+    }
+
+    /** @returns {boolean} whether the saved settings differ from the machine that is running. */
+    get restartPending() {
+        if (!this.runningMachine) return false;
+        const settings = this.restartRequiredSettings();
+        return RestartRequiredSettings.some((key) => settings[key] !== this.runningMachine[key]);
+    }
+
     showCurrentSettings() {
         this.setDropdownText(this.model.name);
         this.set65c02(this.coProcessor);
@@ -145,6 +157,7 @@ export class Config extends EventTarget {
         this.setTeletext(this.hasTeletextAdaptor);
         this.setMusic5000(this.hasMusic5000);
         this.setEconet(this.hasEconet);
+        document.getElementById("restart-pending").classList.toggle("d-none", !this.restartPending);
     }
 
     adoptRestartSettings(changed) {
@@ -153,13 +166,6 @@ export class Config extends EventTarget {
         if (changed.hasEconet !== undefined) this.setEconet(changed.hasEconet);
         if (changed.hasMusic5000 !== undefined) this.setMusic5000(changed.hasMusic5000);
         if (changed.hasTeletextAdaptor !== undefined) this.setTeletext(changed.hasTeletextAdaptor);
-    }
-
-    applyChanges(changed) {
-        this.onClose(changed);
-        if (Object.keys(changed).length > 0) {
-            this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
-        }
     }
 
     setMicrophoneChannel(channel) {

@@ -19,6 +19,7 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
+import { makeAreYouSure } from "./are-you-sure.js";
 import { TubeModel } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
@@ -267,16 +268,14 @@ const config = new Config(
         }
         updateUrl();
     },
-    function onRestartRequired({ confirm, discard }) {
+    function onRestartRequired() {
         areYouSure(
-            "Changing model requires a restart of the emulator. Restart now?",
-            "Yes, restart now",
-            "No, thanks",
+            "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
+            "Restart now",
+            "Later",
             function () {
-                confirm();
                 window.location.reload();
             },
-            discard,
         );
     },
 );
@@ -1695,7 +1694,8 @@ syncLights = function () {
         drive0.update(processor.fdc.motorOn[0]);
         drive1.update(processor.fdc.motorOn[1]);
         cassette.update(processor.acia.motorOn);
-        if (config.hasEconet) {
+        // Asks the machine, not the settings, which can have moved on to a change awaiting a restart.
+        if (processor.econet) {
             network.update(processor.econet.activityLight());
         }
     }
@@ -1850,31 +1850,7 @@ const startPromise = (async () => {
 })();
 
 const aysEl = document.getElementById("are-you-sure");
-const aysModal = new bootstrap.Modal(aysEl);
-
-function areYouSure(message, yesText, noText, yesFunc, noFunc) {
-    const yesButton = aysEl.querySelector(".ays-yes");
-    aysEl.querySelector(".context").textContent = message;
-    aysEl.querySelector(".ays-no").textContent = noText;
-    yesButton.textContent = yesText;
-    let confirmed = false;
-    const onYes = () => {
-        confirmed = true;
-        aysModal.hide();
-    };
-    yesButton.addEventListener("click", onYes, { once: true });
-    // The answer is decided on hiding, so the "no" button, Escape and a click outside all count as declining.
-    aysEl.addEventListener(
-        "hidden.bs.modal",
-        () => {
-            yesButton.removeEventListener("click", onYes);
-            if (confirmed) yesFunc();
-            else noFunc();
-        },
-        { once: true },
-    );
-    aysModal.show();
-}
+const areYouSure = makeAreYouSure(aysEl, new bootstrap.Modal(aysEl));
 
 function benchmarkCpu(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;

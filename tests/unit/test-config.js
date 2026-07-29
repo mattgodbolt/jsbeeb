@@ -49,7 +49,7 @@ class Dialog {
         this.config = new Config(
             () => {},
             (changed) => this.onClose(changed),
-            (restart) => this.onRestartRequired(restart),
+            () => this.onRestartRequired(),
         );
         this.config.addEventListener("settings-changed", (e) => this.settingsChanged(e.detail));
         // Mirrors main.js applying the startup settings before the dialog is ever shown.
@@ -81,9 +81,8 @@ class Dialog {
         return document.getElementById(id).checked;
     }
 
-    get restartPrompt() {
-        expect(this.onRestartRequired).toHaveBeenCalledTimes(1);
-        return this.onRestartRequired.mock.calls[0][0];
+    get pendingShown() {
+        return !document.getElementById("restart-pending").classList.contains("d-none");
     }
 }
 
@@ -93,70 +92,71 @@ describe("Config settings dialog", () => {
     });
 
     describe("settings that need a restart", () => {
-        it("holds a co-processor change back until the restart is confirmed", () => {
+        it("saves a co-processor change and asks about restarting", () => {
             const dialog = new Dialog();
             dialog.open();
             dialog.tick("65c02");
             dialog.close();
-
-            expect(dialog.onClose).toHaveBeenCalledWith({});
-            expect(dialog.settingsChanged).not.toHaveBeenCalled();
-        });
-
-        it("applies a co-processor change once the restart is confirmed", () => {
-            const dialog = new Dialog();
-            dialog.open();
-            dialog.tick("65c02");
-            dialog.close();
-            dialog.restartPrompt.confirm();
 
             expect(dialog.onClose).toHaveBeenCalledWith({ coProcessor: true });
             expect(dialog.settingsChanged).toHaveBeenCalledWith({ coProcessor: true });
+            expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
             expect(dialog.config.coProcessor).toBe(true);
             expect(dialog.checkbox("65c02")).toBe(true);
         });
 
-        it("holds a model change back until the restart is confirmed", () => {
+        it("saves a model change", () => {
             const dialog = new Dialog();
             dialog.open();
             dialog.chooseModel("Master");
             dialog.close();
 
-            expect(dialog.settingsChanged).not.toHaveBeenCalled();
-
-            dialog.restartPrompt.confirm();
-
             expect(dialog.settingsChanged).toHaveBeenCalledWith({ model: "Master" });
             expect(dialog.config.model).toBe(findModel("Master"));
+            expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
         });
 
-        it("leaves the machine, the checkboxes and the fields agreeing when the restart is declined", () => {
+        it("shows the saved values, marked pending, when the dialog is opened again", () => {
             const dialog = new Dialog();
             dialog.open();
             dialog.tick("65c02");
             dialog.tick("hasEconet");
             dialog.close();
-            dialog.restartPrompt.discard();
 
-            expect(dialog.settingsChanged).not.toHaveBeenCalled();
-            expect(dialog.config.coProcessor).toBe(false);
-            expect(dialog.config.hasEconet).toBe(false);
-            expect(dialog.checkbox("65c02")).toBe(false);
-            expect(dialog.checkbox("hasEconet")).toBe(false);
+            dialog.open();
+
+            expect(dialog.checkbox("65c02")).toBe(true);
+            expect(dialog.checkbox("hasEconet")).toBe(true);
+            expect(dialog.pendingShown).toBe(true);
         });
 
-        it("forgets a declined change when the dialog is opened again", () => {
+        it("does not re-save or re-ask on a later visit that changes nothing", () => {
             const dialog = new Dialog();
             dialog.open();
             dialog.tick("hasMusic5000");
             dialog.close();
-            dialog.restartPrompt.discard();
 
             dialog.open();
             dialog.close();
 
-            expect(dialog.settingsChanged).not.toHaveBeenCalled();
+            expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
             expect(dialog.onRestartRequired).toHaveBeenCalledTimes(1);
+        });
+
+        it("stops marking a setting pending once it is put back", () => {
+            const dialog = new Dialog();
+            dialog.open();
+            dialog.tick("hasMusic5000");
+            dialog.close();
+
+            dialog.open();
+            dialog.tick("hasMusic5000");
+            dialog.close();
+
+            dialog.open();
+
+            expect(dialog.checkbox("hasMusic5000")).toBe(false);
+            expect(dialog.pendingShown).toBe(false);
         });
 
         it("asks nothing when only live settings changed", () => {
@@ -166,31 +166,32 @@ describe("Config settings dialog", () => {
             dialog.close();
 
             expect(dialog.onRestartRequired).not.toHaveBeenCalled();
+            expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true });
         });
     });
 
     describe("settings that apply live", () => {
-        it("applies them on close even while a restart is pending", () => {
+        it("saves them alongside a change that needs a restart", () => {
             const dialog = new Dialog();
             dialog.open();
             dialog.tick("speechOutput");
             dialog.tick("65c02");
             dialog.close();
 
-            expect(dialog.onClose).toHaveBeenCalledWith({ speechOutput: true });
-            expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true });
+            expect(dialog.onClose).toHaveBeenCalledWith({ speechOutput: true, coProcessor: true });
+            expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
+            expect(dialog.settingsChanged).toHaveBeenCalledWith({ speechOutput: true, coProcessor: true });
         });
 
-        it("survives declining the restart", () => {
+        it("does not mark the dialog pending on their own", () => {
             const dialog = new Dialog();
             dialog.open();
             dialog.tick("mouseJoystickEnabled");
-            dialog.tick("65c02");
             dialog.close();
-            dialog.restartPrompt.discard();
 
-            expect(dialog.settingsChanged).toHaveBeenCalledTimes(1);
-            expect(dialog.settingsChanged).toHaveBeenCalledWith({ mouseJoystickEnabled: true });
+            dialog.open();
+
+            expect(dialog.pendingShown).toBe(false);
         });
 
         it("says nothing changed when nothing did", () => {
