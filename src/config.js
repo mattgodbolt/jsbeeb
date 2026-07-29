@@ -69,7 +69,8 @@ export class Config extends EventTarget {
             this.changed = {};
             // The startup settings are pushed in after construction, so what the running machine was
             // built with is only knowable from the first time the dialog is opened.
-            if (!this.runningSettings) this.runningSettings = { ...this };
+            if (!this.runningSettings)
+                this.runningSettings = Object.fromEntries(RestartRequiredFields.map((field) => [field, this[field]]));
             this.setDropdownText(this.model.name);
             this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
             this.setCheckboxes(this);
