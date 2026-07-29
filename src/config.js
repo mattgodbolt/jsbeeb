@@ -59,10 +59,7 @@ export class Config extends EventTarget {
         this.onRestartRequired = onRestartRequired;
         this.changed = {};
         this.model = null;
-        this.coProcessor = false;
-        this.hasEconet = false;
-        this.hasMusic5000 = false;
-        this.hasTeletextAdaptor = false;
+        for (const { field } of CheckboxSettings) this[field] = false;
         this.runningSettings = null;
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
@@ -86,7 +83,8 @@ export class Config extends EventTarget {
             this.onClose(changed);
             if (Object.keys(changed).length === 0) return;
             this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
-            if (needsRestart(changed)) this.onRestartRequired();
+            // changed records which controls were touched, so a value in it can be what is already running.
+            if (needsRestart(changed) && restartPending(this, this.runningSettings)) this.onRestartRequired();
         });
 
         const modelMenu = document.querySelector(".model-menu");

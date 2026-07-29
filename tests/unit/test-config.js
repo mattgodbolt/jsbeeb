@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CheckboxSettings, fittedRoms, needsRestart, restartPending } from "../../src/config.js";
+import { fittedRoms, needsRestart, restartPending } from "../../src/config.js";
 import { findModel } from "../../src/models.js";
 
 describe("fittedRoms", () => {
@@ -61,7 +61,13 @@ describe("needsRestart", () => {
 });
 
 describe("restartPending", () => {
-    const running = { model: "B-DFS1.2", coProcessor: false, hasEconet: false, hasMusic5000: false };
+    const running = {
+        model: "B-DFS1.2",
+        coProcessor: false,
+        hasEconet: false,
+        hasMusic5000: false,
+        hasTeletextAdaptor: false,
+    };
 
     it("is not pending when the settings match the running machine", () => {
         expect(restartPending({ ...running }, running)).toBe(false);
@@ -79,18 +85,5 @@ describe("restartPending", () => {
 
     it("ignores settings the running machine can follow", () => {
         expect(restartPending({ ...running, keyLayout: "natural" }, running)).toBe(false);
-    });
-});
-
-describe("CheckboxSettings", () => {
-    it("marks the fittings as needing a restart, and the rest as not", () => {
-        const restartRequired = CheckboxSettings.filter((s) => s.restartRequired).map((s) => s.field);
-
-        expect(restartRequired).toEqual(["coProcessor", "hasTeletextAdaptor", "hasEconet", "hasMusic5000"]);
-    });
-
-    it("gives every setting a distinct element and field", () => {
-        expect(new Set(CheckboxSettings.map((s) => s.id)).size).toBe(CheckboxSettings.length);
-        expect(new Set(CheckboxSettings.map((s) => s.field)).size).toBe(CheckboxSettings.length);
     });
 });

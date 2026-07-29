@@ -1863,8 +1863,7 @@ function areYouSure(message, yesText, noText, yesFunc) {
         aysModal.hide();
     };
     yesButton.addEventListener("click", onYes, { once: true });
-    // Acting on hiding rather than on the click means the "no" button, Escape and a click outside all
-    // come to the same thing, and that the modal is gone before yesFunc runs.
+    // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
     aysEl.addEventListener(
         "hidden.bs.modal",
         () => {
