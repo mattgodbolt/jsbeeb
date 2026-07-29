@@ -78,7 +78,8 @@ export class Config extends EventTarget {
 
         configuration.addEventListener("hide.bs.modal", () => {
             const changed = this.changed;
-            if (changed.model !== undefined) this.setModel(changed.model);
+            // Not setModel: that also renames the machine in the title bar, which has not changed yet.
+            if (changed.model !== undefined) this.model = findModel(changed.model);
             this.setCheckboxes(changed);
             this.onClose(changed);
             if (Object.keys(changed).length === 0) return;
