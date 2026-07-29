@@ -787,7 +787,9 @@
       aria-labelledby="configurationModalLabel"
       aria-hidden="true"
     >
-      <div class="modal-dialog">
+      <!-- Scrollable: this dialog has far more settings than the others and would otherwise
+           run off the bottom of a short screen. -->
+      <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="configurationModalLabel">Emulation Configuration</h5>
