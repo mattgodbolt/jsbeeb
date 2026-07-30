@@ -22,17 +22,27 @@ export class Acia {
         this.hadDcdHigh = false;
         this.serialReceiveRate = 0;
         this.serialReceiveCyclesPerByte = 0;
+        this.serialTransmitRate = 0;
+        this.serialTransmitCyclesPerByte = 0;
 
         this.setSerialReceive(19200);
+        this.setSerialTransmit(19200);
         this.txCompleteTask = scheduler.newTask(() => {
             this.sr |= 0x02; // set the TDRE
+            this.updateIrq();
         });
         this.runTapeTask = scheduler.newTask(() => this.runTape());
         this.runRs423Task = scheduler.newTask(() => this.runRs423());
     }
 
+    // MC6850: the transmit interrupt is selected by CR6:CR5 = 01 and follows
+    // TDRE, which a high CTS inhibits.
+    txIrq() {
+        return (this.cr & 0x60) === 0x20 && (this.sr & 0x0a) === 0x02;
+    }
+
     updateIrq() {
-        if (this.sr & this.cr & 0x80) {
+        if (this.sr & this.cr & 0x80 || this.txIrq()) {
             this.cpu.interrupt |= 0x04;
         } else {
             this.cpu.interrupt &= ~0x04;
@@ -77,6 +87,7 @@ export class Acia {
             return this.dr;
         } else {
             let result = (this.sr & 0x7f) | (this.sr & this.cr & 0x80);
+            if (this.txIrq()) result |= 0x80;
             // MC6850: "A low CTS indicates that there is a Clear-to-Send
             // from the modem. In the high state, the Transmit Data Register
             // Empty bit is inhibited".
@@ -100,10 +111,7 @@ export class Acia {
     write(addr, val) {
         if (addr & 1) {
             this.sr &= ~0x02;
-            // It's not clear how long this can take; it's when the shift register is loaded.
-            // That could be straight away if not already tx-ing, but as we don't really tx,
-            // be conservative here.
-            this.txCompleteTask.reschedule(2000);
+            this.txCompleteTask.reschedule(this.serialTransmitCyclesPerByte);
             this.updateIrq();
             if (this.rs423Selected && this.rs423Handler) this.rs423Handler.onTransmit(val);
         } else {
@@ -113,7 +121,10 @@ export class Acia {
                 this.reset();
             } else {
                 this.cr = val;
+                // The word format in CR changes how long a byte takes on the wire.
                 this.setSerialReceive(this.serialReceiveRate);
+                this.setSerialTransmit(this.serialTransmitRate);
+                this.updateIrq();
             }
         }
     }
@@ -213,6 +224,7 @@ export class Acia {
             hadDcdHigh: this.hadDcdHigh,
             serialReceiveRate: this.serialReceiveRate,
             serialReceiveCyclesPerByte: this.serialReceiveCyclesPerByte,
+            serialTransmitRate: this.serialTransmitRate,
             txCompleteTaskOffset: this.txCompleteTask.scheduled()
                 ? this.txCompleteTask.expireEpoch - scheduler.epoch
                 : null,
@@ -232,6 +244,8 @@ export class Acia {
         this.hadDcdHigh = state.hadDcdHigh;
         this.serialReceiveRate = state.serialReceiveRate;
         this.serialReceiveCyclesPerByte = state.serialReceiveCyclesPerByte;
+        // Snapshots taken before transmit timing was modelled have no rate.
+        this.setSerialTransmit(state.serialTransmitRate ?? 19200);
         this.updateIrq();
 
         this.txCompleteTask.cancel();
@@ -294,7 +308,8 @@ export class Acia {
                 parityBits = 1;
                 break;
         }
-        return wordLength + stopBits + parityBits;
+        const startBits = 1;
+        return startBits + wordLength + stopBits + parityBits;
     }
 
     rts() {
@@ -305,6 +320,11 @@ export class Acia {
     setSerialReceive(rate) {
         this.serialReceiveRate = rate;
         this.serialReceiveCyclesPerByte = this.secondsToCycles(this.numBitsPerByte() / rate);
+    }
+
+    setSerialTransmit(rate) {
+        this.serialTransmitRate = rate;
+        this.serialTransmitCyclesPerByte = this.secondsToCycles(this.numBitsPerByte() / rate);
     }
 
     runTape() {

@@ -40,6 +40,7 @@ describe("Acia snapshotState / restoreState", () => {
 
     it("should snapshot and restore serial rate", () => {
         acia.setSerialReceive(9600);
+        acia.setSerialTransmit(1200);
 
         const snapshot = acia.snapshotState();
         const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler, null);
@@ -47,6 +48,8 @@ describe("Acia snapshotState / restoreState", () => {
 
         expect(acia2.serialReceiveRate).toBe(9600);
         expect(acia2.serialReceiveCyclesPerByte).toBe(acia.serialReceiveCyclesPerByte);
+        expect(acia2.serialTransmitRate).toBe(1200);
+        expect(acia2.serialTransmitCyclesPerByte).toBe(acia.serialTransmitCyclesPerByte);
     });
 
     it("should snapshot scheduled task offsets", () => {
