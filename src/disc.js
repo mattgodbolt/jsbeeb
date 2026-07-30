@@ -675,6 +675,8 @@ export function loadAdf(disc, data, isDsd) {
 /** Why a sector will not fit in an SSD or DSD image, or null if it will. */
 function sectorShortfall(sector, trackNum) {
     if (sector.hasDataCrcError || sector.hasHeaderCrcError) return "with a CRC error";
+    // A header whose data mark never arrives leaves the sector with nothing to write.
+    if (!sector.sectorData) return "with no data";
     if (sector.sectorNumber >= SsdFormat.sectorsPerTrack)
         return `numbered past the ${SsdFormat.sectorsPerTrack} a track holds`;
     if (sector.sectorData.length !== SsdFormat.sectorSize) return `not ${SsdFormat.sectorSize} bytes`;
