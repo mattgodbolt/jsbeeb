@@ -1443,7 +1443,12 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
     let data;
     if (document.querySelector("#google-drive .create-from-existing").checked) {
         const discType = disc.guessDiscTypeFromName(name);
-        data = discType.saver(processor.fdc.drives[0].disc);
+        try {
+            data = discType.saver(processor.fdc.drives[0].disc);
+        } catch (e) {
+            loadingFinished(`Create failed: ${e.message}`);
+            return;
+        }
         name = replaceOrAddExtension(name, discType.extension);
         console.log(`Saving existing disc: ${name}`);
     } else {
@@ -1472,11 +1477,15 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
 
 document.getElementById("download-drive-link").addEventListener("click", function () {
     const disc = processor.fdc.drives[0].disc;
-    const data = toSsdOrDsd(disc);
-    const name = disc.name;
-    const extension = disc.isDoubleSided ? ".dsd" : ".ssd";
-
-    downloadDriveData(data, name, extension);
+    const save = (options) =>
+        downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
+    try {
+        save();
+    } catch (e) {
+        areYouSure(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel", () =>
+            save({ force: true }),
+        );
+    }
 });
 
 document.getElementById("download-drive-hfe-link").addEventListener("click", function () {
