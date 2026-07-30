@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { fittedRoms, needsRestart, restartPending } from "../../src/config.js";
+import {
+    fittedRoms,
+    nearestTubeCpuSpeedIndex,
+    needsRestart,
+    restartPending,
+    TubeCpuMultipliers,
+    tubeCpuSpeedLabel,
+} from "../../src/config.js";
 import { findModel } from "../../src/models.js";
 
 describe("fittedRoms", () => {
@@ -85,5 +92,37 @@ describe("restartPending", () => {
 
     it("ignores settings the running machine can follow", () => {
         expect(restartPending({ ...running, keyLayout: "natural" }, running)).toBe(false);
+    });
+});
+
+describe("tube cpu speeds", () => {
+    it("offers the real parts and the overclocks", () => {
+        expect(TubeCpuMultipliers.map(tubeCpuSpeedLabel)).toEqual([
+            "3MHz (1x)",
+            "4MHz (1.33x)",
+            "6MHz (2x)",
+            "8MHz (2.67x)",
+            "12MHz (4x)",
+            "24MHz (8x)",
+        ]);
+    });
+
+    it("keeps the multipliers short enough to share in a URL", () => {
+        expect(TubeCpuMultipliers.map(String)).toEqual(["1", "1.3333", "2", "2.6667", "4", "8"]);
+    });
+
+    it("labels a multiplier from a URL as it stands", () => {
+        expect(tubeCpuSpeedLabel(0.75)).toBe("2.25MHz (0.75x)");
+        expect(tubeCpuSpeedLabel(1.3333)).toBe("4MHz (1.33x)");
+    });
+
+    it("puts the slider on the speed asked for", () => {
+        expect(TubeCpuMultipliers.map(nearestTubeCpuSpeedIndex)).toEqual([0, 1, 2, 3, 4, 5]);
+    });
+
+    it("puts the slider nearest a speed it does not offer", () => {
+        expect(nearestTubeCpuSpeedIndex(1.3)).toBe(1);
+        expect(nearestTubeCpuSpeedIndex(0.5)).toBe(0);
+        expect(nearestTubeCpuSpeedIndex(100)).toBe(5);
     });
 });

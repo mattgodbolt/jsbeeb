@@ -3,8 +3,30 @@ import { allModels, findModel } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
 import { TubeCpuClockMhz } from "./6502.js";
 
+/** The parasite speeds the slider offers, in MHz: the external 6502, the Master Turbo's 65C102, then overclocks. */
+const TubeCpuSpeedsMhz = [3, 4, 6, 8, 12, 24];
+
+const round = (value, places) => Number(value.toFixed(places));
+
+/** The same speeds as multiples of the parasite's own clock, rounded so a shared URL stays readable. */
+export const TubeCpuMultipliers = TubeCpuSpeedsMhz.map((mhz) => round(mhz / TubeCpuClockMhz, 4));
+
+/** @returns {string} the speed a multiplier gives, e.g. "4MHz (1.33x)". */
+export function tubeCpuSpeedLabel(multiplier) {
+    return `${round(multiplier * TubeCpuClockMhz, 2)}MHz (${round(multiplier, 2)}x)`;
+}
+
+/** @returns {number} the slider position offering the speed closest to `multiplier`. */
+export function nearestTubeCpuSpeedIndex(multiplier) {
+    const distanceAt = (index) => Math.abs(TubeCpuMultipliers[index] - multiplier);
+    return TubeCpuMultipliers.reduce((best, _, index) => (distanceAt(index) < distanceAt(best) ? index : best), 0);
+}
+
 function showTubeCpuMultiplier(value) {
-    document.getElementById("tubeCpuMultiplierValue").textContent = `${value}x (${value * TubeCpuClockMhz}MHz)`;
+    const label = tubeCpuSpeedLabel(value);
+    document.getElementById("tubeCpuMultiplierValue").textContent = label;
+    // The slider itself carries a position, so it needs telling what that position means.
+    document.getElementById("tubeCpuMultiplier").setAttribute("aria-valuetext", label);
 }
 
 /**
@@ -117,8 +139,10 @@ export class Config extends EventTarget {
             });
         }
 
-        document.getElementById("tubeCpuMultiplier").addEventListener("input", () => {
-            const val = parseInt(document.getElementById("tubeCpuMultiplier").value, 10);
+        const tubeCpuSlider = document.getElementById("tubeCpuMultiplier");
+        tubeCpuSlider.max = TubeCpuMultipliers.length - 1;
+        tubeCpuSlider.addEventListener("input", () => {
+            const val = TubeCpuMultipliers[parseInt(tubeCpuSlider.value, 10)];
             showTubeCpuMultiplier(val);
             this.changed.tubeCpuMultiplier = val;
         });
@@ -195,9 +219,10 @@ export class Config extends EventTarget {
         for (const el of document.querySelectorAll(".keyboard-layout")) el.textContent = text;
     }
 
+    /** Snaps the slider to the nearest speed offered, but labels the exact `value`, which a URL may put in between. */
     setTubeCpuMultiplier(value) {
         this.tubeCpuMultiplier = value;
-        document.getElementById("tubeCpuMultiplier").value = value;
+        document.getElementById("tubeCpuMultiplier").value = nearestTubeCpuSpeedIndex(value);
         showTubeCpuMultiplier(value);
     }
 

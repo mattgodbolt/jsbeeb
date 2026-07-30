@@ -170,8 +170,9 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - `cpuMultiplier=X` speeds up the CPU by a factor of `X` relative to the peripherals: video, sound and the VIAs keep
   running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
   unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
-- `tubeCpuMultiplier=X` speeds up the 65c02 second processor by a factor of `X`, a whole number. `1`, the default, is
-  the real 3MHz part.
+- `tubeCpuMultiplier=X` speeds up the 65c02 second processor by a factor of `X`, which may be fractional. `1`, the
+  default, is the real 3MHz part; `1.3333` is the Master Turbo's 4MHz 65C102. Below about `0.73` (2.2MHz) the MOS's
+  unhandshaken tube transfers lose data.
 - `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right
   should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into
   problems on smaller screens; bottom taller than 100 or so similarly.

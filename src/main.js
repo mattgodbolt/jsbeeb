@@ -138,7 +138,7 @@ const paramTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
-    tubeCpuMultiplier: ParamTypes.INT,
+    tubeCpuMultiplier: ParamTypes.FLOAT,
     microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)

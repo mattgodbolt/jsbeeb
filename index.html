@@ -897,18 +897,10 @@
                   </div>
                   <div class="form-check" id="tubeCpuMultiplierGroup">
                     <label class="form-check-label" for="tubeCpuMultiplier">
-                      Tube CPU: <span id="tubeCpuMultiplierValue">1x (3MHz)</span>
+                      Tube CPU: <span id="tubeCpuMultiplierValue">3MHz (1x)</span>
                     </label>
-                    <input
-                      type="range"
-                      class="form-range"
-                      id="tubeCpuMultiplier"
-                      min="1"
-                      max="8"
-                      value="1"
-                      step="1"
-                      disabled
-                    />
+                    <!-- The slider indexes the speed list in config.js, which sets its max. -->
+                    <input type="range" class="form-range" id="tubeCpuMultiplier" min="0" value="0" step="1" disabled />
                   </div>
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="hasMusic5000" name="hasMusic5000" />
