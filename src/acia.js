@@ -5,10 +5,10 @@
 // http://www.classiccmp.org/dunfield/r/6850.pdf
 
 export class Acia {
-    constructor(cpu, toneGen, scheduler, rs423Handler, relayNoise) {
+    constructor(cpu, toneGen, scheduler, relayNoise) {
         this.cpu = cpu;
         this.toneGen = toneGen;
-        this.rs423Handler = rs423Handler;
+        this.rs423Handler = null;
         this.relayNoise = relayNoise;
 
         this.sr = 0x00;
@@ -121,7 +121,6 @@ export class Acia {
                 this.reset();
             } else {
                 this.cr = val;
-                // The word format in CR changes the byte time.
                 this.setSerialReceive(this.serialReceiveRate);
                 this.setSerialTransmit(this.serialTransmitRate);
                 this.updateIrq();

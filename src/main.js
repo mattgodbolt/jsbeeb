@@ -685,7 +685,6 @@ const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
  * again whenever speechOutput.enabled changes.
  */
 function setupRs423Handler() {
-    // A hard reset builds a new touchscreen, so it is looked up per call rather than captured.
     processor.acia.setRs423Handler({
         onTransmit(val) {
             processor.touchScreen.onTransmit(val);

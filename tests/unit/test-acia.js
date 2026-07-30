@@ -11,7 +11,7 @@ const Tdre = 0x02;
 
 function createScheduledAcia(scheduler, cr, transmitRate) {
     const cpu = { interrupt: 0 };
-    const acia = new Acia(cpu, { mute: vi.fn(), tone: vi.fn() }, scheduler, null);
+    const acia = new Acia(cpu, { mute: vi.fn(), tone: vi.fn() }, scheduler);
     acia.write(0, cr);
     acia.setSerialTransmit(transmitRate);
     return { cpu, acia };
@@ -25,7 +25,9 @@ function createMockAcia(relayNoise) {
             reschedule: vi.fn(),
         })),
     };
-    return new Acia({ interrupt: 0 }, { mute: vi.fn(), tone: vi.fn() }, scheduler, {}, relayNoise);
+    const acia = new Acia({ interrupt: 0 }, { mute: vi.fn(), tone: vi.fn() }, scheduler, relayNoise);
+    acia.setRs423Handler({});
+    return acia;
 }
 
 describe("Acia", () => {
