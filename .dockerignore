@@ -1,0 +1,8 @@
+# The build stage runs its own npm install, so copying these would overwrite what it built
+# with host binaries: the image is alpine (musl) and the host most likely is not.
+node_modules
+dist
+out
+coverage
+
+.git
