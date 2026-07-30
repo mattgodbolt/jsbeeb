@@ -672,39 +672,51 @@ export function loadAdf(disc, data, isDsd) {
     return disc;
 }
 
+/** Why a sector will not fit in an SSD or DSD image, or null if it will. */
+function sectorShortfall(sector, trackNum) {
+    if (sector.hasDataCrcError || sector.hasHeaderCrcError) return "with a CRC error";
+    if (sector.sectorNumber >= SsdFormat.sectorsPerTrack)
+        return `numbered past the ${SsdFormat.sectorsPerTrack} a track holds`;
+    if (sector.sectorData.length !== SsdFormat.sectorSize) return `not ${SsdFormat.sectorSize} bytes`;
+    if (trackNum >= SsdFormat.tracksPerDisc) return `past track ${SsdFormat.tracksPerDisc}`;
+    return null;
+}
+
 /**
  * SSD and DSD images hold sector contents and nothing else, so anything a DFS sector could not
  * have held is lost. Copy protection usually shows up as one of these.
  *
- * @returns {?string} why `disc` cannot be an SSD or DSD, or null if it can
+ * @returns {string[]} what `disc` holds that an SSD or DSD cannot, worst first
  * @param {Disc} disc
  */
-function whyNotSsdOrDsd(disc) {
+export function ssdOrDsdShortfalls(disc) {
+    const counts = new Map();
     for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
         for (const upper of disc.isDoubleSided ? [false, true] : [false]) {
             for (const sector of disc.getTrack(upper, trackNum).findSectors()) {
-                const where = `track ${trackNum} sector ${sector.sectorNumber}`;
-                if (sector.hasDataCrcError || sector.hasHeaderCrcError) return `${where} has a CRC error`;
-                if (sector.sectorNumber >= SsdFormat.sectorsPerTrack)
-                    return `${where} is past the ${SsdFormat.sectorsPerTrack} sectors a track holds`;
-                if (sector.sectorData.length !== SsdFormat.sectorSize)
-                    return `${where} is ${sector.sectorData.length} bytes rather than ${SsdFormat.sectorSize}`;
-                if (trackNum >= SsdFormat.tracksPerDisc)
-                    return `${where} is past the ${SsdFormat.tracksPerDisc} tracks an image holds`;
+                const shortfall = sectorShortfall(sector, trackNum);
+                if (shortfall) counts.set(shortfall, (counts.get(shortfall) ?? 0) + 1);
             }
         }
     }
-    return null;
+    return [...counts]
+        .sort(([, a], [, b]) => b - a)
+        .map(([shortfall, count]) => `${count} sector${count === 1 ? "" : "s"} ${shortfall}`);
 }
 
 /**
  * @returns {Uint8Array}
  * @param {Disc} disc
- * @throws if the disc holds anything an SSD or DSD cannot represent
+ * @param {boolean} [force] save what fits instead of refusing a disc that will not fit
+ * @throws if the disc holds anything an SSD or DSD cannot, and `force` is not set
  */
-export function toSsdOrDsd(disc) {
-    const why = whyNotSsdOrDsd(disc);
-    if (why) throw new Error(`This disc cannot be saved as SSD or DSD: ${why}. Save it as HFE instead.`);
+export function toSsdOrDsd(disc, { force = false } = {}) {
+    const shortfalls = ssdOrDsdShortfalls(disc);
+    if (shortfalls.length && !force)
+        throw new Error(
+            `This disc cannot be saved as SSD or DSD: it has ${shortfalls.join(", ")}. ` +
+                `Save it as HFE to keep everything.`,
+        );
     const numSides = disc.isDoubleSided ? 2 : 1;
     const result = new Uint8Array(
         numSides * SsdFormat.tracksPerDisc * SsdFormat.sectorsPerTrack * SsdFormat.sectorSize,
@@ -714,6 +726,7 @@ export function toSsdOrDsd(disc) {
         for (let side = 0; side < numSides; ++side) {
             const trackObj = disc.getTrack(side === 1, trackNum);
             for (const sector of trackObj.findSectors()) {
+                if (sectorShortfall(sector, trackNum)) continue;
                 const sectorOffset = offset + sector.sectorNumber * SsdFormat.sectorSize;
                 for (let x = 0; x < SsdFormat.sectorSize; ++x) result[sectorOffset + x] = sector.sectorData[x];
             }
