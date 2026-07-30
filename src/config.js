@@ -155,11 +155,8 @@ export class Config extends EventTarget {
      * @returns {object}
      */
     proposedSettings() {
-        const settings = Object.fromEntries(RestartRequiredFields.map((field) => [field, this[field]]));
-        settings.model = this.model.synonyms[0];
-        for (const field of RestartRequiredFields)
-            if (this.changed[field] !== undefined) settings[field] = this.changed[field];
-        return settings;
+        const saved = (field) => (field === "model" ? this.model.synonyms[0] : this[field]);
+        return Object.fromEntries(RestartRequiredFields.map((field) => [field, this.changed[field] ?? saved(field)]));
     }
 
     showRestartPending() {
