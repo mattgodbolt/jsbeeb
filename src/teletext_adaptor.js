@@ -42,7 +42,6 @@ export class TeletextAdaptor extends EventTarget {
     constructor(cpu) {
         super();
         this.cpu = cpu;
-        this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
         // Not cleared by a reset, so a fetch still in flight across one is recognised as stale.
         this.streamRequest = 0;
         this.clearState();
@@ -59,7 +58,7 @@ export class TeletextAdaptor extends EventTarget {
         this.colPtr = 0x00;
         this.streamData = null;
         this.pollCount = 0;
-        for (const row of this.frameBuffer) row.fill(0);
+        this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
     }
 
     reset(hard) {
