@@ -365,22 +365,22 @@ Track keys are strings like `"false:0"` (lower side, track 0) or `"true:5"` (upp
 
 Present only when a co-processor was fitted.
 
-| Field      | Type       | Description                                                     |
-| ---------- | ---------- | --------------------------------------------------------------- |
-| `a`        | number     | Parasite accumulator                                            |
-| `x`        | number     | Parasite X register                                             |
-| `y`        | number     | Parasite Y register                                             |
-| `s`        | number     | Parasite stack pointer                                          |
-| `pc`       | number     | Parasite program counter                                        |
-| `p`        | number     | Parasite status flags as a byte                                 |
-| `nmiLevel` | boolean    | Parasite NMI line level                                         |
-| `nmiEdge`  | boolean    | Whether a parasite NMI edge is pending                          |
-| `takeInt`  | boolean    | Whether an interrupt is to be taken before the next instruction |
-| `cycles`   | number     | Cycles owed to the parasite; it has no scheduler of its own     |
-| `romPaged` | boolean    | Whether the boot ROM is paged in at `0xF000`                    |
-| `memory`   | Uint8Array | 64KB of parasite RAM                                            |
-| `rom`      | Uint8Array | _(Optional)_ 4KB parasite ROM, only when `includeRoms` is set   |
-| `ula`      | object     | Tube ULA state (see below)                                      |
+| Field      | Type       | Description                                                            |
+| ---------- | ---------- | ---------------------------------------------------------------------- |
+| `a`        | number     | Parasite accumulator                                                   |
+| `x`        | number     | Parasite X register                                                    |
+| `y`        | number     | Parasite Y register                                                    |
+| `s`        | number     | Parasite stack pointer                                                 |
+| `pc`       | number     | Parasite program counter                                               |
+| `p`        | number     | Parasite status flags as a byte                                        |
+| `nmiLevel` | boolean    | Parasite NMI line level                                                |
+| `nmiEdge`  | boolean    | Whether a parasite NMI edge is pending                                 |
+| `takeInt`  | boolean    | Whether an interrupt is to be taken before the next instruction        |
+| `cycles`   | number     | Cycles owed to the parasite, in halves; it has no scheduler of its own |
+| `romPaged` | boolean    | Whether the boot ROM is paged in at `0xF000`                           |
+| `memory`   | Uint8Array | 64KB of parasite RAM                                                   |
+| `rom`      | Uint8Array | _(Optional)_ 4KB parasite ROM, only when `includeRoms` is set          |
+| `ula`      | object     | Tube ULA state (see below)                                             |
 
 #### Tube ULA (`state.tube.ula`)
 

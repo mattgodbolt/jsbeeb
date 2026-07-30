@@ -15,8 +15,11 @@ import { AtomMMC2 } from "./mmc.js";
 
 const signExtend = utils.signExtend;
 
-// Speed of the second processor relative to the host, as fitted to a Master Turbo.
-export const DefaultTubeCpuMultiplier = 2;
+export const TubeCpuClockMhz = 3;
+const HostClockMhz = 2;
+const TubeCyclesPerHostCycle = TubeCpuClockMhz / HostClockMhz;
+// 1x is real hardware. Slower than about 1.1x loses bytes in the MOS's unhandshaken 10us/byte R3 transfers.
+export const DefaultTubeCpuMultiplier = 1;
 
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
@@ -479,7 +482,7 @@ class Tube6502 extends Base6502 {
     }
 
     execute(cycles) {
-        this.cycles += (cycles * this.cpuMultiplier) | 0;
+        this.cycles += cycles * TubeCyclesPerHostCycle * this.cpuMultiplier;
         if (this.cycles < 3) return;
         while (this.cycles > 0) {
             const opcode = this.readmem(this.pc);

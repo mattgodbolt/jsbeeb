@@ -104,7 +104,19 @@ describe("Tube co-processor", () => {
         expect(cpu.tube.pc).toBe(cpu.tube.readmem(0xfffc) | (cpu.tube.readmem(0xfffd) << 8));
     });
 
-    it("runs the parasite at the requested multiple of the host clock", async () => {
+    it("boots the language across the tube at the default speed", async () => {
+        const machine = new TestMachine("Master", { tube: true });
+        await machine.initialise();
+        machine.startCapture();
+
+        await machine.runFor(20 * 1000 * 1000);
+
+        // The prompt only arrives if the parasite kept up with the MOS's unhandshaken R3
+        // transfer: the ULA drops bytes the host never re-checks, and a part-copied BASIC hangs.
+        expect(machine.drainText({ raw: true })).toContain("BASIC\n\n>");
+    });
+
+    it("passes the requested multiplier on to the parasite", async () => {
         const machine = new TestMachine("Master", { tube: true, tubeCpuMultiplier: 4 });
         await machine.initialise();
 
