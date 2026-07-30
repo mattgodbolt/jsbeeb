@@ -700,7 +700,7 @@ export class Cpu6502 extends Base6502 {
             getGamepads: this.config.getGamepads,
         });
         this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
-        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen, this.relayNoise);
+        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
         this.serial = new Serial(this.acia);
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.soundChip.setScheduler(this.scheduler);

@@ -10,7 +10,7 @@ describe("Acia snapshotState / restoreState", () => {
         scheduler = new Scheduler();
         cpu = { interrupt: 0 };
         const toneGen = { mute: () => {}, tone: () => {} };
-        acia = new Acia(cpu, toneGen, scheduler, null);
+        acia = new Acia(cpu, toneGen, scheduler);
     });
 
     it("should snapshot and restore register state", () => {
@@ -25,7 +25,7 @@ describe("Acia snapshotState / restoreState", () => {
 
         const snapshot = acia.snapshotState();
 
-        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler, null);
+        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
         acia2.restoreState(snapshot);
 
         expect(acia2.sr).toBe(0x82);
@@ -40,13 +40,16 @@ describe("Acia snapshotState / restoreState", () => {
 
     it("should snapshot and restore serial rate", () => {
         acia.setSerialReceive(9600);
+        acia.setSerialTransmit(1200);
 
         const snapshot = acia.snapshotState();
-        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler, null);
+        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
         acia2.restoreState(snapshot);
 
         expect(acia2.serialReceiveRate).toBe(9600);
         expect(acia2.serialReceiveCyclesPerByte).toBe(acia.serialReceiveCyclesPerByte);
+        expect(acia2.serialTransmitRate).toBe(1200);
+        expect(acia2.serialTransmitCyclesPerByte).toBe(acia.serialTransmitCyclesPerByte);
     });
 
     it("should snapshot scheduled task offsets", () => {
@@ -63,7 +66,7 @@ describe("Acia snapshotState / restoreState", () => {
         acia.txCompleteTask.schedule(500);
         const snapshot = acia.snapshotState();
 
-        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler, null);
+        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
         acia2.restoreState(snapshot);
 
         expect(acia2.txCompleteTask.scheduled()).toBe(true);
@@ -80,7 +83,7 @@ describe("Acia snapshotState / restoreState", () => {
         const snapshot = acia.snapshotState();
         cpu.interrupt = 0;
 
-        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler, null);
+        const acia2 = new Acia(cpu, { mute: () => {}, tone: () => {} }, scheduler);
         acia2.restoreState(snapshot);
         expect(cpu.interrupt & 0x04).toBe(0x04);
     });
