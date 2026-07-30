@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  # release-please leaves its branch alone while the release content is unchanged, so a run of
+  # commits that it does not put in the changelog can leave the PR stale and conflicting.
+  workflow_dispatch:
 
 permissions:
   contents: write
