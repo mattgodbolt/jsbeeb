@@ -121,7 +121,7 @@ export class Acia {
                 this.reset();
             } else {
                 this.cr = val;
-                // The word format in CR changes how long a byte takes on the wire.
+                // The word format in CR changes the byte time.
                 this.setSerialReceive(this.serialReceiveRate);
                 this.setSerialTransmit(this.serialTransmitRate);
                 this.updateIrq();
@@ -244,7 +244,7 @@ export class Acia {
         this.hadDcdHigh = state.hadDcdHigh;
         this.serialReceiveRate = state.serialReceiveRate;
         this.serialReceiveCyclesPerByte = state.serialReceiveCyclesPerByte;
-        // Snapshots taken before transmit timing was modelled have no rate.
+        // Snapshots predating transmit timing have no saved rate.
         this.setSerialTransmit(state.serialTransmitRate ?? 19200);
         this.updateIrq();
 

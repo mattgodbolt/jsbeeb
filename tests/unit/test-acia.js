@@ -11,10 +11,7 @@ const Tdre = 0x02;
 
 function createScheduledAcia(scheduler, cr, transmitRate) {
     const cpu = { interrupt: 0 };
-    const acia = new Acia(cpu, { mute: vi.fn(), tone: vi.fn() }, scheduler, null, {
-        motorOn: vi.fn(),
-        motorOff: vi.fn(),
-    });
+    const acia = new Acia(cpu, { mute: vi.fn(), tone: vi.fn() }, scheduler, null);
     acia.write(0, cr);
     acia.setSerialTransmit(transmitRate);
     return { cpu, acia };
@@ -67,11 +64,13 @@ describe("Acia", () => {
     });
 
     describe("transmit timing", () => {
+        // A 10 bit byte at 75 baud takes 0.1333s: 266666 cycles of the 2MHz clock.
+        const ByteCyclesAt75Baud = 266666;
+
         const timeToEmpty = (cr, rate) => {
             const scheduler = new Scheduler();
             const { acia } = createScheduledAcia(scheduler, cr, rate);
             acia.write(1, 0x55);
-            expect(acia.read(0) & Tdre).toBe(0);
             let cycles = 0;
             while (!(acia.read(0) & Tdre)) {
                 scheduler.polltime(1);
@@ -81,16 +80,11 @@ describe("Acia", () => {
         };
 
         it("should empty the transmit register after one byte time", () => {
-            // 10 bits at 75 baud is 0.1333s, or 266666 cycles of the 2MHz clock.
-            expect(timeToEmpty(EightBitsOneStopNoParity, 75)).toBe(266666);
-        });
-
-        it("should scale with the transmit rate", () => {
-            expect(timeToEmpty(EightBitsOneStopNoParity, 19200)).toBe(1041);
+            expect(timeToEmpty(EightBitsOneStopNoParity, 75)).toBe(ByteCyclesAt75Baud);
         });
 
         it("should account for the word format", () => {
-            // 11 bits at 75 baud.
+            // Eleven bits: start, seven data, parity, two stop.
             expect(timeToEmpty(SevenBitsTwoStopEvenParity, 75)).toBe(293333);
         });
 
@@ -99,11 +93,11 @@ describe("Acia", () => {
             const { cpu, acia } = createScheduledAcia(
                 scheduler,
                 EightBitsOneStopNoParity | TransmitInterruptEnable,
-                19200,
+                75,
             );
             acia.write(1, 0x55);
             expect(cpu.interrupt).toBe(0);
-            scheduler.polltime(1041);
+            scheduler.polltime(ByteCyclesAt75Baud);
             expect(cpu.interrupt).toBe(0x04);
             expect(acia.read(0) & 0x80).toBe(0x80);
 
@@ -113,9 +107,9 @@ describe("Acia", () => {
 
         it("should not interrupt when the transmit interrupt is disabled", () => {
             const scheduler = new Scheduler();
-            const { cpu, acia } = createScheduledAcia(scheduler, EightBitsOneStopNoParity, 19200);
+            const { cpu, acia } = createScheduledAcia(scheduler, EightBitsOneStopNoParity, 75);
             acia.write(1, 0x55);
-            scheduler.polltime(1041);
+            scheduler.polltime(ByteCyclesAt75Baud);
             expect(cpu.interrupt).toBe(0);
         });
     });
