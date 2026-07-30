@@ -1,6 +1,11 @@
 "use strict";
 import { allModels, findModel } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
+import { TubeCpuClockMhz } from "./6502.js";
+
+function showTubeCpuMultiplier(value) {
+    document.getElementById("tubeCpuMultiplierValue").textContent = `${value}x (${value * TubeCpuClockMhz}MHz)`;
+}
 
 /**
  * The sideways ROMs the optional fittings need, in the order they claim banks.
@@ -114,7 +119,7 @@ export class Config extends EventTarget {
 
         document.getElementById("tubeCpuMultiplier").addEventListener("input", () => {
             const val = parseInt(document.getElementById("tubeCpuMultiplier").value, 10);
-            document.getElementById("tubeCpuMultiplierValue").textContent = val;
+            showTubeCpuMultiplier(val);
             this.changed.tubeCpuMultiplier = val;
         });
 
@@ -193,7 +198,7 @@ export class Config extends EventTarget {
     setTubeCpuMultiplier(value) {
         this.tubeCpuMultiplier = value;
         document.getElementById("tubeCpuMultiplier").value = value;
-        document.getElementById("tubeCpuMultiplierValue").textContent = value;
+        showTubeCpuMultiplier(value);
     }
 
     setDropdownText(modelName) {
