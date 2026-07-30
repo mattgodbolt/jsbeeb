@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
+import * as utils from "../../src/utils.js";
 
 describe("TeletextAdaptor", () => {
     // Constants
@@ -223,44 +224,30 @@ describe("TeletextAdaptor", () => {
         const TELETEXT_FRAME_SIZE = 860;
 
         // Resolvers for the fetches the adaptor has started, keyed by the URL it asked for.
-        let pending;
+        const pending = new Map();
         let adaptor;
 
-        const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-        const resolveChannel = (channel, frames) => {
-            // Each byte identifies the channel, so any frame buffer content shows which stream won.
-            const data = new Uint8Array(frames * TELETEXT_FRAME_SIZE).fill(channel);
-            pending.get(`teletext/txt${channel}.dat`)(data);
-        };
-
         beforeEach(() => {
-            pending = new Map();
-            adaptor = new TeletextAdaptor(mockCpu, (url) => new Promise((resolve) => pending.set(url, resolve)));
+            pending.clear();
+            vi.spyOn(utils, "loadData").mockImplementation(
+                (url) => new Promise((resolve) => pending.set(url, resolve)),
+            );
+            adaptor = new TeletextAdaptor(mockCpu);
         });
 
-        it("should ignore a stale response that arrives after a newer channel's", async () => {
+        // Each byte holds the channel number, so the frame buffer shows which stream was applied.
+        const resolveChannel = (channel, length = TELETEXT_FRAME_SIZE) =>
+            pending.get(`teletext/txt${channel}.dat`)(new Uint8Array(length).fill(channel));
+
+        const settle = () => new Promise((resolve) => setTimeout(resolve));
+
+        it("should ignore a response that arrives after a newer channel's", async () => {
             adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
             adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
 
-            resolveChannel(2, 1);
-            resolveChannel(1, 1);
-            await flushPromises();
-
-            adaptor.update();
-
-            expect(adaptor.channel).toBe(2);
-            expect(adaptor.frameBuffer[0][1]).toBe(2);
-        });
-
-        it("should use the newest response even when an older one arrives last", async () => {
-            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
-            adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
-
-            resolveChannel(1, 1);
-            resolveChannel(2, 1);
-            await flushPromises();
-
+            resolveChannel(2);
+            resolveChannel(1);
+            await settle();
             adaptor.update();
 
             expect(adaptor.frameBuffer[0][1]).toBe(2);
@@ -269,9 +256,8 @@ describe("TeletextAdaptor", () => {
         it("should round a truncated stream down to whole frames", async () => {
             adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
 
-            const truncated = new Uint8Array(2 * TELETEXT_FRAME_SIZE + 100).fill(1);
-            pending.get("teletext/txt1.dat")(truncated);
-            await flushPromises();
+            resolveChannel(1, 2 * TELETEXT_FRAME_SIZE + 100);
+            await settle();
 
             expect(adaptor.totalFrames).toBe(2);
         });

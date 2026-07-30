@@ -35,9 +35,8 @@ Status register:
 */
 
 export class TeletextAdaptor {
-    constructor(cpu, loadData = utils.loadData) {
+    constructor(cpu) {
         this.cpu = cpu;
-        this.loadData = loadData;
         this.teletextStatus = 0x0f; /* low nibble comes from LK4-7 and mystery links which are left floating */
         this.teletextInts = false;
         this.teletextEnable = false;
@@ -62,8 +61,8 @@ export class TeletextAdaptor {
     async loadChannelStream(channel) {
         console.log("Teletext adaptor: switching to channel " + channel);
         const request = ++this.streamRequest;
-        const data = await this.loadData(`teletext/txt${channel}.dat`);
-        // Fetches can resolve out of order; only the most recently requested channel counts.
+        const data = await utils.loadData(`teletext/txt${channel}.dat`);
+        // Fetches can resolve out of order; only the newest request may apply its data.
         if (request !== this.streamRequest) return;
         this.streamData = data;
         this.totalFrames = Math.floor(data.length / TELETEXT_FRAME_SIZE);
