@@ -681,8 +681,8 @@ const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 /**
  * Attach an RS-423 composite handler to the ACIA that combines the touchscreen
  * (which sends position data to the BBC) with the speech output (which speaks
- * text the BBC sends out).  Call this once after processor.initialise() and
- * again whenever speechOutput.enabled changes.
+ * text the BBC sends out).  Both are resolved as each byte arrives, so the one
+ * call after processor.initialise() survives hard resets and speech being toggled.
  */
 function setupRs423Handler() {
     processor.acia.setRs423Handler({
