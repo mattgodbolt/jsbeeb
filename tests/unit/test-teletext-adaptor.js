@@ -25,6 +25,7 @@ describe("TeletextAdaptor", () => {
 
         // Silence console logs during tests
         vi.spyOn(console, "log").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
 
         // Override loadChannelStream to avoid actual network calls
         teletext.loadChannelStream = vi.fn();
@@ -223,23 +224,31 @@ describe("TeletextAdaptor", () => {
     describe("Channel stream loading", () => {
         const TELETEXT_FRAME_SIZE = 860;
 
-        // Resolvers for the fetches the adaptor has started, keyed by the URL it asked for.
+        // Settlers for the fetches the adaptor has started, keyed by the URL it asked for.
         const pending = new Map();
         let adaptor;
 
         beforeEach(() => {
             pending.clear();
             vi.spyOn(utils, "loadData").mockImplementation(
-                (url) => new Promise((resolve) => pending.set(url, resolve)),
+                (url) => new Promise((resolve, reject) => pending.set(url, { resolve, reject })),
             );
             adaptor = new TeletextAdaptor(mockCpu);
         });
 
         // Each byte holds the channel number, so the frame buffer shows which stream was applied.
         const resolveChannel = (channel, length = TELETEXT_FRAME_SIZE) =>
-            pending.get(`teletext/txt${channel}.dat`)(new Uint8Array(length).fill(channel));
+            pending.get(`teletext/txt${channel}.dat`).resolve(new Uint8Array(length).fill(channel));
+
+        const failChannel = (channel, error) => pending.get(`teletext/txt${channel}.dat`).reject(error);
 
         const settle = () => new Promise((resolve) => setTimeout(resolve));
+
+        const listenForErrors = () => {
+            const errors = [];
+            adaptor.addEventListener("showError", (e) => errors.push(e.detail));
+            return errors;
+        };
 
         it("should ignore a response that arrives after a newer channel's", async () => {
             adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
@@ -260,6 +269,59 @@ describe("TeletextAdaptor", () => {
             await settle();
 
             expect(adaptor.totalFrames).toBe(2);
+        });
+
+        it("should report a failed load", async () => {
+            const errors = listenForErrors();
+            const failure = new Error("404");
+
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+            failChannel(1, failure);
+            await settle();
+
+            expect(errors).toEqual([{ context: "loading teletext channel 1", error: failure }]);
+        });
+
+        it("should not report a failure from a superseded request", async () => {
+            const errors = listenForErrors();
+
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+            adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
+            failChannel(1, new Error("404"));
+            resolveChannel(2);
+            await settle();
+
+            expect(errors).toEqual([]);
+            expect(adaptor.totalFrames).toBe(1);
+        });
+
+        it("should discard a fetch still in flight over a hard reset", async () => {
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+            adaptor.reset(true);
+
+            resolveChannel(0, 3 * TELETEXT_FRAME_SIZE);
+            resolveChannel(1, 5 * TELETEXT_FRAME_SIZE);
+            await settle();
+
+            expect(adaptor.totalFrames).toBe(3);
+        });
+
+        it("should clear state on a hard reset", async () => {
+            adaptor.write(0, 0x0c | 1); // Teletext enable, interrupts, channel 1
+            resolveChannel(1);
+            await settle();
+            adaptor.update();
+            expect(adaptor.frameBuffer[0][1]).toBe(1);
+
+            adaptor.reset(true);
+
+            expect(adaptor.teletextStatus).toBe(0x0f);
+            expect(adaptor.teletextEnable).toBe(false);
+            expect(adaptor.teletextInts).toBe(false);
+            expect(adaptor.channel).toBe(0);
+            expect(adaptor.streamData).toBe(null);
+            expect(adaptor.totalFrames).toBe(0);
+            expect(adaptor.frameBuffer[0][1]).toBe(0);
         });
     });
 

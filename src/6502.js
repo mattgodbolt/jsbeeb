@@ -673,6 +673,7 @@ export class Cpu6502 extends Base6502 {
         this.hasTube = !!this.config.tube;
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
+        this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
         this.tube = this.hasTube
             ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
             : new FakeTube();
@@ -1364,7 +1365,6 @@ export class Cpu6502 extends Base6502 {
         this.adconverter.reset();
 
         this.touchScreen = new TouchScreen(this.scheduler);
-        if (this.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
         if (this.econet) this.filestore = new Filestore(this, this.econet);
     }
 
