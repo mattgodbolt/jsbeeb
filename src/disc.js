@@ -713,12 +713,14 @@ export function ssdOrDsdShortfalls(disc) {
  * @throws if the disc holds anything an SSD or DSD cannot, and `force` is not set
  */
 export function toSsdOrDsd(disc, { force = false } = {}) {
-    const shortfalls = ssdOrDsdShortfalls(disc);
-    if (shortfalls.length && !force)
-        throw new Error(
-            `This disc cannot be saved as SSD or DSD: it has ${shortfalls.join(", ")}. ` +
-                `Save it as HFE to keep everything.`,
-        );
+    if (!force) {
+        const shortfalls = ssdOrDsdShortfalls(disc);
+        if (shortfalls.length)
+            throw new Error(
+                `This disc cannot be saved as SSD or DSD: it has ${shortfalls.join(", ")}. ` +
+                    `Save it as HFE to keep everything.`,
+            );
+    }
     const numSides = disc.isDoubleSided ? 2 : 1;
     const result = new Uint8Array(
         numSides * SsdFormat.tracksPerDisc * SsdFormat.sectorsPerTrack * SsdFormat.sectorSize,
