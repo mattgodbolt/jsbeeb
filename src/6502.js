@@ -18,7 +18,7 @@ const signExtend = utils.signExtend;
 export const TubeCpuClockMhz = 3;
 const HostClockMhz = 2;
 const TubeCyclesPerHostCycle = TubeCpuClockMhz / HostClockMhz;
-// 1x is real hardware. Slower than about 1.1x loses bytes in the MOS's unhandshaken 10us/byte R3 transfers.
+// Below about 2.2MHz the MOS's unhandshaken 10us/byte R3 transfers lose data.
 export const DefaultTubeCpuMultiplier = 1;
 
 function _set(byte, mask, set) {
