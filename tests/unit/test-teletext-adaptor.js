@@ -312,6 +312,7 @@ describe("TeletextAdaptor", () => {
             await settle();
             adaptor.update();
             expect(adaptor.frameBuffer[0][1]).toBe(1);
+            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
 
             adaptor.reset(true);
 
@@ -322,6 +323,7 @@ describe("TeletextAdaptor", () => {
             expect(adaptor.streamData).toBe(null);
             expect(adaptor.totalFrames).toBe(0);
             expect(adaptor.frameBuffer[0][1]).toBe(0);
+            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
         });
     });
 

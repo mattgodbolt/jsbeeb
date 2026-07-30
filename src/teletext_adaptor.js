@@ -59,6 +59,8 @@ export class TeletextAdaptor extends EventTarget {
         this.streamData = null;
         this.pollCount = 0;
         this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
+        // Only a register access clears our IRQ, so an interrupt latched before the reset would hang the machine.
+        this.cpu.interrupt &= ~(1 << TELETEXT_IRQ);
     }
 
     reset(hard) {
