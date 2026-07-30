@@ -219,6 +219,64 @@ describe("TeletextAdaptor", () => {
         });
     });
 
+    describe("Channel stream loading", () => {
+        const TELETEXT_FRAME_SIZE = 860;
+
+        // Resolvers for the fetches the adaptor has started, keyed by the URL it asked for.
+        let pending;
+        let adaptor;
+
+        const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+        const resolveChannel = (channel, frames) => {
+            // Each byte identifies the channel, so any frame buffer content shows which stream won.
+            const data = new Uint8Array(frames * TELETEXT_FRAME_SIZE).fill(channel);
+            pending.get(`teletext/txt${channel}.dat`)(data);
+        };
+
+        beforeEach(() => {
+            pending = new Map();
+            adaptor = new TeletextAdaptor(mockCpu, (url) => new Promise((resolve) => pending.set(url, resolve)));
+        });
+
+        it("should ignore a stale response that arrives after a newer channel's", async () => {
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+            adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
+
+            resolveChannel(2, 1);
+            resolveChannel(1, 1);
+            await flushPromises();
+
+            adaptor.update();
+
+            expect(adaptor.channel).toBe(2);
+            expect(adaptor.frameBuffer[0][1]).toBe(2);
+        });
+
+        it("should use the newest response even when an older one arrives last", async () => {
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+            adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
+
+            resolveChannel(1, 1);
+            resolveChannel(2, 1);
+            await flushPromises();
+
+            adaptor.update();
+
+            expect(adaptor.frameBuffer[0][1]).toBe(2);
+        });
+
+        it("should round a truncated stream down to whole frames", async () => {
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+
+            const truncated = new Uint8Array(2 * TELETEXT_FRAME_SIZE + 100).fill(1);
+            pending.get("teletext/txt1.dat")(truncated);
+            await flushPromises();
+
+            expect(adaptor.totalFrames).toBe(2);
+        });
+    });
+
     describe("Update and polling", () => {
         it("should update status and frame counter on update()", () => {
             // Set initial state
