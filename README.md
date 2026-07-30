@@ -171,8 +171,7 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
   running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
   unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
 - `tubeCpuMultiplier=X` speeds up the 65c02 second processor by a factor of `X`, a whole number. `1`, the default, is
-  the real 3MHz part. The MOS transfers the language across the Tube on a timing promise rather than a handshake, so a
-  second processor slower than about 2.2MHz drops bytes and never reaches its prompt.
+  the real 3MHz part.
 - `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right
   should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into
   problems on smaller screens; bottom taller than 100 or so similarly.
