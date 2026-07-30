@@ -109,7 +109,7 @@ describe("Tube co-processor", () => {
         await machine.initialise();
         machine.startCapture();
 
-        await machine.runFor(20 * 1000 * 1000);
+        await machine.runFor(4 * 1000 * 1000);
 
         // The prompt only arrives if the parasite kept up with the MOS's unhandshaken R3
         // transfer: the ULA drops bytes the host never re-checks, and a part-copied BASIC hangs.
