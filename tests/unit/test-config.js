@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fittedRoms } from "../../src/config.js";
+import { fittedRoms, needsRestart, restartPending } from "../../src/config.js";
 import { findModel } from "../../src/models.js";
 
 describe("fittedRoms", () => {
@@ -31,5 +31,59 @@ describe("fittedRoms", () => {
         const all = { model: master, hasEconet: true, hasMusic5000: true, hasTeletextAdaptor: true };
 
         expect(fittedRoms(all)).toEqual(fittedRoms(all));
+    });
+});
+
+describe("needsRestart", () => {
+    it("says no when nothing changed", () => {
+        expect(needsRestart({})).toBe(false);
+    });
+
+    it("says no for settings the running machine can follow", () => {
+        expect(needsRestart({ keyLayout: "natural", displayMode: "pal", speechOutput: true })).toBe(false);
+    });
+
+    it("says yes for the model and the fittings", () => {
+        expect(needsRestart({ model: "Master" })).toBe(true);
+        expect(needsRestart({ coProcessor: true })).toBe(true);
+        expect(needsRestart({ hasEconet: true })).toBe(true);
+        expect(needsRestart({ hasMusic5000: true })).toBe(true);
+        expect(needsRestart({ hasTeletextAdaptor: true })).toBe(true);
+    });
+
+    it("says yes when turning a fitting off, not just on", () => {
+        expect(needsRestart({ coProcessor: false })).toBe(true);
+    });
+
+    it("says yes when a live setting changed alongside one that needs a restart", () => {
+        expect(needsRestart({ speechOutput: true, coProcessor: true })).toBe(true);
+    });
+});
+
+describe("restartPending", () => {
+    const running = {
+        model: "B-DFS1.2",
+        coProcessor: false,
+        hasEconet: false,
+        hasMusic5000: false,
+        hasTeletextAdaptor: false,
+    };
+
+    it("is not pending when the settings match the running machine", () => {
+        expect(restartPending({ ...running }, running)).toBe(false);
+    });
+
+    it("is pending when a fitting was added", () => {
+        expect(restartPending({ ...running, coProcessor: true }, running)).toBe(true);
+    });
+
+    it("stops being pending once the setting is put back", () => {
+        const changed = { ...running, hasMusic5000: true };
+        expect(restartPending(changed, running)).toBe(true);
+        expect(restartPending({ ...changed, hasMusic5000: false }, running)).toBe(false);
+    });
+
+    it("ignores settings the running machine can follow", () => {
+        expect(restartPending({ ...running, keyLayout: "natural" }, running)).toBe(false);
     });
 });

@@ -227,7 +227,7 @@ const userPort = {
 };
 
 // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
-// Must be created before Config so the onClose callback and setSpeechOutput() call can reference it.
+// Must be created before Config so the onClose callback and the initial checkbox state can reference it.
 const speechOutput = new SpeechOutput();
 speechOutput.enabled = !!parsedQuery.speechOutput;
 
@@ -243,23 +243,6 @@ const config = new Config(
     },
     function onClose(changed) {
         parsedQuery = Object.assign(parsedQuery, changed);
-        if (
-            changed.model ||
-            changed.coProcessor !== undefined ||
-            changed.hasMusic5000 !== undefined ||
-            changed.hasTeletextAdaptor !== undefined ||
-            changed.hasEconet !== undefined
-        ) {
-            areYouSure(
-                "Changing model requires a restart of the emulator. Restart now?",
-                "Yes, restart now",
-                "No, thanks",
-                function () {
-                    updateUrl();
-                    window.location.reload();
-                },
-            );
-        }
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
@@ -284,6 +267,16 @@ const config = new Config(
         }
         updateUrl();
     },
+    function onRestartRequired() {
+        areYouSure(
+            "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
+            "Restart now",
+            "Later",
+            function () {
+                window.location.reload();
+            },
+        );
+    },
 );
 
 // Perform mapping of legacy models to the new format
@@ -291,14 +284,16 @@ config.mapLegacyModels(parsedQuery);
 
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
-config.set65c02(parsedQuery.coProcessor);
 config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || DefaultTubeCpuMultiplier);
-config.setEconet(parsedQuery.hasEconet);
-config.setMusic5000(parsedQuery.hasMusic5000);
-config.setTeletext(parsedQuery.hasTeletextAdaptor);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
-config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
-config.setSpeechOutput(speechOutput.enabled);
+config.setCheckboxes({
+    coProcessor: !!parsedQuery.coProcessor,
+    hasEconet: !!parsedQuery.hasEconet,
+    hasMusic5000: !!parsedQuery.hasMusic5000,
+    hasTeletextAdaptor: !!parsedQuery.hasTeletextAdaptor,
+    mouseJoystickEnabled: !!parsedQuery.mouseJoystickEnabled,
+    speechOutput: speechOutput.enabled,
+});
 let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
 
@@ -1700,7 +1695,7 @@ syncLights = function () {
         drive0.update(processor.fdc.motorOn[0]);
         drive1.update(processor.fdc.motorOn[1]);
         cassette.update(processor.acia.motorOn);
-        if (config.hasEconet) {
+        if (processor.econet) {
             network.update(processor.econet.activityLight());
         }
     }
@@ -1858,14 +1853,22 @@ const aysEl = document.getElementById("are-you-sure");
 const aysModal = new bootstrap.Modal(aysEl);
 
 function areYouSure(message, yesText, noText, yesFunc) {
+    const yesButton = aysEl.querySelector(".ays-yes");
     aysEl.querySelector(".context").textContent = message;
-    aysEl.querySelector(".ays-yes").textContent = yesText;
     aysEl.querySelector(".ays-no").textContent = noText;
-    aysEl.querySelector(".ays-yes").addEventListener(
-        "click",
-        function () {
-            aysModal.hide();
-            yesFunc();
+    yesButton.textContent = yesText;
+    let confirmed = false;
+    const onYes = () => {
+        confirmed = true;
+        aysModal.hide();
+    };
+    yesButton.addEventListener("click", onYes, { once: true });
+    // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
+    aysEl.addEventListener(
+        "hidden.bs.modal",
+        () => {
+            yesButton.removeEventListener("click", onYes);
+            if (confirmed) yesFunc();
         },
         { once: true },
     );

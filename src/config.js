@@ -16,33 +16,71 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
     ];
 }
 
+/** The settings the dialog presents as checkboxes. `enables` names a control only usable while ticked. */
+export const CheckboxSettings = [
+    { id: "65c02", field: "coProcessor", restartRequired: true, enables: "tubeCpuMultiplier" },
+    { id: "hasTeletextAdaptor", field: "hasTeletextAdaptor", restartRequired: true },
+    { id: "hasEconet", field: "hasEconet", restartRequired: true },
+    { id: "hasMusic5000", field: "hasMusic5000", restartRequired: true },
+    { id: "mouseJoystickEnabled", field: "mouseJoystickEnabled" },
+    { id: "speechOutput", field: "speechOutput" },
+];
+
+/** The model is not a checkbox, but changing it needs a restart just the same. */
+const RestartRequiredFields = [
+    "model",
+    ...CheckboxSettings.filter((setting) => setting.restartRequired).map((setting) => setting.field),
+];
+
+/** @returns {boolean} whether any of the changed settings only take effect on a freshly built machine. */
+export function needsRestart(changed) {
+    return RestartRequiredFields.some((field) => field in changed);
+}
+
+/** @returns {boolean} whether the saved settings differ from those the running machine was built with. */
+export function restartPending(settings, running) {
+    return RestartRequiredFields.some((field) => settings[field] !== running[field]);
+}
+
 export class Config extends EventTarget {
-    constructor(onChange, onClose) {
+    /**
+     * @param {function(object)} onChange called as soon as a setting the emulator can follow live changes
+     * @param {function(object)} onClose called with the settings to apply and persist
+     * @param {function()} onRestartRequired called after the settings have been saved, when some of them
+     *     will only take effect once the machine is rebuilt
+     */
+    constructor(onChange, onClose, onRestartRequired) {
         super();
         this.onChange = onChange;
         this.onClose = onClose;
+        this.onRestartRequired = onRestartRequired;
         this.changed = {};
         this.model = null;
-        this.coProcessor = false;
-        this.hasEconet = false;
-        this.hasMusic5000 = false;
-        this.hasTeletextAdaptor = false;
+        for (const { field } of CheckboxSettings) this[field] = false;
+        this.runningSettings = null;
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
+            // The startup settings are pushed in after construction, so what the running machine was
+            // built with is only knowable from the first time the dialog is opened.
+            if (!this.runningSettings) this.runningSettings = this.proposedSettings();
             this.setDropdownText(this.model.name);
-            this.set65c02(this.coProcessor);
             this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
-            this.setTeletext(this.hasTeletextAdaptor);
-            this.setMusic5000(this.hasMusic5000);
-            this.setEconet(this.hasEconet);
+            this.setCheckboxes(this);
+            this.showRestartPending();
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
-            this.onClose(this.changed);
-            if (Object.keys(this.changed).length > 0) {
-                this.dispatchEvent(new CustomEvent("settings-changed", { detail: this.changed }));
-            }
+            const changed = this.changed;
+            // Not setModel: that also renames the machine in the title bar, which has not changed yet.
+            if (changed.model !== undefined) this.model = findModel(changed.model);
+            this.setCheckboxes(changed);
+            this.onClose(changed);
+            if (Object.keys(changed).length === 0) return;
+            this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
+            // changed records which controls were touched, so a value in it can be what is already running.
+            if (needsRestart(changed) && restartPending(this.proposedSettings(), this.runningSettings))
+                this.onRestartRequired();
         });
 
         const modelMenu = document.querySelector(".model-menu");
@@ -62,29 +100,22 @@ export class Config extends EventTarget {
             if (!link) return;
             this.changed.model = link.dataset.target;
             this.setDropdownText(link.textContent);
+            this.showRestartPending();
         });
 
-        document.getElementById("65c02").addEventListener("click", () => {
-            this.changed.coProcessor = document.getElementById("65c02").checked;
-            document.getElementById("tubeCpuMultiplier").disabled = !document.getElementById("65c02").checked;
-        });
+        for (const { id, field, enables } of CheckboxSettings) {
+            document.getElementById(id).addEventListener("click", () => {
+                const checked = document.getElementById(id).checked;
+                this.changed[field] = checked;
+                if (enables) document.getElementById(enables).disabled = !checked;
+                this.showRestartPending();
+            });
+        }
 
         document.getElementById("tubeCpuMultiplier").addEventListener("input", () => {
             const val = parseInt(document.getElementById("tubeCpuMultiplier").value, 10);
             document.getElementById("tubeCpuMultiplierValue").textContent = val;
             this.changed.tubeCpuMultiplier = val;
-        });
-
-        document.getElementById("hasTeletextAdaptor").addEventListener("click", () => {
-            this.changed.hasTeletextAdaptor = document.getElementById("hasTeletextAdaptor").checked;
-        });
-
-        document.getElementById("hasEconet").addEventListener("click", () => {
-            this.changed.hasEconet = document.getElementById("hasEconet").checked;
-        });
-
-        document.getElementById("hasMusic5000").addEventListener("click", () => {
-            this.changed.hasMusic5000 = document.getElementById("hasMusic5000").checked;
         });
 
         for (const link of document.querySelectorAll(".keyboard-menu a")) {
@@ -104,14 +135,6 @@ export class Config extends EventTarget {
             });
         }
 
-        document.getElementById("mouseJoystickEnabled").addEventListener("click", () => {
-            this.changed.mouseJoystickEnabled = document.getElementById("mouseJoystickEnabled").checked;
-        });
-
-        document.getElementById("speechOutput").addEventListener("click", () => {
-            this.changed.speechOutput = document.getElementById("speechOutput").checked;
-        });
-
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
                 const mode = e.target.dataset.mode;
@@ -122,17 +145,34 @@ export class Config extends EventTarget {
         }
     }
 
+    /**
+     * The restart-required settings as they would be saved if the dialog were closed now, in the form the
+     * menu and the URL use: the model by synonym rather than resolved, the fittings as booleans.
+     */
+    proposedSettings() {
+        const saved = (field) => (field === "model" ? this.model.synonyms[0] : this[field]);
+        return Object.fromEntries(RestartRequiredFields.map((field) => [field, this.changed[field] ?? saved(field)]));
+    }
+
+    showRestartPending() {
+        const pending = restartPending(this.proposedSettings(), this.runningSettings);
+        document.getElementById("restart-pending").classList.toggle("d-none", !pending);
+    }
+
+    /** Ticks the boxes named in `values` and adopts them, leaving any the object does not mention alone. */
+    setCheckboxes(values) {
+        for (const { id, field, enables } of CheckboxSettings) {
+            if (values[field] === undefined) continue;
+            const checked = !!values[field];
+            document.getElementById(id).checked = checked;
+            this[field] = checked;
+            if (enables) document.getElementById(enables).disabled = !checked;
+        }
+    }
+
     setMicrophoneChannel(channel) {
         const text = channel !== undefined ? `Channel ${channel}` : "Disabled";
         for (const el of document.querySelectorAll(".mic-channel-text")) el.textContent = text;
-    }
-
-    setMouseJoystickEnabled(enabled) {
-        document.getElementById("mouseJoystickEnabled").checked = !!enabled;
-    }
-
-    setSpeechOutput(enabled) {
-        document.getElementById("speechOutput").checked = !!enabled;
     }
 
     setDisplayMode(mode) {
@@ -150,35 +190,10 @@ export class Config extends EventTarget {
         for (const el of document.querySelectorAll(".keyboard-layout")) el.textContent = text;
     }
 
-    set65c02(enabled) {
-        enabled = !!enabled;
-        document.getElementById("65c02").checked = enabled;
-        this.coProcessor = enabled;
-        document.getElementById("tubeCpuMultiplier").disabled = !enabled;
-    }
-
     setTubeCpuMultiplier(value) {
         this.tubeCpuMultiplier = value;
         document.getElementById("tubeCpuMultiplier").value = value;
         document.getElementById("tubeCpuMultiplierValue").textContent = value;
-    }
-
-    setEconet(enabled) {
-        enabled = !!enabled;
-        document.getElementById("hasEconet").checked = enabled;
-        this.hasEconet = enabled;
-    }
-
-    setMusic5000(enabled) {
-        enabled = !!enabled;
-        document.getElementById("hasMusic5000").checked = enabled;
-        this.hasMusic5000 = enabled;
-    }
-
-    setTeletext(enabled) {
-        enabled = !!enabled;
-        document.getElementById("hasTeletextAdaptor").checked = enabled;
-        this.hasTeletextAdaptor = enabled;
     }
 
     setDropdownText(modelName) {
