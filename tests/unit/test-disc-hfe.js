@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd, toSsdOrDsd } from "../../src/disc.js";
 import { loadHfe, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
 import * as fs from "node:fs";
 
@@ -16,6 +16,15 @@ describe("HFE loader tests", function () {
             expect(sector.hasHeaderCrcError).toBe(false);
             expect(sector.hasDataCrcError).toBe(false);
         }
+    });
+
+    it("should refuse to save a protected disc as SSD or DSD", () => {
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        loadHfe(disc, data);
+
+        // Elite's protection puts sectors numbered 246 to 255 on track 2 and an unreadable one on
+        // track 80, none of which a sector image can hold.
+        expect(() => toSsdOrDsd(disc)).toThrow(/cannot be saved as SSD or DSD.*Save it as HFE instead/);
     });
 
     it("should reject invalid HFE files", () => {

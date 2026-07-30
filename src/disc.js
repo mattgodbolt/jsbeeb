@@ -673,10 +673,38 @@ export function loadAdf(disc, data, isDsd) {
 }
 
 /**
- * @returns {Uint8Array}
+ * SSD and DSD images hold sector contents and nothing else, so anything a DFS sector could not
+ * have held is lost. Copy protection usually shows up as one of these.
+ *
+ * @returns {?string} why `disc` cannot be an SSD or DSD, or null if it can
  * @param {Disc} disc
  */
+function whyNotSsdOrDsd(disc) {
+    for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
+        for (const upper of disc.isDoubleSided ? [false, true] : [false]) {
+            for (const sector of disc.getTrack(upper, trackNum).findSectors()) {
+                const where = `track ${trackNum} sector ${sector.sectorNumber}`;
+                if (sector.hasDataCrcError || sector.hasHeaderCrcError) return `${where} has a CRC error`;
+                if (sector.sectorNumber >= SsdFormat.sectorsPerTrack)
+                    return `${where} is past the ${SsdFormat.sectorsPerTrack} sectors a track holds`;
+                if (sector.sectorData.length !== SsdFormat.sectorSize)
+                    return `${where} is ${sector.sectorData.length} bytes rather than ${SsdFormat.sectorSize}`;
+                if (trackNum >= SsdFormat.tracksPerDisc)
+                    return `${where} is past the ${SsdFormat.tracksPerDisc} tracks an image holds`;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * @returns {Uint8Array}
+ * @param {Disc} disc
+ * @throws if the disc holds anything an SSD or DSD cannot represent
+ */
 export function toSsdOrDsd(disc) {
+    const why = whyNotSsdOrDsd(disc);
+    if (why) throw new Error(`This disc cannot be saved as SSD or DSD: ${why}. Save it as HFE instead.`);
     const numSides = disc.isDoubleSided ? 2 : 1;
     const result = new Uint8Array(
         numSides * SsdFormat.tracksPerDisc * SsdFormat.sectorsPerTrack * SsdFormat.sectorSize,
@@ -687,10 +715,6 @@ export function toSsdOrDsd(disc) {
             const trackObj = disc.getTrack(side === 1, trackNum);
             for (const sector of trackObj.findSectors()) {
                 const sectorOffset = offset + sector.sectorNumber * SsdFormat.sectorSize;
-                if (sector.hasDataCrcError || sector.hasHeaderCrcError) {
-                    console.log(`Skipping sector ${sector.description} with bad CRC`);
-                    continue;
-                }
                 for (let x = 0; x < SsdFormat.sectorSize; ++x) result[sectorOffset + x] = sector.sectorData[x];
             }
             offset += SsdFormat.sectorsPerTrack * SsdFormat.sectorSize;
