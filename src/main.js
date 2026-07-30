@@ -1478,7 +1478,7 @@ document.getElementById("download-drive-link").addEventListener("click", functio
         const data = toSsdOrDsd(disc);
         downloadDriveData(data, disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
     } catch (e) {
-        showError("downloading disc as SSD or DSD", e);
+        showError("downloading disc", e);
     }
 });
 

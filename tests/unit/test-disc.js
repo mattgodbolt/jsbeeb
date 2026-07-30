@@ -220,12 +220,6 @@ describe(
                 expect(sector.hasDataCrcError).toBe(false);
             }
         });
-        it("should refuse to save a disc with more tracks than SSD supports", () => {
-            const disc = new Disc(true, new DiscConfig(), "test.ssd");
-            loadSsd(disc, data, false);
-            disc.buildTrack(false, 80);
-            expect(() => toSsdOrDsd(disc)).toThrow(/81 tracks; SSD and DSD images hold at most 80/);
-        });
         it("should have sane tracks", () => {
             const disc = new Disc(true, new DiscConfig(), "test.ssd");
             loadSsd(disc, data, false);

@@ -678,9 +678,7 @@ export function loadAdf(disc, data, isDsd) {
  */
 export function toSsdOrDsd(disc) {
     if (disc.tracksUsed > SsdFormat.tracksPerDisc) {
-        throw new Error(
-            `Disc has ${disc.tracksUsed} tracks; SSD and DSD images hold at most ${SsdFormat.tracksPerDisc}`,
-        );
+        throw new Error(`Disc has too many tracks (${disc.tracksUsed}) to save as SSD or DSD`);
     }
     const numSides = disc.isDoubleSided ? 2 : 1;
     const result = new Uint8Array(

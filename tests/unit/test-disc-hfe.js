@@ -21,7 +21,7 @@ describe("HFE loader tests", function () {
     it("should refuse to save Elite as SSD or DSD", () => {
         const disc = new Disc(true, new DiscConfig(), "test.hfe");
         loadHfe(disc, data);
-        expect(() => toSsdOrDsd(disc)).toThrow(/81 tracks; SSD and DSD images hold at most 80/);
+        expect(() => toSsdOrDsd(disc)).toThrow(/too many tracks \(81\)/);
     });
 
     it("should reject invalid HFE files", () => {
