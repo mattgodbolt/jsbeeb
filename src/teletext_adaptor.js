@@ -47,6 +47,7 @@ export class TeletextAdaptor {
         this.colPtr = 0x00;
         this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
         this.streamData = null;
+        this.streamRequest = 0;
         this.pollCount = 0;
     }
 
@@ -57,14 +58,15 @@ export class TeletextAdaptor {
         }
     }
 
-    loadChannelStream(channel) {
+    async loadChannelStream(channel) {
         console.log("Teletext adaptor: switching to channel " + channel);
-        const teletextRef = this;
-        utils.loadData("teletext/txt" + channel + ".dat").then(function (data) {
-            teletextRef.streamData = data;
-            teletextRef.totalFrames = data.length / TELETEXT_FRAME_SIZE;
-            teletextRef.currentFrame = 0;
-        });
+        const request = ++this.streamRequest;
+        const data = await utils.loadData(`teletext/txt${channel}.dat`);
+        // Fetches can resolve out of order; only the newest request may apply its data.
+        if (request !== this.streamRequest) return;
+        this.streamData = data;
+        this.totalFrames = Math.floor(data.length / TELETEXT_FRAME_SIZE);
+        this.currentFrame = 0;
     }
 
     read(addr) {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
+import * as utils from "../../src/utils.js";
 
 describe("TeletextAdaptor", () => {
     // Constants
@@ -216,6 +217,49 @@ describe("TeletextAdaptor", () => {
                 // Interrupt should be cleared
                 expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
             });
+        });
+    });
+
+    describe("Channel stream loading", () => {
+        const TELETEXT_FRAME_SIZE = 860;
+
+        // Resolvers for the fetches the adaptor has started, keyed by the URL it asked for.
+        const pending = new Map();
+        let adaptor;
+
+        beforeEach(() => {
+            pending.clear();
+            vi.spyOn(utils, "loadData").mockImplementation(
+                (url) => new Promise((resolve) => pending.set(url, resolve)),
+            );
+            adaptor = new TeletextAdaptor(mockCpu);
+        });
+
+        // Each byte holds the channel number, so the frame buffer shows which stream was applied.
+        const resolveChannel = (channel, length = TELETEXT_FRAME_SIZE) =>
+            pending.get(`teletext/txt${channel}.dat`)(new Uint8Array(length).fill(channel));
+
+        const settle = () => new Promise((resolve) => setTimeout(resolve));
+
+        it("should ignore a response that arrives after a newer channel's", async () => {
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+            adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
+
+            resolveChannel(2);
+            resolveChannel(1);
+            await settle();
+            adaptor.update();
+
+            expect(adaptor.frameBuffer[0][1]).toBe(2);
+        });
+
+        it("should round a truncated stream down to whole frames", async () => {
+            adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
+
+            resolveChannel(1, 2 * TELETEXT_FRAME_SIZE + 100);
+            await settle();
+
+            expect(adaptor.totalFrames).toBe(2);
         });
     });
 
