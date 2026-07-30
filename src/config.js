@@ -16,10 +16,7 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
     ];
 }
 
-/**
- * The settings the dialog presents as checkboxes: the element that shows them, the field they are held
- * in, whether they only take effect on a freshly built machine, and any control they enable.
- */
+/** The settings the dialog presents as checkboxes. `enables` names a control only usable while ticked. */
 export const CheckboxSettings = [
     { id: "65c02", field: "coProcessor", restartRequired: true, enables: "tubeCpuMultiplier" },
     { id: "hasTeletextAdaptor", field: "hasTeletextAdaptor", restartRequired: true },
@@ -151,8 +148,6 @@ export class Config extends EventTarget {
     /**
      * The restart-required settings as they would be saved if the dialog were closed now, in the form the
      * menu and the URL use: the model by synonym rather than resolved, the fittings as booleans.
-     *
-     * @returns {object}
      */
     proposedSettings() {
         const saved = (field) => (field === "model" ? this.model.synonyms[0] : this[field]);
