@@ -223,7 +223,6 @@ export class Acia {
             tapeDcdLineLevel: this.tapeDcdLineLevel,
             hadDcdHigh: this.hadDcdHigh,
             serialReceiveRate: this.serialReceiveRate,
-            serialReceiveCyclesPerByte: this.serialReceiveCyclesPerByte,
             serialTransmitRate: this.serialTransmitRate,
             txCompleteTaskOffset: this.txCompleteTask.scheduled()
                 ? this.txCompleteTask.expireEpoch - scheduler.epoch
@@ -242,8 +241,8 @@ export class Acia {
         this.tapeCarrierCount = state.tapeCarrierCount;
         this.tapeDcdLineLevel = state.tapeDcdLineLevel;
         this.hadDcdHigh = state.hadDcdHigh;
-        this.serialReceiveRate = state.serialReceiveRate;
-        this.serialReceiveCyclesPerByte = state.serialReceiveCyclesPerByte;
+        // The byte times are derived from the rates and the restored word format, not saved.
+        this.setSerialReceive(state.serialReceiveRate);
         // Snapshots predating transmit timing have no saved rate.
         this.setSerialTransmit(state.serialTransmitRate ?? 19200);
         this.updateIrq();

@@ -25,7 +25,6 @@ export const DefaultAcia = {
     tapeDcdLineLevel: false,
     hadDcdHigh: false,
     serialReceiveRate: 19200,
-    serialReceiveCyclesPerByte: 0,
     serialTransmitRate: 19200,
     txCompleteTaskOffset: null,
     runTapeTaskOffset: null,

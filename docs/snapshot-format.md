@@ -224,22 +224,21 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 
 ### ACIA (`state.acia`)
 
-| Field                        | Type         | Description                             |
-| ---------------------------- | ------------ | --------------------------------------- |
-| `sr`                         | number       | Status Register                         |
-| `cr`                         | number       | Control Register                        |
-| `dr`                         | number       | Data Register                           |
-| `rs423Selected`              | boolean      | RS-423 mode selected                    |
-| `motorOn`                    | boolean      | Tape motor state                        |
-| `tapeCarrierCount`           | number       | Carrier detect counter                  |
-| `tapeDcdLineLevel`           | boolean      | DCD line level                          |
-| `hadDcdHigh`                 | boolean      | DCD high seen flag                      |
-| `serialReceiveRate`          | number       | Receive baud rate                       |
-| `serialReceiveCyclesPerByte` | number       | Cycles per byte at current receive rate |
-| `serialTransmitRate`         | number       | Transmit baud rate                      |
-| `txCompleteTaskOffset`       | number\|null | TX complete task offset                 |
-| `runTapeTaskOffset`          | number\|null | Tape poll task offset                   |
-| `runRs423TaskOffset`         | number\|null | RS-423 poll task offset                 |
+| Field                  | Type         | Description             |
+| ---------------------- | ------------ | ----------------------- |
+| `sr`                   | number       | Status Register         |
+| `cr`                   | number       | Control Register        |
+| `dr`                   | number       | Data Register           |
+| `rs423Selected`        | boolean      | RS-423 mode selected    |
+| `motorOn`              | boolean      | Tape motor state        |
+| `tapeCarrierCount`     | number       | Carrier detect counter  |
+| `tapeDcdLineLevel`     | boolean      | DCD line level          |
+| `hadDcdHigh`           | boolean      | DCD high seen flag      |
+| `serialReceiveRate`    | number       | Receive baud rate       |
+| `serialTransmitRate`   | number       | Transmit baud rate      |
+| `txCompleteTaskOffset` | number\|null | TX complete task offset |
+| `runTapeTaskOffset`    | number\|null | Tape poll task offset   |
+| `runRs423TaskOffset`   | number\|null | RS-423 poll task offset |
 
 ### ADC (`state.adc`)
 
