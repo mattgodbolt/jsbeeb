@@ -61,9 +61,11 @@ export class TeletextAdaptor {
     async loadChannelStream(channel) {
         console.log("Teletext adaptor: switching to channel " + channel);
         const request = ++this.streamRequest;
-        const data = await utils.loadData(`teletext/txt${channel}.dat`);
+        const data = await utils
+            .loadData(`teletext/txt${channel}.dat`)
+            .catch((e) => console.log(`Teletext adaptor: cannot load channel ${channel}: ${e}`));
         // Fetches can resolve out of order; only the newest request may apply its data.
-        if (request !== this.streamRequest) return;
+        if (!data || request !== this.streamRequest) return;
         this.streamData = data;
         this.totalFrames = Math.floor(data.length / TELETEXT_FRAME_SIZE);
         this.currentFrame = 0;
