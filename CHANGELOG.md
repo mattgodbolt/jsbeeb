@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.14.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.13.1...v1.14.0) (2026-07-30)
+
+
+### Features
+
+* allow MachineSession to attach a Tube 65C02 co-processor ([#706](https://github.com/mattgodbolt/jsbeeb/issues/706)) ([2999610](https://github.com/mattgodbolt/jsbeeb/commit/299961068fb0a91bd726dfe87ad215dd92e3d6db))
+* save and restore second processor state ([#719](https://github.com/mattgodbolt/jsbeeb/issues/719)) ([c346d77](https://github.com/mattgodbolt/jsbeeb/commit/c346d779e1e09b2c6c955846a45997dad19cc47c))
+
+
+### Bug Fixes
+
+* defer the restart instead of discarding the change ([#721](https://github.com/mattgodbolt/jsbeeb/issues/721)) ([9123a0e](https://github.com/mattgodbolt/jsbeeb/commit/9123a0eb0a2cbf4505b23bef4a621d1f5a53ad18)), closes [#717](https://github.com/mattgodbolt/jsbeeb/issues/717)
+* let the configuration dialog scroll on short screens ([#726](https://github.com/mattgodbolt/jsbeeb/issues/726)) ([c8ae1d4](https://github.com/mattgodbolt/jsbeeb/commit/c8ae1d451ca4fb907910caaf804c8fe179f80afd))
+* make ?cpuMultiplier= run the CPU faster than the peripherals again ([#725](https://github.com/mattgodbolt/jsbeeb/issues/725)) ([4c57345](https://github.com/mattgodbolt/jsbeeb/commit/4c57345fbcdcace4f56f68a7c11c401ccd7b39ff))
+* poll the teletext adaptor so it receives broadcast data ([#720](https://github.com/mattgodbolt/jsbeeb/issues/720)) ([07265e0](https://github.com/mattgodbolt/jsbeeb/commit/07265e082f0759a2b904fe6f0669301f4cfeb6f0))
+* use clientX/Y for mouse coordinates ([#696](https://github.com/mattgodbolt/jsbeeb/issues/696)) ([8e87f9f](https://github.com/mattgodbolt/jsbeeb/commit/8e87f9ffbd8f1cfe9823639eb3430755cac9e18b))
+* work around Chrome 150 V8 bug that wedged the emulator after ~1 minute ([#704](https://github.com/mattgodbolt/jsbeeb/issues/704)) ([efc42cb](https://github.com/mattgodbolt/jsbeeb/commit/efc42cb730a8bbcf5e1f9e7cbfe28e2f7143e317))
+* write two-byte Tube R3 transfers into the right FIFO ([#718](https://github.com/mattgodbolt/jsbeeb/issues/718)) ([256d08f](https://github.com/mattgodbolt/jsbeeb/commit/256d08f8c83a6210098e86bf1a550847b3d8053b))
+
 ## [1.13.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.13.0...v1.13.1) (2026-05-11)
 
 
