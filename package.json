@@ -8,7 +8,7 @@
   "description": "Emulate a BBC Micro",
   "repository": "git@github.com:mattgodbolt/jsbeeb.git",
   "version": "1.13.1",
-  "//": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
+  "//engines": "If you change the version of Node, it must also be updated at the top of the Dockerfile.",
   "engines": {
     "node": ">=24.15.0"
   },
@@ -54,7 +54,7 @@
     "electron-builder": "^26.15.3",
     "electron-store": "^11.0.2"
   },
-  "//": "overrides: brace-expansion forced to the patched version for GHSA-mh99-v99m-4gvg; the electron-builder dependency chain still pins vulnerable versions. Remove once `npm audit` is clean without it.",
+  "//overrides": "brace-expansion forced to the patched version for GHSA-mh99-v99m-4gvg; the electron-builder dependency chain still pins vulnerable versions. Remove once `npm audit` is clean without it.",
   "overrides": {
     "brace-expansion": "^5.0.8"
   },
@@ -112,5 +112,8 @@
       "prettier --write"
     ],
     "*.{md,json,yml,yaml,css,html}": "prettier --write"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true
   }
 }
