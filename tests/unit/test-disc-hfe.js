@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd, toSsdOrDsd } from "../../src/disc.js";
 import { loadHfe, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
 import * as fs from "node:fs";
 
@@ -16,6 +16,12 @@ describe("HFE loader tests", function () {
             expect(sector.hasHeaderCrcError).toBe(false);
             expect(sector.hasDataCrcError).toBe(false);
         }
+    });
+
+    it("should refuse to save Elite as SSD or DSD", () => {
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        loadHfe(disc, data);
+        expect(() => toSsdOrDsd(disc)).toThrow(/81 tracks; SSD and DSD images hold at most 80/);
     });
 
     it("should reject invalid HFE files", () => {

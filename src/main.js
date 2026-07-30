@@ -1474,11 +1474,12 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
 
 document.getElementById("download-drive-link").addEventListener("click", function () {
     const disc = processor.fdc.drives[0].disc;
-    const data = toSsdOrDsd(disc);
-    const name = disc.name;
-    const extension = disc.isDoubleSided ? ".dsd" : ".ssd";
-
-    downloadDriveData(data, name, extension);
+    try {
+        const data = toSsdOrDsd(disc);
+        downloadDriveData(data, disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
+    } catch (e) {
+        showError("downloading disc as SSD or DSD", e);
+    }
 });
 
 document.getElementById("download-drive-hfe-link").addEventListener("click", function () {
