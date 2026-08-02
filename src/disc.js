@@ -709,7 +709,8 @@ export function ssdOrDsdShortfalls(disc) {
 /**
  * @returns {Uint8Array}
  * @param {Disc} disc
- * @param {boolean} [force] save what fits instead of refusing a disc that will not fit
+ * @param {object} [options]
+ * @param {boolean} [options.force] save what fits instead of refusing a disc that will not fit
  * @throws if the disc holds anything an SSD or DSD cannot, and `force` is not set
  */
 export function toSsdOrDsd(disc, { force = false } = {}) {
