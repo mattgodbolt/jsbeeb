@@ -666,7 +666,7 @@ export class Cpu6502 extends Base6502 {
         this.resetLine = true;
         this.cpuMultiplier = this.config.cpuMultiplier;
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
-        this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
+        this.peripheralCyclesPerSecond = model.cyclesPerSecond;
         this.hasTube = !!this.config.tube;
         this.hasMusic5000 = !!this.config.hasMusic5000;
         this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
@@ -1361,7 +1361,7 @@ export class Cpu6502 extends Base6502 {
         this.fdc.powerOnReset();
         this.adconverter.reset();
 
-        this.touchScreen = new TouchScreen(this.scheduler);
+        this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
         if (this.econet) this.filestore = new Filestore(this, this.econet);
     }
 
@@ -1614,8 +1614,6 @@ export class AtomCpu6502 extends Cpu6502 {
             this.ramRomOs = expanded;
         }
 
-        // Atom runs at 1 MHz
-        this.peripheralCyclesPerSecond = 1 * 1000 * 1000;
         // reset() and debugger.setCpu() are called by initialise() after loadOs().
     }
 

@@ -17,6 +17,11 @@ describe("Model", () => {
         }
     });
 
+    it("reports its clock in cycles per second", () => {
+        expect(findModel("Master").cyclesPerSecond).toBe(2 * 1000 * 1000);
+        expect(findModel("Atom").cyclesPerSecond).toBe(1 * 1000 * 1000);
+    });
+
     it("carries no per-session settings", () => {
         const master = findModel("Master");
 
