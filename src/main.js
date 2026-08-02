@@ -658,6 +658,8 @@ processor = new CpuClass(model, {
     econet,
 });
 
+processor.teletextAdaptor?.addEventListener("showError", (e) => showError(e.detail.context, e.detail.error));
+
 // Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
 // Create MicrophoneInput but don't enable by default

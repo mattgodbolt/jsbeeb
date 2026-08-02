@@ -34,9 +34,20 @@ Status register:
 
 */
 
-export class TeletextAdaptor {
+/**
+ * Emulates the Acorn teletext adaptor. Dispatches a `showError` CustomEvent, carrying
+ * `context` and `error` in its detail, when a channel's stream cannot be loaded.
+ */
+export class TeletextAdaptor extends EventTarget {
     constructor(cpu) {
+        super();
         this.cpu = cpu;
+        // Not cleared by a reset, so a fetch still in flight across one is recognised as stale.
+        this.streamRequest = 0;
+        this.clearState();
+    }
+
+    clearState() {
         this.teletextStatus = 0x0f; /* low nibble comes from LK4-7 and mystery links which are left floating */
         this.teletextInts = false;
         this.teletextEnable = false;
@@ -45,23 +56,35 @@ export class TeletextAdaptor {
         this.totalFrames = 0;
         this.rowPtr = 0x00;
         this.colPtr = 0x00;
-        this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
         this.streamData = null;
-        this.streamRequest = 0;
         this.pollCount = 0;
+        this.frameBuffer = new Array(16).fill(0).map(() => new Array(64).fill(0));
+        // Only a register access clears our IRQ, so an interrupt latched before the reset would hang the machine.
+        this.cpu.interrupt &= ~(1 << TELETEXT_IRQ);
     }
 
     reset(hard) {
-        if (hard) {
-            console.log("Teletext adaptor: initialisation");
-            this.loadChannelStream(this.channel);
-        }
+        if (!hard) return;
+        this.clearState();
+        this.loadChannelStream(this.channel);
     }
 
     async loadChannelStream(channel) {
         console.log("Teletext adaptor: switching to channel " + channel);
         const request = ++this.streamRequest;
-        const data = await utils.loadData(`teletext/txt${channel}.dat`);
+        let data;
+        try {
+            data = await utils.loadData(`teletext/txt${channel}.dat`);
+        } catch (error) {
+            if (request !== this.streamRequest) return;
+            console.error(`Teletext adaptor: failed to load channel ${channel}`, error);
+            this.dispatchEvent(
+                new CustomEvent("showError", {
+                    detail: { context: `loading teletext channel ${channel}`, error },
+                }),
+            );
+            return;
+        }
         // Fetches can resolve out of order; only the newest request may apply its data.
         if (request !== this.streamRequest) return;
         this.streamData = data;
