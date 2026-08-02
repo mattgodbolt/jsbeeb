@@ -35,6 +35,15 @@ class Model {
         this.cmosOverride = cmosOverride;
     }
 
+    /**
+     * How many CPU cycles this machine runs in a second. Everything that
+     * converts between real time and emulated cycles should ask here rather
+     * than assuming a clock speed.
+     */
+    get cyclesPerSecond() {
+        return this.clockMhz * 1000 * 1000;
+    }
+
     get nmos() {
         return this._cpuModel === CpuModel.MOS6502;
     }

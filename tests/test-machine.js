@@ -178,7 +178,7 @@ export class TestMachine {
                     return true;
                 }
             });
-            await this.runFor(secs * 1 * 1000 * 1000); // Atom is 1 MHz
+            await this.runFor(secs * this.model.cyclesPerSecond);
             hook.remove();
             assert(hit, "Atom did not reach keyboard input in time");
             return this.runFor(10 * 1000);
@@ -191,7 +191,7 @@ export class TestMachine {
                 return true;
             }
         });
-        await this.runFor(secs * 2 * 1000 * 1000);
+        await this.runFor(secs * this.model.cyclesPerSecond);
         hook.remove();
         assert(hit, "did not hit appropriate breakpoint in time");
         return this.runFor(10 * 1000);
@@ -206,7 +206,7 @@ export class TestMachine {
                 return true;
             }
         });
-        await this.runFor(secs * 2 * 1000 * 1000);
+        await this.runFor(secs * this.model.cyclesPerSecond);
         hook.remove();
         assert(hit, "did not hit appropriate breakpoint in time");
     }
@@ -370,7 +370,8 @@ export class TestMachine {
         let nextEventCycle = 0;
         let done = false;
 
-        const currentCycle = () => this.processor.cycleSeconds * 2000000 + this.processor.currentCycles;
+        const currentCycle = () =>
+            this.processor.cycleSeconds * this.model.cyclesPerSecond + this.processor.currentCycles;
 
         const hook = this.processor.debugInstruction.add(() => {
             if (currentCycle() < nextEventCycle) return;
@@ -425,7 +426,8 @@ export class TestMachine {
         let done = false;
         let shiftHeld = false;
 
-        const currentCycle = () => this.processor.cycleSeconds * 1000000 + this.processor.currentCycles;
+        const currentCycle = () =>
+            this.processor.cycleSeconds * this.model.cyclesPerSecond + this.processor.currentCycles;
 
         const isShift = (entry) => entry[0] === SHIFT[0] && entry[1] === SHIFT[1];
 

@@ -102,6 +102,11 @@
     "coverage:unit": "vitest run tests/unit --coverage",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",
+    "mirror-sth": "node tools/mirror-sth.js --out .sth-mirror",
+    "mirror-sth:check": "node tools/mirror-sth.js --index-only",
+    "mirror-sth:upload": "npm-run-all mirror-sth:upload:*",
+    "mirror-sth:upload:blobs": "aws s3 sync .sth-mirror s3://bbc.xania.org/archive/sth/ --no-progress --exclude '*manifest.json' --exclude 'meta/*' --cache-control 'public, max-age=31536000, immutable'",
+    "mirror-sth:upload:index": "aws s3 sync .sth-mirror s3://bbc.xania.org/archive/sth/ --no-progress --exclude '*' --include '*manifest.json' --include 'meta/*' --cache-control 'public, max-age=300'",
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder"
   },

@@ -6,7 +6,7 @@ import { SoundChip } from "../../src/soundchip.js";
 import { FakeDdNoise } from "../../src/ddnoise.js";
 import { Cmos } from "../../src/cmos.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
-import { TEST_6502 } from "../../src/models.js";
+import { findModel, TEST_6502 } from "../../src/models.js";
 
 function makeCpu() {
     const fb32 = new Uint32Array(1024 * 768);
@@ -249,5 +249,43 @@ describe("Cpu6502 cpuMultiplier", () => {
 
         cpu.polltime(1);
         expect(cpu.scheduler.epoch).toBe(1);
+    });
+});
+
+describe("cycle counter rollover", () => {
+    // The CPU keeps its cycle counters small by subtracting a second's worth
+    // and bumping cycleSeconds. Consumers (the Atom speaker, test helpers)
+    // reconstruct absolute time as cycleSeconds * clock + currentCycles, so
+    // rolling over by the wrong amount makes emulated time jump backwards.
+    const runAcrossASecond = async (model) => {
+        const cpu = fake6502(model);
+        await cpu.initialise();
+        const absolute = () => cpu.cycleSeconds * model.cyclesPerSecond + cpu.currentCycles;
+        let previous = absolute();
+        let wentBackwards = false;
+        // Bounded so a rollover that never happens fails rather than hangs.
+        for (let chunk = 0; chunk < 50 && cpu.cycleSeconds < 1; ++chunk) {
+            cpu.execute(100000);
+            const now = absolute();
+            if (now < previous) wentBackwards = true;
+            previous = now;
+        }
+        return { cpu, wentBackwards, absolute: absolute() };
+    };
+
+    it("rolls a 2MHz machine over after two million cycles", async () => {
+        const { cpu, wentBackwards, absolute } = await runAcrossASecond(TEST_6502);
+
+        expect(cpu.cycleSeconds).toBe(1);
+        expect(wentBackwards).toBe(false);
+        expect(absolute).toBeGreaterThanOrEqual(2 * 1000 * 1000);
+    });
+
+    it("rolls a 1MHz machine over after one million cycles", async () => {
+        const { cpu, wentBackwards, absolute } = await runAcrossASecond(findModel("Atom"));
+
+        expect(cpu.cycleSeconds).toBe(1);
+        expect(wentBackwards).toBe(false);
+        expect(absolute).toBeLessThan(2 * 1000 * 1000);
     });
 });
