@@ -116,6 +116,20 @@ describe("Tube co-processor", () => {
         expect(machine.drainText({ raw: true })).toContain("BASIC\n\n>");
     });
 
+    it("boots the language across the external second processor", async () => {
+        const machine = new TestMachine("B-DFS1.2", { tube: true });
+        await machine.initialise();
+        machine.startCapture();
+
+        await machine.runFor(4 * 1000 * 1000);
+
+        // The client ROM's boot uses none of the opcodes the CPU variants disagree about, so
+        // this only guards against the wedge breaking outright, not against the wrong variant.
+        const text = machine.drainText({ raw: true });
+        expect(text).toContain("Acorn TUBE 6502 64K");
+        expect(text).toContain("BASIC\n\n>");
+    });
+
     it("passes the requested multiplier on to the parasite", async () => {
         const machine = new TestMachine("Master", { tube: true, tubeCpuMultiplier: 4 });
         await machine.initialise();

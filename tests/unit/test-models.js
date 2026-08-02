@@ -27,6 +27,29 @@ describe("Model", () => {
     });
 });
 
+const IncA = 0x1a; // Absent from the NMOS 6502, present on every CMOS part.
+const Smb0Zp = 0x87; // Present only on Rockwell parts; a one-byte undefined NOP on the rest.
+// Doubles as SMB0's operand and, on the parts where SMB0 is a one-byte NOP, as the NOP that
+// then runs in its place, so the two cases differ only in the byte SMB0 would have touched.
+const ScratchZp = 0xea;
+
+/** Assemble `program` into the parasite's RAM and run it from a known register state. */
+function runOnParasite(model, program, { a = 0, x = 0 } = {}) {
+    const ProgramStart = 0x1000;
+    const parasite = fake6502(findModel(model), { tube: true }).tube;
+    parasite.romPaged = false;
+    parasite.memory.fill(0xea); // NOP, so whatever follows the program is harmless
+    parasite.memory[ScratchZp] = 0;
+    parasite.memory.set(program, ProgramStart);
+    parasite.pc = ProgramStart;
+    parasite.a = a;
+    parasite.x = x;
+    // Tube6502.execute does nothing at all with fewer than three parasite cycles banked, so
+    // ask for enough host cycles to clear that on the slower of the two parasite clocks.
+    parasite.execute(4);
+    return parasite;
+}
+
 describe("fake6502 tube handling", () => {
     it("attaches a tube when asked", () => {
         const cpu = fake6502(findModel("Master"), { tube: true });
@@ -61,6 +84,18 @@ describe("fake6502 tube handling", () => {
         const cpu = fake6502(findModel("B-DFS1.2"), { tube: true });
 
         expect(cpu.tube.cyclesPerHostCycle).toBe(1.5);
+    });
+
+    it("gives both co-processors the CMOS additions", () => {
+        expect(runOnParasite("B-DFS1.2", [IncA], { a: 0x41 }).a).toBe(0x42);
+        expect(runOnParasite("Master", [IncA], { a: 0x41 }).a).toBe(0x42);
+    });
+
+    it("gives the Rockwell bit instructions to the Turbo alone", () => {
+        // Same program either side, so the difference can only be the CPU. The Turbo keeps the
+        // superset deliberately: real ADC06 boards are reported with both Rockwell and GTE parts.
+        expect(runOnParasite("B-DFS1.2", [Smb0Zp, ScratchZp]).memory[ScratchZp]).toBe(0);
+        expect(runOnParasite("Master", [Smb0Zp, ScratchZp]).memory[ScratchZp]).toBe(1);
     });
 
     it("runs the parasite the given multiple of its clock", () => {

@@ -225,8 +225,9 @@ export const allModels = [
         name: "Tube65C02",
         synonyms: [],
         os: ["tube/6502Tube.rom"],
-        // TODO(#746): the external second processor was an NMOS 6502A.
-        cpuModel: CpuModel.CMOS65C02,
+        // The production ANC01 wedge carries a GTE 65SC02, whose x7 and xF columns are blank:
+        // the base CMOS set, which for us is CMOS65C12. Only pre-production boards were NMOS.
+        cpuModel: CpuModel.CMOS65C12,
         isMaster: false,
         clockMhz: 3,
     }),
@@ -234,7 +235,9 @@ export const allModels = [
         name: "Tube65C102",
         synonyms: [],
         os: ["tube/65C102Tube.rom"],
-        // TODO(#746): Acorn's 65C102 has no Rockwell bit instructions.
+        // ADC06 boards are reported with both Rockwell R65C102s and GTE G65SC102s, and only the
+        // Rockwell part has the bit instructions. Staying with the superset until someone runs
+        // Dormann's Rockwell tests on real hardware: a superset only ever runs more, never less.
         cpuModel: CpuModel.CMOS65C02,
         isMaster: false,
         clockMhz: 4,
