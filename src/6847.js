@@ -492,20 +492,10 @@ export class Video6847 {
                         {
                             // TODO: Add in the INTEXT modifiers to mode (if necessary)
                             // blit into the fb32 buffer which is painted by VIDEO
-                            if ((mode & MODE_AG) === 0) {
-                                // MODE_AG - bit 4; 0x10 is the AG bit
-                                // Eight glyph bits share the character's texels.
-                                this.recordLineGrid((this.pixelsPerChar * this.bitmapPxPerPixel) / 8);
-                                this.blitChar(this.video.fb32, dat, offset, this.pixelsPerChar, css);
-                            } else {
-                                // `pixelsPerBit` texels per pixel in both 1bpp
-                                // and 2bpp modes: blitPixels steps its bit
-                                // groups by `pixelsPerBit / bpp`, but at 2bpp
-                                // reads the colour with `j & 0xe`, so pairs of
-                                // groups share one — twice as many texels each.
-                                this.recordLineGrid(this.pixelsPerBit);
-                                this.blitPixels(this.video.fb32, dat, offset, css);
-                            }
+                            const textMode = (mode & MODE_AG) === 0; // 0x10 is the AG bit
+                            this.recordLineGrid(textMode);
+                            if (textMode) this.blitChar(this.video.fb32, dat, offset, this.pixelsPerChar, css);
+                            else this.blitPixels(this.video.fb32, dat, offset, css);
                         }
                     }
                 } else {
@@ -637,9 +627,19 @@ export class Video6847 {
      * grid: the border is a solid colour, and letting it write here would
      * leave the row describing the border rather than the picture on it.
      *
-     * @param {number} texelsWide how many framebuffer texels one pixel spans
+     * The two blitters derive their widths differently and cannot be unified:
+     * `blitChar` splits the character's texels across eight glyph bits, while
+     * `blitPixels` takes the bit width from the mode table — which for text
+     * mode holds -1, since it does not blit pixels at all.
+     *
+     * `pixelsPerBit` is right for graphics at 2bpp as well as 1bpp: the blitter
+     * steps its bit groups by `pixelsPerBit / bpp`, but reads the colour with
+     * `j & 0xe`, so pairs of groups share one and each pixel is twice as wide.
+     *
+     * @param {boolean} textMode whether the character blitter is about to run
      */
-    recordLineGrid(texelsWide) {
+    recordLineGrid(textMode) {
+        const texelsWide = textMode ? (this.pixelsPerChar * this.bitmapPxPerPixel) / 8 : this.pixelsPerBit;
         // Every 6847 blitter writes each pixel row into two framebuffer lines.
         const grid = encodeLineGrid(texelsWide, true);
         this.video.lineGrid[this.bitmapY] = grid;

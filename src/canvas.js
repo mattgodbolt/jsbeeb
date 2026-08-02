@@ -186,11 +186,8 @@ export function bestCanvas(canvas, filterClass) {
     try {
         return new GlCanvas(canvas, filterClass);
     } catch (e) {
-        console.log("Unable to use OpenGL: " + e);
-        if (filterClass.requiresGl()) {
-            const config = filterClass.getDisplayConfig();
-            console.warn(`${config.name} requires WebGL. Falling back to standard 2D canvas.`);
-        }
+        // Either WebGL is unavailable or this particular filter declined it.
+        console.log(`Unable to use ${filterClass.getDisplayConfig().name} with WebGL: ${e}`);
     }
 
     // A canvas that has handed out a WebGL context can never hand out a 2D one,

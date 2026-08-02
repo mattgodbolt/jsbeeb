@@ -395,8 +395,14 @@ function createCanvasForFilter(filterClass) {
 
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
-    if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
-        showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
+    // Test which filter was actually built, not merely whether we got WebGL: a
+    // filter can decline a context that works perfectly well for other modes,
+    // in which case bestCanvas quietly gives us an unfiltered GL canvas.
+    if (filterClass.requiresGl() && !(newCanvas.filter instanceof filterClass)) {
+        showError(
+            `enabling ${config.name} mode`,
+            `${config.name} is not available on this device. Using standard display instead.`,
+        );
     }
 
     return newCanvas;

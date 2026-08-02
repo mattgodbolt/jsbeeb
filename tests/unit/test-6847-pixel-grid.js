@@ -54,10 +54,22 @@ describe("6847 logical pixel grid", () => {
             vdg.blitPixels(video.fb32, pattern, 0, 0);
             const blitted = shortestRun(video.fb32, 0, 8 * vdg.pixelsPerBit);
 
-            vdg.recordLineGrid(vdg.pixelsPerBit);
+            // Ask for the width the same way the render loop does, so this
+            // pins the decision the 6847 makes and not just the arithmetic.
+            vdg.recordLineGrid(false);
             expect(decodeLineGrid(video.lineGrid[0]).texelsWide).toBe(blitted);
         },
     );
+
+    it("does not ask blitPixels' mode table for a text mode width", () => {
+        // The table holds -1 there, because text mode does not blit pixels.
+        // Reaching for it would encode a negative width and throw.
+        const video = fakeVideo();
+        const vdg = new Video6847(video);
+        vdg.setValuesFromMode(0x00);
+        expect(vdg.pixelsPerBit).toBeLessThan(0);
+        expect(() => vdg.recordLineGrid(true)).not.toThrow();
+    });
 
     it("records what blitChar actually writes", () => {
         const video = fakeVideo();
@@ -71,7 +83,7 @@ describe("6847 logical pixel grid", () => {
         const texelsPerChar = vdg.pixelsPerChar * vdg.bitmapPxPerPixel;
         const blitted = shortestRun(video.fb32, 0, texelsPerChar);
 
-        vdg.recordLineGrid(texelsPerChar / 8);
+        vdg.recordLineGrid(true);
         expect(decodeLineGrid(video.lineGrid[0]).texelsWide).toBe(blitted);
     });
 
@@ -80,8 +92,9 @@ describe("6847 logical pixel grid", () => {
         // to say so and cover both rows.
         const video = fakeVideo();
         const vdg = new Video6847(video);
+        vdg.setValuesFromMode(0xb0); // four texels per pixel
         vdg.bitmapY = 2;
-        vdg.recordLineGrid(4);
+        vdg.recordLineGrid(false);
 
         for (const row of [2, 3]) {
             expect(decodeLineGrid(video.lineGrid[row])).toEqual({
