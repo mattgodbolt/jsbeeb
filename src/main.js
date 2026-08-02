@@ -44,6 +44,7 @@ import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
+import { downloadBlob } from "./dom-utils.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -471,18 +472,8 @@ function replaceOrAddExtension(name, newExt) {
  * @param {string} extension - The file extension to use
  */
 function downloadDriveData(data, name, extension) {
-    const a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
-    const fileName = replaceOrAddExtension(name, extension);
     const blob = new Blob([data], { type: "application/octet-stream" });
-    const url = window.URL.createObjectURL(blob);
-
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadBlob(blob, replaceOrAddExtension(name, extension));
 }
 
 async function loadHTMLFile(file) {
@@ -1546,13 +1537,8 @@ document.getElementById("save-state").addEventListener("click", async function (
         const snapshot = createSnapshot(processor, model, Object.keys(media).length > 0 ? media : undefined);
         const json = snapshotToJSON(snapshot);
         const blob = await compressBlob(new Blob([json]));
-        const url = URL.createObjectURL(blob);
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `jsbeeb-${model.name}-${timestamp}.json.gz`;
-        a.click();
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `jsbeeb-${model.name}-${timestamp}.json.gz`);
     } catch (e) {
         showError("saving state", e);
     }
