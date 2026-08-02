@@ -407,11 +407,14 @@ class Base6502 {
 }
 
 class Tube6502 extends Base6502 {
-    constructor(model, cpu) {
+    constructor(model, cpu, { cpuMultiplier = 1 } = {}) {
         super(model, { cycleAccurate: false });
 
+        if (!(cpuMultiplier > 0)) throw new Error(`Tube CPU multiplier must be positive, got ${cpuMultiplier}`);
+
         this.cycles = 0;
-        this.cpuMultiplier = 2;
+        this.cyclesPerHostCycle = model.clockMhz / cpu.model.clockMhz;
+        this.cpuMultiplier = cpuMultiplier;
         this.romPaged = true;
         this.memory = new Uint8Array(65536);
         this.rom = new Uint8Array(4096);
@@ -424,6 +427,10 @@ class Tube6502 extends Base6502 {
         this.pc = this.readmem(0xfffc) | (this.readmem(0xfffd) << 8);
         this.p.i = true;
         this.s = (this.s - 3) & 0xff; // Simulate 3 dummy pushes during reset
+        // A latched NMI would otherwise survive the reset and be taken on the first instruction
+        // after it, defeating the empty R3 FIFO the ULA seeds for exactly that reason.
+        this._nmiLevel = this._nmiEdge = false;
+        this.takeInt = false;
         this.tube.reset(hard);
     }
 
@@ -472,7 +479,7 @@ class Tube6502 extends Base6502 {
     }
 
     execute(cycles) {
-        this.cycles += (cycles * this.cpuMultiplier) | 0;
+        this.cycles += cycles * this.cyclesPerHostCycle * this.cpuMultiplier;
         if (this.cycles < 3) return;
         while (this.cycles > 0) {
             const opcode = this.readmem(this.pc);
@@ -480,6 +487,46 @@ class Tube6502 extends Base6502 {
             this.runner.run(opcode);
             if (this.takeInt) this.brk(true);
         }
+    }
+
+    snapshotState({ includeRoms = false } = {}) {
+        return {
+            a: this.a,
+            x: this.x,
+            y: this.y,
+            s: this.s,
+            pc: this.pc,
+            p: this.p.asByte(),
+            nmiLevel: this._nmiLevel,
+            nmiEdge: this._nmiEdge,
+            takeInt: this.takeInt,
+            // The parasite has no scheduler of its own, so this is not relative to any epoch.
+            cycles: this.cycles,
+            romPaged: this.romPaged,
+            memory: this.memory.slice(),
+            rom: includeRoms ? this.rom.slice() : undefined,
+            ula: this.tube.snapshotState(),
+        };
+    }
+
+    restoreState(state) {
+        this.a = state.a;
+        this.x = state.x;
+        this.y = state.y;
+        this.s = state.s;
+        this.pc = state.pc;
+        this.p.setFromByte(state.p);
+        this._nmiLevel = state.nmiLevel;
+        this._nmiEdge = state.nmiEdge;
+        this.takeInt = state.takeInt;
+        this.cycles = state.cycles;
+        this.romPaged = state.romPaged;
+        this.memory.set(state.memory);
+        if (state.rom) this.rom.set(state.rom);
+
+        // After the registers, so the edge-triggered NMI moves from its saved level to the one
+        // the ULA implies: no edge if they agree, and the edge it is owed if they do not.
+        this.tube.restoreState(state.ula);
     }
 
     async loadOs() {
@@ -620,10 +667,13 @@ export class Cpu6502 extends Base6502 {
         this.cpuMultiplier = this.config.cpuMultiplier;
         this.videoCyclesBatch = this.config.videoCyclesBatch | 0;
         this.peripheralCyclesPerSecond = 2 * 1000 * 1000;
-        this.tube = model.tube ? new Tube6502(model.tube, this) : new FakeTube();
-        if (model.tube && this.config.tubeCpuMultiplier) {
-            this.tube.cpuMultiplier = this.config.tubeCpuMultiplier;
-        }
+        this.hasTube = !!this.config.tube;
+        this.hasMusic5000 = !!this.config.hasMusic5000;
+        this.hasTeletextAdaptor = !!this.config.hasTeletextAdaptor;
+        this.teletextAdaptor = this.hasTeletextAdaptor ? new TeletextAdaptor(this) : null;
+        this.tube = this.hasTube
+            ? new Tube6502(this.config.tube, this, { cpuMultiplier: this.config.tubeCpuMultiplier })
+            : new FakeTube();
         this.music5000PageSel = 0;
         this.econet = econet;
 
@@ -648,7 +698,7 @@ export class Cpu6502 extends Base6502 {
             getGamepads: this.config.getGamepads,
         });
         this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
-        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.touchScreen, this.relayNoise);
+        this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
         this.serial = new Serial(this.acia);
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.soundChip.setScheduler(this.scheduler);
@@ -799,7 +849,7 @@ export class Cpu6502 extends Base6502 {
 
         switch (addr & ~0x0003) {
             case 0xfc10:
-                if (this.model.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
+                if (this.hasTeletextAdaptor) return this.teletextAdaptor.read(addr - 0xfc10);
                 break;
             case 0xfc20:
             case 0xfc24:
@@ -822,7 +872,7 @@ export class Cpu6502 extends Base6502 {
                 // IDE
                 break;
             case 0xfcfc:
-                if (addr === 0xfcff && this.model.hasMusic5000) return this.music5000PageSel;
+                if (addr === 0xfcff && this.hasMusic5000) return this.music5000PageSel;
                 break;
             case 0xfe00:
             case 0xfe04:
@@ -909,7 +959,7 @@ export class Cpu6502 extends Base6502 {
                 return this.tube.read(addr);
         }
 
-        if (this.model.hasMusic5000) {
+        if (this.hasMusic5000) {
             if ((this.music5000PageSel & 0xf0) === 0x30 && (addr & 0xff00) === 0xfd00) {
                 return this.music5000.read(this.music5000PageSel, addr);
             }
@@ -966,14 +1016,14 @@ export class Cpu6502 extends Base6502 {
         addr &= 0xffff;
         b |= 0;
 
-        if (this.model.hasMusic5000 && (addr & 0xff00) === 0xfd00 && (this.music5000PageSel & 0xf0) === 0x30) {
+        if (this.hasMusic5000 && (addr & 0xff00) === 0xfd00 && (this.music5000PageSel & 0xf0) === 0x30) {
             this.music5000.write(this.music5000PageSel, addr, b);
             return;
         }
 
         switch (addr & ~0x0003) {
             case 0xfc10:
-                if (this.model.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
+                if (this.hasTeletextAdaptor) return this.teletextAdaptor.write(addr - 0xfc10, b);
                 break;
             case 0xfc20:
             case 0xfc24:
@@ -996,7 +1046,7 @@ export class Cpu6502 extends Base6502 {
                 // IDE
                 break;
             case 0xfcfc:
-                if (addr === 0xfcff && this.model.hasMusic5000) {
+                if (addr === 0xfcff && this.hasMusic5000) {
                     this.music5000PageSel = b;
                 }
                 break;
@@ -1183,6 +1233,7 @@ export class Cpu6502 extends Base6502 {
             acia: this.acia.snapshotState(),
             adc: this.adconverter.snapshotState(),
             fdc: this.fdc.snapshotState(),
+            tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
     }
 
@@ -1242,6 +1293,13 @@ export class Cpu6502 extends Base6502 {
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
         if (state.fdc) {
             this.fdc.restoreState(state.fdc);
+        }
+
+        // Tube state (v3+). Rather than leave the parasite running on state the host knows
+        // nothing about, reset it; restoreSnapshot() rejects such a pairing before reaching here.
+        if (this.hasTube) {
+            if (state.tube) this.tube.restoreState(state.tube);
+            else this.tube.reset(true);
         }
     }
 
@@ -1304,7 +1362,6 @@ export class Cpu6502 extends Base6502 {
         this.adconverter.reset();
 
         this.touchScreen = new TouchScreen(this.scheduler);
-        if (this.model.hasTeletextAdaptor) this.teletextAdaptor = new TeletextAdaptor(this);
         if (this.econet) this.filestore = new Filestore(this, this.econet);
     }
 
@@ -1364,7 +1421,7 @@ export class Cpu6502 extends Base6502 {
     // Builds common code between polltimeSlow and polltimeFast
     buildPolltime() {
         const nop = (_cycles) => {};
-        const tubeStuff = (cycles) => (this.model.tube ? this.tube.execute(cycles) : nop);
+        const tubeStuff = this.hasTube ? (cycles) => this.tube.execute(cycles) : nop;
         const teletextStuff = this.teletextAdaptor ? (cycles) => this.teletextAdaptor.polltime(cycles) : nop;
         const musicStuff = this.music5000 ? (cycles) => this.music5000.polltime(cycles) : nop;
         const econetStuff = this.econet
@@ -1506,7 +1563,7 @@ export class Cpu6502 extends Base6502 {
         if (this.model.os.length) {
             await this.loadOs.apply(this, this.model.os);
         }
-        if (this.model.tube) {
+        if (this.hasTube) {
             await this.tube.loadOs();
         }
         this.reset(true);

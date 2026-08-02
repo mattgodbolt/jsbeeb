@@ -11,6 +11,7 @@ different peripherals.
 ## Table of Contents
 
 - [Keyboard Mappings](#keyboard-mappings)
+- [Remapping Keys](#remapping-keys)
 - [Emulator Shortcuts](#emulator-shortcuts)
 - [Save State and Rewind](#save-state-and-rewind)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
@@ -35,6 +36,65 @@ The BBC had a somewhat different-looking keyboard to a modern PC, and so it's us
 
 To play right now, visit [https://bbc.xania.org/](https://bbc.xania.org/). To load the default disc image (Elite in this
 case), press shift-F12 (which is shift-Break on the BBC).
+
+### Remapping Keys
+
+Plenty of games use keys that are awkward on a modern keyboard: `COPY` (which is `End`, or `fn`+`→` on a Mac), or
+`CAPS LOCK` (which on a Mac toggles rather than acting as a key you hold down). Any host key can be made to press any
+BBC key by adding a `KEY.` parameter to the URL:
+
+```
+KEY.<host key>=<BBC key>
+```
+
+Add one for each key you want to change. For example, Superior Software's Space Invaders fires with `COPY`; this makes
+`Enter` fire instead:
+
+[`https://bbc.xania.org/?disc1=sth:Superior/SpaceInvaders-Superior.zip&autoboot&KEY.ENTER=COPY`](https://bbc.xania.org/?disc1=sth%3ASuperior%2FSpaceInvaders-Superior.zip&autoboot&KEY.ENTER=COPY)
+
+Superior's Frogger uses `A`/`Z`/`DELETE`/`COPY` to move; this puts it on the arrow keys:
+
+[`https://bbc.xania.org/?disc1=sth:Superior/Frogger-Superior.zip&autoboot&KEY.UP=A&KEY.DOWN=Z&KEY.LEFT=DELETE&KEY.RIGHT=COPY`](https://bbc.xania.org/?disc1=sth%3ASuperior%2FFrogger-Superior.zip&autoboot&KEY.UP=A&KEY.DOWN=Z&KEY.LEFT=DELETE&KEY.RIGHT=COPY)
+
+And Superior's Hunchback steers with `CAPS LOCK` and `CTRL`, which the arrow keys can stand in for:
+
+[`https://bbc.xania.org/?disc1=sth:Superior/Hunchback-Superior.zip&autoboot&KEY.LEFT=CAPSLOCK&KEY.RIGHT=CTRL`](https://bbc.xania.org/?disc1=sth%3ASuperior%2FHunchback-Superior.zip&autoboot&KEY.LEFT=CAPSLOCK&KEY.RIGHT=CTRL)
+
+The **host key** names are jsbeeb's names for the keys on your own keyboard. Most are what you'd expect, but note:
+
+- `ENTER` (the BBC's `RETURN` key is called `ENTER` on the host side)
+- `K0` to `K9` for the number keys, `NUMPAD0` to `NUMPAD9` for the keypad
+- `SHIFT_LEFT` / `SHIFT_RIGHT`, `CTRL_LEFT` / `CTRL_RIGHT`, `ALT_LEFT` / `ALT_RIGHT` to distinguish the two of each
+- `BACK_QUOTE`, `APOSTROPHE`, `SEMICOLON`, `MINUS`, `EQUALS`, `HASH`, `BACKSLASH`, `LEFT_SQUARE_BRACKET`,
+  `RIGHT_SQUARE_BRACKET` for punctuation
+
+The **BBC key** names are:
+
+```
+RETURN COPY DELETE ESCAPE TAB SPACE SHIFT SHIFTLOCK CAPSLOCK CTRL
+LEFT RIGHT UP DOWN
+A-Z, K0-K9 (the number keys), F0-F9 (the red function keys)
+SEMICOLON_PLUS MINUS COMMA PERIOD SLASH AT COLON_STAR HAT_TILDE
+UNDERSCORE_POUND PIPE_BACKSLASH LEFT_SQUARE_BRACKET RIGHT_SQUARE_BRACKET
+
+(and, on the Master's numeric keypad only)
+NUMPAD0-NUMPAD9 NUMPADPLUS NUMPADMINUS NUMPADSLASH NUMPADASTERISK NUMPADCOMMA
+NUMPADHASH NUMPADENTER NUMPAD_DELETE NUMPAD_DECIMAL_POINT
+```
+
+Some things to know:
+
+- Names are case-insensitive, and a remapped key ignores the `SHIFT` state, so `KEY.ENTER=COPY` presses `COPY` whether
+  or not shift is held.
+- Remapping replaces what that host key normally does; in the Space Invaders example above, `Enter` no longer presses
+  `RETURN`.
+- The remapping is applied on top of whichever keyboard layout is selected, and survives changing layout or model.
+- If a name isn't recognised the mapping is skipped, and the emulator says so on startup, naming the parameter that
+  was at fault.
+- On the Atom, use the Atom's own key names (`LOCK`, `UP_DOWN`, `LEFT_RIGHT` and so on) rather than the BBC's.
+
+The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/utils.js`](src/utils.js), and `ATOM` in
+[`src/utils_atom.js`](src/utils_atom.js).
 
 ### Emulator Shortcuts
 
@@ -62,6 +122,35 @@ jsbeeb supports both USB/Bluetooth gamepads and mouse-based analogue joystick em
 
 - X-axis: Left = 65535, Right = 0
 - Y-axis: Up = 65535, Down = 0
+
+A gamepad presses BBC keys, and which key each control presses can be changed from the URL in the same way as
+[remapping the keyboard](#remapping-keys):
+
+```
+GP.<gamepad control>=<BBC key>
+```
+
+By default the D-pad presses the "Snapper" keys (`Z`, `X`, `:`, `/`), the `A` button presses `RETURN` and `Start`
+presses `SPACE`. To play Superior's Space Invaders on a pad, where `COPY` fires:
+
+[`https://bbc.xania.org/?disc1=sth:Superior/SpaceInvaders-Superior.zip&autoboot&GP.FIRE=COPY`](https://bbc.xania.org/?disc1=sth%3ASuperior%2FSpaceInvaders-Superior.zip&autoboot&GP.FIRE=COPY)
+
+The gamepad control names are:
+
+- `FIRE` — every button at once, which is usually what you want for a one-button game
+- `UP` `DOWN` `LEFT` `RIGHT` — both analogue sticks at once, plus one face button each (`UP` is also `A`, `DOWN` is
+  `X`, `LEFT` is `Y`, `RIGHT` is `B`)
+- `UP1` `DOWN1` `LEFT1` `RIGHT1` — the left stick only; `UP2` `DOWN2` … — the right stick only; `UP3` `DOWN3` … — the
+  face buttons only
+- `A` `B` `X` `Y` `START` `BACK` `LB` `RB` `LT` `RT` — individual buttons, by their Xbox 360 names
+- `FIRE1` `FIRE2` — clicking the left and right sticks
+
+The BBC key names are the same as for the keyboard, and digits may be written either way round: `GP.A=1` and `GP.A=K1`
+both press `1`. Unlike `KEY.`, gamepad mappings are BBC-only: there's no Atom equivalent. The D-pad's default mapping
+can't currently be changed.
+
+The older `LEFT=`, `RIGHT=`, `UP=`, `DOWN=` and `FIRE=` parameters (no `GP.` prefix) still work and mean the same
+thing.
 
 ## Getting Set Up to Run Locally
 
@@ -157,6 +246,8 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - `disc1=sth:ZZZ` - loads disc ZZZ from the Stairway to Hell archive
 - `tape=XXX` - loads tape XXX (from the `tapes/` directory)
 - `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
+- `KEY.X=Y` - makes host key `X` press BBC key `Y`, e.g. `KEY.ENTER=COPY`. See
+  [Remapping Keys](#remapping-keys).
 - `patch=P` - applies a memory patch `P`. See below.
 - `loadBasic=X` - loads 'X' (a resource on the webserver) as text, tokenises it and puts it in `PAGE` as if you'd typed
   it in to the emulator
@@ -167,8 +258,12 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - `autotype` - types whatever you put after. e.g. `&autotype=PRINT"Matt is cool"%0a` (return is URI escaped to `%0a`)
 - `embed` - Remove the margins around the screen, hide most navigation entries and make the page background
   transparent (intended for use when running within an iframe in a third-party site).
-- `cpuMultiplier=X` speeds up the CPU by a factor of `X`. May be fractional or below one to slow the CPU down. NB disc
-  loads become unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
+- `cpuMultiplier=X` speeds up the CPU by a factor of `X` relative to the peripherals: video, sound and the VIAs keep
+  running at their real-world rates. May be fractional or below one to slow the CPU down. NB disc loads become
+  unreliable with a too-slow CPU, and running too fast might cause the browser to hang.
+- `tubeCpuMultiplier=X` overclocks the second processor by a factor of `X`, which may be fractional. `1`, the default,
+  runs it at the real part's own clock: 3MHz for the 6502 second processor a BBC B takes, 4MHz for the 65C102 Turbo
+  board a Master takes. Below about 2.2MHz the MOS's unhandshaken tube transfers lose data.
 - `sbLeft` / `sbRight` / `sbBottom` - a URL to place left of, right of, or below the cub monitor. The left and right
   should be around 648 high and the bottom image should be around 896 wide. Left and right wider than 300 will run into
   problems on smaller screens; bottom taller than 100 or so similarly.

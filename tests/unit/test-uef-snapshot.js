@@ -181,7 +181,7 @@ describe("parseUefSnapshot", () => {
         const buffer = makeUefSnapshot();
         const snap = parseUefSnapshot(buffer);
         expect(snap.format).toBe("jsbeeb-snapshot");
-        expect(snap.version).toBe(2);
+        expect(snap.version).toBe(3);
         expect(snap.importedFrom).toBe("beebem-uef");
     });
 
@@ -472,7 +472,7 @@ describe("parseUefSnapshot", () => {
         // Find and truncate the sys VIA chunk in the buffer
         const bytes = new Uint8Array(buffer);
         // Overwrite the VIA chunk length to make it too short
-        for (let i = 12; i < bytes.length - 6; ) {
+        for (let i = 12; i < bytes.length - 6;) {
             const chunkId = bytes[i] | (bytes[i + 1] << 8);
             const chunkLen = bytes[i + 2] | (bytes[i + 3] << 8) | (bytes[i + 4] << 16) | (bytes[i + 5] << 24);
             if (chunkId === 0x0467 && bytes[i + 6] === 0) {

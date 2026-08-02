@@ -5,6 +5,7 @@ describe("Serial", () => {
     // Create mock for the ACIA dependency
     const mockAcia = {
         setSerialReceive: vi.fn(),
+        setSerialTransmit: vi.fn(),
         setMotor: vi.fn(),
         selectRs423: vi.fn(),
     };
@@ -78,6 +79,15 @@ describe("Serial", () => {
             }
         });
 
+        it("should set correct transmit baud rate", () => {
+            for (let i = 0; i < 8; i++) {
+                serial.write(0, i);
+
+                expect(serial.transmitRate).toBe(i);
+                expect(mockAcia.setSerialTransmit).toHaveBeenLastCalledWith(baudRateTable[i]);
+            }
+        });
+
         it("should set motor state based on bit 7", () => {
             // Test with bit 7 = 0
             serial.write(0, 0x00);
@@ -110,6 +120,7 @@ describe("Serial", () => {
             expect(serial.transmitRate).toBe(2);
             expect(serial.receiveRate).toBe(5);
             expect(mockAcia.setSerialReceive).toHaveBeenCalledWith(baudRateTable[5]);
+            expect(mockAcia.setSerialTransmit).toHaveBeenCalledWith(baudRateTable[2]);
             expect(mockAcia.setMotor).toHaveBeenCalledWith(true);
             expect(mockAcia.selectRs423).toHaveBeenCalledWith(true);
         });
@@ -133,6 +144,7 @@ describe("Serial", () => {
             expect(serial.receiveRate).toBe(7); // (0xFE >>> 3) & 0x07 = 7
             // Check ACIA was updated
             expect(mockAcia.setSerialReceive).toHaveBeenLastCalledWith(baudRateTable[7]);
+            expect(mockAcia.setSerialTransmit).toHaveBeenLastCalledWith(baudRateTable[6]);
             expect(mockAcia.setMotor).toHaveBeenLastCalledWith(true);
             expect(mockAcia.selectRs423).toHaveBeenLastCalledWith(true);
         });

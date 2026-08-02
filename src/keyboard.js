@@ -341,8 +341,9 @@ export class Keyboard extends EventTarget {
         if (this.isPasting) this.cancelPaste();
 
         this.keyInterface.disableKeyboard();
-        this._pasteClocksPerMs =
-            Math.floor(this.processor.cpuMultiplier * this.processor.peripheralCyclesPerSecond) / 1000;
+        // The paste task lives on the processor's scheduler, which is polled with peripheral
+        // cycles, so paste delays stay in real time whatever the CPU multiplier is.
+        this._pasteClocksPerMs = this.processor.peripheralCyclesPerSecond / 1000;
 
         if (checkCapsAndShiftLocks) {
             let toggleKey = null;

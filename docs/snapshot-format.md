@@ -1,4 +1,4 @@
-# jsbeeb Snapshot Format (Version 2)
+# jsbeeb Snapshot Format (Version 3)
 
 jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.json.gz`. TypedArrays (RAM, palette data, etc.) are encoded as base64 within the JSON. Uncompressed `.json` files are also accepted on load for backward compatibility.
 
@@ -7,22 +7,24 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 ```json
 {
   "format": "jsbeeb-snapshot",
-  "version": 2,
+  "version": 3,
   "model": "BBC B with DFS 1.2",
+  "coProcessor": false,
   "timestamp": "2026-03-15T12:00:00.000Z",
   "media": { "disc1": "sth:Acornsoft/Drogna", "disc1Crc32": -1234567890 },
   "state": { ... }
 }
 ```
 
-| Field       | Type   | Description                                                                     |
-| ----------- | ------ | ------------------------------------------------------------------------------- |
-| `format`    | string | Always `"jsbeeb-snapshot"`                                                      |
-| `version`   | number | Format version (currently `2`)                                                  |
-| `model`     | string | jsbeeb model name or synonym (e.g. `"B"`, `"Master"`, `"BBC Master 128 (DFS)"`) |
-| `timestamp` | string | ISO 8601 timestamp of when the snapshot was created                             |
-| `media`     | object | _(Optional)_ Disc source references for reload on restore (see below)           |
-| `state`     | object | The full emulator state (see below)                                             |
+| Field         | Type    | Description                                                                     |
+| ------------- | ------- | ------------------------------------------------------------------------------- |
+| `format`      | string  | Always `"jsbeeb-snapshot"`                                                      |
+| `version`     | number  | Format version (currently `3`)                                                  |
+| `model`       | string  | jsbeeb model name or synonym (e.g. `"B"`, `"Master"`, `"BBC Master 128 (DFS)"`) |
+| `coProcessor` | boolean | _(v3+)_ Whether a second processor was fitted. Absent means no                  |
+| `timestamp`   | string  | ISO 8601 timestamp of when the snapshot was created                             |
+| `media`       | object  | _(Optional)_ Disc source references for reload on restore (see below)           |
+| `state`       | object  | The full emulator state (see below)                                             |
 
 ### Media references (`media`)
 
@@ -47,6 +49,7 @@ When `discNCrc32` is present, it is compared against the CRC32 of the reloaded d
 
 - **v1** — Initial release. CPU, memory, VIA, video, sound, ACIA, ADC.
 - **v2** — Added FDC, disc drive, and disc track data. Dirty track persistence, embedded disc image data for local files, and CRC32 verification. v1 snapshots load with FDC state unchanged.
+- **v3** — Added second processor state (`state.tube`) and the top-level `coProcessor` flag. Nothing before v3 captured tube state, so earlier snapshots are always host-only and load into a machine without a co-processor unchanged.
 
 ### Imported snapshots
 
@@ -57,13 +60,19 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 2) and do not include FDC or disc state (`state.fdc` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC or disc state (`state.fdc` will be absent).
 
 B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots only include sideways RAM banks via the `swRamBanks` field (an object keyed by bank number, each value a `Uint8Array` of 16KB). On restore, `swRamBanks` selectively overwrites individual ROM banks without touching the ROMs jsbeeb has already loaded.
 
 ### Model compatibility
 
-When loading, the snapshot model is compared to the current model using `modelsCompatible()`. This resolves model synonyms (e.g. `"B"` matches `"BBC B with DFS 1.2"`) and treats filesystem variants as compatible (e.g. `"BBC Master 128 (DFS)"` and `"BBC Master 128 (ADFS)"`). If the base machine type differs, a page reload with the correct model is triggered.
+When loading, the snapshot's model must match the current one. Names are resolved through the model list, so synonyms and old names match (e.g. `"B"` matches `"BBC B with DFS 1.2"`), but the result must be the same model: filesystem variants are separate models and so are _not_ interchangeable (e.g. `"BBC Master 128 (DFS)"` does not match `"BBC Master 128 (ADFS)"`).
+
+The co-processor is emulation config rather than part of the model, so the model name cannot tell a Master Turbo from a plain Master. The `coProcessor` flag is therefore compared separately, and a mismatch is an error.
+
+If the models or co-processor settings differ, the snapshot is stashed in `sessionStorage` under `jsbeeb-pending-state` and the page reloads with the snapshot's model and co-processor setting in the query string, picking the state back up on the way in.
+
+Loading a pre-v3 snapshot while a co-processor is fitted therefore restarts the machine without one, since such a snapshot describes a host-only machine.
 
 ## TypedArray encoding
 
@@ -107,7 +116,7 @@ The `type` field is the constructor name: `Uint8Array`, `Uint16Array`, `Uint32Ar
 | `ram`              | Uint8Array | RAM contents (128KB, excludes ROMs)                                                               |
 | `roms`             | Uint8Array | _(Optional)_ ROM contents (256KB, 16 x 16KB banks). Only present in snapshots imported from b-em. |
 
-**Note:** `interrupt` is not saved — it is reconstructed by the VIA and ACIA `restoreState()` calls which reassert their interrupt lines.
+**Note:** `interrupt` is not saved — it is reconstructed from the VIA and ACIA state, which reasserts their interrupt lines.
 
 ### Scheduler (`state.scheduler`)
 
@@ -215,21 +224,21 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 
 ### ACIA (`state.acia`)
 
-| Field                        | Type         | Description                     |
-| ---------------------------- | ------------ | ------------------------------- |
-| `sr`                         | number       | Status Register                 |
-| `cr`                         | number       | Control Register                |
-| `dr`                         | number       | Data Register                   |
-| `rs423Selected`              | boolean      | RS-423 mode selected            |
-| `motorOn`                    | boolean      | Tape motor state                |
-| `tapeCarrierCount`           | number       | Carrier detect counter          |
-| `tapeDcdLineLevel`           | boolean      | DCD line level                  |
-| `hadDcdHigh`                 | boolean      | DCD high seen flag              |
-| `serialReceiveRate`          | number       | Baud rate                       |
-| `serialReceiveCyclesPerByte` | number       | Cycles per byte at current rate |
-| `txCompleteTaskOffset`       | number\|null | TX complete task offset         |
-| `runTapeTaskOffset`          | number\|null | Tape poll task offset           |
-| `runRs423TaskOffset`         | number\|null | RS-423 poll task offset         |
+| Field                  | Type         | Description             |
+| ---------------------- | ------------ | ----------------------- |
+| `sr`                   | number       | Status Register         |
+| `cr`                   | number       | Control Register        |
+| `dr`                   | number       | Data Register           |
+| `rs423Selected`        | boolean      | RS-423 mode selected    |
+| `motorOn`              | boolean      | Tape motor state        |
+| `tapeCarrierCount`     | number       | Carrier detect counter  |
+| `tapeDcdLineLevel`     | boolean      | DCD line level          |
+| `hadDcdHigh`           | boolean      | DCD high seen flag      |
+| `serialReceiveRate`    | number       | Receive baud rate       |
+| `serialTransmitRate`   | number       | Transmit baud rate      |
+| `txCompleteTaskOffset` | number\|null | TX complete task offset |
+| `runTapeTaskOffset`    | number\|null | Tape poll task offset   |
+| `runRs423TaskOffset`   | number\|null | RS-423 poll task offset |
 
 ### ADC (`state.adc`)
 
@@ -352,7 +361,44 @@ Track keys are strings like `"false:0"` (lower side, track 0) or `"true:5"` (upp
 
 **Save-to-file vs rewind:** When saving to a file, `tracks` is empty (`{}`) and `dirtyTracks` contains only tracks that have been written since the disc was loaded. On restore, the base disc is first reloaded from the media source (URL or embedded image data), then dirty track overlays are applied on top. This preserves disc writes (e.g. game saves) across save/restore cycles. For in-memory rewind snapshots, `tracks` contains full pulse data with structural sharing: clean tracks share `pulses2Us` references across snapshots, and only tracks written since the previous snapshot are freshly copied. This keeps rewind memory proportional to disc write activity rather than total disc size.
 
-## Known limitations (v2)
+### Second processor (`state.tube`) — _v3+_
+
+Present only when a co-processor was fitted.
+
+| Field      | Type       | Description                                                             |
+| ---------- | ---------- | ----------------------------------------------------------------------- |
+| `a`        | number     | Parasite accumulator                                                    |
+| `x`        | number     | Parasite X register                                                     |
+| `y`        | number     | Parasite Y register                                                     |
+| `s`        | number     | Parasite stack pointer                                                  |
+| `pc`       | number     | Parasite program counter                                                |
+| `p`        | number     | Parasite status flags as a byte                                         |
+| `nmiLevel` | boolean    | Parasite NMI line level                                                 |
+| `nmiEdge`  | boolean    | Whether a parasite NMI edge is pending                                  |
+| `takeInt`  | boolean    | Whether an interrupt is to be taken before the next instruction         |
+| `cycles`   | number     | Cycles owed to the parasite, fractional; it has no scheduler of its own |
+| `romPaged` | boolean    | Whether the boot ROM is paged in at `0xF000`                            |
+| `memory`   | Uint8Array | 64KB of parasite RAM                                                    |
+| `rom`      | Uint8Array | _(Optional)_ 4KB parasite ROM, only when `includeRoms` is set           |
+| `ula`      | object     | Tube ULA state (see below)                                              |
+
+#### Tube ULA (`state.tube.ula`)
+
+| Field                          | Type         | Description                                         |
+| ------------------------------ | ------------ | --------------------------------------------------- |
+| `internalStatusRegister`       | number       | Control flags (IRQ/NMI enables, R3 two-byte mode)   |
+| `hostStatus`                   | Uint8Array   | Status of registers 1-4 as the host sees them       |
+| `parasiteStatus`               | Uint8Array   | Status of registers 1-4 as the parasite sees them   |
+| `parasiteToHostData`           | Uint8Array[] | The four parasite-to-host FIFOs (R1 holds 24 bytes) |
+| `hostToParasiteData`           | Uint8Array[] | The four host-to-parasite FIFOs                     |
+| `parasiteToHostFifoByteCount1` | number       | Bytes waiting in the parasite-to-host R1 FIFO       |
+| `parasiteToHostFifoByteCount3` | number       | Bytes waiting in the parasite-to-host R3 FIFO       |
+| `hostToParasiteFifoByteCount3` | number       | Bytes waiting in the host-to-parasite R3 FIFO       |
+
+The interrupt and reset lines are not saved: they follow from the status registers and FIFO counts above, in the same way the host's `interrupt` follows from the VIA and ACIA state. The parasite's NMI is edge triggered, so `nmiLevel` and `nmiEdge` are saved, being the one part of it that cannot be recovered that way.
+
+## Known limitations (v3)
 
 - **No tape position** — tape playback position is not saved.
+- **BeebEm UEF co-processor state is not imported** — BeebEm records a tube type in its `EmuState` chunk, but jsbeeb does not read it, so a UEF save state taken with a second processor imports as host-only.
 - **ROMs not saved** (in jsbeeb-native snapshots) — ROMs are loaded from files and don't change at runtime. Imported b-em snapshots include ROMs in the optional `roms` field.

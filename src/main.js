@@ -19,6 +19,7 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
+import { tubeModelFor } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
@@ -29,12 +30,21 @@ import { GamepadSource } from "./gamepad-source.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
+import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { getFilterForMode } from "./canvas.js";
-import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "./snapshot.js";
+import {
+    createSnapshot,
+    restoreSnapshot,
+    snapshotToJSON,
+    snapshotFromJSON,
+    isSameModel,
+    hasCoProcessor,
+} from "./snapshot.js";
 import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
+import { downloadBlob } from "./dom-utils.js";
 import {
     buildUrlFromParams,
     guessModelFromHostname,
@@ -42,7 +52,7 @@ import {
     parseMediaParams,
     parseQueryString,
     processAutobootParams,
-    processKeyboardParams,
+    processInputParams,
 } from "./url-params.js";
 
 let processor;
@@ -129,7 +139,7 @@ const paramTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
-    tubeCpuMultiplier: ParamTypes.INT,
+    tubeCpuMultiplier: ParamTypes.FLOAT,
     microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)
@@ -151,7 +161,7 @@ let keyLayout = window.localStorage.keyLayout || "physical";
 
 const BBC = utils.BBC;
 const keyCodes = utils.keyCodes;
-let cpuMultiplier = 1;
+const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 let fastAsPossible = false;
 let fastTape = false;
 let noSeek;
@@ -166,9 +176,6 @@ const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } 
 // Only assign if values are provided
 if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
-
-// Process keyboard mappings
-parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
 
 // Handle specific query parameters
 if (Array.isArray(parsedQuery.rom)) {
@@ -217,27 +224,8 @@ const userPort = {
     },
 };
 
-const emulationConfig = {
-    keyLayout: keyLayout,
-    coProcessor: parsedQuery.coProcessor,
-    cpuMultiplier: cpuMultiplier,
-    tubeCpuMultiplier: parsedQuery.tubeCpuMultiplier || 2,
-    videoCyclesBatch: parsedQuery.videoCyclesBatch,
-    extraRoms: extraRoms,
-    userPort: userPort,
-    printerPort: printerPort,
-    getGamepads: function () {
-        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
-        return navigator.getGamepads ? navigator.getGamepads() : [];
-    },
-    debugFlags: {
-        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
-        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
-    },
-};
-
 // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
-// Must be created before Config so the onClose callback and setSpeechOutput() call can reference it.
+// Must be created before Config so the onClose callback and the initial checkbox state can reference it.
 const speechOutput = new SpeechOutput();
 speechOutput.enabled = !!parsedQuery.speechOutput;
 
@@ -253,23 +241,6 @@ const config = new Config(
     },
     function onClose(changed) {
         parsedQuery = Object.assign(parsedQuery, changed);
-        if (
-            changed.model ||
-            changed.coProcessor !== undefined ||
-            changed.hasMusic5000 !== undefined ||
-            changed.hasTeletextAdaptor !== undefined ||
-            changed.hasEconet !== undefined
-        ) {
-            areYouSure(
-                "Changing model requires a restart of the emulator. Restart now?",
-                "Yes, restart now",
-                "No, thanks",
-                function () {
-                    updateUrl();
-                    window.location.reload();
-                },
-            );
-        }
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
@@ -288,11 +259,21 @@ const config = new Config(
         if (changed.tubeCpuMultiplier !== undefined) {
             emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
             config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
-            if (processor.tube && processor.tube.cpuMultiplier !== undefined) {
+            if (processor.hasTube) {
                 processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
             }
         }
         updateUrl();
+    },
+    function onRestartRequired() {
+        areYouSure(
+            "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
+            "Restart now",
+            "Later",
+            function () {
+                window.location.reload();
+            },
+        );
     },
 );
 
@@ -301,18 +282,53 @@ config.mapLegacyModels(parsedQuery);
 
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
-config.set65c02(parsedQuery.coProcessor);
-config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 2);
-config.setEconet(parsedQuery.hasEconet);
-config.setMusic5000(parsedQuery.hasMusic5000);
-config.setTeletext(parsedQuery.hasTeletextAdaptor);
+config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 1);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
-config.setMouseJoystickEnabled(parsedQuery.mouseJoystickEnabled);
-config.setSpeechOutput(speechOutput.enabled);
+config.setCheckboxes({
+    coProcessor: !!parsedQuery.coProcessor,
+    hasEconet: !!parsedQuery.hasEconet,
+    hasMusic5000: !!parsedQuery.hasMusic5000,
+    hasTeletextAdaptor: !!parsedQuery.hasTeletextAdaptor,
+    mouseJoystickEnabled: !!parsedQuery.mouseJoystickEnabled,
+    speechOutput: speechOutput.enabled,
+});
 let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
 
 model = config.model;
+
+// Must come after we know the model, to validate names against those of the hardware.
+const keyMappingWarnings = processInputParams(
+    parsedQuery,
+    model.isAtom ? utils_atom.ATOM : BBC,
+    keyCodes,
+    utils.userKeymap,
+    gamepad,
+);
+
+// Depends on the config.setX calls above having applied the URL parameters.
+const emulationConfig = {
+    keyLayout,
+    cpuMultiplier,
+    tubeCpuMultiplier: config.tubeCpuMultiplier,
+    videoCyclesBatch: parsedQuery.videoCyclesBatch,
+    tube: config.coProcessor ? tubeModelFor(config.model) : null,
+    hasMusic5000: config.hasMusic5000,
+    hasTeletextAdaptor: config.hasTeletextAdaptor,
+    // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
+    // before any the user asked for with ?rom=.
+    extraRoms: [...config.extraRoms, ...extraRoms],
+    userPort,
+    printerPort,
+    getGamepads: function () {
+        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
+        return navigator.getGamepads ? navigator.getGamepads() : [];
+    },
+    debugFlags: {
+        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
+        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
+    },
+};
 
 function sbBind(div, url, onload) {
     const img = div.querySelector("img");
@@ -335,11 +351,8 @@ sbBind(document.querySelector(".sidebar.bottom"), parsedQuery.sbBottom, function
     div.style.bottom = -img.naturalHeight + "px";
 });
 
-if (parsedQuery.cpuMultiplier !== undefined) {
-    cpuMultiplier = parsedQuery.cpuMultiplier;
-    console.log("CPU multiplier set to " + cpuMultiplier);
-}
-const cpuSpeed = model.isAtom ? 1 * 1000 * 1000 : 2 * 1000 * 1000;
+if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
+const cpuSpeed = model.clockMhz * 1000 * 1000;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 const MaxCyclesPerFrame = clocksPerSecond / 10;
 
@@ -366,6 +379,10 @@ function showError(context, error) {
     errorDialog.querySelector(".context").textContent = context;
     errorDialog.querySelector(".error").textContent = error;
     errorDialogModal.show();
+}
+
+if (keyMappingWarnings.length) {
+    showError("applying the key mappings in the URL", keyMappingWarnings.join(" "));
 }
 
 function createCanvasForFilter(filterClass) {
@@ -465,18 +482,8 @@ function replaceOrAddExtension(name, newExt) {
  * @param {string} extension - The file extension to use
  */
 function downloadDriveData(data, name, extension) {
-    const a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-
-    const fileName = replaceOrAddExtension(name, extension);
     const blob = new Blob([data], { type: "application/octet-stream" });
-    const url = window.URL.createObjectURL(blob);
-
-    a.href = url;
-    a.download = fileName;
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadBlob(blob, replaceOrAddExtension(name, extension));
 }
 
 async function loadHTMLFile(file) {
@@ -536,10 +543,8 @@ const cubMonitor = document.getElementById("cub-monitor");
 function onCubMouseEvent(evt) {
     audioHandler.tryResume();
     if (document.activeElement !== document.body) document.activeElement.blur();
-    const cubRect = cubMonitor.getBoundingClientRect();
     const screenRect = screenCanvas.getBoundingClientRect();
-    const x = (evt.offsetX - cubRect.left + screenRect.left) / screenCanvas.offsetWidth;
-    const y = (evt.offsetY - cubRect.top + screenRect.top) / screenCanvas.offsetHeight;
+    const { x, y } = calculateMouseCoordinates(evt, screenRect);
 
     // Handle touchscreen
     if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
@@ -613,7 +618,7 @@ window.addEventListener("beforeunload", function (event) {
     }
 });
 
-if (model.hasEconet) {
+if (config.hasEconet) {
     econet = new Econet(stationId);
 } else {
     document.getElementById("fsmenuitem").style.display = "none";
@@ -657,11 +662,13 @@ processor = new CpuClass(model, {
     soundChip: audioHandler.soundChip,
     ddNoise: audioHandler.ddNoise,
     relayNoise: audioHandler.relayNoise,
-    music5000: model.hasMusic5000 ? audioHandler.music5000 : null,
+    music5000: config.hasMusic5000 ? audioHandler.music5000 : null,
     cmos,
     config: emulationConfig,
     econet,
 });
+
+processor.teletextAdaptor?.addEventListener("showError", (e) => showError(e.detail.context, e.detail.error));
 
 // Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
@@ -677,18 +684,16 @@ const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 /**
  * Attach an RS-423 composite handler to the ACIA that combines the touchscreen
  * (which sends position data to the BBC) with the speech output (which speaks
- * text the BBC sends out).  Call this once after processor.initialise() and
- * again whenever speechOutput.enabled changes.
+ * text the BBC sends out).
  */
 function setupRs423Handler() {
-    const touchScreen = processor.touchScreen;
     processor.acia.setRs423Handler({
         onTransmit(val) {
-            touchScreen.onTransmit(val);
+            processor.touchScreen.onTransmit(val);
             speechOutput.onTransmit(val);
         },
         tryReceive(rts) {
-            return touchScreen.tryReceive(rts);
+            return processor.touchScreen.tryReceive(rts);
         },
     });
 }
@@ -1441,7 +1446,12 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
     let data;
     if (document.querySelector("#google-drive .create-from-existing").checked) {
         const discType = disc.guessDiscTypeFromName(name);
-        data = discType.saver(processor.fdc.drives[0].disc);
+        try {
+            data = discType.saver(processor.fdc.drives[0].disc);
+        } catch (e) {
+            loadingFinished(`Create failed: ${e.message}`);
+            return;
+        }
         name = replaceOrAddExtension(name, discType.extension);
         console.log(`Saving existing disc: ${name}`);
     } else {
@@ -1470,11 +1480,15 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
 
 document.getElementById("download-drive-link").addEventListener("click", function () {
     const disc = processor.fdc.drives[0].disc;
-    const data = toSsdOrDsd(disc);
-    const name = disc.name;
-    const extension = disc.isDoubleSided ? ".dsd" : ".ssd";
-
-    downloadDriveData(data, name, extension);
+    const save = (options) =>
+        downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
+    try {
+        save();
+    } catch (e) {
+        areYouSure(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel", () =>
+            save({ force: true }),
+        );
+    }
 });
 
 document.getElementById("download-drive-hfe-link").addEventListener("click", function () {
@@ -1535,13 +1549,8 @@ document.getElementById("save-state").addEventListener("click", async function (
         const snapshot = createSnapshot(processor, model, Object.keys(media).length > 0 ? media : undefined);
         const json = snapshotToJSON(snapshot);
         const blob = await compressBlob(new Blob([json]));
-        const url = URL.createObjectURL(blob);
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `jsbeeb-${model.name}-${timestamp}.json.gz`;
-        a.click();
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `jsbeeb-${model.name}-${timestamp}.json.gz`);
     } catch (e) {
         showError("saving state", e);
     }
@@ -1570,10 +1579,10 @@ async function loadStateFromFile(file, preReadBuffer) {
             }
             snapshot = snapshotFromJSON(text);
         }
-        if (!isSameModel(snapshot.model, model.name)) {
-            // Model mismatch: stash state and reload with correct model
+        if (!isSameModel(snapshot.model, model.name) || hasCoProcessor(snapshot) !== processor.hasTube) {
+            // Model or co-processor mismatch: stash state and reload with a matching machine
             sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
-            const newQuery = { ...parsedQuery, model: snapshot.model };
+            const newQuery = { ...parsedQuery, model: snapshot.model, coProcessor: hasCoProcessor(snapshot) };
             const baseUrl = window.location.origin + window.location.pathname;
             window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
             return;
@@ -1691,7 +1700,7 @@ syncLights = function () {
         drive0.update(processor.fdc.motorOn[0]);
         drive1.update(processor.fdc.motorOn[1]);
         cassette.update(processor.acia.motorOn);
-        if (model.hasEconet) {
+        if (processor.econet) {
             network.update(processor.econet.activityLight());
         }
     }
@@ -1849,14 +1858,22 @@ const aysEl = document.getElementById("are-you-sure");
 const aysModal = new bootstrap.Modal(aysEl);
 
 function areYouSure(message, yesText, noText, yesFunc) {
+    const yesButton = aysEl.querySelector(".ays-yes");
     aysEl.querySelector(".context").textContent = message;
-    aysEl.querySelector(".ays-yes").textContent = yesText;
     aysEl.querySelector(".ays-no").textContent = noText;
-    aysEl.querySelector(".ays-yes").addEventListener(
-        "click",
-        function () {
-            aysModal.hide();
-            yesFunc();
+    yesButton.textContent = yesText;
+    let confirmed = false;
+    const onYes = () => {
+        confirmed = true;
+        aysModal.hide();
+    };
+    yesButton.addEventListener("click", onYes, { once: true });
+    // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
+    aysEl.addEventListener(
+        "hidden.bs.modal",
+        () => {
+            yesButton.removeEventListener("click", onYes);
+            if (confirmed) yesFunc();
         },
         { once: true },
     );

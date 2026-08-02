@@ -1,0 +1,35 @@
+version: 2
+
+# Security updates run regardless of this file. What it adds is a scheduled version-update
+# sweep, which is also what closes security PRs once something else has already updated the
+# dependency past them.
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for the routine churn, rather than one per package.
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "ci(deps)"

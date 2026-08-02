@@ -20,6 +20,7 @@ export class Serial {
         this.transmitRate = val & 0x07;
         this.receiveRate = (val >>> 3) & 0x07;
         this.acia.setSerialReceive(table[this.receiveRate]);
+        this.acia.setSerialTransmit(table[this.transmitRate]);
         this.acia.setMotor(!!(val & 0x80));
         this.acia.selectRs423(!!(val & 0x40));
     }

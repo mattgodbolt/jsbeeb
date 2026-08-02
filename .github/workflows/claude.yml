@@ -26,7 +26,7 @@ jobs:
       actions: read # Required for Claude to read CI results on PRs
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -40,8 +40,9 @@ jobs:
           additional_permissions: |
             actions: read
 
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
-          # model: "claude-opus-4-1-20250805"
+          # Pin the model explicitly: the action's own default has pointed at a
+          # retired model in the past, which 404s every run.
+          model: "claude-opus-5"
 
           # Optional: Customize the trigger phrase (default: @claude)
           # trigger_phrase: "/claude"

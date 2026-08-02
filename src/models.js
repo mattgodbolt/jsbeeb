@@ -10,11 +10,21 @@ const CpuModel = Object.freeze({
     CMOS65C12: 2,
 });
 
+/**
+ * Describes what a machine *is*: which CPU, which ROMs, which disc controller.
+ * Anything a user can turn on and off for a session (second processor, Econet,
+ * Music 5000, teletext adaptor) belongs in the emulation config passed to Cpu6502.
+ *
+ * Instances are shared process-wide via `allModels` and frozen, so they can be handed
+ * to any number of machines without one session's settings leaking into the next.
+ */
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, tube, cmosOverride, banks } = {}) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, cmosOverride, banks, clockMhz } = {}) {
+        if (!(clockMhz > 0)) throw new Error(`Model ${name} has no clock speed`);
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
+        this.clockMhz = clockMhz;
         this.banks = banks;
         this._cpuModel = cpuModel;
         this.isMaster = isMaster;
@@ -22,10 +32,7 @@ class Model {
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
-        this.tube = tube;
         this.cmosOverride = cmosOverride;
-        this.hasEconet = false;
-        this.hasMusic5000 = false;
     }
 
     get nmos() {
@@ -67,6 +74,7 @@ function atomModel({ name, synonyms, os, banks }) {
         os,
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 1,
         isAtom: true,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
@@ -119,6 +127,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
     }),
@@ -128,6 +137,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
     }),
@@ -137,6 +147,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareWdFdc,
     }),
@@ -147,6 +158,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareWdFdc,
     }),
@@ -156,6 +168,7 @@ export const allModels = [
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
         isMaster: true,
+        clockMhz: 2,
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickDfs,
@@ -166,6 +179,7 @@ export const allModels = [
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
         isMaster: true,
+        clockMhz: 2,
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAdfs,
@@ -176,6 +190,7 @@ export const allModels = [
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
         isMaster: true,
+        clockMhz: 2,
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAnfs,
@@ -205,13 +220,24 @@ export const allModels = [
         synonyms: ["Atom-DOS"],
         os: ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
     }),
-    // Although this can not be explicitly selected as a model, it is required by the configuration builder later
+    // Neither can be selected as a model: they are fitted to one, by the configuration builder later.
     new Model({
         name: "Tube65C02",
         synonyms: [],
         os: ["tube/6502Tube.rom"],
+        // TODO(#746): the external second processor was an NMOS 6502A.
         cpuModel: CpuModel.CMOS65C02,
         isMaster: false,
+        clockMhz: 3,
+    }),
+    new Model({
+        name: "Tube65C102",
+        synonyms: [],
+        os: ["tube/65C102Tube.rom"],
+        // TODO(#746): Acorn's 65C102 has no Rockwell bit instructions.
+        cpuModel: CpuModel.CMOS65C02,
+        isMaster: false,
+        clockMhz: 4,
     }),
 ];
 
@@ -231,6 +257,7 @@ export const TEST_6502 = new Model({
     name: "TEST",
     synonyms: ["TEST"],
     os: [],
+    clockMhz: 2,
     cpuModel: CpuModel.MOS6502,
     isMaster: false,
     swram: beebSwram,
@@ -241,6 +268,7 @@ export const TEST_65C02 = new Model({
     name: "TEST",
     synonyms: ["TEST"],
     os: [],
+    clockMhz: 2,
     cpuModel: CpuModel.CMOS65C02,
     isMaster: false,
     swram: masterSwram,
@@ -251,6 +279,7 @@ export const TEST_65C12 = new Model({
     name: "TEST",
     synonyms: ["TEST"],
     os: [],
+    clockMhz: 2,
     cpuModel: CpuModel.CMOS65C12,
     isMaster: false,
     swram: masterSwram,
@@ -260,6 +289,7 @@ TEST_65C12.isTest = true;
 
 export const basicOnly = new Model({
     name: "Basic only",
+    clockMhz: 2,
     synonyms: ["Basic only"],
     os: ["master/mos3.20"],
     cpuModel: CpuModel.CMOS65C12,
@@ -267,3 +297,25 @@ export const basicOnly = new Model({
     swram: masterSwram,
     fdc: NoiseAwareWdFdc,
 });
+
+/**
+ * The second processors jsbeeb emulates: the external 3MHz box, and the Master Turbo's
+ * internal 4MHz board. Machine-building code passes one of these as the emulation config's
+ * `tube`, so that 6502.js needn't import this module and close an import cycle via the FDC
+ * modules.
+ */
+export const TubeModel = findModel("Tube65C02");
+export const TurboTubeModel = findModel("Tube65C102");
+
+/** @returns {Model} the second processor sold for this machine: the Turbo board for a Master. */
+export function tubeModelFor(model) {
+    return model.isMaster ? TurboTubeModel : TubeModel;
+}
+
+// After the isTest assignments above, so those still apply.
+for (const model of [...allModels, TEST_6502, TEST_65C02, TEST_65C12, basicOnly]) {
+    Object.freeze(model.os);
+    Object.freeze(model.synonyms);
+    Object.freeze(model);
+}
+Object.freeze(allModels);

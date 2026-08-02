@@ -123,7 +123,10 @@ export class AudioHandler {
     }
 
     _onBuffer(buffer) {
-        if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer }, [buffer.buffer]);
+        // No transfer list, deliberately: the chip reuses this buffer, and
+        // transferring would detach it and trip crbug.com/537801199. The clone
+        // costs little (512 floats per 1.024ms of chip output, ~2MB/s).
+        if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer });
     }
 
     // Recent browsers, particularly Safari and Chrome, require a user interaction in order to enable sound playback.

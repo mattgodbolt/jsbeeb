@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  # release-please leaves its branch alone while the release content is unchanged, so a run of
+  # commits that it does not put in the changelog can leave the PR stale and conflicting.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,7 +21,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           release-type: node
@@ -28,11 +31,11 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.release-please.outputs.release_created }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - name: npm install
         run: npm install
@@ -57,11 +60,11 @@ jobs:
     runs-on: windows-latest
     if: ${{ needs.release-please.outputs.release_created }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - name: npm install
         run: npm install
@@ -79,8 +82,8 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ needs.release-please.outputs.release_created }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm

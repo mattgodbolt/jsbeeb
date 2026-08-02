@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { SoundChip, AtomSoundChip } from "../../src/soundchip.js";
+import { SoundChip, AtomSoundChip, SoundBufferSamples } from "../../src/soundchip.js";
 import { Scheduler } from "../../src/scheduler.js";
 
-function makeSoundChip() {
+function makeSoundChip(onBuffer = () => {}) {
     const scheduler = new Scheduler();
-    const chip = new SoundChip(() => {});
+    const chip = new SoundChip(onBuffer);
     chip.setScheduler(scheduler);
     return { chip, scheduler };
 }
@@ -15,6 +15,45 @@ function makeAtomSoundChip() {
     chip.setScheduler(scheduler);
     return { chip, scheduler };
 }
+
+describe("SoundChip advance", () => {
+    it("should reuse one buffer for every onBuffer callback, never reallocating", () => {
+        // Pins the buffer-reuse contract that works around crbug.com/537801199;
+        // see the comment in SoundChip.advance(). Cross-call identity is the
+        // key assertion: the old code handed out a fresh buffer per callback.
+        let callbackCount = 0;
+        let firstBuffer = null;
+        const { chip } = makeSoundChip((buffer) => {
+            if (firstBuffer === null) firstBuffer = buffer;
+            expect(buffer).toBe(firstBuffer);
+            callbackCount++;
+        });
+
+        // samplesPerCycle divides SoundBufferSamples exactly, so this fills the
+        // buffer exactly three times and leaves position at zero.
+        const cyclesToFillBufferThrice = Math.round((3 * SoundBufferSamples) / chip.samplesPerCycle);
+        chip.advance(cyclesToFillBufferThrice);
+        expect(callbackCount).toBe(3);
+        expect(chip.buffer).toBe(firstBuffer);
+        expect(chip.buffer.length).toBe(SoundBufferSamples);
+        expect(chip.position).toBe(0);
+    });
+
+    // The guard states are unreachable through the public API (that's the
+    // point), so these tests corrupt internal state to simulate a miscompile
+    // or a reintroduced buffer transfer.
+    it("should throw rather than spin if the buffer position goes bad", () => {
+        const { chip } = makeSoundChip();
+        chip.position = SoundBufferSamples;
+        expect(() => chip.advance(1024)).toThrow("Sound buffer accounting error");
+    });
+
+    it("should throw rather than fall silent if the buffer is detached or replaced", () => {
+        const { chip } = makeSoundChip();
+        chip.buffer = new Float32Array(0); // what a detached buffer reports
+        expect(() => chip.advance(1024)).toThrow("Sound buffer accounting error");
+    });
+});
 
 describe("SoundChip snapshotState / restoreState", () => {
     it("should snapshot and restore tone channel registers", () => {
