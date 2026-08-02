@@ -1,10 +1,9 @@
 # Mirroring the Stairway to Hell archive
 
 `tools/mirror-sth.js` scrapes the BBC Micro, Acorn Electron, and sideways-ROM
-areas of `https://www.stairwaytohell.com/` into a local directory tree, which
-`tools/upload-sth-mirror.sh` uploads to `s3://bbc.xania.org/archive/sth/`.
-jsbeeb's `sth:` URLs and in-app archive browser read from that mirror rather
-than from STH directly.
+areas of `https://www.stairwaytohell.com/` into a local directory tree, which is
+then uploaded as-is to `s3://bbc.xania.org/archive/sth/`. jsbeeb's `sth:` URLs
+and in-app archive browser read from that mirror rather than from STH directly.
 
 STH has been effectively frozen since around 2008, so this is a one-shot
 snapshot, not a continuous sync — there is no scheduled job. Re-run it by hand
@@ -15,12 +14,21 @@ if upstream ever changes.
 ```sh
 npm run mirror-sth:check    # parse the index pages only, print file counts
 npm run mirror-sth          # download everything into .sth-mirror (~80 MB)
-npm run mirror-sth:upload -- --dryrun   # show what would be uploaded
-npm run mirror-sth:upload   # for real
+npm run mirror-sth:upload   # upload it to S3
 ```
 
 Uploading needs AWS credentials with write access to the `archive/sth/` prefix
 of the `bbc.xania.org` bucket.
+
+The two upload passes split the mirror between them by filename, and getting
+those filters wrong would tag thousands of objects with the wrong cache
+lifetime. Dry-run both first and check that the zips land in one and the
+manifests in the other:
+
+```sh
+npm run mirror-sth:upload:blobs -- --dryrun
+npm run mirror-sth:upload:index -- --dryrun
+```
 
 The download is resumable: files already present are skipped, and downloads land
 under a `.part` name until complete, so an interrupted run can't leave a
@@ -98,23 +106,16 @@ fetched.
 
 ## Uploading
 
-`tools/upload-sth-mirror.sh` runs three `aws s3 sync` passes, because the three
-kinds of file want different headers:
+The upload is two `aws s3 sync` passes, because the zips want a different cache
+lifetime from everything else:
 
 - Zips: `public, max-age=31536000, immutable` — paths are content-stable
-- `meta/*`: `public, max-age=300` — these change on a re-mirror
-- Manifests: as above, plus `Content-Encoding: gzip`
+- Manifests and `meta/*`: `public, max-age=300` — these change on a re-mirror
 
-Manifests are uploaded pre-compressed because neither S3 nor the CloudFront
-distribution in front of it compresses on the fly, and the app fetches a whole
-category manifest every time the archive browser is opened. Compressing takes
-the disc catalogue from ~124 KB to ~14 KB. Browsers decode it transparently, so
-`src/sth.js` needs to do nothing special, but `curl` needs `--compressed`:
+The CloudFront distribution in front of the bucket compresses `application/json`
+itself, so the manifests go over the wire gzipped without anything here having
+to arrange it — the disc catalogue is ~124 KB of JSON but ~14 KB on the wire.
 
-```sh
-curl --compressed https://bbc.xania.org/archive/sth/diskimages/manifest.json
-```
-
-No pass uses `--delete`, and none should: the jsbeeb app is served from this
-same bucket, so a mistyped destination could take the site out. Remove files
-from the mirror by hand if it's ever needed.
+Neither pass uses `--delete`, and neither should: the jsbeeb app is served from
+this same bucket, so a mistyped destination could take the site out. Remove
+files from the mirror by hand if it's ever needed.

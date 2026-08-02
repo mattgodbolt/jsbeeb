@@ -185,7 +185,7 @@ async function index(category) {
 // rather than what an index page claimed.
 async function downloadCategory(category, paths, outRoot, concurrency) {
     let downloaded = 0;
-    const files = [];
+    const sizes = new Map();
     await forEachConcurrently(paths, concurrency, async (path) => {
         const dest = join(outRoot, category.id, path);
         let size = await fileSize(dest);
@@ -194,11 +194,14 @@ async function downloadCategory(category, paths, outRoot, concurrency) {
             size = await fileSize(dest);
             downloaded++;
         }
-        files.push({ path, size });
+        sizes.set(path, size);
     });
     stderr.write(`[${category.id}] downloaded ${downloaded}, already present ${paths.length - downloaded}\n`);
-    files.sort((a, b) => a.path.localeCompare(b.path));
-    return files;
+    // Report in the order the index gave, rather than the order downloads
+    // happened to finish. Sorting here instead would have to match how the app
+    // sorts the catalogue for display, and a locale-aware comparison would make
+    // the manifest depend on the machine that built it.
+    return paths.map((path) => ({ path, size: sizes.get(path) }));
 }
 
 async function writeJson(dest, value) {
