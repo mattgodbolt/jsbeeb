@@ -39,16 +39,21 @@ export class GamePad {
          this.gamepadAxisMapping[3][-1] = BBC.COLON_STAR; // up
          this.gamepadAxisMapping[3][1] = BBC.SLASH;      // down
          */
+    /**
+     * Maps a gamepad button or stick direction to a BBC key.
+     * @param {string} gamepadKey - the gamepad control, eg `FIRE2`
+     * @param {string} bbcKey - the BBC key to press, eg `RETURN`
+     * @returns {?string} a description of the problem, or null if the mapping was applied
+     */
     remap(gamepadKey, bbcKey) {
         // convert "1" into "K1"
-        if ("0123456789".indexOf(bbcKey) > 0) {
+        if (bbcKey.length === 1 && bbcKey >= "0" && bbcKey <= "9") {
             bbcKey = "K" + bbcKey;
         }
 
         const mappedBbcKey = BBC[bbcKey];
         if (!mappedBbcKey) {
-            console.log("unknown BBC key: " + bbcKey);
-            return;
+            return `unknown BBC key "${bbcKey}".`;
         }
 
         switch (gamepadKey) {
@@ -152,8 +157,10 @@ export class GamePad {
                 this.gamepadMapping[6] = mappedBbcKey;
                 break;
             default:
-                console.log("unknown gamepad key: " + gamepadKey);
+                return `unknown gamepad control "${gamepadKey}".`;
         }
+
+        return null;
     }
 
     update(sysvia) {

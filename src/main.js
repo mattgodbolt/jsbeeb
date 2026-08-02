@@ -52,7 +52,7 @@ import {
     parseMediaParams,
     parseQueryString,
     processAutobootParams,
-    processKeyboardParams,
+    processInputParams,
 } from "./url-params.js";
 
 let processor;
@@ -177,9 +177,6 @@ const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } 
 if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
 
-// Process keyboard mappings
-parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
-
 // Handle specific query parameters
 if (Array.isArray(parsedQuery.rom)) {
     parsedQuery.rom.forEach((romPath) => {
@@ -300,6 +297,15 @@ config.setDisplayMode(displayMode);
 
 model = config.model;
 
+// Must come after we know the model, to validate names against those of the hardware.
+const keyMappingWarnings = processInputParams(
+    parsedQuery,
+    model.isAtom ? utils_atom.ATOM : BBC,
+    keyCodes,
+    utils.userKeymap,
+    gamepad,
+);
+
 // Depends on the config.setX calls above having applied the URL parameters.
 const emulationConfig = {
     keyLayout,
@@ -373,6 +379,10 @@ function showError(context, error) {
     errorDialog.querySelector(".context").textContent = context;
     errorDialog.querySelector(".error").textContent = error;
     errorDialogModal.show();
+}
+
+if (keyMappingWarnings.length) {
+    showError("applying the key mappings in the URL", keyMappingWarnings.join(" "));
 }
 
 function createCanvasForFilter(filterClass) {
