@@ -2,8 +2,10 @@
 
 import * as utils from "./utils.js";
 
-const mirrorHost = "bbc.xania.org";
-const mirrorRoot = "archive/sth";
+// Always https, whatever the page was loaded over: the mirror redirects plain
+// http, so following the page's protocol would cost a redirect on every request
+// when developing over http, and Electron reports "file:" anyway.
+const mirrorBase = "https://bbc.xania.org/archive/sth";
 
 async function _fetchManifest(url) {
     const response = await fetch(url);
@@ -26,9 +28,7 @@ function encodePath(path) {
 
 export class StairwayToHell {
     constructor(onStart, onCat, onError, tape) {
-        // Use https explicitly - document.location.protocol is 'file:' in Electron
-        const protocol = document.location.protocol === "file:" ? "https:" : document.location.protocol;
-        this._baseUrl = `${protocol}//${mirrorHost}/${mirrorRoot}/${tape ? "tape" : "disk"}images/`;
+        this._baseUrl = `${mirrorBase}/${tape ? "tape" : "disk"}images/`;
         this._catalog = [];
         this._onStart = onStart;
         this._onCat = onCat;

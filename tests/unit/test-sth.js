@@ -2,8 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StairwayToHell } from "../../src/sth.js";
 
-const ARCHIVE_HOST = "bbc.xania.org";
-const ARCHIVE_PREFIX = "archive/sth";
+const ARCHIVE_BASE = "https://bbc.xania.org/archive/sth";
 
 function makeManifestResponse(files) {
     return {
@@ -28,7 +27,7 @@ describe("StairwayToHell", () => {
 
     it("populates the disc catalog from the disk manifest", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-            expect(url).toBe(`http://${ARCHIVE_HOST}/${ARCHIVE_PREFIX}/diskimages/manifest.json`);
+            expect(url).toBe(`${ARCHIVE_BASE}/diskimages/manifest.json`);
             return makeManifestResponse([
                 { path: "Acornsoft/Elite.zip", size: 12345, mtime: null },
                 { path: "Cheats/CHT_ChuckieEgg-ExtraColours.zip", size: 9992, mtime: null },
@@ -62,7 +61,7 @@ describe("StairwayToHell", () => {
         );
         await sth.populate();
 
-        expect(seen).toEqual([`http://${ARCHIVE_HOST}/${ARCHIVE_PREFIX}/tapeimages/manifest.json`]);
+        expect(seen).toEqual([`${ARCHIVE_BASE}/tapeimages/manifest.json`]);
     });
 
     it("invokes the error callback when the manifest fetch fails", async () => {
@@ -116,8 +115,6 @@ describe("StairwayToHell", () => {
         );
         await expect(sth.fetch("Unreleased/Daxis[droids]-demo.zip")).rejects.toBeDefined();
 
-        expect(seen).toEqual([
-            `http://${ARCHIVE_HOST}/${ARCHIVE_PREFIX}/diskimages/Unreleased/Daxis%5Bdroids%5D-demo.zip`,
-        ]);
+        expect(seen).toEqual([`${ARCHIVE_BASE}/diskimages/Unreleased/Daxis%5Bdroids%5D-demo.zip`]);
     });
 });
