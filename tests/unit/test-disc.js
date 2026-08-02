@@ -1,7 +1,54 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
+import { BitWindow64, Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
 import * as fs from "node:fs";
+
+describe("BitWindow64", function () {
+    /** Shift the low `count` bits of a BigInt in, most significant first. */
+    function shiftIn(window, value, count = 64) {
+        for (let bit = count - 1; bit >= 0; --bit) window.shiftIn(Number((value >> BigInt(bit)) & 1n));
+        return window;
+    }
+
+    it("holds the last 64 bits shifted in", () => {
+        const window = shiftIn(new BitWindow64(), 0xaaaa448944894489n);
+        expect(window.hi).toBe(0xaaaa4489);
+        expect(window.lo).toBe(0x44894489);
+    });
+
+    it("keeps both halves unsigned as bits cross bit 31 and bit 63", () => {
+        const window = shiftIn(new BitWindow64(), 0xffffffffffffffffn);
+        expect(window.hi).toBe(0xffffffff);
+        expect(window.lo).toBe(0xffffffff);
+    });
+
+    it("returns the bit leaving bit 63", () => {
+        const window = shiftIn(new BitWindow64(), 0x8000000000000000n);
+        expect(window.shiftIn(0)).toBe(1);
+        expect(window.shiftIn(0)).toBe(0);
+    });
+
+    it("matches a 64 bit value only in full", () => {
+        const window = shiftIn(new BitWindow64(), 0xaaaa448944894489n);
+        expect(window.equals(0xaaaa4489, 0x44894489)).toBe(true);
+        expect(window.equals(0xaaaa4489, 0x44894488)).toBe(false);
+        expect(window.equals(0xaaaa4488, 0x44894489)).toBe(false);
+    });
+
+    it("counts a run of nibbles ending at bit 0", () => {
+        expect(shiftIn(new BitWindow64(), 0x1234567988888888n).countTrailingNibbles(0x8)).toBe(8);
+    });
+
+    it("counts a run continuing into the high half", () => {
+        expect(shiftIn(new BitWindow64(), 0x1234567888888888n).countTrailingNibbles(0x8)).toBe(9);
+        expect(shiftIn(new BitWindow64(), 0x1238888888888888n).countTrailingNibbles(0x8)).toBe(13);
+        expect(shiftIn(new BitWindow64(), 0x8888888888888888n).countTrailingNibbles(0x8)).toBe(16);
+    });
+
+    it("counts nothing when the lowest nibble differs", () => {
+        expect(shiftIn(new BitWindow64(), 0x8888888888888880n).countTrailingNibbles(0x8)).toBe(0);
+    });
+});
 
 describe("IBM disc format tests", function () {
     it("calculates FM crcs", () => {

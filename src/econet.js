@@ -1,6 +1,9 @@
 // Code ported from Beebem (C to .js) by Jason Robson
 // The majority of the commentary here is also from Beebem
 
+// How long a four-way handshake may stall before we resend.
+const RetryTimeoutSecs = 0.5;
+
 // Econet support classes
 class ADLC {
     constructor() {
@@ -57,10 +60,11 @@ export class ReceiveBlock {
 
 // Econet class definition
 export class Econet {
-    constructor(stationId_) {
+    constructor(stationId_, cyclesPerSecond) {
         // Config parameters
         this.TIME_BETWEEN_BYTES = 128;
         this.SERVER_STATION_ID = 254;
+        this.retryCycles = (cyclesPerSecond * RetryTimeoutSecs) | 0;
 
         // 4-way handshake states
         this.FWH_Idle = 0;
@@ -156,7 +160,7 @@ export class Econet {
             }
 
             // Re-tries
-            if (this.pollTotalCycles > this.wireStateEntryTimer + 1000000) {
+            if (this.pollTotalCycles > this.wireStateEntryTimer + this.retryCycles) {
                 if (this.wireState !== this.FWH_Idle) {
                     switch (this.wireState) {
                         case this.FWH_RX_Scout_Received:

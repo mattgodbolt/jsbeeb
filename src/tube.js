@@ -36,6 +36,11 @@ const TUBE_ULA_FLAG_STATUS_PARASITE_RESET_ACTIVE_LOW = TUBE_ULA_FLAG_STATUS_P;
 const TUBE_ULA_FLAG_STATUS_CLEAR_ALL_TUBE_REGISTERS = TUBE_ULA_FLAG_STATUS_T;
 const TUBE_ULA_FLAG_STATUS_SET_CONTROL_FLAGS = TUBE_ULA_FLAG_STATUS_S;
 const TUBE_ULA_R1_PARASITE_BYTE_COUNT = 24;
+//  the control flags live in the bottom six bits of the register 1 status registers, which both
+//  sides see merged with their own flow control bits
+const TUBE_ULA_CONTROL_FLAG_MASK = 0x3f;
+//  every status register except register 1's reads its unused bits as ones
+const TUBE_ULA_STATUS_UNUSED_BITS = 0x3f;
 
 export class Tube {
     constructor(hostCpu, parasiteCpu) {
@@ -54,6 +59,7 @@ export class Tube {
         this.parasiteToHostFifoByteCount1 = 0;
         this.parasiteToHostFifoByteCount3 = 0;
         this.hostToParasiteFifoByteCount3 = 0;
+        this.parasiteNmi = false;
         this.debug = false;
     }
     reset(updateInternalStatusRegister = true) {
@@ -61,8 +67,10 @@ export class Tube {
             this.internalStatusRegister = 0;
         }
         for (let i = 0; i < 4; i++) {
-            this.hostStatus[i] = TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
-            this.parasiteStatus[i] = TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+            //  register 1's spare bits carry the control flags instead, merged in when either side reads it
+            const unused = i === TUBE_ULA_R1 ? 0 : TUBE_ULA_STATUS_UNUSED_BITS;
+            this.hostStatus[i] = TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL | unused;
+            this.parasiteStatus[i] = TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL | unused;
             if (i === TUBE_ULA_R3) {
                 //  register 3 has one valid but insignificant byte in the parasite to host FIFO (this is to prevent an immediate PNMI state after PRST)
                 this.hostStatus[i] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
@@ -73,7 +81,38 @@ export class Tube {
         //  see info in the loop above from Tube Application Note about R3
         this.parasiteToHostFifoByteCount3 = 1;
         this.hostToParasiteFifoByteCount3 = 0;
+        this.parasiteNmi = false;
         this.updateInterrupts();
+    }
+
+    /**
+     * The register 3 condition the ULA raises an NMI from, before the M flag gates it: the host has
+     * queued a whole transfer for the parasite, or the parasite has nothing queued back to the host.
+     *
+     * @returns {boolean} whether the condition currently holds
+     */
+    r3NmiCondition() {
+        const bytesPerTransfer = this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_2_BYTE_R3_DATA ? 2 : 1;
+        return this.hostToParasiteFifoByteCount3 >= bytesPerTransfer || this.parasiteToHostFifoByteCount3 === 0;
+    }
+
+    /** @returns {boolean} whether that condition is currently allowed to reach the parasite's NMI pin. */
+    parasiteNmiEnabled() {
+        return !!(this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_PARASITE_NMI_FROM_R3_DATA);
+    }
+
+    /** Drops the NMI request once the parasite has vectored through it. */
+    acknowledgeNmi() {
+        this.parasiteNmi = false;
+        this.updateInterrupts();
+    }
+
+    /**
+     * Withdraws a pending NMI whose register 3 condition has since gone away. Only the parasite's own
+     * accesses can do this: a transfer it has satisfied no longer needs servicing.
+     */
+    clearNmiIfSatisfied() {
+        if (!this.r3NmiCondition()) this.parasiteNmi = false;
     }
     updateInterrupts() {
         //  host IRQ
@@ -97,21 +136,11 @@ export class Tube {
             this.parasiteCpu.interrupt = false;
         }
         //  parasite NMI
-        //  (from Tube Application Note)
-        //  either: M = 1, V = 0, 1 or 2 bytes in host to parasite register 3 FIFO or 0 bytes in parasite
-        //  to host register 3 FIFO (this allows single byte transfers across
-        //  register 3)
-        //  or: M = 1, V = 1, 2 bytes in host to parasite register 3 FIFO or 0 bytes in parasite to host
-        //  register 3 FIFO. (this allows two byte transfers across register 3)
-        const r3Size = this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_2_BYTE_R3_DATA ? 2 : 1;
-        if (
-            this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_ENABLE_PARASITE_NMI_FROM_R3_DATA &&
-            (this.hostToParasiteFifoByteCount3 >= r3Size || this.parasiteToHostFifoByteCount3 === 0)
-        ) {
-            this.parasiteCpu.NMI(true);
-        } else {
-            this.parasiteCpu.NMI(false);
-        }
+        //  The ULA latches its NMI request rather than presenting the register 3 condition as a level:
+        //  each host access to register 3 that gives the parasite something to do raises a request, and
+        //  only the parasite can retire one, by servicing the transfer or by taking the NMI. Recomputing
+        //  the condition here instead would lose every request raised while an earlier one still stood.
+        this.parasiteCpu.NMI(this.parasiteNmi && this.parasiteNmiEnabled());
         //  parasite CPU RESET held low - not implemented in the CPU - the CPU should be frozen until this signal is released
         this.parasiteCpu.resetHeldLow = this.internalStatusRegister & TUBE_ULA_FLAG_STATUS_PARASITE_RESET_ACTIVE_LOW;
     }
@@ -122,8 +151,7 @@ export class Tube {
                 result =
                     (this.hostStatus[TUBE_ULA_R1] &
                         (TUBE_ULA_FLAG_DATA_AVAILABLE | TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL)) |
-                    (this.internalStatusRegister &
-                        ~(TUBE_ULA_FLAG_DATA_AVAILABLE | TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL));
+                    (this.internalStatusRegister & TUBE_ULA_CONTROL_FLAG_MASK);
                 break;
             case TUBE_ULA_R1_DATA_ADDRESS:
                 result = this.parasiteToHostData[TUBE_ULA_R1][0];
@@ -143,8 +171,10 @@ export class Tube {
                 break;
             case TUBE_ULA_R2_DATA_ADDRESS:
                 result = this.parasiteToHostData[TUBE_ULA_R2][0];
-                this.parasiteStatus[TUBE_ULA_R2] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
-                this.hostStatus[TUBE_ULA_R2] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                if (this.hostStatus[TUBE_ULA_R2] & TUBE_ULA_FLAG_DATA_AVAILABLE) {
+                    this.parasiteStatus[TUBE_ULA_R2] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+                    this.hostStatus[TUBE_ULA_R2] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                }
                 break;
             case TUBE_ULA_R3_STATUS_ADDRESS:
                 result = this.hostStatus[TUBE_ULA_R3];
@@ -157,6 +187,8 @@ export class Tube {
                     this.parasiteToHostFifoByteCount3--;
                     if (this.parasiteToHostFifoByteCount3 === 0) {
                         this.hostStatus[TUBE_ULA_R3] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                        //  the parasite owes the host a byte, so ask it for one
+                        this.parasiteNmi = true;
                     }
                 }
                 break;
@@ -165,8 +197,10 @@ export class Tube {
                 break;
             case TUBE_ULA_R4_DATA_ADDRESS:
                 result = this.parasiteToHostData[TUBE_ULA_R4][0];
-                this.parasiteStatus[TUBE_ULA_R4] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
-                this.hostStatus[TUBE_ULA_R4] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                if (this.hostStatus[TUBE_ULA_R4] & TUBE_ULA_FLAG_DATA_AVAILABLE) {
+                    this.parasiteStatus[TUBE_ULA_R4] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+                    this.hostStatus[TUBE_ULA_R4] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                }
                 break;
         }
         this.updateInterrupts();
@@ -180,14 +214,13 @@ export class Tube {
             console.log("TUBE ULA: host write " + utils.hexword(address) + " = " + utils.hexbyte(value));
         }
         switch (address & 7) {
-            case TUBE_ULA_R1_STATUS_ADDRESS:
+            case TUBE_ULA_R1_STATUS_ADDRESS: {
+                //  M and V both feed the NMI, so a write here can raise or drop the request on its own
+                const nmiBefore = this.parasiteNmiEnabled() && this.r3NmiCondition();
                 if (value & TUBE_ULA_FLAG_STATUS_SET_CONTROL_FLAGS) {
-                    this.internalStatusRegister |=
-                        value & ~(TUBE_ULA_FLAG_DATA_AVAILABLE | TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL);
+                    this.internalStatusRegister |= value & TUBE_ULA_CONTROL_FLAG_MASK;
                 } else {
-                    this.internalStatusRegister &= ~(
-                        value & ~(TUBE_ULA_FLAG_DATA_AVAILABLE | TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL)
-                    );
+                    this.internalStatusRegister &= ~(value & TUBE_ULA_CONTROL_FLAG_MASK);
                 }
                 if (value & TUBE_ULA_FLAG_STATUS_CLEAR_ALL_TUBE_REGISTERS) {
                     this.reset(false);
@@ -200,7 +233,11 @@ export class Tube {
                         this.parasiteCpu.reset(true); //  this in turn calls our this.reset(true)
                     }
                 }
+                const nmiAfter = this.parasiteNmiEnabled() && this.r3NmiCondition();
+                if (!nmiBefore && nmiAfter) this.parasiteNmi = true;
+                if (!nmiAfter) this.parasiteNmi = false;
                 break;
+            }
             case TUBE_ULA_R1_DATA_ADDRESS:
                 if (this.hostStatus[TUBE_ULA_R1] & TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL) {
                     this.hostToParasiteData[TUBE_ULA_R1][0] = value;
@@ -224,12 +261,15 @@ export class Tube {
                         if (this.hostToParasiteFifoByteCount3 === 2) {
                             this.parasiteStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
                             this.hostStatus[TUBE_ULA_R3] &= ~TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+                            //  a whole transfer is waiting, so ask the parasite to take it
+                            this.parasiteNmi = true;
                         }
                     } else {
                         this.hostToParasiteData[TUBE_ULA_R3][0] = value;
                         this.hostToParasiteFifoByteCount3 = 1;
                         this.parasiteStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
                         this.hostStatus[TUBE_ULA_R3] &= ~TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+                        this.parasiteNmi = true;
                     }
                 }
                 break;
@@ -250,20 +290,24 @@ export class Tube {
         let result = 0;
         switch (address & 7) {
             case TUBE_ULA_R1_STATUS_ADDRESS:
-                result = this.parasiteStatus[TUBE_ULA_R1];
+                result = this.parasiteStatus[TUBE_ULA_R1] | (this.internalStatusRegister & TUBE_ULA_CONTROL_FLAG_MASK);
                 break;
             case TUBE_ULA_R1_DATA_ADDRESS:
                 result = this.hostToParasiteData[TUBE_ULA_R1][0];
-                this.hostStatus[TUBE_ULA_R1] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
-                this.parasiteStatus[TUBE_ULA_R1] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                if (this.parasiteStatus[TUBE_ULA_R1] & TUBE_ULA_FLAG_DATA_AVAILABLE) {
+                    this.hostStatus[TUBE_ULA_R1] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+                    this.parasiteStatus[TUBE_ULA_R1] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                }
                 break;
             case TUBE_ULA_R2_STATUS_ADDRESS:
                 result = this.parasiteStatus[TUBE_ULA_R2];
                 break;
             case TUBE_ULA_R2_DATA_ADDRESS:
                 result = this.hostToParasiteData[TUBE_ULA_R2][0];
-                this.hostStatus[TUBE_ULA_R2] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
-                this.parasiteStatus[TUBE_ULA_R2] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                if (this.parasiteStatus[TUBE_ULA_R2] & TUBE_ULA_FLAG_DATA_AVAILABLE) {
+                    this.hostStatus[TUBE_ULA_R2] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+                    this.parasiteStatus[TUBE_ULA_R2] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                }
                 break;
             case TUBE_ULA_R3_STATUS_ADDRESS:
                 result = this.parasiteStatus[TUBE_ULA_R3];
@@ -277,6 +321,7 @@ export class Tube {
                         this.hostStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
                         this.parasiteStatus[TUBE_ULA_R3] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
                     }
+                    this.clearNmiIfSatisfied();
                 }
                 break;
             case TUBE_ULA_R4_STATUS_ADDRESS:
@@ -284,8 +329,10 @@ export class Tube {
                 break;
             case TUBE_ULA_R4_DATA_ADDRESS:
                 result = this.hostToParasiteData[TUBE_ULA_R4][0];
-                this.hostStatus[TUBE_ULA_R4] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
-                this.parasiteStatus[TUBE_ULA_R4] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                if (this.parasiteStatus[TUBE_ULA_R4] & TUBE_ULA_FLAG_DATA_AVAILABLE) {
+                    this.hostStatus[TUBE_ULA_R4] |= TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
+                    this.parasiteStatus[TUBE_ULA_R4] &= ~TUBE_ULA_FLAG_DATA_AVAILABLE;
+                }
                 break;
         }
         this.updateInterrupts();
@@ -304,13 +351,15 @@ export class Tube {
             parasiteToHostFifoByteCount1: this.parasiteToHostFifoByteCount1,
             parasiteToHostFifoByteCount3: this.parasiteToHostFifoByteCount3,
             hostToParasiteFifoByteCount3: this.hostToParasiteFifoByteCount3,
+            parasiteNmi: this.parasiteNmi,
         };
     }
 
     /**
      * The interrupt and reset lines are not saved: they are derived from the status registers
      * and FIFO counts, in the same way the host's `interrupt` is rebuilt by the VIA and ACIA
-     * restores.
+     * restores. The latched NMI request is saved, as nothing else records whether the parasite
+     * still owes the host a transfer.
      */
     restoreState(state) {
         this.internalStatusRegister = state.internalStatusRegister;
@@ -323,6 +372,8 @@ export class Tube {
         this.parasiteToHostFifoByteCount1 = state.parasiteToHostFifoByteCount1;
         this.parasiteToHostFifoByteCount3 = state.parasiteToHostFifoByteCount3;
         this.hostToParasiteFifoByteCount3 = state.hostToParasiteFifoByteCount3;
+        //  snapshots taken before the ULA latched its NMI have to fall back on the condition itself
+        this.parasiteNmi = state.parasiteNmi ?? this.r3NmiCondition();
         this.updateInterrupts();
     }
 
@@ -366,6 +417,7 @@ export class Tube {
                         this.hostStatus[TUBE_ULA_R3] |= TUBE_ULA_FLAG_DATA_AVAILABLE;
                         this.parasiteStatus[TUBE_ULA_R3] &= ~TUBE_ULA_FLAG_DATA_REGISTER_NOT_FULL;
                     }
+                    this.clearNmiIfSatisfied();
                 }
                 break;
             case TUBE_ULA_R4_DATA_ADDRESS:

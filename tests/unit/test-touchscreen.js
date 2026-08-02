@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 
+import { findModel } from "../../src/models.js";
 import { Scheduler } from "../../src/scheduler.js";
-import { TouchScreen, PollCycles } from "../../src/touchscreen.js";
+import { TouchScreen } from "../../src/touchscreen.js";
 
 /** Drain everything the touchscreen has to send. */
 function readAll(touchScreen) {
@@ -21,35 +22,37 @@ function transmit(touchScreen, command) {
 describe("TouchScreen", () => {
     let scheduler;
     let touchScreen;
+    let pollCycles;
 
     beforeEach(() => {
         scheduler = new Scheduler();
-        touchScreen = new TouchScreen(scheduler);
+        touchScreen = new TouchScreen(scheduler, findModel("B-DFS1.2").cyclesPerSecond);
+        pollCycles = touchScreen.pollCycles;
     });
 
     it("polls repeatedly once the guest selects mode 129", () => {
         touchScreen.onMouse(0.5, 0.5, true);
         transmit(touchScreen, "M129.");
 
-        scheduler.polltime(PollCycles);
+        scheduler.polltime(pollCycles);
         // Centre of the screen, with the button down.
         expect(readAll(touchScreen)).toEqual([0x43, 0x4c, 0x43, 0x42, 0x2e]);
 
-        scheduler.polltime(PollCycles);
+        scheduler.polltime(pollCycles);
         expect(readAll(touchScreen)).toEqual([0x43, 0x4c, 0x43, 0x42, 0x2e]);
     });
 
     it("reports nothing touched before the mouse is ever moved", () => {
         transmit(touchScreen, "M130.");
 
-        scheduler.polltime(PollCycles);
+        scheduler.polltime(pollCycles);
         expect(readAll(touchScreen)).toEqual([0x4f, 0x4f, 0x4f, 0x4f, 0x2e]);
     });
 
     it("does not poll in other modes", () => {
         transmit(touchScreen, "M128.");
 
-        scheduler.polltime(10 * PollCycles);
+        scheduler.polltime(10 * pollCycles);
         expect(readAll(touchScreen)).toEqual([]);
     });
 

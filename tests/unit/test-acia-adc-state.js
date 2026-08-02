@@ -2,13 +2,14 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Acia } from "../../src/acia.js";
 import { Adc } from "../../src/adc.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { findModel } from "../../src/models.js";
 
 describe("Acia snapshotState / restoreState", () => {
     let scheduler, cpu, acia;
 
     beforeEach(() => {
         scheduler = new Scheduler();
-        cpu = { interrupt: 0 };
+        cpu = { interrupt: 0, model: findModel("B-DFS1.2") };
         const toneGen = { mute: () => {}, tone: () => {} };
         acia = new Acia(cpu, toneGen, scheduler);
     });

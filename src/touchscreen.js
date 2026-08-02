@@ -3,7 +3,6 @@
 import * as utils from "./utils.js";
 
 const PollHz = 8; // Made up
-export const PollCycles = (2 * 1000 * 1000) / PollHz;
 
 function doScale(val, scale, margin) {
     val = (val - margin) / (1 - 2 * margin);
@@ -11,8 +10,9 @@ function doScale(val, scale, margin) {
 }
 
 export class TouchScreen {
-    constructor(scheduler) {
+    constructor(scheduler, cyclesPerSecond) {
         this.scheduler = scheduler;
+        this.pollCycles = cyclesPerSecond / PollHz;
         this.mouse = { x: 0, y: 0, button: 0 };
         this.outBuffer = new utils.Fifo(16);
         this.delay = 0;
@@ -47,7 +47,7 @@ export class TouchScreen {
 
     poll() {
         this.doRead();
-        this.pollTask.reschedule(PollCycles);
+        this.pollTask.reschedule(this.pollCycles);
     }
 
     store(byte) {
@@ -81,6 +81,6 @@ export class TouchScreen {
                 if (this.mode === 1) this.doRead();
                 break;
         }
-        this.pollTask.ensureScheduled(this.mode === 129 || this.mode === 130, PollCycles);
+        this.pollTask.ensureScheduled(this.mode === 129 || this.mode === 130, this.pollCycles);
     }
 }
