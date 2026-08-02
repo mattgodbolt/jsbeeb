@@ -352,7 +352,7 @@ sbBind(document.querySelector(".sidebar.bottom"), parsedQuery.sbBottom, function
 });
 
 if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
-const cpuSpeed = model.clockMhz * 1000 * 1000;
+const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 const MaxCyclesPerFrame = clocksPerSecond / 10;
 
@@ -533,7 +533,7 @@ pastetext.addEventListener("drop", async function (event) {
         await loadStateFromFile(file, arrayBuffer);
     } else if (file.name.toLowerCase().endsWith(".uef")) {
         // Regular UEF tape image (not a BeebEm save state)
-        setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model.isAtom));
+        setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
     } else {
         await loadHTMLFile(file);
     }
@@ -619,7 +619,7 @@ window.addEventListener("beforeunload", function (event) {
 });
 
 if (config.hasEconet) {
-    econet = new Econet(stationId);
+    econet = new Econet(stationId, model.cyclesPerSecond);
 } else {
     document.getElementById("fsmenuitem").style.display = "none";
 }
@@ -1207,17 +1207,16 @@ async function loadTapeImage(tapeImage) {
     const split = splitImage(tapeImage);
     tapeImage = split.image;
     const schema = split.schema;
-    const isAtom = model.isAtom;
 
     switch (schema) {
         case "|":
         case "sth":
-            return await loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage), isAtom);
+            return await loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage), model);
 
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
             const { name, data } = await utils.unzipDiscImage(arr);
-            return await loadTapeFromData(name, data, isAtom);
+            return await loadTapeFromData(name, data, model);
         }
 
         case "http":
@@ -1232,7 +1231,7 @@ async function loadTapeImage(tapeImage) {
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
-            return await loadTapeFromData(tapeImage, tapeData, isAtom);
+            return await loadTapeFromData(tapeImage, tapeData, model);
         }
 
         default: {
@@ -1244,7 +1243,7 @@ async function loadTapeImage(tapeImage) {
                 tapeData = unzipped.data;
                 tapeName = unzipped.name;
             }
-            return await loadTapeFromData(tapeName, tapeData, isAtom);
+            return await loadTapeFromData(tapeName, tapeData, model);
         }
     }
 }
@@ -1277,7 +1276,7 @@ document.getElementById("tape_load").addEventListener("change", async function (
         tapeData = unzipped.data;
         tapeName = unzipped.name;
     }
-    setProcessorTape(await loadTapeFromData(tapeName, tapeData, model.isAtom));
+    setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
     delete parsedQuery.tape;
     updateUrl();
     bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
@@ -1940,7 +1939,7 @@ function VirtualSpeedUpdater() {
         if (this.cycles) {
             const thisMHz = this.cycles / this.time / 1000;
             this.v.textContent = thisMHz.toFixed(1);
-            if (this.cycles >= 10 * 2 * 1000 * 1000) {
+            if (this.cycles >= 10 * cpuSpeed) {
                 this.cycles = this.time = 0;
             }
             this.header.style.color = this.speedy ? "red" : "white";

@@ -78,4 +78,20 @@ describe("Video6847", () => {
             expect(vdg.scanlineCounter).toBe(0);
         });
     });
+
+    describe("VDG clock", () => {
+        const fakeCpu = (clockMhz) => ({ model: { clockMhz } });
+
+        it("advances 3.638004 VDG cycles per cycle of the Atom's 1MHz CPU", () => {
+            const vdg = new Video6847(makeStubVideo());
+            vdg.reset(fakeCpu(1), {});
+            expect(vdg.vdgCyclesPerCpuCycle).toBeCloseTo(3.638004, 6);
+        });
+
+        it("advances half as far per cycle if the CPU runs twice as fast", () => {
+            const vdg = new Video6847(makeStubVideo());
+            vdg.reset(fakeCpu(2), {});
+            expect(vdg.vdgCyclesPerCpuCycle).toBeCloseTo(3.638004 / 2, 6);
+        });
+    });
 });
