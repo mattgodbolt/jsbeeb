@@ -249,8 +249,7 @@ export function getKeyMapAtom(keyLayout) {
         keys2[shiftDown][s] = colRow;
     }
 
-    // Deliberately replace any existing binding for a key, in both shift states.
-    // Unlike `map` this doesn't warn about the clash: overriding a default is the point.
+    // Overriding a default is the point here, so unlike `map` this doesn't warn about the clash.
     function remap(s, colRow) {
         keys2[true][s] = colRow;
         keys2[false][s] = colRow;
@@ -484,9 +483,7 @@ export function getKeyMapAtom(keyLayout) {
         // Z - M normal
     }
 
-    // User key mapping from `KEY.<host>=<atom>` URL parameters; see the "Remapping Keys"
-    // section of the README. Done last so it overrides the defaults above, and read
-    // without consuming so the mapping survives rebuilding the map (layout change).
+    // `KEY.` URL parameters, applied last so they win. See the equivalent in `getKeyMap`.
     for (const mapping of userKeymap) {
         remap(keyCodes[mapping.native], ATOM[mapping.key]);
     }

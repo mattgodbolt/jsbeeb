@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
     parseQueryString,
     buildUrlFromParams,
-    processKeyboardParams,
+    processInputParams,
     processAutobootParams,
     parseMediaParams,
     guessModelFromHostname,
@@ -221,7 +221,7 @@ describe("URL Parameters", () => {
         });
     });
 
-    describe("processKeyboardParams", () => {
+    describe("processInputParams", () => {
         it("should process keyboard mappings", () => {
             const machineKeys = { CTRL: "CTRL", SHIFT: "SHIFT" };
             const keyCodes = { A: 65, B: 66 };
@@ -236,7 +236,7 @@ describe("URL Parameters", () => {
                 other: "value",
             };
 
-            const warnings = processKeyboardParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad);
+            const warnings = processInputParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad);
 
             expect(userKeymap).toEqual([
                 { native: "A", key: "CTRL" },
@@ -255,7 +255,7 @@ describe("URL Parameters", () => {
             const userKeymap = [];
             const gamepad = { remap: vi.fn().mockReturnValue('unknown gamepad control "WIBBLE".') };
 
-            const warnings = processKeyboardParams(
+            const warnings = processInputParams(
                 { "KEY.A": "NOTAKEY", "KEY.NOTAKEY": "CTRL", "GP.WIBBLE": "CTRL" },
                 machineKeys,
                 keyCodes,

@@ -657,8 +657,7 @@ export function getKeyMap(keyLayout) {
         keys2[shiftDown][s] = colRow;
     }
 
-    // Deliberately replace any existing binding for a key, in both shift states.
-    // Unlike `map` this doesn't warn about the clash: overriding a default is the point.
+    // Overriding a default is the point here, so unlike `map` this doesn't warn about the clash.
     function remap(s, colRow) {
         keys2[true][s] = colRow;
         keys2[false][s] = colRow;
@@ -942,9 +941,8 @@ export function getKeyMap(keyLayout) {
     // eg Master Dunjunz needs # Del 3 , * Enter
     // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
 
-    // User key mapping from `KEY.<host>=<bbc>` URL parameters; see the "Remapping Keys"
-    // section of the README. Done last so it overrides the defaults above, and read
-    // without consuming so the mapping survives rebuilding the map (layout or model change).
+    // `KEY.` URL parameters, applied last so they win. Not consumed: this map is rebuilt on
+    // layout and model changes, and the user's mapping has to survive that.
     for (const mapping of userKeymap) {
         remap(keyCodes[mapping.native], BBC[mapping.key]);
     }

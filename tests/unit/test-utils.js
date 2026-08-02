@@ -19,7 +19,7 @@ import {
     userKeymap,
 } from "../../src/utils.js";
 import { ATOM, getKeyMapAtom } from "../../src/utils_atom.js";
-import { processKeyboardParams } from "../../src/url-params.js";
+import { processInputParams } from "../../src/url-params.js";
 
 describe("Utils tests", function () {
     "use strict";
@@ -359,7 +359,7 @@ describe("User key mapping from KEY. URL parameters", function () {
     });
 
     const applyParams = (params, machineKeys) =>
-        processKeyboardParams(params, machineKeys, keyCodes, userKeymap, { remap: () => null });
+        processInputParams(params, machineKeys, keyCodes, userKeymap, { remap: () => null });
 
     it("overrides the default binding for the host key", function () {
         expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.RETURN);

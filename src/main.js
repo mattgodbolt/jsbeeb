@@ -52,7 +52,7 @@ import {
     parseMediaParams,
     parseQueryString,
     processAutobootParams,
-    processKeyboardParams,
+    processInputParams,
 } from "./url-params.js";
 
 let processor;
@@ -297,10 +297,8 @@ config.setDisplayMode(displayMode);
 
 model = config.model;
 
-// Process keyboard and gamepad mappings. Must come after the model is known: `KEY.`
-// parameters are validated against the emulated machine's key names, which differ on the
-// Atom. Anything we couldn't apply is shown below, once the error dialog is available.
-const keyMappingWarnings = processKeyboardParams(
+// Must come after we know the model, to validate names against those of the hardware.
+const keyMappingWarnings = processInputParams(
     parsedQuery,
     model.isAtom ? utils_atom.ATOM : BBC,
     keyCodes,
@@ -383,8 +381,6 @@ function showError(context, error) {
     errorDialogModal.show();
 }
 
-// A mistyped `KEY.`/`GP.` parameter is easy to miss otherwise: the emulator starts up
-// looking perfectly normal, but with the keys still where the game put them.
 if (keyMappingWarnings.length) {
     showError("applying the key mappings in the URL", keyMappingWarnings.join(" "));
 }

@@ -169,16 +169,14 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
  * @param {Object} gamepad - Gamepad object for handling mapping
  * @returns {string[]} descriptions of any mappings that were skipped, for showing to the user
  */
-export function processKeyboardParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad) {
+export function processInputParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad) {
     const warnings = [];
 
     Object.entries(parsedQuery).forEach(([key, val]) => {
         if (!val) return;
 
-        // Keyboard remapping: `KEY.<host key>=<machine key>`, eg `KEY.CAPSLOCK=CTRL` makes the
-        // host's Caps Lock press the BBC's Ctrl. Host names come from `keyCodes` (so it's
-        // `ENTER`, not `RETURN`), machine names from `BBC` (or `ATOM`); both are listed in the
-        // README's "Remapping Keys" section. Unrecognised names are skipped and reported.
+        // `KEY.<host key>=<machine key>`, eg `KEY.CAPSLOCK=CTRL`. Host names come from
+        // `keyCodes`, so the BBC's RETURN is ENTER here; both lists are in the README.
         if (key.toUpperCase().indexOf("KEY.") === 0) {
             const machineKey = val.toUpperCase();
             const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
