@@ -394,8 +394,11 @@ Present only when a co-processor was fitted.
 | `parasiteToHostFifoByteCount1` | number       | Bytes waiting in the parasite-to-host R1 FIFO       |
 | `parasiteToHostFifoByteCount3` | number       | Bytes waiting in the parasite-to-host R3 FIFO       |
 | `hostToParasiteFifoByteCount3` | number       | Bytes waiting in the host-to-parasite R3 FIFO       |
+| `parasiteNmi`                  | boolean      | Whether the ULA is holding an NMI request           |
 
-The interrupt and reset lines are not saved: they follow from the status registers and FIFO counts above, in the same way the host's `interrupt` follows from the VIA and ACIA state. The parasite's NMI is edge triggered, so `nmiLevel` and `nmiEdge` are saved, being the one part of it that cannot be recovered that way.
+The IRQ and reset lines are not saved: they follow from the status registers and FIFO counts above, in the same way the host's `interrupt` follows from the VIA and ACIA state.
+
+The parasite's NMI does not. The ULA latches its request rather than presenting the register 3 condition as a level, so once the parasite takes an NMI the request is retired while the condition that raised it may still hold. `parasiteNmi` is therefore real state and cannot be recomputed. Snapshots written before it existed fall back to the register 3 condition on restore, which is what the emulator used to derive the line from. `nmiLevel` and `nmiEdge` on the parasite itself are saved for the same reason: an edge already taken leaves no trace in the ULA.
 
 ## Known limitations (v3)
 

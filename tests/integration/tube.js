@@ -64,17 +64,35 @@ describe("Tube co-processor", () => {
         cpu.execute(200 * 1000);
         const state = cpu.snapshotState();
 
-        // As an imported snapshot can be: the ULA has R3 data pending with NMI enabled, but the
+        // As an imported snapshot can be: the ULA is holding an NMI request with NMI enabled, but the
         // parasite's own idea of the line predates it.
         state.tube.nmiLevel = false;
         state.tube.nmiEdge = false;
         state.tube.ula.internalStatusRegister |= TubeStatusEnableParasiteNmiFromR3;
-        state.tube.ula.parasiteToHostFifoByteCount3 = 0;
+        state.tube.ula.parasiteNmi = true;
 
         cpu.restoreState(state);
 
         expect(cpu.tube._nmiLevel).toBe(true);
         expect(cpu.tube._nmiEdge).toBe(true);
+    });
+
+    it("takes a snapshot without a latched request back to the register 3 condition", async () => {
+        const machine = new TestMachine("Master", { tube: true });
+        await machine.initialise();
+        const cpu = machine.processor;
+        cpu.execute(200 * 1000);
+        const state = cpu.snapshotState();
+
+        // As a snapshot taken before the ULA latched its request would be.
+        delete state.tube.ula.parasiteNmi;
+        state.tube.ula.internalStatusRegister |= TubeStatusEnableParasiteNmiFromR3;
+        state.tube.ula.parasiteToHostFifoByteCount3 = 0;
+
+        cpu.restoreState(state);
+
+        expect(cpu.tube.tube.parasiteNmi).toBe(true);
+        expect(cpu.tube._nmiLevel).toBe(true);
     });
 
     it("does not take a latched NMI across a parasite reset", async () => {
