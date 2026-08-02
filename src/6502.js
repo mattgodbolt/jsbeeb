@@ -213,6 +213,9 @@ class Base6502 {
         if (this._nmiLevel && !prevLevel) this._nmiEdge = true;
     }
 
+    /** Called as the NMI vector is taken, for devices that withdraw their request at that point. */
+    nmiAcknowledged() {}
+
     polltime() {
         throw new Error("Must be overridden");
     }
@@ -239,6 +242,7 @@ class Base6502 {
         if ((this.model.nmos || isIrq) && this._nmiEdge) {
             vector = 0xfffa;
             this._nmiEdge = false;
+            this.nmiAcknowledged();
         }
         this.takeInt = false;
         this.pc = this.readmem(vector) | (this.readmem(vector + 1) << 8);
@@ -449,6 +453,10 @@ class Tube6502 extends Base6502 {
 
     readmemZpStack(offset) {
         return this.memory[offset & 0xffff];
+    }
+
+    nmiAcknowledged() {
+        this.tube.acknowledgeNmi();
     }
 
     writemem(addr, b) {
