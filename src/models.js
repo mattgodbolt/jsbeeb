@@ -19,10 +19,11 @@ const CpuModel = Object.freeze({
  * to any number of machines without one session's settings leaking into the next.
  */
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, cmosOverride, banks } = {}) {
+    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, cmosOverride, banks, clockMhz } = {}) {
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
+        this.clockMhz = clockMhz;
         this.banks = banks;
         this._cpuModel = cpuModel;
         this.isMaster = isMaster;
@@ -63,6 +64,12 @@ function pickAnfs(cmos) {
 function pickDfs(cmos) {
     cmos[19] = (cmos[19] & 0xf0) | 9;
     return cmos;
+}
+
+/** A second processor. Its clock is what the multiplier in the emulation config multiplies. */
+function tubeModel({ name, os, cpuModel, clockMhz }) {
+    if (!(clockMhz > 0)) throw new Error(`Co-processor ${name} has no clock speed`);
+    return new Model({ name, synonyms: [], os, cpuModel, isMaster: false, clockMhz });
 }
 
 function atomModel({ name, synonyms, os, banks }) {
@@ -210,13 +217,20 @@ export const allModels = [
         synonyms: ["Atom-DOS"],
         os: ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
     }),
-    // Although this can not be explicitly selected as a model, it is required by the configuration builder later
-    new Model({
+    // Neither can be selected as a model: they are fitted to one, by the configuration builder later.
+    tubeModel({
         name: "Tube65C02",
-        synonyms: [],
         os: ["tube/6502Tube.rom"],
+        // TODO(#746): the external second processor was an NMOS 6502A.
         cpuModel: CpuModel.CMOS65C02,
-        isMaster: false,
+        clockMhz: 3,
+    }),
+    tubeModel({
+        name: "Tube65C102",
+        os: ["tube/65C102Tube.rom"],
+        // TODO(#746): Acorn's 65C102 has no Rockwell bit instructions.
+        cpuModel: CpuModel.CMOS65C02,
+        clockMhz: 4,
     }),
 ];
 
@@ -274,11 +288,18 @@ export const basicOnly = new Model({
 });
 
 /**
- * The only second processor jsbeeb emulates. Machine-building code passes this as the
- * emulation config's `tube`, so that 6502.js needn't import this module and close an
- * import cycle via the FDC modules.
+ * The second processors jsbeeb emulates: the external 3MHz box, and the Master Turbo's
+ * internal 4MHz board. Machine-building code passes one of these as the emulation config's
+ * `tube`, so that 6502.js needn't import this module and close an import cycle via the FDC
+ * modules.
  */
 export const TubeModel = findModel("Tube65C02");
+export const TurboTubeModel = findModel("Tube65C102");
+
+/** @returns {Model} the second processor sold for this machine: the Turbo board for a Master. */
+export function tubeModelFor(model) {
+    return model.isMaster ? TurboTubeModel : TubeModel;
+}
 
 // After the isTest assignments above, so those still apply.
 for (const model of [...allModels, TEST_6502, TEST_65C02, TEST_65C12, basicOnly]) {

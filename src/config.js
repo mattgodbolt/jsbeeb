@@ -1,10 +1,12 @@
 "use strict";
-import { allModels, findModel } from "./models.js";
+import { allModels, findModel, tubeModelFor } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
-import { TubeCpuClockMhz } from "./6502.js";
 
-function showTubeCpuMultiplier(value) {
-    document.getElementById("tubeCpuMultiplierValue").textContent = `${value}x (${value * TubeCpuClockMhz}MHz)`;
+const round = (value) => Number(value.toFixed(2));
+
+/** @returns {string} the speed a multiplier gives this machine's co-processor, e.g. "1.6x (4.8MHz)". */
+export function tubeCpuSpeedLabel(multiplier, model) {
+    return `${round(multiplier)}x (${round(multiplier * tubeModelFor(model).clockMhz)}MHz)`;
 }
 
 /**
@@ -105,6 +107,7 @@ export class Config extends EventTarget {
             if (!link) return;
             this.changed.model = link.dataset.target;
             this.setDropdownText(link.textContent);
+            this.showTubeCpuMultiplier(this.tubeCpuMultiplier, findModel(link.dataset.target));
             this.showRestartPending();
         });
 
@@ -118,8 +121,8 @@ export class Config extends EventTarget {
         }
 
         document.getElementById("tubeCpuMultiplier").addEventListener("input", () => {
-            const val = parseInt(document.getElementById("tubeCpuMultiplier").value, 10);
-            showTubeCpuMultiplier(val);
+            const val = parseFloat(document.getElementById("tubeCpuMultiplier").value);
+            this.showTubeCpuMultiplier(val);
             this.changed.tubeCpuMultiplier = val;
         });
 
@@ -198,7 +201,11 @@ export class Config extends EventTarget {
     setTubeCpuMultiplier(value) {
         this.tubeCpuMultiplier = value;
         document.getElementById("tubeCpuMultiplier").value = value;
-        showTubeCpuMultiplier(value);
+        this.showTubeCpuMultiplier(value);
+    }
+
+    showTubeCpuMultiplier(value, model = this.model) {
+        document.getElementById("tubeCpuMultiplierValue").textContent = tubeCpuSpeedLabel(value, model);
     }
 
     setDropdownText(modelName) {

@@ -19,7 +19,7 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
-import { TubeModel } from "./models.js";
+import { tubeModelFor } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
@@ -138,7 +138,7 @@ const paramTypes = {
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
-    tubeCpuMultiplier: ParamTypes.INT,
+    tubeCpuMultiplier: ParamTypes.FLOAT,
     microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)
@@ -305,7 +305,7 @@ const emulationConfig = {
     cpuMultiplier,
     tubeCpuMultiplier: config.tubeCpuMultiplier,
     videoCyclesBatch: parsedQuery.videoCyclesBatch,
-    tube: config.coProcessor ? TubeModel : null,
+    tube: config.coProcessor ? tubeModelFor(config.model) : null,
     hasMusic5000: config.hasMusic5000,
     hasTeletextAdaptor: config.hasTeletextAdaptor,
     // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks

@@ -3,7 +3,7 @@
 
 import { FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
-import { TEST_6502, TEST_65C02, TEST_65C12, TubeModel } from "./models.js";
+import { TEST_6502, TEST_65C02, TEST_65C12, tubeModelFor } from "./models.js";
 import { FakeDdNoise } from "./ddnoise.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { Cpu6502, AtomCpu6502 } from "./6502.js";
@@ -30,7 +30,7 @@ export function fake6502(model, opts) {
         cmos: new Cmos(),
         cycleAccurate: opts.cycleAccurate,
         config: {
-            tube: opts.tube ? TubeModel : null,
+            tube: opts.tube ? tubeModelFor(model) : null,
             tubeCpuMultiplier: opts.tubeCpuMultiplier,
             cpuMultiplier: opts.cpuMultiplier,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
