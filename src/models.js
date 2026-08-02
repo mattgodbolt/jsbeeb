@@ -225,8 +225,7 @@ export const allModels = [
         name: "Tube65C02",
         synonyms: [],
         os: ["tube/6502Tube.rom"],
-        // The production ANC01 wedge carries a GTE 65SC02, whose x7 and xF columns are blank:
-        // the base CMOS set, which for us is CMOS65C12. Only pre-production boards were NMOS.
+        // The production wedge's GTE 65SC02 has no Rockwell bit instructions.
         cpuModel: CpuModel.CMOS65C12,
         isMaster: false,
         clockMhz: 3,
@@ -235,9 +234,7 @@ export const allModels = [
         name: "Tube65C102",
         synonyms: [],
         os: ["tube/65C102Tube.rom"],
-        // ADC06 boards are reported with both Rockwell R65C102s and GTE G65SC102s, and only the
-        // Rockwell part has the bit instructions. Staying with the superset until someone runs
-        // Dormann's Rockwell tests on real hardware: a superset only ever runs more, never less.
+        // Boards are reported with both Rockwell and GTE parts, so keep the superset of the two.
         cpuModel: CpuModel.CMOS65C02,
         isMaster: false,
         clockMhz: 4,

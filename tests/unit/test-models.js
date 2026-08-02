@@ -27,10 +27,9 @@ describe("Model", () => {
     });
 });
 
-const IncA = 0x1a; // Absent from the NMOS 6502, present on every CMOS part.
-const Smb0Zp = 0x87; // Present only on Rockwell parts; a one-byte undefined NOP on the rest.
-// Doubles as SMB0's operand and, on the parts where SMB0 is a one-byte NOP, as the NOP that
-// then runs in its place, so the two cases differ only in the byte SMB0 would have touched.
+const IncA = 0x1a;
+const Smb0Zp = 0x87; // A Rockwell instruction; a one-byte NOP on the base CMOS parts.
+// Chosen to be NOP, so it is harmless when read as an opcode rather than as SMB0's operand.
 const ScratchZp = 0xea;
 
 /** Assemble `program` into the parasite's RAM and run it from a known register state. */
@@ -44,9 +43,7 @@ function runOnParasite(model, program, { a = 0, x = 0 } = {}) {
     parasite.pc = ProgramStart;
     parasite.a = a;
     parasite.x = x;
-    // Tube6502.execute does nothing at all with fewer than three parasite cycles banked, so
-    // ask for enough host cycles to clear that on the slower of the two parasite clocks.
-    parasite.execute(4);
+    parasite.execute(4); // Below three parasite cycles, execute does nothing at all.
     return parasite;
 }
 
@@ -92,8 +89,7 @@ describe("fake6502 tube handling", () => {
     });
 
     it("gives the Rockwell bit instructions to the Turbo alone", () => {
-        // Same program either side, so the difference can only be the CPU. The Turbo keeps the
-        // superset deliberately: real ADC06 boards are reported with both Rockwell and GTE parts.
+        // Same program either side, so the difference can only be the CPU.
         expect(runOnParasite("B-DFS1.2", [Smb0Zp, ScratchZp]).memory[ScratchZp]).toBe(0);
         expect(runOnParasite("Master", [Smb0Zp, ScratchZp]).memory[ScratchZp]).toBe(1);
     });
