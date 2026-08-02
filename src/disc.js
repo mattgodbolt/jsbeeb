@@ -355,6 +355,25 @@ class Sector {
     }
 }
 
+// What the 64 bit mark detector holds at an address mark, split into high and low 32 bit halves.
+// The FM case only pins down the high half, the last eight zero bits of sync (0x88888888 being
+// FM data 0x00 with all clocks set); the low half is the marker byte itself, decoded separately.
+// The MFM case matches the whole of 0xaaaa448944894489.
+const FmSyncHi = 0x88888888;
+const MfmMarkerHi = 0xaaaa4489;
+const MfmMarkerLo = 0x44894489;
+const NibblesPerWord = 8;
+// Sync ahead of an address mark is counted in zero data bits, so this is two bytes' worth.
+// A run no longer than this is unusual enough to be worth logging.
+const ShortSyncZeros = 16;
+
+/** @returns {Number} how many low nibbles of `word` are the FM pulses for a zero data bit */
+function countSyncNibbles(word) {
+    let count = 0;
+    for (let bits = word; (bits & 0xf) === 0x8; bits >>>= 4) count++;
+    return count;
+}
+
 class Track {
     constructor(upper, trackNum, initialByte) {
         this.length = IbmDiscFormat.bytesPerTrack; // Default size, will be updated when track is populated
@@ -394,40 +413,40 @@ class Track {
         let doMfmMarkerByte = false;
         let isMfm = false;
         let pulses = 0;
-        let markDetector = 0n;
-        let markDetectorPrev = 0n;
-        const all64b = 0xffffffffffffffffn;
-        const top32of64b = 0xffffffff00000000n;
-        const fmMarker = 0x8888888800000000n;
-        const mfmMarker = 0xaaaa448944894489n;
+        // The mark detector is a 64 bit sliding window over the pulse stream, and its previous
+        // 64 bits. Both are pairs of unsigned 32 bit Numbers rather than BigInts, which cost an
+        // order of magnitude more in a loop that runs once per bit of every track.
+        let markDetectorHi = 0;
+        let markDetectorLo = 0;
+        let markDetectorPrevHi = 0;
+        let markDetectorPrevLo = 0;
         let dataByte;
         let sector = null;
         for (let pulseIndex = 0; pulseIndex < bitLength; ++pulseIndex) {
             if ((pulseIndex & 31) === 0) pulses = this.pulses2Us[pulseIndex >>> 5];
-            markDetectorPrev = (markDetectorPrev << 1n) & all64b;
-            markDetectorPrev |= markDetector >> 63n;
-            markDetector = (markDetector << 1n) & all64b;
-            shiftRegister = (shiftRegister << 1) & 0xffffffff;
+            markDetectorPrevHi = ((markDetectorPrevHi << 1) | (markDetectorPrevLo >>> 31)) >>> 0;
+            markDetectorPrevLo = ((markDetectorPrevLo << 1) | (markDetectorHi >>> 31)) >>> 0;
+            markDetectorHi = ((markDetectorHi << 1) | (markDetectorLo >>> 31)) >>> 0;
+            const pulseBit = pulses >>> 31;
+            markDetectorLo = ((markDetectorLo << 1) | pulseBit) >>> 0;
+            shiftRegister = ((shiftRegister << 1) | pulseBit) & 0xffffffff;
             numShifts++;
-            if (pulses & 0x80000000) {
-                markDetector |= 1n;
-                shiftRegister |= 1;
-            }
             pulses = (pulses << 1) & 0xffffffff;
-            if ((markDetector & top32of64b) === fmMarker) {
-                const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(Number(markDetector & 0xffffffffn));
+            if (markDetectorHi === FmSyncHi) {
+                const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(markDetectorLo);
                 if (iffyPulses || clocks !== IbmDiscFormat.markClockPattern) continue;
                 isMfm = false;
                 doMfmMarkerByte = false;
-                let num0s = 8;
-                for (let bits = markDetectorPrev; (bits & 0xfn) === 0x8n; bits >>= 4n) {
-                    num0s++;
-                }
-                if (num0s <= 16) {
+                const lowNibbles = countSyncNibbles(markDetectorPrevLo);
+                // A run reaching the top of the low word may continue into the high word.
+                const highNibbles = lowNibbles === NibblesPerWord ? countSyncNibbles(markDetectorPrevHi) : 0;
+                // Matching FmSyncHi already accounted for a whole word of sync.
+                const num0s = NibblesPerWord + lowNibbles + highNibbles;
+                if (num0s <= ShortSyncZeros) {
                     console.log(`Short zeros sync ${this.description}`);
                 }
                 dataByte = data;
-            } else if (markDetector === mfmMarker) {
+            } else if (markDetectorHi === MfmMarkerHi && markDetectorLo === MfmMarkerLo) {
                 // Next byte is MFM marker.
                 isMfm = true;
                 doMfmMarkerByte = true;
