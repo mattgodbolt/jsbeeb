@@ -28,6 +28,15 @@ async function render(model, program, { isAtom = false } = {}) {
     return video;
 }
 
+/** Distinct colours in a band, so a test cannot pass on a blank screen. */
+function coloursIn(video, band, left, right) {
+    const colours = new Set();
+    for (let y = band.top; y < band.bottom; ++y) {
+        for (let x = left; x < right; ++x) colours.add(video.fb32[y * FbWidth + x]);
+    }
+    return colours;
+}
+
 /** The bands covering an actual picture, ignoring stray single rows. */
 function pictureBands(video) {
     return findBands(video.lineGrid, 0, FbHeight).filter((band) => band.bottom - band.top > 8);
@@ -56,13 +65,20 @@ function gridDescribesPixels(video, band, left, right) {
 }
 
 describe("logical pixel grid over real screens", { timeout: 60000 }, () => {
-    // A pattern of single-pixel-wide vertical stripes is the strongest test
-    // available: if the grid were one step too wide, two colours would land
-    // inside one logical pixel and gridDescribesPixels would say so.
+    // Single-pixel-wide vertical stripes with a gap between them. If the grid
+    // claimed pixels were wider than they are, a lit and an unlit pixel would
+    // land inside one and gridDescribesPixels would say so. A grid that claimed
+    // pixels were *narrower* would still look uniform, so the expected width is
+    // asserted outright as well, and notBlank guards against the whole thing
+    // passing on an empty screen.
+    //
+    // 16 graphics units is 8 pixels in MODE 0, 4 in MODE 1 and 4, and 2 in
+    // MODE 2 and 5 — a gap in every mode under test.
     const stripes = (mode) => [
         `MODE ${mode}`,
         "VDU 23,1,0;0;0;0;",
-        "FOR X%=0 TO 1279 STEP 8:GCOL 0,X% MOD 4:MOVE X%,0:DRAW X%,1023:NEXT",
+        "GCOL 0,1",
+        "FOR X%=0 TO 1279 STEP 16:MOVE X%,0:DRAW X%,1023:NEXT",
     ];
 
     it.each([
@@ -77,6 +93,7 @@ describe("logical pixel grid over real screens", { timeout: 60000 }, () => {
         expect(bands).toHaveLength(1);
         expect(bands[0].texelsWide).toBe(expectedWidth);
         expect(bands[0].texelsHigh).toBe(2);
+        expect(coloursIn(video, bands[0], 200, 840).size).toBeGreaterThan(1);
         expect(gridDescribesPixels(video, bands[0], 200, 840)).toBeNull();
     });
 
@@ -87,6 +104,7 @@ describe("logical pixel grid over real screens", { timeout: 60000 }, () => {
         const bands = pictureBands(video);
         expect(bands.length).toBeGreaterThanOrEqual(1);
         expect(bands[0].texelsWide).toBe(1);
+        expect(coloursIn(video, bands[0], 250, 800).size).toBeGreaterThan(1);
     });
 
     it("records a grid for the Atom's 6847 as well", async () => {
@@ -100,6 +118,8 @@ describe("logical pixel grid over real screens", { timeout: 60000 }, () => {
         expect(bands[0].texelsWide).toBe(2);
         expect(bands[0].texelsHigh).toBe(2);
         expect(bands[0].bottom - bands[0].top).toBe(192 * 2);
+        expect(coloursIn(video, bands[0], 150, 600).size).toBeGreaterThan(1);
+        expect(gridDescribesPixels(video, bands[0], 150, 600)).toBeNull();
     });
 
     it("leaves rows outside the picture marked as not rendered", async () => {
