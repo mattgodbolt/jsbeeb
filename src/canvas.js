@@ -192,5 +192,18 @@ export function bestCanvas(canvas, filterClass) {
             console.warn(`${config.name} requires WebGL. Falling back to standard 2D canvas.`);
         }
     }
+
+    // A canvas that has handed out a WebGL context can never hand out a 2D one,
+    // so if the failure came from the filter rather than from WebGL itself, the
+    // 2D fallback below would throw and take the emulator with it. Try the
+    // plainest filter on the context we already have first.
+    if (filterClass !== PassthroughFilter) {
+        try {
+            return new GlCanvas(canvas, PassthroughFilter);
+        } catch (e) {
+            console.log("Unable to fall back to the passthrough filter: " + e);
+        }
+    }
+
     return new Canvas(canvas);
 }

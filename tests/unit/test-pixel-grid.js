@@ -146,6 +146,11 @@ describe("logical pixel grid", () => {
         });
     });
 
+    it("refuses a width it cannot describe rather than lying about it", () => {
+        expect(() => encodeLineGrid(9, false)).toThrow(/cannot be described/);
+        expect(() => encodeLineGrid(0, false)).toThrow(/cannot be described/);
+    });
+
     it("describes any width the video chips can produce", () => {
         // The BBC's ULA only ever selects powers of two, but the Atom's 6847
         // has its own geometry, so the field must not assume a power of two.

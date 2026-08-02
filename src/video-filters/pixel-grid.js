@@ -57,6 +57,11 @@ export function texelsPerPixel(ulaMode) {
  * @param {boolean} doubledLines whether this scanline was written to two rows
  */
 export function encodeLineGrid(texelsWide, doubledLines) {
+    // A width of 9 would set the doubling bit and read back as a doubled width
+    // of 1: a silent lie rather than a mismatch, and both implementations would
+    // agree on it. The widths come from mode-table arithmetic, so check.
+    if (texelsWide < 1 || texelsWide > LineGridWidthMask + 1)
+        throw new Error(`Logical pixel width ${texelsWide} cannot be described in a line grid descriptor`);
     return LineGridRendered | (texelsWide - 1) | (doubledLines ? LineGridVerticalDouble : 0);
 }
 

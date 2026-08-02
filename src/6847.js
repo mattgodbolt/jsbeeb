@@ -498,7 +498,12 @@ export class Video6847 {
                                 this.recordLineGrid((this.pixelsPerChar * this.bitmapPxPerPixel) / 8);
                                 this.blitChar(this.video.fb32, dat, offset, this.pixelsPerChar, css);
                             } else {
-                                this.recordLineGrid(this.pixelsPerBit / this.bpp);
+                                // `pixelsPerBit` texels per pixel in both 1bpp
+                                // and 2bpp modes: blitPixels steps its bit
+                                // groups by `pixelsPerBit / bpp`, but at 2bpp
+                                // reads the colour with `j & 0xe`, so pairs of
+                                // groups share one — twice as many texels each.
+                                this.recordLineGrid(this.pixelsPerBit);
                                 this.blitPixels(this.video.fb32, dat, offset, css);
                             }
                         }

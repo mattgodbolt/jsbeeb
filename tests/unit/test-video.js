@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
-import { decodeLineGrid } from "../../src/video-filters/pixel-grid.js";
+import { decodeLineGrid, texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 
 // Setup with focus on testing behavior rather than implementation details
 describe("Video", () => {
@@ -120,6 +120,32 @@ describe("Video", () => {
                 widths.push(decodeLineGrid(video.lineGridUla).texelsWide);
             }
             expect(widths).toEqual([8, 4, 2, 1]);
+        });
+
+        it("should record the width blitFb actually writes", () => {
+            // Asserting the width against the formula would only restate it.
+            // Measure what the blitter puts in the framebuffer instead, so a
+            // grid that is too narrow is caught as well as one too wide.
+            for (let ulaMode = 0; ulaMode <= 3; ++ulaMode) {
+                for (const pixelsPerChar of [8, 16]) {
+                    video.ulaMode = ulaMode;
+                    // Distinct colours per palette entry, so runs are visible.
+                    for (let i = 0; i < 16; ++i) video.ulaPal[i] = 0xff000000 | (i * 0x111111);
+                    mockFb32.fill(0);
+                    // Alternating bits give the shortest runs the mode can make.
+                    video.blitFb(0b01010101, 0, pixelsPerChar);
+
+                    let shortest = Infinity;
+                    let runStart = 0;
+                    for (let x = 1; x <= pixelsPerChar; ++x) {
+                        if (x === pixelsPerChar || mockFb32[x] !== mockFb32[runStart]) {
+                            shortest = Math.min(shortest, x - runStart);
+                            runStart = x;
+                        }
+                    }
+                    expect(shortest).toBe(texelsPerPixel(ulaMode));
+                }
+            }
         });
 
         it("should report teletext as one texel per pixel", () => {
