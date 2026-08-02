@@ -69,6 +69,31 @@ describe("parseZipLinks", () => {
 
         expect(parseZipLinks(html, DiskIndex, DiskFiles)).toEqual(["Acornsoft/Elite.zip"]);
     });
+
+    it("rewrites paths an index page spells wrongly, and keeps them sorted", () => {
+        const html = `<a href="new/Exile_E.zip">Exile</a><a href="New/LazerChess.zip">Lazer Chess</a>`;
+
+        expect(parseZipLinks(html, DiskIndex, DiskFiles, { "new/Exile_E.zip": "New/Exile_E.zip" })).toEqual([
+            "New/Exile_E.zip",
+            "New/LazerChess.zip",
+        ]);
+    });
+
+    it("collapses a correction onto the same file listed correctly elsewhere", () => {
+        const html = `<a href="new/Exile_E.zip">Exile</a><a href="New/Exile_E.zip">Exile again</a>`;
+
+        expect(parseZipLinks(html, DiskIndex, DiskFiles, { "new/Exile_E.zip": "New/Exile_E.zip" })).toEqual([
+            "New/Exile_E.zip",
+        ]);
+    });
+
+    it("leaves paths alone when no correction applies", () => {
+        const html = `<a href="Acornsoft/Elite.zip">Elite</a>`;
+
+        expect(parseZipLinks(html, DiskIndex, DiskFiles, { "other/Thing.zip": "Other/Thing.zip" })).toEqual([
+            "Acornsoft/Elite.zip",
+        ]);
+    });
 });
 
 describe("fetchWithRetry", () => {

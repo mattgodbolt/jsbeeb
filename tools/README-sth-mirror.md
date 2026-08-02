@@ -54,6 +54,14 @@ server won't serve, that's a fault worth reporting to the STH folks rather than
 something to paper over — so the mirror never quietly omits a file the catalogue
 promised. Re-running picks up where it left off, so nothing is lost by stopping.
 
+Where a link turns out to be a typo rather than a missing file, the category
+gets a `corrections` entry mapping the mis-spelled path to the real one. There
+is one at the time of writing: `electron/dfs/homepage.html` links
+`new/Exile_E.zip`, but the server is case-sensitive and the file is under `New/`
+like the section's other three links. Corrections only rename; there is no way
+to mark a file as skippable, so a genuinely broken link still stops the run.
+Report them upstream, and delete the entry once the page is fixed.
+
 ## What is mirrored
 
 S3 paths mirror STH's own URL structure: `archive/sth/<id>/...`.

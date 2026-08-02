@@ -69,6 +69,11 @@ const Categories = [
         title: "Electron DFS Disk Images",
         index: `${SthRoot}/electron/dfs/homepage.html`,
         files: `${SthRoot}/electron/dfs/`,
+        // homepage.html links this one with a lower-case directory, and the
+        // server is case-sensitive; the file is there under "New/", as the
+        // section's other three links spell it. Reported upstream — delete this
+        // once their page is fixed, at which point it stops matching anyway.
+        corrections: { "new/Exile_E.zip": "New/Exile_E.zip" },
     },
     {
         id: "electron/adfs",
@@ -116,16 +121,24 @@ const MetaFiles = [
  * Paths come back relative to `filesUrl` and decoded, matching the hrefs as
  * written upstream — jsbeeb's `sth:` URLs embed these verbatim.
  *
+ * `corrections` rewrites individual paths an index page gets wrong. It exists
+ * only for links verified to be typos, where the file is present under another
+ * name; it is not a way to skip files, so a link that is simply broken still
+ * stops the run rather than being quietly dropped.
+ *
  * @param {string} html raw index page
  * @param {string} indexUrl absolute URL the page was fetched from
  * @param {string} filesUrl absolute URL prefix the category's zips live under
+ * @param {Object<string, string>} [corrections] mis-spelled path -> real path
  * @returns {string[]} sorted, deduplicated paths
  */
-export function parseZipLinks(html, indexUrl, filesUrl) {
+export function parseZipLinks(html, indexUrl, filesUrl, corrections = {}) {
     const paths = new Set();
     for (const [, href] of html.matchAll(/href="([^"?]+\.zip)"/gi)) {
         const resolved = new URL(href, indexUrl).href;
-        if (resolved.startsWith(filesUrl)) paths.add(decodeURIComponent(resolved.slice(filesUrl.length)));
+        if (!resolved.startsWith(filesUrl)) continue;
+        const path = decodeURIComponent(resolved.slice(filesUrl.length));
+        paths.add(corrections[path] ?? path);
     }
     return [...paths].sort();
 }
@@ -204,7 +217,7 @@ async function fileSize(path) {
 async function index(category) {
     stderr.write(`\n[${category.id}] indexing ${category.index}\n`);
     const html = await (await fetchWithRetry(category.index)).text();
-    const paths = parseZipLinks(html, category.index, category.files);
+    const paths = parseZipLinks(html, category.index, category.files, category.corrections);
     stderr.write(`[${category.id}] ${paths.length} files\n`);
     return paths;
 }
