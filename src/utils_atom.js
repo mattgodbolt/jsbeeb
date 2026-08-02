@@ -249,6 +249,12 @@ export function getKeyMapAtom(keyLayout) {
         keys2[shiftDown][s] = colRow;
     }
 
+    // Overriding a default is the point here, so unlike `map` this doesn't warn about the clash.
+    function remap(s, colRow) {
+        keys2[true][s] = colRow;
+        keys2[false][s] = colRow;
+    }
+
     // shiftDown undefined -> map both
     function map(s, colRow, shiftDown) {
         if ((!s && s !== 0) || !colRow) {
@@ -477,11 +483,9 @@ export function getKeyMapAtom(keyLayout) {
         // Z - M normal
     }
 
-    // user keymapping
-    // do last (to override defaults)
-    while (userKeymap.length > 0) {
-        const mapping = userKeymap.pop();
-        map(keyCodes[mapping.native], ATOM[mapping.atom]);
+    // `KEY.` URL parameters, applied last so they win. See the equivalent in `getKeyMap`.
+    for (const mapping of userKeymap) {
+        remap(keyCodes[mapping.native], ATOM[mapping.key]);
     }
 
     return keys2;

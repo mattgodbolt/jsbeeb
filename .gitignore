@@ -10,6 +10,7 @@
 **/.DS_Store
 coverage
 /dist
+/.sth-mirror
 
 **/.claude/settings.local.json
 **/.claude/worktrees/

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { loadTapeFromData } from "../../src/tapes.js";
+import { findModel } from "../../src/models.js";
+
+const BbcModel = findModel("B-DFS1.2");
+const AtomModel = findModel("Atom");
 
 // Build a minimal UEF file: "UEF File!\0" + version (minor, major) + chunks.
 // UefTape constructor reads the first chunk, so at least one must be present.
@@ -75,7 +79,7 @@ describe("tapes", () => {
     describe("loadTapeFromData", () => {
         it("should detect UEF format", async () => {
             const uef = makeUef([{ id: 0x0100, data: [0x41] }]);
-            const tape = await loadTapeFromData("test.uef", uef);
+            const tape = await loadTapeFromData("test.uef", uef, BbcModel);
             expect(tape).not.toBeNull();
             // Verify it behaves as a UEF tape: poll should not throw
             expect(() => tape.poll(mockAcia())).not.toThrow();
@@ -83,7 +87,7 @@ describe("tapes", () => {
 
         it("should detect tapefile format", async () => {
             const tapefile = makeTapefile();
-            const tape = await loadTapeFromData("test.tape", tapefile);
+            const tape = await loadTapeFromData("test.tape", tapefile, BbcModel);
             expect(tape).not.toBeNull();
             // First poll reads the 0xFF 0x04 carrier header and returns 5s delay
             expect(tape.poll(mockAcia())).toBe(5 * 2 * 1000 * 1000);
@@ -91,14 +95,37 @@ describe("tapes", () => {
 
         it("should return null for unknown format", async () => {
             const unknown = new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b]);
-            const tape = await loadTapeFromData("test.bin", unknown);
+            const tape = await loadTapeFromData("test.bin", unknown, BbcModel);
             expect(tape).toBeNull();
         });
 
         it("should reject UEF with unsupported major version", async () => {
             const uef = makeUef([{ id: 0x0100, data: [0x41] }]);
             uef[11] = 0x01; // major version 1
-            await expect(loadTapeFromData("test.uef", uef)).rejects.toThrow(/Unsupported UEF version/);
+            await expect(loadTapeFromData("test.uef", uef, BbcModel)).rejects.toThrow(/Unsupported UEF version/);
+        });
+    });
+
+    describe("tape timing follows the machine's clock", () => {
+        // Chunk 0x0116 is a gap given in seconds as a 32-bit float; the tape
+        // must turn it into however many cycles that is on this machine.
+        const oneSecondGap = () =>
+            makeUef([
+                { id: 0x0000, data: [0x00] },
+                { id: 0x0116, data: [0x00, 0x00, 0x80, 0x3f] },
+            ]);
+
+        it("turns a one second gap into one second of CPU cycles", async () => {
+            const bbc = await loadTapeFromData("test.uef", oneSecondGap(), BbcModel);
+            expect(bbc.poll(mockAcia())).toBe(2 * 1000 * 1000);
+
+            const atom = await loadTapeFromData("test.uef", oneSecondGap(), AtomModel);
+            expect(atom.poll(mockAcia())).toBe(1 * 1000 * 1000);
+        });
+
+        it("simulates five seconds of tapefile carrier at the machine's clock", async () => {
+            const atom = await loadTapeFromData("test.tape", makeTapefile(), AtomModel);
+            expect(atom.poll(mockAcia())).toBe(5 * 1000 * 1000);
         });
     });
 
@@ -110,7 +137,7 @@ describe("tapes", () => {
                 { id: 0x0110, data: [0x01, 0x00] }, // carrier tone, count=1
                 { id: 0x0100, data: [0x41] },
             ]);
-            const tape = await loadTapeFromData("test.uef", uef);
+            const tape = await loadTapeFromData("test.uef", uef, BbcModel);
             expect(pollUntilReceived(tape)).toBe(0x41);
         });
 
@@ -119,7 +146,7 @@ describe("tapes", () => {
                 { id: 0x0000, data: [0x74, 0x65, 0x73, 0x74, 0x00] }, // "test\0"
                 { id: 0x0100, data: [0x41] },
             ]);
-            const tape = await loadTapeFromData("test.uef", uef);
+            const tape = await loadTapeFromData("test.uef", uef, BbcModel);
             // Poll past the origin chunk and receive data from the next chunk
             expect(pollUntilReceived(tape)).toBe(0x41);
         });
@@ -129,7 +156,7 @@ describe("tapes", () => {
                 { id: 0x0110, data: [0x01, 0x00] },
                 { id: 0x0100, data: [0x41] },
             ]);
-            const tape = await loadTapeFromData("test.uef", uef);
+            const tape = await loadTapeFromData("test.uef", uef, BbcModel);
             expect(pollUntilReceived(tape)).toBe(0x41);
 
             tape.rewind();
@@ -172,7 +199,7 @@ describe("tapes", () => {
             // With phase-continuous generation, the last wavebit of a '1' bit
             // must equal the first wavebit of the following '0' bit.
             const uef = makeAtomUef(0x00);
-            const tape = await loadTapeFromData("test.uef", uef, true);
+            const tape = await loadTapeFromData("test.uef", uef, AtomModel);
             const bits = collectWavebits(tape);
 
             // Carrier is 16 wavebits. The 16th is the last carrier wavebit,
@@ -184,8 +211,8 @@ describe("tapes", () => {
         it("should produce the same waveform from two identical tapes", async () => {
             const uef1 = makeAtomUef(0x55);
             const uef2 = makeAtomUef(0x55);
-            const tape1 = await loadTapeFromData("test.uef", uef1, true);
-            const tape2 = await loadTapeFromData("test.uef", uef2, true);
+            const tape1 = await loadTapeFromData("test.uef", uef1, AtomModel);
+            const tape2 = await loadTapeFromData("test.uef", uef2, AtomModel);
 
             expect(collectWavebits(tape1)).toEqual(collectWavebits(tape2));
         });
@@ -196,7 +223,7 @@ describe("tapes", () => {
             // Format detection uses readByte(0/1) without advancing the stream,
             // so the first poll still reads the 0xFF 0x04 carrier header.
             const tapefile = makeTapefile([0xff, 0x04]);
-            const tape = await loadTapeFromData("test.tape", tapefile);
+            const tape = await loadTapeFromData("test.tape", tapefile, BbcModel);
             let carrierSet = null;
             const acia = {
                 setTapeCarrier: (val) => {
@@ -211,21 +238,21 @@ describe("tapes", () => {
 
         it("should receive regular bytes after rewind", async () => {
             const tapefile = makeTapefile([0x41]);
-            const tape = await loadTapeFromData("test.tape", tapefile);
+            const tape = await loadTapeFromData("test.tape", tapefile, BbcModel);
             tape.rewind();
             expect(pollUntilReceived(tape, 1)).toBe(0x41);
         });
 
         it("should escape 0xFF as 0xFF 0xFF after rewind", async () => {
             const tapefile = makeTapefile([0xff, 0xff]);
-            const tape = await loadTapeFromData("test.tape", tapefile);
+            const tape = await loadTapeFromData("test.tape", tapefile, BbcModel);
             tape.rewind();
             expect(pollUntilReceived(tape, 1)).toBe(0xff);
         });
 
         it("should handle end of carrier (0xFF 0x00) after rewind", async () => {
             const tapefile = makeTapefile([0xff, 0x00]);
-            const tape = await loadTapeFromData("test.tape", tapefile);
+            const tape = await loadTapeFromData("test.tape", tapefile, BbcModel);
             tape.rewind();
             let carrierSet = null;
             const acia = {
@@ -241,7 +268,7 @@ describe("tapes", () => {
 
         it("should support rewind and replay", async () => {
             const tapefile = makeTapefile([0x41, 0x42]);
-            const tape = await loadTapeFromData("test.tape", tapefile);
+            const tape = await loadTapeFromData("test.tape", tapefile, BbcModel);
             tape.rewind();
             expect(pollUntilReceived(tape, 1)).toBe(0x41);
 
@@ -251,7 +278,7 @@ describe("tapes", () => {
 
         it("should return large cycle count at EOF", async () => {
             const tapefile = makeTapefile([0x41, 0x42, 0x43]);
-            const tape = await loadTapeFromData("test.tape", tapefile);
+            const tape = await loadTapeFromData("test.tape", tapefile, BbcModel);
             tape.rewind();
             // Consume all bytes
             for (let i = 0; i < 3; i++) tape.poll(mockAcia());

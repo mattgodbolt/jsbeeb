@@ -1,9 +1,6 @@
 "use strict";
 import * as utils from "./utils.js";
 
-const BbcCpuSpeed = 2 * 1000 * 1000;
-const AtomCpuSpeed = 1 * 1000 * 1000;
-
 function secsToClocks(secs, cpuSpeed) {
     return (cpuSpeed * secs) | 0;
 }
@@ -25,11 +22,11 @@ function parityOf(curByte) {
 const ParityN = "N".charCodeAt(0);
 
 class UefTape {
-    constructor(stream, isAtom = false) {
+    constructor(stream, model) {
         this.stream = stream;
         this.baseFrequency = 1200;
-        this.isAtom = isAtom;
-        this.cpuSpeed = isAtom ? AtomCpuSpeed : BbcCpuSpeed;
+        this.isAtom = model.isAtom;
+        this.cpuSpeed = model.cyclesPerSecond;
         this.rewind();
 
         this.curChunk = this.readChunk();
@@ -265,9 +262,10 @@ class UefTape {
 const dividerTable = [1, 16, 64, -1];
 
 class TapefileTape {
-    constructor(stream) {
+    constructor(stream, model) {
         this.count = 0;
         this.stream = stream;
+        this.cpuSpeed = model.cyclesPerSecond;
     }
 
     rate(acia) {
@@ -278,7 +276,7 @@ class TapefileTape {
         const divider = dividerTable[acia.cr & 0x03];
         // http://beebwiki.mdfs.net/index.php/Serial_ULA says the serial rate is ignored
         // for cassette mode.
-        const cpp = (2 * 1000 * 1000) / (19200 / divider);
+        const cpp = this.cpuSpeed / (19200 / divider);
         return Math.floor(bitsPerByte * cpp);
     }
 
@@ -297,7 +295,7 @@ class TapefileTape {
             } else if (byte === 0x04) {
                 acia.setTapeCarrier(true);
                 // Simulate 5 seconds of carrier.
-                return 5 * 2 * 1000 * 1000;
+                return secsToClocks(5, this.cpuSpeed);
             } else if (byte !== 0xff) {
                 throw "Got a weird byte in the tape";
             }
@@ -307,15 +305,15 @@ class TapefileTape {
     }
 }
 
-export async function loadTapeFromData(name, data, isAtom = false) {
+export async function loadTapeFromData(name, data, model) {
     const stream = await utils.DataStream.create(name, data);
     if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
         console.log("Detected a 'tapefile' tape");
-        return new TapefileTape(stream);
+        return new TapefileTape(stream, model);
     }
     if (stream.readNulString(0) === "UEF File!") {
         console.log("Detected a UEF tape");
-        return new UefTape(stream, isAtom);
+        return new UefTape(stream, model);
     }
     console.log("Unknown tape format");
     return null;
