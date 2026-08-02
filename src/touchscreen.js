@@ -3,7 +3,7 @@
 import * as utils from "./utils.js";
 
 const PollHz = 8; // Made up
-const PollCycles = (2 * 1000 * 1000) / PollHz;
+export const PollCycles = (2 * 1000 * 1000) / PollHz;
 
 function doScale(val, scale, margin) {
     val = (val - margin) / (1 - 2 * margin);
@@ -13,11 +13,11 @@ function doScale(val, scale, margin) {
 export class TouchScreen {
     constructor(scheduler) {
         this.scheduler = scheduler;
-        this.mouse = [];
+        this.mouse = { x: 0, y: 0, button: 0 };
         this.outBuffer = new utils.Fifo(16);
         this.delay = 0;
         this.mode = 0;
-        this.pollTask = this.scheduler.newTask(this.poll);
+        this.pollTask = this.scheduler.newTask(() => this.poll());
     }
 
     tryReceive(rts) {
