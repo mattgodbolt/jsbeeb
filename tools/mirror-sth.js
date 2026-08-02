@@ -14,6 +14,13 @@ const SthRoot = "https://www.stairwaytohell.com";
 const UserAgent = "jsbeeb-mirror (+https://github.com/mattgodbolt/jsbeeb)";
 const SchemaVersion = 1;
 const ProgressEvery = 100;
+// STH is a slow box run by volunteers, and this fetches several thousand files
+// from it, so keep the request rate low by default: four at a time, and no more
+// than ten a second across the run.
+const DefaultConcurrency = 4;
+const MinRequestIntervalMs = 100;
+const RetryDelayMs = 1000;
+const MaxRetries = 3;
 
 // Each category is one section of the archive. `id` doubles as the directory
 // name under archive/sth/, so the mirror's layout matches STH's own. `files`
@@ -125,17 +132,39 @@ export function parseZipLinks(html, indexUrl, filesUrl) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// STH is a slow, volunteer-run box that intermittently drops connections, so
-// retry transient failures rather than abandon a multi-thousand-file run.
-async function fetchWithRetry(url, retries = 3) {
+export class HttpError extends Error {
+    constructor(status, url) {
+        super(`HTTP ${status} for ${url}`);
+        this.status = status;
+    }
+}
+
+// Space requests out across the whole run, not per worker, so that mirroring
+// several thousand files doesn't hammer someone's volunteer-run server.
+let nextRequestAt = 0;
+async function waitForTurn() {
+    const now = Date.now();
+    const wait = nextRequestAt - now;
+    // Claim this slot before awaiting, so concurrent callers each get their own.
+    nextRequestAt = Math.max(now, nextRequestAt) + MinRequestIntervalMs;
+    if (wait > 0) await sleep(wait);
+}
+
+// A dropped connection or a 5xx from an overloaded server is worth retrying. A
+// 404 is not: it means an index page promised a file the server won't serve,
+// which is a fault to report upstream rather than to retry or work around.
+export const isTransient = (error) => !(error instanceof HttpError) || error.status === 429 || error.status >= 500;
+
+export async function fetchWithRetry(url, retryDelayMs = RetryDelayMs) {
     for (let attempt = 0; ; attempt++) {
+        await waitForTurn();
         try {
             const response = await fetch(url, { headers: { "user-agent": UserAgent } });
-            if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+            if (!response.ok) throw new HttpError(response.status, url);
             return response;
         } catch (error) {
-            if (attempt === retries) throw error;
-            await sleep(500 * (attempt + 1));
+            if (attempt === MaxRetries || !isTransient(error)) throw error;
+            await sleep(retryDelayMs * (attempt + 1));
         }
     }
 }
@@ -221,7 +250,7 @@ function fail(message) {
 
 function parseArgs(args) {
     const categoryIds = Categories.map((category) => category.id).join(", ");
-    const opts = { out: null, concurrency: 8, category: null, indexOnly: false };
+    const opts = { out: null, concurrency: DefaultConcurrency, category: null, indexOnly: false };
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         if (arg === "--out") opts.out = args[++i];
@@ -229,7 +258,9 @@ function parseArgs(args) {
         else if (arg === "--category") opts.category = args[++i];
         else if (arg === "--index-only") opts.indexOnly = true;
         else if (arg === "-h" || arg === "--help") {
-            stdout.write("Usage: mirror-sth.js --out <dir> [--concurrency 8] [--category <id>] [--index-only]\n");
+            stdout.write(
+                `Usage: mirror-sth.js --out <dir> [--concurrency ${DefaultConcurrency}] [--category <id>] [--index-only]\n`,
+            );
             stdout.write(`Categories: ${categoryIds}\n`);
             exit(0);
         } else fail(`Unknown argument: ${arg}`);
@@ -292,6 +323,8 @@ async function main() {
 if (argv[1]?.endsWith("mirror-sth.js")) {
     main().catch((error) => {
         stderr.write(`\nERROR: ${error.stack ?? error.message ?? error}\n`);
+        if (error instanceof HttpError && error.status === 404)
+            stderr.write("An index page lists a file the server won't serve — worth reporting to the STH folks.\n");
         exit(1);
     });
 }

@@ -41,6 +41,19 @@ node tools/mirror-sth.js --out .sth-mirror --category diskimages
 A single-category run leaves the top-level manifest alone, so it can't drop the
 other categories out of the index.
 
+## Being a good guest
+
+STH is a slow box run by volunteers and this pulls several thousand files off
+it, so the scrape deliberately runs at four requests at a time and no more than
+ten a second overall. `--concurrency` can lower that; think twice before raising
+it. Dropped connections and 5xx responses are retried a few times with a
+lengthening delay.
+
+A 404 is _not_ retried, and stops the run. If an index page lists a file the
+server won't serve, that's a fault worth reporting to the STH folks rather than
+something to paper over — so the mirror never quietly omits a file the catalogue
+promised. Re-running picks up where it left off, so nothing is lost by stopping.
+
 ## What is mirrored
 
 S3 paths mirror STH's own URL structure: `archive/sth/<id>/...`.
