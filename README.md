@@ -89,7 +89,7 @@ Some things to know:
 - Remapping replaces what that host key normally does; in the Space Invaders example above, `Enter` no longer presses
   `RETURN`.
 - The remapping is applied on top of whichever keyboard layout is selected, and survives changing layout or model.
-- If a name isn't recognised the mapping is skipped, with a note in the browser's developer console saying which name
+- If a name isn't recognised the mapping is skipped, and the emulator says so on startup, naming the parameter that
   was at fault.
 - On the Atom, use the Atom's own key names (`LOCK`, `UP_DOWN`, `LEFT_RIGHT` and so on) rather than the BBC's.
 
