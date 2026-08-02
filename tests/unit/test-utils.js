@@ -13,7 +13,13 @@ import {
     crc32,
     createZipBlob,
     unzip,
+    BBC,
+    keyCodes,
+    getKeyMap,
+    userKeymap,
 } from "../../src/utils.js";
+import { ATOM, getKeyMapAtom } from "../../src/utils_atom.js";
+import { processKeyboardParams } from "../../src/url-params.js";
 
 describe("Utils tests", function () {
     "use strict";
@@ -344,6 +350,47 @@ describe("Utils tests", function () {
             expect(stringToBBCKeys("a").length).toBe(3); // With CAPSLOCK toggles
             expect(stringToBBCKeys("!").length).toBe(3); // With SHIFT
         });
+    });
+});
+
+describe("User key mapping from KEY. URL parameters", function () {
+    afterEach(function () {
+        userKeymap.length = 0;
+    });
+
+    const applyParams = (params, machineKeys) =>
+        processKeyboardParams(params, machineKeys, keyCodes, userKeymap, { remap: () => null });
+
+    it("overrides the default binding for the host key", function () {
+        expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.RETURN);
+
+        applyParams({ "KEY.ENTER": "COPY" }, BBC);
+
+        const keyMap = getKeyMap("physical");
+        expect(keyMap[false][keyCodes.ENTER]).toEqual(BBC.COPY);
+        expect(keyMap[true][keyCodes.ENTER]).toEqual(BBC.COPY);
+    });
+
+    it("survives the key map being rebuilt, as on a layout or model change", function () {
+        applyParams({ "KEY.ENTER": "COPY" }, BBC);
+
+        getKeyMap("physical");
+        expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.COPY);
+    });
+
+    it("applies to the Atom, whose key names differ from the BBC's", function () {
+        applyParams({ "KEY.ENTER": "LOCK" }, ATOM);
+
+        expect(getKeyMapAtom("physical")[false][keyCodes.ENTER]).toEqual(ATOM.LOCK);
+    });
+
+    it("ignores unknown host and machine key names", function () {
+        // RETURN is the BBC's name for the key the host calls ENTER: not a host key name.
+        const warnings = applyParams({ "KEY.RETURN": "COPY", "KEY.ENTER": "NOTAKEY" }, BBC);
+
+        expect(warnings).toHaveLength(2);
+        expect(userKeymap).toEqual([]);
+        expect(getKeyMap("physical")[false][keyCodes.ENTER]).toEqual(BBC.RETURN);
     });
 });
 

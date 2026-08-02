@@ -177,9 +177,6 @@ const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } 
 if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
 
-// Process keyboard mappings
-parsedQuery = processKeyboardParams(parsedQuery, BBC, keyCodes, utils.userKeymap, gamepad);
-
 // Handle specific query parameters
 if (Array.isArray(parsedQuery.rom)) {
     parsedQuery.rom.forEach((romPath) => {
@@ -300,6 +297,17 @@ config.setDisplayMode(displayMode);
 
 model = config.model;
 
+// Process keyboard and gamepad mappings. Must come after the model is known: `KEY.`
+// parameters are validated against the emulated machine's key names, which differ on the
+// Atom. Anything we couldn't apply is shown below, once the error dialog is available.
+const keyMappingWarnings = processKeyboardParams(
+    parsedQuery,
+    model.isAtom ? utils_atom.ATOM : BBC,
+    keyCodes,
+    utils.userKeymap,
+    gamepad,
+);
+
 // Depends on the config.setX calls above having applied the URL parameters.
 const emulationConfig = {
     keyLayout,
@@ -373,6 +381,12 @@ function showError(context, error) {
     errorDialog.querySelector(".context").textContent = context;
     errorDialog.querySelector(".error").textContent = error;
     errorDialogModal.show();
+}
+
+// A mistyped `KEY.`/`GP.` parameter is easy to miss otherwise: the emulator starts up
+// looking perfectly normal, but with the keys still where the game put them.
+if (keyMappingWarnings.length) {
+    showError("applying the key mappings in the URL", keyMappingWarnings.join(" "));
 }
 
 function createCanvasForFilter(filterClass) {

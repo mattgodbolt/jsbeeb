@@ -223,7 +223,7 @@ describe("URL Parameters", () => {
 
     describe("processKeyboardParams", () => {
         it("should process keyboard mappings", () => {
-            const BBC = { CTRL: "CTRL", SHIFT: "SHIFT" };
+            const machineKeys = { CTRL: "CTRL", SHIFT: "SHIFT" };
             const keyCodes = { A: 65, B: 66 };
             const userKeymap = [];
             const gamepad = { remap: vi.fn() };
@@ -236,16 +236,39 @@ describe("URL Parameters", () => {
                 other: "value",
             };
 
-            processKeyboardParams(parsedQuery, BBC, keyCodes, userKeymap, gamepad);
+            const warnings = processKeyboardParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad);
 
             expect(userKeymap).toEqual([
-                { native: "A", bbc: "CTRL" },
-                { native: "B", bbc: "SHIFT" },
+                { native: "A", key: "CTRL" },
+                { native: "B", key: "SHIFT" },
             ]);
+            expect(warnings).toEqual([]);
 
             expect(gamepad.remap).toHaveBeenCalledTimes(2);
             expect(gamepad.remap).toHaveBeenCalledWith("FIRE2", "RETURN");
             expect(gamepad.remap).toHaveBeenCalledWith("UP", "Q");
+        });
+
+        it("should report mappings it can't apply", () => {
+            const machineKeys = { CTRL: "CTRL" };
+            const keyCodes = { A: 65 };
+            const userKeymap = [];
+            const gamepad = { remap: vi.fn().mockReturnValue('unknown gamepad control "WIBBLE".') };
+
+            const warnings = processKeyboardParams(
+                { "KEY.A": "NOTAKEY", "KEY.NOTAKEY": "CTRL", "GP.WIBBLE": "CTRL" },
+                machineKeys,
+                keyCodes,
+                userKeymap,
+                gamepad,
+            );
+
+            expect(warnings).toEqual([
+                'KEY.A=NOTAKEY: "NOTAKEY" is not a key on the emulated machine.',
+                'KEY.NOTAKEY=CTRL: "NOTAKEY" is not a key on your keyboard.',
+                'GP.WIBBLE=CTRL: unknown gamepad control "WIBBLE".',
+            ]);
+            expect(userKeymap).toEqual([]);
         });
     });
 

@@ -161,52 +161,58 @@ export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
 }
 
 /**
- * Process keyboard mapping parameters from query string
+ * Process keyboard and gamepad mapping parameters from query string
  * @param {Object} parsedQuery - The parsed query parameters
- * @param {Object} BBC - BBC key constants
+ * @param {Object} machineKeys - Emulated machine's key constants (`BBC`, or `ATOM` for the Atom)
  * @param {Object} keyCodes - Key code constants
  * @param {Array} userKeymap - Array to store user key mappings
  * @param {Object} gamepad - Gamepad object for handling mapping
- * @returns {Object} Updated query parameters
+ * @returns {string[]} descriptions of any mappings that were skipped, for showing to the user
  */
-export function processKeyboardParams(parsedQuery, BBC, keyCodes, userKeymap, gamepad) {
+export function processKeyboardParams(parsedQuery, machineKeys, keyCodes, userKeymap, gamepad) {
+    const warnings = [];
+
     Object.entries(parsedQuery).forEach(([key, val]) => {
         if (!val) return;
 
-        // eg KEY.CAPSLOCK=CTRL
+        // Keyboard remapping: `KEY.<host key>=<machine key>`, eg `KEY.CAPSLOCK=CTRL` makes the
+        // host's Caps Lock press the BBC's Ctrl. Host names come from `keyCodes` (so it's
+        // `ENTER`, not `RETURN`), machine names from `BBC` (or `ATOM`); both are listed in the
+        // README's "Remapping Keys" section. Unrecognised names are skipped and reported.
         if (key.toUpperCase().indexOf("KEY.") === 0) {
-            const bbcKey = val.toUpperCase();
+            const machineKey = val.toUpperCase();
+            const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
 
-            if (BBC[bbcKey]) {
-                const nativeKey = key.substring(4).toUpperCase(); // remove KEY.
-                if (keyCodes[nativeKey]) {
-                    console.log("mapping " + nativeKey + " to " + bbcKey);
-                    userKeymap.push({ native: nativeKey, bbc: bbcKey });
-                } else {
-                    console.log("unknown key: " + nativeKey);
-                }
+            if (!machineKeys[machineKey]) {
+                warnings.push(`${key}=${val}: "${machineKey}" is not a key on the emulated machine.`);
+            } else if (!keyCodes[nativeKey]) {
+                warnings.push(`${key}=${val}: "${nativeKey}" is not a key on your keyboard.`);
             } else {
-                console.log("unknown BBC key: " + val);
+                console.log("mapping " + nativeKey + " to " + machineKey);
+                userKeymap.push({ native: nativeKey, key: machineKey });
             }
         } else if (key.indexOf("GP.") === 0) {
             // gamepad mapping
             // eg ?GP.FIRE2=RETURN
             const gamepadKey = key.substring(3).toUpperCase(); // remove GP. prefix
-            gamepad.remap(gamepadKey, val.toUpperCase());
+            const problem = gamepad.remap(gamepadKey, val.toUpperCase());
+            if (problem) warnings.push(`${key}=${val}: ${problem}`);
         } else {
             switch (key) {
                 case "LEFT":
                 case "RIGHT":
                 case "UP":
                 case "DOWN":
-                case "FIRE":
-                    gamepad.remap(key, val.toUpperCase());
+                case "FIRE": {
+                    const problem = gamepad.remap(key, val.toUpperCase());
+                    if (problem) warnings.push(`${key}=${val}: ${problem}`);
                     break;
+                }
             }
         }
     });
 
-    return parsedQuery;
+    return warnings;
 }
 
 /**
