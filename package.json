@@ -98,7 +98,9 @@
     "coverage:unit": "vitest run tests/unit --coverage",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",
-    "mirror-sth": "node tools/mirror-sth.js --out mirror",
+    "mirror-sth": "node tools/mirror-sth.js --out .sth-mirror",
+    "mirror-sth:check": "node tools/mirror-sth.js --index-only",
+    "mirror-sth:upload": "bash tools/upload-sth-mirror.sh .sth-mirror",
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder"
   },

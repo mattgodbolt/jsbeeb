@@ -1,20 +1,41 @@
 # Mirroring the Stairway to Hell archive
 
-`tools/mirror-sth.js` scrapes the public BBC Micro, Acorn Electron, and
-sideways-ROM areas of `https://www.stairwaytohell.com/` into a local
-directory tree that is sync'd into `s3://bbc.xania.org/archive/sth/` by
-`.github/workflows/mirror-sth.yml`.
+`tools/mirror-sth.js` scrapes the BBC Micro, Acorn Electron, and sideways-ROM
+areas of `https://www.stairwaytohell.com/` into a local directory tree, which
+`tools/upload-sth-mirror.sh` uploads to `s3://bbc.xania.org/archive/sth/`.
+jsbeeb's `sth:` URLs and in-app archive browser read from that mirror rather
+than from STH directly.
 
-The mirror exists so jsbeeb's `sth:` URLs and the in-app archive browser
-keep working if the upstream site disappears. STH has been effectively
-frozen since around 2008 (see `meta/bbc-disklog.txt` and
-`meta/bbc-tapelog.txt` in the mirror), so this is a one-shot snapshot
-rather than a continuous sync.
+STH has been effectively frozen since around 2008, so this is a one-shot
+snapshot, not a continuous sync — there is no scheduled job. Re-run it by hand
+if upstream ever changes.
+
+## Running it
+
+```sh
+npm run mirror-sth:check    # parse the index pages only, print file counts
+npm run mirror-sth          # download everything into .sth-mirror (~80 MB)
+npm run mirror-sth:upload -- --dryrun   # show what would be uploaded
+npm run mirror-sth:upload   # for real
+```
+
+Uploading needs AWS credentials with write access to the `archive/sth/` prefix
+of the `bbc.xania.org` bucket.
+
+The download is resumable: files already present are skipped, and downloads land
+under a `.part` name until complete, so an interrupted run can't leave a
+truncated file behind. To work on one category at a time:
+
+```sh
+node tools/mirror-sth.js --out .sth-mirror --category diskimages
+```
+
+A single-category run leaves the top-level manifest alone, so it can't drop the
+other categories out of the index.
 
 ## What is mirrored
 
-S3 paths mirror STH's upstream layout — `archive/sth/<id>/...` matches
-the natural URL structure on `stairwaytohell.com`.
+S3 paths mirror STH's own URL structure: `archive/sth/<id>/...`.
 
 | Category                 | Source on STH                                              | Notes                                 |
 | ------------------------ | ---------------------------------------------------------- | ------------------------------------- |
@@ -28,32 +49,29 @@ the natural URL structure on `stairwaytohell.com`.
 | `electron/adfs/`         | `electron/adfs/homepage.html`                              | ~23 Electron ADFS disk images         |
 | `electron/multiplexing/` | `electron/multiplexing/homepage.html`                      | curiosity, 1 file                     |
 | `electron/t2p3/`         | `electron/t2p3/homepage.html`                              | curiosity, 4 files                    |
-| `meta/bbc-disklog.txt`   | `bbc/disklog.txt`, `bbc/tapelog.txt`                       | upstream changelogs                   |
-| `meta/*.html`            | `bbc/homepage.html`, `roms/homepage.html`, etc.            | site index pages, provenance          |
 
-Total ~4,500 zips, ~80 MB across 10 categories.
+Total ~4,500 zips, ~80 MB. jsbeeb itself only reads `diskimages/` and
+`tapeimages/`; the rest is mirrored for completeness.
 
-The Electron categories are mirrored even though jsbeeb does not currently
-emulate the Electron — the goal is a complete archival snapshot, not just
-what the running app uses today. The `roms/` category similarly overlaps
-with what jsbeeb already ships in `public/roms/`; mirroring it is purely
-archival.
+Alongside the categories, `meta/` holds upstream's changelogs
+(`bbc/disklog.txt`, `bbc/tapelog.txt`) and index pages, saved verbatim. It isn't
+a category and doesn't appear in any manifest.
 
 ## Manifest format (schemaVersion 1)
 
-The top-level `archive/sth/manifest.json` lists categories and points at
+The top-level `archive/sth/manifest.json` lists the categories and points at
 each per-category manifest:
 
 ```json
 {
   "schemaVersion": 1,
   "name": "Stairway to Hell BBC Micro Software Archive",
-  "source": "https://www.stairwaytohell.com/bbc/",
-  "scrapedAt": "2026-05-03T17:00:00Z",
+  "source": "https://www.stairwaytohell.com/",
+  "scrapedAt": "2026-05-03T17:00:00.000Z",
   "categories": [
     {
       "id": "diskimages",
-      "title": "Disk Images",
+      "title": "BBC Disk Images",
       "manifest": "diskimages/manifest.json",
       "source": "https://www.stairwaytohell.com/bbc/archive/diskimages/",
       "fileCount": 1608,
@@ -63,56 +81,40 @@ each per-category manifest:
 }
 ```
 
-Each per-category manifest is a flat list of files, sorted by path:
+Each per-category manifest is a flat list of files sorted by path:
 
 ```json
 {
   "schemaVersion": 1,
-  "files": [{ "path": "Acornsoft/Elite.zip", "size": 12345, "mtime": "2003-04-28T00:00:00.000Z" }]
+  "files": [{ "path": "Acornsoft/Elite.zip", "size": 12345 }]
 }
 ```
 
-Paths are POSIX-style, relative to the category directory.
+Paths are POSIX-style and relative to the category directory, spelled exactly as
+upstream's links spell them — jsbeeb's `sth:` URLs embed them verbatim, so
+normalising them would break saved links. Sizes are measured from the downloaded
+files, not taken from STH's index pages, so a manifest describes what was really
+fetched.
 
-## Running locally
+## Uploading
+
+`tools/upload-sth-mirror.sh` runs three `aws s3 sync` passes, because the three
+kinds of file want different headers:
+
+- Zips: `public, max-age=31536000, immutable` — paths are content-stable
+- `meta/*`: `public, max-age=300` — these change on a re-mirror
+- Manifests: as above, plus `Content-Encoding: gzip`
+
+Manifests are uploaded pre-compressed because neither S3 nor the CloudFront
+distribution in front of it compresses on the fly, and the app fetches a whole
+category manifest every time the archive browser is opened. Compressing takes
+the disc catalogue from ~124 KB to ~14 KB. Browsers decode it transparently, so
+`src/sth.js` needs to do nothing special, but `curl` needs `--compressed`:
 
 ```sh
-# Catalog parse only — no zip downloads. Fast (~2s) sanity check.
-node tools/mirror-sth.js --out /tmp/sth-mirror --quick
-
-# Full mirror — ~80 MB, a few minutes depending on STH's bandwidth.
-node tools/mirror-sth.js --out /tmp/sth-mirror
-
-# Or just one category:
-node tools/mirror-sth.js --out /tmp/sth-mirror --source diskimages
+curl --compressed https://bbc.xania.org/archive/sth/diskimages/manifest.json
 ```
 
-The script is resumable: it skips files that are already on disk with the
-expected size, so a re-run after a partial download will only fetch what's
-missing.
-
-## Running in CI
-
-`.github/workflows/mirror-sth.yml` is `workflow_dispatch` only — no
-schedule. The `dry_run` input (default `true`) makes the workflow scrape
-into the runner's tmp dir and stop short of uploading. Re-run with
-`dry_run: false` once the dry-run output looks right.
-
-The S3 sync is **strictly additive** — there's no `--delete`. If a file
-ever needs to be removed from the mirror, do it by hand or in a follow-up
-workflow guarded by an explicit `prune` input. This avoids the failure
-mode where a typo on the destination URL with `--delete` could nuke the
-live app served from the same bucket.
-
-Cache headers:
-
-- Zips: `public, max-age=31536000, immutable` (paths are content-stable)
-- Manifests + `meta/*`: `public, max-age=300` (these are what actually
-  change when we re-mirror)
-
-## Costs
-
-Storage for ~80 MB of objects is well under one cent per month at S3
-standard pricing. Egress is fronted by CloudFront (already in front of
-`bbc.xania.org`) and dominated by the existing app traffic; the marginal
-cost of mirror traffic is negligible.
+No pass uses `--delete`, and none should: the jsbeeb app is served from this
+same bucket, so a mistyped destination could take the site out. Remove files
+from the mirror by hand if it's ever needed.
