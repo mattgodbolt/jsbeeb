@@ -18,7 +18,12 @@ npm run mirror-sth:upload   # upload it to S3
 ```
 
 Uploading needs AWS credentials with write access to the `archive/sth/` prefix
-of the `bbc.xania.org` bucket.
+of the `bbc.xania.org` bucket. That may not be whichever account your default
+profile points at, so set `AWS_PROFILE` accordingly:
+
+```sh
+AWS_PROFILE=<profile> npm run mirror-sth:upload
+```
 
 The two upload passes split the mirror between them by filename, and getting
 those filters wrong would tag thousands of objects with the wrong cache
