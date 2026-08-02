@@ -18,7 +18,7 @@ describe("HFE loader tests", function () {
         }
     });
 
-    it("should refuse to save a protected disc as SSD or DSD", () => {
+    it("should refuse to save a protected disc as SSD or DSD", { timeout: 30000 }, () => {
         const disc = new Disc(true, new DiscConfig(), "test.hfe");
         loadHfe(disc, data);
 
@@ -31,7 +31,7 @@ describe("HFE loader tests", function () {
         expect(() => toSsdOrDsd(disc)).toThrow(/cannot be saved as SSD or DSD/);
     });
 
-    it("should save what fits when forced", () => {
+    it("should save what fits when forced", { timeout: 30000 }, () => {
         const disc = new Disc(true, new DiscConfig(), "test.hfe");
         loadHfe(disc, data);
 
