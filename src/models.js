@@ -20,6 +20,7 @@ const CpuModel = Object.freeze({
  */
 class Model {
     constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, cmosOverride, banks, clockMhz } = {}) {
+        if (!(clockMhz > 0)) throw new Error(`Model ${name} has no clock speed`);
         this.name = name;
         this.synonyms = synonyms;
         this.os = os;
@@ -66,12 +67,6 @@ function pickDfs(cmos) {
     return cmos;
 }
 
-/** A second processor. Its clock is what the multiplier in the emulation config multiplies. */
-function tubeModel({ name, os, cpuModel, clockMhz }) {
-    if (!(clockMhz > 0)) throw new Error(`Co-processor ${name} has no clock speed`);
-    return new Model({ name, synonyms: [], os, cpuModel, isMaster: false, clockMhz });
-}
-
 function atomModel({ name, synonyms, os, banks }) {
     return new Model({
         name,
@@ -79,6 +74,7 @@ function atomModel({ name, synonyms, os, banks }) {
         os,
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 1,
         isAtom: true,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
@@ -131,6 +127,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
     }),
@@ -140,6 +137,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareIntelFdc,
     }),
@@ -149,6 +147,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareWdFdc,
     }),
@@ -159,6 +158,7 @@ export const allModels = [
         os: ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
         cpuModel: CpuModel.MOS6502,
         isMaster: false,
+        clockMhz: 2,
         swram: beebSwram,
         fdc: NoiseAwareWdFdc,
     }),
@@ -168,6 +168,7 @@ export const allModels = [
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
         isMaster: true,
+        clockMhz: 2,
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickDfs,
@@ -178,6 +179,7 @@ export const allModels = [
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
         isMaster: true,
+        clockMhz: 2,
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAdfs,
@@ -188,6 +190,7 @@ export const allModels = [
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
         isMaster: true,
+        clockMhz: 2,
         swram: masterSwram,
         fdc: NoiseAwareWdFdc,
         cmosOverride: pickAnfs,
@@ -218,18 +221,22 @@ export const allModels = [
         os: ["atom/Atom_Kernel.rom", "atom/Atom_DOS.rom", "atom/Atom_FloatingPoint.rom", "atom/Atom_Basic.rom"],
     }),
     // Neither can be selected as a model: they are fitted to one, by the configuration builder later.
-    tubeModel({
+    new Model({
         name: "Tube65C02",
+        synonyms: [],
         os: ["tube/6502Tube.rom"],
         // TODO(#746): the external second processor was an NMOS 6502A.
         cpuModel: CpuModel.CMOS65C02,
+        isMaster: false,
         clockMhz: 3,
     }),
-    tubeModel({
+    new Model({
         name: "Tube65C102",
+        synonyms: [],
         os: ["tube/65C102Tube.rom"],
         // TODO(#746): Acorn's 65C102 has no Rockwell bit instructions.
         cpuModel: CpuModel.CMOS65C02,
+        isMaster: false,
         clockMhz: 4,
     }),
 ];
@@ -250,6 +257,7 @@ export const TEST_6502 = new Model({
     name: "TEST",
     synonyms: ["TEST"],
     os: [],
+    clockMhz: 2,
     cpuModel: CpuModel.MOS6502,
     isMaster: false,
     swram: beebSwram,
@@ -260,6 +268,7 @@ export const TEST_65C02 = new Model({
     name: "TEST",
     synonyms: ["TEST"],
     os: [],
+    clockMhz: 2,
     cpuModel: CpuModel.CMOS65C02,
     isMaster: false,
     swram: masterSwram,
@@ -270,6 +279,7 @@ export const TEST_65C12 = new Model({
     name: "TEST",
     synonyms: ["TEST"],
     os: [],
+    clockMhz: 2,
     cpuModel: CpuModel.CMOS65C12,
     isMaster: false,
     swram: masterSwram,
@@ -279,6 +289,7 @@ TEST_65C12.isTest = true;
 
 export const basicOnly = new Model({
     name: "Basic only",
+    clockMhz: 2,
     synonyms: ["Basic only"],
     os: ["master/mos3.20"],
     cpuModel: CpuModel.CMOS65C12,

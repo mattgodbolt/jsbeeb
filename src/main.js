@@ -7,7 +7,7 @@ import "./jsbeeb.css";
 import * as utils from "./utils.js";
 import { FakeVideo, Video } from "./video.js";
 import { Debugger } from "./web/debug.js";
-import { Cpu6502, AtomCpu6502, DefaultTubeCpuMultiplier } from "./6502.js";
+import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
@@ -285,7 +285,7 @@ config.mapLegacyModels(parsedQuery);
 
 config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
 config.setKeyLayout(keyLayout);
-config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || DefaultTubeCpuMultiplier);
+config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 1);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
 config.setCheckboxes({
     coProcessor: !!parsedQuery.coProcessor,
@@ -346,7 +346,7 @@ sbBind(document.querySelector(".sidebar.bottom"), parsedQuery.sbBottom, function
 });
 
 if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
-const cpuSpeed = model.isAtom ? 1 * 1000 * 1000 : 2 * 1000 * 1000;
+const cpuSpeed = model.clockMhz * 1000 * 1000;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 const MaxCyclesPerFrame = clocksPerSecond / 10;
 

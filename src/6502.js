@@ -15,10 +15,6 @@ import { AtomMMC2 } from "./mmc.js";
 
 const signExtend = utils.signExtend;
 
-const HostClockMhz = 2;
-// A multiple of the fitted co-processor's own clock, so 1x is the real part.
-export const DefaultTubeCpuMultiplier = 1;
-
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
 }
@@ -411,15 +407,13 @@ class Base6502 {
 }
 
 class Tube6502 extends Base6502 {
-    constructor(model, cpu, { cpuMultiplier = DefaultTubeCpuMultiplier } = {}) {
+    constructor(model, cpu, { cpuMultiplier = 1 } = {}) {
         super(model, { cycleAccurate: false });
 
-        // A negative multiplier leaves the parasite owed ever fewer cycles, so it stops executing
-        // without ever failing.
         if (!(cpuMultiplier > 0)) throw new Error(`Tube CPU multiplier must be positive, got ${cpuMultiplier}`);
 
         this.cycles = 0;
-        this.cyclesPerHostCycle = model.clockMhz / HostClockMhz;
+        this.cyclesPerHostCycle = model.clockMhz / cpu.model.clockMhz;
         this.cpuMultiplier = cpuMultiplier;
         this.romPaged = true;
         this.memory = new Uint8Array(65536);
