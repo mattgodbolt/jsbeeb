@@ -1478,9 +1478,10 @@ export class Cpu6502 extends Base6502 {
         // that from both, to keep the domain low (while accumulating seconds). Take care to preserve the bottom
         // bit though; as that encodes whether we're on an even or odd bus cycle.
         const smaller = Math.min(this.targetCycles, this.currentCycles) & 0xfffffffe;
-        if (smaller >= 2 * 1000 * 1000) {
-            this.targetCycles -= 2 * 1000 * 1000;
-            this.currentCycles -= 2 * 1000 * 1000;
+        const cyclesPerSecond = this.model.cyclesPerSecond;
+        if (smaller >= cyclesPerSecond) {
+            this.targetCycles -= cyclesPerSecond;
+            this.currentCycles -= cyclesPerSecond;
             this.cycleSeconds++;
         }
         // Any tracing or debugging means we need to run the potentially slower version: the debug read or
