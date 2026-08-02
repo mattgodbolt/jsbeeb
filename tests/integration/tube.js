@@ -116,6 +116,18 @@ describe("Tube co-processor", () => {
         expect(machine.drainText({ raw: true })).toContain("BASIC\n\n>");
     });
 
+    it("still brings the external second processor's client ROM up on the base CMOS core", async () => {
+        const machine = new TestMachine("B-DFS1.2", { tube: true });
+        await machine.initialise();
+        machine.startCapture();
+
+        await machine.runFor(4 * 1000 * 1000);
+
+        const text = machine.drainText({ raw: true });
+        expect(text).toContain("Acorn TUBE 6502 64K");
+        expect(text).toContain("BASIC\n\n>");
+    });
+
     it("passes the requested multiplier on to the parasite", async () => {
         const machine = new TestMachine("Master", { tube: true, tubeCpuMultiplier: 4 });
         await machine.initialise();
