@@ -355,9 +355,6 @@ class Sector {
     }
 }
 
-/** Nibbles in each 32 bit half of a {@link BitWindow64}. */
-const NibblesPerHalf = 8;
-
 /**
  * A 64 bit shift register, held as a pair of unsigned 32 bit halves. BigInt would say this more
  * directly but costs an order of magnitude more per bit shifted.
@@ -391,10 +388,11 @@ export class BitWindow64 {
      * @returns {Number} the length of the run of `nibble` ending at bit 0
      */
     countTrailingNibbles(nibble) {
+        const nibblesPerHalf = 8;
         let count = 0;
         for (let bits = this.lo; (bits & 0xf) === nibble; bits >>>= 4) count++;
         // Only a low half that matched all the way up can have a run continuing into the high half.
-        if (count === NibblesPerHalf) for (let bits = this.hi; (bits & 0xf) === nibble; bits >>>= 4) count++;
+        if (count === nibblesPerHalf) for (let bits = this.hi; (bits & 0xf) === nibble; bits >>>= 4) count++;
         return count;
     }
 }
