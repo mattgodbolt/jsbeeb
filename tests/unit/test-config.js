@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fittedRoms, needsRestart, restartPending } from "../../src/config.js";
+import { fittedRoms, needsRestart, restartPending, tubeCpuSpeedLabel } from "../../src/config.js";
 import { findModel } from "../../src/models.js";
 
 describe("fittedRoms", () => {
@@ -85,5 +85,23 @@ describe("restartPending", () => {
 
     it("ignores settings the running machine can follow", () => {
         expect(restartPending({ ...running, keyLayout: "natural" }, running)).toBe(false);
+    });
+});
+
+describe("tubeCpuSpeedLabel", () => {
+    const bbcB = findModel("B-DFS1.2");
+    const master = findModel("Master");
+
+    it("shows each machine's own second processor at 1x", () => {
+        expect(tubeCpuSpeedLabel(1, bbcB)).toBe("1x (3MHz)");
+        expect(tubeCpuSpeedLabel(1, master)).toBe("1x (4MHz)");
+    });
+
+    it("shows a fractional overclock", () => {
+        expect(tubeCpuSpeedLabel(1.6, bbcB)).toBe("1.6x (4.8MHz)");
+    });
+
+    it("keeps a repeating multiplier from a URL readable", () => {
+        expect(tubeCpuSpeedLabel(4 / 3, bbcB)).toBe("1.33x (4MHz)");
     });
 });
