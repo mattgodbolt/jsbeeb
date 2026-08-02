@@ -3,6 +3,7 @@ import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
+import { LineGridRendered, LineGridVerticalDouble, LineGridRows } from "./video-filters/pixel-grid.js";
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -127,6 +128,7 @@ class Ula {
             this.video.ulaMode = newMode;
         }
         this.video.teletextMode = !!(val & 2);
+        this.video.updateLineGridUla();
     }
 
     // ULA palette register (&FE21).
@@ -386,6 +388,14 @@ export class Video {
         this.doubledScanlines = true;
         this.frameSkipCount = 0;
         this.screenSubtract = 0;
+        // Describes the logical pixel grid of each framebuffer row: how many
+        // texels wide and tall one BBC pixel is on that line. Display filters
+        // need this to see the picture as pixels rather than as raster samples;
+        // see video-filters/pixel-grid.js. One byte per row, rewritten as the
+        // frame renders, so a mid-screen mode change is recorded accurately.
+        this.lineGrid = new Uint8Array(LineGridRows);
+        this.lineGridUla = 0;
+        this.updateLineGridUla();
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -524,6 +534,8 @@ export class Video {
         this.halfClock = state.halfClock;
         this.ulaMode = state.ulaMode;
         this.teletextMode = state.teletextMode;
+        // Derived from the above, so it is recomputed rather than snapshotted.
+        this.updateLineGridUla();
         this.displayEnableSkew = state.displayEnableSkew;
         this.actualPal.set(state.actualPal);
         this.cursorOn = state.cursorOn;
@@ -555,15 +567,19 @@ export class Video {
 
     clearPaintBuffer() {
         const fb32 = this.fb32;
+        // The line grid is cleared exactly where the pixels are: in interlaced
+        // modes the other field's rows survive, and so must their grid.
         if (this.interlacedSyncAndVideo || !this.doubledScanlines) {
             let line = this.frameCount & 1;
             while (line < 625) {
                 const start = line * 1024;
                 fb32.fill(OPAQUE_BLACK, start, start + 1024);
+                this.lineGrid[line] = 0;
                 line += 2;
             }
         } else {
             fb32.fill(OPAQUE_BLACK);
+            this.lineGrid.fill(0);
         }
     }
 
@@ -608,6 +624,21 @@ export class Video {
         }
         this.paint();
         debugCopyFb(this.fb32, this.debugPrevScreen);
+    }
+
+    /**
+     * Recompute the ULA-dependent half of the line grid descriptor: everything
+     * except whether this particular scanline was doubled. Called whenever the
+     * ULA control register changes, so the render loop only has to store it.
+     *
+     * MODE 7 counts as one texel per pixel: the SAA5050 emulation writes each
+     * of its 16 texels per character individually, so its output is already at
+     * the framebuffer's own resolution. Otherwise the stored field is log2 of
+     * the pixel's width in texels, which for the ULA's `1 << (3 - ulaMode)`
+     * texels per pixel is simply `3 - ulaMode`.
+     */
+    updateLineGridUla() {
+        this.lineGridUla = LineGridRendered | (this.teletextMode ? 0 : 3 - this.ulaMode);
     }
 
     blitFb(dat, destOffset, numPixels) {
@@ -974,7 +1005,7 @@ export class Video {
                 // Render data depending on display enable state.
                 if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
                     let doubledLines = false;
-                    let offset = this.bitmapY;
+                    let row = this.bitmapY;
                     // There's a painting subtlety here: if we're in an
                     // interlace mode but R6>R4 then we'll get stuck
                     // painting just an odd or even frame, so we double up
@@ -984,12 +1015,23 @@ export class Video {
                         this.isEvenRender === this.lastRenderWasEven
                     ) {
                         doubledLines = true;
-                        offset &= ~1;
+                        row &= ~1;
                     }
 
-                    offset = offset * 1024 + this.bitmapX;
+                    const offset = row * 1024 + this.bitmapX;
 
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
+                        // Note this row's logical pixel size for display
+                        // filters; see video-filters/pixel-grid.js. The ULA half
+                        // of the descriptor is precomputed on register writes so
+                        // this stays a store or two in the hottest loop we have.
+                        if (doubledLines) {
+                            const grid = this.lineGridUla | LineGridVerticalDouble;
+                            this.lineGrid[row] = grid;
+                            this.lineGrid[row + 1] = grid;
+                        } else {
+                            this.lineGrid[row] = this.lineGridUla;
+                        }
                         if (this.teletextMode) {
                             if (this.halfClock) {
                                 // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.

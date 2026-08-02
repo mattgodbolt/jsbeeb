@@ -1,0 +1,109 @@
+"use strict";
+
+// The xBR-lv2 display mode. See shaders/xbr.frag.glsl for the algorithm and
+// xbr.js for the JavaScript reference implementation it mirrors.
+
+import VERT_SHADER from "./shaders/xbr.vert.glsl?raw";
+import FRAG_SHADER from "./shaders/xbr.frag.glsl?raw";
+import { compileProgram } from "./shader-program.js";
+import { LineGridRows } from "./pixel-grid.js";
+
+export class XbrFilter {
+    static requiresGl() {
+        return true;
+    }
+
+    static getDisplayConfig() {
+        return {
+            name: "Smoothed (xBR)",
+            image: "images/cub-monitor.png",
+            imageAlt: "A fake CUB computer monitor",
+            imageWidth: 896,
+            imageHeight: 648,
+            canvasLeft: 0,
+            canvasTop: 8,
+            visibleWidth: 896,
+            visibleHeight: 600,
+            // Twice the usual canvas, so there is somewhere to put the detail
+            // the filter reconstructs. Exactly 2x keeps the aspect ratio, and
+            // so the monitor placement above, identical to the other modes.
+            canvasWidth: 1792,
+            canvasHeight: 1200,
+            // The shader picks its own samples on the logical pixel grid, so
+            // hardware interpolation would only blur what it reads.
+            nearestSampling: true,
+        };
+    }
+
+    constructor(gl) {
+        this.gl = gl;
+
+        // The shader floors framebuffer coordinates that run to 1024 to find
+        // the pixel grid. mediump cannot resolve one texel from the next up
+        // there, so the grid would land on the wrong texel and the picture
+        // would come apart. Better to fall back to an unfiltered display than
+        // to render a broken one.
+        const highp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+        if (!highp || highp.precision === 0)
+            throw new Error("xBR needs high fragment shader precision, which this device does not offer");
+
+        this.program = compileProgram(gl, VERT_SHADER, FRAG_SHADER, "xBR");
+        this.locations = {
+            tex: gl.getUniformLocation(this.program, "tex"),
+            lineGrid: gl.getUniformLocation(this.program, "lineGrid"),
+            textureSize: gl.getUniformLocation(this.program, "uTextureSize"),
+            texelSize: gl.getUniformLocation(this.program, "uTexelSize"),
+            texelsPerOutputPixel: gl.getUniformLocation(this.program, "uTexelsPerOutputPixel"),
+        };
+
+        // A one-pixel-wide column holding the logical pixel size of each
+        // framebuffer row, uploaded afresh each frame.
+        this.lineGridTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.lineGridTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.activeTexture(gl.TEXTURE0);
+
+        this.uploaded = new Uint8Array(LineGridRows);
+        this.allocated = false;
+    }
+
+    setUniforms(params) {
+        const gl = this.gl;
+        gl.uniform1i(this.locations.tex, 0);
+        gl.uniform1i(this.locations.lineGrid, 1);
+        gl.uniform2f(this.locations.textureSize, params.width, params.height);
+        gl.uniform2f(this.locations.texelSize, 1.0 / params.width, 1.0 / params.height);
+        gl.uniform1f(this.locations.texelsPerOutputPixel, params.texelsPerOutputPixel);
+
+        this.uploaded.set(params.lineGrid.subarray(0, LineGridRows));
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.lineGridTexture);
+        // A single-byte-per-texel image one pixel wide has a one-byte row
+        // stride, which the default four-byte unpack alignment would misread.
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        if (this.allocated) {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, LineGridRows, gl.LUMINANCE, gl.UNSIGNED_BYTE, this.uploaded);
+        } else {
+            gl.texImage2D(
+                gl.TEXTURE_2D,
+                0,
+                gl.LUMINANCE,
+                1,
+                LineGridRows,
+                0,
+                gl.LUMINANCE,
+                gl.UNSIGNED_BYTE,
+                this.uploaded,
+            );
+            this.allocated = true;
+        }
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        // Leave unit 0 active and the framebuffer bound: the canvas uploads the
+        // next frame's pixels through whatever is current.
+        gl.activeTexture(gl.TEXTURE0);
+    }
+}

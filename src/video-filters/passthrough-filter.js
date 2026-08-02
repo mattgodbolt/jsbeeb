@@ -2,6 +2,7 @@
 
 import VERT_SHADER from "./shaders/passthrough.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/passthrough.frag.glsl?raw";
+import { compileProgram } from "./shader-program.js";
 
 export class PassthroughFilter {
     static requiresGl() {
@@ -19,48 +20,17 @@ export class PassthroughFilter {
             canvasTop: 8,
             visibleWidth: 896,
             visibleHeight: 600,
+            canvasWidth: 896,
+            canvasHeight: 600,
         };
     }
 
     constructor(gl) {
         this.gl = gl;
-        this.program = null;
-        this.locations = {};
-
-        this._init();
-    }
-
-    _init() {
-        const gl = this.gl;
-
-        const vertexShader = this._compileShader(gl.VERTEX_SHADER, VERT_SHADER);
-        const fragmentShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
-
-        this.program = gl.createProgram();
-        gl.attachShader(this.program, vertexShader);
-        gl.attachShader(this.program, fragmentShader);
-        gl.linkProgram(this.program);
-
-        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-            throw new Error("Failed to link passthrough shader program: " + gl.getProgramInfoLog(this.program));
-        }
-
-        this.locations.tex = gl.getUniformLocation(this.program, "tex");
-    }
-
-    _compileShader(type, source) {
-        const gl = this.gl;
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            const error = gl.getShaderInfoLog(shader);
-            gl.deleteShader(shader);
-            throw new Error("Shader compilation failed: " + error);
-        }
-
-        return shader;
+        this.program = compileProgram(gl, VERT_SHADER, FRAG_SHADER, "passthrough");
+        this.locations = {
+            tex: gl.getUniformLocation(this.program, "tex"),
+        };
     }
 
     setUniforms(_params) {

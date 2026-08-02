@@ -386,10 +386,16 @@ if (keyMappingWarnings.length) {
 }
 
 function createCanvasForFilter(filterClass) {
+    const config = filterClass.getDisplayConfig();
+    // Each mode says how many pixels it wants to draw into; xBR asks for more
+    // than the rest so its reconstructed detail has somewhere to go. Set this
+    // before creating the context, which fixes its initial viewport.
+    screenCanvas.width = config.canvasWidth;
+    screenCanvas.height = config.canvasHeight;
+
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
     if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
-        const config = filterClass.getDisplayConfig();
         showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
     }
 
@@ -404,7 +410,7 @@ function swapCanvas(newFilterClass) {
         frames++;
         if (frames < frameSkip) return;
         frames = 0;
-        newCanvas.paint(minx, miny, maxx, maxy, this.frameCount);
+        newCanvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
     };
     canvas = newCanvas;
     displayModeFilter = newFilterClass;
@@ -420,7 +426,7 @@ video = new Video(
         frames++;
         if (frames < frameSkip) return;
         frames = 0;
-        canvas.paint(minx, miny, maxx, maxy, this.frameCount);
+        canvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
     },
     { isAtom: model.isAtom },
 );

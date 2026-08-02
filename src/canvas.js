@@ -2,10 +2,12 @@
 import webglDebug from "./lib/webgl-debug.js";
 import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
+import { XbrFilter } from "./video-filters/xbr-filter.js";
 
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,
     rgb: PassthroughFilter,
+    xbr: XbrFilter,
 };
 
 export function getFilterForMode(mode) {
@@ -32,7 +34,7 @@ export class Canvas {
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
-    paint(minx, miny, maxx, maxy, _frameCount) {
+    paint(minx, miny, maxx, maxy, _frame) {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
@@ -70,9 +72,17 @@ export class GlCanvas {
 
         checkedGl.depthMask(false);
 
+        // The default viewport is fixed when the context is created, so it has
+        // to be set explicitly for the filters that ask for a larger canvas.
+        checkedGl.viewport(0, 0, checkedGl.drawingBufferWidth, checkedGl.drawingBufferHeight);
+
         this.filter = new filterClass(checkedGl);
         const program = this.filter.program;
         checkedGl.useProgram(program);
+
+        // Filters that pick their own samples want the texels they asked for,
+        // not a hardware blend of the ones either side.
+        const sampling = filterClass.getDisplayConfig().nearestSampling ? checkedGl.NEAREST : checkedGl.LINEAR;
 
         this.fb8 = new Uint8Array(width * height * 4);
         this.fb32 = new Uint32Array(this.fb8.buffer);
@@ -81,8 +91,8 @@ export class GlCanvas {
         checkedGl.pixelStorei(checkedGl.UNPACK_ALIGNMENT, 4);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
+        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, sampling);
+        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, sampling);
         checkedGl.texImage2D(
             checkedGl.TEXTURE_2D,
             0,
@@ -118,7 +128,7 @@ export class GlCanvas {
         console.log("GL Canvas set up");
     }
 
-    paint(minx, miny, maxx, maxy, frameCount) {
+    paint(minx, miny, maxx, maxy, frame) {
         const gl = this.gl;
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
@@ -157,7 +167,16 @@ export class GlCanvas {
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
 
-        this.filter.setUniforms({ width, height, frameCount });
+        this.filter.setUniforms({
+            width,
+            height,
+            frameCount: frame.frameCount,
+            lineGrid: frame.lineGrid,
+            // How much of the framebuffer each output pixel covers, which sets
+            // how wide an edge-smoothing ramp should be. Read from `extent`:
+            // minx and maxx above have been scaled into texture coordinates.
+            texelsPerOutputPixel: (extent.maxx - extent.minx) / gl.drawingBufferWidth,
+        });
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
+import { decodeLineGrid } from "../../src/video-filters/pixel-grid.js";
 
 // Setup with focus on testing behavior rather than implementation details
 describe("Video", () => {
@@ -108,6 +109,24 @@ describe("Video", () => {
             video.ula.write(0, 16); // 00010000
             expect(video.pixelsPerChar).toBe(8);
             expect(video.halfClock).toBe(false);
+        });
+
+        it("should track the logical pixel width for display filters", () => {
+            // The ULA's colour bits decide how many framebuffer texels one BBC
+            // pixel covers; filters recover the pixel grid from this.
+            const widths = [];
+            for (const colourBits of [0, 1, 2, 3]) {
+                video.ula.write(0, 0x10 | (colourBits << 2));
+                widths.push(decodeLineGrid(video.lineGridUla).texelsWide);
+            }
+            expect(widths).toEqual([8, 4, 2, 1]);
+        });
+
+        it("should report teletext as one texel per pixel", () => {
+            // The SAA5050 writes every texel of its output individually, so
+            // MODE 7 is already at the framebuffer's own resolution.
+            video.ula.write(0, 0x02);
+            expect(decodeLineGrid(video.lineGridUla).texelsWide).toBe(1);
         });
     });
 
@@ -661,6 +680,21 @@ describe("Video", () => {
             expect(v2.teletextMode).toBe(false);
             expect(v2.cursorPos).toBe(0x2000);
             expect(v2.screenSubtract).toBe(5);
+        });
+
+        it("should rebuild the line grid descriptor on restore", () => {
+            // It is derived from ulaMode and teletextMode rather than saved, so
+            // a restored machine must not keep the destination's old value.
+            const v = makeRealVideo();
+            v.ulaMode = 1; // four texels per pixel, as MODE 2 selects
+            v.teletextMode = false;
+
+            const v2 = makeRealVideo();
+            v2.ulaMode = 3;
+            v2.updateLineGridUla();
+            v2.restoreState(v.snapshotState());
+
+            expect(decodeLineGrid(v2.lineGridUla).texelsWide).toBe(4);
         });
 
         it("should snapshot and restore CRTC registers", () => {
