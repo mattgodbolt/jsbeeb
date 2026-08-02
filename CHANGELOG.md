@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.15.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.14.0...v1.15.0) (2026-08-02)
+
+
+### Features
+
+* document key remapping, and report mappings that can't be applied ([#750](https://github.com/mattgodbolt/jsbeeb/issues/750)) ([3495a77](https://github.com/mattgodbolt/jsbeeb/commit/3495a77b6f4ef4984b6a5f8092707e0b2d9d46a8))
+* fit each machine the second processor it was sold with ([5b045c5](https://github.com/mattgodbolt/jsbeeb/commit/5b045c54cbc9995545acf967f6d3775f3eab3232))
+
+
+### Bug Fixes
+
+* clock the second processor at its own 3MHz ([#732](https://github.com/mattgodbolt/jsbeeb/issues/732)) ([aeadc31](https://github.com/mattgodbolt/jsbeeb/commit/aeadc31affe136332b239ebb08fe8fe289481a71)), closes [#703](https://github.com/mattgodbolt/jsbeeb/issues/703)
+* discard stale teletext channel fetches ([#734](https://github.com/mattgodbolt/jsbeeb/issues/734)) ([30229c5](https://github.com/mattgodbolt/jsbeeb/commit/30229c564a7c1f51a1225a59910049ec7b051fa1))
+* let Safari finish blob downloads before the URL is revoked ([#741](https://github.com/mattgodbolt/jsbeeb/issues/741)) ([b7501b4](https://github.com/mattgodbolt/jsbeeb/commit/b7501b4b7b23f534aedf7e3caafc151b8ccbffa7)), closes [#494](https://github.com/mattgodbolt/jsbeeb/issues/494)
+* model serial transmit timing ([#738](https://github.com/mattgodbolt/jsbeeb/issues/738)) ([00336ff](https://github.com/mattgodbolt/jsbeeb/commit/00336ff14a189eee11e1815076dee6890ec490c9)), closes [#66](https://github.com/mattgodbolt/jsbeeb/issues/66)
+* refuse to save a disc an SSD or DSD cannot hold ([#740](https://github.com/mattgodbolt/jsbeeb/issues/740)) ([adc55c8](https://github.com/mattgodbolt/jsbeeb/commit/adc55c87cf8c208037ed9bbba985fe238a4efa16))
+* report teletext channel load failures to the user ([#742](https://github.com/mattgodbolt/jsbeeb/issues/742)) ([b6411eb](https://github.com/mattgodbolt/jsbeeb/commit/b6411eb6aa8a5bf3089b1fdf3dac2b0aead41408))
+
+
+### Performance Improvements
+
+* skip the shortfall scan when forcing an SSD or DSD save ([#744](https://github.com/mattgodbolt/jsbeeb/issues/744)) ([6aad144](https://github.com/mattgodbolt/jsbeeb/commit/6aad14458240cdfcdebd21047051b1abfb9b2e17))
+
 ## [1.14.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.13.1...v1.14.0) (2026-07-30)
 
 
