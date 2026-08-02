@@ -3,7 +3,7 @@ import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
-import { LineGridRendered, LineGridVerticalDouble, LineGridRows } from "./video-filters/pixel-grid.js";
+import { encodeLineGrid, texelsPerPixel, LineGridVerticalDouble, LineGridRows } from "./video-filters/pixel-grid.js";
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -391,8 +391,10 @@ export class Video {
         // Describes the logical pixel grid of each framebuffer row: how many
         // texels wide and tall one BBC pixel is on that line. Display filters
         // need this to see the picture as pixels rather than as raster samples;
-        // see video-filters/pixel-grid.js. One byte per row, rewritten as the
-        // frame renders, so a mid-screen mode change is recorded accurately.
+        // see video-filters/pixel-grid.js. One byte per row, written as each
+        // character cell renders, so a mode change between rows is recorded
+        // faithfully. A row whose mode changes part way along keeps only the
+        // last mode on it — enough for a raster split, not for a mid-line one.
         this.lineGrid = new Uint8Array(LineGridRows);
         this.lineGridUla = 0;
         this.updateLineGridUla();
@@ -633,12 +635,10 @@ export class Video {
      *
      * MODE 7 counts as one texel per pixel: the SAA5050 emulation writes each
      * of its 16 texels per character individually, so its output is already at
-     * the framebuffer's own resolution. Otherwise the stored field is log2 of
-     * the pixel's width in texels, which for the ULA's `1 << (3 - ulaMode)`
-     * texels per pixel is simply `3 - ulaMode`.
+     * the framebuffer's own resolution.
      */
     updateLineGridUla() {
-        this.lineGridUla = LineGridRendered | (this.teletextMode ? 0 : 3 - this.ulaMode);
+        this.lineGridUla = encodeLineGrid(this.teletextMode ? 1 : texelsPerPixel(this.ulaMode), false);
     }
 
     blitFb(dat, destOffset, numPixels) {

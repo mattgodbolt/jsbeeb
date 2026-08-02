@@ -62,7 +62,9 @@ function xbrFrame(frame, extent, outWidth, outHeight, options) {
         // The band occupies the same fraction of the output as of the input.
         const outTop = Math.round(((band.top - extent.top) / totalRows) * outHeight);
         const outBottom = Math.round(((band.bottom - extent.top) / totalRows) * outHeight);
-        const slice = makePixelImage(outWidth, Math.max(1, outBottom - outTop));
+        // A band that rounds away entirely would otherwise write past the end.
+        if (outBottom <= outTop) continue;
+        const slice = makePixelImage(outWidth, outBottom - outTop);
         xbrUpscale(logical, slice, options);
         out.data.set(slice.data, outTop * outWidth);
         report.push(

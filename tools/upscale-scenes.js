@@ -36,7 +36,7 @@ export const Scenes = [
     {
         name: "mode2-chunky",
         detail: { left: 500, top: 250, width: 180, height: 130 },
-        description: "MODE 2 — 160 pixels across, each eight framebuffer texels wide",
+        description: "MODE 2 — 160 pixels across, each four framebuffer texels wide",
         program: [
             "MODE 2",
             "VDU 23,1,0;0;0;0;",

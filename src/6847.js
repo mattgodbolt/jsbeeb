@@ -1,6 +1,7 @@
 "use strict";
 import * as utils from "./utils.js";
 import * as fontData from "./6847_fontdata.js";
+import { encodeLineGrid } from "./video-filters/pixel-grid.js";
 
 const VDISPENABLE = 1 << 0,
     HDISPENABLE = 1 << 1,
@@ -491,10 +492,15 @@ export class Video6847 {
                         {
                             // TODO: Add in the INTEXT modifiers to mode (if necessary)
                             // blit into the fb32 buffer which is painted by VIDEO
-                            if ((mode & MODE_AG) === 0)
+                            if ((mode & MODE_AG) === 0) {
                                 // MODE_AG - bit 4; 0x10 is the AG bit
+                                // Eight glyph bits share the character's texels.
+                                this.recordLineGrid((this.pixelsPerChar * this.bitmapPxPerPixel) / 8);
                                 this.blitChar(this.video.fb32, dat, offset, this.pixelsPerChar, css);
-                            else this.blitPixels(this.video.fb32, dat, offset, css);
+                            } else {
+                                this.recordLineGrid(this.pixelsPerBit / this.bpp);
+                                this.blitPixels(this.video.fb32, dat, offset, css);
+                            }
                         }
                     }
                 } else {
@@ -617,6 +623,22 @@ export class Video6847 {
                 fb32[destOffset + n + 1024] = fb32[destOffset + n] = colour;
             }
         }
+    }
+
+    /**
+     * Note the logical pixel size of the two rows about to be written, so
+     * display filters can see the picture as pixels rather than as raster
+     * samples (see video-filters/pixel-grid.js). Only the picture records a
+     * grid: the border is a solid colour, and letting it write here would
+     * leave the row describing the border rather than the picture on it.
+     *
+     * @param {number} texelsWide how many framebuffer texels one pixel spans
+     */
+    recordLineGrid(texelsWide) {
+        // Every 6847 blitter writes each pixel row into two framebuffer lines.
+        const grid = encodeLineGrid(texelsWide, true);
+        this.video.lineGrid[this.bitmapY] = grid;
+        this.video.lineGrid[this.bitmapY + 1] = grid;
     }
 
     blitChar(buf, data, destOffset, numPixels, css) {

@@ -20,7 +20,7 @@ logical pixel covers several framebuffer texels:
 
 - horizontally, `Video.blitFb` writes `pixelsPerChar` texels per byte, so a
   logical pixel is 1, 2, 4 or 8 texels wide depending on the ULA's colour bits.
-  It is one texel in MODE 0 and eight in MODE 2;
+  It is one texel in MODE 0, two in MODE 1 and four in MODE 2 and MODE 5;
 - vertically, non-interlaced modes write each CRTC scanline into two adjacent
   framebuffer rows, so logical pixels are usually two texels tall.
 
@@ -36,15 +36,20 @@ per framebuffer row in `lineGrid`:
 
 | bits | meaning                                     |
 | ---- | ------------------------------------------- |
-| 0-1  | log2 of the pixel's width in texels (0-3)   |
-| 2    | set if the scanline was written to two rows |
+| 0-2  | the pixel's width in texels, less one       |
+| 3    | set if the scanline was written to two rows |
 | 7    | set if the row was rendered at all          |
 
-The width field is log2 so that `Video` can build the byte as
-`LineGridRendered | (3 - ulaMode)` with no lookup and no logarithm: the ULA
-writes `1 << (3 - ulaMode)` texels per pixel. MODE 7 is recorded as one texel per
-pixel, because the SAA5050 emulation writes each of its 16 texels per character
+The width is stored less one so it needs no logarithm to write and no
+exponential to read, and so that any width from one to eight can be described —
+the Atom's 6847 uses widths the BBC's ULA never selects, and records the same
+descriptor from its own blitters. MODE 7 is recorded as one texel per pixel,
+because the SAA5050 emulation writes each of its 16 texels per character
 individually and its output is already at the framebuffer's own resolution.
+
+A row whose mode changes part way along keeps only the last mode on it. That is
+enough for a raster split, which is what people write; it is not enough for a
+mid-line one.
 
 `src/video-filters/pixel-grid.js` owns the encoding and the code that turns a
 frame into bands of constant pixel size. The filter uploads `lineGrid` as a
@@ -83,8 +88,9 @@ parameter change.
   become continuous.
 - **MODE 0** is barely changed. At 640 pixels across and one texel per pixel
   there is little for the filter to reconstruct, and text stays crisp.
-- **Chunky text in MODE 2 and MODE 5** is where opinions differ. Eight-by-eight
-  characters twenty columns across get noticeably rounded.
+- **Chunky text in MODE 2 and MODE 5** is where opinions differ. Twenty columns
+  across, each character only eight logical pixels wide, they get noticeably
+  rounded.
 - **MODE 7** is left alone. The SAA5050's own character rounding has already
   smoothed the glyphs, so the filter finds almost no edges to work on.
 

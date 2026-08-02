@@ -7,18 +7,18 @@
 //
 //   * horizontally, `Video.blitFb` writes `pixelsPerChar` texels per byte, so a
 //     logical pixel is 1, 2, 4 or 8 texels wide depending on the ULA's colour
-//     bits — 8 texels in MODE 2, one in MODE 0;
+//     bits — one texel in MODE 0, two in MODE 1, four in MODE 2 and MODE 5;
 //   * vertically, non-interlaced modes write each CRTC scanline into two
 //     adjacent framebuffer rows (`doubledLines`), so logical pixels are two
 //     texels tall.
+//
+// The Atom's 6847 has its own geometry and records the same descriptor from its
+// own blitters.
 //
 // Any upscaler that samples raw texel neighbours therefore sees nine copies of
 // the same logical pixel and does nothing at all. Filters need the grid, and
 // only Video knows it — so Video records it per row, and this module turns that
 // record into something a filter can use.
-
-/** Widest a logical pixel can be, in framebuffer texels (MODE 2). */
-export const MaxTexelsPerPixel = 8;
 
 /**
  * Rows in the line grid. The framebuffer is 625 rows, but the GL texture it is
@@ -27,34 +27,37 @@ export const MaxTexelsPerPixel = 8;
  */
 export const LineGridRows = 1024;
 
-// Row descriptor bits, as stored by Video in its `lineGrid` array: bits 0-1
-// hold log2 of the logical pixel's width in texels, so a plain `3 - ulaMode`
-// with no lookup or logarithm (see `Video.recordLineGrid`).
+// Row descriptor bits, as stored in `Video.lineGrid`. The width is held less
+// one, so it needs no logarithm to write and no exponential to read, and any
+// width from one to eight can be described — the 6847 uses widths the BBC's ULA
+// never selects.
 export const LineGridRendered = 0x80;
-export const LineGridVerticalDouble = 0x04;
-export const LineGridHorizontalLog2Mask = 0x03;
+export const LineGridVerticalDouble = 0x08;
+export const LineGridWidthMask = 0x07;
 
 /**
  * How many framebuffer texels wide one logical pixel is, given the ULA's
  * colour-select bits. The ULA writes 8 pixels per byte at `ulaMode` 3 and
  * halves the count for each step down, which `Video.table4bpp` implements by
- * indexing its 1bpp entries with `i >> (3 - ulaMode)`.
+ * indexing its 1bpp entries with `i >> (3 - ulaMode)`. This holds for the 1MHz
+ * modes too: `pixelsPerChar` is 16 there rather than 8, and the same shift over
+ * twice as many texels gives the same width — MODE 4 is two, MODE 5 is four.
  *
  * @param {number} ulaMode 0..3, the ULA control register's colour bits
- * @returns {number} 1, 2, 4 or 8
+ * @returns {number} 1, 2, 4 or 8; the standard modes use 1, 2 and 4
  */
 export function texelsPerPixel(ulaMode) {
-    return 1 << (3 - ulaMode);
+    return 8 >> ulaMode;
 }
 
 /**
- * Pack a row's grid description into the byte Video stores.
+ * Pack a row's grid description into the byte the video chips store.
  *
- * @param {number} texelsWide 1, 2, 4 or 8 (see {@link texelsPerPixel})
+ * @param {number} texelsWide 1 to 8 (see {@link texelsPerPixel})
  * @param {boolean} doubledLines whether this scanline was written to two rows
  */
 export function encodeLineGrid(texelsWide, doubledLines) {
-    return LineGridRendered | Math.log2(texelsWide) | (doubledLines ? LineGridVerticalDouble : 0);
+    return LineGridRendered | (texelsWide - 1) | (doubledLines ? LineGridVerticalDouble : 0);
 }
 
 /**
@@ -66,7 +69,7 @@ export function encodeLineGrid(texelsWide, doubledLines) {
 export function decodeLineGrid(encoded) {
     return {
         rendered: (encoded & LineGridRendered) !== 0,
-        texelsWide: 1 << (encoded & LineGridHorizontalLog2Mask),
+        texelsWide: (encoded & LineGridWidthMask) + 1,
         texelsHigh: encoded & LineGridVerticalDouble ? 2 : 1,
     };
 }
@@ -78,6 +81,12 @@ export function decodeLineGrid(encoded) {
  * is routine — so there is no one logical grid for the whole screen. Each band
  * is upscaled independently; the only cost is that the filter cannot see across
  * a mode change, which is where the picture is discontinuous anyway.
+ *
+ * Note the GLSL filter has no bands: it reads each row's own descriptor and
+ * samples its vertical neighbours at that row's stride, so at a seam it reads
+ * the neighbouring mode's texels at the wrong one. The two implementations
+ * therefore differ for a row or two at a mode change, and tools/verify-xbr-
+ * shader.js does not compare multi-band frames for that reason.
  *
  * @param {Uint8Array} lineGrid one descriptor byte per framebuffer row
  * @param {number} top first row to consider

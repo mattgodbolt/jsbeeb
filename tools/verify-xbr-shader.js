@@ -247,7 +247,12 @@ async function verifyScene(scene, opts) {
 
     const bands = findBands(frame.lineGrid, extent.top, extent.bottom);
     if (bands.length !== 1) {
-        console.log(`  skipped: ${bands.length} bands, and the reference maps only one to the full output`);
+        // The reference clips each band, so it never looks across a mode
+        // change; the shader has no band boundaries and samples its
+        // neighbours at the current row's stride regardless. The two
+        // legitimately disagree for a row or two at a seam, so a multi-band
+        // scene cannot be compared this way — and is therefore not covered.
+        console.log(`  NOT COMPARED: ${bands.length} bands; band seams are outside what this can check`);
         return true;
     }
     // Whole logical pixels only, so the two implementations sample the same grid.

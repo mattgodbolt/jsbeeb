@@ -7,6 +7,7 @@ import {
     extractBand,
     LineGridRendered,
     LineGridVerticalDouble,
+    LineGridWidthMask,
 } from "../../src/video-filters/pixel-grid.js";
 
 describe("logical pixel grid", () => {
@@ -25,7 +26,7 @@ describe("logical pixel grid", () => {
 
     describe("encode and decode", () => {
         it("round-trips every combination", () => {
-            for (const texelsWide of [1, 2, 4, 8]) {
+            for (const texelsWide of [1, 2, 3, 4, 5, 6, 7, 8]) {
                 for (const doubled of [false, true]) {
                     const decoded = decodeLineGrid(encodeLineGrid(texelsWide, doubled));
                     expect(decoded).toEqual({
@@ -145,12 +146,21 @@ describe("logical pixel grid", () => {
         });
     });
 
-    it("uses bit positions that Video can compute without a lookup", () => {
-        // Video builds the byte as `LineGridRendered | (3 - ulaMode) | double`,
-        // which is only correct if the width field is log2 in the low bits.
-        for (let ulaMode = 0; ulaMode <= 3; ++ulaMode) {
-            const fromVideo = LineGridRendered | (3 - ulaMode) | LineGridVerticalDouble;
-            expect(decodeLineGrid(fromVideo).texelsWide).toBe(texelsPerPixel(ulaMode));
+    it("describes any width the video chips can produce", () => {
+        // The BBC's ULA only ever selects powers of two, but the Atom's 6847
+        // has its own geometry, so the field must not assume a power of two.
+        expect(LineGridWidthMask + 1).toBeGreaterThanOrEqual(8);
+        for (let texelsWide = 1; texelsWide <= 8; ++texelsWide) {
+            expect(decodeLineGrid(encodeLineGrid(texelsWide, true)).texelsWide).toBe(texelsWide);
         }
+    });
+
+    it("keeps the width, doubling and rendered fields out of each other's way", () => {
+        const encoded = encodeLineGrid(8, true);
+        expect(encoded & LineGridWidthMask).toBe(7);
+        expect(encoded & LineGridVerticalDouble).toBe(LineGridVerticalDouble);
+        expect(encoded & LineGridRendered).toBe(LineGridRendered);
+        // A width of 8 must not bleed into the doubling bit.
+        expect(decodeLineGrid(encodeLineGrid(8, false)).texelsHigh).toBe(1);
     });
 });

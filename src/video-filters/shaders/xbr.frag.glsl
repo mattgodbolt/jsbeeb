@@ -54,7 +54,7 @@ const vec3 Y = vec3(0.2627, 0.678, 0.0593);
 
 // Line grid descriptor bits; see video-filters/pixel-grid.js.
 const float GridRendered = 128.0;
-const float GridVerticalDouble = 4.0;
+const float GridVerticalDouble = 8.0;
 
 // Four colours held channel-wise, standing in for the reference shader's
 // mat4x3. The four lanes are the same rule applied to the four rotations of
@@ -120,8 +120,8 @@ void main() {
     descriptor -= step(GridRendered, descriptor) * GridRendered;
     float verticalDouble = step(GridVerticalDouble, descriptor);
     descriptor -= verticalDouble * GridVerticalDouble;
-    // Bits 0-1 hold log2 of the pixel's width in texels.
-    vec2 pixelSize = vec2(exp2(descriptor), 1.0 + verticalDouble);
+    // What is left is the pixel's width in texels, less one.
+    vec2 pixelSize = vec2(descriptor + 1.0, 1.0 + verticalDouble);
 
     // Everything below works in logical pixels, as a stock xBR shader would.
     vec2 logical = fbCoord / pixelSize;

@@ -67,38 +67,29 @@ export class XbrFilter {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.activeTexture(gl.TEXTURE0);
 
-        this.uploaded = new Uint8Array(LineGridRows);
         this.allocated = false;
     }
 
     setUniforms(params) {
         const gl = this.gl;
+        const lineGrid = params.lineGrid;
+        if (lineGrid.length !== LineGridRows)
+            throw new Error(`Line grid is ${lineGrid.length} rows, expected ${LineGridRows}`);
         gl.uniform1i(this.locations.tex, 0);
         gl.uniform1i(this.locations.lineGrid, 1);
         gl.uniform2f(this.locations.textureSize, params.width, params.height);
         gl.uniform2f(this.locations.texelSize, 1.0 / params.width, 1.0 / params.height);
         gl.uniform1f(this.locations.texelsPerOutputPixel, params.texelsPerOutputPixel);
 
-        this.uploaded.set(params.lineGrid.subarray(0, LineGridRows));
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.lineGridTexture);
         // A single-byte-per-texel image one pixel wide has a one-byte row
         // stride, which the default four-byte unpack alignment would misread.
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
         if (this.allocated) {
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, LineGridRows, gl.LUMINANCE, gl.UNSIGNED_BYTE, this.uploaded);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, LineGridRows, gl.LUMINANCE, gl.UNSIGNED_BYTE, lineGrid);
         } else {
-            gl.texImage2D(
-                gl.TEXTURE_2D,
-                0,
-                gl.LUMINANCE,
-                1,
-                LineGridRows,
-                0,
-                gl.LUMINANCE,
-                gl.UNSIGNED_BYTE,
-                this.uploaded,
-            );
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1, LineGridRows, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, lineGrid);
             this.allocated = true;
         }
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
