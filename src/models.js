@@ -234,7 +234,8 @@ export const allModels = [
         name: "Tube65C102",
         synonyms: [],
         os: ["tube/65C102Tube.rom"],
-        // Boards are reported with both Rockwell and GTE parts, so keep the superset of the two.
+        // Boards are reported with both Rockwell and GTE parts, so keep the superset of the two
+        // until #756 lets the fitted co-processor be chosen.
         cpuModel: CpuModel.CMOS65C02,
         isMaster: false,
         clockMhz: 4,
