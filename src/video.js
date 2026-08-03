@@ -389,8 +389,9 @@ export class Video {
         this.doubledScanlines = true;
         this.frameSkipCount = 0;
         this.screenSubtract = 0;
+        this.videoClocks = 0;
         // Host paint pacing, not machine state, so deliberately not snapshotted.
-        this.paintCooldown = 0;
+        this.lastPaintClock = -MinPaintIntervalClocks;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -574,9 +575,9 @@ export class Video {
 
     // Return the beam to the top of the frame, painting the frame we just
     // finished unless we are painting too often to be worth showing the host.
-    flyback() {
-        const paintNow = this.paintCooldown === 0;
-        if (paintNow) this.paintCooldown = MinPaintIntervalClocks;
+    flyback(now) {
+        const paintNow = now - this.lastPaintClock >= MinPaintIntervalClocks;
+        if (paintNow) this.lastPaintClock = now;
         this.paintAndClear(paintNow);
     }
 
@@ -829,14 +830,12 @@ export class Video {
             // an approximation that works if hsyncs are spaced evenly.
             this.bitmapY += 2;
 
-            // If no VSync occurs this frame, go back to the top and force a repaint
-            if (this.bitmapY >= 768) {
-                // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
-                this.flyback();
-            }
+            // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
+            return this.bitmapY >= 768;
         } else if (this.hpulseCounter === (this.regs[3] & 0x0f)) {
             this.inHSync = false;
         }
+        return false;
     }
 
     cb2changed(level, output) {
@@ -872,8 +871,10 @@ export class Video {
     ////////////////////
     // Main drawing routine
     polltime(clocks) {
+        // `clocks` is already decremented in the loop body, so `endClock - clocks`
+        // is the absolute video clock of the tick being handled.
+        const endClock = this.videoClocks + clocks;
         while (clocks--) {
-            if (this.paintCooldown > 0) this.paintCooldown--;
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
             this.bitmapX += 8;
@@ -885,7 +886,7 @@ export class Video {
             // This emulates the Hitachi 6845SP CRTC.
             // Other variants have different quirks.
             // Handle HSync
-            if (this.inHSync) this.handleHSync();
+            if (this.inHSync && this.handleHSync()) this.flyback(endClock - clocks);
 
             // Handle delayed display enable due to skew
             const displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
@@ -949,7 +950,7 @@ export class Video {
                 this.hadVSyncThisRow = true;
                 this.vpulseCounter = 0;
 
-                this.flyback();
+                this.flyback(endClock - clocks);
             }
 
             if (vSyncStarting || vSyncEnding) {
@@ -1100,6 +1101,7 @@ export class Video {
                 this.doEvenFrameLogic = !!(this.frameCount & 1);
             }
         } // matches while
+        this.videoClocks = endClock;
     }
 }
 
