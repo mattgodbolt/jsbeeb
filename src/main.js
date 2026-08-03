@@ -398,7 +398,11 @@ function createCanvasForFilter(filterClass) {
 
 let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
 function swapCanvas(newFilterClass) {
+    const oldCanvas = canvas;
     const newCanvas = createCanvasForFilter(newFilterClass);
+    // Only once the replacement exists, so a failure to build it leaves the
+    // display we already had. The two share a GL context but no GL objects.
+    oldCanvas.dispose();
     video.fb32 = newCanvas.fb32;
     video.paint_ext = function paint(minx, miny, maxx, maxy) {
         frames++;

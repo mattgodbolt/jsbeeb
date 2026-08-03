@@ -41,6 +41,11 @@ export class PassthroughFilter {
         gl.attachShader(this.program, fragmentShader);
         gl.linkProgram(this.program);
 
+        // Once linked the program holds its own reference, so releasing ours
+        // here means deleting the program later frees the shaders too.
+        gl.deleteShader(vertexShader);
+        gl.deleteShader(fragmentShader);
+
         if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
             throw new Error("Failed to link passthrough shader program: " + gl.getProgramInfoLog(this.program));
         }
@@ -61,6 +66,12 @@ export class PassthroughFilter {
         }
 
         return shader;
+    }
+
+    /** Release the GL objects this filter owns. */
+    dispose() {
+        this.gl.deleteProgram(this.program);
+        this.program = null;
     }
 
     setUniforms(_params) {

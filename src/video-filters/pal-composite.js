@@ -55,6 +55,11 @@ export class PALCompositeFilter {
         gl.attachShader(this.program, fragShader);
         gl.linkProgram(this.program);
 
+        // Once linked the program holds its own reference, so releasing ours
+        // here means deleting the program later frees the shaders too.
+        gl.deleteShader(vertShader);
+        gl.deleteShader(fragShader);
+
         if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
             const info = gl.getProgramInfoLog(this.program);
             throw new Error("Failed to link PAL shader program: " + info);
@@ -82,6 +87,12 @@ export class PALCompositeFilter {
         }
 
         return shader;
+    }
+
+    /** Release the GL objects this filter owns. */
+    dispose() {
+        this.gl.deleteProgram(this.program);
+        this.program = null;
     }
 
     setUniforms(params) {
