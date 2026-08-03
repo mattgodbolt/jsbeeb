@@ -1,9 +1,9 @@
 "use strict";
 
-// Test screens drawn on a real emulated BBC, shared by the upscaling preview
-// and the shader verifier. They are drawn from BASIC so that the capture goes
-// through the real video path — palette, ULA modes, teletext — rather than a
-// synthetic bitmap that might not resemble anything the emulator produces.
+// Test screens drawn on a real emulated BBC, for tools/verify-xbr-shader.js.
+// They are drawn from BASIC so the capture goes through the real video path —
+// palette, ULA modes, teletext — rather than a synthetic bitmap that might not
+// resemble anything the emulator actually produces.
 
 import path from "path";
 import { TestMachine } from "../tests/test-machine.js";
@@ -11,16 +11,11 @@ import { Video } from "../src/video.js";
 import { setNodeBasePath } from "../src/utils.js";
 
 export const FbWidth = 1024;
-export const FbHeight = 625;
-
-/** The size of the <canvas> jsbeeb draws into in its default modes. */
-export const CanvasWidth = 896;
-export const CanvasHeight = 600;
+const FbHeight = 625;
 
 export const Scenes = [
     {
         name: "mode1-diagonals",
-        detail: { left: 700, top: 300, width: 180, height: 130 },
         description: "MODE 1 lines and circles — the classic hard case for a scaler",
         program: [
             "MODE 1",
@@ -35,7 +30,6 @@ export const Scenes = [
     },
     {
         name: "mode2-chunky",
-        detail: { left: 500, top: 250, width: 180, height: 130 },
         description: "MODE 2 — 160 pixels across, each four framebuffer texels wide",
         program: [
             "MODE 2",
@@ -48,7 +42,6 @@ export const Scenes = [
     },
     {
         name: "mode0-text",
-        detail: { left: 120, top: 120, width: 200, height: 90 },
         description: "MODE 0 — 640 pixels across, one texel per pixel, mostly text",
         program: [
             "MODE 0",
@@ -59,7 +52,6 @@ export const Scenes = [
     },
     {
         name: "mode7-teletext",
-        detail: { left: 60, top: 40, width: 200, height: 120 },
         description: "MODE 7 — SAA5050 output, already at framebuffer resolution",
         program: [
             "MODE 7",
@@ -72,7 +64,6 @@ export const Scenes = [
     },
     {
         name: "mode5-chunky",
-        detail: { left: 300, top: 200, width: 180, height: 130 },
         description: "MODE 5 — four colours, 160 pixels across, drawn from BASIC",
         program: [
             "MODE 5",
@@ -109,7 +100,7 @@ class CapturingVideo extends Video {
 }
 
 /** Trim fully-black rows and columns so each scene is compared over its picture. */
-export function visibleExtent(frame) {
+function visibleExtent(frame) {
     const { fb32, left, top, right, bottom } = frame;
     let minX = right;
     let maxX = left;
