@@ -16,10 +16,7 @@ export const EVERYTHINGENABLED =
 export const OPAQUE_BLACK = 0xff000000;
 export const OPAQUE_WHITE = 0xffffffff;
 
-// Smallest gap, in 2MHz video clocks, between two host repaints: 5ms, so at
-// most 200 a second, comfortably above the 50Hz a sane display asks for. A CRTC
-// with small R0 or R4 can fly back every scanline or even every character, and
-// painting that often would swamp the host.
+// 5ms in 2MHz video clocks: at most 200 host repaints a second.
 export const MinPaintIntervalClocks = 10000;
 
 ////////////////////
