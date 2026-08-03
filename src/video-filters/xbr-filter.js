@@ -73,6 +73,13 @@ export class XbrFilter {
         this.allocated = false;
     }
 
+    /** Release the GL objects this filter owns, the extra texture included. */
+    dispose() {
+        this.gl.deleteProgram(this.program);
+        this.gl.deleteTexture(this.lineGridTexture);
+        this.program = this.lineGridTexture = null;
+    }
+
     setUniforms(params) {
         const gl = this.gl;
         const lineGrid = params.lineGrid;

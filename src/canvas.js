@@ -38,6 +38,10 @@ export class Canvas {
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
+
+    /** Nothing to release: the 2D context owns no objects of ours. */
+    dispose() {}
+
     paint(minx, miny, maxx, maxy, _frame) {
         const width = maxx - minx;
         const height = maxy - miny;
@@ -114,8 +118,8 @@ export class GlCanvas {
 
         const vertexPositionAttrLoc = checkedGl.getAttribLocation(program, "pos");
         checkedGl.enableVertexAttribArray(vertexPositionAttrLoc);
-        const vertexPositionBuffer = checkedGl.createBuffer();
-        checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, vertexPositionBuffer);
+        this.vertexPositionBuffer = checkedGl.createBuffer();
+        checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, this.vertexPositionBuffer);
         checkedGl.bufferData(checkedGl.ARRAY_BUFFER, new Float32Array([0, 0, 0, 1, 1, 0, 1, 1]), checkedGl.STATIC_DRAW);
         checkedGl.vertexAttribPointer(vertexPositionAttrLoc, 2, checkedGl.FLOAT, false, 0, 0);
 
@@ -128,10 +132,29 @@ export class GlCanvas {
         checkedGl.activeTexture(gl.TEXTURE0);
         checkedGl.bindTexture(gl.TEXTURE_2D, this.texture);
 
+        this.checkedGl = checkedGl;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
         console.log("GL Canvas set up");
+    }
+
+    /**
+     * Release the GL objects this canvas owns.
+     *
+     * Switching display mode builds a new canvas over the same element, and a
+     * canvas only ever hands out one WebGL context — so the new one inherits
+     * the old one's context and the old one's objects stay resident unless
+     * they are deleted here. That is a megabytes-per-switch leak: the
+     * framebuffer texture alone is 1024x1024 RGBA.
+     */
+    dispose() {
+        const gl = this.checkedGl;
+        this.filter.dispose();
+        gl.deleteTexture(this.texture);
+        gl.deleteBuffer(this.vertexPositionBuffer);
+        gl.deleteBuffer(this.uvBuffer);
+        this.texture = this.vertexPositionBuffer = this.uvBuffer = null;
     }
 
     paint(minx, miny, maxx, maxy, frame) {

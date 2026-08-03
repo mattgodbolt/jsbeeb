@@ -33,6 +33,12 @@ export class PassthroughFilter {
         };
     }
 
+    /** Release the GL objects this filter owns. */
+    dispose() {
+        this.gl.deleteProgram(this.program);
+        this.program = null;
+    }
+
     setUniforms(_params) {
         const gl = this.gl;
         gl.uniform1i(this.locations.tex, 0);

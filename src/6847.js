@@ -112,6 +112,11 @@ only 1 bit is used of SG6 - to get yellow/red, cyan/orange
 // constant for the graphics mode
 const MODE_AG = 0x10; // graphics mode
 
+// The MC6847 datasheet specifies 3.579545 MHz, but 3.638004 is used here as an
+// empirical correction to align VSync/interrupt timing with the CPU clock.
+// TODO: revisit once full integration is testable.
+const VdgClockMhz = 3.638004;
+
 export class Video6847 {
     constructor(video) {
         this.video = video;
@@ -226,6 +231,9 @@ export class Video6847 {
     reset(cpu, ppia) {
         this.cpu = cpu;
         this.ppia = ppia;
+        // polltime() is handed CPU cycles, so how far the VDG advances per
+        // cycle depends on how fast the CPU it's attached to runs.
+        this.vdgCyclesPerCpuCycle = cpu ? VdgClockMhz / cpu.model.clockMhz : 0;
     }
 
     // USE PAINT from VIDEO
@@ -345,11 +353,7 @@ export class Video6847 {
         // it doesn't draw the whole frame.  It regularly gives control back to the CPU.
 
         const vdgcharclock = this.pixelsPerChar / 2; // 4 or 8
-        // The MC6847 datasheet specifies 3.579545 MHz, but 3.638004 is used here
-        // as an empirical correction to align VSync/interrupt timing with the Atom's
-        // 1 MHz CPU clock. TODO: revisit once full integration is testable.
-        const vdgclock = 3.638004;
-        this.vdg_cycles += clocks * vdgclock;
+        this.vdg_cycles += clocks * this.vdgCyclesPerCpuCycle;
 
         const vdgframelines = 262; //  312 PAL (but no pal on standard atom)  262; // NTSC
         const vdglinetime = 228; // vdg cycles to do a line; not 227.5

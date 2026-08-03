@@ -48,6 +48,12 @@ export class PALCompositeFilter {
         };
     }
 
+    /** Release the GL objects this filter owns. */
+    dispose() {
+        this.gl.deleteProgram(this.program);
+        this.program = null;
+    }
+
     setUniforms(params) {
         const gl = this.gl;
         gl.uniform1i(this.locations.uFramebuffer, 0); // Texture unit 0

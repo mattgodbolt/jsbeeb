@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Acia } from "../../src/acia.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { findModel } from "../../src/models.js";
+
+const BbcModel = findModel("B-DFS1.2");
 
 // Control register word select 101: 8 data bits, 1 stop bit, no parity.
 const EightBitsOneStopNoParity = 0x14;
@@ -9,8 +12,8 @@ const SevenBitsTwoStopEvenParity = 0x00;
 const TransmitInterruptEnable = 0x20;
 const Tdre = 0x02;
 
-function createScheduledAcia(scheduler, cr, transmitRate) {
-    const cpu = { interrupt: 0 };
+function createScheduledAcia(scheduler, cr, transmitRate, model = BbcModel) {
+    const cpu = { interrupt: 0, model };
     const acia = new Acia(cpu, { mute: vi.fn(), tone: vi.fn() }, scheduler);
     acia.write(0, cr);
     acia.setSerialTransmit(transmitRate);
@@ -25,7 +28,7 @@ function createMockAcia(relayNoise) {
             reschedule: vi.fn(),
         })),
     };
-    const acia = new Acia({ interrupt: 0 }, { mute: vi.fn(), tone: vi.fn() }, scheduler, relayNoise);
+    const acia = new Acia({ interrupt: 0, model: BbcModel }, { mute: vi.fn(), tone: vi.fn() }, scheduler, relayNoise);
     acia.setRs423Handler({});
     return acia;
 }
@@ -69,9 +72,9 @@ describe("Acia", () => {
         // A 10 bit byte at 75 baud takes 0.1333s: 266666 cycles of the 2MHz clock.
         const ByteCyclesAt75Baud = 266666;
 
-        const timeToEmpty = (cr, rate) => {
+        const timeToEmpty = (cr, rate, model) => {
             const scheduler = new Scheduler();
-            const { acia } = createScheduledAcia(scheduler, cr, rate);
+            const { acia } = createScheduledAcia(scheduler, cr, rate, model);
             acia.write(1, 0x55);
             let cycles = 0;
             while (!(acia.read(0) & Tdre)) {
@@ -83,6 +86,13 @@ describe("Acia", () => {
 
         it("should empty the transmit register after one byte time", () => {
             expect(timeToEmpty(EightBitsOneStopNoParity, 75)).toBe(ByteCyclesAt75Baud);
+        });
+
+        it("should count the byte time in the machine's own cycles", () => {
+            // The scheduler counts CPU cycles, so the same 0.1333s takes half
+            // as many of them on a 1MHz machine. (The Atom has no ACIA; it is
+            // only standing in here as a machine with a different clock.)
+            expect(timeToEmpty(EightBitsOneStopNoParity, 75, findModel("Atom"))).toBe(ByteCyclesAt75Baud / 2);
         });
 
         it("should account for the word format", () => {

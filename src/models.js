@@ -35,6 +35,15 @@ class Model {
         this.cmosOverride = cmosOverride;
     }
 
+    /**
+     * How many CPU cycles this machine runs in a second. Everything that
+     * converts between real time and emulated cycles should ask here rather
+     * than assuming a clock speed.
+     */
+    get cyclesPerSecond() {
+        return this.clockMhz * 1000 * 1000;
+    }
+
     get nmos() {
         return this._cpuModel === CpuModel.MOS6502;
     }
@@ -225,8 +234,8 @@ export const allModels = [
         name: "Tube65C02",
         synonyms: [],
         os: ["tube/6502Tube.rom"],
-        // TODO(#746): the external second processor was an NMOS 6502A.
-        cpuModel: CpuModel.CMOS65C02,
+        // The production wedge's GTE 65SC02 has no Rockwell bit instructions.
+        cpuModel: CpuModel.CMOS65C12,
         isMaster: false,
         clockMhz: 3,
     }),
@@ -234,7 +243,8 @@ export const allModels = [
         name: "Tube65C102",
         synonyms: [],
         os: ["tube/65C102Tube.rom"],
-        // TODO(#746): Acorn's 65C102 has no Rockwell bit instructions.
+        // Boards are reported with both Rockwell and GTE parts, so keep the superset of the two
+        // until #756 lets the fitted co-processor be chosen.
         cpuModel: CpuModel.CMOS65C02,
         isMaster: false,
         clockMhz: 4,

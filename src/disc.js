@@ -355,6 +355,61 @@ class Sector {
     }
 }
 
+/**
+ * A 64 bit shift register, held as a pair of unsigned 32 bit halves. BigInt would say this more
+ * directly but costs an order of magnitude more per bit shifted.
+ */
+export class BitWindow64 {
+    constructor() {
+        this.hi = 0;
+        this.lo = 0;
+    }
+
+    /**
+     * @param {Number} bit 0 or 1, shifted into bit 0
+     * @returns {Number} the bit shifted out of bit 63
+     */
+    shiftIn(bit) {
+        const shiftedOut = this.hi >>> 31;
+        this.hi = ((this.hi << 1) | (this.lo >>> 31)) >>> 0;
+        this.lo = ((this.lo << 1) | bit) >>> 0;
+        return shiftedOut;
+    }
+
+    /**
+     * @returns {boolean} whether all 64 bits match the halves given
+     */
+    equals(hi, lo) {
+        return this.hi === hi && this.lo === lo;
+    }
+
+    /**
+     * @param {Number} nibble
+     * @returns {Number} the length of the run of `nibble` ending at bit 0
+     */
+    countTrailingNibbles(nibble) {
+        const nibblesPerHalf = 8;
+        let count = 0;
+        for (let bits = this.lo; (bits & 0xf) === nibble; bits >>>= 4) count++;
+        // Only a low half that matched all the way up can have a run continuing into the high half.
+        if (count === nibblesPerHalf) for (let bits = this.hi; (bits & 0xf) === nibble; bits >>>= 4) count++;
+        return count;
+    }
+}
+
+// What the mark detector holds at an address mark. The FM case only pins down the high half,
+// the tail of the zero sync run; the low half is the marker byte itself, decoded separately.
+const FmSyncHi = 0x88888888;
+const MfmMarkerHi = 0xaaaa4489;
+const MfmMarkerLo = 0x44894489;
+// One data bit of zero, FM encoded with its clock, is the pulse nibble 0x8.
+const FmZeroBitPulses = 0x8;
+// FmSyncHi is eight of those, so a match has already seen this much of the sync run.
+const FmSyncHiZeroBits = 8;
+// Sync is counted in zero data bits, so a run no longer than two bytes' worth is short enough
+// to be worth logging.
+const ShortSyncZeros = 16;
+
 class Track {
     constructor(upper, trackNum, initialByte) {
         this.length = IbmDiscFormat.bytesPerTrack; // Default size, will be updated when track is populated
@@ -394,40 +449,30 @@ class Track {
         let doMfmMarkerByte = false;
         let isMfm = false;
         let pulses = 0;
-        let markDetector = 0n;
-        let markDetectorPrev = 0n;
-        const all64b = 0xffffffffffffffffn;
-        const top32of64b = 0xffffffff00000000n;
-        const fmMarker = 0x8888888800000000n;
-        const mfmMarker = 0xaaaa448944894489n;
+        // The mark detector is a 64 bit sliding window over the pulse stream; the bits leaving it
+        // spill into a second window, which the sync run length is counted from.
+        const markDetector = new BitWindow64();
+        const markDetectorPrev = new BitWindow64();
         let dataByte;
         let sector = null;
         for (let pulseIndex = 0; pulseIndex < bitLength; ++pulseIndex) {
             if ((pulseIndex & 31) === 0) pulses = this.pulses2Us[pulseIndex >>> 5];
-            markDetectorPrev = (markDetectorPrev << 1n) & all64b;
-            markDetectorPrev |= markDetector >> 63n;
-            markDetector = (markDetector << 1n) & all64b;
-            shiftRegister = (shiftRegister << 1) & 0xffffffff;
+            const pulseBit = pulses >>> 31;
+            markDetectorPrev.shiftIn(markDetector.shiftIn(pulseBit));
+            shiftRegister = ((shiftRegister << 1) | pulseBit) & 0xffffffff;
             numShifts++;
-            if (pulses & 0x80000000) {
-                markDetector |= 1n;
-                shiftRegister |= 1;
-            }
             pulses = (pulses << 1) & 0xffffffff;
-            if ((markDetector & top32of64b) === fmMarker) {
-                const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(Number(markDetector & 0xffffffffn));
+            if (markDetector.hi === FmSyncHi) {
+                const { clocks, data, iffyPulses } = IbmDiscFormat._2usPulsesToFm(markDetector.lo);
                 if (iffyPulses || clocks !== IbmDiscFormat.markClockPattern) continue;
                 isMfm = false;
                 doMfmMarkerByte = false;
-                let num0s = 8;
-                for (let bits = markDetectorPrev; (bits & 0xfn) === 0x8n; bits >>= 4n) {
-                    num0s++;
-                }
-                if (num0s <= 16) {
+                const num0s = FmSyncHiZeroBits + markDetectorPrev.countTrailingNibbles(FmZeroBitPulses);
+                if (num0s <= ShortSyncZeros) {
                     console.log(`Short zeros sync ${this.description}`);
                 }
                 dataByte = data;
-            } else if (markDetector === mfmMarker) {
+            } else if (markDetector.equals(MfmMarkerHi, MfmMarkerLo)) {
                 // Next byte is MFM marker.
                 isMfm = true;
                 doMfmMarkerByte = true;

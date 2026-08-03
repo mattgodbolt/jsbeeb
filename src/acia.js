@@ -265,8 +265,9 @@ export class Acia {
         }
     }
 
+    // Byte times are held in CPU cycles because that's what the scheduler counts.
     secondsToCycles(sec) {
-        return Math.floor(2 * 1000 * 1000 * sec) | 0;
+        return Math.floor(this.cpu.model.cyclesPerSecond * sec) | 0;
     }
 
     numBitsPerByte() {

@@ -64,17 +64,35 @@ describe("Tube co-processor", () => {
         cpu.execute(200 * 1000);
         const state = cpu.snapshotState();
 
-        // As an imported snapshot can be: the ULA has R3 data pending with NMI enabled, but the
+        // As an imported snapshot can be: the ULA is holding an NMI request with NMI enabled, but the
         // parasite's own idea of the line predates it.
         state.tube.nmiLevel = false;
         state.tube.nmiEdge = false;
         state.tube.ula.internalStatusRegister |= TubeStatusEnableParasiteNmiFromR3;
-        state.tube.ula.parasiteToHostFifoByteCount3 = 0;
+        state.tube.ula.parasiteNmi = true;
 
         cpu.restoreState(state);
 
         expect(cpu.tube._nmiLevel).toBe(true);
         expect(cpu.tube._nmiEdge).toBe(true);
+    });
+
+    it("takes a snapshot without a latched request back to the register 3 condition", async () => {
+        const machine = new TestMachine("Master", { tube: true });
+        await machine.initialise();
+        const cpu = machine.processor;
+        cpu.execute(200 * 1000);
+        const state = cpu.snapshotState();
+
+        // As a snapshot taken before the ULA latched its request would be.
+        delete state.tube.ula.parasiteNmi;
+        state.tube.ula.internalStatusRegister |= TubeStatusEnableParasiteNmiFromR3;
+        state.tube.ula.parasiteToHostFifoByteCount3 = 0;
+
+        cpu.restoreState(state);
+
+        expect(cpu.tube.tube.parasiteNmi).toBe(true);
+        expect(cpu.tube._nmiLevel).toBe(true);
     });
 
     it("does not take a latched NMI across a parasite reset", async () => {
@@ -114,6 +132,18 @@ describe("Tube co-processor", () => {
         // The prompt only arrives if the parasite kept up with the MOS's unhandshaken R3
         // transfer: the ULA drops bytes the host never re-checks, and a part-copied BASIC hangs.
         expect(machine.drainText({ raw: true })).toContain("BASIC\n\n>");
+    });
+
+    it("still brings the external second processor's client ROM up on the base CMOS core", async () => {
+        const machine = new TestMachine("B-DFS1.2", { tube: true });
+        await machine.initialise();
+        machine.startCapture();
+
+        await machine.runFor(4 * 1000 * 1000);
+
+        const text = machine.drainText({ raw: true });
+        expect(text).toContain("Acorn TUBE 6502 64K");
+        expect(text).toContain("BASIC\n\n>");
     });
 
     it("passes the requested multiplier on to the parasite", async () => {

@@ -13,27 +13,30 @@
  */
 export function compileProgram(gl, vertexSource, fragmentSource, name) {
     const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexSource, name);
-    const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource, name);
+    let fragmentShader = null;
+    try {
+        fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource, name);
 
-    const program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
 
-    // Release our references before checking: the program holds its own, so
-    // this frees them on failure and hands ownership over on success. A filter
-    // that throws here is retried on the fallback path, so leaking a pair of
-    // shaders each time would accumulate.
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            const info = gl.getProgramInfoLog(program);
+            gl.deleteProgram(program);
+            throw new Error(`Failed to link ${name} shader program: ${info}`);
+        }
 
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        const info = gl.getProgramInfoLog(program);
-        gl.deleteProgram(program);
-        throw new Error(`Failed to link ${name} shader program: ${info}`);
+        return program;
+    } finally {
+        // Once linked the program holds its own reference, so releasing ours here means
+        // deleting the program later frees the shaders too. If we never got that far, ours
+        // was the only reference and they go now. A filter that throws is retried on the
+        // fallback path, so leaking a pair each time would accumulate.
+        gl.deleteShader(vertexShader);
+        gl.deleteShader(fragmentShader);
     }
-
-    return program;
 }
 
 function compileShader(gl, type, source, name) {
