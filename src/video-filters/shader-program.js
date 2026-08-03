@@ -20,15 +20,19 @@ export function compileProgram(gl, vertexSource, fragmentSource, name) {
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
 
+    // Release our references before checking: the program holds its own, so
+    // this frees them on failure and hands ownership over on success. A filter
+    // that throws here is retried on the fallback path, so leaking a pair of
+    // shaders each time would accumulate.
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
         const info = gl.getProgramInfoLog(program);
         gl.deleteProgram(program);
         throw new Error(`Failed to link ${name} shader program: ${info}`);
     }
 
-    // The program holds its own reference now.
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
     return program;
 }
 

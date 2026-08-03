@@ -24,11 +24,14 @@ export class XbrFilter {
             canvasTop: 8,
             visibleWidth: 896,
             visibleHeight: 600,
-            // Twice the usual canvas, so there is somewhere to put the detail
-            // the filter reconstructs. Exactly 2x keeps the aspect ratio, and
-            // so the monitor placement above, identical to the other modes.
-            canvasWidth: 1792,
-            canvasHeight: 1200,
+            canvasWidth: 896,
+            canvasHeight: 600,
+            // Reconstructed detail needs somewhere to go, so this mode will
+            // draw into up to twice the usual canvas — but only as far as the
+            // display can actually show. Rendering 1792x1200 into a window
+            // showing 900 pixels costs four times the fragments for nothing,
+            // and this shader is expensive per fragment.
+            maxCanvasScale: 2,
             // The shader picks its own samples on the logical pixel grid, so
             // hardware interpolation would only blur what it reads.
             nearestSampling: true,

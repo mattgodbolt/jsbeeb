@@ -232,9 +232,10 @@ speechOutput.enabled = !!parsedQuery.speechOutput;
 const config = new Config(
     function onChange(changed) {
         if (changed.displayMode) {
-            displayModeFilter = getFilterForMode(changed.displayMode);
+            // swapCanvas settles displayModeFilter on whatever was really
+            // built, so take the picture from that rather than the request.
+            swapCanvas(getFilterForMode(changed.displayMode));
             setCrtPic(displayModeFilter);
-            swapCanvas(displayModeFilter);
             // Trigger window resize to recalculate layout with new dimensions
             window.dispatchEvent(new Event("resize"));
         }
@@ -398,7 +399,7 @@ function createCanvasForFilter(filterClass) {
     // Test which filter was actually built, not merely whether we got WebGL: a
     // filter can decline a context that works perfectly well for other modes,
     // in which case bestCanvas quietly gives us an unfiltered GL canvas.
-    if (filterClass.requiresGl() && !(newCanvas.filter instanceof filterClass)) {
+    if (filterClass.requiresGl() && newCanvas.filterClass !== filterClass) {
         showError(
             `enabling ${config.name} mode`,
             `${config.name} is not available on this device. Using standard display instead.`,
@@ -419,11 +420,15 @@ function swapCanvas(newFilterClass) {
         newCanvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
     };
     canvas = newCanvas;
-    displayModeFilter = newFilterClass;
+    // Follow the filter we ended up with, not the one we asked for: everything
+    // downstream — the monitor picture, the canvas geometry, how large a
+    // drawing buffer to ask for — comes from its display config.
+    displayModeFilter = newCanvas.filterClass;
     window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
 }
 
 let canvas = createCanvasForFilter(displayModeFilter);
+displayModeFilter = canvas.filterClass;
 
 video = new Video(
     model.isMaster,
@@ -2147,6 +2152,20 @@ function stop(debug) {
         resizeCubMonitor.style.width = width + "px";
         resizeCubMonitorPic.style.height = height + "px";
         resizeCubMonitorPic.style.width = width + "px";
+        // A mode that reconstructs detail wants to draw at the size it will be
+        // seen at, up to the limit it asks for. Drawing more than the display
+        // can show costs fragments and buys nothing, and for an expensive
+        // shader that is the difference between comfortable and not.
+        if (displayConfig.maxCanvasScale) {
+            const wanted = (finalCanvasWidth * (window.devicePixelRatio || 1)) / displayConfig.canvasWidth;
+            const scale = Math.min(displayConfig.maxCanvasScale, Math.max(1, wanted));
+            const backingWidth = Math.round(displayConfig.canvasWidth * scale);
+            if (screenCanvas.width !== backingWidth) {
+                screenCanvas.width = backingWidth;
+                screenCanvas.height = Math.round(displayConfig.canvasHeight * scale);
+            }
+        }
+
         screenCanvas.style.width = finalCanvasWidth + "px";
         screenCanvas.style.height = finalCanvasHeight + "px";
         screenCanvas.style.left = canvasOrigLeft * containerScale + "px";

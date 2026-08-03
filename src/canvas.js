@@ -19,6 +19,11 @@ export class Canvas {
         return false;
     }
 
+    /** The 2D canvas draws the framebuffer as-is, which is what this filter is. */
+    get filterClass() {
+        return PassthroughFilter;
+    }
+
     constructor(canvas) {
         this.ctx = canvas.getContext("2d", { alpha: false });
         if (this.ctx === null) throw new Error("Unable to get a 2D context");
@@ -29,8 +34,7 @@ export class Canvas {
         this.backBuffer.height = 625;
         this.backCtx = this.backBuffer.getContext("2d", { alpha: false });
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
-        this.canvasWidth = canvas.width;
-        this.canvasHeight = canvas.height;
+        this.canvas = canvas;
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
@@ -38,7 +42,8 @@ export class Canvas {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvasWidth, this.canvasHeight);
+        // Read the size each time: it can change when the window is resized.
+        this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
     }
 }
 
@@ -47,6 +52,11 @@ const height = 1024;
 export class GlCanvas {
     isWebGl() {
         return true;
+    }
+
+    /** The filter actually built, which may not be the one that was asked for. */
+    get filterClass() {
+        return this.filter.constructor;
     }
 
     constructor(canvas, filterClass) {
@@ -71,10 +81,6 @@ export class GlCanvas {
         });
 
         checkedGl.depthMask(false);
-
-        // The default viewport is fixed when the context is created, so it has
-        // to be set explicitly for the filters that ask for a larger canvas.
-        checkedGl.viewport(0, 0, checkedGl.drawingBufferWidth, checkedGl.drawingBufferHeight);
 
         this.filter = new filterClass(checkedGl);
         const program = this.filter.program;
@@ -130,6 +136,10 @@ export class GlCanvas {
 
     paint(minx, miny, maxx, maxy, frame) {
         const gl = this.gl;
+        // The drawing buffer can be resized under us — modes that scale to the
+        // display do it on every window resize — and the viewport does not
+        // follow, so set it each frame rather than track when it changed.
+        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
             gl.TEXTURE_2D,

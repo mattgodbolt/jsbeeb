@@ -95,6 +95,10 @@ vec4 pack4(Lane4 a) {
     return a.r * 65536.0 + a.g * 256.0 + a.b;
 }
 
+float pack(vec3 c) {
+    return c.r * 65536.0 + c.g * 256.0 + c.b;
+}
+
 /** Exact (not thresholded) inequality. */
 vec4 diff4(vec4 a, vec4 b) {
     return vec4(notEqual(a, b));
@@ -140,17 +144,36 @@ void main() {
     // D0  D  E  F F4
     // G0  G  H  I I4
     //    G5 H5 I5
+    vec3 E = AT(0.0, 0.0);
+    vec3 B = AT(0.0, -1.0);
+    vec3 D = AT(-1.0, 0.0);
+    vec3 F = AT(1.0, 0.0);
+    vec3 H = AT(0.0, 1.0);
+
+    // Level 0: the centre differs from both its right and lower neighbours,
+    // i.e. there is an edge here at all. Every rule below is gated on it, so
+    // where it is zero in all four rotations the answer is exactly E — and
+    // most of a BBC screen is flat colour. Taking that exit early skips
+    // sixteen texture fetches and the whole of the algorithm.
+    //
+    // Correctness rests on this being the same irlv0 the full path computes,
+    // which tools/verify-xbr-shader.js proves by comparing against the
+    // JavaScript reference, where no such shortcut exists.
+    vec4 eP4 = vec4(pack(E));
+    vec4 fP = vec4(pack(F), pack(B), pack(D), pack(H));
+    vec4 hP = fP.wxyz;
+    vec4 irlv0 = vec4(notEqual(eP4, fP)) * vec4(notEqual(eP4, hP));
+    if (irlv0 == vec4(0.0)) {
+        gl_FragColor = vec4(E, 1.0);
+        return;
+    }
+
     vec3 A1 = AT(-1.0, -2.0);
     vec3 B1 = AT(0.0, -2.0);
     vec3 C1 = AT(1.0, -2.0);
     vec3 A = AT(-1.0, -1.0);
-    vec3 B = AT(0.0, -1.0);
     vec3 C = AT(1.0, -1.0);
-    vec3 D = AT(-1.0, 0.0);
-    vec3 E = AT(0.0, 0.0);
-    vec3 F = AT(1.0, 0.0);
     vec3 G = AT(-1.0, 1.0);
-    vec3 H = AT(0.0, 1.0);
     vec3 I = AT(1.0, 1.0);
     vec3 G5 = AT(-1.0, 2.0);
     vec3 H5 = AT(0.0, 2.0);
@@ -176,23 +199,19 @@ void main() {
     Lane4 h5 = lane(H5, F4, B1, D0);
     Lane4 f4 = lane(F4, B1, D0, H5);
 
-    // Packed forms, for the exact-inequality tests.
+    // Packed forms, for the exact-inequality tests. `fP` and `hP` are already
+    // in hand from the early-out above; `bP.wxyz` and `bP.zwxy` are those same
+    // two rotations.
     vec4 bP = pack4(b);
     vec4 cP = pack4(c);
     vec4 dP = bP.yzwx;
-    vec4 eP = pack4(e);
-    vec4 fP = bP.wxyz;
+    vec4 eP = eP4;
     vec4 gP = cP.zwxy;
-    vec4 hP = bP.zwxy;
 
     // These inequations define the line below which interpolation occurs.
     vec4 fx = Ao * fp.y + Bo * fp.x;
     vec4 fxL = Ax * fp.y + Bx * fp.x;
     vec4 fxU = Ay * fp.y + By * fp.x;
-
-    // Level 0: the centre differs from both its right and lower neighbours,
-    // i.e. there is an edge here at all.
-    vec4 irlv0 = diff4(eP, fP) * diff4(eP, hP);
 
     // Corner detection variant C: also require the edge to be part of a longer
     // run, so isolated single pixels are not rounded away.
