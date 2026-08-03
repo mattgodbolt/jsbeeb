@@ -18,16 +18,14 @@ const ControlRunningDrive0 = 0x21;
 const StatusBusy = 0x01;
 
 const ForceInterrupt = 0xd0;
+// The whole low nibble, including the ready line bits the BBC can never exercise.
+const AllFlagCombinations = [...Array(16).keys()];
 // Seek, with the spin-up wait disabled so the seek starts without six revolutions of delay.
 const SeekCommand = 0x18;
 
-// The drive schedules its first pulse callback one tick after it starts spinning.
-const TicksForFirstPulse = 1;
-// Half way into a seek step, which at the default 6ms rate and two ticks per microsecond is
-// 12000 ticks.
-const TicksMidSeekStep = 6000;
-// Comfortably more than the 32us the controller takes to report a command as complete.
-const TicksForCommandCompletion = 1000;
+// Long enough to reach the drive's first pulse callback and to outlast the 32us the controller
+// takes to report a command as complete, but still well inside a seek's first step.
+const ShortWaitTicks = 1000;
 
 /**
  * A drive with no disc holds its index line permanently asserted, so the controller sees exactly
@@ -64,14 +62,14 @@ describe("WD1770 FDC tests", () => {
             fdc.write(TrackRegister, 0);
             fdc.write(DataRegister, 40);
             fdc.write(CommandRegister, SeekCommand);
-            scheduler.polltime(TicksMidSeekStep);
+            scheduler.polltime(ShortWaitTicks);
             expect(fdc.read(StatusRegister) & StatusBusy).toBe(StatusBusy);
 
             fdc.write(CommandRegister, ForceInterrupt | 0x08);
             expect(cpu.nmi).toBe(true);
 
             // The completion timer must clear busy without swallowing the interrupt.
-            scheduler.polltime(TicksForCommandCompletion);
+            scheduler.polltime(ShortWaitTicks);
             expect(cpu.nmi).toBe(true);
             expect(fdc.read(StatusRegister) & StatusBusy).toBe(0);
         });
@@ -80,7 +78,7 @@ describe("WD1770 FDC tests", () => {
             const { cpu, scheduler, fdc } = makeFdc();
             fdc.write(CommandRegister, ForceInterrupt | 0x04);
             expect(cpu.nmi).toBe(false);
-            scheduler.polltime(TicksForFirstPulse);
+            scheduler.polltime(ShortWaitTicks);
             expect(cpu.nmi).toBe(true);
         });
 
@@ -92,7 +90,7 @@ describe("WD1770 FDC tests", () => {
             // Reading the status register drops INTRQ, so a second one must be the index pulse.
             fdc.read(StatusRegister);
             expect(cpu.nmi).toBe(false);
-            scheduler.polltime(TicksForFirstPulse);
+            scheduler.polltime(ShortWaitTicks);
             expect(cpu.nmi).toBe(true);
         });
 
@@ -100,22 +98,26 @@ describe("WD1770 FDC tests", () => {
             const { cpu, scheduler, fdc } = makeFdc();
             fdc.write(CommandRegister, ForceInterrupt | 0x04);
             fdc.write(CommandRegister, ForceInterrupt);
-            scheduler.polltime(TicksForFirstPulse);
+            scheduler.polltime(ShortWaitTicks);
             expect(cpu.nmi).toBe(false);
         });
 
-        it.each([...Array(16).keys()])("accepts force interrupt flags %i when idle", (bits) => {
-            const { fdc } = makeFdc();
-            expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
+        it("accepts every combination of flags when idle", () => {
+            for (const bits of AllFlagCombinations) {
+                const { fdc } = makeFdc();
+                expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
+            }
         });
 
-        it.each([...Array(16).keys()])("accepts force interrupt flags %i during a seek", (bits) => {
-            const { scheduler, fdc } = makeFdc(true);
-            fdc.write(TrackRegister, 0);
-            fdc.write(DataRegister, 40);
-            fdc.write(CommandRegister, SeekCommand);
-            scheduler.polltime(TicksMidSeekStep);
-            expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
+        it("accepts every combination of flags during a seek", () => {
+            for (const bits of AllFlagCombinations) {
+                const { scheduler, fdc } = makeFdc(true);
+                fdc.write(TrackRegister, 0);
+                fdc.write(DataRegister, 40);
+                fdc.write(CommandRegister, SeekCommand);
+                scheduler.polltime(ShortWaitTicks);
+                expect(() => fdc.write(CommandRegister, ForceInterrupt | bits)).not.toThrow();
+            }
         });
     });
 });
