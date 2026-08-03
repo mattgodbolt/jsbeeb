@@ -23,6 +23,7 @@ const parser = new ArgumentParser({ description: "Time jsbeeb's display filters"
 parser.add_argument("--scene", { default: "mode1-diagonals" });
 parser.add_argument("--frames", { type: "int", default: 60 });
 parser.add_argument("--size", { action: "append", help: "output size as WxH; repeatable" });
+parser.add_argument("--filter", { action: "append", help: "only time these filters; repeatable" });
 const args = parser.parse_args();
 
 const sceneName = args.scene;
@@ -37,11 +38,16 @@ async function main() {
     const { frame, extent } = await captureScene(scene);
 
     // Each variant is a fragment shader plus the uniforms it wants.
-    const variants = [
+    const allVariants = [
         { name: "passthrough", vert: "passthrough.vert.glsl", frag: "passthrough.frag.glsl", kind: "passthrough" },
         { name: "pal", vert: "pal-composite.vert.glsl", frag: "pal-composite.frag.glsl", kind: "pal" },
         { name: "xbr", vert: "xbr.vert.glsl", frag: "xbr.frag.glsl", kind: "xbr" },
     ];
+    const variants = args.filter ? allVariants.filter((v) => args.filter.includes(v.name)) : allVariants;
+    if (variants.length === 0)
+        throw new Error(
+            `No filter named "${args.filter.join(", ")}"; try ${allVariants.map((v) => v.name).join(", ")}`,
+        );
 
     const sizes = (args.size ?? ["896x600", "1792x1200"]).map((size) => {
         const match = /^(\d+)x(\d+)$/.exec(size);
@@ -54,6 +60,15 @@ async function main() {
 
     const cases = [];
     for (const [w, h] of sizes) for (const v of variants) cases.push({ ...v, width: w, height: h });
+
+    // Chrome reports nothing until the whole run finishes, so say what is coming.
+    // PAL at a large size is far and away the slowest thing here.
+    console.log(
+        `timing ${cases.length} cases at ${frames} frames each: ` +
+            `${variants.map((v) => v.name).join(", ")} at ${sizes.map(([w, h]) => `${w}x${h}`).join(", ")}`,
+    );
+    if (variants.some((v) => v.kind === "pal") && sizes.some(([w]) => w > 1000))
+        console.log("(PAL at that size is the slow one; --filter xbr skips it)");
 
     const page = `<!doctype html><html><head><meta charset="utf-8"></head><body>
 <canvas id="c"></canvas>
