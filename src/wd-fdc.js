@@ -47,6 +47,17 @@ const CommandBits = Object.freeze({
 });
 
 /**
+ * Type IV (force interrupt) condition bits, taken from the command's low nibble.
+ *
+ * @readonly
+ * @enum {Number}
+ */
+const ForceInterruptBits = Object.freeze({
+    indexPulse: 0x04,
+    immediate: 0x08,
+});
+
+/**
  * The drive control register is documented here:
  * https://www.cloud9.co.uk/james/BBCMicro/Documentation/wd1770.html
  *
@@ -512,6 +523,8 @@ export class WdFdc {
         //   insofar as index pulse appears to be reported in the status register.
         // - Interrupt on index pulse is only active for the current command.
         if (this._statusRegister & Status.busy) {
+            // Any pending timer belongs to the command being aborted.
+            this._clearTimer();
             this._commandDone(false);
         } else {
             if (this._state !== State.idle) throw new Error(`Unexpected state when force interrupt: ${this._state}`);
@@ -523,13 +536,10 @@ export class WdFdc {
                 this._currentDrive.startSpinning();
             }
         }
-        if (forceInterruptBits === 0) {
-            this._isInterruptOnIndexPulse = false;
-        } else if (forceInterruptBits === 4) {
-            this._isInterruptOnIndexPulse = true;
-        } else {
-            throw new Error(`1700 force interrupt flags not handled: ${forceInterruptBits}`);
-        }
+        if (forceInterruptBits & ForceInterruptBits.immediate) this._setIntRq(true);
+        this._isInterruptOnIndexPulse = !!(forceInterruptBits & ForceInterruptBits.indexPulse);
+        // The remaining two bits select interrupts on the ready line's transitions. The BBC ties
+        // the 1770's READY input active, so neither transition can ever occur.
     }
 
     _timerFired() {
