@@ -573,8 +573,6 @@ export class Video {
         }
     }
 
-    // Return the beam to the top of the frame, painting the frame we just
-    // finished unless we are painting too often to be worth showing the host.
     flyback(now) {
         if (now - this.lastPaintClock >= MinPaintIntervalClocks && this.dispEnabled & FRAMESKIPENABLE) {
             this.lastPaintClock = now;
