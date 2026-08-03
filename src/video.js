@@ -391,7 +391,7 @@ export class Video {
         this.screenSubtract = 0;
         this.videoClocks = 0;
         // Host paint pacing, not machine state, so deliberately not snapshotted.
-        this.lastPaintClock = -MinPaintIntervalClocks;
+        this.nextPaintClock = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -574,8 +574,8 @@ export class Video {
     }
 
     flyback(now) {
-        if (now - this.lastPaintClock >= MinPaintIntervalClocks && this.dispEnabled & FRAMESKIPENABLE) {
-            this.lastPaintClock = now;
+        if (now >= this.nextPaintClock && this.dispEnabled & FRAMESKIPENABLE) {
+            this.nextPaintClock = now + MinPaintIntervalClocks;
             this.paint();
             this.clearPaintBuffer();
         }
