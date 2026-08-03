@@ -22,8 +22,9 @@ const ForceInterrupt = 0xd0;
 const SeekCommand = 0x18;
 
 // The drive schedules its first pulse callback one tick after it starts spinning.
-const TicksForFirstPulse = 1000;
-// Part way into a seek step, which is 6ms at the default rate and two ticks per microsecond.
+const TicksForFirstPulse = 1;
+// Half way into a seek step, which at the default 6ms rate and two ticks per microsecond is
+// 12000 ticks.
 const TicksMidSeekStep = 6000;
 // Comfortably more than the 32us the controller takes to report a command as complete.
 const TicksForCommandCompletion = 1000;

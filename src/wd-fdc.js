@@ -47,8 +47,7 @@ const CommandBits = Object.freeze({
 });
 
 /**
- * Type IV (force interrupt) condition bits, taken from the command's low nibble. Bits 0 and 1
- * select the not-ready to ready and ready to not-ready transitions.
+ * Type IV (force interrupt) condition bits, taken from the command's low nibble.
  *
  * @readonly
  * @enum {Number}
@@ -524,7 +523,7 @@ export class WdFdc {
         //   insofar as index pulse appears to be reported in the status register.
         // - Interrupt on index pulse is only active for the current command.
         if (this._statusRegister & Status.busy) {
-            // Any settle or seek timer belongs to the command being aborted.
+            // Any pending timer belongs to the command being aborted.
             this._clearTimer();
             this._commandDone(false);
         } else {
