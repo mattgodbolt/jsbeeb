@@ -1,12 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import {
-    Video,
-    HDISPENABLE,
-    VDISPENABLE,
-    USERDISPENABLE,
-    EVERYTHINGENABLED,
-    MinPaintIntervalClocks,
-} from "../../src/video.js";
+import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
 
 // Setup with focus on testing behavior rather than implementation details
@@ -621,7 +614,7 @@ describe("Video", () => {
         });
     });
 
-    describe("Repaint rate limiting", () => {
+    describe("Painting short frames", () => {
         // A freshly constructed Video runs a 2MHz character clock, so with
         // R0=127 a scanline is 128 characters of one video clock each.
         const ClocksPerScanline = 128;
@@ -686,51 +679,45 @@ describe("Video", () => {
             expect(v.paints()).toBe(10);
         });
 
-        it("should paint for an R4=0 display whose vsync is driven externally", () => {
+        it("should paint once per frame for an R4=0 display synced externally", () => {
             const v = makeVideo();
             programExternallySyncedTiming(v);
 
             const paintsPerFrame = [];
             for (let frame = 0; frame < 10; ++frame) {
+                v.run(ClocksPerFrame - ClocksPerScanline);
+                // Count only the paints the vsync itself produces.
                 v.resetPaints();
                 v.forceVSync();
                 paintsPerFrame.push(v.paints());
-                v.run(ClocksPerFrame - ClocksPerScanline);
             }
 
             expect(paintsPerFrame).toEqual(Array(10).fill(1));
         });
 
-        it("should coalesce vsyncs that arrive within the minimum paint interval", () => {
+        it("should not paint frames too short to hold a picture", () => {
             const v = makeVideo();
             programExternallySyncedTiming(v);
-            v.forceVSync();
             v.resetPaints();
 
-            v.run(MinPaintIntervalClocks / 2);
-            v.forceVSync();
-            expect(v.paints()).toBe(0);
+            // A vsync every few scanlines, as the boot-up register values give.
+            for (let frame = 0; frame < 1000; ++frame) {
+                v.run(4 * ClocksPerScanline);
+                v.forceVSync();
+            }
 
-            v.run(MinPaintIntervalClocks);
-            v.forceVSync();
-            expect(v.paints()).toBe(1);
+            expect(v.paints()).toBe(0);
         });
 
-        it("should bound the paint rate for a pathologically small R0 and R4", () => {
+        it("should paint when the beam runs off the bottom without a vsync", () => {
             const v = makeVideo();
-            programCommonTiming(v);
-            v.writeCrtc(0, 0);
-            v.writeCrtc(4, 0);
-            v.writeCrtc(7, 0);
-            v.writeCrtc(9, 0);
+            programExternallySyncedTiming(v);
             v.resetPaints();
 
             v.run(ClocksPerSecond);
 
-            // Vsync restarts every character here, which unchecked would be
-            // hundreds of thousands of paints per emulated second.
-            expect(v.paints()).toBeLessThanOrEqual(ClocksPerSecond / MinPaintIntervalClocks);
-            expect(v.paints()).toBeGreaterThan(0);
+            // The beam gives up and flies back every 384 scanlines.
+            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (384 * ClocksPerScanline)));
         });
     });
 

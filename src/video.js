@@ -16,8 +16,7 @@ export const EVERYTHINGENABLED =
 export const OPAQUE_BLACK = 0xff000000;
 export const OPAQUE_WHITE = 0xffffffff;
 
-// 5ms in 2MHz video clocks: at most 200 host repaints a second.
-export const MinPaintIntervalClocks = 10000;
+export const MinPaintedFrameRows = 64;
 
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
@@ -389,8 +388,6 @@ export class Video {
         this.doubledScanlines = true;
         this.frameSkipCount = 0;
         this.screenSubtract = 0;
-        // Host paint pacing, not machine state, so deliberately not snapshotted.
-        this.clocksToNextPaint = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -572,9 +569,8 @@ export class Video {
         }
     }
 
-    flyback(clocksLeft) {
-        if (this.clocksToNextPaint + clocksLeft <= 0 && this.dispEnabled & FRAMESKIPENABLE) {
-            this.clocksToNextPaint = MinPaintIntervalClocks - clocksLeft;
+    flyback() {
+        if (this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE) {
             this.paint();
             this.clearPaintBuffer();
         }
@@ -863,7 +859,6 @@ export class Video {
     ////////////////////
     // Main drawing routine
     polltime(clocks) {
-        this.clocksToNextPaint -= clocks;
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
@@ -876,7 +871,7 @@ export class Video {
             // This emulates the Hitachi 6845SP CRTC.
             // Other variants have different quirks.
             // Handle HSync
-            if (this.inHSync && this.handleHSync()) this.flyback(clocks);
+            if (this.inHSync && this.handleHSync()) this.flyback();
 
             // Handle delayed display enable due to skew
             const displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
@@ -940,7 +935,7 @@ export class Video {
                 this.hadVSyncThisRow = true;
                 this.vpulseCounter = 0;
 
-                this.flyback(clocks);
+                this.flyback();
             }
 
             if (vSyncStarting || vSyncEnding) {
