@@ -33,8 +33,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Error Handling**: Use try/catch with explicit error messages that provide context about what failed
 - **Naming**: camelCase for variables and functions, PascalCase for classes
 - **Imports**: Group by source (internal/external) with proper separation
-- **Documentation**: Use JSDoc for public APIs and complex functions, add comments for non-obvious code
+- **Documentation**: Use JSDoc for public APIs and complex functions. For comments, see below
 - **Error Messages**: Use consistent, specific error messages (e.g., "Track buffer overflow" instead of "Overflow in disc building")
+
+## Comments
+
+Default to no comment. A comment must earn its place, and most do not.
+
+Before writing one, in order:
+
+1. **Can the name carry it?** Rename first. A comment that exists to explain an identifier is a bug
+   report about that identifier.
+2. **Look at the neighbours.** If the nine constants above yours have no comment, yours almost
+   certainly does not need one. Match the file you are in, not an abstract standard.
+3. **Is it already said elsewhere?** One fact lives at exactly one site, the most load-bearing one.
+   Elsewhere, a pointer or nothing.
+4. **Would a competent reader of _this file_ fail to work it out?** Not a stranger, not a beginner.
+   Someone who knows the domain and has the rest of the file in front of them.
+
+If a comment survives all four, write the single non-obvious fact and stop: a unit, a derivation, an
+ordering constraint, a reason a default is overridden, a hardware quirk with a reference.
+
+Never write:
+
+- anything restating what the next line does
+- the issue or PR description, or why the change was made; that belongs in the commit message and the
+  ticket
+- how a user might experience the bug
+- a second explanation of a rationale given elsewhere in the diff
+
+Em dashes are not used in this codebase, in comments or in prose. Use commas, parentheses or
+semicolons.
+
+Length is a smell, not a rule: if a comment runs past two lines, it is usually answering a question
+nobody asked.
 
 ## Test Organization
 
@@ -86,7 +118,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Use PascalCase for module-level constants (e.g., `const MaxHfeTrackPulses = 3132;`)
   - Prefer module-level constants over function-local constants for shared values
   - Define constants at the beginning of functions or at the class/module level as appropriate
-  - Add comments explaining what the constant represents, especially for non-obvious values
+  - Let the name do the explaining; see the Comments section before adding one
 
 - **Pre-commit Hooks**:
   - The project uses lint-staged with ESLint
