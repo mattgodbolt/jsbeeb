@@ -206,8 +206,9 @@ export class GlCanvas {
             frameCount: frame.frameCount,
             lineGrid: frame.lineGrid,
             // How much of the framebuffer each output pixel covers, which sets
-            // how wide an edge-smoothing ramp should be. Read from `extent`:
-            // minx and maxx above have been scaled into texture coordinates.
+            // how wide an edge-smoothing ramp should be. `extent` holds texel
+            // counts; the scaling into texture coordinates above applies only
+            // to the local copies that go into the UV buffer.
             texelsPerOutputPixel: (extent.maxx - extent.minx) / gl.drawingBufferWidth,
         });
 

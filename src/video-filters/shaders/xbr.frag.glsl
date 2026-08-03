@@ -159,11 +159,19 @@ void main() {
     // Correctness rests on this being the same irlv0 the full path computes,
     // which tools/verify-xbr-shader.js proves by comparing against the
     // JavaScript reference, where no such shortcut exists.
+    //
+    // Returning here also puts every texture2D below inside non-uniform
+    // control flow, which GLSL ES 1.0 section 8.7 leaves undefined for lookups
+    // needing implicit derivatives. It is defined here only because there is
+    // no level of detail to choose: XbrFilter asks for `nearestSampling`, so
+    // canvas.js gives this texture NEAREST for both filters, and it has no
+    // mipmaps. Move this filter back to LINEAR, or give the texture mipmaps,
+    // and this shortcut stops being merely faster and starts being undefined.
     vec4 eP4 = vec4(pack(E));
     vec4 fP = vec4(pack(F), pack(B), pack(D), pack(H));
     vec4 hP = fP.wxyz;
     vec4 irlv0 = vec4(notEqual(eP4, fP)) * vec4(notEqual(eP4, hP));
-    if (irlv0 == vec4(0.0)) {
+    if (all(equal(irlv0, vec4(0.0)))) {
         gl_FragColor = vec4(E, 1.0);
         return;
     }

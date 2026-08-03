@@ -33,7 +33,10 @@ export class XbrFilter {
             // and this shader is expensive per fragment.
             maxCanvasScale: 2,
             // The shader picks its own samples on the logical pixel grid, so
-            // hardware interpolation would only blur what it reads.
+            // hardware interpolation would only blur what it reads. It is also
+            // what makes the shader's early return legal: with no LOD to
+            // choose, its texture lookups need no implicit derivatives. See
+            // the note beside that return in xbr.frag.glsl before changing it.
             nearestSampling: true,
         };
     }

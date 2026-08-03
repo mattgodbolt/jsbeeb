@@ -387,12 +387,13 @@ if (keyMappingWarnings.length) {
 }
 
 function createCanvasForFilter(filterClass) {
-    const config = filterClass.getDisplayConfig();
-    // Each mode says how many pixels it wants to draw into; xBR asks for more
-    // than the rest so its reconstructed detail has somewhere to go. Set this
-    // before creating the context, which fixes its initial viewport.
-    screenCanvas.width = config.canvasWidth;
-    screenCanvas.height = config.canvasHeight;
+    // Not `config`: that is the emulator's live configuration object, declared
+    // at module scope and used throughout this file.
+    const displayConfig = filterClass.getDisplayConfig();
+    // Each mode says how many pixels it wants to draw into. Set this before
+    // creating the context, which fixes its initial viewport.
+    screenCanvas.width = displayConfig.canvasWidth;
+    screenCanvas.height = displayConfig.canvasHeight;
 
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
@@ -401,8 +402,8 @@ function createCanvasForFilter(filterClass) {
     // in which case bestCanvas quietly gives us an unfiltered GL canvas.
     if (filterClass.requiresGl() && newCanvas.filterClass !== filterClass) {
         showError(
-            `enabling ${config.name} mode`,
-            `${config.name} is not available on this device. Using standard display instead.`,
+            `enabling ${displayConfig.name} mode`,
+            `${displayConfig.name} is not available on this device. Using standard display instead.`,
         );
     }
 
