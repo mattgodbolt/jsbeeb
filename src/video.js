@@ -16,6 +16,12 @@ export const EVERYTHINGENABLED =
 export const OPAQUE_BLACK = 0xff000000;
 export const OPAQUE_WHITE = 0xffffffff;
 
+// Smallest gap, in 2MHz video clocks, between two host repaints: 5ms, so at
+// most 200 a second, comfortably above the 50Hz a sane display asks for. A CRTC
+// with small R0 or R4 can fly back every scanline or even every character, and
+// painting that often would swamp the host.
+export const MinPaintIntervalClocks = 10000;
+
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
 // Reference: b-em src/video.c (stardot/b-em).
@@ -386,6 +392,8 @@ export class Video {
         this.doubledScanlines = true;
         this.frameSkipCount = 0;
         this.screenSubtract = 0;
+        // Host paint pacing, not machine state, so deliberately not snapshotted.
+        this.paintCooldown = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -567,8 +575,16 @@ export class Video {
         }
     }
 
-    paintAndClear() {
-        if (this.dispEnabled & FRAMESKIPENABLE) {
+    // Return the beam to the top of the frame, painting the frame we just
+    // finished unless we are painting too often to be worth showing the host.
+    flyback() {
+        const paintNow = this.paintCooldown === 0;
+        if (paintNow) this.paintCooldown = MinPaintIntervalClocks;
+        this.paintAndClear(paintNow);
+    }
+
+    paintAndClear(paintToHost) {
+        if (paintToHost && this.dispEnabled & FRAMESKIPENABLE) {
             this.paint();
             this.clearPaintBuffer();
         }
@@ -819,7 +835,7 @@ export class Video {
             // If no VSync occurs this frame, go back to the top and force a repaint
             if (this.bitmapY >= 768) {
                 // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
-                this.paintAndClear();
+                this.flyback();
             }
         } else if (this.hpulseCounter === (this.regs[3] & 0x0f)) {
             this.inHSync = false;
@@ -860,6 +876,7 @@ export class Video {
     // Main drawing routine
     polltime(clocks) {
         while (clocks--) {
+            if (this.paintCooldown > 0) this.paintCooldown--;
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
             this.bitmapX += 8;
@@ -935,11 +952,7 @@ export class Video {
                 this.hadVSyncThisRow = true;
                 this.vpulseCounter = 0;
 
-                // Avoid intense painting if registers have boot-up or
-                // otherwise small values.
-                if (this.regs[0] && this.regs[4]) {
-                    this.paintAndClear();
-                }
+                this.flyback();
             }
 
             if (vSyncStarting || vSyncEnding) {
