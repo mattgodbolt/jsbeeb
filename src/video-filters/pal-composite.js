@@ -47,29 +47,34 @@ export class PALCompositeFilter {
 
         // Compile shaders
         const vertShader = this._compileShader(gl.VERTEX_SHADER, VERT_SHADER);
-        const fragShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
+        let fragShader = null;
+        try {
+            fragShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
 
-        // Link program
-        this.program = gl.createProgram();
-        gl.attachShader(this.program, vertShader);
-        gl.attachShader(this.program, fragShader);
-        gl.linkProgram(this.program);
+            // Link program
+            this.program = gl.createProgram();
+            gl.attachShader(this.program, vertShader);
+            gl.attachShader(this.program, fragShader);
+            gl.linkProgram(this.program);
 
-        // Once linked the program holds its own reference, so releasing ours
-        // here means deleting the program later frees the shaders too.
-        gl.deleteShader(vertShader);
-        gl.deleteShader(fragShader);
+            if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+                const info = gl.getProgramInfoLog(this.program);
+                this.dispose();
+                throw new Error("Failed to link PAL shader program: " + info);
+            }
 
-        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-            const info = gl.getProgramInfoLog(this.program);
-            throw new Error("Failed to link PAL shader program: " + info);
+            // Get uniform locations
+            this.locations.uFramebuffer = gl.getUniformLocation(this.program, "uFramebuffer");
+            this.locations.uResolution = gl.getUniformLocation(this.program, "uResolution");
+            this.locations.uTexelSize = gl.getUniformLocation(this.program, "uTexelSize");
+            this.locations.uFrameCount = gl.getUniformLocation(this.program, "uFrameCount");
+        } finally {
+            // Once linked the program holds its own reference, so releasing ours here means
+            // deleting the program later frees the shaders too. If we never got that far, ours
+            // was the only reference and they go now.
+            gl.deleteShader(vertShader);
+            gl.deleteShader(fragShader);
         }
-
-        // Get uniform locations
-        this.locations.uFramebuffer = gl.getUniformLocation(this.program, "uFramebuffer");
-        this.locations.uResolution = gl.getUniformLocation(this.program, "uResolution");
-        this.locations.uTexelSize = gl.getUniformLocation(this.program, "uTexelSize");
-        this.locations.uFrameCount = gl.getUniformLocation(this.program, "uFrameCount");
 
         console.log("PAL composite filter initialized");
     }
@@ -83,6 +88,7 @@ export class PALCompositeFilter {
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
             const info = gl.getShaderInfoLog(shader);
             const typeName = type === gl.VERTEX_SHADER ? "vertex" : "fragment";
+            gl.deleteShader(shader);
             throw new Error(`Failed to compile ${typeName} shader: ${info}`);
         }
 

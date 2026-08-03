@@ -34,23 +34,29 @@ export class PassthroughFilter {
         const gl = this.gl;
 
         const vertexShader = this._compileShader(gl.VERTEX_SHADER, VERT_SHADER);
-        const fragmentShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
+        let fragmentShader = null;
+        try {
+            fragmentShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
 
-        this.program = gl.createProgram();
-        gl.attachShader(this.program, vertexShader);
-        gl.attachShader(this.program, fragmentShader);
-        gl.linkProgram(this.program);
+            this.program = gl.createProgram();
+            gl.attachShader(this.program, vertexShader);
+            gl.attachShader(this.program, fragmentShader);
+            gl.linkProgram(this.program);
 
-        // Once linked the program holds its own reference, so releasing ours
-        // here means deleting the program later frees the shaders too.
-        gl.deleteShader(vertexShader);
-        gl.deleteShader(fragmentShader);
+            if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+                const info = gl.getProgramInfoLog(this.program);
+                this.dispose();
+                throw new Error("Failed to link passthrough shader program: " + info);
+            }
 
-        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-            throw new Error("Failed to link passthrough shader program: " + gl.getProgramInfoLog(this.program));
+            this.locations.tex = gl.getUniformLocation(this.program, "tex");
+        } finally {
+            // Once linked the program holds its own reference, so releasing ours here means
+            // deleting the program later frees the shaders too. If we never got that far, ours
+            // was the only reference and they go now.
+            gl.deleteShader(vertexShader);
+            gl.deleteShader(fragmentShader);
         }
-
-        this.locations.tex = gl.getUniformLocation(this.program, "tex");
     }
 
     _compileShader(type, source) {

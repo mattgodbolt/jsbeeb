@@ -112,7 +112,24 @@ describe("GlCanvas", () => {
         // mean deleting the program never released them.
         const gl = recordingGl();
         new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
-        expect([...gl.live].filter((object) => object.kind === "shader")).toEqual([]);
+        expect([...gl.live].filter((object) => object.kind === "Shader")).toEqual([]);
+    });
+
+    it.each(filters)("releases its shaders when one will not compile (%s)", (_name, filterClass) => {
+        const gl = recordingGl();
+        let compiles = 0;
+        gl.getShaderParameter = () => ++compiles < 2;
+
+        expect(() => new filterClass(gl)).toThrow(/compil/i);
+        expect([...gl.live]).toEqual([]);
+    });
+
+    it.each(filters)("releases its program and shaders when linking fails (%s)", (_name, filterClass) => {
+        const gl = recordingGl();
+        gl.getProgramParameter = () => false;
+
+        expect(() => new filterClass(gl)).toThrow(/Failed to link/);
+        expect([...gl.live]).toEqual([]);
     });
 });
 
