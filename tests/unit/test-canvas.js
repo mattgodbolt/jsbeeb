@@ -10,61 +10,41 @@ import { PALCompositeFilter } from "../../src/video-filters/pal-composite.js";
 
 /**
  * A WebGL context that records the objects created and deleted through it.
- * Every object it hands out is a distinct tagged token, so a test can tell not
- * only how many were released but which.
+ * Everything except create/delete is a no-op, but the names have to be present:
+ * `makeDebugContext` wraps the context by enumerating it.
  */
 function recordingGl() {
     const live = new Set();
     let nextId = 0;
-    const create = (kind) => () => {
-        const object = { kind, id: nextId++ };
-        live.add(object);
-        return object;
-    };
-    const destroy = () => (object) => {
-        // WebGL ignores deleting null; a double delete would be a real bug.
-        if (object === null) return;
-        expect(live.has(object), `deleted a ${object.kind} that was not live`).toBe(true);
-        live.delete(object);
-    };
-    const gl = {
-        live,
-        // Enough of the enum for the calls below; the values are arbitrary.
-        TEXTURE_2D: 1,
-        ARRAY_BUFFER: 2,
-        RGBA: 3,
-        UNSIGNED_BYTE: 4,
-        FLOAT: 5,
-        STATIC_DRAW: 6,
-        DYNAMIC_DRAW: 7,
-        CLAMP_TO_EDGE: 8,
-        LINEAR: 9,
-        NEAREST: 10,
-        TEXTURE_WRAP_S: 11,
-        TEXTURE_WRAP_T: 12,
-        TEXTURE_MAG_FILTER: 13,
-        TEXTURE_MIN_FILTER: 14,
-        UNPACK_ALIGNMENT: 15,
-        VERTEX_SHADER: 16,
-        FRAGMENT_SHADER: 17,
-        COMPILE_STATUS: 18,
-        LINK_STATUS: 19,
-        TEXTURE0: 20,
-        TEXTURE1: 21,
-        TRIANGLE_STRIP: 22,
-        NO_ERROR: 0,
-        HIGH_FLOAT: 23,
+    const gl = { live };
 
-        createTexture: create("texture"),
-        createBuffer: create("buffer"),
-        createProgram: create("program"),
-        createShader: create("shader"),
-        deleteTexture: destroy(),
-        deleteBuffer: destroy(),
-        deleteProgram: destroy(),
-        deleteShader: destroy(),
+    // Constants: any stable value will do, since we only pass them back in.
+    for (const [index, name] of (
+        "TEXTURE_2D ARRAY_BUFFER RGBA UNSIGNED_BYTE FLOAT STATIC_DRAW DYNAMIC_DRAW " +
+        "CLAMP_TO_EDGE LINEAR NEAREST TEXTURE_WRAP_S TEXTURE_WRAP_T TEXTURE_MAG_FILTER TEXTURE_MIN_FILTER " +
+        "UNPACK_ALIGNMENT VERTEX_SHADER FRAGMENT_SHADER COMPILE_STATUS LINK_STATUS TEXTURE0 TEXTURE1 " +
+        "TRIANGLE_STRIP HIGH_FLOAT"
+    )
+        .split(" ")
+        .entries())
+        gl[name] = index + 1;
+    gl.NO_ERROR = 0;
 
-        // Everything else is a no-op or a fixed answer.
+    for (const kind of ["Texture", "Buffer", "Program", "Shader"]) {
+        gl[`create${kind}`] = () => {
+            const object = { kind, id: nextId++ };
+            live.add(object);
+            return object;
+        };
+        gl[`delete${kind}`] = (object) => {
+            if (object === null) return; // WebGL ignores this; a double delete would not be.
+            expect(live.has(object), `deleted a ${object.kind} that was not live`).toBe(true);
+            live.delete(object);
+        };
+    }
+
+    // Queries the canvas and filters make on the way up.
+    Object.assign(gl, {
         getError: () => 0,
         getShaderParameter: () => true,
         getProgramParameter: () => true,
@@ -73,28 +53,15 @@ function recordingGl() {
         getAttribLocation: () => 0,
         getUniformLocation: () => ({}),
         getShaderPrecisionFormat: () => ({ precision: 23 }),
-        shaderSource: () => {},
-        compileShader: () => {},
-        attachShader: () => {},
-        linkProgram: () => {},
-        useProgram: () => {},
-        depthMask: () => {},
-        viewport: () => {},
-        bindTexture: () => {},
-        bindBuffer: () => {},
-        bufferData: () => {},
-        texImage2D: () => {},
-        texSubImage2D: () => {},
-        texParameteri: () => {},
-        pixelStorei: () => {},
-        activeTexture: () => {},
-        enableVertexAttribArray: () => {},
-        vertexAttribPointer: () => {},
-        drawArrays: () => {},
-        uniform1i: () => {},
-        uniform1f: () => {},
-        uniform2f: () => {},
-    };
+    });
+
+    for (const name of (
+        "shaderSource compileShader attachShader linkProgram useProgram depthMask viewport " +
+        "bindTexture bindBuffer bufferData texImage2D texSubImage2D texParameteri pixelStorei activeTexture " +
+        "enableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f"
+    ).split(" "))
+        gl[name] = () => {};
+
     return gl;
 }
 
