@@ -389,9 +389,8 @@ export class Video {
         this.doubledScanlines = true;
         this.frameSkipCount = 0;
         this.screenSubtract = 0;
-        this.videoClocks = 0;
         // Host paint pacing, not machine state, so deliberately not snapshotted.
-        this.nextPaintClock = 0;
+        this.clocksToNextPaint = 0;
 
         this.topBorder = 12;
         this.bottomBorder = 13;
@@ -573,9 +572,9 @@ export class Video {
         }
     }
 
-    flyback(now) {
-        if (now >= this.nextPaintClock && this.dispEnabled & FRAMESKIPENABLE) {
-            this.nextPaintClock = now + MinPaintIntervalClocks;
+    flyback(clocksLeft) {
+        if (this.clocksToNextPaint + clocksLeft <= 0 && this.dispEnabled & FRAMESKIPENABLE) {
+            this.clocksToNextPaint = MinPaintIntervalClocks - clocksLeft;
             this.paint();
             this.clearPaintBuffer();
         }
@@ -864,7 +863,7 @@ export class Video {
     ////////////////////
     // Main drawing routine
     polltime(clocks) {
-        const endClock = this.videoClocks + clocks;
+        this.clocksToNextPaint -= clocks;
         while (clocks--) {
             this.oddClock = !this.oddClock;
             // Advance CRT beam.
@@ -877,7 +876,7 @@ export class Video {
             // This emulates the Hitachi 6845SP CRTC.
             // Other variants have different quirks.
             // Handle HSync
-            if (this.inHSync && this.handleHSync()) this.flyback(endClock - clocks);
+            if (this.inHSync && this.handleHSync()) this.flyback(clocks);
 
             // Handle delayed display enable due to skew
             const displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
@@ -941,7 +940,7 @@ export class Video {
                 this.hadVSyncThisRow = true;
                 this.vpulseCounter = 0;
 
-                this.flyback(endClock - clocks);
+                this.flyback(clocks);
             }
 
             if (vSyncStarting || vSyncEnding) {
@@ -1092,7 +1091,6 @@ export class Video {
                 this.doEvenFrameLogic = !!(this.frameCount & 1);
             }
         } // matches while
-        this.videoClocks = endClock;
     }
 }
 
