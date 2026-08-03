@@ -576,13 +576,8 @@ export class Video {
     // Return the beam to the top of the frame, painting the frame we just
     // finished unless we are painting too often to be worth showing the host.
     flyback(now) {
-        const paintNow = now - this.lastPaintClock >= MinPaintIntervalClocks;
-        if (paintNow) this.lastPaintClock = now;
-        this.paintAndClear(paintNow);
-    }
-
-    paintAndClear(paintToHost) {
-        if (paintToHost && this.dispEnabled & FRAMESKIPENABLE) {
+        if (now - this.lastPaintClock >= MinPaintIntervalClocks && this.dispEnabled & FRAMESKIPENABLE) {
+            this.lastPaintClock = now;
             this.paint();
             this.clearPaintBuffer();
         }
@@ -871,8 +866,6 @@ export class Video {
     ////////////////////
     // Main drawing routine
     polltime(clocks) {
-        // `clocks` is already decremented in the loop body, so `endClock - clocks`
-        // is the absolute video clock of the tick being handled.
         const endClock = this.videoClocks + clocks;
         while (clocks--) {
             this.oddClock = !this.oddClock;
