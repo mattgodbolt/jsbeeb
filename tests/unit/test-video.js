@@ -614,6 +614,113 @@ describe("Video", () => {
         });
     });
 
+    describe("Painting short frames", () => {
+        // A freshly constructed Video runs a 2MHz character clock, so with
+        // R0=127 a scanline is 128 characters of one video clock each.
+        const ClocksPerScanline = 128;
+        const ScanlinesPerFrame = 312;
+        const ClocksPerFrame = ClocksPerScanline * ScanlinesPerFrame;
+        const ClocksPerSecond = 2 * 1000 * 1000;
+
+        // These tests run millions of video clocks, so they use plain callbacks
+        // instead of the shared vi.fn() mocks, which would record every call.
+        function makeVideo() {
+            let paintCount = 0;
+            const v = new Video(false, new Uint32Array(1024 * 768), () => paintCount++);
+            v.reset({ videoRead: () => 0, interrupt: 0 }, { cb2changecallback: null, setVBlankInt: () => {} });
+            const self = {
+                paints: () => paintCount,
+                resetPaints: () => (paintCount = 0),
+                run: (clocks) => v.polltime(clocks),
+                writeCrtc: (reg, val) => {
+                    v.crtc.write(0, reg);
+                    v.crtc.write(1, val);
+                },
+                // Aim R7 at the current row for a scanline, the way a program
+                // driving vsync from a VIA timer does.
+                forceVSync: () => {
+                    self.writeCrtc(7, 0);
+                    self.run(ClocksPerScanline);
+                    self.writeCrtc(7, 0x7f);
+                },
+            };
+            return self;
+        }
+
+        function programCommonTiming(v) {
+            v.writeCrtc(0, 127); // Horizontal total
+            v.writeCrtc(1, 80); // Horizontal displayed
+            v.writeCrtc(2, 98); // Hsync position
+            v.writeCrtc(3, 0x24); // Sync widths
+            v.writeCrtc(5, 0); // Vertical adjust
+            v.writeCrtc(6, 32); // Vertical displayed
+            v.writeCrtc(8, 0); // No interlace
+        }
+
+        // R4=0 gives no CRTC-generated vertical structure, so vsync only
+        // happens when the program asks for it.
+        function programExternallySyncedTiming(v) {
+            programCommonTiming(v);
+            v.writeCrtc(4, 0); // Vertical total
+            v.writeCrtc(9, 0); // One scanline per character row
+            v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
+        }
+
+        it("should paint once per frame for a normally programmed display", () => {
+            const v = makeVideo();
+            programCommonTiming(v);
+            v.writeCrtc(4, 38); // Vertical total
+            v.writeCrtc(7, 34); // Vsync position
+            v.writeCrtc(9, 7); // Scanlines per character row
+            v.resetPaints();
+
+            v.run(10 * ClocksPerFrame);
+
+            expect(v.paints()).toBe(10);
+        });
+
+        it("should paint once per frame for an R4=0 display synced externally", () => {
+            const v = makeVideo();
+            programExternallySyncedTiming(v);
+
+            const paintsPerFrame = [];
+            for (let frame = 0; frame < 10; ++frame) {
+                v.run(ClocksPerFrame - ClocksPerScanline);
+                // Count only the paints the vsync itself produces.
+                v.resetPaints();
+                v.forceVSync();
+                paintsPerFrame.push(v.paints());
+            }
+
+            expect(paintsPerFrame).toEqual(Array(10).fill(1));
+        });
+
+        it("should not paint frames too short to hold a picture", () => {
+            const v = makeVideo();
+            programExternallySyncedTiming(v);
+            v.resetPaints();
+
+            // A vsync every few scanlines, as the boot-up register values give.
+            for (let frame = 0; frame < 1000; ++frame) {
+                v.run(4 * ClocksPerScanline);
+                v.forceVSync();
+            }
+
+            expect(v.paints()).toBe(0);
+        });
+
+        it("should paint when the beam runs off the bottom without a vsync", () => {
+            const v = makeVideo();
+            programExternallySyncedTiming(v);
+            v.resetPaints();
+
+            v.run(ClocksPerSecond);
+
+            // The beam gives up and flies back every 384 scanlines.
+            expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (384 * ClocksPerScanline)));
+        });
+    });
+
     describe("snapshotState / restoreState", () => {
         // These tests use fresh (non-mocked) Video instances since snapshot
         // needs the real Teletext with snapshotState/restoreState.
