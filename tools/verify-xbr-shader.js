@@ -29,10 +29,14 @@ const ChannelTolerance = 0.06;
 /** Fraction of pixels allowed to differ, for the edges the two treat differently. */
 const MaxDifferingFraction = 0.002;
 
+let chromePath = null;
+
 function findChrome() {
+    if (chromePath) return chromePath;
     for (const candidate of ChromeCandidates) {
         try {
-            return execFileSync("which", [candidate], { encoding: "utf8" }).trim();
+            chromePath = execFileSync("which", [candidate], { encoding: "utf8" }).trim();
+            return chromePath;
         } catch {
             // Try the next one.
         }
@@ -137,7 +141,7 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1, ${LineGridRows}, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, lineGrid);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, ${LineGridRows}, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, lineGrid);
 gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
 gl.activeTexture(gl.TEXTURE0);
 
@@ -221,10 +225,8 @@ function renderInChrome(html, outWidth, outHeight, keep) {
 }
 
 /** Run the JavaScript reference over the same frame and extent. */
-function referenceRender(frame, extent, outWidth, outHeight) {
-    const bands = findBands(frame.lineGrid, extent.top, extent.bottom);
-    if (bands.length !== 1) throw new Error(`expected a single-mode frame, found ${bands.length} bands`);
-    const logical = extractBand(frame.fb32, FbWidth, bands[0], extent.left, extent.right);
+function referenceRender(frame, extent, band, outWidth, outHeight) {
+    const logical = extractBand(frame.fb32, FbWidth, band, extent.left, extent.right);
     const out = makePixelImage(outWidth, outHeight);
     xbrUpscale(logical, out);
     return out;
@@ -265,7 +267,7 @@ async function verifyScene(scene, opts) {
 
     const shaderPng = renderInChrome(buildHarness(frame, extent, outWidth, outHeight), outWidth, outHeight, opts.keep);
     const shaderRaw = await sharp(shaderPng).ensureAlpha().raw().toBuffer();
-    const referenceRaw = toRgbaBuffer(referenceRender(frame, extent, outWidth, outHeight));
+    const referenceRaw = toRgbaBuffer(referenceRender(frame, extent, bands[0], outWidth, outHeight));
 
     const diff = Buffer.alloc(outWidth * outHeight * 4);
     const differing = pixelmatch(referenceRaw, shaderRaw, diff, outWidth, outHeight, {
@@ -299,7 +301,7 @@ async function main() {
     const parser = new ArgumentParser({ description: "Check the xBR shader against the JS reference" });
     parser.add_argument("--scene", { help: "verify only the named scene" });
     parser.add_argument("--model", { default: "B-DFS1.2" });
-    parser.add_argument("--out", { default: "out/xbr-verify", help: "where to write the rendered images" });
+    parser.add_argument("--out", { default: "out/xbr-verify", help: "where to write images when a scene fails" });
     parser.add_argument("--keep", { action: "store_true", help: "keep the generated harness page" });
     const args = parser.parse_args();
 

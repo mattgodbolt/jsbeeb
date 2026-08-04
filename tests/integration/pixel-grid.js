@@ -21,7 +21,13 @@ const FbHeight = 625;
 class FrameCapturingVideo extends Video {
     constructor(isAtom) {
         super(false, new Uint32Array(FbWidth * FbHeight), () => {}, { isAtom });
+        this.wanted = false;
+        this.frame = null;
         this.paint_ext = () => {
+            // Only when asked: copying two megabytes on every painted frame of
+            // a fifteen-million-cycle warm-up is all cost and no information.
+            if (!this.wanted) return;
+            this.wanted = false;
             this.frame = { fb32: this.fb32.slice(), lineGrid: this.lineGrid.slice() };
         };
     }
@@ -35,7 +41,7 @@ async function render(model, program, { isAtom = false } = {}) {
     for (const line of program) await machine.type(line);
     await machine.runFor(15 * 1000 * 1000);
     // Drawing has finished; take the next complete frame.
-    video.frame = null;
+    video.wanted = true;
     for (let attempt = 0; attempt < 10 && !video.frame; ++attempt) await machine.runFor(1000 * 1000);
     if (!video.frame) throw new Error("no complete frame was painted");
     return video.frame;

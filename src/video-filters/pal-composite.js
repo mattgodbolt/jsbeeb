@@ -17,10 +17,6 @@ import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
 import { compileProgram } from "./shader-program.js";
 
 export class PALCompositeFilter {
-    static requiresGl() {
-        return true;
-    }
-
     static getDisplayConfig() {
         return {
             name: "PAL TV",

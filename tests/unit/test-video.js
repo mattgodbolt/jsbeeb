@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
 import { decodeLineGrid, texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
+import { shortestRun } from "../pixel-runs.js";
 
 // Setup with focus on testing behavior rather than implementation details
 describe("Video", () => {
@@ -135,15 +136,7 @@ describe("Video", () => {
                     // Alternating bits give the shortest runs the mode can make.
                     video.blitFb(0b01010101, 0, pixelsPerChar);
 
-                    let shortest = Infinity;
-                    let runStart = 0;
-                    for (let x = 1; x <= pixelsPerChar; ++x) {
-                        if (x === pixelsPerChar || mockFb32[x] !== mockFb32[runStart]) {
-                            shortest = Math.min(shortest, x - runStart);
-                            runStart = x;
-                        }
-                    }
-                    expect(shortest).toBe(texelsPerPixel(ulaMode));
+                    expect(shortestRun(mockFb32, 0, pixelsPerChar)).toBe(texelsPerPixel(ulaMode));
                 }
             }
         });

@@ -181,6 +181,7 @@ export class Video6847 {
         this.bitmapPxPerPixel = 2; // each pixel is 2 bitmap pixels wide and high
         this.pixelsPerBit = this.bitmapPxPerPixel;
         this.bpp = 1;
+        this.updateLineGrid();
 
         this.cpuAddr = 0;
         this.dispEnabled = 0;
@@ -324,6 +325,7 @@ export class Video6847 {
         this.pixelsPerBit = this.bitmapPxPerPixel * this.modes[mode][1];
         let linesPerRow = this.modes[mode][2]; // move to reg9
         this.bpp = this.modes[mode][3];
+        this.updateLineGrid();
 
         this.charLinesreg9 = linesPerRow - 1; //2  - scanlines per char
 
@@ -642,10 +644,16 @@ export class Video6847 {
      *
      * @param {boolean} textMode whether the character blitter is about to run
      */
-    recordLineGrid(textMode) {
-        const texelsWide = textMode ? (this.pixelsPerChar * this.bitmapPxPerPixel) / 8 : this.pixelsPerBit;
+    updateLineGrid() {
         // Every 6847 blitter writes each pixel row into two framebuffer lines.
-        const grid = encodeLineGrid(texelsWide, true);
+        // Text mode's entry is only reachable through blitChar, which is just
+        // as well: the mode table holds -1 for it and would not encode.
+        this.lineGridText = encodeLineGrid((this.pixelsPerChar * this.bitmapPxPerPixel) / 8, true);
+        this.lineGridGraphics = this.pixelsPerBit > 0 ? encodeLineGrid(this.pixelsPerBit, true) : this.lineGridText;
+    }
+
+    recordLineGrid(textMode) {
+        const grid = textMode ? this.lineGridText : this.lineGridGraphics;
         this.video.lineGrid[this.bitmapY] = grid;
         this.video.lineGrid[this.bitmapY + 1] = grid;
     }

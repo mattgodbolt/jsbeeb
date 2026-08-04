@@ -18,8 +18,7 @@ function imageFrom(rows, palette) {
     return image;
 }
 
-const upscale = (src, factor, options) =>
-    xbrUpscale(src, makePixelImage(src.width * factor, src.height * factor), options);
+const upscale = (src, factor) => xbrUpscale(src, makePixelImage(src.width * factor, src.height * factor));
 
 const distinctColours = (image) => new Set(image.data);
 
@@ -99,12 +98,6 @@ describe("xBR-lv2 upscaler", () => {
             return x < 2 * scale || x >= 3 * scale || y < 2 * scale || y >= 3 * scale;
         });
         expect(new Set(outside)).toEqual(new Set([Black]));
-    });
-
-    it("produces a hard-edged result with blending disabled", () => {
-        const src = imageFrom(["#...", "##..", "###.", "####"], { "#": White, ".": Black });
-        const out = upscale(src, 4, { blending: false });
-        expect([...distinctColours(out)].sort()).toEqual([White, Black].sort());
     });
 
     it("handles non-square and non-integer scale factors", () => {

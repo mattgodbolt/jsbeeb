@@ -100,17 +100,23 @@ describe("GlCanvas", () => {
         // filter returns to its own count, not that every count is the same.
         const gl = recordingGl();
         const element = fakeCanvasElement(gl);
+
+        // What each filter owns when freshly built and alone, so every
+        // assertion in the loop below compares against a known number rather
+        // than against whatever the first visit happened to produce.
         const expected = new Map();
+        for (const [, filterClass] of filters) {
+            const only = new GlCanvas(element, filterClass);
+            expected.set(filterClass, gl.live.size);
+            only.dispose();
+        }
 
         let canvas = new GlCanvas(element, filters[0][1]);
-        expected.set(filters[0][1], gl.live.size);
-
         for (let switches = 1; switches <= 3 * filters.length; ++switches) {
             const [name, filterClass] = filters[switches % filters.length];
             const next = new GlCanvas(element, filterClass);
             canvas.dispose();
             canvas = next;
-            if (!expected.has(filterClass)) expected.set(filterClass, gl.live.size);
             expect(gl.live.size, `after switching to ${name}`).toBe(expected.get(filterClass));
         }
     });

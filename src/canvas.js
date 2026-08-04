@@ -15,10 +15,6 @@ export function getFilterForMode(mode) {
 }
 
 export class Canvas {
-    isWebGl() {
-        return false;
-    }
-
     /** The 2D canvas draws the framebuffer as-is, which is what this filter is. */
     get filterClass() {
         return PassthroughFilter;
@@ -54,10 +50,6 @@ export class Canvas {
 const width = 1024;
 const height = 1024;
 export class GlCanvas {
-    isWebGl() {
-        return true;
-    }
-
     /** The filter actually built, which may not be the one that was asked for. */
     get filterClass() {
         return this.filter.constructor;
@@ -133,6 +125,7 @@ export class GlCanvas {
         checkedGl.bindTexture(gl.TEXTURE_2D, this.texture);
 
         this.checkedGl = checkedGl;
+        this.viewportWidth = this.viewportHeight = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
@@ -161,8 +154,12 @@ export class GlCanvas {
         const gl = this.gl;
         // The drawing buffer can be resized under us — modes that scale to the
         // display do it on every window resize — and the viewport does not
-        // follow, so set it each frame rather than track when it changed.
-        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+        // follow it.
+        if (gl.drawingBufferWidth !== this.viewportWidth || gl.drawingBufferHeight !== this.viewportHeight) {
+            this.viewportWidth = gl.drawingBufferWidth;
+            this.viewportHeight = gl.drawingBufferHeight;
+            gl.viewport(0, 0, this.viewportWidth, this.viewportHeight);
+        }
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
             gl.TEXTURE_2D,

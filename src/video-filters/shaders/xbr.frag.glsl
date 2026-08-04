@@ -120,7 +120,7 @@ void main() {
     // This row's logical pixel size. The descriptor is a byte, so recover it by
     // scaling and rounding rather than trusting the sampled float directly.
     float row = floor(fbCoord.y);
-    float descriptor = floor(texture2D(lineGrid, vec2(0.5, (row + 0.5) * uTexelSize.y)).r * 255.0 + 0.5);
+    float descriptor = floor(texture2D(lineGrid, vec2((row + 0.5) * uTexelSize.x, 0.5)).r * 255.0 + 0.5);
     descriptor -= step(GridRendered, descriptor) * GridRendered;
     float verticalDouble = step(GridVerticalDouble, descriptor);
     descriptor -= verticalDouble * GridVerticalDouble;
@@ -167,10 +167,10 @@ void main() {
     // canvas.js gives this texture NEAREST for both filters, and it has no
     // mipmaps. Move this filter back to LINEAR, or give the texture mipmaps,
     // and this shortcut stops being merely faster and starts being undefined.
-    vec4 eP4 = vec4(pack(E));
+    vec4 eP = vec4(pack(E));
     vec4 fP = vec4(pack(F), pack(B), pack(D), pack(H));
     vec4 hP = fP.wxyz;
-    vec4 irlv0 = vec4(notEqual(eP4, fP)) * vec4(notEqual(eP4, hP));
+    vec4 irlv0 = vec4(notEqual(eP, fP)) * vec4(notEqual(eP, hP));
     if (all(equal(irlv0, vec4(0.0)))) {
         gl_FragColor = vec4(E, 1.0);
         return;
@@ -207,13 +207,12 @@ void main() {
     Lane4 h5 = lane(H5, F4, B1, D0);
     Lane4 f4 = lane(F4, B1, D0, H5);
 
-    // Packed forms, for the exact-inequality tests. `fP` and `hP` are already
-    // in hand from the early-out above; `bP.wxyz` and `bP.zwxy` are those same
-    // two rotations.
-    vec4 bP = pack4(b);
+    // Packed forms, for the exact-inequality tests. `fP` and `hP` are already in
+    // hand from the early-out above, and `b` is `f` rotated, so `bP` is too —
+    // packing it again would cost twelve multiplies for the same bits.
+    vec4 bP = fP.yzwx;
     vec4 cP = pack4(c);
     vec4 dP = bP.yzwx;
-    vec4 eP = eP4;
     vec4 gP = cP.zwxy;
 
     // These inequations define the line below which interpolation occurs.
@@ -223,10 +222,12 @@ void main() {
 
     // Corner detection variant C: also require the edge to be part of a longer
     // run, so isolated single pixels are not rounded away.
+    vec4 eqEC = eq4(e, c);
+    vec4 eqEG = eq4(e, g);
     vec4 irlv1 = clamp(
         irlv0 *
             (neq4(f, b) * neq4(f, c) + neq4(h, d) * neq4(h, g) +
-                eq4(e, i) * (neq4(f, f4) * neq4(f, i4) + neq4(h, h5) * neq4(h, i5)) + eq4(e, g) + eq4(e, c)),
+                eq4(e, i) * (neq4(f, f4) * neq4(f, i4) + neq4(h, h5) * neq4(h, i5)) + eqEG + eqEC),
         0.0,
         1.0);
 
@@ -256,8 +257,8 @@ void main() {
 
     vec4 edri = step(wd1, wd2) * irlv0;
     vec4 edr = vec4(lessThan(wd1, wd2)) * irlv1 * (vec4(1.0) - edri.yzwx * edri.wxyz);
-    vec4 edrL = step(Lv2Cf * dFG, dHC) * irlv2l * edr * ((vec4(1.0) - edri.yzwx) * eq4(e, c));
-    vec4 edrU = step(Lv2Cf * dHC, dFG) * irlv2u * edr * ((vec4(1.0) - edri.wxyz) * eq4(e, g));
+    vec4 edrL = step(Lv2Cf * dFG, dHC) * irlv2l * edr * ((vec4(1.0) - edri.yzwx) * eqEC);
+    vec4 edrU = step(Lv2Cf * dHC, dFG) * irlv2u * edr * ((vec4(1.0) - edri.wxyz) * eqEG);
 
     fx45i *= edri;
     fx45 *= edr;

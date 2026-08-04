@@ -8,11 +8,10 @@ import FRAG_SHADER from "./shaders/xbr.frag.glsl?raw";
 import { compileProgram } from "./shader-program.js";
 import { LineGridRows } from "./pixel-grid.js";
 
-export class XbrFilter {
-    static requiresGl() {
-        return true;
-    }
+// The framebuffer texture GlCanvas hands us is square and fixed at this size.
+const TextureSize = 1024;
 
+export class XbrFilter {
     static getDisplayConfig() {
         return {
             name: "Smoothed (xBR)",
@@ -62,8 +61,10 @@ export class XbrFilter {
             texelsPerOutputPixel: gl.getUniformLocation(this.program, "uTexelsPerOutputPixel"),
         };
 
-        // A one-pixel-wide column holding the logical pixel size of each
-        // framebuffer row, uploaded afresh each frame.
+        // One row holding the logical pixel size of each framebuffer row, laid
+        // out along x rather than y: 1024 contiguous bytes upload as a single
+        // row, where a one-texel-wide column would be 1024 rows of one byte and
+        // would need the unpack alignment changed around every upload.
         this.lineGridTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.lineGridTexture);
@@ -71,9 +72,18 @@ export class XbrFilter {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        // Its size is fixed, so allocate now and only ever refill it.
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, LineGridRows, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
         gl.activeTexture(gl.TEXTURE0);
 
-        this.allocated = false;
+        // Everything but the line grid and the output scale is fixed for the
+        // life of the program, so set it once. GlCanvas has not called
+        // useProgram yet, and does so again straight after building us.
+        gl.useProgram(this.program);
+        gl.uniform1i(this.locations.tex, 0);
+        gl.uniform1i(this.locations.lineGrid, 1);
+        gl.uniform2f(this.locations.textureSize, TextureSize, TextureSize);
+        gl.uniform2f(this.locations.texelSize, 1.0 / TextureSize, 1.0 / TextureSize);
     }
 
     /** Release the GL objects this filter owns, the extra texture included. */
@@ -85,27 +95,11 @@ export class XbrFilter {
 
     setUniforms(params) {
         const gl = this.gl;
-        const lineGrid = params.lineGrid;
-        if (lineGrid.length !== LineGridRows)
-            throw new Error(`Line grid is ${lineGrid.length} rows, expected ${LineGridRows}`);
-        gl.uniform1i(this.locations.tex, 0);
-        gl.uniform1i(this.locations.lineGrid, 1);
-        gl.uniform2f(this.locations.textureSize, params.width, params.height);
-        gl.uniform2f(this.locations.texelSize, 1.0 / params.width, 1.0 / params.height);
         gl.uniform1f(this.locations.texelsPerOutputPixel, params.texelsPerOutputPixel);
 
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, this.lineGridTexture);
-        // A single-byte-per-texel image one pixel wide has a one-byte row
-        // stride, which the default four-byte unpack alignment would misread.
-        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-        if (this.allocated) {
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, LineGridRows, gl.LUMINANCE, gl.UNSIGNED_BYTE, lineGrid);
-        } else {
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 1, LineGridRows, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, lineGrid);
-            this.allocated = true;
-        }
-        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, LineGridRows, 1, gl.LUMINANCE, gl.UNSIGNED_BYTE, params.lineGrid);
         // Leave unit 0 active and the framebuffer bound: the canvas uploads the
         // next frame's pixels through whatever is current.
         gl.activeTexture(gl.TEXTURE0);

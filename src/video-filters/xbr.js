@@ -18,9 +18,9 @@
 // the reference, not that one.
 
 /** Colour distance below which two pixels count as "equal". */
-const EqThresholdDefault = 0.32;
+const EqThreshold = 0.32;
 /** Larger values let the shallow 30/60 degree rules fire more readily. */
-const Lv2CoefficientDefault = 0.3;
+const Lv2Cf = 0.3 + 2.0;
 
 // Coefficients of the straight lines that bound each interpolation region.
 // A/B give the line's gradient in (fp.x, fp.y); C is its offset.
@@ -80,8 +80,8 @@ const dist4 = (A, B) => [
     colourDistance(A[3], B[3]),
 ];
 
-const eq4 = (A, B, threshold) => lte4(dist4(A, B), [threshold, threshold, threshold, threshold]);
-const neq4 = (A, B, threshold) => not4(eq4(A, B, threshold));
+const eq4 = (A, B) => lte4(dist4(A, B), [EqThreshold, EqThreshold, EqThreshold, EqThreshold]);
+const neq4 = (A, B) => not4(eq4(A, B));
 
 /** Distance among pixels in some direction; the 4x term dominates. */
 const weightedDistance = (a, b, c, d, e, f, g, h) =>
@@ -112,11 +112,11 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
  *     `at(dx, dy)` returning [r, g, b] in 0..1 relative to the centre pixel
  * @param {number} fpx sub-pixel x position within the centre pixel, 0..1
  * @param {number} fpy sub-pixel y position within the centre pixel, 0..1
- * @param {Object} params `eqThreshold`, `lv2cf` and `aaFactor`
+ * @param {Object} params carries `aaFactor`
  * @returns {number[]} the output colour as [r, g, b] in 0..1
  */
 function xbrPixel(at, fpx, fpy, params) {
-    const { eqThreshold, lv2cf, aaFactor, blending } = params;
+    const { aaFactor } = params;
 
     //    A1 B1 C1
     // A0  A  B  C C4
@@ -183,19 +183,10 @@ function xbrPixel(at, fpx, fpy, params) {
         mul4(
             irlv0,
             add4(
+                add4(mul4(neq4(f, b), neq4(f, c)), mul4(neq4(h, d), neq4(h, g))),
                 add4(
-                    mul4(neq4(f, b, eqThreshold), neq4(f, c, eqThreshold)),
-                    mul4(neq4(h, d, eqThreshold), neq4(h, g, eqThreshold)),
-                ),
-                add4(
-                    mul4(
-                        eq4(e, i, eqThreshold),
-                        add4(
-                            mul4(neq4(f, f4, eqThreshold), neq4(f, i4, eqThreshold)),
-                            mul4(neq4(h, h5, eqThreshold), neq4(h, i5, eqThreshold)),
-                        ),
-                    ),
-                    add4(eq4(e, g, eqThreshold), eq4(e, c, eqThreshold)),
+                    mul4(eq4(e, i), add4(mul4(neq4(f, f4), neq4(f, i4)), mul4(neq4(h, h5), neq4(h, i5)))),
+                    add4(eq4(e, g), eq4(e, c)),
                 ),
             ),
         ),
@@ -206,23 +197,14 @@ function xbrPixel(at, fpx, fpy, params) {
     const irlv2u = mul4(diff4(eP, cP), diff4(bP, cP));
 
     // How far across the blend ramp this fragment sits, for each edge angle.
-    let fx45i, fx45, fx30, fx60;
-    if (blending) {
-        const delta = [aaFactor, aaFactor, aaFactor, aaFactor];
-        const deltaL = [0.5 * aaFactor, aaFactor, 0.5 * aaFactor, aaFactor];
-        const deltaU = [deltaL[1], deltaL[0], deltaL[3], deltaL[2]];
-        const ramp = (value, offset, widths) =>
-            saturate4(add4([0.5, 0.5, 0.5, 0.5], divide4(sub4(value, offset), widths)));
-        fx45i = ramp(fx, add4(Co, Ci), delta);
-        fx45 = ramp(fx, Co, delta);
-        fx30 = ramp(fxL, Cx, deltaL);
-        fx60 = ramp(fxU, Cy, deltaU);
-    } else {
-        fx45i = lt4(add4(Co, Ci), fx);
-        fx45 = lt4(Co, fx);
-        fx30 = lt4(Cx, fxL);
-        fx60 = lt4(Cy, fxU);
-    }
+    const delta = [aaFactor, aaFactor, aaFactor, aaFactor];
+    const deltaL = [0.5 * aaFactor, aaFactor, 0.5 * aaFactor, aaFactor];
+    const deltaU = [deltaL[1], deltaL[0], deltaL[3], deltaL[2]];
+    const ramp = (value, offset, widths) => saturate4(add4([0.5, 0.5, 0.5, 0.5], divide4(sub4(value, offset), widths)));
+    let fx45i = ramp(fx, add4(Co, Ci), delta);
+    let fx45 = ramp(fx, Co, delta);
+    let fx30 = ramp(fxL, Cx, deltaL);
+    let fx60 = ramp(fxU, Cy, deltaU);
 
     // Which way does the edge run? wd1 small means the edge is the main
     // diagonal through E, wd2 small means it is the anti-diagonal.
@@ -234,14 +216,8 @@ function xbrPixel(at, fpx, fpy, params) {
 
     const edri = mul4(lte4(wd1, wd2), irlv0);
     const edr = mul4(mul4(lt4(wd1, wd2), irlv1), not4(mul4(yzwx(edri), wxyz(edri))));
-    const edrL = mul4(
-        mul4(mul4(lte4(scale4(dFG, lv2cf), dHC), irlv2l), edr),
-        mul4(not4(yzwx(edri)), eq4(e, c, eqThreshold)),
-    );
-    const edrU = mul4(
-        mul4(mul4(lte4(scale4(dHC, lv2cf), dFG), irlv2u), edr),
-        mul4(not4(wxyz(edri)), eq4(e, g, eqThreshold)),
-    );
+    const edrL = mul4(mul4(mul4(lte4(scale4(dFG, Lv2Cf), dHC), irlv2l), edr), mul4(not4(yzwx(edri)), eq4(e, c)));
+    const edrU = mul4(mul4(mul4(lte4(scale4(dHC, Lv2Cf), dFG), irlv2u), edr), mul4(not4(wxyz(edri)), eq4(e, g)));
 
     fx45i = mul4(edri, fx45i);
     fx45 = mul4(edr, fx45);
@@ -273,13 +249,9 @@ function xbrPixel(at, fpx, fpy, params) {
  *
  * @param {PixelImage} src
  * @param {PixelImage} dest modified in place
- * @param {Object} [options] `eqThreshold`, `lv2Coefficient`, `blending`
  */
-export function xbrUpscale(src, dest, options = {}) {
+export function xbrUpscale(src, dest) {
     const params = {
-        eqThreshold: options.eqThreshold ?? EqThresholdDefault,
-        lv2cf: (options.lv2Coefficient ?? Lv2CoefficientDefault) + 2.0,
-        blending: options.blending !== false,
         // Width of the antialiasing ramp, in units of a source pixel: two
         // output pixels' worth, matching the shader's `aa_factor`.
         aaFactor: (2.0 * src.width) / dest.width,

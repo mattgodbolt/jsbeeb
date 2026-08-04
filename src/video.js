@@ -3,7 +3,7 @@ import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
-import { encodeLineGrid, texelsPerPixel, LineGridVerticalDouble, LineGridRows } from "./video-filters/pixel-grid.js";
+import { encodeLineGrid, texelsPerPixel, LineGridRows } from "./video-filters/pixel-grid.js";
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -397,6 +397,7 @@ export class Video {
         // last mode on it — enough for a raster split, not for a mid-line one.
         this.lineGrid = new Uint8Array(LineGridRows);
         this.lineGridUla = 0;
+        this.lineGridUlaDoubled = 0;
         this.updateLineGridUla();
 
         this.topBorder = 12;
@@ -638,7 +639,9 @@ export class Video {
      * the framebuffer's own resolution.
      */
     updateLineGridUla() {
-        this.lineGridUla = encodeLineGrid(this.teletextMode ? 1 : texelsPerPixel(this.ulaMode), false);
+        const texelsWide = this.teletextMode ? 1 : texelsPerPixel(this.ulaMode);
+        this.lineGridUla = encodeLineGrid(texelsWide, false);
+        this.lineGridUlaDoubled = encodeLineGrid(texelsWide, true);
     }
 
     blitFb(dat, destOffset, numPixels) {
@@ -1026,9 +1029,8 @@ export class Video {
                         // of the descriptor is precomputed on register writes so
                         // this stays a store or two in the hottest loop we have.
                         if (doubledLines) {
-                            const grid = this.lineGridUla | LineGridVerticalDouble;
-                            this.lineGrid[row] = grid;
-                            this.lineGrid[row + 1] = grid;
+                            this.lineGrid[row] = this.lineGridUlaDoubled;
+                            this.lineGrid[row + 1] = this.lineGridUlaDoubled;
                         } else {
                             this.lineGrid[row] = this.lineGridUla;
                         }

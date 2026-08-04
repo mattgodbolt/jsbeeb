@@ -400,7 +400,7 @@ function createCanvasForFilter(filterClass) {
     // Test which filter was actually built, not merely whether we got WebGL: a
     // filter can decline a context that works perfectly well for other modes,
     // in which case bestCanvas quietly gives us an unfiltered GL canvas.
-    if (filterClass.requiresGl() && newCanvas.filterClass !== filterClass) {
+    if (newCanvas.filterClass !== filterClass) {
         showError(
             `enabling ${displayConfig.name} mode`,
             `${displayConfig.name} is not available on this device. Using standard display instead.`,
@@ -2104,6 +2104,9 @@ function stop(debug) {
     updateDebugButtons();
 }
 
+/** Steps the drawing buffer grows in, as a multiple of the base canvas size. */
+const CanvasScaleStep = 0.25;
+
 (function () {
     const resizeCubMonitor = document.getElementById("cub-monitor");
     const resizeCubMonitorPic = document.getElementById("cub-monitor-pic");
@@ -2162,7 +2165,10 @@ function stop(debug) {
         // shader that is the difference between comfortable and not.
         if (displayConfig.maxCanvasScale) {
             const wanted = (finalCanvasWidth * (window.devicePixelRatio || 1)) / displayConfig.canvasWidth;
-            const scale = Math.min(displayConfig.maxCanvasScale, Math.max(1, wanted));
+            // Quantised, because resize fires continuously while a window is
+            // dragged and every distinct value reallocates the drawing buffer.
+            const quantised = Math.round(wanted / CanvasScaleStep) * CanvasScaleStep;
+            const scale = Math.min(displayConfig.maxCanvasScale, Math.max(1, quantised));
             const backingWidth = Math.round(displayConfig.canvasWidth * scale);
             if (screenCanvas.width !== backingWidth) {
                 screenCanvas.width = backingWidth;
