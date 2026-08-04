@@ -99,6 +99,8 @@
     "test:unit": "vitest run --silent=true tests/unit",
     "test:integration": "vitest run --silent=true tests/integration",
     "test:cpu": "node tests/test-suite.js",
+    "//verify-shader": "Deliberately not test:*, which npm test globs — this one needs Chrome.",
+    "verify-shader": "node tools/verify-xbr-shader.js",
     "coverage:unit": "vitest run tests/unit --coverage",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",

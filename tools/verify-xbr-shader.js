@@ -189,6 +189,8 @@ function renderInChrome(html, outWidth, outHeight, keep) {
             [
                 "--headless",
                 "--disable-gpu",
+                // Chrome cannot set up its sandbox in most CI containers.
+                "--no-sandbox",
                 // Software WebGL; newer Chrome hides it behind this flag.
                 "--enable-unsafe-swiftshader",
                 "--hide-scrollbars",

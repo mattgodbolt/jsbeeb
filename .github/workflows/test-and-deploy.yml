@@ -22,6 +22,8 @@ jobs:
         run: npm run test:unit
       - name: Integration tests
         run: npm run test:integration
+      - name: Shader matches its reference implementation
+        run: npm run verify-shader
 
   cpu-test:
     runs-on: ubuntu-24.04

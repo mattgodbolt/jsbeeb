@@ -69,14 +69,18 @@ shader's flat-region early return is deliberately absent from the JavaScript, so
 the comparison is what proves it changes nothing. It does **not** establish that
 either matches upstream xBR-lv2; only reading the slang source does that.
 
-If you change either implementation, run:
+CI runs this on every push, so the two cannot drift apart unnoticed — which is
+the only thing that makes keeping a second implementation reasonable. To run it
+yourself:
 
 ```sh
-node tools/verify-xbr-shader.js
+npm run verify-shader
 ```
 
-It declines to compare frames containing more than one mode, for the band reason
-above, and says so rather than passing quietly.
+It is deliberately not called `test:something`: `npm test` globs `test:*`, and
+this is the one check that needs a browser. It declines to compare frames
+containing more than one mode, for the band reason above, and says so rather
+than passing quietly.
 
 ## What it suits
 
