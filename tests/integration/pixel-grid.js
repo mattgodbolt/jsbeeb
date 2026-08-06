@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../test-machine.js";
 import { Video } from "../../src/video.js";
-import { findBands, decodeLineGrid } from "../../src/video-filters/pixel-grid.js";
+import { decodeLineGrid, findBands } from "../line-grid.js";
 
 // The logical pixel grid that display filters rely on is derived from the video
 // chips' own state, so the only test that really proves it is to render a real
@@ -89,8 +89,7 @@ describe("logical pixel grid over real screens", { timeout: 60000 }, () => {
     // land inside one and gridDescribesPixels would say so. A grid that claimed
     // pixels were *narrower* would still look uniform, so the expected width is
     // asserted outright as well, and the distinct-colour count from coloursIn
-    // guards against the whole thing
-    // passing on an empty screen.
+    // guards against the whole thing passing on an empty screen.
     //
     // 16 graphics units is 8 pixels in MODE 0, 4 in MODE 1 and 4, and 2 in
     // MODE 2 and 5 — a gap in every mode under test.

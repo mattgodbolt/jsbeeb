@@ -20,9 +20,9 @@ export const LineGridRows = 1024;
 // one, so it needs no logarithm to write and no exponential to read, and any
 // width from one to eight can be described — the 6847 uses widths the BBC's ULA
 // never selects.
-export const LineGridRendered = 0x80;
-export const LineGridVerticalDouble = 0x08;
-export const LineGridWidthMask = 0x07;
+const LineGridRendered = 0x80;
+const LineGridVerticalDouble = 0x08;
+const LineGridWidthMask = 0x07;
 
 /**
  * How many framebuffer texels wide one logical pixel is, given the ULA's
@@ -52,56 +52,4 @@ export function encodeLineGrid(texelsWide, doubledLines) {
     if (texelsWide < 1 || texelsWide > LineGridWidthMask + 1)
         throw new Error(`Logical pixel width ${texelsWide} cannot be described in a line grid descriptor`);
     return LineGridRendered | (texelsWide - 1) | (doubledLines ? LineGridVerticalDouble : 0);
-}
-
-/**
- * Unpack a row descriptor.
- *
- * @param {number} encoded a byte from Video's `lineGrid`
- * @returns {{rendered: boolean, texelsWide: number, texelsHigh: number}}
- */
-export function decodeLineGrid(encoded) {
-    return {
-        rendered: (encoded & LineGridRendered) !== 0,
-        texelsWide: (encoded & LineGridWidthMask) + 1,
-        texelsHigh: encoded & LineGridVerticalDouble ? 2 : 1,
-    };
-}
-
-/**
- * Split a frame into horizontal bands of constant logical pixel size.
- *
- * A single frame can mix modes — a MODE 7 status line above a MODE 1 playfield
- * is routine — so there is no one logical grid for the whole screen. This finds
- * the runs that do share one, which is how the integration tests check a real
- * screen's recorded grid against the pixels the modes actually wrote.
- *
- * The shader itself has no need of this: it reads each row's own descriptor.
- * That is also why it has no notion of a seam, and reads a neighbouring mode's
- * texels at the wrong stride for a row or two at a mode change.
- *
- * @param {Uint8Array} lineGrid one descriptor byte per framebuffer row
- * @param {number} top first row to consider
- * @param {number} bottom one past the last row to consider
- * @returns {Array<{top: number, bottom: number, texelsWide: number, texelsHigh: number}>}
- *     bands covering every *rendered* row between `top` and `bottom`
- */
-export function findBands(lineGrid, top, bottom) {
-    const bands = [];
-    let current = null;
-    let currentEncoded = 0;
-    for (let y = top; y < bottom; ++y) {
-        const encoded = lineGrid[y];
-        if (!(encoded & LineGridRendered)) {
-            current = null;
-        } else if (current && encoded === currentEncoded) {
-            current.bottom = y + 1;
-        } else {
-            const { texelsWide, texelsHigh } = decodeLineGrid(encoded);
-            current = { top: y, bottom: y + 1, texelsWide, texelsHigh };
-            currentEncoded = encoded;
-            bands.push(current);
-        }
-    }
-    return bands;
 }
