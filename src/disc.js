@@ -810,6 +810,9 @@ export class Disc {
         this.isDoubleSided = false;
 
         this.writeTrackCallback = undefined;
+        // Observers of surface changes, kept apart from writeTrackCallback: that belongs to
+        // whichever loader owns writing the disc back out, and there is only ever one of those.
+        this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
 
         // Track which tracks have been written since the last snapshot.
@@ -838,6 +841,16 @@ export class Disc {
 
     setWriteTrackCallback(callback) {
         this.writeTrackCallback = callback;
+    }
+
+    /** @param {function(boolean, Number, Track): void} listener called once per flushed track */
+    addTrackWriteListener(listener) {
+        this._trackWriteListeners.add(listener);
+    }
+
+    /** @param {function(boolean, Number, Track): void} listener */
+    removeTrackWriteListener(listener) {
+        this._trackWriteListeners.delete(listener);
     }
 
     /**
@@ -947,8 +960,9 @@ export class Disc {
         this.isDirty = false;
         this.dirtySide = -1;
         this.dirtyTrack = -1;
-        if (!this.writeTrackCallback) return;
         const trackObj = this.getTrack(dirtySide, dirtyTrack);
+        for (const listener of this._trackWriteListeners) listener(dirtySide, dirtyTrack, trackObj);
+        if (!this.writeTrackCallback) return;
         this.writeTrackCallback(dirtySide, dirtyTrack, trackObj);
         this.setTrackUsed(dirtySide, dirtyTrack);
     }

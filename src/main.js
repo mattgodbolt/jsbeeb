@@ -44,6 +44,7 @@ import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
+import { DiscVisualiser } from "./disc-visualiser.js";
 import { downloadBlob } from "./dom-utils.js";
 import {
     buildUrlFromParams,
@@ -1971,6 +1972,9 @@ rewindUI = new RewindUI({
 });
 rewindUI.updateButtonState();
 
+const discVisualiser = processor.fdc ? new DiscVisualiser({ fdc: processor.fdc }) : null;
+if (!discVisualiser) document.getElementById("disc-visualiser-open").classList.add("disabled");
+
 function draw(now) {
     if (!running) {
         last = 0;
@@ -2006,6 +2010,7 @@ function draw(now) {
     audioHandler.soundChip.catchUp();
     gamepad.update(processor.sysvia);
     syncLights();
+    discVisualiser?.update();
     if (last !== 0) {
         let cycles;
         if (!speedy) {

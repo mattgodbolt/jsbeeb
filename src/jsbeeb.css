@@ -441,6 +441,79 @@ small {
   pointer-events: none;
 }
 
+#disc-panel {
+  position: fixed;
+  top: 56px;
+  right: 8px;
+  width: min(420px, 46vw);
+  max-height: calc(100vh - 104px);
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid #555;
+  border-radius: 4px;
+  z-index: 10;
+  padding: 8px;
+}
+
+.disc-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.disc-title {
+  color: #ccc;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* The overlay tracks the head and so redraws every frame; the surface beneath it does not. */
+.disc-stack {
+  position: relative;
+}
+
+.disc-stack canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+#disc-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.disc-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #aaa;
+  font-size: 10px;
+}
+
+.disc-legend-ramp {
+  flex: 1;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.disc-legend-swatch {
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.disc-status {
+  margin-top: 4px;
+  color: #ccc;
+  font-family: consolas, monospace;
+  font-size: 11px;
+  min-height: 14px;
+}
+
 div.smoothie-chart-tooltip {
   background: #444;
   padding: 1em;

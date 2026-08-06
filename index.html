@@ -90,6 +90,8 @@
                     >Download drive 0 image as HFE</a
                   >
                 </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li><a href="#" id="disc-visualiser-open" class="dropdown-item">Disc surface</a></li>
               </ul>
             </li>
             <li class="nav-item dropdown embed-hide">
@@ -252,6 +254,34 @@
           <span class="rewind-title">Rewind</span>
         </div>
         <div class="rewind-filmstrip" id="rewind-filmstrip"></div>
+      </div>
+      <div id="disc-panel" hidden>
+        <div class="disc-header">
+          <button id="disc-close" class="btn btn-sm btn-outline-light" title="Close (Escape)">Close</button>
+          <span class="disc-title">Disc surface</span>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Drive">
+            <button type="button" class="btn btn-outline-light" data-drive="0">Drive 0</button>
+            <button type="button" class="btn btn-outline-light" data-drive="1">Drive 1</button>
+          </div>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Side" id="disc-side-controls" hidden>
+            <button type="button" class="btn btn-outline-light" data-side="0">Side 0</button>
+            <button type="button" class="btn btn-outline-light" data-side="1">Side 1</button>
+          </div>
+        </div>
+        <div class="disc-stack">
+          <canvas id="disc-surface"></canvas>
+          <canvas id="disc-overlay"></canvas>
+        </div>
+        <div class="disc-legend">
+          <span>unformatted</span>
+          <span class="disc-legend-swatch" id="disc-legend-unformatted"></span>
+          <span id="disc-legend-min"></span>
+          <span class="disc-legend-ramp" id="disc-legend-ramp"></span>
+          <span id="disc-legend-max"></span>
+          <span>pulses per 64&micro;s</span>
+        </div>
+        <div class="disc-status" id="disc-status"></div>
+        <div class="disc-status" id="disc-hover"></div>
       </div>
       <div id="leds">
         <table>
