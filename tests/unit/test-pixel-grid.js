@@ -4,7 +4,6 @@ import {
     encodeLineGrid,
     decodeLineGrid,
     findBands,
-    extractBand,
     LineGridRendered,
     LineGridVerticalDouble,
     LineGridWidthMask,
@@ -86,63 +85,6 @@ describe("logical pixel grid", () => {
 
         it("finds nothing in a blank frame", () => {
             expect(findBands(new Uint8Array(64), 0, 64)).toEqual([]);
-        });
-    });
-
-    describe("extractBand", () => {
-        const FbWidth = 16;
-
-        /** Build a framebuffer where every logical pixel has a distinct value. */
-        function rasterise(pixels, texelsWide, texelsHigh, top) {
-            const fb32 = new Uint32Array(FbWidth * 32);
-            pixels.forEach((row, y) => {
-                row.forEach((value, x) => {
-                    for (let dy = 0; dy < texelsHigh; ++dy) {
-                        for (let dx = 0; dx < texelsWide; ++dx) {
-                            fb32[(top + y * texelsHigh + dy) * FbWidth + x * texelsWide + dx] = value;
-                        }
-                    }
-                });
-            });
-            return fb32;
-        }
-
-        it("recovers the logical pixels from a 4x2 texel grid", () => {
-            const pixels = [
-                [11, 12, 13],
-                [21, 22, 23],
-            ];
-            const fb32 = rasterise(pixels, 4, 2, 6);
-            const band = { top: 6, bottom: 10, texelsWide: 4, texelsHigh: 2 };
-            const image = extractBand(fb32, FbWidth, band, 0, 12);
-            expect(image.width).toBe(3);
-            expect(image.height).toBe(2);
-            expect([...image.data]).toEqual([11, 12, 13, 21, 22, 23]);
-        });
-
-        it("is the identity when a logical pixel is a single texel", () => {
-            const pixels = [[1, 2, 3, 4]];
-            const fb32 = rasterise(pixels, 1, 1, 0);
-            const image = extractBand(fb32, FbWidth, { top: 0, bottom: 1, texelsWide: 1, texelsHigh: 1 }, 0, 4);
-            expect([...image.data]).toEqual([1, 2, 3, 4]);
-        });
-
-        it("rounds down rather than inventing a partial pixel", () => {
-            const fb32 = rasterise([[1, 2]], 4, 2, 0);
-            // Ask for 11 texels of a 4-texel grid and 3 rows of a 2-row grid.
-            const image = extractBand(fb32, FbWidth, { top: 0, bottom: 3, texelsWide: 4, texelsHigh: 2 }, 0, 11);
-            expect(image.width).toBe(2);
-            expect(image.height).toBe(1);
-        });
-
-        it("anchors the grid to the framebuffer origin, not to the crop", () => {
-            // Character cells start at whole multiples of their width, so an
-            // arbitrary crop must be snapped back or every pixel is misread —
-            // and the GLSL filter, which has no crop, would disagree.
-            const fb32 = rasterise([[1, 2, 3]], 4, 1, 0);
-            const image = extractBand(fb32, FbWidth, { top: 0, bottom: 1, texelsWide: 4, texelsHigh: 1 }, 6, 12);
-            expect(image.left).toBe(4);
-            expect([...image.data]).toEqual([2, 3]);
         });
     });
 

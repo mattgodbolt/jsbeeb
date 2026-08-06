@@ -1,7 +1,7 @@
 "use strict";
 
-// The xBR-lv2 display mode. See shaders/xbr.frag.glsl for the algorithm and
-// xbr.js for the JavaScript reference implementation it mirrors.
+// The xBR-lv2 display mode. See shaders/xbr.frag.glsl for the algorithm, and
+// tests/shader, which runs it in a browser and asserts on what it draws.
 
 import VERT_SHADER from "./shaders/xbr.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/xbr.frag.glsl?raw";

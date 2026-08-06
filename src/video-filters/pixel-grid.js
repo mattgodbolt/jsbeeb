@@ -1,24 +1,13 @@
 "use strict";
 
-// Recovering the logical pixel grid from jsbeeb's framebuffer.
+// Describing the logical pixel grid of jsbeeb's framebuffer, which is a
+// 1024-wide *raster* rather than a grid of BBC pixels: one logical pixel covers
+// up to eight texels across and two down. Filters need to know that, and only
+// the video chips do, so they record one descriptor byte per row and this
+// module owns the encoding.
 //
-// The framebuffer is a 1024-wide *raster*, not a grid of BBC pixels. One
-// logical pixel covers several framebuffer texels:
-//
-//   * horizontally, `Video.blitFb` writes `pixelsPerChar` texels per byte, so a
-//     logical pixel is 1, 2, 4 or 8 texels wide depending on the ULA's colour
-//     bits — one texel in MODE 0, two in MODE 1, four in MODE 2 and MODE 5;
-//   * vertically, non-interlaced modes write each CRTC scanline into two
-//     adjacent framebuffer rows (`doubledLines`), so logical pixels are two
-//     texels tall.
-//
-// The Atom's 6847 has its own geometry and records the same descriptor from its
-// own blitters.
-//
-// Any upscaler that samples raw texel neighbours therefore sees nine copies of
-// the same logical pixel and does nothing at all. Filters need the grid, and
-// only Video knows it — so Video records it per row, and this module turns that
-// record into something a filter can use.
+// See docs/xbr-display-mode.md for why an upscaler that samples raw texels
+// achieves nothing at all.
 
 /**
  * Rows in the line grid. The framebuffer is 625 rows, but the GL texture it is
@@ -58,8 +47,8 @@ export function texelsPerPixel(ulaMode) {
  */
 export function encodeLineGrid(texelsWide, doubledLines) {
     // A width of 9 would set the doubling bit and read back as a doubled width
-    // of 1: a silent lie rather than a mismatch, and both implementations would
-    // agree on it. The widths come from mode-table arithmetic, so check.
+    // of 1 — a silent lie rather than an error. The widths come from mode-table
+    // arithmetic, so check.
     if (texelsWide < 1 || texelsWide > LineGridWidthMask + 1)
         throw new Error(`Logical pixel width ${texelsWide} cannot be described in a line grid descriptor`);
     return LineGridRendered | (texelsWide - 1) | (doubledLines ? LineGridVerticalDouble : 0);
@@ -83,15 +72,13 @@ export function decodeLineGrid(encoded) {
  * Split a frame into horizontal bands of constant logical pixel size.
  *
  * A single frame can mix modes — a MODE 7 status line above a MODE 1 playfield
- * is routine — so there is no one logical grid for the whole screen. Each band
- * is upscaled independently; the only cost is that the filter cannot see across
- * a mode change, which is where the picture is discontinuous anyway.
+ * is routine — so there is no one logical grid for the whole screen. This finds
+ * the runs that do share one, which is how the integration tests check a real
+ * screen's recorded grid against the pixels the modes actually wrote.
  *
- * Note the GLSL filter has no bands: it reads each row's own descriptor and
- * samples its vertical neighbours at that row's stride, so at a seam it reads
- * the neighbouring mode's texels at the wrong one. The two implementations
- * therefore differ for a row or two at a mode change, and tools/verify-xbr-
- * shader.js does not compare multi-band frames for that reason.
+ * The shader itself has no need of this: it reads each row's own descriptor.
+ * That is also why it has no notion of a seam, and reads a neighbouring mode's
+ * texels at the wrong stride for a row or two at a mode change.
  *
  * @param {Uint8Array} lineGrid one descriptor byte per framebuffer row
  * @param {number} top first row to consider
@@ -117,45 +104,4 @@ export function findBands(lineGrid, top, bottom) {
         }
     }
     return bands;
-}
-
-/**
- * Extract a band of the framebuffer as an image of logical pixels, by taking
- * one texel from the middle of each logical pixel.
- *
- * The band's height is rounded down to a whole number of logical pixels; a band
- * whose height is not a multiple of `texelsHigh` (which happens when a mode
- * change lands mid-character-row) loses its last raster row rather than
- * inventing a half-height pixel.
- *
- * Logical pixels are anchored to the framebuffer's own origin rather than to
- * `left`: character cells begin at whole multiples of their width, so column
- * zero is a pixel boundary in every mode. `left` is snapped back to the nearest
- * boundary at or before it and returned, so callers can map the result to the
- * screen. The GLSL filter anchors the same way, which is what lets the two be
- * compared against each other.
- *
- * @param {Uint32Array} fb32 the 1024-wide framebuffer
- * @param {number} fbWidth framebuffer stride in texels
- * @param {{top: number, bottom: number, texelsWide: number, texelsHigh: number}} band
- * @param {number} left first texel column of the visible area
- * @param {number} right one past the last visible texel column
- * @returns {{width: number, height: number, data: Uint32Array, left: number}}
- */
-export function extractBand(fb32, fbWidth, band, left, right) {
-    const { texelsWide, texelsHigh } = band;
-    const alignedLeft = left - (left % texelsWide);
-    const width = Math.floor((right - alignedLeft) / texelsWide);
-    const height = Math.floor((band.bottom - band.top) / texelsHigh);
-    const data = new Uint32Array(width * height);
-    // Every texel of a logical pixel holds the same colour — the ULA writes
-    // them all from one table entry — so any of them will do. Take the first,
-    // as the shader does, so the two implementations agree exactly.
-    for (let y = 0; y < height; ++y) {
-        const srcRow = (band.top + y * texelsHigh) * fbWidth;
-        for (let x = 0; x < width; ++x) {
-            data[y * width + x] = fb32[srcRow + alignedLeft + x * texelsWide];
-        }
-    }
-    return { width, height, data, left: alignedLeft };
 }

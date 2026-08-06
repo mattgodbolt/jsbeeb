@@ -1,9 +1,8 @@
 // xBR-lv2 edge-directed upscaling, applied to the BBC's *logical* pixels.
 //
-// This mirrors src/video-filters/xbr.js line for line; that file is the
-// reference implementation and is unit tested, so keep the two in step. Both
-// derive from Hyllian's xbr-lv2-standalone.slang (MIT, Copyright (C) 2011-2022
-// Hyllian <sergiogdb@gmail.com>), which see for the original.
+// Ported from Hyllian's xbr-lv2-standalone.slang (MIT, Copyright (C) 2011-2022
+// Hyllian <sergiogdb@gmail.com>), which see for the original. tests/shader runs
+// this file in headless Chrome and asserts on the pixels it produces.
 //
 // The one thing this does that a stock xBR shader does not: jsbeeb's
 // framebuffer is a 1024-wide raster in which one BBC pixel spans up to eight
@@ -156,9 +155,10 @@ void main() {
     // most of a BBC screen is flat colour. Taking that exit early skips
     // sixteen texture fetches and the whole of the algorithm.
     //
-    // Correctness rests on this being the same irlv0 the full path computes,
-    // which tools/verify-xbr-shader.js proves by comparing against the
-    // JavaScript reference, where no such shortcut exists.
+    // Correctness rests on this being the same irlv0 the full path computes.
+    // tests/shader asserts what the shader is for — flat areas untouched, hard
+    // edges left hard, diagonals smoothed — so a shortcut that took this exit
+    // where the algorithm would have blended shows up there.
     //
     // Returning here also puts every texture2D below inside non-uniform
     // control flow, which GLSL ES 1.0 section 8.7 leaves undefined for lookups

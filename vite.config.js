@@ -13,7 +13,12 @@ export default defineConfig({
         assetsInlineLimit: 0,
     },
     test: {
-        include: [...configDefaults.include, "tests/unit/**/*.js", "tests/integration/**/*.js"],
+        include: [
+            ...configDefaults.include,
+            "tests/unit/**/*.js",
+            "tests/integration/**/*.js",
+            "tests/shader/test-*.js",
+        ],
         testTimout: 15000,
         slowTestThreshold: 1000,
         coverage: {

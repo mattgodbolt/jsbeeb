@@ -55,32 +55,39 @@ Two limits worth knowing:
   neighbouring mode's texels at the wrong one. Expect a row or two of artefact
   at a seam.
 
-## Keeping the shader honest
+## Testing the shader
 
-Node has no WebGL, so the GLSL cannot be unit tested in the usual way. Instead
-`src/video-filters/xbr.js` is a literal JavaScript port of the same algorithm,
-which the unit tests exercise directly, and `tools/verify-xbr-shader.js`
-captures frames from a real emulated machine, renders them through the real
-shader in headless Chrome, and compares the two pixel by pixel.
+Node has no WebGL, so `tests/shader` gives the GLSL to a browser instead: it
+lays out small patterns in a framebuffer, draws them through the real shader in
+headless Chrome, reads the pixels back, and asserts on them. Every pattern in a
+run shares one Chrome invocation, which costs far more to start than to draw in.
 
-Be precise about what that establishes. It catches the two implementations
-drifting apart, which is what makes it safe to optimise one of them — the
-shader's flat-region early return is deliberately absent from the JavaScript, so
-the comparison is what proves it changes nothing. It does **not** establish that
-either matches upstream xBR-lv2; only reading the slang source does that.
+The assertions are the promises the mode makes: a flat area comes back
+untouched, a straight edge stays hard — that is what separates xBR from
+bilinear — a diagonal gains intermediate shades that lie between the two
+colours already there rather than inventing new ones, and a lone pixel is
+chamfered without bleeding outside its own cell. The grid tests are the
+jsbeeb-specific ones: the same picture drawn with MODE 1's two texels per pixel,
+MODE 2's four, and with doubled scanlines must all give the same result, which
+is precisely what [#667](https://github.com/mattgodbolt/jsbeeb/pull/667) did not
+do.
 
-CI runs this on every push, so the two cannot drift apart unnoticed — which is
-the only thing that makes keeping a second implementation reasonable. To run it
-yourself:
+Be precise about what this establishes: that the shader behaves as described,
+not that it matches upstream xBR-lv2. Only reading the slang source does that.
+
+Patterns are drawn with a margin that is cropped off before anything is
+asserted, because the last row of fragments in a drawn quad picks up a blend
+even where the picture either side of it is uniform. They also carry two logical
+pixels of repeated edge context, since xBR reads a 5x5 neighbourhood and would
+otherwise reconstruct the picture's own edges against an empty framebuffer.
 
 ```sh
-npm run verify-shader
+npm run test:shader
 ```
 
-It is deliberately not called `test:something`: `npm test` globs `test:*`, and
-this is the one check that needs a browser. It declines to compare frames
-containing more than one mode, for the band reason above, and says so rather
-than passing quietly.
+`npm test` includes it. It needs Chrome or Chromium on `PATH`, or `CHROME_PATH`
+pointing at one — in the same way the integration tests need the git submodules,
+and failing the same way if it is missing.
 
 ## What it suits
 
@@ -102,7 +109,7 @@ fragments and buys nothing, and this shader is expensive per fragment.
 xBR-lv2 is from `edge-smoothing/xbr/shaders/xbr-lv2-standalone.slang` in
 libretro's slang-shaders, Copyright (C) 2011-2022 Hyllian
 \<sergiogdb@gmail.com\>, MIT licensed, incorporating ideas from Joshua Street's
-SABR shader. The notice is kept in both `xbr.js` and `xbr.frag.glsl`.
+SABR shader. The notice is kept in `xbr.frag.glsl`.
 
 Note the older `xbr/shaders/xbr-lv2.glsl` in libretro's **glsl**-shaders
 repository declares `f4` and never assigns it, so it reads an uninitialised
