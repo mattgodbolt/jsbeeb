@@ -414,6 +414,8 @@ let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "r
 function swapCanvas(newFilterClass) {
     const oldCanvas = canvas;
     const newCanvas = createCanvasForFilter(newFilterClass);
+    // Carry the picture over; the buffers differ in height, so copy what fits.
+    newCanvas.fb32.set(oldCanvas.fb32.subarray(0, newCanvas.fb32.length));
     // Only once the replacement exists, so a failure to build it leaves the
     // display we already had. The two share a GL context but no GL objects.
     oldCanvas.dispose();
@@ -429,6 +431,9 @@ function swapCanvas(newFilterClass) {
     // downstream — the monitor picture, the canvas geometry, how large a
     // drawing buffer to ask for — comes from its display config.
     displayModeFilter = newCanvas.filterClass;
+    // Nothing else will redraw: the mode is changed from a modal, which stops
+    // the emulator.
+    video.paint();
     window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
 }
 
@@ -2173,6 +2178,8 @@ const CanvasScaleStep = 0.25;
             if (screenCanvas.width !== backingWidth) {
                 screenCanvas.width = backingWidth;
                 screenCanvas.height = Math.round(displayConfig.canvasHeight * scale);
+                // Resizing threw the drawing buffer away.
+                video.paint();
             }
         }
 
