@@ -24,11 +24,7 @@ const FbWidth = LineGridRows;
  */
 const Margin = 1;
 
-/**
- * Logical pixels of context each pattern is surrounded by. xBR reads a 5x5
- * neighbourhood, so everything drawn — the margin included — needs two more
- * beyond it.
- */
+/** Logical pixels of context each pattern is surrounded by; see {@link buildPattern}. */
 const Padding = Margin + 2;
 
 const ChromeCandidates = ["google-chrome", "google-chrome-stable", "chrome", "chromium", "chromium-browser"];
@@ -100,12 +96,20 @@ export function buildPattern({ name, rows, palette, texelsWide = 1, texelsHigh =
     const lineGrid = new Uint8Array(LineGridRows);
     lineGrid.fill(encodeLineGrid(texelsWide, texelsHigh === 2), 0, texelRows);
 
+    if ((width + 2 * Padding) * texelsWide > FbWidth)
+        throw new Error(`Pattern "${name}" is wider than the framebuffer once padded`);
+
     return {
         name,
         width,
         height,
         scale,
         fb32,
+        // Every row built, not just those drawn: the rows below the picture are
+        // sampled by the ones above them, and the texture is allocated once and
+        // only ever refilled, so anything not uploaded holds the previous
+        // pattern's pixels rather than nothing.
+        texelRows,
         lineGrid,
         // The picture plus its margin is drawn; the rest of the padding is
         // there to be sampled.
@@ -131,13 +135,14 @@ function buildHarness(jobs) {
     const vert = readFileSync(new URL("xbr.vert.glsl", shaderDir), "utf8");
     const frag = readFileSync(new URL("xbr.frag.glsl", shaderDir), "utf8");
 
-    // Ship only the framebuffer rows that can matter, so the page stays small.
+    // Ship only the framebuffer rows that were built, so the page stays small.
     const encoded = jobs.map((job) => ({
         name: job.name,
         extent: job.extent,
+        rows: job.texelRows,
         outWidth: job.outWidth,
         outHeight: job.outHeight,
-        fb: Buffer.from(job.fb32.buffer, 0, FbWidth * job.extent.bottom * 4).toString("base64"),
+        fb: Buffer.from(job.fb32.buffer, 0, FbWidth * job.texelRows * 4).toString("base64"),
         lineGrid: Buffer.from(job.lineGrid).toString("base64"),
     }));
 
@@ -237,7 +242,7 @@ for (const job of jobs) {
     canvas.height = job.outHeight;
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
 
-    const rows = job.extent.bottom;
+    const rows = job.rows;
     gl.activeTexture(gl.TEXTURE0);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, TextureSize, rows, gl.RGBA, gl.UNSIGNED_BYTE, fromBase64(job.fb));
