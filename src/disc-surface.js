@@ -31,6 +31,26 @@ export const DensityRampHex = [
 /** Off the ramp entirely: no flux here at all, so nothing was ever written. */
 export const UnformattedHex = "#2a2a28";
 
+/** What a word of a track holds, once the sectors on it have been picked out. */
+export const Region = {
+    Unformatted: 0,
+    Gap: 1,
+    Header: 2,
+    Data: 3,
+    Deleted: 4,
+};
+
+/**
+ * Gap and unformatted stay recessive neutrals; the three that carry identity are the first three
+ * categorical slots, which are the set that clears every colourblindness gate for any pairing.
+ * A CRC error is a state rather than an identity, so it is marked over the surface, not filled in.
+ */
+export const RegionHex = ["#2a2a28", "#3f3f3c", "#d95926", "#3987e5", "#199e70"];
+export const RegionNames = ["unformatted", "gap", "sector header", "sector data", "deleted data"];
+
+/** Reserved status colour, never used as a fill. */
+export const ErrorHex = "#d03b3b";
+
 /** Canvas pixel buffers are little-endian ABGR, as in bbc-palette.js. */
 function hexToAbgr(hex) {
     const value = parseInt(hex.slice(1), 16);
@@ -40,8 +60,17 @@ function hexToAbgr(hex) {
     return ((0xff << 24) | (b << 16) | (g << 8) | r) >>> 0;
 }
 
-const DensityRamp = DensityRampHex.map(hexToAbgr);
 const UnformattedColour = hexToAbgr(UnformattedHex);
+
+/** Indexed by pulse count, so the renderer can look a word's colour straight up. */
+export const DensityPalette = Uint32Array.from({ length: PulsesPerWord + 1 }, (_, density) => {
+    if (density === 0) return UnformattedColour;
+    const step = Math.min(Math.max(density - MinDensity, 0), DensityRampHex.length - 1);
+    return hexToAbgr(DensityRampHex[step]);
+});
+
+/** Indexed by {@link Region}. */
+export const RegionPalette = Uint32Array.from(RegionHex, hexToAbgr);
 
 /**
  * @param {number} pulses one word of surface data
@@ -63,13 +92,63 @@ export function trackPulseDensity(track) {
     return density;
 }
 
+/** Address mark aside, a sector header is four bytes of identity and two of CRC. */
+const HeaderBytes = 6;
+/** A data field's CRC, likewise. */
+const CrcBytes = 2;
+const DefaultSectorBytes = 256;
+
+/** Words a bit range covers, wrapped into a track of `length` words. */
+function fillSpan(codes, sectorNumbers, length, startBit, endBit, code, sectorNumber) {
+    for (let word = Math.floor(startBit / PulsesPerWord); word < Math.ceil(endBit / PulsesPerWord); ++word) {
+        const index = ((word % length) + length) % length;
+        codes[index] = code;
+        sectorNumbers[index] = sectorNumber;
+    }
+}
+
 /**
- * @param {number} density flux transitions in a word
- * @returns {number} the ABGR it paints as
+ * Pick the sectors out of a track and say what each word of it holds.
+ *
+ * @param {Track} track
+ * @param {function(string): void} [warn] where to send the decoder's complaints
+ * @returns {{codes: Uint8Array, sectorNumbers: Int16Array, errors: {firstWord: number, lastWord: number, kind: string, sectorNumber: number}[]}}
  */
-export function densityColour(density) {
-    if (density === 0) return UnformattedColour;
-    return DensityRamp[Math.min(Math.max(density - MinDensity, 0), DensityRamp.length - 1)];
+export function trackRegions(track, warn) {
+    const codes = new Uint8Array(track.length);
+    const sectorNumbers = new Int16Array(track.length).fill(-1);
+    const errors = [];
+    for (let word = 0; word < track.length; ++word)
+        codes[word] = track.pulses2Us[word] === 0 ? Region.Unformatted : Region.Gap;
+
+    for (const sector of track.findSectors(warn)) {
+        const pulsesPerByte = sector.isMfm ? PulsesPerWord / 2 : PulsesPerWord;
+        const noteError = (kind, startBit, endBit) =>
+            errors.push({
+                firstWord: Math.floor(startBit / PulsesPerWord) % track.length,
+                lastWord: Math.ceil(endBit / PulsesPerWord) % track.length,
+                kind,
+                sectorNumber: sector.sectorNumber,
+            });
+
+        // A region starts at its address mark, which sits one byte before the offset the reader
+        // was handed.
+        const idStart = sector.idPosBitOffset - pulsesPerByte;
+        const idEnd = sector.idPosBitOffset + HeaderBytes * pulsesPerByte;
+        fillSpan(codes, sectorNumbers, track.length, idStart, idEnd, Region.Header, sector.sectorNumber);
+        if (sector.hasHeaderCrcError) noteError("header CRC", idStart, idEnd);
+
+        if (sector.dataPosBitOffset === null) continue;
+        // A failed CRC leaves no confirmed length, so fall back to what the header claimed.
+        const sizeCode = sector.header ? Math.min(sector.header[3], 4) : 1;
+        const bytes = sector.byteLength ?? (sector.header ? 128 << sizeCode : DefaultSectorBytes);
+        const dataStart = sector.dataPosBitOffset - pulsesPerByte;
+        const dataEnd = sector.dataPosBitOffset + (bytes + CrcBytes) * pulsesPerByte;
+        const code = sector.isDeleted ? Region.Deleted : Region.Data;
+        fillSpan(codes, sectorNumbers, track.length, dataStart, dataEnd, code, sector.sectorNumber);
+        if (sector.hasDataCrcError) noteError("data CRC", dataStart, dataEnd);
+    }
+    return { codes, sectorNumbers, errors };
 }
 
 const OuterRadiusFraction = 0.97;
@@ -143,11 +222,12 @@ const Supersample = 2;
  *
  * @param {Uint32Array} pixels size * size ABGR pixels
  * @param {DiscGeometry} geometry
- * @param {(Uint8Array|null)[]} densities flux transitions per word, indexed by track
+ * @param {(Uint8Array|null)[]} codes one value per word, indexed by track
+ * @param {Uint32Array} palette ABGR for each code
  * @param {number} firstTrack
  * @param {number} lastTrack inclusive
  */
-export function renderTracks(pixels, geometry, densities, firstTrack, lastTrack) {
+export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastTrack) {
     const bandOuter = geometry.outerRadius - firstTrack * geometry.trackPitch;
     const bandInner = geometry.outerRadius - (lastTrack + 1) * geometry.trackPitch;
     const firstRow = Math.max(0, Math.floor(geometry.centre - bandOuter));
@@ -179,13 +259,13 @@ export function renderTracks(pixels, geometry, densities, firstTrack, lastTrack)
                 for (let subX = 0; subX < Supersample; ++subX) {
                     const sampleX = x + (subX + 0.5) / Supersample - geometry.centre;
                     const track = geometry.trackAt(Math.hypot(sampleX, sampleY));
-                    const density = track === null ? null : densities[track];
-                    if (!density || density.length === 0) continue;
+                    const trackCodes = track === null ? null : codes[track];
+                    if (!trackCodes || trackCodes.length === 0) continue;
                     const word = Math.min(
-                        (geometry.fractionAt(sampleX, sampleY) * density.length) | 0,
-                        density.length - 1,
+                        (geometry.fractionAt(sampleX, sampleY) * trackCodes.length) | 0,
+                        trackCodes.length - 1,
                     );
-                    const colour = densityColour(density[word]);
+                    const colour = palette[trackCodes[word]];
                     red += colour & 0xff;
                     green += (colour >>> 8) & 0xff;
                     blue += (colour >>> 16) & 0xff;
