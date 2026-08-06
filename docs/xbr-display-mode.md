@@ -43,7 +43,7 @@ MODE 7 counts as one texel per pixel: the SAA5050 emulation writes each of its
 framebuffer's own resolution.
 
 `src/video-filters/pixel-grid.js` owns the encoding. The filter uploads
-`lineGrid` as a one-pixel-wide texture each frame, and the shader reads it to
+`lineGrid` as a single-row, 1024-wide texture each frame, and the shader reads it to
 decide what a "pixel" means on the row it is drawing.
 
 Two limits worth knowing:

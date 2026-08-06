@@ -112,9 +112,10 @@ describe("Video6847 logical pixel grid", () => {
             vdg.setValuesFromMode(mode);
             vdg.bitmapY = 0;
 
-            // Alternating bits give the shortest runs the mode can produce: at
-            // 1bpp neighbouring pixels differ, and at 2bpp so do neighbouring
-            // colour pairs.
+            // Alternating *pairs* of bits, so neighbouring colour pairs differ
+            // at 2bpp — where alternating single bits would decode to one
+            // colour throughout — and the single bits at each end still give a
+            // shortest run of one pixel at 1bpp.
             const pattern = 0b01100110;
             vdg.blitPixels(video.fb32, pattern, 0, 0);
             const blitted = shortestRun(video.fb32, 0, 8 * vdg.pixelsPerBit);
@@ -143,7 +144,8 @@ describe("Video6847 logical pixel grid", () => {
         vdg.bitmapY = 0;
         vdg.scanlineCounter = 4; // a scanline through the middle of the glyph
 
-        // Character 'A' has both set and clear pixels on a middle scanline.
+        // The 6847's set starts at '@', so 0x21 is '!': set and clear pixels
+        // on a middle scanline, which is all this needs.
         vdg.blitChar(video.fb32, 0x21, 0, vdg.pixelsPerChar, 0);
         const texelsPerChar = vdg.pixelsPerChar * vdg.bitmapPxPerPixel;
         const blitted = shortestRun(video.fb32, 0, texelsPerChar);

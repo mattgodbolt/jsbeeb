@@ -88,7 +88,8 @@ describe("logical pixel grid over real screens", { timeout: 60000 }, () => {
     // claimed pixels were wider than they are, a lit and an unlit pixel would
     // land inside one and gridDescribesPixels would say so. A grid that claimed
     // pixels were *narrower* would still look uniform, so the expected width is
-    // asserted outright as well, and notBlank guards against the whole thing
+    // asserted outright as well, and the distinct-colour count from coloursIn
+    // guards against the whole thing
     // passing on an empty screen.
     //
     // 16 graphics units is 8 pixels in MODE 0, 4 in MODE 1 and 4, and 2 in

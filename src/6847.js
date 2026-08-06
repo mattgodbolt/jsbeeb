@@ -627,11 +627,7 @@ export class Video6847 {
     }
 
     /**
-     * Note the logical pixel size of the two rows about to be written, so
-     * display filters can see the picture as pixels rather than as raster
-     * samples (see video-filters/pixel-grid.js). Only the picture records a
-     * grid: the border is a solid colour, and letting it write here would
-     * leave the row describing the border rather than the picture on it.
+     * Precompute this mode's grid descriptors, one per blitter.
      *
      * The two blitters derive their widths differently and cannot be unified:
      * `blitChar` splits the character's texels across eight glyph bits, while
@@ -641,8 +637,6 @@ export class Video6847 {
      * `pixelsPerBit` is right for graphics at 2bpp as well as 1bpp: the blitter
      * steps its bit groups by `pixelsPerBit / bpp`, but reads the colour with
      * `j & 0xe`, so pairs of groups share one and each pixel is twice as wide.
-     *
-     * @param {boolean} textMode whether the character blitter is about to run
      */
     updateLineGrid() {
         // Every 6847 blitter writes each pixel row into two framebuffer lines.
@@ -652,6 +646,15 @@ export class Video6847 {
         this.lineGridGraphics = this.pixelsPerBit > 0 ? encodeLineGrid(this.pixelsPerBit, true) : this.lineGridText;
     }
 
+    /**
+     * Note the logical pixel size of the two rows about to be written, so
+     * display filters can see the picture as pixels rather than as raster
+     * samples (see video-filters/pixel-grid.js). Only the picture records a
+     * grid: the border is a solid colour, and letting it write here would
+     * leave the row describing the border rather than the picture on it.
+     *
+     * @param {boolean} textMode whether the character blitter is about to run
+     */
     recordLineGrid(textMode) {
         const grid = textMode ? this.lineGridText : this.lineGridGraphics;
         this.video.lineGrid[this.bitmapY] = grid;

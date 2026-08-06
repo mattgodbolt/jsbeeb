@@ -32,7 +32,8 @@ varying vec2 uv;
 
 // Colour distance below which two pixels count as "equal".
 const float EqThreshold = 0.32;
-// Larger values let the shallow 30/60 degree rules fire more readily.
+// Used as the threshold of a step(), so larger values make the shallow 30/60
+// degree rules harder to satisfy and fewer shallow edges get smoothed.
 const float Lv2Coefficient = 0.3;
 const float Lv2Cf = Lv2Coefficient + 2.0;
 
@@ -209,7 +210,7 @@ void main() {
 
     // Packed forms, for the exact-inequality tests. `fP` and `hP` are already in
     // hand from the early-out above, and `b` is `f` rotated, so `bP` is too —
-    // packing it again would cost twelve multiplies for the same bits.
+    // packing it again would cost eight multiplies for the same bits.
     vec4 bP = fP.yzwx;
     vec4 cP = pack4(c);
     vec4 dP = bP.yzwx;
