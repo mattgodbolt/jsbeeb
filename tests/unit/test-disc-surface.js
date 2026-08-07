@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadAdf, loadSsd } from "../../src/disc.js";
 import {
     DensityPalette,
     DensityRampHex,
@@ -18,6 +18,13 @@ import {
 const densityColour = (density) => DensityPalette[density];
 
 afterEach(() => vi.restoreAllMocks());
+
+/** An ADF's worth of surface: MFM, where a word holds two bytes rather than one. */
+function adfDisc() {
+    const disc = new Disc(true, new DiscConfig(), "test.adf");
+    loadAdf(disc, new Uint8Array(16 * 256 * 80), false);
+    return disc;
+}
 
 /** An SSD's worth of surface, so the tests see real FM pulse data. */
 function ssdDisc() {
@@ -228,6 +235,44 @@ describe("trackRegions", function () {
         expect(after.codes[damaged]).toBe(Region.Data);
     });
 
+    it("finds MFM sectors, whose bytes are half a word each", () => {
+        const { codes, sectorNumbers, errors } = trackRegions(adfDisc().getTrack(false, 0), () => {});
+        expect(errors).toHaveLength(0);
+        // An ADF track holds 16 sectors, against an SSD's 10.
+        expect(new Set([...sectorNumbers].filter((n) => n >= 0)).size).toBe(16);
+        expect(wordsWith(codes, Region.Header).size).toBeGreaterThan(0);
+        expect(wordsWith(codes, Region.Data).size).toBeGreaterThan(0);
+    });
+
+    it("marks a header whose own CRC fails", () => {
+        const disc = ssdDisc();
+        const track = disc.getTrack(false, 0);
+        const { codes, sectorNumbers } = trackRegions(track, () => {});
+        const header = [];
+        codes.forEach((code, word) => code === Region.Header && sectorNumbers[word] === 6 && header.push(word));
+        // The second word in: the first is the address mark, and losing that loses the sector.
+        track.pulses2Us[header[1]] ^= 0xf;
+
+        const after = trackRegions(track, () => {});
+        expect(after.errors.map((e) => e.kind)).toContain("header CRC");
+    });
+
+    it("tells a deleted data field from a live one", () => {
+        const disc = ssdDisc();
+        const track = disc.getTrack(false, 0);
+        const { codes, sectorNumbers } = trackRegions(track, () => {});
+        const mark = codes.findIndex((code, word) => code === Region.Data && sectorNumbers[word] === 2);
+        track.pulses2Us[mark] = IbmDiscFormat.fmTo2usPulses(
+            IbmDiscFormat.markClockPattern,
+            IbmDiscFormat.deletedDataMarkDataPattern,
+        );
+
+        const after = trackRegions(track, () => {});
+        const deleted = [...after.codes].filter((code) => code === Region.Deleted);
+        expect(deleted.length).toBeGreaterThan(0);
+        expect(wordsWith(after.codes, Region.Data).size).toBeGreaterThan(0);
+    });
+
     it("sends the decoder's complaints to the caller instead of the console", () => {
         const disc = ssdDisc();
         const track = disc.getTrack(false, 0);
@@ -290,6 +335,19 @@ describe("renderTracks", function () {
         for (let track = 0; track < numTracks; ++track)
             renderTracks(perTrack, geometry, densities, DensityPalette, track, track);
         expect(perTrack).toEqual(pixels);
+    });
+
+    it("leaves a track alone when its neighbour has not been read yet", () => {
+        const densities = solid();
+        const { geometry, pixels } = render(densities, 0, numTracks - 1);
+        const before = pixels.slice();
+
+        // The surface fills in a track at a time, so a neighbour is briefly absent.
+        densities[5] = null;
+        renderTracks(pixels, geometry, densities, DensityPalette, 4, 4);
+
+        expect(pixelAt(geometry, pixels, 5, 0.5)).toBe(pixelAt(geometry, before, 5, 0.5));
+        expect(pixelAt(geometry, pixels, 4, 0.5)).toBe(densityColour(MaxDensity));
     });
 
     it("repaints one track without disturbing its neighbours", () => {

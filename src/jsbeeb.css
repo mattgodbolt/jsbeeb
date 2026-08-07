@@ -463,7 +463,6 @@ small {
   margin-bottom: 8px;
   cursor: move;
   user-select: none;
-  /* Claim touch gestures on the header, or a drag scrolls the page instead. */
   touch-action: none;
 }
 
@@ -488,14 +487,11 @@ small {
 }
 
 #disc-overlay {
+  position: absolute;
+  inset: 0;
   cursor: crosshair;
   /* Claim wheel and drag gestures, or the page scrolls instead. */
   touch-action: none;
-}
-
-#disc-overlay {
-  position: absolute;
-  inset: 0;
 }
 
 .disc-legend {

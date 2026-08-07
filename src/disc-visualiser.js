@@ -12,6 +12,7 @@ import {
     RegionNames,
     RegionPalette,
     UnformattedHex,
+    clampZoom,
     renderTracks,
     trackPulseDensity,
     trackRegions,
@@ -24,14 +25,17 @@ const RevolutionMs = 200;
 const HeadColour = "#eb6834";
 const IndexColour = "#c3c2b7";
 const HoverColour = "#ffffff";
-/** Kept in step with #disc-panel's background in jsbeeb.css. */
-const PanelColour = "#0d0d0d";
+/** Outlines a mark so it stays legible over whatever it crosses. */
+const MarkOutline = "#0d0d0d";
 
 /** A whole frame: scanning a side costs a couple of hundred ms, and the fill is a one-off. */
 const ScanBudgetMs = 16;
 
 /** A trackpad reports deltas in the tens, a mouse notch about 100. */
 const WheelZoomRate = 0.003;
+
+/** Firefox reports a wheel notch as three lines rather than a pixel count. */
+const PixelsPerWheelLine = 16;
 
 const Views = {
     density: {
@@ -43,6 +47,8 @@ const Views = {
         analyse: (track, warn) => trackRegions(track, warn),
     },
 };
+
+const ignoreWarning = () => {};
 
 /** These lines are rewritten every frame, so skip the ones that have not changed. */
 function setText(element, text) {
@@ -92,42 +98,32 @@ export class DiscVisualiser {
         this._scanCursor = 0;
         this._scanHandle = null;
         this._hover = null;
-        /** Null until dragged: the panel is wherever the CSS put it. */
         this._position = null;
         this._drag = null;
-        this._zoom = 1;
-        this._originX = 0;
-        this._originY = 0;
         this._pan = null;
         this._surfaceStale = false;
+        this._frameHandle = null;
 
         this._onTrackWrite = (isSideUpper, trackNum) => {
             if (isSideUpper === this._isSideUpper) this._staleTracks.add(trackNum);
         };
         this._onResize = () => this._resize();
         this._onKeyDown = (e) => {
-            if (e.key === "Escape") {
-                e.preventDefault();
-                this.close();
-            }
+            if (e.key !== "Escape") return;
+            e.preventDefault();
+            e.stopPropagation();
+            this.close();
         };
 
-        this.openBtn?.addEventListener("click", (e) => {
+        this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
             this.toggle();
         });
-        document.getElementById("disc-close")?.addEventListener("click", () => this.close());
+        document.getElementById("disc-close").addEventListener("click", () => this.close());
         this._bindChoice("[data-drive]", (button) => this._select(Number(button.dataset.drive), this._isSideUpper));
         this._bindChoice("[data-side]", (button) => this._select(this._driveIndex, button.dataset.side === "1"));
         this._bindChoice("[data-view]", (button) => this._setView(button.dataset.view));
-        this.overlayCanvas.addEventListener("mousemove", (e) => {
-            const rect = this.overlayCanvas.getBoundingClientRect();
-            this._hover = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top,
-                scale: this.overlayCanvas.width / rect.width,
-            };
-        });
+        this.overlayCanvas.addEventListener("mousemove", (e) => (this._hover = this._canvasPoint(e)));
         this.overlayCanvas.addEventListener("mouseleave", () => (this._hover = null));
         this._bindZoomAndPan();
         this._bindDrag(this.panel.querySelector(".disc-header"));
@@ -138,36 +134,37 @@ export class DiscVisualiser {
         const canvas = this.overlayCanvas;
         canvas.addEventListener("wheel", (e) => {
             e.preventDefault();
+            if (!this._geometry) return;
             const { x, y } = this._canvasPoint(e);
+            const at = this._geometry.toDisc(x, y);
+            const lines = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? PixelsPerWheelLine : 1;
+            const zoom = clampZoom(this._geometry.zoom * Math.exp(-e.deltaY * lines * WheelZoomRate));
             // Keep whatever is under the pointer under the pointer.
-            const before = this._geometry.toDisc(x, y);
-            this._setViewport(this._zoom * Math.exp(-e.deltaY * WheelZoomRate), this._originX, this._originY);
-            this._setViewport(this._zoom, before.x - x / this._zoom, before.y - y / this._zoom);
+            this._setViewport(zoom, at.x - x / zoom, at.y - y / zoom);
         });
         canvas.addEventListener("pointerdown", (e) => {
             if (e.button !== 0) return;
-            this._pan = {
-                pointerId: e.pointerId,
-                ...this._canvasPoint(e),
-                originX: this._originX,
-                originY: this._originY,
-            };
+            const { originX, originY } = this._geometry;
+            this._pan = { pointerId: e.pointerId, ...this._canvasPoint(e), originX, originY, moved: false };
             canvas.setPointerCapture(e.pointerId);
         });
         canvas.addEventListener("pointermove", (e) => {
             if (this._pan?.pointerId !== e.pointerId) return;
             const { x, y } = this._canvasPoint(e);
+            const { zoom } = this._geometry;
+            this._pan.moved = true;
             this._setViewport(
-                this._zoom,
-                this._pan.originX - (x - this._pan.x) / this._zoom,
-                this._pan.originY - (y - this._pan.y) / this._zoom,
+                zoom,
+                this._pan.originX - (x - this._pan.x) / zoom,
+                this._pan.originY - (y - this._pan.y) / zoom,
             );
         });
         for (const ending of ["pointerup", "pointercancel"])
             canvas.addEventListener(ending, (e) => {
                 if (this._pan?.pointerId !== e.pointerId) return;
+                // The drag rendered at draft quality, so ask for one more pass at full.
+                if (this._pan.moved) this._surfaceStale = true;
                 this._pan = null;
-                this._surfaceStale = true;
             });
         canvas.addEventListener("dblclick", () => this._setViewport(1, 0, 0));
     }
@@ -180,19 +177,16 @@ export class DiscVisualiser {
     }
 
     _setViewport(zoom, originX, originY) {
-        if (!this._geometry) return;
+        const was = { ...this._geometry };
         this._geometry.setView(zoom, originX, originY);
-        const changed =
-            this._zoom !== this._geometry.zoom ||
-            this._originX !== this._geometry.originX ||
-            this._originY !== this._geometry.originY;
-        this._zoom = this._geometry.zoom;
-        this._originX = this._geometry.originX;
-        this._originY = this._geometry.originY;
-        if (changed) this._surfaceStale = true;
+        if (
+            was.zoom !== this._geometry.zoom ||
+            was.originX !== this._geometry.originX ||
+            was.originY !== this._geometry.originY
+        )
+            this._surfaceStale = true;
     }
 
-    /** The header carries buttons, so a press on one must not start a drag. */
     _bindDrag(header) {
         header.addEventListener("pointerdown", (e) => {
             if (e.button !== 0 || e.target.closest("button")) return;
@@ -211,16 +205,15 @@ export class DiscVisualiser {
             });
     }
 
-    /** Move the panel, keeping all of it on screen. */
     _moveTo(left, top) {
         const { width, height } = this.panel.getBoundingClientRect();
         this._position = {
             left: Math.min(Math.max(left, 0), Math.max(0, window.innerWidth - width)),
             top: Math.min(Math.max(top, 0), Math.max(0, window.innerHeight - height)),
         };
-        // Dragging switches the panel from its right-hand anchor to an explicit position.
         this.panel.style.left = `${this._position.left}px`;
         this.panel.style.top = `${this._position.top}px`;
+        // Dragging trades the panel's right-hand anchor for an explicit position.
         this.panel.style.right = "auto";
     }
 
@@ -244,17 +237,26 @@ export class DiscVisualiser {
         window.addEventListener("resize", this._onResize);
         document.addEventListener("keydown", this._onKeyDown, true);
         this._resize();
-        this.update();
+        this._tick();
     }
 
     close() {
         if (!this.isOpen) return;
         this.isOpen = false;
         this.panel.hidden = true;
+        if (this._frameHandle !== null) cancelAnimationFrame(this._frameHandle);
+        this._frameHandle = null;
         this._cancelScan();
         this._detach();
+        this._hover = null;
+        this._needsFullRepaint = true;
         window.removeEventListener("resize", this._onResize);
         document.removeEventListener("keydown", this._onKeyDown, true);
+    }
+
+    _tick() {
+        this.update();
+        this._frameHandle = requestAnimationFrame(() => this._tick());
     }
 
     /** Redraw whatever has moved or changed. Cheap enough to call every frame. */
@@ -264,18 +266,14 @@ export class DiscVisualiser {
         if (this._isSideUpper && !disc?.isDoubleSided) this._select(this._driveIndex, false);
         if (disc !== this._disc) this._attach(disc);
         if (this._needsFullRepaint) this._beginFullRepaint();
-        else if (this._surfaceStale && !this._scanning) this._repaintSurface();
-        else if (this._staleTracks.size && !this._scanning) {
-            for (const trackNum of this._staleTracks) this._repaintTrack(trackNum);
-            this._staleTracks.clear();
-            this._blit();
-        }
+        else if (this._surfaceStale) this._repaintSurface();
+        else if (this._staleTracks.size && !this._scanning) this._repaintStaleTracks();
         this._drawOverlay();
         this._updateStatus();
     }
 
     get _drive() {
-        return this._fdc?.drives?.[this._driveIndex];
+        return this._fdc.drives[this._driveIndex];
     }
 
     get _showingHead() {
@@ -323,8 +321,9 @@ export class DiscVisualiser {
             canvas.width = size;
             canvas.height = size;
         }
+        const previous = this._geometry;
         this._geometry = new DiscGeometry(size, IbmDiscFormat.tracksPerDisc);
-        this._setViewport(this._zoom, this._originX, this._originY);
+        if (previous) this._geometry.adoptView(previous);
         this._imageData = this.surfaceCanvas.getContext("2d").createImageData(size, size);
         this._pixels = new Uint32Array(this._imageData.data.buffer);
         this._needsFullRepaint = true;
@@ -332,9 +331,8 @@ export class DiscVisualiser {
 
     /** @returns {{codes: Uint8Array, sectorNumbers: Int16Array|null, errors: object[]|null}|null} */
     _analyse(trackNum) {
-        const disc = this._drive?.disc;
-        if (!disc) return null;
-        return Views[this._view].analyse(disc.getTrack(this._isSideUpper, trackNum), () => this._warnings++);
+        if (!this._disc) return null;
+        return Views[this._view].analyse(this._disc.getTrack(this._isSideUpper, trackNum), ignoreWarning);
     }
 
     _blit() {
@@ -347,7 +345,6 @@ export class DiscVisualiser {
         const count = this._geometry.numTracks;
         this._codes = new Array(count).fill(null);
         this._info = new Array(count).fill(null);
-        this._warnings = 0;
         this._scanCursor = 0;
         this._pixels.fill(0);
         this._advanceScan();
@@ -363,11 +360,7 @@ export class DiscVisualiser {
         const count = this._geometry.numTracks;
         const deadline = performance.now() + ScanBudgetMs;
         do {
-            if (this._scanCursor < count) {
-                const analysis = this._analyse(this._scanCursor);
-                this._codes[this._scanCursor] = analysis?.codes ?? null;
-                this._info[this._scanCursor] = analysis;
-            }
+            if (this._scanCursor < count) this._analyseInto(this._scanCursor);
             // A track's edge pixels sample its neighbours, so paint one behind the scan.
             const paintTrack = this._scanCursor - 1;
             if (paintTrack >= 0)
@@ -383,24 +376,36 @@ export class DiscVisualiser {
         return Views[this._view].palette;
     }
 
-    /** Redraw everything already scanned, for when the view moved rather than the disc. */
+    _repaintStaleTracks() {
+        const deadline = performance.now() + ScanBudgetMs;
+        for (const trackNum of this._staleTracks) {
+            this._repaintTrack(trackNum);
+            this._staleTracks.delete(trackNum);
+            if (performance.now() >= deadline) break;
+        }
+        this._blit();
+    }
+
+    /** For when the view moved rather than the disc. */
     _repaintSurface() {
         this._surfaceStale = false;
         this._pixels.fill(0);
-        // Mid-drag the whole surface is redrawn every frame, so trade the smoothed edges for the
-        // frame rate; releasing the pointer asks for one more pass at full quality.
+        // Mid-drag the whole surface is redrawn every frame, so trade smoothed edges for the frame rate.
         const supersample = this._pan ? 1 : undefined;
         const last = this._geometry.numTracks - 1;
         renderTracks(this._pixels, this._geometry, this._codes, this._palette, 0, last, supersample);
         this._blit();
     }
 
+    _analyseInto(trackNum) {
+        const analysis = this._analyse(trackNum);
+        this._info[trackNum] = analysis;
+        this._codes[trackNum] = analysis?.codes ?? null;
+    }
+
     _repaintTrack(trackNum) {
         if (trackNum >= this._geometry.numTracks) return;
-        const analysis = this._analyse(trackNum);
-        if (!analysis) return;
-        this._codes[trackNum] = analysis.codes;
-        this._info[trackNum] = analysis;
+        this._analyseInto(trackNum);
         renderTracks(this._pixels, this._geometry, this._codes, this._palette, trackNum, trackNum);
     }
 
@@ -464,7 +469,7 @@ export class DiscVisualiser {
                 let end = error.lastWord / info.codes.length;
                 if (end <= start) end += 1;
                 for (const [lineWidth, style] of [
-                    [width + 3 * scale, PanelColour],
+                    [width + 3 * scale, MarkOutline],
                     [width, ErrorHex],
                 ]) {
                     ctx.lineWidth = lineWidth;
@@ -500,8 +505,7 @@ export class DiscVisualiser {
 
     /** @returns {{track: number, fraction: number}|null} */
     _hoverPosition() {
-        if (!this._hover) return null;
-        return this._geometry.positionAt(this._hover.x * this._hover.scale, this._hover.y * this._hover.scale);
+        return this._hover ? this._geometry.positionAt(this._hover.x, this._hover.y) : null;
     }
 
     _updateStatus() {
@@ -519,7 +523,7 @@ export class DiscVisualiser {
                 ? `head at track ${drive.track}, ${(drive.positionFraction * RevolutionMs).toFixed(1)} ms`
                 : `head on the other side, track ${drive.track}`;
             const spin = drive.spinning ? "spinning" : "stopped";
-            const zoom = this._zoom > 1 ? ` · ${this._zoom.toFixed(1)}x` : "";
+            const zoom = this._geometry.zoom > 1 ? ` · ${this._geometry.zoom.toFixed(1)}x` : "";
             setText(this.statusElem, `${disc.name ?? "disc"} · ${spin}, ${head}${zoom}${this._scanNote()}`);
         }
         setText(this.hoverElem, this._describeHover());
@@ -543,7 +547,7 @@ export class DiscVisualiser {
         const info = this._info[hover.track];
         if (!info?.codes?.length) return `Track ${hover.track} · not read yet`;
         const word = Math.min((hover.fraction * info.codes.length) | 0, info.codes.length - 1);
-        const at = `Track ${hover.track} · byte ${word} of ${info.codes.length} · ${(hover.fraction * RevolutionMs).toFixed(1)} ms`;
+        const at = `Track ${hover.track} · word ${word} of ${info.codes.length} · ${(hover.fraction * RevolutionMs).toFixed(1)} ms`;
         if (this._view !== "format") {
             const pulses = info.codes[word];
             return `${at} · ${pulses === 0 ? "no flux" : `${pulses} pulses`}`;

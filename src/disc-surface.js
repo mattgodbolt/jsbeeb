@@ -4,7 +4,7 @@
 
 import { IbmDiscFormat } from "./disc.js";
 
-/** 32 slots of 2us: one FM byte, or two MFM bytes. */
+/** One FM byte, or two MFM bytes; 2us a slot. */
 export const PulsesPerWord = 32;
 
 /**
@@ -38,7 +38,7 @@ export const Region = {
 };
 
 /** Gap and unformatted are recessive neutrals; header, data and deleted carry identity. */
-export const RegionHex = ["#2a2a28", "#3f3f3c", "#d95926", "#3987e5", "#199e70"];
+export const RegionHex = [UnformattedHex, "#3f3f3c", "#d95926", "#3987e5", "#199e70"];
 export const RegionNames = ["unformatted", "gap", "header", "data", "deleted data"];
 
 /** Reserved status colour, never used as a fill. */
@@ -88,16 +88,6 @@ export function trackPulseDensity(track) {
 /** Address mark aside, a sector header is four bytes of identity and two of CRC. */
 const HeaderBytes = 6;
 const CrcBytes = 2;
-const DefaultSectorBytes = 256;
-
-/** Words a bit range covers, wrapped into a track of `length` words. */
-function fillSpan(codes, sectorNumbers, length, startBit, endBit, code, sectorNumber) {
-    for (let word = Math.floor(startBit / PulsesPerWord); word < Math.ceil(endBit / PulsesPerWord); ++word) {
-        const index = ((word % length) + length) % length;
-        codes[index] = code;
-        sectorNumbers[index] = sectorNumber;
-    }
-}
 
 /**
  * Pick the sectors out of a track and say what each word of it holds.
@@ -113,6 +103,15 @@ export function trackRegions(track, warn) {
     for (let word = 0; word < track.length; ++word)
         codes[word] = track.pulses2Us[word] === 0 ? Region.Unformatted : Region.Gap;
 
+    /** Marks the words a bit range covers, wrapping at the index. */
+    const fill = (startBit, endBit, code, sectorNumber) => {
+        for (let word = Math.floor(startBit / PulsesPerWord); word < Math.ceil(endBit / PulsesPerWord); ++word) {
+            const index = ((word % track.length) + track.length) % track.length;
+            codes[index] = code;
+            sectorNumbers[index] = sectorNumber;
+        }
+    };
+
     for (const sector of track.findSectors(warn)) {
         const pulsesPerByte = sector.isMfm ? PulsesPerWord / 2 : PulsesPerWord;
         const noteError = (kind, startBit, endBit) =>
@@ -127,24 +126,25 @@ export function trackRegions(track, warn) {
         // was handed.
         const idStart = sector.idPosBitOffset - pulsesPerByte;
         const idEnd = sector.idPosBitOffset + HeaderBytes * pulsesPerByte;
-        fillSpan(codes, sectorNumbers, track.length, idStart, idEnd, Region.Header, sector.sectorNumber);
+        fill(idStart, idEnd, Region.Header, sector.sectorNumber);
         if (sector.hasHeaderCrcError) noteError("header CRC", idStart, idEnd);
 
         if (sector.dataPosBitOffset === null) continue;
         // A failed CRC leaves no confirmed length, so fall back to what the header claimed.
-        const sizeCode = sector.header ? Math.min(sector.header[3], 4) : 1;
-        const bytes = sector.byteLength ?? (sector.header ? 128 << sizeCode : DefaultSectorBytes);
+        const bytes = sector.byteLength ?? 128 << Math.min(sector.header[3], 4);
         const dataStart = sector.dataPosBitOffset - pulsesPerByte;
         const dataEnd = sector.dataPosBitOffset + (bytes + CrcBytes) * pulsesPerByte;
         const code = sector.isDeleted ? Region.Deleted : Region.Data;
-        fillSpan(codes, sectorNumbers, track.length, dataStart, dataEnd, code, sector.sectorNumber);
+        fill(dataStart, dataEnd, code, sector.sectorNumber);
         if (sector.hasDataCrcError) noteError("data CRC", dataStart, dataEnd);
     }
     return { codes, sectorNumbers, errors };
 }
 
-/** Enough to fill the panel with a couple of tracks. */
+/** Enough to fill the view with a couple of tracks. */
 export const MaxZoom = 32;
+
+export const clampZoom = (zoom) => Math.min(Math.max(zoom, 1), MaxZoom);
 
 const OuterRadiusFraction = 0.97;
 const InnerRadiusFraction = 0.36;
@@ -152,8 +152,7 @@ const HubRadiusFraction = 0.26;
 
 /**
  * Maps between a square canvas and the surface of a disc drawn on it. Disc space is the canvas at
- * rest: the platter fills a `size` square. Zooming and panning move the canvas over that, so the
- * disc's own dimensions never change and only the mapping does.
+ * rest, with the platter filling a `size` square; zoom and pan move the canvas over it.
  */
 export class DiscGeometry {
     /**
@@ -179,12 +178,17 @@ export class DiscGeometry {
      * @param {number} originY disc-space coordinate shown at the canvas's top edge
      */
     setView(zoom, originX, originY) {
-        this.zoom = Math.min(Math.max(zoom, 1), MaxZoom);
+        this.zoom = clampZoom(zoom);
         // Holding the window inside the platter's square keeps the disc from being panned away.
         const slack = this.size - this.size / this.zoom;
         this.originX = Math.min(Math.max(originX, 0), slack);
         this.originY = Math.min(Math.max(originY, 0), slack);
         return this;
+    }
+
+    /** Carry a viewport from a differently sized canvas, where the origin meant proportionally less. */
+    adoptView({ zoom, originX, originY, size }) {
+        return this.setView(zoom, (originX * this.size) / size, (originY * this.size) / size);
     }
 
     toDisc(x, y) {
@@ -318,11 +322,8 @@ export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastT
                     covered++;
                 }
             }
+            if (covered === 0) continue;
             const offset = y * size + x;
-            if (covered === 0) {
-                pixels[offset] = 0;
-                continue;
-            }
             const alpha = ((255 * covered) / samplesPerPixel) | 0;
             pixels[offset] =
                 ((alpha << 24) |

@@ -294,3 +294,70 @@ describe("ADF loader tests", function () {
         }
     });
 });
+
+describe("track write listeners", () => {
+    /** @returns {Disc} a disc with one formatted track, ready to be written to */
+    function writeableDisc() {
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
+        return disc;
+    }
+
+    it("reports each flushed track to every listener", () => {
+        const disc = writeableDisc();
+        const seen = [];
+        disc.addTrackWriteListener((isSideUpper, trackNum, track) => seen.push([isSideUpper, trackNum, track.length]));
+        disc.writePulses(false, 3, 0, 0);
+        disc.flushWrites();
+
+        expect(seen).toEqual([[false, 3, disc.getTrack(false, 3).length]]);
+    });
+
+    it("reports writes even with no write-track callback set", () => {
+        // The callback belongs to whichever loader owns writing the image back out, and a disc
+        // loaded from a URL has none; observers still need telling.
+        const disc = new Disc(true, new DiscConfig(), "blank");
+        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
+        expect(disc.writeTrackCallback).toBeUndefined();
+
+        let calls = 0;
+        disc.addTrackWriteListener(() => calls++);
+        disc.writePulses(false, 0, 0, 0);
+        disc.flushWrites();
+
+        expect(calls).toBe(1);
+    });
+
+    it("says nothing when there was nothing to flush", () => {
+        const disc = writeableDisc();
+        let calls = 0;
+        disc.addTrackWriteListener(() => calls++);
+        disc.flushWrites();
+        expect(calls).toBe(0);
+    });
+
+    it("stops reporting to a listener that has been removed", () => {
+        const disc = writeableDisc();
+        let calls = 0;
+        const listener = () => calls++;
+        disc.addTrackWriteListener(listener);
+        disc.removeTrackWriteListener(listener);
+        disc.writePulses(false, 1, 0, 0);
+        disc.flushWrites();
+        expect(calls).toBe(0);
+    });
+
+    it("leaves the loader's own write-track callback working alongside them", () => {
+        let imageUpdates = 0;
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, () => imageUpdates++);
+        let listenerCalls = 0;
+        disc.addTrackWriteListener(() => listenerCalls++);
+
+        disc.writePulses(false, 2, 0, 0);
+        disc.flushWrites();
+
+        expect(listenerCalls).toBe(1);
+        expect(imageUpdates).toBe(1);
+    });
+});

@@ -2010,7 +2010,6 @@ function draw(now) {
     audioHandler.soundChip.catchUp();
     gamepad.update(processor.sysvia);
     syncLights();
-    discVisualiser?.update();
     if (last !== 0) {
         let cycles;
         if (!speedy) {
