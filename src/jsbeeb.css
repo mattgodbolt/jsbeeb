@@ -461,6 +461,14 @@ small {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
+  cursor: move;
+  user-select: none;
+  /* Claim touch gestures on the header, or a drag scrolls the page instead. */
+  touch-action: none;
+}
+
+.disc-header button {
+  cursor: pointer;
 }
 
 .disc-title {

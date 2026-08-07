@@ -93,6 +93,9 @@ export class DiscVisualiser {
         this._scanCursor = 0;
         this._scanHandle = null;
         this._hover = null;
+        /** Where the user has dragged the panel to, once they have; null means the CSS default. */
+        this._position = null;
+        this._drag = null;
 
         this._onTrackWrite = (isSideUpper, trackNum) => {
             if (isSideUpper === this._isSideUpper) this._staleTracks.add(trackNum);
@@ -122,7 +125,40 @@ export class DiscVisualiser {
             };
         });
         this.overlayCanvas.addEventListener("mouseleave", () => (this._hover = null));
+        this._bindDrag(this.panel.querySelector(".disc-header"));
         this._buildLegend();
+    }
+
+    /** Drag the panel around by its header, leaving the controls on it still clickable. */
+    _bindDrag(header) {
+        header.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0 || e.target.closest("button")) return;
+            const { left, top } = this.panel.getBoundingClientRect();
+            this._drag = { pointerId: e.pointerId, grabX: e.clientX - left, grabY: e.clientY - top };
+            header.setPointerCapture(e.pointerId);
+            e.preventDefault();
+        });
+        header.addEventListener("pointermove", (e) => {
+            if (this._drag?.pointerId !== e.pointerId) return;
+            this._moveTo(e.clientX - this._drag.grabX, e.clientY - this._drag.grabY);
+        });
+        for (const ending of ["pointerup", "pointercancel"])
+            header.addEventListener(ending, (e) => {
+                if (this._drag?.pointerId === e.pointerId) this._drag = null;
+            });
+    }
+
+    /** Move the panel, keeping all of it on screen. */
+    _moveTo(left, top) {
+        const { width, height } = this.panel.getBoundingClientRect();
+        this._position = {
+            left: Math.min(Math.max(left, 0), Math.max(0, window.innerWidth - width)),
+            top: Math.min(Math.max(top, 0), Math.max(0, window.innerHeight - height)),
+        };
+        // Dragging switches the panel from its right-hand anchor to an explicit position.
+        this.panel.style.left = `${this._position.left}px`;
+        this.panel.style.top = `${this._position.top}px`;
+        this.panel.style.right = "auto";
     }
 
     _bindChoice(selector, onClick) {
@@ -217,6 +253,9 @@ export class DiscVisualiser {
     }
 
     _resize() {
+        // A window that shrank since the panel was dragged, or since it was last open, can leave it
+        // hanging off the edge.
+        if (this._position) this._moveTo(this._position.left, this._position.top);
         const size = Math.round(this.surfaceCanvas.clientWidth * (window.devicePixelRatio || 1));
         if (size <= 0) return;
         for (const canvas of [this.surfaceCanvas, this.overlayCanvas]) {
