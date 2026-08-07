@@ -28,17 +28,18 @@ const HoverColour = "#ffffff";
 const PanelColour = "#0d0d0d";
 
 /**
- * Picking the sectors out of a whole disc takes long enough to drop frames, so the surface is
- * scanned a few tracks at a time and fills in as it goes.
+ * Reading a whole side's format costs a couple of hundred milliseconds, so the surface is scanned
+ * against a frame budget and fills in as it goes. A whole frame's worth of budget: the fill is a
+ * transient, and a brief dip in frame rate beats a slow drip.
  */
-const ScanBudgetMs = 8;
+const ScanBudgetMs = 16;
 
 const Views = {
     density: {
         palette: DensityPalette,
         analyse: (track) => ({ codes: trackPulseDensity(track), sectorNumbers: null, errors: null }),
     },
-    sectors: {
+    format: {
         palette: RegionPalette,
         analyse: (track, warn) => trackRegions(track, warn),
     },
@@ -49,8 +50,9 @@ function setText(element, text) {
     if (element.textContent !== text) element.textContent = text;
 }
 
+/** One atomic legend entry, so a swatch never gets orphaned from its label by a line break. */
 function swatch(colour, label) {
-    return `<span class="disc-legend-swatch" style="background:${colour}"></span><span>${label}</span>`;
+    return `<span class="disc-legend-item"><span class="disc-legend-swatch" style="background:${colour}"></span>${label}</span>`;
 }
 
 /**
@@ -412,7 +414,7 @@ export class DiscVisualiser {
 
     _scanNote() {
         if (this._scanning) return " — reading surface…";
-        if (this._view !== "sectors") return "";
+        if (this._view !== "format") return "";
         const errors = this._info.reduce((count, info) => count + (info?.errors?.length ?? 0), 0);
         if (!errors) return "";
         return ` — ${errors} CRC error${errors === 1 ? "" : "s"}`;
@@ -425,13 +427,13 @@ export class DiscVisualiser {
         if (!info?.codes?.length) return `Track ${hover.track} — not read yet`;
         const word = Math.min((hover.fraction * info.codes.length) | 0, info.codes.length - 1);
         const at = `Track ${hover.track} · byte ${word} of ${info.codes.length} · ${(hover.fraction * RevolutionMs).toFixed(1)} ms`;
-        if (this._view !== "sectors") {
+        if (this._view !== "format") {
             const pulses = info.codes[word];
             return `${at} · ${pulses === 0 ? "no flux" : `${pulses} pulses`}`;
         }
         const sectorNumber = info.sectorNumbers[word];
         const what = RegionNames[info.codes[word]];
-        const named = sectorNumber < 0 ? what : `sector ${sectorNumber} ${what.replace("sector ", "")}`;
+        const named = sectorNumber < 0 ? what : `sector ${sectorNumber} ${what}`;
         const error = info.errors.find(({ firstWord, lastWord }) =>
             lastWord <= firstWord ? word >= firstWord || word < lastWord : word >= firstWord && word < lastWord,
         );
@@ -440,16 +442,16 @@ export class DiscVisualiser {
 
     _buildLegend() {
         const parts = [];
-        if (this._view === "sectors") {
+        if (this._view === "format") {
             for (let region = 0; region < RegionHex.length; ++region)
                 parts.push(swatch(RegionHex[region], RegionNames[region]));
             parts.push(swatch(ErrorHex, "CRC error"));
         } else {
             parts.push(swatch(UnformattedHex, "unformatted"));
             parts.push(
-                `<span>${MinDensity}</span>` +
+                `<span class="disc-legend-item disc-legend-grow">${MinDensity}` +
                     `<span class="disc-legend-ramp" style="background:linear-gradient(to right, ${DensityRampHex.join(", ")})"></span>` +
-                    `<span>${MaxDensity}</span><span>pulses per 64&micro;s</span>`,
+                    `${MaxDensity} pulses per 64&micro;s</span>`,
             );
         }
         this.legendElem.innerHTML = parts.join("");

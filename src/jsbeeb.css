@@ -495,8 +495,21 @@ small {
   font-size: 10px;
 }
 
+.disc-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.disc-legend-grow {
+  flex: 1;
+  min-width: 150px;
+}
+
 .disc-legend-ramp {
   flex: 1;
+  min-width: 40px;
   height: 8px;
   border-radius: 2px;
 }
@@ -505,6 +518,7 @@ small {
   width: 12px;
   height: 8px;
   border-radius: 2px;
+  flex: none;
 }
 
 .disc-status {
