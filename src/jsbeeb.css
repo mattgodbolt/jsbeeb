@@ -477,7 +477,6 @@ small {
   font-weight: bold;
 }
 
-/* The overlay tracks the head and so redraws every frame; the surface beneath it does not. */
 .disc-stack {
   position: relative;
 }

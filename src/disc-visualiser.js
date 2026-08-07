@@ -17,21 +17,17 @@ import {
     trackRegions,
 } from "./disc-surface.js";
 
-/** 300 rpm, so one turn of the surface passes the head in this long. */
+/** 300 rpm. */
 const RevolutionMs = 200;
 
 /** Not on either palette: the head and the index marker have to sit clear of the surface. */
 const HeadColour = "#eb6834";
 const IndexColour = "#c3c2b7";
 const HoverColour = "#ffffff";
-/** What the panel is painted on, so a mark can be ringed clear of whatever it overlaps. */
+/** Kept in step with #disc-panel's background in jsbeeb.css. */
 const PanelColour = "#0d0d0d";
 
-/**
- * Reading a whole side's format costs a couple of hundred milliseconds, so the surface is scanned
- * against a frame budget and fills in as it goes. A whole frame's worth of budget: the fill is a
- * transient, and a brief dip in frame rate beats a slow drip.
- */
+/** A whole frame: scanning a side costs a couple of hundred ms, and the fill is a one-off. */
 const ScanBudgetMs = 16;
 
 const Views = {
@@ -63,7 +59,7 @@ function swatch(colour, label) {
 export class DiscVisualiser {
     /**
      * @param {object} options
-     * @param {object} options.fdc - the floppy disc controller owning the drives
+     * @param {object} options.fdc
      */
     constructor({ fdc }) {
         this._fdc = fdc;
@@ -93,7 +89,7 @@ export class DiscVisualiser {
         this._scanCursor = 0;
         this._scanHandle = null;
         this._hover = null;
-        /** Where the user has dragged the panel to, once they have; null means the CSS default. */
+        /** Null until dragged: the panel is wherever the CSS put it. */
         this._position = null;
         this._drag = null;
 
@@ -129,7 +125,7 @@ export class DiscVisualiser {
         this._buildLegend();
     }
 
-    /** Drag the panel around by its header, leaving the controls on it still clickable. */
+    /** The header carries buttons, so a press on one must not start a drag. */
     _bindDrag(header) {
         header.addEventListener("pointerdown", (e) => {
             if (e.button !== 0 || e.target.closest("button")) return;
@@ -214,7 +210,6 @@ export class DiscVisualiser {
         return this._fdc?.drives?.[this._driveIndex];
     }
 
-    /** @returns {boolean} whether the head we would draw is over the side on show */
     get _showingHead() {
         const drive = this._drive;
         return !!drive?.disc && drive.isSideUpper === this._isSideUpper;
@@ -253,8 +248,6 @@ export class DiscVisualiser {
     }
 
     _resize() {
-        // A window that shrank since the panel was dragged, or since it was last open, can leave it
-        // hanging off the edge.
         if (this._position) this._moveTo(this._position.left, this._position.top);
         const size = Math.round(this.surfaceCanvas.clientWidth * (window.devicePixelRatio || 1));
         if (size <= 0 || size === this._geometry?.size) return;
@@ -296,10 +289,7 @@ export class DiscVisualiser {
         this._scanHandle = null;
     }
 
-    /**
-     * Scan and paint until the frame budget runs out, then pick up on the next frame. Driven by
-     * requestAnimationFrame rather than the emulator's loop so it also completes while paused.
-     */
+    /** Driven by requestAnimationFrame rather than the emulator's loop, so it completes while paused. */
     _advanceScan() {
         const count = this._geometry.numTracks;
         const deadline = performance.now() + ScanBudgetMs;
@@ -379,10 +369,6 @@ export class DiscVisualiser {
         }
     }
 
-    /**
-     * CRC errors are a state, not an identity, so they are marked over the surface rather than
-     * filled: a ring in the panel colour lifts the mark clear of whatever it crosses.
-     */
     _drawErrors(ctx, scale) {
         const geometry = this._geometry;
         const width = Math.max(geometry.trackPitch, 2.5 * scale);
@@ -421,7 +407,7 @@ export class DiscVisualiser {
         ctx.stroke();
     }
 
-    /** @returns {{track: number, fraction: number}|null} where the pointer is over the surface */
+    /** @returns {{track: number, fraction: number}|null} */
     _hoverPosition() {
         if (!this._hover) return null;
         return this._geometry.positionAt(this._hover.x * this._hover.scale, this._hover.y * this._hover.scale);
@@ -442,7 +428,7 @@ export class DiscVisualiser {
                 ? `head at track ${drive.track}, ${(drive.positionFraction * RevolutionMs).toFixed(1)} ms`
                 : `head on the other side, track ${drive.track}`;
             const spin = drive.spinning ? "spinning" : "stopped";
-            setText(this.statusElem, `${disc.name ?? "disc"} — ${spin}, ${head}${this._scanNote()}`);
+            setText(this.statusElem, `${disc.name ?? "disc"} · ${spin}, ${head}${this._scanNote()}`);
         }
         setText(this.hoverElem, this._describeHover());
     }
@@ -452,18 +438,18 @@ export class DiscVisualiser {
     }
 
     _scanNote() {
-        if (this._scanning) return " — reading surface…";
+        if (this._scanning) return " · reading surface…";
         if (this._view !== "format") return "";
         const errors = this._info.reduce((count, info) => count + (info?.errors?.length ?? 0), 0);
         if (!errors) return "";
-        return ` — ${errors} CRC error${errors === 1 ? "" : "s"}`;
+        return ` · ${errors} CRC error${errors === 1 ? "" : "s"}`;
     }
 
     _describeHover() {
         const hover = this._hoverPosition();
         if (!hover) return "Point at the surface to read it";
         const info = this._info[hover.track];
-        if (!info?.codes?.length) return `Track ${hover.track} — not read yet`;
+        if (!info?.codes?.length) return `Track ${hover.track} · not read yet`;
         const word = Math.min((hover.fraction * info.codes.length) | 0, info.codes.length - 1);
         const at = `Track ${hover.track} · byte ${word} of ${info.codes.length} · ${(hover.fraction * RevolutionMs).toFixed(1)} ms`;
         if (this._view !== "format") {

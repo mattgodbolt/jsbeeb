@@ -168,7 +168,6 @@ describe("trackRegions", function () {
         expect(after.errors[0]).toMatchObject({ kind: "data CRC", sectorNumber: 4 });
         expect(damaged).toBeGreaterThanOrEqual(after.errors[0].firstWord);
         expect(damaged).toBeLessThan(after.errors[0].lastWord);
-        // The region keeps its own colour; the error is marked over the top of it.
         expect(after.codes[damaged]).toBe(Region.Data);
     });
 

@@ -1,21 +1,20 @@
 "use strict";
 
-// Pure geometry and colour mapping for the disc surface visualiser. Kept free of the DOM so it
-// can be tested directly; disc-visualiser.js owns the canvases and the panel.
+// Pure geometry and colour mapping, free of the DOM; disc-visualiser.js owns the canvases.
 
 import { IbmDiscFormat } from "./disc.js";
 
-/** Pulse slots in one word of surface data: 32 slots of 2us, so one FM byte or two MFM bytes. */
+/** 32 slots of 2us: one FM byte, or two MFM bytes. */
 export const PulsesPerWord = 32;
 
 /**
  * Both FM and MFM put between eight and sixteen flux transitions in a formatted word, so the ramp
- * spans exactly that and gets one step per count. A word with no transitions at all is unformatted.
+ * spans exactly that and gets one step per count.
  */
 export const MinDensity = 8;
 export const MaxDensity = 16;
 
-/** Sequential blue, dark to light, read against the panel's dark surface. */
+/** Dark to light, for a dark surface. */
 export const DensityRampHex = [
     "#1c5cab",
     "#256abf",
@@ -28,10 +27,8 @@ export const DensityRampHex = [
     "#cde2fb",
 ];
 
-/** Off the ramp entirely: no flux here at all, so nothing was ever written. */
 export const UnformattedHex = "#2a2a28";
 
-/** What a word of a track holds, once the sectors on it have been picked out. */
 export const Region = {
     Unformatted: 0,
     Gap: 1,
@@ -40,11 +37,7 @@ export const Region = {
     Deleted: 4,
 };
 
-/**
- * Gap and unformatted stay recessive neutrals; the three that carry identity are the first three
- * categorical slots, which are the set that clears every colourblindness gate for any pairing.
- * A CRC error is a state rather than an identity, so it is marked over the surface, not filled in.
- */
+/** Gap and unformatted are recessive neutrals; header, data and deleted carry identity. */
 export const RegionHex = ["#2a2a28", "#3f3f3c", "#d95926", "#3987e5", "#199e70"];
 export const RegionNames = ["unformatted", "gap", "header", "data", "deleted data"];
 
@@ -62,7 +55,7 @@ function hexToAbgr(hex) {
 
 const UnformattedColour = hexToAbgr(UnformattedHex);
 
-/** Indexed by pulse count, so the renderer can look a word's colour straight up. */
+/** Indexed by pulse count. */
 export const DensityPalette = Uint32Array.from({ length: PulsesPerWord + 1 }, (_, density) => {
     if (density === 0) return UnformattedColour;
     const step = Math.min(Math.max(density - MinDensity, 0), DensityRampHex.length - 1);
@@ -94,7 +87,6 @@ export function trackPulseDensity(track) {
 
 /** Address mark aside, a sector header is four bytes of identity and two of CRC. */
 const HeaderBytes = 6;
-/** A data field's CRC, likewise. */
 const CrcBytes = 2;
 const DefaultSectorBytes = 256;
 
@@ -216,18 +208,14 @@ export class DiscGeometry {
 const Supersample = 2;
 const InvTwoPi = 1 / (2 * Math.PI);
 
-/**
- * Canvas coordinates are far too small to overflow, so the scaling Math.hypot does to stay safe is
- * all cost and no benefit in here: this is most of the work in a repaint, and it runs 1.7x faster.
- */
+/** Math.hypot's overflow scaling is pure cost at canvas coordinates, and this is the hot path. */
 function distance(dx, dy) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
 /**
  * Paint a range of tracks into a square ABGR pixel buffer. Only pixels whose centres fall in the
- * band those tracks occupy are written, so a single track can be repainted as the machine writes
- * it; edge pixels still sample their neighbours, so the seams stay smooth.
+ * band those tracks occupy are written.
  *
  * @param {Uint32Array} pixels size * size ABGR pixels
  * @param {DiscGeometry} geometry
@@ -237,8 +225,6 @@ function distance(dx, dy) {
  * @param {number} lastTrack inclusive
  */
 export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastTrack) {
-    // Hoisted out of the loops: this runs a few million times per repaint, and property loads and
-    // method calls on the geometry are a measurable part of it.
     const { size, centre, outerRadius, trackPitch, numTracks } = geometry;
     const bandOuter = outerRadius - firstTrack * trackPitch;
     const bandInner = outerRadius - (lastTrack + 1) * trackPitch;
@@ -249,8 +235,6 @@ export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastT
     const samplesPerPixel = Supersample * Supersample;
     const subStep = 1 / Supersample;
     for (let y = firstRow; y < lastRow; ++y) {
-        // Walking only the row's span of the band keeps a one-track repaint proportional to that
-        // track's area rather than to the whole disc's bounding box.
         const dy = y + 0.5 - centre;
         const halfWidth = Math.sqrt(Math.max(0, bandOuterSquared - dy * dy));
         const low = Math.max(0, Math.floor(centre - halfWidth));

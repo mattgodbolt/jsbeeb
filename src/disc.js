@@ -812,8 +812,7 @@ export class Disc {
         this.isDoubleSided = false;
 
         this.writeTrackCallback = undefined;
-        // Observers of surface changes, kept apart from writeTrackCallback: that belongs to
-        // whichever loader owns writing the disc back out, and there is only ever one of those.
+        // Distinct from writeTrackCallback, which the owning loader claims exclusively.
         this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
 
