@@ -143,11 +143,18 @@ export function trackRegions(track, warn) {
     return { codes, sectorNumbers, errors };
 }
 
+/** Enough to fill the panel with a couple of tracks. */
+export const MaxZoom = 32;
+
 const OuterRadiusFraction = 0.97;
 const InnerRadiusFraction = 0.36;
 const HubRadiusFraction = 0.26;
 
-/** Maps between a square canvas and the surface of a disc drawn on it. */
+/**
+ * Maps between a square canvas and the surface of a disc drawn on it. Disc space is the canvas at
+ * rest: the platter fills a `size` square. Zooming and panning move the canvas over that, so the
+ * disc's own dimensions never change and only the mapping does.
+ */
 export class DiscGeometry {
     /**
      * @param {number} size canvas edge in device pixels
@@ -161,6 +168,39 @@ export class DiscGeometry {
         this.innerRadius = this.centre * InnerRadiusFraction;
         this.hubRadius = this.centre * HubRadiusFraction;
         this.trackPitch = (this.outerRadius - this.innerRadius) / numTracks;
+        this.zoom = 1;
+        this.originX = 0;
+        this.originY = 0;
+    }
+
+    /**
+     * @param {number} zoom canvas pixels per disc pixel, at least 1
+     * @param {number} originX disc-space coordinate shown at the canvas's left edge
+     * @param {number} originY disc-space coordinate shown at the canvas's top edge
+     */
+    setView(zoom, originX, originY) {
+        this.zoom = Math.min(Math.max(zoom, 1), MaxZoom);
+        // Holding the window inside the platter's square keeps the disc from being panned away.
+        const slack = this.size - this.size / this.zoom;
+        this.originX = Math.min(Math.max(originX, 0), slack);
+        this.originY = Math.min(Math.max(originY, 0), slack);
+        return this;
+    }
+
+    toDisc(x, y) {
+        return { x: x / this.zoom + this.originX, y: y / this.zoom + this.originY };
+    }
+
+    get screenCentreX() {
+        return (this.centre - this.originX) * this.zoom;
+    }
+
+    get screenCentreY() {
+        return (this.centre - this.originY) * this.zoom;
+    }
+
+    screenRadiusOf(track) {
+        return this.radiusOf(track) * this.zoom;
     }
 
     /** Track 0 is the outermost, as on the real thing. */
@@ -188,18 +228,20 @@ export class DiscGeometry {
         return fraction - Math.floor(fraction);
     }
 
+    /** @returns {{x: number, y: number}} where on the canvas that point of the surface is drawn */
     pointAt(track, fraction) {
         const angle = this.angleOf(fraction);
-        const radius = this.radiusOf(track);
-        return { x: this.centre + radius * Math.cos(angle), y: this.centre + radius * Math.sin(angle) };
+        const radius = this.screenRadiusOf(track);
+        return { x: this.screenCentreX + radius * Math.cos(angle), y: this.screenCentreY + radius * Math.sin(angle) };
     }
 
     /**
      * @returns {{track: number, fraction: number}|null} what the surface holds under a canvas point
      */
     positionAt(x, y) {
-        const dx = x - this.centre;
-        const dy = y - this.centre;
+        const disc = this.toDisc(x, y);
+        const dx = disc.x - this.centre;
+        const dy = disc.y - this.centre;
         const track = this.trackAt(Math.hypot(dx, dy));
         return track === null ? null : { track, fraction: this.fractionAt(dx, dy) };
     }
@@ -223,26 +265,31 @@ function distance(dx, dy) {
  * @param {Uint32Array} palette ABGR for each code
  * @param {number} firstTrack
  * @param {number} lastTrack inclusive
+ * @param {number} [supersample] samples per pixel edge; 1 trades the smoothed edges for speed
  */
-export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastTrack) {
-    const { size, centre, outerRadius, trackPitch, numTracks } = geometry;
-    const bandOuter = outerRadius - firstTrack * trackPitch;
-    const bandInner = outerRadius - (lastTrack + 1) * trackPitch;
+export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastTrack, supersample = Supersample) {
+    const { size, outerRadius, trackPitch, numTracks, zoom } = geometry;
+    // Work in canvas pixels throughout: zooming and panning scale and shift the radius, and leave
+    // the angle alone.
+    const centreX = geometry.screenCentreX;
+    const centreY = geometry.screenCentreY;
+    const bandOuter = (outerRadius - firstTrack * trackPitch) * zoom;
+    const bandInner = (outerRadius - (lastTrack + 1) * trackPitch) * zoom;
     const bandOuterSquared = bandOuter * bandOuter;
     const bandInnerSquared = bandInner * bandInner;
-    const firstRow = Math.max(0, Math.floor(centre - bandOuter));
-    const lastRow = Math.min(size, Math.ceil(centre + bandOuter) + 1);
-    const samplesPerPixel = Supersample * Supersample;
-    const subStep = 1 / Supersample;
+    const firstRow = Math.max(0, Math.floor(centreY - bandOuter));
+    const lastRow = Math.min(size, Math.ceil(centreY + bandOuter) + 1);
+    const samplesPerPixel = supersample * supersample;
+    const subStep = 1 / supersample;
     for (let y = firstRow; y < lastRow; ++y) {
-        const dy = y + 0.5 - centre;
+        const dy = y + 0.5 - centreY;
         const halfWidth = Math.sqrt(Math.max(0, bandOuterSquared - dy * dy));
-        const low = Math.max(0, Math.floor(centre - halfWidth));
-        const high = Math.min(size, Math.ceil(centre + halfWidth) + 1);
+        const low = Math.max(0, Math.floor(centreX - halfWidth));
+        const high = Math.min(size, Math.ceil(centreX + halfWidth) + 1);
         const holeHalfWidth = Math.abs(dy) < bandInner ? Math.sqrt(bandInnerSquared - dy * dy) : 0;
-        const pastHole = Math.ceil(centre + holeHalfWidth - 0.5);
+        const pastHole = Math.ceil(centreX + holeHalfWidth - 0.5);
         for (let x = low; x < high; ++x) {
-            const dx = x + 0.5 - centre;
+            const dx = x + 0.5 - centreX;
             if (Math.abs(dx) < holeHalfWidth) {
                 x = Math.max(x, pastHole - 1);
                 continue;
@@ -253,11 +300,11 @@ export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastT
             let red = 0;
             let green = 0;
             let blue = 0;
-            for (let subY = 0; subY < Supersample; ++subY) {
-                const sampleY = y + (subY + 0.5) * subStep - centre;
-                for (let subX = 0; subX < Supersample; ++subX) {
-                    const sampleX = x + (subX + 0.5) * subStep - centre;
-                    const at = (outerRadius - distance(sampleX, sampleY)) / trackPitch;
+            for (let subY = 0; subY < supersample; ++subY) {
+                const sampleY = y + (subY + 0.5) * subStep - centreY;
+                for (let subX = 0; subX < supersample; ++subX) {
+                    const sampleX = x + (subX + 0.5) * subStep - centreX;
+                    const at = (outerRadius - distance(sampleX, sampleY) / zoom) / trackPitch;
                     if (at < 0 || at >= numTracks) continue;
                     const trackCodes = codes[at | 0];
                     if (!trackCodes || trackCodes.length === 0) continue;

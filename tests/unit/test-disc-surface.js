@@ -6,6 +6,7 @@ import {
     DensityRampHex,
     DiscGeometry,
     MaxDensity,
+    MaxZoom,
     MinDensity,
     Region,
     pulseDensity,
@@ -111,6 +112,62 @@ describe("DiscGeometry", function () {
     it("has nothing under a point off the surface", () => {
         expect(geometry.positionAt(0, 0)).toBeNull();
         expect(geometry.positionAt(geometry.centre, geometry.centre)).toBeNull();
+    });
+
+    describe("zoomed and panned", function () {
+        it("still reads back the position it drew a point at", () => {
+            const zoomed = new DiscGeometry(400, 80).setView(4, 130, 90);
+            const { x, y } = zoomed.pointAt(17, 0.3);
+            const position = zoomed.positionAt(x, y);
+            expect(position.track).toBe(17);
+            expect(position.fraction).toBeCloseTo(0.3);
+        });
+
+        it("magnifies about the canvas, leaving the disc's own dimensions alone", () => {
+            const zoomed = new DiscGeometry(400, 80).setView(4, 0, 0);
+            expect(zoomed.radiusOf(10)).toBe(geometry.radiusOf(10));
+            expect(zoomed.screenRadiusOf(10)).toBeCloseTo(geometry.radiusOf(10) * 4);
+        });
+
+        it("keeps the window on the platter", () => {
+            const zoomed = new DiscGeometry(400, 80).setView(2, -500, 9999);
+            expect(zoomed.originX).toBe(0);
+            expect(zoomed.originY).toBe(200);
+        });
+
+        it("refuses to zoom out past the whole disc, or in past the limit", () => {
+            expect(new DiscGeometry(400, 80).setView(0.1, 0, 0).zoom).toBe(1);
+            expect(new DiscGeometry(400, 80).setView(1e6, 0, 0).zoom).toBe(MaxZoom);
+        });
+
+        it("paints each pixel with the track the geometry puts under it", () => {
+            const size = 120;
+            const zoomed = new DiscGeometry(size, 8).setView(3, 20, 15);
+            const codes = Array.from({ length: 8 }, (_, track) => new Uint8Array(64).fill(MinDensity + track));
+            const pixels = new Uint32Array(size * size);
+            renderTracks(pixels, zoomed, codes, DensityPalette, 0, 7);
+
+            let checked = 0;
+            for (let y = 0; y < size; y += 3) {
+                for (let x = 0; x < size; x += 3) {
+                    const at = zoomed.positionAt(x + 0.5, y + 0.5);
+                    const pixel = pixels[y * size + x];
+                    if (at === null) {
+                        expect(pixel).toBe(0);
+                        continue;
+                    }
+                    const disc = zoomed.toDisc(x + 0.5, y + 0.5);
+                    const radius = Math.hypot(disc.x - zoomed.centre, disc.y - zoomed.centre);
+                    // Pixels straddling a track boundary are a blend of both, so only assert on the
+                    // middle half of each track.
+                    const acrossTrack = ((zoomed.outerRadius - radius) / zoomed.trackPitch) % 1;
+                    if (acrossTrack < 0.25 || acrossTrack > 0.75) continue;
+                    expect(pixel).toBe(DensityPalette[MinDensity + at.track]);
+                    checked++;
+                }
+            }
+            expect(checked).toBeGreaterThan(100);
+        });
     });
 });
 

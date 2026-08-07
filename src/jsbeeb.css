@@ -488,6 +488,12 @@ small {
 }
 
 #disc-overlay {
+  cursor: crosshair;
+  /* Claim wheel and drag gestures, or the page scrolls instead. */
+  touch-action: none;
+}
+
+#disc-overlay {
   position: absolute;
   inset: 0;
 }
