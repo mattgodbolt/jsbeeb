@@ -108,13 +108,6 @@ export class DiscVisualiser {
             if (isSideUpper === this._isSideUpper) this._staleTracks.add(trackNum);
         };
         this._onResize = () => this._resize();
-        this._onKeyDown = (e) => {
-            if (e.key !== "Escape") return;
-            e.preventDefault();
-            e.stopPropagation();
-            this.close();
-        };
-
         this.openBtn.addEventListener("click", (e) => {
             e.preventDefault();
             this.toggle();
@@ -235,7 +228,6 @@ export class DiscVisualiser {
         this.isOpen = true;
         this.panel.hidden = false;
         window.addEventListener("resize", this._onResize);
-        document.addEventListener("keydown", this._onKeyDown, true);
         this._resize();
         this._tick();
     }
@@ -251,7 +243,6 @@ export class DiscVisualiser {
         this._hover = null;
         this._needsFullRepaint = true;
         window.removeEventListener("resize", this._onResize);
-        document.removeEventListener("keydown", this._onKeyDown, true);
     }
 
     _tick() {
