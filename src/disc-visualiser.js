@@ -257,7 +257,7 @@ export class DiscVisualiser {
         // hanging off the edge.
         if (this._position) this._moveTo(this._position.left, this._position.top);
         const size = Math.round(this.surfaceCanvas.clientWidth * (window.devicePixelRatio || 1));
-        if (size <= 0) return;
+        if (size <= 0 || size === this._geometry?.size) return;
         for (const canvas of [this.surfaceCanvas, this.overlayCanvas]) {
             canvas.width = size;
             canvas.height = size;
