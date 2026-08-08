@@ -190,9 +190,8 @@ export function loadHfe(disc, data, onChange) {
         }
     }
 
-    // Set up write track callback if onChange is provided
     if (onChange) {
-        disc.setWriteTrackCallback((_side, _trackNum, _trackObj) => {
+        disc.addTrackWriteListener((_side, _trackNum, _trackObj) => {
             // Generate a complete HFE image from the current disc state
             const hfeData = toHfe(disc);
             // Call the onChange handler with the updated HFE data

@@ -34,6 +34,11 @@ export class BaseDiscDrive extends EventTarget {
     }
 
     /** @returns {boolean} */
+    get isSideUpper() {
+        throw new Error("Not implemented: isSideUpper getter");
+    }
+
+    /** @returns {boolean} */
     get indexPulse() {
         throw new Error("Not implemented: indexPulse getter");
     }
@@ -238,6 +243,10 @@ export class DiscDrive extends BaseDiscDrive {
 
     get track() {
         return this._track;
+    }
+
+    get isSideUpper() {
+        return this._isSideUpper;
     }
 
     get positionFraction() {
