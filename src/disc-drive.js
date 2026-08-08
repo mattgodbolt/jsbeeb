@@ -13,14 +13,6 @@ class StepEvent extends Event {
     }
 }
 
-/** Sent when the disc that has just been loaded moves the drive's 40/80 switch. */
-class TrackSwitchEvent extends Event {
-    constructor(is40Track) {
-        super("trackSwitch");
-        this.is40Track = is40Track;
-    }
-}
-
 /**
  * Abstract base class defining the interface for disc drives.
  * All disc drive implementations must extend this class.
@@ -179,7 +171,6 @@ export class DiscDrive extends BaseDiscDrive {
         /** @type {Disc|undefined} */
         this._disc = undefined;
         this._is40Track = false;
-        this._is40TrackPin = null;
         // Physically always 80 tracks even if we're in 40 track mode. 40 track mode essentially double steps.
         this._track = 0;
         this._isSideUpper = false;
@@ -322,12 +313,6 @@ export class DiscDrive extends BaseDiscDrive {
      */
     setDisc(disc) {
         this._disc = disc;
-        if (!disc) return;
-        // A user swapping media would also flick the drive's 40/80 switch to suit it.
-        const is40Track = this._is40TrackPin ?? disc.is40Track;
-        if (is40Track === this._is40Track) return;
-        this._is40Track = is40Track;
-        this.dispatchEvent(new TrackSwitchEvent(is40Track));
     }
 
     /** @returns {boolean} whether the drive double steps, as its 40/80 switch is set */
@@ -337,16 +322,6 @@ export class DiscDrive extends BaseDiscDrive {
 
     set is40Track(is40Track) {
         this._is40Track = is40Track;
-    }
-
-    /**
-     * Hold the 40/80 switch where it is, so that loading a disc no longer moves it.
-     *
-     * @param {?boolean} is40Track where to hold it, or null to let discs move it again
-     */
-    pinTracks(is40Track) {
-        this._is40TrackPin = is40Track;
-        if (is40Track !== null) this.is40Track = is40Track;
     }
 
     get indexPulse() {
