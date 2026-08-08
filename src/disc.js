@@ -634,11 +634,9 @@ export function loadSsd(disc, data, isDsd, onChange) {
             (side, trackNum, trackObj) => {
                 const trackOffset =
                     SsdFormat.sectorSize * SsdFormat.sectorsPerTrack * (trackNum * numSides + (side ? 1 : 0));
-                for (const sector of trackObj.findSectors()) {
-                    const sectorOffset = sector.sectorNumber * SsdFormat.sectorSize;
-                    for (let x = 0; x < SsdFormat.sectorSize; ++x)
-                        dataCopy[trackOffset + sectorOffset + x] = sector.sectorData[x];
-                }
+                for (const sector of trackObj.findSectors())
+                    if (!sectorShortfall(sector, trackNum))
+                        dataCopy.set(sector.sectorData, trackOffset + sector.sectorNumber * SsdFormat.sectorSize);
                 onChange(dataCopy);
             },
         );

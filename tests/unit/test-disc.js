@@ -305,6 +305,14 @@ function unobservedDisc() {
     return disc;
 }
 
+/** Leaves a sector's header pointing at nothing, which the decoder complains about. */
+function eraseDataField(track, sectorNumber) {
+    const sector = track.findSectors(() => {})[sectorNumber];
+    // dataPosBitOffset is the offset after the address mark, so back up over the mark itself.
+    const start = Math.floor(sector.dataPosBitOffset / 32) - 1;
+    for (let word = start; word < start + 256; ++word) track.pulses2Us[word] = IbmDiscFormat.fmTo2usPulses(0xff, 0xff);
+}
+
 describe("flushWrites marks the surface used", () => {
     it("notices a write to the upper side of a disc loaded as single sided", () => {
         const disc = unobservedDisc();
@@ -387,15 +395,24 @@ describe("track write listeners", () => {
         expect(imageUpdates).toBe(1);
         expect(watcherCalls).toBe(1);
     });
-});
 
-/** Leaves a sector's header pointing at nothing, which the decoder complains about. */
-function eraseDataField(track, sectorNumber) {
-    const sector = track.findSectors(() => {})[sectorNumber];
-    // dataPosBitOffset is the offset after the address mark, so back up over the mark itself.
-    const start = Math.floor(sector.dataPosBitOffset / 32) - 1;
-    for (let word = start; word < start + 256; ++word) track.pulses2Us[word] = IbmDiscFormat.fmTo2usPulses(0xff, 0xff);
-}
+    it("writes an image back for a track holding a sector it cannot read", () => {
+        vi.spyOn(globalThis.console, "log").mockImplementation(() => {});
+        const sectorsPerTrack = 10;
+        const sectorSize = 256;
+        const data = new Uint8Array(sectorsPerTrack * sectorSize).fill(0xa5);
+        let image = null;
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        loadSsd(disc, data, false, (updated) => (image = updated));
+        eraseDataField(disc.getTrack(false, 0), 4);
+
+        disc.writePulses(false, 0, 0, 0);
+        disc.flushWrites();
+
+        expect(image).not.toBeNull();
+        expect(image.slice(0, sectorsPerTrack * sectorSize)).toEqual(data);
+    });
+});
 
 describe("sector decoding warnings", () => {
     it("goes to the caller rather than the console", () => {
