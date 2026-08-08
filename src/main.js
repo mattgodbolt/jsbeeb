@@ -396,7 +396,7 @@ if (driveTrackWarnings.length) {
     showError("setting the disc drives up from the URL", driveTrackWarnings.join(" "));
 }
 
-/** A drive fixed at 80 tracks reads every image the way jsbeeb did before it could tell them apart. */
+/** @returns {string} the DiscLayout to load an image for this drive with */
 function layoutForDrive(driveIndex) {
     return driveTracks[driveIndex] === DriveTracks.eighty ? DiscLayout.contiguous : DiscLayout.auto;
 }
