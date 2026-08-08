@@ -607,9 +607,10 @@ export function sniffDfsLayout(data, isDsd) {
             return contiguous("its catalogue entries do not run in descending order");
     const sectors = ((data[DfsSectorCountOffset] & 3) << 8) | data[DfsSectorCountOffset + 1];
     const reason = `its catalogue claims ${sectors} sectors`;
-    if (sectors === 0 || sectors > SsdFormat.fortyTracksPerDisc * SsdFormat.sectorsPerTrack) return contiguous(reason);
+    const fortyTrackSectors = (SsdFormat.tracksPerDisc / 2) * SsdFormat.sectorsPerTrack;
+    if (sectors === 0 || sectors > fortyTrackSectors) return contiguous(reason);
     const tracks = tracksWithData(data, isDsd ? 2 : 1);
-    if (tracks > SsdFormat.maxFortyTracksPerDisc) return contiguous(`it holds data as far as track ${tracks - 1}`);
+    if (tracks > IbmDiscFormat.tracksPerDisc / 2) return contiguous(`it holds data as far as track ${tracks - 1}`);
     return { is40Track: true, reason };
 }
 
