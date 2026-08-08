@@ -14,6 +14,7 @@
 
 import VERT_SHADER from "./shaders/pal-composite.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
+import { compileProgram } from "./shader-program.js";
 
 export class PALCompositeFilter {
     static requiresGl() {
@@ -36,63 +37,13 @@ export class PALCompositeFilter {
 
     constructor(gl) {
         this.gl = gl;
-        this.program = null;
-        this.locations = {};
-
-        this._init();
-    }
-
-    _init() {
-        const gl = this.gl;
-
-        // Compile shaders
-        const vertShader = this._compileShader(gl.VERTEX_SHADER, VERT_SHADER);
-        let fragShader = null;
-        try {
-            fragShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
-
-            // Link program
-            this.program = gl.createProgram();
-            gl.attachShader(this.program, vertShader);
-            gl.attachShader(this.program, fragShader);
-            gl.linkProgram(this.program);
-
-            if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-                const info = gl.getProgramInfoLog(this.program);
-                this.dispose();
-                throw new Error("Failed to link PAL shader program: " + info);
-            }
-
-            // Get uniform locations
-            this.locations.uFramebuffer = gl.getUniformLocation(this.program, "uFramebuffer");
-            this.locations.uResolution = gl.getUniformLocation(this.program, "uResolution");
-            this.locations.uTexelSize = gl.getUniformLocation(this.program, "uTexelSize");
-            this.locations.uFrameCount = gl.getUniformLocation(this.program, "uFrameCount");
-        } finally {
-            // Once linked the program holds its own reference, so releasing ours here means
-            // deleting the program later frees the shaders too. If we never got that far, ours
-            // was the only reference and they go now.
-            gl.deleteShader(vertShader);
-            gl.deleteShader(fragShader);
-        }
-
-        console.log("PAL composite filter initialized");
-    }
-
-    _compileShader(type, source) {
-        const gl = this.gl;
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            const info = gl.getShaderInfoLog(shader);
-            const typeName = type === gl.VERTEX_SHADER ? "vertex" : "fragment";
-            gl.deleteShader(shader);
-            throw new Error(`Failed to compile ${typeName} shader: ${info}`);
-        }
-
-        return shader;
+        this.program = compileProgram(gl, VERT_SHADER, FRAG_SHADER, "PAL composite");
+        this.locations = {
+            uFramebuffer: gl.getUniformLocation(this.program, "uFramebuffer"),
+            uResolution: gl.getUniformLocation(this.program, "uResolution"),
+            uTexelSize: gl.getUniformLocation(this.program, "uTexelSize"),
+            uFrameCount: gl.getUniformLocation(this.program, "uFrameCount"),
+        };
     }
 
     /** Release the GL objects this filter owns. */
