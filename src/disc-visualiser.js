@@ -8,8 +8,7 @@ import {
     ErrorHex,
     MaxDensity,
     MinDensity,
-    RegionHex,
-    RegionNames,
+    RegionStyles,
     RegionPalette,
     UnformattedHex,
     clampZoom,
@@ -35,14 +34,45 @@ const WheelZoomRate = 0.003;
 /** Firefox reports wheel deltas in lines, not pixels. */
 const PixelsPerWheelLine = 16;
 
+/** @returns {string} the word under the pointer, in the terms this view deals in */
+function describeDensity({ codes }, word) {
+    return codes[word] === 0 ? "no flux" : `${codes[word]} pulses`;
+}
+
+function describeRegion({ codes, sectorNumbers, errors }, word) {
+    const what = RegionStyles[codes[word]].name;
+    const sectorNumber = sectorNumbers[word];
+    const error = errors.find(({ firstWord, lastWord }) =>
+        lastWord <= firstWord ? word >= firstWord || word < lastWord : word >= firstWord && word < lastWord,
+    );
+    return `${sectorNumber < 0 ? what : `sector ${sectorNumber} ${what}`}${error ? ` · ${error.kind} error` : ""}`;
+}
+
+function densityLegend() {
+    return (
+        swatch(UnformattedHex, "unformatted") +
+        `<span class="disc-legend-item disc-legend-grow">${MinDensity}` +
+        `<span class="disc-legend-ramp" style="background:linear-gradient(to right, ${DensityRampHex.join(", ")})"></span>` +
+        `${MaxDensity} pulses per 64&micro;s</span>`
+    );
+}
+
+function regionLegend() {
+    return RegionStyles.map(({ hex, name }) => swatch(hex, name)).join("") + swatch(ErrorHex, "CRC error");
+}
+
 const Views = {
     density: {
         palette: DensityPalette,
-        analyse: (track) => ({ codes: trackPulseDensity(track), sectorNumbers: null, errors: null }),
+        analyse: (track) => ({ codes: trackPulseDensity(track) }),
+        describe: describeDensity,
+        legend: densityLegend,
     },
     format: {
         palette: RegionPalette,
         analyse: (track, warn) => trackRegions(track, warn),
+        describe: describeRegion,
+        legend: regionLegend,
     },
 };
 
@@ -97,8 +127,8 @@ export class DiscVisualiser {
         this._scanHandle = null;
         this._hover = null;
         this._position = null;
-        this._drag = null;
         this._pan = null;
+        this._drag = null;
         this._surfaceStale = false;
         this._frameHandle = null;
 
@@ -523,7 +553,6 @@ export class DiscVisualiser {
 
     _scanNote() {
         if (this._scanning) return " · reading surface…";
-        if (this._view !== "format") return "";
         const errors = this._info.reduce((count, info) => count + (info?.errors?.length ?? 0), 0);
         if (!errors) return "";
         return ` · ${errors} CRC error${errors === 1 ? "" : "s"}`;
@@ -536,33 +565,10 @@ export class DiscVisualiser {
         if (!info?.codes?.length) return `Track ${hover.track} · not read yet`;
         const word = Math.min((hover.fraction * info.codes.length) | 0, info.codes.length - 1);
         const at = `Track ${hover.track} · word ${word} of ${info.codes.length} · ${(hover.fraction * RevolutionMs).toFixed(1)} ms`;
-        if (this._view !== "format") {
-            const pulses = info.codes[word];
-            return `${at} · ${pulses === 0 ? "no flux" : `${pulses} pulses`}`;
-        }
-        const sectorNumber = info.sectorNumbers[word];
-        const what = RegionNames[info.codes[word]];
-        const named = sectorNumber < 0 ? what : `sector ${sectorNumber} ${what}`;
-        const error = info.errors.find(({ firstWord, lastWord }) =>
-            lastWord <= firstWord ? word >= firstWord || word < lastWord : word >= firstWord && word < lastWord,
-        );
-        return `${at} · ${named}${error ? ` · ${error.kind} error` : ""}`;
+        return `${at} · ${Views[this._view].describe(info, word)}`;
     }
 
     _buildLegend() {
-        const parts = [];
-        if (this._view === "format") {
-            for (let region = 0; region < RegionHex.length; ++region)
-                parts.push(swatch(RegionHex[region], RegionNames[region]));
-            parts.push(swatch(ErrorHex, "CRC error"));
-        } else {
-            parts.push(swatch(UnformattedHex, "unformatted"));
-            parts.push(
-                `<span class="disc-legend-item disc-legend-grow">${MinDensity}` +
-                    `<span class="disc-legend-ramp" style="background:linear-gradient(to right, ${DensityRampHex.join(", ")})"></span>` +
-                    `${MaxDensity} pulses per 64&micro;s</span>`,
-            );
-        }
-        this.legendElem.innerHTML = parts.join("");
+        this.legendElem.innerHTML = Views[this._view].legend();
     }
 }

@@ -37,9 +37,17 @@ export const Region = {
     Deleted: 4,
 };
 
-/** Gap and unformatted are recessive neutrals; header, data and deleted carry identity. */
-export const RegionHex = [UnformattedHex, "#3f3f3c", "#d95926", "#3987e5", "#199e70"];
-export const RegionNames = ["unformatted", "gap", "header", "data", "deleted data"];
+/**
+ * Indexed by {@link Region}. Gap and unformatted are recessive neutrals; header, data and deleted
+ * carry identity.
+ */
+export const RegionStyles = [
+    { name: "unformatted", hex: UnformattedHex },
+    { name: "gap", hex: "#3f3f3c" },
+    { name: "header", hex: "#d95926" },
+    { name: "data", hex: "#3987e5" },
+    { name: "deleted data", hex: "#199e70" },
+];
 
 /** Reserved status colour, never used as a fill. */
 export const ErrorHex = "#d03b3b";
@@ -62,8 +70,7 @@ export const DensityPalette = Uint32Array.from({ length: PulsesPerWord + 1 }, (_
     return hexToAbgr(DensityRampHex[step]);
 });
 
-/** Indexed by {@link Region}. */
-export const RegionPalette = Uint32Array.from(RegionHex, hexToAbgr);
+export const RegionPalette = Uint32Array.from(RegionStyles, ({ hex }) => hexToAbgr(hex));
 
 /**
  * @param {number} pulses one word of surface data
@@ -281,10 +288,46 @@ export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastT
     const bandInner = (outerRadius - (lastTrack + 1) * trackPitch) * zoom;
     const bandOuterSquared = bandOuter * bandOuter;
     const bandInnerSquared = bandInner * bandInner;
-    const firstRow = Math.max(0, Math.floor(centreY - bandOuter));
-    const lastRow = Math.min(size, Math.ceil(centreY + bandOuter) + 1);
     const samplesPerPixel = supersample * supersample;
     const subStep = 1 / supersample;
+
+    /** @returns {number} the pixel's ABGR, averaged over its samples, or zero if no track covers it */
+    const samplePixel = (x, y) => {
+        let covered = 0;
+        let red = 0;
+        let green = 0;
+        let blue = 0;
+        for (let subY = 0; subY < supersample; ++subY) {
+            const sampleY = y + (subY + 0.5) * subStep - centreY;
+            for (let subX = 0; subX < supersample; ++subX) {
+                const sampleX = x + (subX + 0.5) * subStep - centreX;
+                const at = (outerRadius - distance(sampleX, sampleY) / zoom) / trackPitch;
+                if (at < 0 || at >= numTracks) continue;
+                const trackCodes = codes[at | 0];
+                if (!trackCodes || trackCodes.length === 0) continue;
+                let fraction = Math.atan2(sampleY, sampleX) * InvTwoPi + 0.25;
+                if (fraction < 0) fraction += 1;
+                const word = Math.min((fraction * trackCodes.length) | 0, trackCodes.length - 1);
+                const colour = palette[trackCodes[word]];
+                red += colour & 0xff;
+                green += (colour >>> 8) & 0xff;
+                blue += (colour >>> 16) & 0xff;
+                covered++;
+            }
+        }
+        if (covered === 0) return 0;
+        const alpha = ((255 * covered) / samplesPerPixel) | 0;
+        return (
+            ((alpha << 24) |
+                (((blue / covered) | 0) << 16) |
+                (((green / covered) | 0) << 8) |
+                ((red / covered) | 0)) >>>
+            0
+        );
+    };
+
+    const firstRow = Math.max(0, Math.floor(centreY - bandOuter));
+    const lastRow = Math.min(size, Math.ceil(centreY + bandOuter) + 1);
     for (let y = firstRow; y < lastRow; ++y) {
         const dy = y + 0.5 - centreY;
         const halfWidth = Math.sqrt(Math.max(0, bandOuterSquared - dy * dy));
@@ -300,37 +343,8 @@ export function renderTracks(pixels, geometry, codes, palette, firstTrack, lastT
             }
             const radiusSquared = dx * dx + dy * dy;
             if (radiusSquared < bandInnerSquared || radiusSquared >= bandOuterSquared) continue;
-            let covered = 0;
-            let red = 0;
-            let green = 0;
-            let blue = 0;
-            for (let subY = 0; subY < supersample; ++subY) {
-                const sampleY = y + (subY + 0.5) * subStep - centreY;
-                for (let subX = 0; subX < supersample; ++subX) {
-                    const sampleX = x + (subX + 0.5) * subStep - centreX;
-                    const at = (outerRadius - distance(sampleX, sampleY) / zoom) / trackPitch;
-                    if (at < 0 || at >= numTracks) continue;
-                    const trackCodes = codes[at | 0];
-                    if (!trackCodes || trackCodes.length === 0) continue;
-                    let fraction = Math.atan2(sampleY, sampleX) * InvTwoPi + 0.25;
-                    if (fraction < 0) fraction += 1;
-                    const word = Math.min((fraction * trackCodes.length) | 0, trackCodes.length - 1);
-                    const colour = palette[trackCodes[word]];
-                    red += colour & 0xff;
-                    green += (colour >>> 8) & 0xff;
-                    blue += (colour >>> 16) & 0xff;
-                    covered++;
-                }
-            }
-            if (covered === 0) continue;
-            const offset = y * size + x;
-            const alpha = ((255 * covered) / samplesPerPixel) | 0;
-            pixels[offset] =
-                ((alpha << 24) |
-                    (((blue / covered) | 0) << 16) |
-                    (((green / covered) | 0) << 8) |
-                    ((red / covered) | 0)) >>>
-                0;
+            const colour = samplePixel(x, y);
+            if (colour !== 0) pixels[y * size + x] = colour;
         }
     }
 }
