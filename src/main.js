@@ -27,6 +27,7 @@ import { DiscLayout, toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
+import { toast } from "./web/toast.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
@@ -48,11 +49,13 @@ import { DiscVisualiser } from "./disc-visualiser.js";
 import { downloadBlob } from "./dom-utils.js";
 import {
     buildUrlFromParams,
+    DriveTracks,
     guessModelFromHostname,
     ParamTypes,
     parseMediaParams,
     parseQueryString,
     processAutobootParams,
+    processDriveTrackParams,
     processInputParams,
 } from "./url-params.js";
 
@@ -153,6 +156,8 @@ const paramTypes = {
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
     displayMode: ParamTypes.STRING,
+    drive0Tracks: ParamTypes.STRING,
+    drive1Tracks: ParamTypes.STRING,
 };
 
 // Parse the query string with parameter types
@@ -173,6 +178,7 @@ let econet = null;
 
 // Parse disc and tape images from query parameters
 const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
+const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 // Only assign if values are provided
 if (queryDiscImage) discImage = queryDiscImage;
@@ -387,6 +393,52 @@ if (keyMappingWarnings.length) {
     showError("applying the key mappings in the URL", keyMappingWarnings.join(" "));
 }
 
+if (driveTrackWarnings.length) {
+    showError("setting the disc drives up from the URL", driveTrackWarnings.join(" "));
+}
+
+/** @returns {string} the DiscLayout to load an image for this drive with */
+function layoutForDrive(driveIndex) {
+    return driveTracks[driveIndex] === DriveTracks.eighty ? DiscLayout.contiguous : DiscLayout.auto;
+}
+
+/** @returns {Number|undefined} the tracksPerStep the user fixed this drive at, if they fixed one */
+function tracksPerStepForDrive(driveIndex) {
+    if (driveTracks[driveIndex] === DriveTracks.auto) return undefined;
+    return driveTracks[driveIndex] === DriveTracks.forty ? 2 : 1;
+}
+
+function putDiscIn(driveIndex, loadedDisc) {
+    const drive = processor.fdc.drives[driveIndex];
+    const fixed = tracksPerStepForDrive(driveIndex);
+    const was = drive.tracksPerStep;
+    processor.fdc.loadDisc(driveIndex, loadedDisc, fixed);
+    showDriveTracks(driveIndex);
+    // A switch the user fixed does not move, so anything it does is not news.
+    if (fixed === undefined && drive.tracksPerStep !== was) noteDriveTracks(driveIndex, loadedDisc.name);
+}
+
+const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
+
+function showDriveTracks(driveIndex) {
+    const drive = processor.fdc?.drives[driveIndex];
+    if (!drive) return;
+    for (const button of driveTracksButtons(driveIndex))
+        button.classList.toggle("active", tracksPerStepFor(button.dataset.tracks) === drive.tracksPerStep);
+}
+
+function driveTracksButtons(driveIndex) {
+    return document.querySelectorAll(`.drive-tracks[data-drive="${driveIndex}"] [data-tracks]`);
+}
+
+function noteDriveTracks(driveIndex, discName) {
+    const tracks = processor.fdc.drives[driveIndex].tracksPerStep === 2 ? "40" : "80";
+    toast(`Drive ${driveIndex} switched to ${tracks} track for ${discName}.`, {
+        title: "Disc drive",
+        quietKey: "quietDriveTracks",
+    });
+}
+
 function createCanvasForFilter(filterClass) {
     // Not `config`: that is the emulator's live configuration object, declared
     // at module scope and used throughout this file.
@@ -516,10 +568,10 @@ function downloadDriveData(data, name, extension) {
 
 async function loadHTMLFile(file) {
     const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
-    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData);
+    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData, undefined, layoutForDrive(0));
     // Local file: retain the image bytes for embedding in save-to-file snapshots.
     loadedDisc.setOriginalImage(imageData);
-    processor.fdc.loadDisc(0, loadedDisc);
+    putDiscIn(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
     updateUrl();
@@ -960,8 +1012,8 @@ async function discSthClick(item) {
 
     popupLoading("Loading " + item);
     try {
-        const loaded = await loadDiscImage(parsedQuery.disc1);
-        processor.fdc.loadDisc(0, loaded);
+        const loaded = await loadDiscImage(parsedQuery.disc1, layoutForDrive(0));
+        putDiscIn(0, loaded);
         loadingFinished();
 
         if (needsAutoboot) {
@@ -1168,7 +1220,7 @@ async function reloadSnapshotMedia(media) {
             }
         }
 
-        processor.fdc.loadDisc(driveIndex, loadedDisc);
+        putDiscIn(driveIndex, loadedDisc);
         // Only update the URL/query for URL-sourced discs. For embedded
         // (local-file) discs, setting parsedQuery would put a bogus source
         // in the URL and break subsequent saves/reloads.
@@ -1443,8 +1495,8 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
             utils.noteEvent("google-drive", "click", item.name);
             setDisc1Image(`gd:${item.id}/${item.name}`);
             googleDriveModal.hide();
-            const ssd = await gdLoad(item);
-            if (ssd) processor.fdc.loadDisc(0, ssd);
+            const ssd = await gdLoad(item, layoutForDrive(0));
+            if (ssd) putDiscIn(0, ssd);
         });
     }
 });
@@ -1460,7 +1512,7 @@ for (const image of availableImages) {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         $discsModal.hide();
-        processor.fdc.loadDisc(0, await loadDiscImage(parsedQuery.disc1));
+        putDiscIn(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
     });
 }
 
@@ -1500,7 +1552,7 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
     try {
         const result = await googleDrive.create(processor.fdc, name, data);
         setDisc1Image("gd:" + result.fileId + "/" + name);
-        processor.fdc.loadDisc(0, result.disc);
+        putDiscIn(0, result.disc);
         loadingFinished();
     } catch (error) {
         console.error(`Error creating Google Drive disc: ${error}`, error);
@@ -1751,8 +1803,8 @@ const startPromise = (async () => {
     if (discImage) {
         imageLoads.push(
             (async () => {
-                const loaded = await loadDiscImage(discImage);
-                processor.fdc.loadDisc(0, loaded);
+                const loaded = await loadDiscImage(discImage, layoutForDrive(0));
+                putDiscIn(0, loaded);
             })(),
         );
     }
@@ -1760,8 +1812,8 @@ const startPromise = (async () => {
     if (secondDiscImage) {
         imageLoads.push(
             (async () => {
-                const loaded = await loadDiscImage(secondDiscImage);
-                processor.fdc.loadDisc(1, loaded);
+                const loaded = await loadDiscImage(secondDiscImage, layoutForDrive(1));
+                putDiscIn(1, loaded);
             })(),
         );
     }
@@ -2003,6 +2055,23 @@ rewindUI.updateButtonState();
 
 if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
 else document.getElementById("disc-visualiser-open").classList.add("disabled");
+
+for (const item of document.querySelectorAll(".drive-tracks")) {
+    const driveIndex = Number(item.dataset.drive);
+    const drive = processor.fdc?.drives[driveIndex];
+    const fixed = drive ? tracksPerStepForDrive(driveIndex) : undefined;
+    if (fixed !== undefined) drive.tracksPerStep = fixed;
+    for (const button of driveTracksButtons(driveIndex)) {
+        button.disabled = !drive;
+        button.addEventListener("click", (event) => {
+            // Setting a switch is not picking from a menu, so leave the menu where it is.
+            event.stopPropagation();
+            drive.tracksPerStep = tracksPerStepFor(button.dataset.tracks);
+            showDriveTracks(driveIndex);
+        });
+    }
+    if (drive) showDriveTracks(driveIndex);
+}
 
 function draw(now) {
     if (!running) {
