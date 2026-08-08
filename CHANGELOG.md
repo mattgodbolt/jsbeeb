@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.16.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.15.0...v1.16.0) (2026-08-08)
+
+
+### Features
+
+* add an xBR display mode that smooths the picture ([#762](https://github.com/mattgodbolt/jsbeeb/issues/762)) ([30fdd39](https://github.com/mattgodbolt/jsbeeb/commit/30fdd39b1f4509ac73886415fd8dadfe84979806))
+* load STH discs and tapes from the bbc.xania.org mirror ([#689](https://github.com/mattgodbolt/jsbeeb/issues/689)) ([614b57d](https://github.com/mattgodbolt/jsbeeb/commit/614b57d4c0fb75594f6e4d5482b7b36d3e602a28))
+* mirror Stairway to Hell archive into S3 ([#688](https://github.com/mattgodbolt/jsbeeb/issues/688)) ([ef32159](https://github.com/mattgodbolt/jsbeeb/commit/ef3215944b4fca7ca00ed878ffa992fc7e596df8))
+
+
+### Bug Fixes
+
+* count the Atom's cycleSeconds in real seconds ([#755](https://github.com/mattgodbolt/jsbeeb/issues/755)) ([9814a65](https://github.com/mattgodbolt/jsbeeb/commit/9814a65473f21d97dccb71bed20f8cb54b7a236c)), closes [#751](https://github.com/mattgodbolt/jsbeeb/issues/751)
+* give the external second processor its real CMOS instruction set ([#752](https://github.com/mattgodbolt/jsbeeb/issues/752)) ([36f28e0](https://github.com/mattgodbolt/jsbeeb/commit/36f28e0547c2c21333263b7e9fd77e71e12a6814)), closes [#746](https://github.com/mattgodbolt/jsbeeb/issues/746)
+* handle every 1770 force interrupt condition instead of throwing ([#763](https://github.com/mattgodbolt/jsbeeb/issues/763)) ([5574446](https://github.com/mattgodbolt/jsbeeb/commit/55744461ca9fb3012e5c0c39f59771edc613f864)), closes [#761](https://github.com/mattgodbolt/jsbeeb/issues/761)
+* keep the display working when a filter will not build ([#780](https://github.com/mattgodbolt/jsbeeb/issues/780)) ([3c7645e](https://github.com/mattgodbolt/jsbeeb/commit/3c7645e8f4da31f08c89b9fe5606dc040cf645b5))
+* keep the touchscreen polling instead of crashing the emulator ([#759](https://github.com/mattgodbolt/jsbeeb/issues/759)) ([b7b2daa](https://github.com/mattgodbolt/jsbeeb/commit/b7b2daa0ec760b7ab74a1cd9c820a263a583705b)), closes [#758](https://github.com/mattgodbolt/jsbeeb/issues/758)
+* latch the Tube ULA's NMI request to the parasite ([#754](https://github.com/mattgodbolt/jsbeeb/issues/754)) ([e05c742](https://github.com/mattgodbolt/jsbeeb/commit/e05c74240ad846ef4ff722c2dd8ac93436b92b03))
+* record tracks written to a disc with no write-track callback ([#777](https://github.com/mattgodbolt/jsbeeb/issues/777)) ([323b723](https://github.com/mattgodbolt/jsbeeb/commit/323b723328e1c178c3b565e50b11840b021453ea))
+* release GL objects when the display mode changes ([#764](https://github.com/mattgodbolt/jsbeeb/issues/764)) ([873ee29](https://github.com/mattgodbolt/jsbeeb/commit/873ee29f6fedf49b4cdea7000c4fd632a0010f86))
+* repaint displays that run with the CRTC's R4 at zero ([#767](https://github.com/mattgodbolt/jsbeeb/issues/767)) ([c115932](https://github.com/mattgodbolt/jsbeeb/commit/c115932b6071232d6a5b13ccf7e0621941559905))
+
+
+### Performance Improvements
+
+* decode flux marks with 32 bit words instead of BigInts ([#753](https://github.com/mattgodbolt/jsbeeb/issues/753)) ([c87c134](https://github.com/mattgodbolt/jsbeeb/commit/c87c134fe6d80539004161e2fb290aa1e1ba37de)), closes [#749](https://github.com/mattgodbolt/jsbeeb/issues/749)
+
 ## [1.15.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.14.0...v1.15.0) (2026-08-02)
 
 
