@@ -34,45 +34,29 @@ const WheelZoomRate = 0.003;
 /** Firefox reports wheel deltas in lines, not pixels. */
 const PixelsPerWheelLine = 16;
 
-/** @returns {string} the word under the pointer, in the terms this view deals in */
-function describeDensity({ codes }, word) {
-    return codes[word] === 0 ? "no flux" : `${codes[word]} pulses`;
-}
-
-function describeRegion({ codes, sectorNumbers, errors }, word) {
-    const what = RegionStyles[codes[word]].name;
-    const sectorNumber = sectorNumbers[word];
-    const error = errors.find(({ firstWord, lastWord }) =>
-        lastWord <= firstWord ? word >= firstWord || word < lastWord : word >= firstWord && word < lastWord,
-    );
-    return `${sectorNumber < 0 ? what : `sector ${sectorNumber} ${what}`}${error ? ` · ${error.kind} error` : ""}`;
-}
-
-function densityLegend() {
-    return (
-        swatch(UnformattedHex, "unformatted") +
-        `<span class="disc-legend-item disc-legend-grow">${MinDensity}` +
-        `<span class="disc-legend-ramp" style="background:linear-gradient(to right, ${DensityRampHex.join(", ")})"></span>` +
-        `${MaxDensity} pulses per 64&micro;s</span>`
-    );
-}
-
-function regionLegend() {
-    return RegionStyles.map(({ hex, name }) => swatch(hex, name)).join("") + swatch(ErrorHex, "CRC error");
-}
-
 const Views = {
     density: {
         palette: DensityPalette,
         analyse: (track) => ({ codes: trackPulseDensity(track) }),
-        describe: describeDensity,
-        legend: densityLegend,
+        describe: ({ codes }, word) => (codes[word] === 0 ? "no flux" : `${codes[word]} pulses`),
+        legend: () =>
+            swatch(UnformattedHex, "unformatted") +
+            `<span class="disc-legend-item disc-legend-grow">${MinDensity}` +
+            `<span class="disc-legend-ramp" style="background:linear-gradient(to right, ${DensityRampHex.join(", ")})"></span>` +
+            `${MaxDensity} pulses per 64&micro;s</span>`,
     },
     format: {
         palette: RegionPalette,
         analyse: (track, warn) => trackRegions(track, warn),
-        describe: describeRegion,
-        legend: regionLegend,
+        describe: ({ codes, sectorNumbers, errors }, word) => {
+            const what = RegionStyles[codes[word]].name;
+            const named = sectorNumbers[word] < 0 ? what : `sector ${sectorNumbers[word]} ${what}`;
+            const error = errors.find(({ firstWord, lastWord }) =>
+                lastWord <= firstWord ? word >= firstWord || word < lastWord : word >= firstWord && word < lastWord,
+            );
+            return `${named}${error ? ` · ${error.kind} error` : ""}`;
+        },
+        legend: () => RegionStyles.map(({ hex, name }) => swatch(hex, name)).join("") + swatch(ErrorHex, "CRC error"),
     },
 };
 
