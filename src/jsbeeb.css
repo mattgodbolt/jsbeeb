@@ -457,13 +457,20 @@ small {
 
 .disc-header {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  align-items: baseline;
   gap: 8px;
   margin-bottom: 8px;
   cursor: move;
   user-select: none;
+  /* Claim touch gestures, or a drag scrolls the page instead. */
   touch-action: none;
+}
+
+.disc-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .disc-header button {
@@ -474,6 +481,25 @@ small {
   color: #ccc;
   font-size: 12px;
   font-weight: bold;
+  flex: none;
+}
+
+/* A disc's name is the one thing here with no bound on its width, so it yields before anything
+   else does and keeps the full name on hover. */
+.disc-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #888;
+  font-family: consolas, monospace;
+  font-size: 11px;
+}
+
+#disc-close {
+  flex: none;
+  margin-left: auto;
 }
 
 .disc-stack {
@@ -535,7 +561,11 @@ small {
   color: #ccc;
   font-family: consolas, monospace;
   font-size: 11px;
-  min-height: 14px;
+  /* These lines change every frame; wrapping one would resize the panel under the pointer. */
+  height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 div.smoothie-chart-tooltip {

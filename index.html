@@ -257,8 +257,11 @@
       </div>
       <div id="disc-panel" hidden>
         <div class="disc-header">
-          <button id="disc-close" class="btn btn-sm btn-outline-light">Close</button>
           <span class="disc-title">Disc surface</span>
+          <span class="disc-name" id="disc-name"></span>
+          <button id="disc-close" class="btn btn-sm btn-outline-light">Close</button>
+        </div>
+        <div class="disc-controls">
           <div class="btn-group btn-group-sm" role="group" aria-label="Drive">
             <button type="button" class="btn btn-outline-light" data-drive="0">Drive 0</button>
             <button type="button" class="btn btn-outline-light" data-drive="1">Drive 1</button>
@@ -278,7 +281,8 @@
         </div>
         <div class="disc-legend" id="disc-legend"></div>
         <div class="disc-status" id="disc-status"></div>
-        <div class="disc-status" id="disc-hover"></div>
+        <div class="disc-status" id="disc-hover-where"></div>
+        <div class="disc-status" id="disc-hover-what"></div>
       </div>
       <div id="leds">
         <table>
