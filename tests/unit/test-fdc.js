@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { loadDiscInto } from "../../src/fdc.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
-import { DiscDrive } from "../../src/disc-drive.js";
+import { IntelFdc } from "../../src/intel-fdc.js";
 import { Scheduler } from "../../src/scheduler.js";
+import { fake6502 } from "../../src/fake6502.js";
 
 const SectorSize = 256;
 const SectorsPerTrack = 10;
@@ -15,39 +15,34 @@ function ssdDisc(numTracks, is40Track) {
     return loadSsd(new Disc(true, config, "test.ssd"), data, false, null);
 }
 
-/** Enough of an FDC to take a disc: the drives, and somewhere to put one. */
-function fakeFdc() {
-    const scheduler = new Scheduler();
-    const drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
-    return { drives, loadDisc: (driveIndex, disc) => drives[driveIndex].setDisc(disc) };
-}
-
 describe("putting a disc in a drive", () => {
+    const newFdc = () => new IntelFdc(fake6502(), new Scheduler());
+
     it("sets the drive's switch to suit the disc", () => {
-        const fdc = fakeFdc();
+        const fdc = newFdc();
 
-        loadDiscInto(fdc, 1, ssdDisc(40, true));
+        fdc.loadDisc(1, ssdDisc(40, true));
 
-        expect(fdc.drives[1].is40Track).toBe(true);
-        expect(fdc.drives[0].is40Track).toBe(false);
+        expect(fdc.drives[1].tracksPerStep).toBe(2);
+        expect(fdc.drives[0].tracksPerStep).toBe(1);
     });
 
     it("puts the switch back for the next 80 track disc", () => {
-        const fdc = fakeFdc();
+        const fdc = newFdc();
 
-        loadDiscInto(fdc, 0, ssdDisc(40, true));
-        loadDiscInto(fdc, 0, ssdDisc(80, false));
+        fdc.loadDisc(0, ssdDisc(40, true));
+        fdc.loadDisc(0, ssdDisc(80, false));
 
-        expect(fdc.drives[0].is40Track).toBe(false);
+        expect(fdc.drives[0].tracksPerStep).toBe(1);
     });
 
-    it("leaves the switch where the user fixed it", () => {
-        const fdc = fakeFdc();
+    it("leaves the switch where the caller asks for it", () => {
+        const fdc = newFdc();
 
-        loadDiscInto(fdc, 0, ssdDisc(40, true), false);
-        loadDiscInto(fdc, 1, ssdDisc(80, false), true);
+        fdc.loadDisc(0, ssdDisc(40, true), 1);
+        fdc.loadDisc(1, ssdDisc(80, false), 2);
 
-        expect(fdc.drives[0].is40Track).toBe(false);
-        expect(fdc.drives[1].is40Track).toBe(true);
+        expect(fdc.drives[0].tracksPerStep).toBe(1);
+        expect(fdc.drives[1].tracksPerStep).toBe(2);
     });
 });

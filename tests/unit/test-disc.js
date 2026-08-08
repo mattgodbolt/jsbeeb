@@ -1,15 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import {
-    BitWindow64,
-    Disc,
-    DiscConfig,
-    IbmDiscFormat,
-    loadSsd,
-    loadAdf,
-    ssdOrDsdShortfalls,
-    toSsdOrDsd,
-} from "../../src/disc.js";
+import { BitWindow64, Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
 import * as fs from "node:fs";
 
 afterEach(() => vi.restoreAllMocks());
@@ -503,54 +494,26 @@ describe("track write listeners", () => {
     });
 });
 
-describe("copying a track", () => {
-    it("tells the listeners which track it wrote", () => {
+describe("erasing a track", () => {
+    it("tells the listeners which track it wiped", () => {
         const disc = unobservedDisc();
         const seen = [];
         disc.addTrackWriteListener((isSideUpper, trackNum) => seen.push([isSideUpper, trackNum]));
 
-        disc.copyTrack(false, 0, 1);
+        disc.eraseTrack(false, 1);
 
         expect(seen).toEqual([[false, 1]]);
-        expect(disc.getTrack(false, 1).pulses2Us).toEqual(disc.getTrack(false, 0).pulses2Us);
-        expect(disc.getTrack(false, 1).length).toBe(disc.getTrack(false, 0).length);
+        expect(disc.getTrack(false, 1).findSectors()).toEqual([]);
     });
 
-    it("offers the copy to the next snapshot", () => {
+    it("offers the erasure to the next snapshot", () => {
         const disc = unobservedDisc();
         const before = disc.snapshotState().tracks;
 
-        disc.copyTrack(false, 0, 1);
+        disc.eraseTrack(false, 1);
 
-        // Without this the copy is left behind at the next rewind.
+        // Without this the track comes back at the next rewind.
         expect(disc.snapshotState().tracks["false:1"]).not.toBe(before["false:1"]);
-    });
-});
-
-describe("SSD and DSD shortfalls", () => {
-    /** A 40 track format laid over an 80 track one, which is what *FORM40 does without fat tracks. */
-    function mongrelDisc() {
-        const config = new DiscConfig();
-        const disc = new Disc(true, config, "test.ssd");
-        loadSsd(disc, new Uint8Array(80 * TrackSize).fill(0x11), false, null);
-        config.expandTo80 = true;
-        loadSsd(disc, new Uint8Array(40 * TrackSize).fill(0x22), false, null);
-        return disc;
-    }
-
-    it("counts the sectors two tracks disagree about", () => {
-        // Every odd logical track survives on its old physical track and on the double stepped one.
-        const oddTracks = 20;
-        expect(ssdOrDsdShortfalls(mongrelDisc())).toEqual([
-            `${oddTracks * SectorsPerTrack} sectors claimed twice with differing contents`,
-        ]);
-    });
-
-    it("says nothing about the matching halves of a fat track", () => {
-        const disc = fortyTrackDisc(numberedImage(40));
-        disc.copyTrack(false, 0, 1);
-
-        expect(ssdOrDsdShortfalls(disc)).toEqual([]);
     });
 });
 

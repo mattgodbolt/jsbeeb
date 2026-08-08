@@ -213,7 +213,7 @@ export class TestMachine {
 
     async loadDisc(image) {
         const data = await fdc.load(image);
-        fdc.loadDiscInto(this.processor.fdc, 0, fdc.discFor(this.processor.fdc, image, data));
+        this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, image, data));
     }
 
     /**
@@ -221,7 +221,7 @@ export class TestMachine {
      * @param {Uint8Array|Buffer} data - raw disc image bytes
      */
     loadDiscData(data) {
-        fdc.loadDiscInto(this.processor.fdc, 0, fdc.discFor(this.processor.fdc, "", data));
+        this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, "", data));
     }
 
     /**

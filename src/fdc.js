@@ -217,20 +217,6 @@ export function discFor(fdc, name, stringData, onChange) {
     return disc;
 }
 
-/**
- * Put a disc in a drive, and set that drive's 40/80 switch to suit it. No drive does the second
- * part for itself: the switch is the user's to set.
- *
- * @param {Object} fdc - The FDC controller object
- * @param {Number} driveIndex
- * @param {Disc} disc
- * @param {?boolean} [is40Track] where to leave the switch instead, if the user has fixed it
- */
-export function loadDiscInto(fdc, driveIndex, disc, is40Track = null) {
-    fdc.loadDisc(driveIndex, disc);
-    fdc.drives[driveIndex].is40Track = is40Track ?? disc.is40Track;
-}
-
 export function localDisc(fdc, name) {
     const discName = "disc_" + name;
     let data;
