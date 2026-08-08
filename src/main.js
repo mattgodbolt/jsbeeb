@@ -960,8 +960,8 @@ async function discSthClick(item) {
 
     popupLoading("Loading " + item);
     try {
-        const disc = await loadDiscImage(parsedQuery.disc1);
-        processor.fdc.loadDisc(0, disc);
+        const loaded = await loadDiscImage(parsedQuery.disc1);
+        processor.fdc.loadDisc(0, loaded);
         loadingFinished();
 
         if (needsAutoboot) {
@@ -1745,8 +1745,8 @@ const startPromise = (async () => {
     if (discImage) {
         imageLoads.push(
             (async () => {
-                const disc = await loadDiscImage(discImage);
-                processor.fdc.loadDisc(0, disc);
+                const loaded = await loadDiscImage(discImage);
+                processor.fdc.loadDisc(0, loaded);
             })(),
         );
     }
@@ -1754,8 +1754,8 @@ const startPromise = (async () => {
     if (secondDiscImage) {
         imageLoads.push(
             (async () => {
-                const disc = await loadDiscImage(secondDiscImage);
-                processor.fdc.loadDisc(1, disc);
+                const loaded = await loadDiscImage(secondDiscImage);
+                processor.fdc.loadDisc(1, loaded);
             })(),
         );
     }

@@ -37,7 +37,8 @@ describe("HFE loader tests", function () {
 
         const saved = toSsdOrDsd(disc, { force: true });
 
-        expect(saved.length).toBe(80 * 2 * 10 * 256);
+        // Elite is a 40 track disc captured in an 80 track drive, so its tracks sit on every other one.
+        expect(saved.length).toBe(40 * 2 * 10 * 256);
         expect(new TextDecoder().decode(saved.slice(0, 8))).toBe("E L I T ");
     });
 
