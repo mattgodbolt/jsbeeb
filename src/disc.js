@@ -527,6 +527,13 @@ class Side {
     }
 }
 
+/** How an image's tracks are laid out on the surface, and whether that is for the loader to decide. */
+export const DiscLayout = Object.freeze({
+    auto: "auto",
+    contiguous: "contiguous",
+    expanded40: "expanded40",
+});
+
 export class DiscConfig {
     constructor() {
         // TODO is this even useful?
@@ -564,6 +571,36 @@ function tracksWithData(data, numSides) {
     let lastUsed = data.length - 1;
     while (lastUsed >= 0 && data[lastUsed] === 0) lastUsed--;
     return Math.floor(lastUsed / (SsdFormat.trackSize * numSides)) + 1;
+}
+
+// The DFS catalogue is the first two sectors of a side. Sector 1 holds how many files there are and
+// how many sectors the disc has.
+const DfsEntryCountOffset = 0x105;
+const DfsSectorCountOffset = 0x106;
+const DfsEntrySize = 8;
+const DfsMaxEntries = 31;
+
+/**
+ * Whether an SSD or DSD image was written by a 40 track drive. Only its catalogue can say: images
+ * are routinely padded out or cut short, so their size means nothing.
+ *
+ * @param {Uint8Array} data
+ * @param {boolean} isDsd
+ * @returns {{is40Track: boolean, reason: string}}
+ */
+export function sniffDfsLayout(data, isDsd) {
+    const contiguous = (reason) => ({ is40Track: false, reason });
+    if (data.length < 2 * SsdFormat.sectorSize) return contiguous("it is smaller than a catalogue");
+    const entryBytes = data[DfsEntryCountOffset];
+    if (entryBytes % DfsEntrySize !== 0 || entryBytes > DfsMaxEntries * DfsEntrySize)
+        return contiguous(`its catalogue claims ${entryBytes} bytes of file entries`);
+    const sectors = ((data[DfsSectorCountOffset] & 3) << 8) | data[DfsSectorCountOffset + 1];
+    const reason = `its catalogue claims ${sectors} sectors`;
+    const fortyTrackSectors = (SsdFormat.tracksPerDisc / 2) * SsdFormat.sectorsPerTrack;
+    if (sectors === 0 || sectors > fortyTrackSectors) return contiguous(reason);
+    const tracks = tracksWithData(data, isDsd ? 2 : 1);
+    if (tracks > IbmDiscFormat.tracksPerDisc / 2) return contiguous(`it holds data as far as track ${tracks - 1}`);
+    return { is40Track: true, reason };
 }
 
 /**

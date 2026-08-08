@@ -1,6 +1,15 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { BitWindow64, Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
+import {
+    BitWindow64,
+    Disc,
+    DiscConfig,
+    IbmDiscFormat,
+    loadSsd,
+    loadAdf,
+    sniffDfsLayout,
+    toSsdOrDsd,
+} from "../../src/disc.js";
 import * as fs from "node:fs";
 
 afterEach(() => vi.restoreAllMocks());
@@ -359,6 +368,64 @@ describe("40 track SSD images", () => {
         disc.flushWrites();
 
         expect(written.slice(0, image.length)).toEqual(image);
+    });
+});
+
+describe("telling a 40 track image from an 80 track one", () => {
+    /** An image with a DFS catalogue claiming `sectors` sectors and holding `starts` files. */
+    function catalogued(sectors, starts = [], length = 80 * TrackSize) {
+        const data = new Uint8Array(length);
+        data.set(new TextEncoder().encode("A DISC"), 0);
+        data[0x105] = starts.length * 8;
+        data[0x106] = (sectors >>> 8) & 3;
+        data[0x107] = sectors & 0xff;
+        starts.forEach((start, entry) => {
+            const offset = 0x108 + entry * 8;
+            data[offset + 6] = (start >>> 8) & 3;
+            data[offset + 7] = start & 0xff;
+        });
+        return data;
+    }
+
+    const is40Track = (data, isDsd = false) => sniffDfsLayout(data, isDsd).is40Track;
+
+    it("goes by the sector count a catalogue claims", () => {
+        expect(is40Track(catalogued(400))).toBe(true);
+        expect(is40Track(catalogued(800))).toBe(false);
+    });
+
+    it("leaves a disc nobody has formatted alone", () => {
+        expect(is40Track(new Uint8Array(80 * TrackSize))).toBe(false);
+    });
+
+    it("cares nothing for the size of the file", () => {
+        expect(is40Track(catalogued(400, [], 8 * TrackSize))).toBe(true);
+        expect(is40Track(catalogued(800, [], 8 * TrackSize))).toBe(false);
+    });
+
+    it("wants a catalogue at all", () => {
+        expect(is40Track(catalogued(400).slice(0, 300))).toBe(false);
+        const garbage = catalogued(400);
+        garbage[0x105] = 3;
+        expect(is40Track(garbage)).toBe(false);
+    });
+
+    it("does not mind a catalogue whose files are in an order DFS would not have written", () => {
+        expect(is40Track(catalogued(400, [2, 50, 100]))).toBe(true);
+    });
+
+    it("turns down an image with data past where 40 tracks reach", () => {
+        const beyond = catalogued(400);
+        beyond[43 * TrackSize] = 1;
+        expect(is40Track(beyond)).toBe(false);
+    });
+
+    it("counts a double sided image's tracks across both of its sides", () => {
+        const dsd = catalogued(400, [], 80 * TrackSize * 2);
+        dsd[80 * TrackSize] = 1;
+
+        expect(is40Track(dsd, true)).toBe(true);
+        expect(is40Track(dsd, false)).toBe(false);
     });
 });
 
