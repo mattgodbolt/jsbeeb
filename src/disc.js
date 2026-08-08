@@ -257,10 +257,12 @@ class Sector {
      * @param {Track} track
      * @param {boolean} isMfm
      * @param {Number} idPosBitOffset
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      */
-    constructor(track, isMfm, idPosBitOffset) {
+    constructor(track, isMfm, idPosBitOffset, warn = console.log) {
         this.track = track;
         this.isMfm = isMfm;
+        this._warn = warn;
         this.idPosBitOffset = idPosBitOffset;
         this.dataPosBitOffset = null;
         this.isDeleted = false;
@@ -271,7 +273,7 @@ class Sector {
         const idReader = this._readerAt(this.idPosBitOffset);
         const { data: headerData, iffyPulses } = idReader.read(6);
         if (iffyPulses) {
-            console.log(`Iffy pulse in sector header ${this.description}`);
+            this._warn(`Iffy pulse in sector header ${this.description}`);
         }
         this.header = headerData;
         let crc = idReader.initialCrc;
@@ -304,7 +306,7 @@ class Sector {
     read(nextSector) {
         const pulsesPerByte = this.isMfm ? 16 : 32; // todo put in reader
         if (this.dataPosBitOffset === null) {
-            console.log(`"Sector header without data ${this.description}"`);
+            this._warn(`Sector header without data ${this.description}`);
             return;
         }
 
@@ -331,7 +333,7 @@ class Sector {
             sectorSize = sectorSize >>> 1;
         } while (sectorSize >= 128);
         if (seenIffyData) {
-            console.log(`"Iffy pulse in sector data ${this.description}"`);
+            this._warn(`Iffy pulse in sector data ${this.description}`);
         }
     }
 
@@ -426,10 +428,11 @@ class Track {
 
     /**
      * Debug functionality to try and interpret the track.
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      * @returns {Sector[]}
      */
-    findSectors() {
-        const sectors = this.findSectorIds();
+    findSectors(warn = console.log) {
+        const sectors = this.findSectorIds(warn);
         for (let sectorIndex = 0; sectorIndex !== sectors.length; ++sectorIndex) {
             const nextSector = sectors[sectorIndex + 1]; // Will be unset for last
             sectors[sectorIndex].read(nextSector);
@@ -438,9 +441,10 @@ class Track {
     }
 
     /**
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      * @returns {Sector[]}
      */
-    findSectorIds() {
+    findSectorIds(warn = console.log) {
         const sectors = [];
         // Pass 1: walk the track and find header and data markers.
         const bitLength = this.length * 32;
@@ -469,7 +473,7 @@ class Track {
                 doMfmMarkerByte = false;
                 const num0s = FmSyncHiZeroBits + markDetectorPrev.countTrailingNibbles(FmZeroBitPulses);
                 if (num0s <= ShortSyncZeros) {
-                    console.log(`Short zeros sync ${this.description}`);
+                    warn(`Short zeros sync ${this.description}`);
                 }
                 dataByte = data;
             } else if (markDetector.equals(MfmMarkerHi, MfmMarkerLo)) {
@@ -487,7 +491,7 @@ class Track {
             }
             switch (dataByte) {
                 case IbmDiscFormat.idMarkDataPattern: {
-                    sector = new Sector(this, isMfm, pulseIndex + 1);
+                    sector = new Sector(this, isMfm, pulseIndex + 1, warn);
                     sectors.push(sector);
                     shiftRegister = 0;
                     numShifts = 0;
@@ -496,7 +500,7 @@ class Track {
                 case IbmDiscFormat.dataMarkDataPattern:
                 case IbmDiscFormat.deletedDataMarkDataPattern:
                     if (!sector || sector.dataPosBitOffset) {
-                        console.log(
+                        warn(
                             `Sector data without header ${this.description}; mark bitpos ${pulseIndex}; previous good sector ${sector ? sector.description : "none"}`,
                         );
                     } else {
@@ -509,7 +513,7 @@ class Track {
                     }
                     break;
                 default:
-                    console.log(`Unknown marker byte ${hexbyte(dataByte)} ${this.description}`);
+                    warn(`Unknown marker byte ${hexbyte(dataByte)} ${this.description}`);
             }
         }
         return sectors;
@@ -625,7 +629,7 @@ export function loadSsd(disc, data, isDsd, onChange) {
         // Create a dataCopy large enough for all the sectors and tracks.
         const dataCopy = new Uint8Array(maxSize);
         dataCopy.set(data);
-        disc.setWriteTrackCallback(
+        disc.addTrackWriteListener(
             /** @param {Track} trackObj  */
             (side, trackNum, trackObj) => {
                 const trackOffset =
@@ -809,7 +813,7 @@ export class Disc {
         this.tracksUsed = 0;
         this.isDoubleSided = false;
 
-        this.writeTrackCallback = undefined;
+        this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
 
         // Track which tracks have been written since the last snapshot.
@@ -836,8 +840,14 @@ export class Disc {
         this.initSurface(0);
     }
 
-    setWriteTrackCallback(callback) {
-        this.writeTrackCallback = callback;
+    /** @param {function(boolean, Number, Track): void} listener called once per flushed track */
+    addTrackWriteListener(listener) {
+        this._trackWriteListeners.add(listener);
+    }
+
+    /** @param {function(boolean, Number, Track): void} listener */
+    removeTrackWriteListener(listener) {
+        this._trackWriteListeners.delete(listener);
     }
 
     /**
@@ -947,9 +957,9 @@ export class Disc {
         this.isDirty = false;
         this.dirtySide = -1;
         this.dirtyTrack = -1;
+        const trackObj = this.getTrack(dirtySide, dirtyTrack);
         this.setTrackUsed(dirtySide, dirtyTrack);
-        if (this.writeTrackCallback)
-            this.writeTrackCallback(dirtySide, dirtyTrack, this.getTrack(dirtySide, dirtyTrack));
+        for (const listener of this._trackWriteListeners) listener(dirtySide, dirtyTrack, trackObj);
     }
 
     /**
