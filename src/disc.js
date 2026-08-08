@@ -603,6 +603,33 @@ export function sniffDfsLayout(data, isDsd) {
     return { is40Track: true, reason };
 }
 
+// One track could match by luck; a disc's worth of them could not.
+const MinDoubleSteppedTracks = 4;
+
+/**
+ * Whether a surface holds a 40 track format, going by where its sectors say they are: a track
+ * written by a 48 tpi head sits at twice the number its own headers claim, with nothing readable
+ * on the tracks between. Only a flux image can be asked this, since for any other format the
+ * layout is the loader's own doing.
+ *
+ * @param {Disc} disc
+ * @returns {{is40Track: boolean, reason: string}}
+ */
+export function sniffSurfaceLayout(disc) {
+    let doubleStepped = 0;
+    // Both heads move together, so a disc has one pitch and the side that boots can speak for it.
+    // Track 0 is where it claims to be at either pitch, so it says nothing.
+    for (let trackNum = 1; trackNum < disc.tracksUsed; ++trackNum) {
+        const sectors = disc.getTrack(false, trackNum).findSectorIds(() => {});
+        if (!sectors.length) continue;
+        if (trackNum & 1) return { is40Track: false, reason: `track ${trackNum} holds sectors of its own` };
+        if (sectors.some((sector) => sector.trackNumber === trackNum / 2)) doubleStepped++;
+    }
+    if (doubleStepped < MinDoubleSteppedTracks)
+        return { is40Track: false, reason: `only ${doubleStepped} tracks sit at twice their own number` };
+    return { is40Track: true, reason: `${doubleStepped} tracks sit at twice the number their sectors claim` };
+}
+
 /**
  * Load a disc image in SSD (Single Sided Disc) or DSD (Double Sided Disc) format
  * @param {Disc} disc - The disc object to load into

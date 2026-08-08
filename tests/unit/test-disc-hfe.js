@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadAdf, loadSsd, ssdOrDsdShortfalls, toSsdOrDsd } from "../../src/disc.js";
+import {
+    Disc,
+    DiscConfig,
+    IbmDiscFormat,
+    loadAdf,
+    loadSsd,
+    sniffSurfaceLayout,
+    ssdOrDsdShortfalls,
+    toSsdOrDsd,
+} from "../../src/disc.js";
 import { loadHfe, sniffHfeLayout, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
 import * as fs from "node:fs";
 
@@ -94,6 +103,25 @@ describe("telling a 40 track HFE from an 80 track one", () => {
     it("says nothing of a file with no header to read", () => {
         expect(sniffHfeLayout(new Uint8Array(4)).is40Track).toBe(false);
         expect(sniffHfeLayout(withTracks(0)).is40Track).toBe(false);
+    });
+
+    it("reads a capture that already holds one spread across the surface", { timeout: 30000 }, () => {
+        const elite = fs.readFileSync("public/discs/elite.hfe");
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        loadHfe(disc, elite);
+
+        // Elite is a 40 track disc as an 80 track drive sees it, so its header cannot say so.
+        expect(sniffHfeLayout(elite).is40Track).toBe(false);
+        expect(sniffSurfaceLayout(disc).is40Track).toBe(true);
+    });
+
+    it("takes an 80 track disc at its word", { timeout: 60000 }, () => {
+        const source = new Disc(true, new DiscConfig(), "source.ssd");
+        loadSsd(source, fs.readFileSync("public/discs/elite.ssd"), false, null);
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        loadHfe(disc, toHfe(source));
+
+        expect(sniffSurfaceLayout(disc).is40Track).toBe(false);
     });
 
     it("expands a 40 track capture across the surface", { timeout: 30000 }, () => {
