@@ -16,9 +16,24 @@ function toastContainer() {
     return container;
 }
 
-/** @param {string} quietKey */
-export function isQuiet(quietKey) {
-    return !!window.localStorage[quietKey];
+// Storage can be unreachable or full, and a notice that nothing needs doing about is not worth
+// failing over: forget the answer and say the thing again.
+function remembered(key) {
+    try {
+        return !!window.localStorage.getItem(key);
+    } catch (e) {
+        console.log(`Unable to read ${key}: ${e}`);
+        return false;
+    }
+}
+
+function remember(key, wanted) {
+    try {
+        if (wanted) window.localStorage.setItem(key, "yes");
+        else window.localStorage.removeItem(key);
+    } catch (e) {
+        console.log(`Unable to remember ${key}: ${e}`);
+    }
 }
 
 /**
@@ -28,7 +43,7 @@ export function isQuiet(quietKey) {
  * @param {string} [options.quietKey] offer to stop showing this kind of notice, remembering the answer here
  */
 export function toast(message, { title = "", quietKey = "" } = {}) {
-    if (quietKey && isQuiet(quietKey)) return;
+    if (quietKey && remembered(quietKey)) return;
 
     const element = document.createElement("div");
     element.className = "toast text-bg-dark";
@@ -55,10 +70,7 @@ export function toast(message, { title = "", quietKey = "" } = {}) {
 
     const quiet = element.querySelector(".form-check");
     quiet.hidden = !quietKey;
-    quiet.querySelector("input").addEventListener("change", (event) => {
-        if (event.target.checked) window.localStorage[quietKey] = "yes";
-        else window.localStorage.removeItem(quietKey);
-    });
+    quiet.querySelector("input").addEventListener("change", (event) => remember(quietKey, event.target.checked));
 
     toastContainer().appendChild(element);
     element.addEventListener("hidden.bs.toast", () => element.remove());

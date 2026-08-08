@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 
-import { isQuiet, toast } from "../../src/web/toast.js";
+import { toast } from "../../src/web/toast.js";
 
 describe("toast", () => {
     afterEach(() => {
@@ -54,9 +54,25 @@ describe("toast", () => {
         quiet.checked = true;
         quiet.dispatchEvent(new window.Event("change"));
 
-        expect(isQuiet("quietTest")).toBe(true);
+        expect(window.localStorage.quietTest).toBe("yes");
         expect(toast("Told again.", { quietKey: "quietTest" })).toBe(undefined);
         expect(toasts()).toHaveLength(1);
+    });
+
+    it("says its piece when it cannot remember whether it was told not to", () => {
+        const storage = window.localStorage;
+        Object.defineProperty(window, "localStorage", {
+            configurable: true,
+            get() {
+                throw new Error("no storage for you");
+            },
+        });
+        try {
+            expect(() => toast("Told anyway.", { quietKey: "quietTest" })).not.toThrow();
+            expect(toasts()).toHaveLength(1);
+        } finally {
+            Object.defineProperty(window, "localStorage", { configurable: true, value: storage });
+        }
     });
 
     it("says it again once it is allowed to", () => {
