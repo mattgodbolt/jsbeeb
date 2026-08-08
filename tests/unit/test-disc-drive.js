@@ -111,7 +111,7 @@ describe("40 track discs", () => {
     afterEach(() => vi.restoreAllMocks());
 
     /** @returns {DiscDrive} a drive holding `disc`, stepped `steps` times towards the centre. */
-    function driveSteppedOut(disc, steps) {
+    function driveSteppedIn(disc, steps) {
         const drive = new DiscDrive(0, new Scheduler());
         drive.setDisc(disc);
         for (let step = 0; step < steps; ++step) drive.seekOneTrack(1);
@@ -140,14 +140,14 @@ describe("40 track discs", () => {
 
     it("stops on the outermost track double stepping can reach", () => {
         vi.spyOn(globalThis.console, "log").mockImplementation(() => {});
-        const drive = driveSteppedOut(fortyTrackDisc(), IbmDiscFormat.tracksPerDisc);
+        const drive = driveSteppedIn(fortyTrackDisc(), IbmDiscFormat.tracksPerDisc);
 
         expect(drive.track).toBe(IbmDiscFormat.tracksPerDisc - 2);
     });
 
     it("writes over the track its head also covers", () => {
         const disc = fortyTrackDisc();
-        const drive = driveSteppedOut(disc, 1);
+        const drive = driveSteppedIn(disc, 1);
         drive.writePulses(0x12345678);
 
         drive.seekOneTrack(1);
@@ -158,7 +158,7 @@ describe("40 track discs", () => {
 
     it("leaves the neighbouring track alone at 80 tracks", () => {
         const disc = eightyTrackDisc();
-        const drive = driveSteppedOut(disc, 2);
+        const drive = driveSteppedIn(disc, 2);
         const neighbour = disc.readPulses(false, 3, 0);
         drive.writePulses(0x12345678);
 
@@ -169,7 +169,7 @@ describe("40 track discs", () => {
 
     it("offers both halves of a fat track to the next snapshot", () => {
         const disc = fortyTrackDisc();
-        const drive = driveSteppedOut(disc, 1);
+        const drive = driveSteppedIn(disc, 1);
         const before = disc.snapshotState().tracks;
         drive.writePulses(0x12345678);
 
@@ -181,7 +181,7 @@ describe("40 track discs", () => {
     });
 
     it("makes the seek noise of a head crossing twice as many tracks", () => {
-        const drive = driveSteppedOut(fortyTrackDisc(), 10);
+        const drive = driveSteppedIn(fortyTrackDisc(), 10);
         const steps = [];
         drive.addEventListener("step", (event) => steps.push(event.stepAmount));
 

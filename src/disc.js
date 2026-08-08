@@ -558,7 +558,7 @@ class SsdFormat {
         return 40;
     }
 
-    // 40 track media has room past its 40th track, and some formats and protections reached for it.
+    // 40 track media had room past its 40th track, and protections used it.
     static get maxFortyTracksPerDisc() {
         return 42;
     }
@@ -596,7 +596,6 @@ export function loadSsd(disc, data, isDsd, onChange) {
         throw new Error("SSD file is too large");
     }
 
-    // A 40 track format is written by a 48 tpi head, so it occupies every other 96 tpi track.
     disc.is40Track = disc.config.expandTo80;
     const trackStep = disc.is40Track ? 2 : 1;
     const numTracks = disc.is40Track
@@ -761,8 +760,8 @@ function sectorShortfall(sector) {
 }
 
 /**
- * Where a sector belongs in an SSD or DSD image. The track comes from the sector's own header,
- * not from where it sits on the surface, so a double stepped disc still saves contiguously.
+ * Where a sector belongs in an SSD or DSD image, which is the track its own header claims rather
+ * than the one it sits on.
  *
  * @param {Sector} sector
  * @param {boolean} isSideUpper
@@ -797,7 +796,7 @@ export function ssdOrDsdShortfalls(disc) {
                 const offset = ssdOffsetOf(sector, upper, disc.isDoubleSided ? 2 : 1);
                 const claimant = claimants.get(offset);
                 if (!claimant) claimants.set(offset, sector.sectorData);
-                // The mirrored halves of a fat track claim the same bytes and agree on them.
+                // Both halves of a fat track claim one sector, and agree about it.
                 else if (!sameBytes(claimant, sector.sectorData)) countOne("claimed twice with differing contents");
             }
         }
