@@ -519,7 +519,7 @@ async function loadHTMLFile(file) {
     const loadedDisc = disc.discFor(processor.fdc, file.name, imageData);
     // Local file: retain the image bytes for embedding in save-to-file snapshots.
     loadedDisc.setOriginalImage(imageData);
-    processor.fdc.loadDisc(0, loadedDisc);
+    disc.loadDiscInto(processor.fdc, 0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
     updateUrl();
@@ -960,8 +960,8 @@ async function discSthClick(item) {
 
     popupLoading("Loading " + item);
     try {
-        const disc = await loadDiscImage(parsedQuery.disc1);
-        processor.fdc.loadDisc(0, disc);
+        const loaded = await loadDiscImage(parsedQuery.disc1);
+        disc.loadDiscInto(processor.fdc, 0, loaded);
         loadingFinished();
 
         if (needsAutoboot) {
@@ -1168,7 +1168,7 @@ async function reloadSnapshotMedia(media) {
             }
         }
 
-        processor.fdc.loadDisc(driveIndex, loadedDisc);
+        disc.loadDiscInto(processor.fdc, driveIndex, loadedDisc);
         // Only update the URL/query for URL-sourced discs. For embedded
         // (local-file) discs, setting parsedQuery would put a bogus source
         // in the URL and break subsequent saves/reloads.
@@ -1444,7 +1444,7 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
             setDisc1Image(`gd:${item.id}/${item.name}`);
             googleDriveModal.hide();
             const ssd = await gdLoad(item);
-            if (ssd) processor.fdc.loadDisc(0, ssd);
+            if (ssd) disc.loadDiscInto(processor.fdc, 0, ssd);
         });
     }
 });
@@ -1460,7 +1460,7 @@ for (const image of availableImages) {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         $discsModal.hide();
-        processor.fdc.loadDisc(0, await loadDiscImage(parsedQuery.disc1));
+        disc.loadDiscInto(processor.fdc, 0, await loadDiscImage(parsedQuery.disc1));
     });
 }
 
@@ -1500,7 +1500,7 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
     try {
         const result = await googleDrive.create(processor.fdc, name, data);
         setDisc1Image("gd:" + result.fileId + "/" + name);
-        processor.fdc.loadDisc(0, result.disc);
+        disc.loadDiscInto(processor.fdc, 0, result.disc);
         loadingFinished();
     } catch (error) {
         console.error(`Error creating Google Drive disc: ${error}`, error);
@@ -1751,8 +1751,8 @@ const startPromise = (async () => {
     if (discImage) {
         imageLoads.push(
             (async () => {
-                const disc = await loadDiscImage(discImage);
-                processor.fdc.loadDisc(0, disc);
+                const loaded = await loadDiscImage(discImage);
+                disc.loadDiscInto(processor.fdc, 0, loaded);
             })(),
         );
     }
@@ -1760,8 +1760,8 @@ const startPromise = (async () => {
     if (secondDiscImage) {
         imageLoads.push(
             (async () => {
-                const disc = await loadDiscImage(secondDiscImage);
-                processor.fdc.loadDisc(1, disc);
+                const loaded = await loadDiscImage(secondDiscImage);
+                disc.loadDiscInto(processor.fdc, 1, loaded);
             })(),
         );
     }

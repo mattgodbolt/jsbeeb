@@ -39,6 +39,16 @@ export class BaseDiscDrive extends EventTarget {
     }
 
     /** @returns {boolean} */
+    get is40Track() {
+        throw new Error("Not implemented: is40Track getter");
+    }
+
+    /** @param {boolean} _is40Track */
+    set is40Track(_is40Track) {
+        throw new Error("Not implemented: is40Track setter");
+    }
+
+    /** @returns {boolean} */
     get indexPulse() {
         throw new Error("Not implemented: indexPulse getter");
     }
@@ -303,8 +313,15 @@ export class DiscDrive extends BaseDiscDrive {
      */
     setDisc(disc) {
         this._disc = disc;
-        // A user swapping media would also flick the drive's 40/80 switch to suit it.
-        if (disc) this._is40Track = disc.is40Track;
+    }
+
+    /** @returns {boolean} whether the drive double steps, as its 40/80 switch is set */
+    get is40Track() {
+        return this._is40Track;
+    }
+
+    set is40Track(is40Track) {
+        this._is40Track = is40Track;
     }
 
     get indexPulse() {

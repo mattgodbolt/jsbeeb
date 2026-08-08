@@ -110,28 +110,24 @@ describe("Disc drive tests", function () {
 describe("40 track discs", () => {
     afterEach(() => vi.restoreAllMocks());
 
-    /** @returns {DiscDrive} a drive holding `disc`, stepped `steps` times towards the centre. */
+    /** @returns {DiscDrive} a drive with its 40/80 switch at 40, stepped `steps` times inwards. */
     function driveSteppedIn(disc, steps) {
         const drive = new DiscDrive(0, new Scheduler());
         drive.setDisc(disc);
+        drive.is40Track = true;
         for (let step = 0; step < steps; ++step) drive.seekOneTrack(1);
         return drive;
     }
 
-    it("double steps for a disc that was written by a 40 track drive", () => {
-        const drive = new DiscDrive(0, new Scheduler());
-        drive.setDisc(fortyTrackDisc());
-
-        drive.seekOneTrack(1);
-        drive.seekOneTrack(1);
+    it("double steps with its switch at 40", () => {
+        const drive = driveSteppedIn(fortyTrackDisc(), 2);
 
         expect(drive.track).toBe(4);
     });
 
-    it("goes back to single stepping for the next 80 track disc", () => {
+    it("single steps with its switch at 80", () => {
         const drive = new DiscDrive(0, new Scheduler());
         drive.setDisc(fortyTrackDisc());
-        drive.setDisc(eightyTrackDisc());
 
         drive.seekOneTrack(1);
 
@@ -156,9 +152,12 @@ describe("40 track discs", () => {
         expect(disc.getTrack(false, 3).length).toBe(disc.getTrack(false, 2).length);
     });
 
-    it("leaves the neighbouring track alone at 80 tracks", () => {
+    it("leaves the neighbouring track alone with its switch at 80", () => {
         const disc = eightyTrackDisc();
-        const drive = driveSteppedIn(disc, 2);
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.setDisc(disc);
+        drive.seekOneTrack(1);
+        drive.seekOneTrack(1);
         const neighbour = disc.readPulses(false, 3, 0);
         drive.writePulses(0x12345678);
 

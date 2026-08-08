@@ -88,7 +88,9 @@ export class DiscVisualiser {
         this.surfaceCanvas = document.getElementById("disc-surface");
         this.overlayCanvas = document.getElementById("disc-overlay");
         this.statusElem = document.getElementById("disc-status");
-        this.hoverElem = document.getElementById("disc-hover");
+        this.nameElem = document.getElementById("disc-name");
+        this.hoverWhereElem = document.getElementById("disc-hover-where");
+        this.hoverWhatElem = document.getElementById("disc-hover-what");
         this.legendElem = document.getElementById("disc-legend");
         this.sideControls = document.getElementById("disc-side-controls");
         this.openBtn = document.getElementById("disc-visualiser-open");
@@ -518,17 +520,22 @@ export class DiscVisualiser {
         this._markActive("[data-side]", (button) => (button.dataset.side === "1") === this._isSideUpper);
         this._markActive("[data-view]", (button) => button.dataset.view === this._view);
 
+        const name = disc?.name ?? "";
+        setText(this.nameElem, name);
+        if (this.nameElem.title !== name) this.nameElem.title = name;
         if (!disc) {
             setText(this.statusElem, `Drive ${this._driveIndex}: no disc`);
         } else {
             const head = this._showingHead
-                ? `head at track ${drive.track}, ${(drive.positionFraction * RevolutionMs).toFixed(1)} ms`
-                : `head on the other side, track ${drive.track}`;
+                ? `head track ${drive.track} · ${(drive.positionFraction * RevolutionMs).toFixed(1)} ms`
+                : `head track ${drive.track}, other side`;
             const spin = drive.spinning ? "spinning" : "stopped";
             const zoom = this._geometry.zoom > 1 ? ` · ${this._geometry.zoom.toFixed(1)}x` : "";
-            setText(this.statusElem, `${disc.name ?? "disc"} · ${spin}, ${head}${zoom}${this._scanNote()}`);
+            setText(this.statusElem, `${spin} · ${head}${zoom}${this._scanNote()}`);
         }
-        setText(this.hoverElem, this._describeHover());
+        const { where, what } = this._describeHover();
+        setText(this.hoverWhereElem, where);
+        setText(this.hoverWhatElem, what);
     }
 
     _markActive(selector, isActive) {
@@ -542,14 +549,18 @@ export class DiscVisualiser {
         return ` · ${errors} CRC error${errors === 1 ? "" : "s"}`;
     }
 
+    /** @returns {{where: string, what: string}} the pointer's position, and what the surface holds */
     _describeHover() {
         const hover = this._hoverPosition();
-        if (!hover) return "Point at the surface to read it";
+        if (!hover) return { where: "Point at the surface to read it", what: "" };
         const info = this._info[hover.track];
-        if (!info?.codes?.length) return `Track ${hover.track} · not read yet`;
+        if (!info?.codes?.length) return { where: `Track ${hover.track}`, what: "not read yet" };
         const word = Math.min((hover.fraction * info.codes.length) | 0, info.codes.length - 1);
-        const at = `Track ${hover.track} · word ${word} of ${info.codes.length} · ${(hover.fraction * RevolutionMs).toFixed(1)} ms`;
-        return `${at} · ${Views[this._view].describe(info, word)}`;
+        const ms = (hover.fraction * RevolutionMs).toFixed(1);
+        return {
+            where: `Track ${hover.track} · word ${word} of ${info.codes.length} · ${ms} ms`,
+            what: Views[this._view].describe(info, word),
+        };
     }
 
     _buildLegend() {
