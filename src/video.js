@@ -1025,10 +1025,10 @@ export class Video {
                         // of the descriptor is precomputed on register writes so
                         // this stays a store or two in the hottest loop we have.
                         if (doubledLines) {
-                            this.lineGrid[row] = this.lineGridUlaDoubled;
-                            this.lineGrid[row + 1] = this.lineGridUlaDoubled;
+                            this.lineGrid[bitmapRow] = this.lineGridUlaDoubled;
+                            this.lineGrid[bitmapRow + 1] = this.lineGridUlaDoubled;
                         } else {
-                            this.lineGrid[row] = this.lineGridUla;
+                            this.lineGrid[bitmapRow] = this.lineGridUla;
                         }
                         if (this.teletextMode) {
                             if (this.halfClock) {
