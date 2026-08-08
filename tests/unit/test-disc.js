@@ -295,15 +295,18 @@ describe("ADF loader tests", function () {
     });
 });
 
-describe("track write listeners", () => {
-    function writeableDisc() {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
-        return disc;
-    }
+/** Most discs have no write-track callback: fdc.js discards onChange for ADF, ADM and ADL, and
+ *  discFor is usually called without one. */
+function callbackFreeDisc() {
+    const disc = new Disc(true, new DiscConfig(), "test.ssd");
+    loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
+    expect(disc.writeTrackCallback).toBeUndefined();
+    return disc;
+}
 
+describe("track write listeners", () => {
     it("reports each flushed track to every listener", () => {
-        const disc = writeableDisc();
+        const disc = callbackFreeDisc();
         const seen = [];
         disc.addTrackWriteListener((isSideUpper, trackNum, track) => seen.push([isSideUpper, trackNum, track.length]));
         disc.writePulses(false, 3, 0, 0);
@@ -313,11 +316,7 @@ describe("track write listeners", () => {
     });
 
     it("reports writes even with no write-track callback set", () => {
-        // A disc loaded from a URL has no callback; observers still need telling.
-        const disc = new Disc(true, new DiscConfig(), "blank");
-        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
-        expect(disc.writeTrackCallback).toBeUndefined();
-
+        const disc = callbackFreeDisc();
         let calls = 0;
         disc.addTrackWriteListener(() => calls++);
         disc.writePulses(false, 0, 0, 0);
@@ -327,7 +326,7 @@ describe("track write listeners", () => {
     });
 
     it("says nothing when there was nothing to flush", () => {
-        const disc = writeableDisc();
+        const disc = callbackFreeDisc();
         let calls = 0;
         disc.addTrackWriteListener(() => calls++);
         disc.flushWrites();
@@ -335,7 +334,7 @@ describe("track write listeners", () => {
     });
 
     it("stops reporting to a listener that has been removed", () => {
-        const disc = writeableDisc();
+        const disc = callbackFreeDisc();
         let calls = 0;
         const listener = () => calls++;
         disc.addTrackWriteListener(listener);
@@ -357,5 +356,29 @@ describe("track write listeners", () => {
 
         expect(listenerCalls).toBe(1);
         expect(imageUpdates).toBe(1);
+    });
+});
+
+describe("flushWrites marks the surface used", () => {
+    it("notices a write to the upper side of a disc loaded as single sided", () => {
+        const disc = callbackFreeDisc();
+        expect(disc.isDoubleSided).toBe(false);
+
+        disc.writePulses(true, 0, 0, 0xffff);
+        disc.flushWrites();
+
+        // Without this, snapshotState() saves one side and the write is lost on rewind.
+        expect(disc.isDoubleSided).toBe(true);
+        expect(Object.keys(disc.snapshotState().tracks).some((key) => key.startsWith("true:"))).toBe(true);
+    });
+
+    it("extends the used tracks when written past the end of the image", () => {
+        const disc = callbackFreeDisc();
+        const beyond = disc.tracksUsed;
+
+        disc.writePulses(false, beyond, 0, 0xffff);
+        disc.flushWrites();
+
+        expect(disc.tracksUsed).toBe(beyond + 1);
     });
 });

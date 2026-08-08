@@ -962,10 +962,9 @@ export class Disc {
         this.dirtySide = -1;
         this.dirtyTrack = -1;
         const trackObj = this.getTrack(dirtySide, dirtyTrack);
-        for (const listener of this._trackWriteListeners) listener(dirtySide, dirtyTrack, trackObj);
-        if (!this.writeTrackCallback) return;
-        this.writeTrackCallback(dirtySide, dirtyTrack, trackObj);
         this.setTrackUsed(dirtySide, dirtyTrack);
+        for (const listener of this._trackWriteListeners) listener(dirtySide, dirtyTrack, trackObj);
+        if (this.writeTrackCallback) this.writeTrackCallback(dirtySide, dirtyTrack, trackObj);
     }
 
     /**
