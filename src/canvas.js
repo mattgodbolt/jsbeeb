@@ -223,8 +223,7 @@ export function bestCanvas(canvas, filterClass) {
 
     // A canvas that has handed out a WebGL context can never hand out a 2D one,
     // so if the failure came from the filter rather than from WebGL itself, the
-    // 2D fallback below would throw and take the emulator with it. Try the
-    // plainest filter on the context we already have first.
+    // 2D fallback below would throw and take the emulator with it.
     if (filterClass !== PassthroughFilter) {
         try {
             return new GlCanvas(canvas, PassthroughFilter);

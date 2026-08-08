@@ -2,8 +2,7 @@
 
 /**
  * Compile and link a shader program, throwing with the driver's own message if
- * either step fails. Every display filter needs this and they were each keeping
- * their own copy.
+ * either step fails.
  *
  * @param {WebGLRenderingContext} gl
  * @param {string} vertexSource
@@ -32,8 +31,7 @@ export function compileProgram(gl, vertexSource, fragmentSource, name) {
     } finally {
         // Once linked the program holds its own reference, so releasing ours here means
         // deleting the program later frees the shaders too. If we never got that far, ours
-        // was the only reference and they go now. A filter that throws is retried on the
-        // fallback path, so leaking a pair each time would accumulate.
+        // was the only reference and they go now.
         gl.deleteShader(vertexShader);
         gl.deleteShader(fragmentShader);
     }

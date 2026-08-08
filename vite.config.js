@@ -19,7 +19,7 @@ export default defineConfig({
             "tests/integration/**/*.js",
             "tests/shader/test-*.js",
         ],
-        testTimout: 15000,
+        testTimeout: 15000,
         slowTestThreshold: 1000,
         coverage: {
             provider: "v8",

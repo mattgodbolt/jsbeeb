@@ -17,6 +17,8 @@ export const EVERYTHINGENABLED =
 export const OPAQUE_BLACK = 0xff000000;
 export const OPAQUE_WHITE = 0xffffffff;
 
+export const MinPaintedFrameRows = 64;
+
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
 // Reference: b-em src/video.c (stardot/b-em).
@@ -586,8 +588,8 @@ export class Video {
         }
     }
 
-    paintAndClear() {
-        if (this.dispEnabled & FRAMESKIPENABLE) {
+    flyback() {
+        if (this.bitmapY >= MinPaintedFrameRows && this.dispEnabled & FRAMESKIPENABLE) {
             this.paint();
             this.clearPaintBuffer();
         }
@@ -850,14 +852,12 @@ export class Video {
             // an approximation that works if hsyncs are spaced evenly.
             this.bitmapY += 2;
 
-            // If no VSync occurs this frame, go back to the top and force a repaint
-            if (this.bitmapY >= 768) {
-                // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
-                this.paintAndClear();
-            }
+            // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
+            return this.bitmapY >= 768;
         } else if (this.hpulseCounter === (this.regs[3] & 0x0f)) {
             this.inHSync = false;
         }
+        return false;
     }
 
     cb2changed(level, output) {
@@ -905,7 +905,7 @@ export class Video {
             // This emulates the Hitachi 6845SP CRTC.
             // Other variants have different quirks.
             // Handle HSync
-            if (this.inHSync) this.handleHSync();
+            if (this.inHSync && this.handleHSync()) this.flyback();
 
             // Handle delayed display enable due to skew
             const displayEnablePos = this.displayEnableSkew + (this.teletextMode ? 2 : 0);
@@ -969,11 +969,7 @@ export class Video {
                 this.hadVSyncThisRow = true;
                 this.vpulseCounter = 0;
 
-                // Avoid intense painting if registers have boot-up or
-                // otherwise small values.
-                if (this.regs[0] && this.regs[4]) {
-                    this.paintAndClear();
-                }
+                this.flyback();
             }
 
             if (vSyncStarting || vSyncEnding) {
