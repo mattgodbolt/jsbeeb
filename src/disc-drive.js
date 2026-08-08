@@ -38,14 +38,14 @@ export class BaseDiscDrive extends EventTarget {
         throw new Error("Not implemented: isSideUpper getter");
     }
 
-    /** @returns {boolean} */
-    get is40Track() {
-        throw new Error("Not implemented: is40Track getter");
+    /** @returns {Number} */
+    get tracksPerStep() {
+        throw new Error("Not implemented: tracksPerStep getter");
     }
 
-    /** @param {boolean} _is40Track */
-    set is40Track(_is40Track) {
-        throw new Error("Not implemented: is40Track setter");
+    /** @param {Number} _tracksPerStep */
+    set tracksPerStep(_tracksPerStep) {
+        throw new Error("Not implemented: tracksPerStep setter");
     }
 
     /** @returns {boolean} */
@@ -170,8 +170,10 @@ export class DiscDrive extends BaseDiscDrive {
         this._scheduler = scheduler;
         /** @type {Disc|undefined} */
         this._disc = undefined;
-        this._is40Track = false;
-        // Physically always 80 tracks even if we're in 40 track mode. 40 track mode essentially double steps.
+        // Two for a drive whose 40/80 switch is set to 40, which reaches a 48 tpi format by
+        // stepping twice for each track the controller counts.
+        this._tracksPerStep = 1;
+        // Where the head is over the 96 tpi surface, whatever the controller believes.
         this._track = 0;
         this._isSideUpper = false;
         // In units where 3125 is a normal track length.
@@ -315,13 +317,18 @@ export class DiscDrive extends BaseDiscDrive {
         this._disc = disc;
     }
 
-    /** @returns {boolean} whether the drive double steps, as its 40/80 switch is set */
-    get is40Track() {
-        return this._is40Track;
+    /** @returns {Number} how many of the surface's tracks the head crosses for one of the format's */
+    get tracksPerStep() {
+        return this._tracksPerStep;
     }
 
-    set is40Track(is40Track) {
-        this._is40Track = is40Track;
+    set tracksPerStep(tracksPerStep) {
+        this._tracksPerStep = tracksPerStep;
+    }
+
+    /** @returns {Number} the track the controller believes the head is on */
+    get logicalTrack() {
+        return (this._track / this._tracksPerStep) | 0;
     }
 
     get indexPulse() {
@@ -358,25 +365,22 @@ export class DiscDrive extends BaseDiscDrive {
      * @param {Number} delta track step delta, either 1 or -1
      */
     seekOneTrack(delta) {
-        if (this._is40Track) delta *= 2;
-        this._selectTrack(this._track + delta);
+        this._selectTrack(this._track + delta * this._tracksPerStep);
     }
 
     /**
      * Notify that an overall seek is happening to a particular track. Purely informational.
      */
     notifySeek(newTrack) {
-        // Controllers count in the tracks the format has, which is half of the drive's when double stepping.
-        this.notifySeekAmount(newTrack - (this._is40Track ? this._track >>> 1 : this._track));
+        this.notifySeekAmount(newTrack - this.logicalTrack);
     }
 
     /**
-     * Notify that an overall seek is happening by some delta smount. Purely informational.
+     * Notify that an overall seek is happening by some delta amount. Purely informational.
      */
     notifySeekAmount(delta) {
         // The step drives the seek noise, so it counts the tracks the head crosses.
-        if (this._is40Track) delta *= 2;
-        this.dispatchEvent(new StepEvent(delta));
+        this.dispatchEvent(new StepEvent(delta * this._tracksPerStep));
     }
 
     /**
@@ -384,8 +388,8 @@ export class DiscDrive extends BaseDiscDrive {
      */
     _selectTrack(track) {
         this._checkTrackNeedsWrite();
-        // Double stepping starts at zero and moves in twos, so it stops one track short of the end.
-        const lastTrack = IbmDiscFormat.tracksPerDisc - (this._is40Track ? 2 : 1);
+        // Stepping starts at zero, so the last track it can land on is a whole step from the end.
+        const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
         if (track < 0) {
             track = 0;
             console.log("Clang! disc head stopped at track 0");
@@ -401,9 +405,9 @@ export class DiscDrive extends BaseDiscDrive {
     _checkTrackNeedsWrite() {
         if (!this.disc) return;
         const written = this.disc.flushWrites();
-        // A 48 tpi head spans both 96 tpi tracks of its band, so a write erases the neighbour too.
-        if (written && this._is40Track)
-            this.disc.copyTrack(written.isSideUpper, written.trackNum, written.trackNum ^ 1);
+        // A 48 tpi head writes across most of its band but not as far as the neighbouring 96 tpi
+        // track, which is left in the guard band with nothing readable on it.
+        if (written && this._tracksPerStep === 2) this.disc.eraseTrack(written.isSideUpper, written.trackNum ^ 1);
     }
 
     snapshotState() {
@@ -414,7 +418,7 @@ export class DiscDrive extends BaseDiscDrive {
             pulsePosition: this._pulsePosition,
             in32usMode: this._in32usMode,
             spinning: this._spinning,
-            is40Track: this._is40Track,
+            is40Track: this._tracksPerStep === 2,
             timerTaskOffset: this._timer.scheduled() ? this._timer.expireEpoch - this._scheduler.epoch : null,
             disc: this._disc ? this._disc.snapshotState() : null,
         };
@@ -426,7 +430,7 @@ export class DiscDrive extends BaseDiscDrive {
         this._headPosition = state.headPosition;
         this._pulsePosition = state.pulsePosition;
         this._in32usMode = state.in32usMode;
-        this._is40Track = state.is40Track;
+        this._tracksPerStep = state.is40Track ? 2 : 1;
 
         // Restore spinning state and timer
         this._timer.cancel();

@@ -565,9 +565,9 @@ class SsdFormat {
         return 40;
     }
 
-    // 40 track media had room past its 40th track, and protections used it.
+    // A 48 tpi format only reaches every other track of the surface.
     static get maxFortyTracksPerDisc() {
-        return 42;
+        return IbmDiscFormat.tracksPerDisc >>> 1;
     }
 
     static get trackSize() {
@@ -817,8 +817,6 @@ function ssdOffsetOf(sector, isSideUpper, numSides) {
     return track * SsdFormat.trackSize + sector.sectorNumber * SsdFormat.sectorSize;
 }
 
-const sameBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
-
 /**
  * SSD and DSD images hold sector contents and nothing else, so anything a DFS sector could not
  * have held is lost. Copy protection usually shows up as one of these.
@@ -828,21 +826,11 @@ const sameBytes = (a, b) => a.length === b.length && a.every((byte, index) => by
  */
 export function ssdOrDsdShortfalls(disc) {
     const counts = new Map();
-    const countOne = (shortfall) => counts.set(shortfall, (counts.get(shortfall) ?? 0) + 1);
-    const claimants = new Map();
     for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
         for (const upper of disc.isDoubleSided ? [false, true] : [false]) {
             for (const sector of disc.getTrack(upper, trackNum).findSectors()) {
                 const shortfall = sectorShortfall(sector);
-                if (shortfall) {
-                    countOne(shortfall);
-                    continue;
-                }
-                const offset = ssdOffsetOf(sector, upper, disc.isDoubleSided ? 2 : 1);
-                const claimant = claimants.get(offset);
-                if (!claimant) claimants.set(offset, sector.sectorData);
-                // Both halves of a fat track claim one sector, and agree about it.
-                else if (!sameBytes(claimant, sector.sectorData)) countOne("claimed twice with differing contents");
+                if (shortfall) counts.set(shortfall, (counts.get(shortfall) ?? 0) + 1);
             }
         }
     }
@@ -1060,20 +1048,20 @@ export class Disc {
     }
 
     /**
+     * Leave a track with no flux on it at all, as an erase head does.
+     *
      * @param {boolean} isSideUpper
-     * @param {Number} fromTrack
-     * @param {Number} toTrack
+     * @param {Number} trackNum
      */
-    copyTrack(isSideUpper, fromTrack, toTrack) {
-        const source = this.getTrack(isSideUpper, fromTrack);
-        const destination = this.getTrack(isSideUpper, toTrack);
-        destination.pulses2Us.set(source.pulses2Us);
-        destination.length = source.length;
-        const dirtyKey = toTrack | (isSideUpper ? 0x100 : 0);
+    eraseTrack(isSideUpper, trackNum) {
+        const trackObj = this.getTrack(isSideUpper, trackNum);
+        trackObj.pulses2Us.fill(0);
+        trackObj.length = IbmDiscFormat.bytesPerTrack;
+        const dirtyKey = trackNum | (isSideUpper ? 0x100 : 0);
         this._snapshotDirtyTracks.add(dirtyKey);
         this._everDirtyTracks.add(dirtyKey);
-        this.setTrackUsed(isSideUpper, toTrack);
-        for (const listener of this._trackWriteListeners) listener(isSideUpper, toTrack, destination);
+        this.setTrackUsed(isSideUpper, trackNum);
+        for (const listener of this._trackWriteListeners) listener(isSideUpper, trackNum, trackObj);
     }
 
     /**

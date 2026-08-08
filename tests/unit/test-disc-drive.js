@@ -114,7 +114,7 @@ describe("40 track discs", () => {
     function driveSteppedIn(disc, steps) {
         const drive = new DiscDrive(0, new Scheduler());
         drive.setDisc(disc);
-        drive.is40Track = true;
+        drive.tracksPerStep = 2;
         for (let step = 0; step < steps; ++step) drive.seekOneTrack(1);
         return drive;
     }
@@ -141,15 +141,17 @@ describe("40 track discs", () => {
         expect(drive.track).toBe(IbmDiscFormat.tracksPerDisc - 2);
     });
 
-    it("writes over the track its head also covers", () => {
-        const disc = fortyTrackDisc();
+    it("wipes the track its head also covers", () => {
+        // An 80 track disc formatted by a drive set to 40: every other track is left with nothing.
+        const disc = eightyTrackDisc();
         const drive = driveSteppedIn(disc, 1);
+        expect(disc.getTrack(false, 3).findSectors()).toHaveLength(10);
         drive.writePulses(0x12345678);
 
         drive.seekOneTrack(1);
 
-        expect(disc.readPulses(false, 3, 0)).toBe(0x12345678);
-        expect(disc.getTrack(false, 3).length).toBe(disc.getTrack(false, 2).length);
+        expect(disc.readPulses(false, 2, 0)).toBe(0x12345678);
+        expect(disc.getTrack(false, 3).findSectors()).toEqual([]);
     });
 
     it("leaves the neighbouring track alone with its switch at 80", () => {
@@ -166,7 +168,7 @@ describe("40 track discs", () => {
         expect(disc.readPulses(false, 3, 0)).toBe(neighbour);
     });
 
-    it("offers both halves of a fat track to the next snapshot", () => {
+    it("offers both tracks a fat write covers to the next snapshot", () => {
         const disc = fortyTrackDisc();
         const drive = driveSteppedIn(disc, 1);
         const before = disc.snapshotState().tracks;

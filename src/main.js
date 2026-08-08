@@ -401,33 +401,34 @@ function layoutForDrive(driveIndex) {
     return driveTracks[driveIndex] === DriveTracks.eighty ? DiscLayout.contiguous : DiscLayout.auto;
 }
 
-/** @returns {?boolean} where the user has fixed this drive's 40/80 switch, or null to let discs set it */
-function switchForDrive(driveIndex) {
-    if (driveTracks[driveIndex] === DriveTracks.auto) return null;
-    return driveTracks[driveIndex] === DriveTracks.forty;
+/** @returns {Number|undefined} the tracksPerStep the user fixed this drive at, if they fixed one */
+function tracksPerStepForDrive(driveIndex) {
+    if (driveTracks[driveIndex] === DriveTracks.auto) return undefined;
+    return driveTracks[driveIndex] === DriveTracks.forty ? 2 : 1;
 }
 
 function putDiscIn(driveIndex, loadedDisc) {
     const drive = processor.fdc.drives[driveIndex];
-    const was = drive.is40Track;
-    disc.loadDiscInto(processor.fdc, driveIndex, loadedDisc, switchForDrive(driveIndex));
+    const fixed = tracksPerStepForDrive(driveIndex);
+    const was = drive.tracksPerStep;
+    processor.fdc.loadDisc(driveIndex, loadedDisc, fixed);
     showDriveTracks(driveIndex);
-    if (drive.is40Track !== was) noteDriveTracks(driveIndex, loadedDisc.name);
+    // A switch the user fixed does not move, so anything it does is not news.
+    if (fixed === undefined && drive.tracksPerStep !== was) noteDriveTracks(driveIndex, loadedDisc.name);
 }
 
 function showDriveTracks(driveIndex) {
     const drive = processor.fdc?.drives[driveIndex];
     if (!drive) return;
     const item = document.querySelector(`.drive-tracks[data-drive="${driveIndex}"] .tracks`);
-    item.textContent = drive.is40Track ? "40" : "80";
+    item.textContent = drive.tracksPerStep === 2 ? "40" : "80";
 }
 
 function noteDriveTracks(driveIndex, discName) {
     if (window.localStorage.quietDriveTracks) return;
-    const is40Track = processor.fdc.drives[driveIndex].is40Track;
+    const tracks = processor.fdc.drives[driveIndex].tracksPerStep === 2 ? "40" : "80";
     const toast = document.getElementById("drive-tracks-toast");
-    toast.querySelector(".message").textContent =
-        `Drive ${driveIndex} switched to ${is40Track ? "40" : "80"} track for ${discName}.`;
+    toast.querySelector(".message").textContent = `Drive ${driveIndex} switched to ${tracks} track for ${discName}.`;
     bootstrap.Toast.getOrCreateInstance(toast).show();
 }
 
@@ -2062,11 +2063,11 @@ for (const item of document.querySelectorAll(".drive-tracks")) {
         item.classList.add("disabled");
         continue;
     }
-    const pinned = switchForDrive(driveIndex);
-    if (pinned !== null) drive.is40Track = pinned;
+    const fixed = tracksPerStepForDrive(driveIndex);
+    if (fixed !== undefined) drive.tracksPerStep = fixed;
     item.addEventListener("click", (event) => {
         event.preventDefault();
-        drive.is40Track = !drive.is40Track;
+        drive.tracksPerStep = drive.tracksPerStep === 2 ? 1 : 2;
         showDriveTracks(driveIndex);
     });
     showDriveTracks(driveIndex);
