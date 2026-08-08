@@ -257,7 +257,7 @@ class Sector {
      * @param {Track} track
      * @param {boolean} isMfm
      * @param {Number} idPosBitOffset
-     * @param {function(string): void} warn
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      */
     constructor(track, isMfm, idPosBitOffset, warn = console.log) {
         this.track = track;
@@ -428,6 +428,7 @@ class Track {
 
     /**
      * Debug functionality to try and interpret the track.
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      * @returns {Sector[]}
      */
     findSectors(warn = console.log) {
@@ -440,6 +441,7 @@ class Track {
     }
 
     /**
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      * @returns {Sector[]}
      */
     findSectorIds(warn = console.log) {

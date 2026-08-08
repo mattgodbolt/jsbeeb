@@ -330,15 +330,29 @@ describe("flushWrites marks the surface used", () => {
 });
 
 describe("track write listeners", () => {
-    it("reports each flushed track to every listener", () => {
+    it("reports the flushed track to every listener", () => {
         const disc = unobservedDisc();
         const seen = [];
-        disc.addTrackWriteListener((isSideUpper, trackNum, track) => seen.push([isSideUpper, trackNum, track.length]));
-        disc.addTrackWriteListener(() => seen.push("second"));
+        for (let i = 0; i < 2; ++i)
+            disc.addTrackWriteListener((isSideUpper, trackNum, track) =>
+                seen.push([isSideUpper, trackNum, track.length]),
+            );
         disc.writePulses(false, 3, 0, 0);
         disc.flushWrites();
 
-        expect(seen).toEqual([[false, 3, disc.getTrack(false, 3).length], "second"]);
+        const expected = [false, 3, disc.getTrack(false, 3).length];
+        expect(seen).toEqual([expected, expected]);
+    });
+
+    it("reports the side and track that were written, not the ones in progress", () => {
+        const disc = unobservedDisc();
+        const seen = [];
+        disc.addTrackWriteListener((isSideUpper, trackNum) => seen.push([isSideUpper, trackNum, disc.isDirty]));
+        disc.writePulses(true, 7, 0, 0);
+        disc.flushWrites();
+
+        // The dirty state is cleared before anyone is told, so a listener may write in turn.
+        expect(seen).toEqual([[true, 7, false]]);
     });
 
     it("says nothing when there was nothing to flush", () => {
