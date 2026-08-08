@@ -812,7 +812,6 @@ export class Disc {
         this.isDoubleSided = false;
 
         this.writeTrackCallback = undefined;
-        // Distinct from writeTrackCallback, which the owning loader claims exclusively.
         this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
 
