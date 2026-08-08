@@ -133,6 +133,21 @@ describe("parseCatalogue", () => {
         expect(problems).toEqual([expect.stringContaining("cannot find a Drive file id")]);
     });
 
+    // A DFS title is 12 arbitrary bytes, so a comma in one is part of the title
+    // rather than the separator between two sides.
+    it("keeps a comma inside a single-sided disc's DFS title", () => {
+        const { entries } = parseCatalogue(
+            sheet(
+                `Testsoft,Commas,D1S1,40,3,BBBB0001,,1,"2201,181-01",04,none,${link("1comma000000000000000000000")},t,,,`,
+            ),
+        );
+        expect(entries[0].dfsTitle).toEqual(["2201,181-01"]);
+    });
+
+    it("still splits a DFS title per side when there is one for each", () => {
+        expect(parseCatalogue(sheet(FlippyRow)).entries[0].dfsTitle).toEqual(["T E S T", "T E S T"]);
+    });
+
     it("names the blob after the fingerprint, not the sheet's prose", () => {
         const [before] = parseCatalogue(sheet(FlippyRow)).entries;
         const [after] = parseCatalogue(sheet(FlippyRow.replace(",Flippy Demo,", ",Flippy Demoe,"))).entries;

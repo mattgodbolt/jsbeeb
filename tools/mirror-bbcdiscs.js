@@ -47,6 +47,17 @@ const splitCell = (value) =>
         .map((part) => part.trim())
         .filter((part) => part.length > 0);
 
+/**
+ * Split a free-text per-side cell, where a comma might be separating the sides
+ * or might just be part of what a side says. A DFS title is 12 arbitrary bytes
+ * and some of them contain commas, so only trust the split when it produces
+ * exactly one value per side; otherwise the cell describes a single side.
+ */
+const splitPerSide = (value, sides) => {
+    const parts = splitCell(value);
+    return parts.length === sides ? parts : (value ?? "").trim() === "" ? [] : [(value ?? "").trim()];
+};
+
 // Most discs leave most of the sheet's optional columns blank, and 725 entries
 // of `"notes": null` would be most of the manifest.
 const withoutEmpties = (entry) =>
@@ -170,7 +181,7 @@ export function parseCatalogue(rows) {
             variant: clean(row.Variant),
             crc32,
             crc32As40: splitCell(row["CRC32 as 40 tracks (if 80 track disc)"]),
-            dfsTitle: splitCell(row["DFS title"]),
+            dfsTitle: splitPerSide(row["DFS title"], crc32.length),
             dfsCycle: splitCell(row["DFS cycle number"]),
             grabVersion: clean(row["HFE Grab version"]),
             date: clean(row["Birthday (YY/MM/DD)"]),
@@ -327,19 +338,23 @@ async function fetchDisc(entry, cacheDir) {
     return { path: dest, downloaded: true };
 }
 
-// beebjit wants its JIT arena at a fixed address and bails if something else
-// already occupies it, which happens now and again with several running at
-// once. It is the process placement that failed, not the disc, so try again.
+// Running many beebjits at once turns up two races that have nothing to do
+// with the disc: its JIT arena can find the fixed address already occupied,
+// and a run this short can trip an assertion on the way out
+// (scarybeasts/beebjit#62). Both pass on a retry; a disc that really disagrees
+// with the catalogue fails by returning mismatches, not by exiting badly.
 async function runBeebjitWithRetry(beebjitPath, discPath) {
     for (let attempt = 0; ; attempt++) {
         try {
             return await runBeebjit(beebjitPath, discPath);
         } catch (error) {
-            if (attempt === MaxRetries || !/mmap in wrong location/.test(error.message)) throw error;
+            if (attempt === MaxRetries) throw error;
             await sleep(RetryDelayMs);
         }
     }
 }
+
+const lastLine = (text) => text.trim().split("\n").pop() ?? "";
 
 // beebjit resolves its ROMs relative to the working directory, so run it from
 // beside its own binary rather than from wherever the mirror is being built.
@@ -351,9 +366,9 @@ function runBeebjit(beebjitPath, discPath) {
         child.stdout.on("data", (chunk) => (text += chunk));
         child.stderr.on("data", (chunk) => (text += chunk));
         child.on("error", reject);
-        child.on("close", (code) => {
-            if (code !== 0) reject(new Error(`beebjit exited ${code}: ${text.trim().split("\n").pop()}`));
-            else resolve_(text);
+        child.on("close", (code, signal) => {
+            if (code === 0) resolve_(text);
+            else reject(new Error(`beebjit ${signal ? `died with ${signal}` : `exited ${code}`}: ${lastLine(text)}`));
         });
     });
 }
