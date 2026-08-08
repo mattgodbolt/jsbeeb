@@ -561,15 +561,6 @@ class SsdFormat {
         return 80;
     }
 
-    static get fortyTracksPerDisc() {
-        return 40;
-    }
-
-    // A 48 tpi format only reaches every other track of the surface.
-    static get maxFortyTracksPerDisc() {
-        return IbmDiscFormat.tracksPerDisc >>> 1;
-    }
-
     static get trackSize() {
         return SsdFormat.sectorSize * SsdFormat.sectorsPerTrack;
     }
@@ -645,12 +636,12 @@ export function loadSsd(disc, data, isDsd, onChange) {
 
     disc.is40Track = disc.config.expandTo80;
     const trackStep = disc.is40Track ? 2 : 1;
-    const numTracks = disc.is40Track
-        ? Math.min(
-              SsdFormat.maxFortyTracksPerDisc,
-              Math.max(SsdFormat.fortyTracksPerDisc, tracksWithData(data, numSides)),
-          )
-        : SsdFormat.tracksPerDisc;
+    // Tracks twice as far apart are half as many, and an image can run past the last of them as
+    // far as the surface has room for.
+    const numTracks = Math.min(
+        IbmDiscFormat.tracksPerDisc / trackStep,
+        Math.max(SsdFormat.tracksPerDisc / trackStep, tracksWithData(data, numSides)),
+    );
 
     let offset = 0;
     for (let track = 0; track < numTracks; ++track) {
