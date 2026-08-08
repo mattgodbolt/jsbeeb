@@ -44,6 +44,7 @@ import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
 import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
+import { DiscVisualiser } from "./disc-visualiser.js";
 import { downloadBlob } from "./dom-utils.js";
 import {
     buildUrlFromParams,
@@ -1980,6 +1981,9 @@ rewindUI = new RewindUI({
     isRunning: () => running,
 });
 rewindUI.updateButtonState();
+
+if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
+else document.getElementById("disc-visualiser-open").classList.add("disabled");
 
 function draw(now) {
     if (!running) {
