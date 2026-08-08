@@ -1,7 +1,7 @@
 // xBR-lv2 edge-directed upscaling, applied to the BBC's *logical* pixels.
 //
 // Ported from Hyllian's xbr-lv2-standalone.slang (MIT, Copyright (C) 2011-2022
-// Hyllian <sergiogdb@gmail.com>), which see for the original. tests/shader runs
+// Hyllian <sergiogdb@gmail.com>); see that for the original. tests/shader runs
 // this file in headless Chrome and asserts on the pixels it produces.
 //
 // The one thing this does that a stock xBR shader does not: jsbeeb's
