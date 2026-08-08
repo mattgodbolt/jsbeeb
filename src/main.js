@@ -12,6 +12,7 @@ import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
+import { BbcDiscArchive, describe as describeHfe } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
 import { loadTapeFromData } from "./tapes.js";
@@ -65,6 +66,7 @@ let frameSkip = 0;
 let syncLights;
 let discSth;
 let tapeSth;
+let hfeArchive;
 let running;
 let model;
 
@@ -1033,6 +1035,7 @@ function sthOnError() {
 
 discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
+hfeArchive = new BbcDiscArchive(hfeStartLoad, hfeOnCat, hfeOnError);
 
 const sthAutoboot = document.querySelector("#sth .autoboot");
 sthAutoboot.addEventListener("click", function () {
@@ -1067,6 +1070,92 @@ function setSthFilter(filter) {
 const sthFilter = document.getElementById("sth-filter");
 sthFilter.addEventListener("change", () => setSthFilter(sthFilter.value));
 sthFilter.addEventListener("keyup", () => setSthFilter(sthFilter.value));
+
+function hfeClearList() {
+    for (const el of document.querySelectorAll("#hfe-list li:not(.template)")) el.remove();
+}
+
+function hfeStartLoad() {
+    const loading = document.querySelector("#hfe .loading");
+    loading.textContent = "Loading catalogue from HFE archive";
+    loading.style.display = "";
+    hfeClearList();
+}
+
+function hfeOnError() {
+    const loading = document.querySelector("#hfe .loading");
+    loading.textContent = "There was an error accessing the HFE archive";
+    loading.style.display = "";
+    hfeClearList();
+}
+
+async function hfeClick(file) {
+    utils.noteEvent("hfe", "click", file.path);
+    setDisc1Image("hfe:" + file.path);
+    const needsAutoboot = parsedQuery.autoboot !== undefined;
+    if (needsAutoboot) processor.reset(true);
+
+    const name = describeHfe(file).title;
+    popupLoading("Loading " + name);
+    try {
+        const disc = await loadDiscImage(parsedQuery.disc1);
+        processor.fdc.loadDisc(0, disc);
+        loadingFinished();
+        if (needsAutoboot) autoboot(name);
+    } catch (err) {
+        console.error("Error loading disc image:", err);
+        loadingFinished(err);
+    }
+}
+
+// The catalogue is a few hundred discs, so fill the list in batches to keep the
+// modal responsive while it renders, as the STH list does.
+function hfeOnCat(catalogue) {
+    hfeClearList();
+    const list = document.getElementById("hfe-list");
+    document.querySelector("#hfe .loading").style.display = "none";
+    const template = list.querySelector(".template");
+    const filter = document.getElementById("hfe-filter").value.toLowerCase();
+
+    const addSome = (remaining) => {
+        const MaxAtATime = 100;
+        const Delay = 30;
+        for (const file of remaining.slice(0, MaxAtATime)) {
+            const { title, publisher, detail } = describeHfe(file);
+            const row = template.cloneNode(true);
+            row.classList.remove("template");
+            row.querySelector(".name").textContent = title;
+            row.querySelector(".publisher").textContent = publisher;
+            row.querySelector(".detail").textContent = detail;
+            if (file.notes) row.title = file.notes;
+            row.addEventListener("click", () => {
+                hfeClick(file);
+                $hfeModal.hide();
+            });
+            row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
+            list.appendChild(row);
+        }
+        if (remaining.length > MaxAtATime) setTimeout(() => addSome(remaining.slice(MaxAtATime)), Delay);
+    };
+    addSome(catalogue);
+}
+
+const $hfeModal = new bootstrap.Modal(document.getElementById("hfe"));
+document.getElementById("hfe").addEventListener("shown.bs.modal", () => {
+    document.getElementById("hfe-filter").focus();
+});
+document.getElementById("hfe").addEventListener("show.bs.modal", () => hfeArchive.populate());
+
+function setHfeFilter(filter) {
+    filter = filter.toLowerCase();
+    for (const el of document.querySelectorAll("#hfe-list li:not(.template)")) {
+        el.style.display = el.textContent.toLowerCase().includes(filter) ? "" : "none";
+    }
+}
+
+const hfeFilter = document.getElementById("hfe-filter");
+hfeFilter.addEventListener("change", () => setHfeFilter(hfeFilter.value));
+hfeFilter.addEventListener("keyup", () => setHfeFilter(hfeFilter.value));
 
 function sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
@@ -1194,6 +1283,9 @@ async function loadDiscImage(discImage) {
         case "|":
         case "sth":
             return disc.discFor(processor.fdc, discImage, await discSth.fetch(discImage));
+
+        case "hfe":
+            return disc.discFor(processor.fdc, discImage, await hfeArchive.fetch(discImage));
 
         case "gd": {
             const splat = discImage.match(/([^/]+)\/?(.*)/);

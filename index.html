@@ -64,6 +64,11 @@
                   >
                 </li>
                 <li>
+                  <a href="#hfe" class="dropdown-item hfe" data-bs-toggle="modal" data-bs-target="#hfe"
+                    >From HFE archive</a
+                  >
+                </li>
+                <li>
                   <a href="#discs" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#discs">
                     From examples or local</a
                   >
@@ -763,6 +768,46 @@
             <ul id="sth-list">
               <li class="template">
                 <a href="#"><span class="name"></span></a>
+              </li>
+            </ul>
+          </div>
+          <div class="modal-footer">
+            <label class="float-xs-left checkbox-inline">
+              <input type="checkbox" class="autoboot" value="" />Autoboot</label
+            >
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal fade" id="hfe" tabindex="-1" aria-labelledby="hfeModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="hfeModalLabel">Load from HFE disc archive</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="hfe-credit">
+              Flux-accurate disc images preserved by
+              <a href="https://github.com/scarybeasts/beebjit">scarybeasts</a> and contributors, mirrored with
+              permission. Several fingerprinted variants of a title may be listed; they differ in protection, track
+              layout or release.
+            </p>
+            <div style="margin-bottom: 1rem">
+              <div class="loading">Loading catalogue from HFE archive...</div>
+              <div class="filter">
+                <label>Filter <input type="text" autofocus id="hfe-filter" /></label>
+              </div>
+            </div>
+            <ul id="hfe-list">
+              <li class="template">
+                <a href="#">
+                  <span class="name"></span>
+                  <span class="publisher"></span>
+                  <span class="detail"></span>
+                </a>
               </li>
             </ul>
           </div>
