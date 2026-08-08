@@ -218,11 +218,8 @@ export function discFor(fdc, name, stringData, onChange) {
 }
 
 /**
- * Put a disc in a drive, and set that drive's 40/80 switch to suit it.
- *
- * Nothing on real hardware does the second part: the switch is the user's to set, and getting it
- * wrong is how a 40 track disc reads as noise. jsbeeb sets it as a courtesy, so that a 40 track
- * image works without anyone having to know what one is.
+ * Put a disc in a drive, and set that drive's 40/80 switch to suit it. No drive does the second
+ * part for itself: the switch is the user's to set.
  *
  * @param {Object} fdc - The FDC controller object
  * @param {Number} driveIndex
