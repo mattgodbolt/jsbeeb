@@ -11,6 +11,8 @@
 coverage
 /dist
 /.sth-mirror
+/.bbcdiscs-mirror
+/.bbcdiscs-sheet.csv
 
 **/.claude/settings.local.json
 **/.claude/worktrees/
