@@ -99,6 +99,7 @@
     "test:unit": "vitest run --silent=true tests/unit",
     "test:integration": "vitest run --silent=true tests/integration",
     "test:cpu": "node tests/test-suite.js",
+    "test:shader": "vitest run --silent=true tests/shader",
     "coverage:unit": "vitest run tests/unit --coverage",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",
@@ -112,7 +113,7 @@
   },
   "lint-staged": {
     "*.js": [
-      "vitest related --run --exclude tests/integration --no-file-parallelism",
+      "vitest related --run --exclude tests/integration --exclude tests/shader --no-file-parallelism",
       "eslint --cache --fix",
       "prettier --write"
     ],

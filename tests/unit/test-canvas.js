@@ -3,6 +3,7 @@ import { GlCanvas, Canvas, bestCanvas } from "../../src/canvas.js";
 import PAL_FRAG_SHADER from "../../src/video-filters/shaders/pal-composite.frag.glsl?raw";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { PALCompositeFilter } from "../../src/video-filters/pal-composite.js";
+import { XbrFilter } from "../../src/video-filters/xbr-filter.js";
 
 // A canvas element hands out a WebGL context once and returns that same context
 // for every later request, so switching display mode builds a new GlCanvas over
@@ -79,6 +80,8 @@ describe("GlCanvas", () => {
     const filters = [
         ["passthrough", PassthroughFilter],
         ["PAL composite", PALCompositeFilter],
+        // xBR owns a second texture, so it is the one most likely to be missed.
+        ["xBR", XbrFilter],
     ];
 
     it.each(filters)("releases everything it created when disposed (%s)", (_name, filterClass) => {
@@ -93,18 +96,29 @@ describe("GlCanvas", () => {
     it("does not accumulate objects over repeated display mode switches", () => {
         // This is the shape of the leak: swapping modes builds a new canvas over
         // the same context, so without disposal each switch strands a texture,
-        // two buffers and a program.
+        // two buffers and a program. Filters own different numbers of objects —
+        // xBR has a second texture — so the invariant is that returning to a
+        // filter returns to its own count, not that every count is the same.
         const gl = recordingGl();
         const element = fakeCanvasElement(gl);
 
-        let canvas = new GlCanvas(element, PassthroughFilter);
-        const afterFirst = gl.live.size;
+        // What each filter owns when freshly built and alone, so every
+        // assertion in the loop below compares against a known number rather
+        // than against whatever the first visit happened to produce.
+        const expected = new Map();
+        for (const [, filterClass] of filters) {
+            const only = new GlCanvas(element, filterClass);
+            expected.set(filterClass, gl.live.size);
+            only.dispose();
+        }
 
-        for (let switches = 0; switches < 5; ++switches) {
-            const next = new GlCanvas(element, switches % 2 ? PassthroughFilter : PALCompositeFilter);
+        let canvas = new GlCanvas(element, filters[0][1]);
+        for (let switches = 1; switches <= 3 * filters.length; ++switches) {
+            const [name, filterClass] = filters[switches % filters.length];
+            const next = new GlCanvas(element, filterClass);
             canvas.dispose();
             canvas = next;
-            expect(gl.live.size).toBe(afterFirst);
+            expect(gl.live.size, `after switching to ${name}`).toBe(expected.get(filterClass));
         }
     });
 

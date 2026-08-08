@@ -2,10 +2,12 @@
 import webglDebug from "./lib/webgl-debug.js";
 import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
+import { XbrFilter } from "./video-filters/xbr-filter.js";
 
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,
     rgb: PassthroughFilter,
+    xbr: XbrFilter,
 };
 
 export function getFilterForMode(mode) {
@@ -28,19 +30,20 @@ export class Canvas {
         this.backBuffer.height = 625;
         this.backCtx = this.backBuffer.getContext("2d", { alpha: false });
         this.imageData = this.backCtx.createImageData(this.backBuffer.width, this.backBuffer.height);
-        this.canvasWidth = canvas.width;
-        this.canvasHeight = canvas.height;
+        this.canvas = canvas;
 
         this.fb32 = new Uint32Array(this.imageData.data.buffer);
     }
+
     /** Nothing to release: the 2D context owns no objects of ours. */
     dispose() {}
 
-    paint(minx, miny, maxx, maxy, _frameCount) {
+    paint(minx, miny, maxx, maxy, _frame) {
         const width = maxx - minx;
         const height = maxy - miny;
         this.backCtx.putImageData(this.imageData, 0, 0, minx, miny, width, height);
-        this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvasWidth, this.canvasHeight);
+        // Read the size each time: it can change when the window is resized.
+        this.ctx.drawImage(this.backBuffer, minx, miny, width, height, 0, 0, this.canvas.width, this.canvas.height);
     }
 }
 
@@ -79,6 +82,10 @@ export class GlCanvas {
         const program = this.filter.program;
         checkedGl.useProgram(program);
 
+        // Filters that pick their own samples want the texels they asked for,
+        // not a hardware blend of the ones either side.
+        const sampling = filterClass.getDisplayConfig().nearestSampling ? checkedGl.NEAREST : checkedGl.LINEAR;
+
         this.fb8 = new Uint8Array(width * height * 4);
         this.fb32 = new Uint32Array(this.fb8.buffer);
         this.texture = checkedGl.createTexture();
@@ -86,8 +93,8 @@ export class GlCanvas {
         checkedGl.pixelStorei(checkedGl.UNPACK_ALIGNMENT, 4);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, checkedGl.LINEAR);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, checkedGl.LINEAR);
+        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, sampling);
+        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, sampling);
         checkedGl.texImage2D(
             checkedGl.TEXTURE_2D,
             0,
@@ -118,6 +125,7 @@ export class GlCanvas {
         checkedGl.bindTexture(gl.TEXTURE_2D, this.texture);
 
         this.checkedGl = checkedGl;
+        this.viewportWidth = this.viewportHeight = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
 
@@ -142,8 +150,16 @@ export class GlCanvas {
         this.texture = this.vertexPositionBuffer = this.uvBuffer = null;
     }
 
-    paint(minx, miny, maxx, maxy, frameCount) {
+    paint(minx, miny, maxx, maxy, frame) {
         const gl = this.gl;
+        // The drawing buffer can be resized under us — modes that scale to the
+        // display do it on every window resize — and the viewport does not
+        // follow it.
+        if (gl.drawingBufferWidth !== this.viewportWidth || gl.drawingBufferHeight !== this.viewportHeight) {
+            this.viewportWidth = gl.drawingBufferWidth;
+            this.viewportHeight = gl.drawingBufferHeight;
+            gl.viewport(0, 0, this.viewportWidth, this.viewportHeight);
+        }
         // We can't specify a stride for the source, so have to use the full width.
         gl.texSubImage2D(
             gl.TEXTURE_2D,
@@ -181,7 +197,17 @@ export class GlCanvas {
             gl.bufferData(gl.ARRAY_BUFFER, this.uvFloatArray, gl.DYNAMIC_DRAW);
         }
 
-        this.filter.setUniforms({ width, height, frameCount });
+        this.filter.setUniforms({
+            width,
+            height,
+            frameCount: frame.frameCount,
+            lineGrid: frame.lineGrid,
+            // How much of the framebuffer each output pixel covers, which sets
+            // how wide an edge-smoothing ramp should be. `extent` holds texel
+            // counts; the scaling into texture coordinates above applies only
+            // to the local copies that go into the UV buffer.
+            texelsPerOutputPixel: (extent.maxx - extent.minx) / gl.drawingBufferWidth,
+        });
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }

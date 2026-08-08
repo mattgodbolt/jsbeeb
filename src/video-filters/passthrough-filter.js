@@ -16,6 +16,8 @@ export class PassthroughFilter {
             canvasTop: 8,
             visibleWidth: 896,
             visibleHeight: 600,
+            canvasWidth: 896,
+            canvasHeight: 600,
         };
     }
 
