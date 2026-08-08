@@ -180,6 +180,39 @@ describe("40 track discs", () => {
         expect(after["false:3"]).not.toBe(before["false:3"]);
     });
 
+    it("says when a disc has moved its switch", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        const switches = [];
+        drive.addEventListener("trackSwitch", (event) => switches.push(event.is40Track));
+
+        drive.setDisc(fortyTrackDisc());
+        drive.setDisc(fortyTrackDisc());
+        drive.setDisc(eightyTrackDisc());
+
+        expect(switches).toEqual([true, false]);
+    });
+
+    it("keeps a switch that has been pinned wherever a disc comes from", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.pinTracks(true);
+
+        drive.setDisc(eightyTrackDisc());
+
+        expect(drive.is40Track).toBe(true);
+        drive.seekOneTrack(1);
+        expect(drive.track).toBe(2);
+    });
+
+    it("lets a disc move the switch once it is unpinned", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.pinTracks(false);
+        drive.pinTracks(null);
+
+        drive.setDisc(fortyTrackDisc());
+
+        expect(drive.is40Track).toBe(true);
+    });
+
     it("makes the seek noise of a head crossing twice as many tracks", () => {
         const drive = driveSteppedIn(fortyTrackDisc(), 10);
         const steps = [];

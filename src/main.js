@@ -48,11 +48,13 @@ import { DiscVisualiser } from "./disc-visualiser.js";
 import { downloadBlob } from "./dom-utils.js";
 import {
     buildUrlFromParams,
+    DriveTracks,
     guessModelFromHostname,
     ParamTypes,
     parseMediaParams,
     parseQueryString,
     processAutobootParams,
+    processDriveTrackParams,
     processInputParams,
 } from "./url-params.js";
 
@@ -153,6 +155,8 @@ const paramTypes = {
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
     displayMode: ParamTypes.STRING,
+    drive0Tracks: ParamTypes.STRING,
+    drive1Tracks: ParamTypes.STRING,
 };
 
 // Parse the query string with parameter types
@@ -173,6 +177,7 @@ let econet = null;
 
 // Parse disc and tape images from query parameters
 const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
+const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 // Only assign if values are provided
 if (queryDiscImage) discImage = queryDiscImage;
@@ -387,6 +392,15 @@ if (keyMappingWarnings.length) {
     showError("applying the key mappings in the URL", keyMappingWarnings.join(" "));
 }
 
+if (driveTrackWarnings.length) {
+    showError("setting the disc drives up from the URL", driveTrackWarnings.join(" "));
+}
+
+/** A drive fixed at 80 tracks reads every image the way jsbeeb did before it could tell them apart. */
+function layoutForDrive(driveIndex) {
+    return driveTracks[driveIndex] === DriveTracks.eighty ? DiscLayout.contiguous : DiscLayout.auto;
+}
+
 function createCanvasForFilter(filterClass) {
     // Not `config`: that is the emulator's live configuration object, declared
     // at module scope and used throughout this file.
@@ -516,7 +530,7 @@ function downloadDriveData(data, name, extension) {
 
 async function loadHTMLFile(file) {
     const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
-    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData);
+    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData, undefined, layoutForDrive(0));
     // Local file: retain the image bytes for embedding in save-to-file snapshots.
     loadedDisc.setOriginalImage(imageData);
     processor.fdc.loadDisc(0, loadedDisc);
@@ -960,7 +974,7 @@ async function discSthClick(item) {
 
     popupLoading("Loading " + item);
     try {
-        const disc = await loadDiscImage(parsedQuery.disc1);
+        const disc = await loadDiscImage(parsedQuery.disc1, layoutForDrive(0));
         processor.fdc.loadDisc(0, disc);
         loadingFinished();
 
@@ -1443,7 +1457,7 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
             utils.noteEvent("google-drive", "click", item.name);
             setDisc1Image(`gd:${item.id}/${item.name}`);
             googleDriveModal.hide();
-            const ssd = await gdLoad(item);
+            const ssd = await gdLoad(item, layoutForDrive(0));
             if (ssd) processor.fdc.loadDisc(0, ssd);
         });
     }
@@ -1460,7 +1474,7 @@ for (const image of availableImages) {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         $discsModal.hide();
-        processor.fdc.loadDisc(0, await loadDiscImage(parsedQuery.disc1));
+        processor.fdc.loadDisc(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
     });
 }
 
@@ -1751,7 +1765,7 @@ const startPromise = (async () => {
     if (discImage) {
         imageLoads.push(
             (async () => {
-                const disc = await loadDiscImage(discImage);
+                const disc = await loadDiscImage(discImage, layoutForDrive(0));
                 processor.fdc.loadDisc(0, disc);
             })(),
         );
@@ -1760,7 +1774,7 @@ const startPromise = (async () => {
     if (secondDiscImage) {
         imageLoads.push(
             (async () => {
-                const disc = await loadDiscImage(secondDiscImage);
+                const disc = await loadDiscImage(secondDiscImage, layoutForDrive(1));
                 processor.fdc.loadDisc(1, disc);
             })(),
         );
@@ -2003,6 +2017,44 @@ rewindUI.updateButtonState();
 
 if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
 else document.getElementById("disc-visualiser-open").classList.add("disabled");
+
+const driveTracksToast = document.getElementById("drive-tracks-toast");
+const driveTracksQuiet = document.getElementById("drive-tracks-quiet");
+driveTracksQuiet.checked = !!window.localStorage.quietDriveTracks;
+driveTracksQuiet.addEventListener("change", () => {
+    if (driveTracksQuiet.checked) window.localStorage.quietDriveTracks = "yes";
+    else window.localStorage.removeItem("quietDriveTracks");
+});
+
+function showDriveTracks(driveIndex, drive) {
+    const item = document.querySelector(`.drive-tracks[data-drive="${driveIndex}"]`);
+    item.querySelector(".tracks").textContent = drive.is40Track ? "40" : "80";
+}
+
+function noteDriveTracks(driveIndex, drive) {
+    showDriveTracks(driveIndex, drive);
+    if (driveTracksQuiet.checked) return;
+    driveTracksToast.querySelector(".message").textContent =
+        `Drive ${driveIndex} switched to ${drive.is40Track ? "40" : "80"} track for ${drive.disc.name}.`;
+    bootstrap.Toast.getOrCreateInstance(driveTracksToast).show();
+}
+
+for (const item of document.querySelectorAll(".drive-tracks")) {
+    const driveIndex = Number(item.dataset.drive);
+    const drive = processor.fdc?.drives[driveIndex];
+    if (!drive) {
+        item.classList.add("disabled");
+        continue;
+    }
+    if (driveTracks[driveIndex] !== DriveTracks.auto) drive.pinTracks(driveTracks[driveIndex] === DriveTracks.forty);
+    item.addEventListener("click", (event) => {
+        event.preventDefault();
+        drive.is40Track = !drive.is40Track;
+        showDriveTracks(driveIndex, drive);
+    });
+    drive.addEventListener("trackSwitch", () => noteDriveTracks(driveIndex, drive));
+    showDriveTracks(driveIndex, drive);
+}
 
 function draw(now) {
     if (!running) {
