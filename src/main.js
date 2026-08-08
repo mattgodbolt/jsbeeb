@@ -1972,8 +1972,9 @@ rewindUI = new RewindUI({
 });
 rewindUI.updateButtonState();
 
-const discVisualiser = processor.fdc ? new DiscVisualiser({ fdc: processor.fdc }) : null;
-if (!discVisualiser) document.getElementById("disc-visualiser-open").classList.add("disabled");
+// The panel registers its own listeners and frame timer, so nothing needs to hold onto it.
+if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
+else document.getElementById("disc-visualiser-open").classList.add("disabled");
 
 function draw(now) {
     if (!running) {
