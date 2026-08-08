@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 
 import { BitWindow64, Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
 import * as fs from "node:fs";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("BitWindow64", function () {
     /** Shift the low `count` bits of a BigInt in, most significant first. */
@@ -295,18 +297,17 @@ describe("ADF loader tests", function () {
     });
 });
 
-describe("flushWrites marks the surface used", () => {
-    /** Most discs have no write-track callback: fdc.js discards onChange for ADF, ADM and ADL, and
-     *  discFor is usually called without one. */
-    function callbackFreeDisc() {
-        const disc = new Disc(true, new DiscConfig(), "test.ssd");
-        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
-        expect(disc.writeTrackCallback).toBeUndefined();
-        return disc;
-    }
+/** Most discs have nothing watching them: fdc.js discards onChange for ADF, ADM and ADL, and
+ *  discFor is usually called without one. */
+function unobservedDisc() {
+    const disc = new Disc(true, new DiscConfig(), "test.ssd");
+    loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
+    return disc;
+}
 
+describe("flushWrites marks the surface used", () => {
     it("notices a write to the upper side of a disc loaded as single sided", () => {
-        const disc = callbackFreeDisc();
+        const disc = unobservedDisc();
         expect(disc.isDoubleSided).toBe(false);
 
         disc.writePulses(true, 0, 0, 0xffff);
@@ -318,12 +319,92 @@ describe("flushWrites marks the surface used", () => {
     });
 
     it("extends the used tracks when written past the end of the image", () => {
-        const disc = callbackFreeDisc();
+        const disc = unobservedDisc();
         const beyond = disc.tracksUsed;
 
         disc.writePulses(false, beyond, 0, 0xffff);
         disc.flushWrites();
 
         expect(disc.tracksUsed).toBe(beyond + 1);
+    });
+});
+
+describe("track write listeners", () => {
+    it("reports each flushed track to every listener", () => {
+        const disc = unobservedDisc();
+        const seen = [];
+        disc.addTrackWriteListener((isSideUpper, trackNum, track) => seen.push([isSideUpper, trackNum, track.length]));
+        disc.addTrackWriteListener(() => seen.push("second"));
+        disc.writePulses(false, 3, 0, 0);
+        disc.flushWrites();
+
+        expect(seen).toEqual([[false, 3, disc.getTrack(false, 3).length], "second"]);
+    });
+
+    it("says nothing when there was nothing to flush", () => {
+        const disc = unobservedDisc();
+        let calls = 0;
+        disc.addTrackWriteListener(() => calls++);
+        disc.flushWrites();
+        expect(calls).toBe(0);
+    });
+
+    it("stops reporting to a listener that has been removed", () => {
+        const disc = unobservedDisc();
+        let calls = 0;
+        const listener = () => calls++;
+        disc.addTrackWriteListener(listener);
+        disc.removeTrackWriteListener(listener);
+        disc.writePulses(false, 1, 0, 0);
+        disc.flushWrites();
+        expect(calls).toBe(0);
+    });
+
+    it("keeps an image loader's own writeback working when something else watches too", () => {
+        let imageUpdates = 0;
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, () => imageUpdates++);
+        let watcherCalls = 0;
+        disc.addTrackWriteListener(() => watcherCalls++);
+
+        disc.writePulses(false, 2, 0, 0);
+        disc.flushWrites();
+
+        expect(imageUpdates).toBe(1);
+        expect(watcherCalls).toBe(1);
+    });
+});
+
+/** Leaves a sector's header pointing at nothing, which the decoder complains about. */
+function eraseDataField(track, sectorNumber) {
+    const sector = track.findSectors(() => {})[sectorNumber];
+    // dataPosBitOffset is the offset after the address mark, so back up over the mark itself.
+    const start = Math.floor(sector.dataPosBitOffset / 32) - 1;
+    for (let word = start; word < start + 256; ++word) track.pulses2Us[word] = IbmDiscFormat.fmTo2usPulses(0xff, 0xff);
+}
+
+describe("sector decoding warnings", () => {
+    it("goes to the caller rather than the console", () => {
+        const disc = unobservedDisc();
+        const track = disc.getTrack(false, 0);
+        eraseDataField(track, 4);
+
+        const console = vi.spyOn(globalThis.console, "log");
+        const warnings = [];
+        track.findSectors((message) => warnings.push(message));
+
+        expect(warnings.length).toBeGreaterThan(0);
+        expect(console).not.toHaveBeenCalled();
+    });
+
+    it("goes to the console when no caller asks for it", () => {
+        const disc = unobservedDisc();
+        const track = disc.getTrack(false, 0);
+        eraseDataField(track, 4);
+
+        const console = vi.spyOn(globalThis.console, "log").mockImplementation(() => {});
+        track.findSectors();
+
+        expect(console).toHaveBeenCalled();
     });
 });
