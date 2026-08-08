@@ -948,8 +948,8 @@ export class Disc {
         this.dirtySide = -1;
         this.dirtyTrack = -1;
         this.setTrackUsed(dirtySide, dirtyTrack);
-        if (!this.writeTrackCallback) return;
-        this.writeTrackCallback(dirtySide, dirtyTrack, this.getTrack(dirtySide, dirtyTrack));
+        if (this.writeTrackCallback)
+            this.writeTrackCallback(dirtySide, dirtyTrack, this.getTrack(dirtySide, dirtyTrack));
     }
 
     /**
