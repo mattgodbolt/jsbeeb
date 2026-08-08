@@ -3,8 +3,6 @@
 // Electron integration for jsbeeb desktop application.
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
-import { loadDiscInto } from "../fdc.js";
-
 function init(args) {
     const { loadDiscImage, loadTapeImage, loadStateFile, processor, modals, actions, config } = args;
     const api = window.electronAPI;
@@ -12,7 +10,7 @@ function init(args) {
     api.onLoadDisc(async (message) => {
         const { drive, path } = message;
         const image = await loadDiscImage(path);
-        loadDiscInto(processor.fdc, drive, image);
+        processor.fdc.loadDisc(drive, image);
     });
 
     api.onLoadTape(async (message) => {
