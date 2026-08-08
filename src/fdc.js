@@ -134,8 +134,9 @@ export class DiscType {
 // Standard sizes
 const SsdByteSize = 80 * 10 * 256; // 80 tracks, 10 sectors, 256 bytes/sector
 const DsdByteSize = SsdByteSize * 2; // Double-sided
-const AdfsLargeByteSize = 2 * 80 * 16 * 256; // Double-sided, 16 sectors/track
-const AdfsSmallByteSize = 80 * 16 * 256; // Single-sided, 16 sectors/track
+// ADFS comes in three sizes: S is 40 tracks on one side, M is 80 on one, L is 80 on both.
+const AdfsMediumByteSize = 80 * 16 * 256;
+const AdfsLargeByteSize = AdfsMediumByteSize * 2;
 
 /**
  * Set the name in a DFS disc image (SSD/DSD format)
@@ -173,7 +174,7 @@ const adlDiscType = new DiscType({
     byteSize: AdfsLargeByteSize,
 });
 
-// ADFS (Small) discs are standard ADFS (non-double) density, single sided
+// ADFS M and S: single sided, and sized as the larger of the two.
 const adfDiscType = new DiscType({
     extension: ".adf",
     loader: (disc, data, _onChange) => {
@@ -185,7 +186,7 @@ const adfDiscType = new DiscType({
     },
     isDoubleSided: false,
     isDoubleDensity: true,
-    byteSize: AdfsSmallByteSize,
+    byteSize: AdfsMediumByteSize,
 });
 
 // DSD (Double-sided disc)
