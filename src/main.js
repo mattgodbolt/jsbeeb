@@ -417,11 +417,17 @@ function putDiscIn(driveIndex, loadedDisc) {
     if (fixed === undefined && drive.tracksPerStep !== was) noteDriveTracks(driveIndex, loadedDisc.name);
 }
 
+const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
+
 function showDriveTracks(driveIndex) {
     const drive = processor.fdc?.drives[driveIndex];
     if (!drive) return;
-    const item = document.querySelector(`.drive-tracks[data-drive="${driveIndex}"] .tracks`);
-    item.textContent = drive.tracksPerStep === 2 ? "40" : "80";
+    for (const button of driveTracksButtons(driveIndex))
+        button.classList.toggle("active", tracksPerStepFor(button.dataset.tracks) === drive.tracksPerStep);
+}
+
+function driveTracksButtons(driveIndex) {
+    return document.querySelectorAll(`.drive-tracks[data-drive="${driveIndex}"] [data-tracks]`);
 }
 
 function noteDriveTracks(driveIndex, discName) {
@@ -2059,18 +2065,18 @@ driveTracksQuiet.addEventListener("change", () => {
 for (const item of document.querySelectorAll(".drive-tracks")) {
     const driveIndex = Number(item.dataset.drive);
     const drive = processor.fdc?.drives[driveIndex];
-    if (!drive) {
-        item.classList.add("disabled");
-        continue;
-    }
-    const fixed = tracksPerStepForDrive(driveIndex);
+    const fixed = drive ? tracksPerStepForDrive(driveIndex) : undefined;
     if (fixed !== undefined) drive.tracksPerStep = fixed;
-    item.addEventListener("click", (event) => {
-        event.preventDefault();
-        drive.tracksPerStep = drive.tracksPerStep === 2 ? 1 : 2;
-        showDriveTracks(driveIndex);
-    });
-    showDriveTracks(driveIndex);
+    for (const button of driveTracksButtons(driveIndex)) {
+        button.disabled = !drive;
+        button.addEventListener("click", (event) => {
+            // Setting a switch is not picking from a menu, so leave the menu where it is.
+            event.stopPropagation();
+            drive.tracksPerStep = tracksPerStepFor(button.dataset.tracks);
+            showDriveTracks(driveIndex);
+        });
+    }
+    if (drive) showDriveTracks(driveIndex);
 }
 
 function draw(now) {
