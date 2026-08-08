@@ -389,9 +389,16 @@ if (keyMappingWarnings.length) {
 function createCanvasForFilter(filterClass) {
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
-    if (filterClass.requiresGl() && !newCanvas.isWebGl()) {
-        const config = filterClass.getDisplayConfig();
-        showError(`enabling ${config.name} mode`, `${config.name} requires WebGL. Using standard display instead.`);
+    // Test which filter was actually built, not merely whether we got WebGL: a
+    // filter can decline a context that works perfectly well for other modes,
+    // in which case bestCanvas quietly gives us an unfiltered GL canvas.
+    if (newCanvas.filterClass !== filterClass) {
+        // Not `config`: that is the emulator's live configuration object.
+        const displayConfig = filterClass.getDisplayConfig();
+        showError(
+            `enabling ${displayConfig.name} mode`,
+            `${displayConfig.name} is not available on this device. Using standard display instead.`,
+        );
     }
 
     return newCanvas;
@@ -412,11 +419,14 @@ function swapCanvas(newFilterClass) {
         newCanvas.paint(minx, miny, maxx, maxy, this.frameCount);
     };
     canvas = newCanvas;
-    displayModeFilter = newFilterClass;
+    // Follow the filter we ended up with, not the one we asked for: the monitor
+    // picture and the canvas geometry both come from its display config.
+    displayModeFilter = newCanvas.filterClass;
     window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
 }
 
 let canvas = createCanvasForFilter(displayModeFilter);
+displayModeFilter = canvas.filterClass;
 
 video = new Video(
     model.isMaster,

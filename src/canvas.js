@@ -13,8 +13,9 @@ export function getFilterForMode(mode) {
 }
 
 export class Canvas {
-    isWebGl() {
-        return false;
+    /** The 2D canvas draws the framebuffer as-is, which is what this filter is. */
+    get filterClass() {
+        return PassthroughFilter;
     }
 
     constructor(canvas) {
@@ -46,8 +47,9 @@ export class Canvas {
 const width = 1024;
 const height = 1024;
 export class GlCanvas {
-    isWebGl() {
-        return true;
+    /** The filter actually built, which may not be the one that was asked for. */
+    get filterClass() {
+        return this.filter.constructor;
     }
 
     constructor(canvas, filterClass) {
@@ -189,11 +191,20 @@ export function bestCanvas(canvas, filterClass) {
     try {
         return new GlCanvas(canvas, filterClass);
     } catch (e) {
-        console.log("Unable to use OpenGL: " + e);
-        if (filterClass.requiresGl()) {
-            const config = filterClass.getDisplayConfig();
-            console.warn(`${config.name} requires WebGL. Falling back to standard 2D canvas.`);
+        // Either WebGL is unavailable or this particular filter declined it.
+        console.log(`Unable to use ${filterClass.getDisplayConfig().name} with WebGL: ${e}`);
+    }
+
+    // A canvas that has handed out a WebGL context can never hand out a 2D one,
+    // so if the failure came from the filter rather than from WebGL itself, the
+    // 2D fallback below would throw and take the emulator with it.
+    if (filterClass !== PassthroughFilter) {
+        try {
+            return new GlCanvas(canvas, PassthroughFilter);
+        } catch (e) {
+            console.log("Unable to fall back to the passthrough filter: " + e);
         }
     }
+
     return new Canvas(canvas);
 }

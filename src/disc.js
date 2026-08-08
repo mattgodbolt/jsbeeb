@@ -257,7 +257,7 @@ class Sector {
      * @param {Track} track
      * @param {boolean} isMfm
      * @param {Number} idPosBitOffset
-     * @param {function(string): void} warn
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      */
     constructor(track, isMfm, idPosBitOffset, warn = console.log) {
         this.track = track;
@@ -428,6 +428,7 @@ class Track {
 
     /**
      * Debug functionality to try and interpret the track.
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      * @returns {Sector[]}
      */
     findSectors(warn = console.log) {
@@ -440,6 +441,7 @@ class Track {
     }
 
     /**
+     * @param {function(string): void} [warn] where to report anomalies; the console by default
      * @returns {Sector[]}
      */
     findSectorIds(warn = console.log) {
@@ -627,7 +629,7 @@ export function loadSsd(disc, data, isDsd, onChange) {
         // Create a dataCopy large enough for all the sectors and tracks.
         const dataCopy = new Uint8Array(maxSize);
         dataCopy.set(data);
-        disc.setWriteTrackCallback(
+        disc.addTrackWriteListener(
             /** @param {Track} trackObj  */
             (side, trackNum, trackObj) => {
                 const trackOffset =
@@ -811,7 +813,6 @@ export class Disc {
         this.tracksUsed = 0;
         this.isDoubleSided = false;
 
-        this.writeTrackCallback = undefined;
         this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
 
@@ -837,10 +838,6 @@ export class Disc {
         this._originalImageCrc32 = null;
 
         this.initSurface(0);
-    }
-
-    setWriteTrackCallback(callback) {
-        this.writeTrackCallback = callback;
     }
 
     /** @param {function(boolean, Number, Track): void} listener called once per flushed track */
@@ -963,7 +960,6 @@ export class Disc {
         const trackObj = this.getTrack(dirtySide, dirtyTrack);
         this.setTrackUsed(dirtySide, dirtyTrack);
         for (const listener of this._trackWriteListeners) listener(dirtySide, dirtyTrack, trackObj);
-        if (this.writeTrackCallback) this.writeTrackCallback(dirtySide, dirtyTrack, trackObj);
     }
 
     /**

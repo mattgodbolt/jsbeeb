@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { GlCanvas, Canvas } from "../../src/canvas.js";
+import { GlCanvas, Canvas, bestCanvas } from "../../src/canvas.js";
+import PAL_FRAG_SHADER from "../../src/video-filters/shaders/pal-composite.frag.glsl?raw";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { PALCompositeFilter } from "../../src/video-filters/pal-composite.js";
 
@@ -130,6 +131,19 @@ describe("GlCanvas", () => {
 
         expect(() => new filterClass(gl)).toThrow(/Failed to link/);
         expect([...gl.live]).toEqual([]);
+    });
+});
+
+describe("bestCanvas", () => {
+    it("falls back to the passthrough filter when the one asked for will not build", () => {
+        // The 2D fallback is unreachable once a WebGL context exists, so a
+        // filter that fails to build has to be replaced on the context we have.
+        const gl = recordingGl();
+        const sources = new Map();
+        gl.shaderSource = (shader, source) => sources.set(shader, source);
+        gl.getShaderParameter = (shader) => sources.get(shader) !== PAL_FRAG_SHADER;
+
+        expect(bestCanvas(fakeCanvasElement(gl), PALCompositeFilter).filterClass).toBe(PassthroughFilter);
     });
 });
 

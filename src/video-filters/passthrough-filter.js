@@ -2,12 +2,9 @@
 
 import VERT_SHADER from "./shaders/passthrough.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/passthrough.frag.glsl?raw";
+import { compileProgram } from "./shader-program.js";
 
 export class PassthroughFilter {
-    static requiresGl() {
-        return false;
-    }
-
     static getDisplayConfig() {
         return {
             name: "RGB Monitor",
@@ -24,54 +21,10 @@ export class PassthroughFilter {
 
     constructor(gl) {
         this.gl = gl;
-        this.program = null;
-        this.locations = {};
-
-        this._init();
-    }
-
-    _init() {
-        const gl = this.gl;
-
-        const vertexShader = this._compileShader(gl.VERTEX_SHADER, VERT_SHADER);
-        let fragmentShader = null;
-        try {
-            fragmentShader = this._compileShader(gl.FRAGMENT_SHADER, FRAG_SHADER);
-
-            this.program = gl.createProgram();
-            gl.attachShader(this.program, vertexShader);
-            gl.attachShader(this.program, fragmentShader);
-            gl.linkProgram(this.program);
-
-            if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-                const info = gl.getProgramInfoLog(this.program);
-                this.dispose();
-                throw new Error("Failed to link passthrough shader program: " + info);
-            }
-
-            this.locations.tex = gl.getUniformLocation(this.program, "tex");
-        } finally {
-            // Once linked the program holds its own reference, so releasing ours here means
-            // deleting the program later frees the shaders too. If we never got that far, ours
-            // was the only reference and they go now.
-            gl.deleteShader(vertexShader);
-            gl.deleteShader(fragmentShader);
-        }
-    }
-
-    _compileShader(type, source) {
-        const gl = this.gl;
-        const shader = gl.createShader(type);
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            const error = gl.getShaderInfoLog(shader);
-            gl.deleteShader(shader);
-            throw new Error("Shader compilation failed: " + error);
-        }
-
-        return shader;
+        this.program = compileProgram(gl, VERT_SHADER, FRAG_SHADER, "passthrough");
+        this.locations = {
+            tex: gl.getUniformLocation(this.program, "tex"),
+        };
     }
 
     /** Release the GL objects this filter owns. */
