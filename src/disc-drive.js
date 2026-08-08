@@ -303,6 +303,8 @@ export class DiscDrive extends BaseDiscDrive {
      */
     setDisc(disc) {
         this._disc = disc;
+        // A user swapping media would also flick the drive's 40/80 switch to suit it.
+        if (disc) this._is40Track = disc.is40Track;
     }
 
     get indexPulse() {
@@ -347,13 +349,16 @@ export class DiscDrive extends BaseDiscDrive {
      * Notify that an overall seek is happening to a particular track. Purely informational.
      */
     notifySeek(newTrack) {
-        this.notifySeekAmount(newTrack - this._track);
+        // Controllers count in the tracks the format has, which is half of the drive's when double stepping.
+        this.notifySeekAmount(newTrack - (this._is40Track ? this._track >>> 1 : this._track));
     }
 
     /**
      * Notify that an overall seek is happening by some delta smount. Purely informational.
      */
     notifySeekAmount(delta) {
+        // The step drives the seek noise, so it counts the tracks the head crosses.
+        if (this._is40Track) delta *= 2;
         this.dispatchEvent(new StepEvent(delta));
     }
 
@@ -362,11 +367,13 @@ export class DiscDrive extends BaseDiscDrive {
      */
     _selectTrack(track) {
         this._checkTrackNeedsWrite();
+        // Double stepping starts at zero and moves in twos, so it stops one track short of the end.
+        const lastTrack = IbmDiscFormat.tracksPerDisc - (this._is40Track ? 2 : 1);
         if (track < 0) {
             track = 0;
             console.log("Clang! disc head stopped at track 0");
-        } else if (track >= IbmDiscFormat.tracksPerDisc) {
-            track = IbmDiscFormat.tracksPerDisc - 1;
+        } else if (track > lastTrack) {
+            track = lastTrack;
             console.log("Clang! disc head stopper at track max");
         }
         const fraction = this.positionFraction;
@@ -375,7 +382,11 @@ export class DiscDrive extends BaseDiscDrive {
     }
 
     _checkTrackNeedsWrite() {
-        if (this.disc) this.disc.flushWrites();
+        if (!this.disc) return;
+        const written = this.disc.flushWrites();
+        // A 48 tpi head spans both 96 tpi tracks of its band, so a write erases the neighbour too.
+        if (written && this._is40Track)
+            this.disc.copyTrack(written.isSideUpper, written.trackNum, written.trackNum ^ 1);
     }
 
     snapshotState() {

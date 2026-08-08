@@ -89,6 +89,7 @@ export function loadHfe(disc, data, onChange) {
     let expandShift = 0;
     if (disc.config.expandTo80 && numTracks * 2 <= IbmDiscFormat.tracksPerDisc) {
         expandShift = 1;
+        disc.is40Track = true;
         console.log("Expanding 40 tracks to 80");
     }
 

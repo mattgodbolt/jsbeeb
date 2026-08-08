@@ -1,6 +1,15 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { BitWindow64, Disc, DiscConfig, IbmDiscFormat, loadSsd, loadAdf, toSsdOrDsd } from "../../src/disc.js";
+import {
+    BitWindow64,
+    Disc,
+    DiscConfig,
+    IbmDiscFormat,
+    loadSsd,
+    loadAdf,
+    ssdOrDsdShortfalls,
+    toSsdOrDsd,
+} from "../../src/disc.js";
 import * as fs from "node:fs";
 
 afterEach(() => vi.restoreAllMocks());
@@ -282,6 +291,86 @@ describe(
     },
 );
 
+const SectorSize = 256;
+const SectorsPerTrack = 10;
+const TrackSize = SectorSize * SectorsPerTrack;
+
+/** An image where every sector says which logical track and sector it holds. */
+function numberedImage(numTracks, numSides = 1) {
+    const data = new Uint8Array(numTracks * numSides * TrackSize);
+    for (let offset = 0; offset < data.length; offset += SectorSize) {
+        const sector = (offset / SectorSize) % SectorsPerTrack;
+        const track = Math.floor(offset / TrackSize / numSides);
+        data.set([track, sector, Math.floor(offset / TrackSize) % numSides], offset);
+    }
+    return data;
+}
+
+function fortyTrackDisc(data, isDsd = false, onChange = null) {
+    const config = new DiscConfig();
+    config.expandTo80 = true;
+    return loadSsd(new Disc(true, config, "test.ssd"), data, isDsd, onChange);
+}
+
+describe("40 track SSD images", () => {
+    it("puts each logical track on every other physical track", () => {
+        const disc = fortyTrackDisc(numberedImage(40));
+
+        expect(disc.is40Track).toBe(true);
+        expect(disc.tracksUsed).toBe(79);
+        for (const [logical, physical] of [
+            [0, 0],
+            [1, 2],
+            [39, 78],
+        ]) {
+            const sectors = disc.getTrack(false, physical).findSectors();
+            expect(sectors.length).toBe(SectorsPerTrack);
+            expect(sectors[0].trackNumber).toBe(logical);
+            expect([...sectors[0].sectorData.slice(0, 2)]).toEqual([logical, 0]);
+        }
+    });
+
+    it("leaves the tracks in between unformatted", () => {
+        const disc = fortyTrackDisc(numberedImage(40));
+
+        for (const physical of [1, 3, 77]) expect(disc.getTrack(false, physical).findSectors()).toEqual([]);
+    });
+
+    it("saves back to the image it was loaded from", () => {
+        for (const numSides of [1, 2]) {
+            const image = numberedImage(40, numSides);
+            expect(toSsdOrDsd(fortyTrackDisc(image, numSides === 2))).toEqual(image);
+        }
+    });
+
+    it("ignores the padding of an image sized for 80 tracks", () => {
+        const padded = new Uint8Array(80 * TrackSize);
+        padded.set(numberedImage(40));
+
+        expect(fortyTrackDisc(padded).tracksUsed).toBe(79);
+    });
+
+    it("reaches past the 40th track for an image with data there", () => {
+        expect(fortyTrackDisc(numberedImage(41)).tracksUsed).toBe(81);
+    });
+
+    it("stops at the surface's outer edge however much data it is given", () => {
+        expect(fortyTrackDisc(numberedImage(50)).tracksUsed).toBe(83);
+    });
+
+    it("keeps an image loader's writeback in logical order", () => {
+        const image = numberedImage(40);
+        let written = null;
+        const disc = fortyTrackDisc(image, false, (data) => (written = data));
+
+        // Rewriting physical track 4 rewrites logical track 2, wherever the image keeps it.
+        disc.writePulses(false, 4, 0, disc.readPulses(false, 4, 0));
+        disc.flushWrites();
+
+        expect(written.slice(0, image.length)).toEqual(image);
+    });
+});
+
 describe("ADF loader tests", function () {
     it("should load a somewhat blank ADFS disc", () => {
         const data = new Uint8Array(327680);
@@ -411,6 +500,57 @@ describe("track write listeners", () => {
 
         expect(image).not.toBeNull();
         expect(image.slice(0, sectorsPerTrack * sectorSize)).toEqual(data);
+    });
+});
+
+describe("copying a track", () => {
+    it("tells the listeners which track it wrote", () => {
+        const disc = unobservedDisc();
+        const seen = [];
+        disc.addTrackWriteListener((isSideUpper, trackNum) => seen.push([isSideUpper, trackNum]));
+
+        disc.copyTrack(false, 0, 1);
+
+        expect(seen).toEqual([[false, 1]]);
+        expect(disc.getTrack(false, 1).pulses2Us).toEqual(disc.getTrack(false, 0).pulses2Us);
+        expect(disc.getTrack(false, 1).length).toBe(disc.getTrack(false, 0).length);
+    });
+
+    it("offers the copy to the next snapshot", () => {
+        const disc = unobservedDisc();
+        const before = disc.snapshotState().tracks;
+
+        disc.copyTrack(false, 0, 1);
+
+        // Without this the copy is left behind at the next rewind.
+        expect(disc.snapshotState().tracks["false:1"]).not.toBe(before["false:1"]);
+    });
+});
+
+describe("SSD and DSD shortfalls", () => {
+    /** A 40 track format laid over an 80 track one, which is what *FORM40 does without fat tracks. */
+    function mongrelDisc() {
+        const config = new DiscConfig();
+        const disc = new Disc(true, config, "test.ssd");
+        loadSsd(disc, new Uint8Array(80 * TrackSize).fill(0x11), false, null);
+        config.expandTo80 = true;
+        loadSsd(disc, new Uint8Array(40 * TrackSize).fill(0x22), false, null);
+        return disc;
+    }
+
+    it("counts the sectors two tracks disagree about", () => {
+        // Every odd logical track survives on its old physical track and on the double stepped one.
+        const oddTracks = 20;
+        expect(ssdOrDsdShortfalls(mongrelDisc())).toEqual([
+            `${oddTracks * SectorsPerTrack} sectors claimed twice with differing contents`,
+        ]);
+    });
+
+    it("says nothing about the matching halves of a fat track", () => {
+        const disc = fortyTrackDisc(numberedImage(40));
+        disc.copyTrack(false, 0, 1);
+
+        expect(ssdOrDsdShortfalls(disc)).toEqual([]);
     });
 });
 

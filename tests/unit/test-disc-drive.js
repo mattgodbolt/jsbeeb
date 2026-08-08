@@ -1,8 +1,21 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 
-import { Disc, IbmDiscFormat } from "../../src/disc.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadSsd } from "../../src/disc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
+
+const SectorsPerTrack = 10;
+const SectorSize = 256;
+
+function ssdDisc(numTracks, is40Track) {
+    const config = new DiscConfig();
+    config.expandTo80 = is40Track;
+    const data = new Uint8Array(numTracks * SectorsPerTrack * SectorSize).fill(0x55);
+    return loadSsd(new Disc(true, config, "test.ssd"), data, false, null);
+}
+
+const eightyTrackDisc = () => ssdDisc(80, false);
+const fortyTrackDisc = () => ssdDisc(40, true);
 
 describe("Disc drive tests", function () {
     it("starts empty", () => {
@@ -64,6 +77,16 @@ describe("Disc drive tests", function () {
         const drive = new DiscDrive(0, scheduler);
         expect(drive.indexPulse).toBe(true);
     });
+    it("steps one track at a time for an 80 track disc", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.setDisc(eightyTrackDisc());
+
+        drive.seekOneTrack(1);
+        drive.seekOneTrack(1);
+
+        expect(drive.track).toBe(2);
+    });
+
     it("asserts index periodically with a spinning disc", () => {
         const scheduler = new Scheduler();
         const drive = new DiscDrive(0, scheduler);
@@ -81,5 +104,90 @@ describe("Disc drive tests", function () {
             previousIndex = drive.indexPulse;
         }
         expect(risingEdges).toBe((rpm / 60) * testSeconds);
+    });
+});
+
+describe("40 track discs", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    /** @returns {DiscDrive} a drive holding `disc`, stepped `steps` times towards the centre. */
+    function driveSteppedOut(disc, steps) {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.setDisc(disc);
+        for (let step = 0; step < steps; ++step) drive.seekOneTrack(1);
+        return drive;
+    }
+
+    it("double steps for a disc that was written by a 40 track drive", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.setDisc(fortyTrackDisc());
+
+        drive.seekOneTrack(1);
+        drive.seekOneTrack(1);
+
+        expect(drive.track).toBe(4);
+    });
+
+    it("goes back to single stepping for the next 80 track disc", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+        drive.setDisc(fortyTrackDisc());
+        drive.setDisc(eightyTrackDisc());
+
+        drive.seekOneTrack(1);
+
+        expect(drive.track).toBe(1);
+    });
+
+    it("stops on the outermost track double stepping can reach", () => {
+        vi.spyOn(globalThis.console, "log").mockImplementation(() => {});
+        const drive = driveSteppedOut(fortyTrackDisc(), IbmDiscFormat.tracksPerDisc);
+
+        expect(drive.track).toBe(IbmDiscFormat.tracksPerDisc - 2);
+    });
+
+    it("writes over the track its head also covers", () => {
+        const disc = fortyTrackDisc();
+        const drive = driveSteppedOut(disc, 1);
+        drive.writePulses(0x12345678);
+
+        drive.seekOneTrack(1);
+
+        expect(disc.readPulses(false, 3, 0)).toBe(0x12345678);
+        expect(disc.getTrack(false, 3).length).toBe(disc.getTrack(false, 2).length);
+    });
+
+    it("leaves the neighbouring track alone at 80 tracks", () => {
+        const disc = eightyTrackDisc();
+        const drive = driveSteppedOut(disc, 2);
+        const neighbour = disc.readPulses(false, 3, 0);
+        drive.writePulses(0x12345678);
+
+        drive.seekOneTrack(1);
+
+        expect(disc.readPulses(false, 3, 0)).toBe(neighbour);
+    });
+
+    it("offers both halves of a fat track to the next snapshot", () => {
+        const disc = fortyTrackDisc();
+        const drive = driveSteppedOut(disc, 1);
+        const before = disc.snapshotState().tracks;
+        drive.writePulses(0x12345678);
+
+        drive.seekOneTrack(1);
+
+        const after = disc.snapshotState().tracks;
+        expect(after["false:2"]).not.toBe(before["false:2"]);
+        expect(after["false:3"]).not.toBe(before["false:3"]);
+    });
+
+    it("makes the seek noise of a head crossing twice as many tracks", () => {
+        const drive = driveSteppedOut(fortyTrackDisc(), 10);
+        const steps = [];
+        drive.addEventListener("step", (event) => steps.push(event.stepAmount));
+
+        drive.notifySeek(20);
+
+        // Ten of the tracks the controller counts in, which is twenty of the surface's.
+        expect(steps).toEqual([20]);
     });
 });

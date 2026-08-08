@@ -553,6 +553,26 @@ class SsdFormat {
     static get tracksPerDisc() {
         return 80;
     }
+
+    static get fortyTracksPerDisc() {
+        return 40;
+    }
+
+    // 40 track media has room past its 40th track, and some formats and protections reached for it.
+    static get maxFortyTracksPerDisc() {
+        return 42;
+    }
+
+    static get trackSize() {
+        return SsdFormat.sectorSize * SsdFormat.sectorsPerTrack;
+    }
+}
+
+/** @returns {Number} how many logical tracks of `data` hold anything, ignoring a run of trailing zeros */
+function tracksWithData(data, numSides) {
+    let lastUsed = data.length - 1;
+    while (lastUsed >= 0 && data[lastUsed] === 0) lastUsed--;
+    return Math.floor(lastUsed / (SsdFormat.trackSize * numSides)) + 1;
 }
 
 /**
@@ -576,10 +596,20 @@ export function loadSsd(disc, data, isDsd, onChange) {
         throw new Error("SSD file is too large");
     }
 
+    // A 40 track format is written by a 48 tpi head, so it occupies every other 96 tpi track.
+    disc.is40Track = disc.config.expandTo80;
+    const trackStep = disc.is40Track ? 2 : 1;
+    const numTracks = disc.is40Track
+        ? Math.min(
+              SsdFormat.maxFortyTracksPerDisc,
+              Math.max(SsdFormat.fortyTracksPerDisc, tracksWithData(data, numSides)),
+          )
+        : SsdFormat.tracksPerDisc;
+
     let offset = 0;
-    for (let track = 0; track < SsdFormat.tracksPerDisc; ++track) {
+    for (let track = 0; track < numTracks; ++track) {
         for (let side = 0; side < numSides; ++side) {
-            const trackBuilder = disc.buildTrack(side === 1, track);
+            const trackBuilder = disc.buildTrack(side === 1, track * trackStep);
             // Sync pattern at start of track, as the index pulse starts, aka GAP 5.
             trackBuilder
                 .appendRepeatFmByte(0xff, IbmDiscFormat.stdGap1FFs)
@@ -631,12 +661,10 @@ export function loadSsd(disc, data, isDsd, onChange) {
         dataCopy.set(data);
         disc.addTrackWriteListener(
             /** @param {Track} trackObj  */
-            (side, trackNum, trackObj) => {
-                const trackOffset =
-                    SsdFormat.sectorSize * SsdFormat.sectorsPerTrack * (trackNum * numSides + (side ? 1 : 0));
+            (side, _trackNum, trackObj) => {
                 for (const sector of trackObj.findSectors()) {
-                    if (sectorShortfall(sector, trackNum)) continue;
-                    dataCopy.set(sector.sectorData, trackOffset + sector.sectorNumber * SsdFormat.sectorSize);
+                    if (sectorShortfall(sector)) continue;
+                    dataCopy.set(sector.sectorData, ssdOffsetOf(sector, side, numSides));
                 }
                 onChange(dataCopy);
             },
@@ -721,16 +749,31 @@ export function loadAdf(disc, data, isDsd) {
 }
 
 /** Why a sector will not fit in an SSD or DSD image, or null if it will. */
-function sectorShortfall(sector, trackNum) {
+function sectorShortfall(sector) {
     if (sector.hasDataCrcError || sector.hasHeaderCrcError) return "with a CRC error";
     // A header whose data mark never arrives leaves the sector with nothing to write.
     if (!sector.sectorData) return "with no data";
     if (sector.sectorNumber >= SsdFormat.sectorsPerTrack)
         return `numbered past the ${SsdFormat.sectorsPerTrack} a track holds`;
     if (sector.sectorData.length !== SsdFormat.sectorSize) return `not ${SsdFormat.sectorSize} bytes`;
-    if (trackNum >= SsdFormat.tracksPerDisc) return `past track ${SsdFormat.tracksPerDisc}`;
+    if (sector.trackNumber >= SsdFormat.tracksPerDisc) return `past track ${SsdFormat.tracksPerDisc}`;
     return null;
 }
+
+/**
+ * Where a sector belongs in an SSD or DSD image. The track comes from the sector's own header,
+ * not from where it sits on the surface, so a double stepped disc still saves contiguously.
+ *
+ * @param {Sector} sector
+ * @param {boolean} isSideUpper
+ * @param {Number} numSides
+ */
+function ssdOffsetOf(sector, isSideUpper, numSides) {
+    const track = sector.trackNumber * numSides + (isSideUpper ? 1 : 0);
+    return track * SsdFormat.trackSize + sector.sectorNumber * SsdFormat.sectorSize;
+}
+
+const sameBytes = (a, b) => a.length === b.length && a.every((byte, index) => byte === b[index]);
 
 /**
  * SSD and DSD images hold sector contents and nothing else, so anything a DFS sector could not
@@ -741,11 +784,21 @@ function sectorShortfall(sector, trackNum) {
  */
 export function ssdOrDsdShortfalls(disc) {
     const counts = new Map();
+    const countOne = (shortfall) => counts.set(shortfall, (counts.get(shortfall) ?? 0) + 1);
+    const claimants = new Map();
     for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
         for (const upper of disc.isDoubleSided ? [false, true] : [false]) {
             for (const sector of disc.getTrack(upper, trackNum).findSectors()) {
-                const shortfall = sectorShortfall(sector, trackNum);
-                if (shortfall) counts.set(shortfall, (counts.get(shortfall) ?? 0) + 1);
+                const shortfall = sectorShortfall(sector);
+                if (shortfall) {
+                    countOne(shortfall);
+                    continue;
+                }
+                const offset = ssdOffsetOf(sector, upper, disc.isDoubleSided ? 2 : 1);
+                const claimant = claimants.get(offset);
+                if (!claimant) claimants.set(offset, sector.sectorData);
+                // The mirrored halves of a fat track claim the same bytes and agree on them.
+                else if (!sameBytes(claimant, sector.sectorData)) countOne("claimed twice with differing contents");
             }
         }
     }
@@ -771,22 +824,19 @@ export function toSsdOrDsd(disc, { force = false } = {}) {
             );
     }
     const numSides = disc.isDoubleSided ? 2 : 1;
-    const result = new Uint8Array(
-        numSides * SsdFormat.tracksPerDisc * SsdFormat.sectorsPerTrack * SsdFormat.sectorSize,
-    );
-    let offset = 0;
+    const result = new Uint8Array(numSides * SsdFormat.tracksPerDisc * SsdFormat.trackSize);
+    let numTracks = 0;
     for (let trackNum = 0; trackNum < disc.tracksUsed; ++trackNum) {
         for (let side = 0; side < numSides; ++side) {
             const trackObj = disc.getTrack(side === 1, trackNum);
             for (const sector of trackObj.findSectors()) {
-                if (sectorShortfall(sector, trackNum)) continue;
-                const sectorOffset = offset + sector.sectorNumber * SsdFormat.sectorSize;
-                for (let x = 0; x < SsdFormat.sectorSize; ++x) result[sectorOffset + x] = sector.sectorData[x];
+                if (sectorShortfall(sector)) continue;
+                result.set(sector.sectorData, ssdOffsetOf(sector, side === 1, numSides));
+                numTracks = Math.max(numTracks, sector.trackNumber + 1);
             }
-            offset += SsdFormat.sectorsPerTrack * SsdFormat.sectorSize;
         }
     }
-    return result.slice(0, offset);
+    return result.slice(0, numTracks * numSides * SsdFormat.trackSize);
 }
 
 export class Disc {
@@ -811,6 +861,8 @@ export class Disc {
         this.dirtyTrack = -1;
         this.tracksUsed = 0;
         this.isDoubleSided = false;
+        // Whether the surface holds a 48 tpi layout, which a drive reads by double stepping.
+        this.is40Track = false;
 
         this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
@@ -945,10 +997,11 @@ export class Disc {
         // console.log(`wrote to ${track}:${position * 32}`);
     }
 
+    /** @returns {?{isSideUpper: boolean, trackNum: Number}} the track written, if there was one */
     flushWrites() {
         if (!this.isDirty) {
             if (this.dirtySide !== -1 || this.dirtyTrack !== -1) throw new Error("Bad state in disc dirty tracking");
-            return;
+            return null;
         }
 
         const dirtySide = this.dirtySide;
@@ -959,6 +1012,24 @@ export class Disc {
         const trackObj = this.getTrack(dirtySide, dirtyTrack);
         this.setTrackUsed(dirtySide, dirtyTrack);
         for (const listener of this._trackWriteListeners) listener(dirtySide, dirtyTrack, trackObj);
+        return { isSideUpper: dirtySide, trackNum: dirtyTrack };
+    }
+
+    /**
+     * @param {boolean} isSideUpper
+     * @param {Number} fromTrack
+     * @param {Number} toTrack
+     */
+    copyTrack(isSideUpper, fromTrack, toTrack) {
+        const source = this.getTrack(isSideUpper, fromTrack);
+        const destination = this.getTrack(isSideUpper, toTrack);
+        destination.pulses2Us.set(source.pulses2Us);
+        destination.length = source.length;
+        const dirtyKey = toTrack | (isSideUpper ? 0x100 : 0);
+        this._snapshotDirtyTracks.add(dirtyKey);
+        this._everDirtyTracks.add(dirtyKey);
+        this.setTrackUsed(isSideUpper, toTrack);
+        for (const listener of this._trackWriteListeners) listener(isSideUpper, toTrack, destination);
     }
 
     /**
