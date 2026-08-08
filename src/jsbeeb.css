@@ -484,9 +484,8 @@ small {
   flex: none;
 }
 
-/* A disc's name is the one thing here with no bound on its width, so it yields before anything
-   else does and keeps the full name on hover. */
-.disc-name {
+/* The only item in the header with no bound on its width, so it is the one that yields. */
+#disc-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -561,8 +560,8 @@ small {
   color: #ccc;
   font-family: consolas, monospace;
   font-size: 11px;
-  /* These lines change every frame; wrapping one would resize the panel under the pointer. */
-  height: 14px;
+  /* Rewritten every frame, so the height must not depend on the content. */
+  min-height: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

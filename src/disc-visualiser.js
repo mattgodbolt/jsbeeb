@@ -520,8 +520,9 @@ export class DiscVisualiser {
         this._markActive("[data-side]", (button) => (button.dataset.side === "1") === this._isSideUpper);
         this._markActive("[data-view]", (button) => button.dataset.view === this._view);
 
-        setText(this.nameElem, disc?.name ?? "");
-        this.nameElem.title = disc?.name ?? "";
+        const name = disc?.name ?? "";
+        setText(this.nameElem, name);
+        if (this.nameElem.title !== name) this.nameElem.title = name;
         if (!disc) {
             setText(this.statusElem, `Drive ${this._driveIndex}: no disc`);
         } else {
