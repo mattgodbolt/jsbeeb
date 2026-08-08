@@ -410,9 +410,8 @@ describe("telling a 40 track image from an 80 track one", () => {
         expect(is40Track(garbage)).toBe(false);
     });
 
-    it("wants the files in the order DFS keeps them", () => {
-        expect(is40Track(catalogued(400, [100, 50, 50, 2]))).toBe(true);
-        expect(is40Track(catalogued(400, [2, 50, 100]))).toBe(false);
+    it("does not mind a catalogue whose files are in an order DFS would not have written", () => {
+        expect(is40Track(catalogued(400, [2, 50, 100]))).toBe(true);
     });
 
     it("turns down an image with data past where 40 tracks reach", () => {

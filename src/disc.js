@@ -573,19 +573,12 @@ function tracksWithData(data, numSides) {
     return Math.floor(lastUsed / (SsdFormat.trackSize * numSides)) + 1;
 }
 
-// The DFS catalogue is the first two sectors of a side. Sector 1 holds how many files there are,
-// how many sectors the disc has, and the file entries, which run in descending order of start
-// sector.
+// The DFS catalogue is the first two sectors of a side. Sector 1 holds how many files there are and
+// how many sectors the disc has.
 const DfsEntryCountOffset = 0x105;
 const DfsSectorCountOffset = 0x106;
-const DfsFirstEntryOffset = 0x108;
 const DfsEntrySize = 8;
 const DfsMaxEntries = 31;
-
-function dfsStartSector(data, entry) {
-    const offset = DfsFirstEntryOffset + entry * DfsEntrySize;
-    return ((data[offset + 6] & 3) << 8) | data[offset + 7];
-}
 
 /**
  * Whether an SSD or DSD image was written by a 40 track drive. Only its catalogue can say: images
@@ -601,10 +594,6 @@ export function sniffDfsLayout(data, isDsd) {
     const entryBytes = data[DfsEntryCountOffset];
     if (entryBytes % DfsEntrySize !== 0 || entryBytes > DfsMaxEntries * DfsEntrySize)
         return contiguous(`its catalogue claims ${entryBytes} bytes of file entries`);
-    // Empty files leave two entries on one sector, so equal neighbours are in order.
-    for (let entry = 1; entry < entryBytes / DfsEntrySize; ++entry)
-        if (dfsStartSector(data, entry) > dfsStartSector(data, entry - 1))
-            return contiguous("its catalogue entries do not run in descending order");
     const sectors = ((data[DfsSectorCountOffset] & 3) << 8) | data[DfsSectorCountOffset + 1];
     const reason = `its catalogue claims ${sectors} sectors`;
     const fortyTrackSectors = (SsdFormat.tracksPerDisc / 2) * SsdFormat.sectorsPerTrack;
