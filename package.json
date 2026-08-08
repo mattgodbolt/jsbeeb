@@ -54,10 +54,6 @@
     "electron-builder": "^26.15.3",
     "electron-store": "^11.0.2"
   },
-  "//overrides": "brace-expansion forced to the patched version for GHSA-mh99-v99m-4gvg; the electron-builder dependency chain still pins vulnerable versions. Remove once `npm audit` is clean without it.",
-  "overrides": {
-    "brace-expansion": "^5.0.8"
-  },
   "license": "GPL-3.0-or-later",
   "build": {
     "appId": "org.godbolt.bbc",
