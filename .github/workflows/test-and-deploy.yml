@@ -77,12 +77,13 @@ jobs:
       - name: Build distribution
         run: |
           make dist
-      - uses: jakejarvis/s3-sync-action@master
+      - name: Deploy to S3
         if: github.ref == 'refs/heads/main'
-        with:
-          args: --cache-control max-age=30 --metadata-directive REPLACE
         env:
-          AWS_S3_BUCKET: bbc.xania.org
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          SOURCE_DIR: "dist"
+          AWS_REGION: us-east-1
+        run: |
+          aws s3 sync dist s3://bbc.xania.org \
+            --no-progress \
+            --cache-control max-age=30 --metadata-directive REPLACE
