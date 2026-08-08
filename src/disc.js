@@ -947,10 +947,9 @@ export class Disc {
         this.isDirty = false;
         this.dirtySide = -1;
         this.dirtyTrack = -1;
-        if (!this.writeTrackCallback) return;
-        const trackObj = this.getTrack(dirtySide, dirtyTrack);
-        this.writeTrackCallback(dirtySide, dirtyTrack, trackObj);
         this.setTrackUsed(dirtySide, dirtyTrack);
+        if (this.writeTrackCallback)
+            this.writeTrackCallback(dirtySide, dirtyTrack, this.getTrack(dirtySide, dirtyTrack));
     }
 
     /**

@@ -294,3 +294,36 @@ describe("ADF loader tests", function () {
         }
     });
 });
+
+describe("flushWrites marks the surface used", () => {
+    /** Most discs have no write-track callback: fdc.js discards onChange for ADF, ADM and ADL, and
+     *  discFor is usually called without one. */
+    function callbackFreeDisc() {
+        const disc = new Disc(true, new DiscConfig(), "test.ssd");
+        loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
+        expect(disc.writeTrackCallback).toBeUndefined();
+        return disc;
+    }
+
+    it("notices a write to the upper side of a disc loaded as single sided", () => {
+        const disc = callbackFreeDisc();
+        expect(disc.isDoubleSided).toBe(false);
+
+        disc.writePulses(true, 0, 0, 0xffff);
+        disc.flushWrites();
+
+        // Without this, snapshotState() saves one side and the write is lost on rewind.
+        expect(disc.isDoubleSided).toBe(true);
+        expect(Object.keys(disc.snapshotState().tracks).some((key) => key.startsWith("true:"))).toBe(true);
+    });
+
+    it("extends the used tracks when written past the end of the image", () => {
+        const disc = callbackFreeDisc();
+        const beyond = disc.tracksUsed;
+
+        disc.writePulses(false, beyond, 0, 0xffff);
+        disc.flushWrites();
+
+        expect(disc.tracksUsed).toBe(beyond + 1);
+    });
+});
