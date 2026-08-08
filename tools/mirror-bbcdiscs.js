@@ -9,9 +9,19 @@
 
 import { spawn } from "node:child_process";
 import { brotliCompress, brotliDecompress, constants as zlibConstants } from "node:zlib";
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+    access,
+    constants as fsConstants,
+    mkdir,
+    readdir,
+    readFile,
+    rename,
+    rm,
+    stat,
+    writeFile,
+} from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { argv, exit, stderr, stdout } from "node:process";
+import { argv, env, exit, stderr, stdout } from "node:process";
 import { promisify } from "node:util";
 
 const SchemaVersion = 1;
@@ -417,7 +427,7 @@ function parseArgs(args) {
         csv: null,
         out: null,
         concurrency: DefaultConcurrency,
-        beebjit: null,
+        beebjit: env.BEEBJIT ?? null,
         limit: null,
         filter: null,
         checkOnly: false,
@@ -448,6 +458,10 @@ function parseArgs(args) {
     }
     if (!opts.csv) fail("--csv <sheet.csv> is required");
     if (!opts.out && !opts.checkOnly) fail("--out <dir> is required");
+    // Publishing a disc means asserting it is the one the catalogue describes,
+    // and only beebjit can tell us that, so there is no unverified path to S3.
+    if (!opts.beebjit && !opts.checkOnly)
+        fail("beebjit is required to verify discs before publishing: set BEEBJIT=<path> or pass --beebjit <path>");
     if (!Number.isInteger(opts.concurrency) || opts.concurrency < 1) fail("--concurrency must be a positive integer");
     return opts;
 }
@@ -464,6 +478,13 @@ async function main() {
     // --check-only reads the sheet and writes nothing, so it can't leave a
     // half-populated mirror behind for someone to upload by mistake.
     if (opts.checkOnly) return;
+
+    // Find out now rather than after a gigabyte of downloads.
+    try {
+        await access(opts.beebjit, fsConstants.X_OK);
+    } catch {
+        fail(`Cannot run beebjit at ${opts.beebjit}: set BEEBJIT=<path> or pass --beebjit <path>`);
+    }
 
     let selected = entries;
     if (opts.filter)
@@ -490,7 +511,7 @@ async function main() {
             // A published blob has already been checked, and its name is the
             // fingerprint, so a changed CRC32 arrives as a new blob rather than
             // as a disc that needs looking at again.
-            if (opts.beebjit && (!alreadyPublished || opts.reverify)) {
+            if (!alreadyPublished || opts.reverify) {
                 const discPath = join(cacheDir, `${entry.driveId}.hfe`);
                 if ((await fileSize(discPath)) === null) await writeAtomically(discPath, raw);
                 const mismatches = compareFingerprints(

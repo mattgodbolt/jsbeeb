@@ -20,11 +20,16 @@ Export the catalogue with File > Download > CSV and save it as
 `.bbcdiscs-sheet.csv`, then:
 
 ```sh
-npm run mirror-bbcdiscs:check    # parse the sheet only, report what it says
+npm run mirror-bbcdiscs:check    # parse the catalogue only, report what it says
 npm run mirror-bbcdiscs:seed     # pull down what is already mirrored
-npm run mirror-bbcdiscs          # fetch anything missing, verify, compress
+BEEBJIT=~/dev/beebjit/beebjit npm run mirror-bbcdiscs
 npm run mirror-bbcdiscs:upload   # push to S3
 ```
+
+Every run that publishes needs beebjit, because publishing a disc asserts it is
+the one the catalogue describes and only beebjit can check that. Point `BEEBJIT`
+at the binary, or pass `--beebjit` when invoking the script directly. Only
+`:check`, which writes nothing, runs without it.
 
 Seed first on a fresh machine. A published blob is the disc, so anything already
 on S3 is decompressed locally rather than fetched again, and a mirror that is
@@ -74,10 +79,10 @@ original, and prints `WITHDRAWN`; `mirror-bbcdiscs:upload:blobs` passes
 
 ## Verifying against the sheet
 
-Pass `--beebjit <path to beebjit>` and every disc is checked against what the
-sheet claims about it before it is published. beebjit's `disc:fingerprint` log
-reproduces four of the sheet's columns, and a disc that disagrees is reported
-and left out of the manifest rather than shipped.
+Every disc is checked against what the catalogue claims about it before it is
+published. beebjit's `disc:fingerprint` log reproduces four of the catalogue's
+columns, and a disc that disagrees is reported and left out of the manifest
+rather than shipped.
 
 ```sh
 node tools/mirror-bbcdiscs.js --csv .bbcdiscs-sheet.csv --out .bbcdiscs-mirror \
