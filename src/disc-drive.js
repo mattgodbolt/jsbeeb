@@ -388,7 +388,6 @@ export class DiscDrive extends BaseDiscDrive {
      */
     _selectTrack(track) {
         this._checkTrackNeedsWrite();
-        // Stepping starts at zero, so the last track it can land on is a whole step from the end.
         const lastTrack = IbmDiscFormat.tracksPerDisc - this._tracksPerStep;
         if (track < 0) {
             track = 0;
