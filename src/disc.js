@@ -661,10 +661,8 @@ export function loadSsd(disc, data, isDsd, onChange) {
         disc.addTrackWriteListener(
             /** @param {Track} trackObj  */
             (side, _trackNum, trackObj) => {
-                for (const sector of trackObj.findSectors()) {
-                    if (sectorShortfall(sector)) continue;
-                    dataCopy.set(sector.sectorData, ssdOffsetOf(sector, side, numSides));
-                }
+                for (const sector of trackObj.findSectors())
+                    if (!sectorShortfall(sector)) dataCopy.set(sector.sectorData, ssdOffsetOf(sector, side, numSides));
                 onChange(dataCopy);
             },
         );
