@@ -1004,7 +1004,7 @@ export class Video {
                 // Render data depending on display enable state.
                 if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
                     let doubledLines = false;
-                    let row = this.bitmapY;
+                    let bitmapRow = this.bitmapY;
                     // There's a painting subtlety here: if we're in an
                     // interlace mode but R6>R4 then we'll get stuck
                     // painting just an odd or even frame, so we double up
@@ -1014,10 +1014,10 @@ export class Video {
                         this.isEvenRender === this.lastRenderWasEven
                     ) {
                         doubledLines = true;
-                        row &= ~1;
+                        bitmapRow &= ~1;
                     }
 
-                    const offset = row * 1024 + this.bitmapX;
+                    const offset = bitmapRow * 1024 + this.bitmapX;
 
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                         // Note this row's logical pixel size for display
