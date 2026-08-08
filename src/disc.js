@@ -947,8 +947,6 @@ export class Disc {
         this.isDirty = false;
         this.dirtySide = -1;
         this.dirtyTrack = -1;
-        // Whether anyone is listening has no bearing on which of the surface now holds data, and
-        // snapshots cover only the tracks and sides marked used.
         this.setTrackUsed(dirtySide, dirtyTrack);
         if (!this.writeTrackCallback) return;
         this.writeTrackCallback(dirtySide, dirtyTrack, this.getTrack(dirtySide, dirtyTrack));
