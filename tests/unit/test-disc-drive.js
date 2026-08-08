@@ -181,6 +181,14 @@ describe("40 track discs", () => {
         expect(after["false:3"]).not.toBe(before["false:3"]);
     });
 
+    it("refuses a switch position no drive has", () => {
+        const drive = new DiscDrive(0, new Scheduler());
+
+        expect(() => (drive.tracksPerStep = 0)).toThrow(/one or two tracks/);
+        expect(() => (drive.tracksPerStep = 3)).toThrow(/one or two tracks/);
+        expect(drive.tracksPerStep).toBe(1);
+    });
+
     it("makes the seek noise of a head crossing twice as many tracks", () => {
         const drive = driveSteppedIn(fortyTrackDisc(), 10);
         const steps = [];

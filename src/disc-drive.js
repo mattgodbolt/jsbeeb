@@ -323,6 +323,8 @@ export class DiscDrive extends BaseDiscDrive {
     }
 
     set tracksPerStep(tracksPerStep) {
+        if (tracksPerStep !== 1 && tracksPerStep !== 2)
+            throw new Error(`Drives step over one or two tracks at a time, not ${tracksPerStep}`);
         this._tracksPerStep = tracksPerStep;
     }
 
