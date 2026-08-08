@@ -1,6 +1,7 @@
 "use strict";
 import * as utils from "./utils.js";
 import * as fontData from "./6847_fontdata.js";
+import { encodeLineGrid } from "./video-filters/pixel-grid.js";
 
 const VDISPENABLE = 1 << 0,
     HDISPENABLE = 1 << 1,
@@ -180,6 +181,7 @@ export class Video6847 {
         this.bitmapPxPerPixel = 2; // each pixel is 2 bitmap pixels wide and high
         this.pixelsPerBit = this.bitmapPxPerPixel;
         this.bpp = 1;
+        this.updateLineGrid();
 
         this.cpuAddr = 0;
         this.dispEnabled = 0;
@@ -323,6 +325,7 @@ export class Video6847 {
         this.pixelsPerBit = this.bitmapPxPerPixel * this.modes[mode][1];
         let linesPerRow = this.modes[mode][2]; // move to reg9
         this.bpp = this.modes[mode][3];
+        this.updateLineGrid();
 
         this.charLinesreg9 = linesPerRow - 1; //2  - scanlines per char
 
@@ -495,9 +498,9 @@ export class Video6847 {
                         {
                             // TODO: Add in the INTEXT modifiers to mode (if necessary)
                             // blit into the fb32 buffer which is painted by VIDEO
-                            if ((mode & MODE_AG) === 0)
-                                // MODE_AG - bit 4; 0x10 is the AG bit
-                                this.blitChar(this.video.fb32, dat, offset, this.pixelsPerChar, css);
+                            const textMode = (mode & MODE_AG) === 0; // 0x10 is the AG bit
+                            this.recordLineGrid(textMode);
+                            if (textMode) this.blitChar(this.video.fb32, dat, offset, this.pixelsPerChar, css);
                             else this.blitPixels(this.video.fb32, dat, offset, css);
                         }
                     }
@@ -621,6 +624,41 @@ export class Video6847 {
                 fb32[destOffset + n + 1024] = fb32[destOffset + n] = colour;
             }
         }
+    }
+
+    /**
+     * Precompute this mode's grid descriptors, one per blitter.
+     *
+     * The two blitters derive their widths differently and cannot be unified:
+     * `blitChar` splits the character's texels across eight glyph bits, while
+     * `blitPixels` takes the bit width from the mode table — which for text
+     * mode holds -1, since it does not blit pixels at all.
+     *
+     * `pixelsPerBit` is right for graphics at 2bpp as well as 1bpp: the blitter
+     * steps its bit groups by `pixelsPerBit / bpp`, but reads the colour with
+     * `j & 0xe`, so pairs of groups share one and each pixel is twice as wide.
+     */
+    updateLineGrid() {
+        // Every 6847 blitter writes each pixel row into two framebuffer lines.
+        // Text mode's entry is only reachable through blitChar, which is just
+        // as well: the mode table holds -1 for it and would not encode.
+        this.lineGridText = encodeLineGrid((this.pixelsPerChar * this.bitmapPxPerPixel) / 8, true);
+        this.lineGridGraphics = this.pixelsPerBit > 0 ? encodeLineGrid(this.pixelsPerBit, true) : this.lineGridText;
+    }
+
+    /**
+     * Note the logical pixel size of the two rows about to be written, so
+     * display filters can see the picture as pixels rather than as raster
+     * samples (see video-filters/pixel-grid.js). Only the picture records a
+     * grid: the border is a solid colour, and letting it write here would
+     * leave the row describing the border rather than the picture on it.
+     *
+     * @param {boolean} textMode whether the character blitter is about to run
+     */
+    recordLineGrid(textMode) {
+        const grid = textMode ? this.lineGridText : this.lineGridGraphics;
+        this.video.lineGrid[this.bitmapY] = grid;
+        this.video.lineGrid[this.bitmapY + 1] = grid;
     }
 
     blitChar(buf, data, destOffset, numPixels, css) {

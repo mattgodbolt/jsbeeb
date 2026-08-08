@@ -232,9 +232,10 @@ speechOutput.enabled = !!parsedQuery.speechOutput;
 const config = new Config(
     function onChange(changed) {
         if (changed.displayMode) {
-            displayModeFilter = getFilterForMode(changed.displayMode);
+            // swapCanvas settles displayModeFilter on whatever was really
+            // built, so take the picture from that rather than the request.
+            swapCanvas(getFilterForMode(changed.displayMode));
             setCrtPic(displayModeFilter);
-            swapCanvas(displayModeFilter);
             // Trigger window resize to recalculate layout with new dimensions
             window.dispatchEvent(new Event("resize"));
         }
@@ -386,14 +387,20 @@ if (keyMappingWarnings.length) {
 }
 
 function createCanvasForFilter(filterClass) {
+    // Not `config`: that is the emulator's live configuration object, declared
+    // at module scope and used throughout this file.
+    const displayConfig = filterClass.getDisplayConfig();
+    // Each mode says how many pixels it wants to draw into. Set this before
+    // creating the context, which fixes its initial viewport.
+    screenCanvas.width = displayConfig.canvasWidth;
+    screenCanvas.height = displayConfig.canvasHeight;
+
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
 
     // Test which filter was actually built, not merely whether we got WebGL: a
     // filter can decline a context that works perfectly well for other modes,
     // in which case bestCanvas quietly gives us an unfiltered GL canvas.
     if (newCanvas.filterClass !== filterClass) {
-        // Not `config`: that is the emulator's live configuration object.
-        const displayConfig = filterClass.getDisplayConfig();
         showError(
             `enabling ${displayConfig.name} mode`,
             `${displayConfig.name} is not available on this device. Using standard display instead.`,
@@ -407,6 +414,8 @@ let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "r
 function swapCanvas(newFilterClass) {
     const oldCanvas = canvas;
     const newCanvas = createCanvasForFilter(newFilterClass);
+    // Carry the picture over; the buffers differ in height, so copy what fits.
+    newCanvas.fb32.set(oldCanvas.fb32.subarray(0, newCanvas.fb32.length));
     // Only once the replacement exists, so a failure to build it leaves the
     // display we already had. The two share a GL context but no GL objects.
     oldCanvas.dispose();
@@ -415,12 +424,16 @@ function swapCanvas(newFilterClass) {
         frames++;
         if (frames < frameSkip) return;
         frames = 0;
-        newCanvas.paint(minx, miny, maxx, maxy, this.frameCount);
+        newCanvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
     };
     canvas = newCanvas;
-    // Follow the filter we ended up with, not the one we asked for: the monitor
-    // picture and the canvas geometry both come from its display config.
+    // Follow the filter we ended up with, not the one we asked for: everything
+    // downstream — the monitor picture, the canvas geometry, how large a
+    // drawing buffer to ask for — comes from its display config.
     displayModeFilter = newCanvas.filterClass;
+    // Nothing else will redraw: the mode is changed from a modal, which stops
+    // the emulator.
+    video.paint();
     window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
 }
 
@@ -434,7 +447,7 @@ video = new Video(
         frames++;
         if (frames < frameSkip) return;
         frames = 0;
-        canvas.paint(minx, miny, maxx, maxy, this.frameCount);
+        canvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
     },
     { isAtom: model.isAtom },
 );
@@ -2096,6 +2109,9 @@ function stop(debug) {
     updateDebugButtons();
 }
 
+/** Steps the drawing buffer grows in, as a multiple of the base canvas size. */
+const CanvasScaleStep = 0.25;
+
 (function () {
     const resizeCubMonitor = document.getElementById("cub-monitor");
     const resizeCubMonitorPic = document.getElementById("cub-monitor-pic");
@@ -2148,6 +2164,25 @@ function stop(debug) {
         resizeCubMonitor.style.width = width + "px";
         resizeCubMonitorPic.style.height = height + "px";
         resizeCubMonitorPic.style.width = width + "px";
+        // A mode that reconstructs detail wants to draw at the size it will be
+        // seen at, up to the limit it asks for. Drawing more than the display
+        // can show costs fragments and buys nothing, and for an expensive
+        // shader that is the difference between comfortable and not.
+        if (displayConfig.maxCanvasScale) {
+            const wanted = (finalCanvasWidth * (window.devicePixelRatio || 1)) / displayConfig.canvasWidth;
+            // Quantised, because resize fires continuously while a window is
+            // dragged and every distinct value reallocates the drawing buffer.
+            const quantised = Math.round(wanted / CanvasScaleStep) * CanvasScaleStep;
+            const scale = Math.min(displayConfig.maxCanvasScale, Math.max(1, quantised));
+            const backingWidth = Math.round(displayConfig.canvasWidth * scale);
+            if (screenCanvas.width !== backingWidth) {
+                screenCanvas.width = backingWidth;
+                screenCanvas.height = Math.round(displayConfig.canvasHeight * scale);
+                // Resizing threw the drawing buffer away.
+                video.paint();
+            }
+        }
+
         screenCanvas.style.width = finalCanvasWidth + "px";
         screenCanvas.style.height = finalCanvasHeight + "px";
         screenCanvas.style.left = canvasOrigLeft * containerScale + "px";

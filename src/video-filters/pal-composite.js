@@ -28,6 +28,8 @@ export class PALCompositeFilter {
             canvasTop: 70,
             visibleWidth: 800,
             visibleHeight: 600,
+            canvasWidth: 896,
+            canvasHeight: 600,
         };
     }
 
