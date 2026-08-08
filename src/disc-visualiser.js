@@ -25,16 +25,14 @@ const RevolutionMs = 200;
 const HeadColour = "#eb6834";
 const IndexColour = "#c3c2b7";
 const HoverColour = "#ffffff";
-/** Outlines a mark so it stays legible over whatever it crosses. */
 const MarkOutline = "#0d0d0d";
 
-/** A whole frame: scanning a side costs a couple of hundred ms, and the fill is a one-off. */
 const ScanBudgetMs = 16;
 
 /** A trackpad reports deltas in the tens, a mouse notch about 100. */
 const WheelZoomRate = 0.003;
 
-/** Firefox reports a wheel notch as three lines rather than a pixel count. */
+/** Firefox reports wheel deltas in lines, not pixels. */
 const PixelsPerWheelLine = 16;
 
 const Views = {
@@ -155,7 +153,6 @@ export class DiscVisualiser {
         for (const ending of ["pointerup", "pointercancel"])
             canvas.addEventListener(ending, (e) => {
                 if (this._pan?.pointerId !== e.pointerId) return;
-                // The drag rendered at draft quality, so ask for one more pass at full.
                 if (this._pan.moved) this._surfaceStale = true;
                 this._pan = null;
             });
@@ -250,7 +247,7 @@ export class DiscVisualiser {
         this._frameHandle = requestAnimationFrame(() => this._tick());
     }
 
-    /** Redraw whatever has moved or changed. Cheap enough to call every frame. */
+    /** Cheap enough to call every frame. */
     update() {
         if (!this.isOpen || !this._geometry) return;
         const disc = this._drive?.disc ?? null;

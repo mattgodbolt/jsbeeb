@@ -277,7 +277,7 @@ describe("trackRegions", function () {
         const disc = ssdDisc();
         const track = disc.getTrack(false, 0);
         const { codes, sectorNumbers } = trackRegions(track, () => {});
-        // Erase a whole data field, so its header is left pointing at nothing.
+        // Leaves the header pointing at nothing, which the decoder complains about.
         codes.forEach((code, word) => {
             if (code === Region.Data && sectorNumbers[word] === 4)
                 track.pulses2Us[word] = IbmDiscFormat.fmTo2usPulses(0xff, 0xff);

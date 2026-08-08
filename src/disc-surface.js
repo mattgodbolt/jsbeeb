@@ -186,7 +186,7 @@ export class DiscGeometry {
         return this;
     }
 
-    /** Carry a viewport from a differently sized canvas, where the origin meant proportionally less. */
+    /** The origin is in disc pixels, which scale with the canvas. */
     adoptView({ zoom, originX, originY, size }) {
         return this.setView(zoom, (originX * this.size) / size, (originY * this.size) / size);
     }

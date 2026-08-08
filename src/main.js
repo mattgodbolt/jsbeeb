@@ -1972,7 +1972,6 @@ rewindUI = new RewindUI({
 });
 rewindUI.updateButtonState();
 
-// The panel registers its own listeners and frame timer, so nothing needs to hold onto it.
 if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
 else document.getElementById("disc-visualiser-open").classList.add("disabled");
 

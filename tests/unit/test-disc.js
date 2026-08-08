@@ -296,7 +296,6 @@ describe("ADF loader tests", function () {
 });
 
 describe("track write listeners", () => {
-    /** @returns {Disc} a disc with one formatted track, ready to be written to */
     function writeableDisc() {
         const disc = new Disc(true, new DiscConfig(), "test.ssd");
         loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
@@ -314,8 +313,7 @@ describe("track write listeners", () => {
     });
 
     it("reports writes even with no write-track callback set", () => {
-        // The callback belongs to whichever loader owns writing the image back out, and a disc
-        // loaded from a URL has none; observers still need telling.
+        // A disc loaded from a URL has no callback; observers still need telling.
         const disc = new Disc(true, new DiscConfig(), "blank");
         loadSsd(disc, new Uint8Array(IbmDiscFormat.bytesPerTrack), false, null);
         expect(disc.writeTrackCallback).toBeUndefined();
