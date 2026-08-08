@@ -23,7 +23,7 @@ import { tubeModelFor } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
-import { toSsdOrDsd } from "./disc.js";
+import { DiscLayout, toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
@@ -1138,10 +1138,13 @@ async function reloadSnapshotMedia(media) {
         const imageDataKey = discKey + "ImageData";
         const crcKey = discKey + "Crc32";
 
+        // A snapshot from before layout detection has no field, and was contiguous.
+        const layout = media[discKey + "Layout"] ?? DiscLayout.contiguous;
+
         let loadedDisc = null;
         if (media[discKey]) {
             // URL-based disc — reload from source
-            loadedDisc = await loadDiscImage(media[discKey]);
+            loadedDisc = await loadDiscImage(media[discKey], layout);
         } else if (media[imageDataKey]) {
             // Locally-loaded disc — reconstruct from embedded image data
             const imageData =
@@ -1149,7 +1152,7 @@ async function reloadSnapshotMedia(media) {
                     ? media[imageDataKey]
                     : new Uint8Array(Object.values(media[imageDataKey]));
             const discName = media[discKey + "Name"] || "snapshot.ssd";
-            loadedDisc = disc.discFor(processor.fdc, discName, imageData);
+            loadedDisc = disc.discFor(processor.fdc, discName, imageData, undefined, layout);
             // Retain the image bytes so subsequent saves can re-embed them.
             loadedDisc.setOriginalImage(imageData);
         }
@@ -1176,13 +1179,13 @@ async function reloadSnapshotMedia(media) {
     }
 }
 
-async function loadDiscImage(discImage) {
+async function loadDiscImage(discImage, layout = DiscLayout.auto) {
     if (!discImage) return null;
     const split = splitImage(discImage);
     discImage = split.image;
     const schema = split.schema;
     if (schema[0] === "!" || schema === "local") {
-        return disc.localDisc(processor.fdc, discImage);
+        return disc.localDisc(processor.fdc, discImage, layout);
     }
     // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
     // Consider:
@@ -1193,7 +1196,7 @@ async function loadDiscImage(discImage) {
     switch (schema) {
         case "|":
         case "sth":
-            return disc.discFor(processor.fdc, discImage, await discSth.fetch(discImage));
+            return disc.discFor(processor.fdc, discImage, await discSth.fetch(discImage), undefined, layout);
 
         case "gd": {
             const splat = discImage.match(/([^/]+)\/?(.*)/);
@@ -1202,15 +1205,15 @@ async function loadDiscImage(discImage) {
                 discImage = splat[1];
                 name = splat[2];
             }
-            return gdLoad({ name, id: discImage });
+            return gdLoad({ name, id: discImage }, layout);
         }
         case "b64data":
-            return disc.discFor(processor.fdc, "disk.ssd", atob(discImage));
+            return disc.discFor(processor.fdc, "disk.ssd", atob(discImage), undefined, layout);
 
         case "data": {
             const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
             const { name, data } = await utils.unzipDiscImage(arr);
-            return disc.discFor(processor.fdc, name, data);
+            return disc.discFor(processor.fdc, name, data, undefined, layout);
         }
         case "http":
         case "https":
@@ -1224,10 +1227,10 @@ async function loadDiscImage(discImage) {
                 discData = unzipped.data;
                 discImage = unzipped.name;
             }
-            return disc.discFor(processor.fdc, discImage, discData);
+            return disc.discFor(processor.fdc, discImage, discData, undefined, layout);
         }
         default:
-            return disc.discFor(processor.fdc, discImage, await disc.load("discs/" + discImage));
+            return disc.discFor(processor.fdc, discImage, await disc.load("discs/" + discImage), undefined, layout);
     }
 }
 
@@ -1372,7 +1375,7 @@ document.querySelector("#google-drive-auth form").addEventListener("submit", asy
     else googleDriveLoadingReject(new Error("Unable to authorize Google Drive"));
 });
 
-async function gdLoad(cat) {
+async function gdLoad(cat, layout) {
     // TODO: have a onclose flush event, handle errors
     /*
      $(window).bind("beforeunload", function() {
@@ -1396,7 +1399,7 @@ async function gdLoad(cat) {
             });
         }
 
-        const ssd = await googleDrive.load(processor.fdc, cat.id);
+        const ssd = await googleDrive.load(processor.fdc, cat.id, layout);
         console.log("Google Drive loading finished");
         loadingFinished();
         return ssd;
@@ -1567,6 +1570,9 @@ document.getElementById("save-state").addEventListener("click", async function (
             const discKey = driveIndex === 0 ? "disc1" : "disc2";
             const crcKey = discKey + "Crc32";
             media[crcKey] = driveDisc.originalImageCrc32;
+            // The snapshot's dirty tracks are indexed by physical track, so restoring has to lay
+            // the disc out the way this one was rather than work it out again.
+            media[discKey + "Layout"] = driveDisc.is40Track ? DiscLayout.expanded40 : DiscLayout.contiguous;
             if (!media[discKey] && driveDisc.originalImageData) {
                 media[discKey + "ImageData"] = driveDisc.originalImageData;
                 media[discKey + "Name"] = driveDisc.name;

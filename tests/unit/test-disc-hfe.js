@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd, ssdOrDsdShortfalls, toSsdOrDsd } from "../../src/disc.js";
-import { loadHfe, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
+import { Disc, DiscConfig, IbmDiscFormat, loadAdf, loadSsd, ssdOrDsdShortfalls, toSsdOrDsd } from "../../src/disc.js";
+import { loadHfe, sniffHfeLayout, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
 import * as fs from "node:fs";
 
 describe("HFE loader tests", function () {
@@ -73,6 +73,42 @@ describe("HFE loader tests", function () {
         expect(() => {
             loadHfe(disc, unsupportedEncoding);
         }).toThrow(/HFE encoding not ISOIBM/);
+    });
+});
+
+describe("telling a 40 track HFE from an 80 track one", () => {
+    const withTracks = (numTracks) => {
+        const data = new Uint8Array(512);
+        data.set(new TextEncoder().encode("HXCHFEV3"), 0);
+        data[9] = numTracks;
+        return data;
+    };
+
+    it("goes by the tracks the header declares", () => {
+        expect(sniffHfeLayout(withTracks(40)).is40Track).toBe(true);
+        expect(sniffHfeLayout(withTracks(42)).is40Track).toBe(true);
+        expect(sniffHfeLayout(withTracks(43)).is40Track).toBe(false);
+        expect(sniffHfeLayout(withTracks(80)).is40Track).toBe(false);
+    });
+
+    it("says nothing of a file with no header to read", () => {
+        expect(sniffHfeLayout(new Uint8Array(4)).is40Track).toBe(false);
+        expect(sniffHfeLayout(withTracks(0)).is40Track).toBe(false);
+    });
+
+    it("expands a 40 track capture across the surface", { timeout: 30000 }, () => {
+        const source = new Disc(true, new DiscConfig(), "source.adf");
+        loadAdf(source, new Uint8Array(40 * 16 * 256), false);
+
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        const hfe = toHfe(source);
+        disc.config.expandTo80 = sniffHfeLayout(hfe).is40Track;
+        loadHfe(disc, hfe);
+
+        expect(disc.is40Track).toBe(true);
+        expect(disc.tracksUsed).toBe(79);
+        expect(disc.getTrack(false, 2).findSectors()[0].trackNumber).toBe(1);
+        expect(disc.getTrack(false, 3).findSectors()).toEqual([]);
     });
 });
 

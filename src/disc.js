@@ -527,6 +527,13 @@ class Side {
     }
 }
 
+/** How an image's tracks are laid out on the surface, and whether that is for the loader to decide. */
+export const DiscLayout = Object.freeze({
+    auto: "auto",
+    contiguous: "contiguous",
+    expanded40: "expanded40",
+});
+
 export class DiscConfig {
     constructor() {
         // TODO is this even useful?
@@ -573,6 +580,46 @@ function tracksWithData(data, numSides) {
     let lastUsed = data.length - 1;
     while (lastUsed >= 0 && data[lastUsed] === 0) lastUsed--;
     return Math.floor(lastUsed / (SsdFormat.trackSize * numSides)) + 1;
+}
+
+// The DFS catalogue is the first two sectors of a side. Sector 1 holds how many files there are,
+// how many sectors the disc has, and the file entries, which run in descending order of start
+// sector.
+const DfsEntryCountOffset = 0x105;
+const DfsSectorCountOffset = 0x106;
+const DfsFirstEntryOffset = 0x108;
+const DfsEntrySize = 8;
+const DfsMaxEntries = 31;
+
+function dfsStartSector(data, entry) {
+    const offset = DfsFirstEntryOffset + entry * DfsEntrySize;
+    return ((data[offset + 6] & 3) << 8) | data[offset + 7];
+}
+
+/**
+ * Whether an SSD or DSD image was written by a 40 track drive. Only its catalogue can say: images
+ * are routinely padded out or cut short, so their size means nothing.
+ *
+ * @param {Uint8Array} data
+ * @param {boolean} isDsd
+ * @returns {{is40Track: boolean, reason: string}}
+ */
+export function sniffDfsLayout(data, isDsd) {
+    const contiguous = (reason) => ({ is40Track: false, reason });
+    if (data.length < 2 * SsdFormat.sectorSize) return contiguous("it is smaller than a catalogue");
+    const entryBytes = data[DfsEntryCountOffset];
+    if (entryBytes % DfsEntrySize !== 0 || entryBytes > DfsMaxEntries * DfsEntrySize)
+        return contiguous(`its catalogue claims ${entryBytes} bytes of file entries`);
+    // Empty files leave two entries on one sector, so equal neighbours are in order.
+    for (let entry = 1; entry < entryBytes / DfsEntrySize; ++entry)
+        if (dfsStartSector(data, entry) > dfsStartSector(data, entry - 1))
+            return contiguous("its catalogue entries do not run in descending order");
+    const sectors = ((data[DfsSectorCountOffset] & 3) << 8) | data[DfsSectorCountOffset + 1];
+    const reason = `its catalogue claims ${sectors} sectors`;
+    if (sectors === 0 || sectors > SsdFormat.fortyTracksPerDisc * SsdFormat.sectorsPerTrack) return contiguous(reason);
+    const tracks = tracksWithData(data, isDsd ? 2 : 1);
+    if (tracks > SsdFormat.maxFortyTracksPerDisc) return contiguous(`it holds data as far as track ${tracks - 1}`);
+    return { is40Track: true, reason };
 }
 
 /**
