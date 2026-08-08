@@ -27,6 +27,7 @@ import { DiscLayout, toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
+import { toast } from "./web/toast.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
@@ -431,11 +432,11 @@ function driveTracksButtons(driveIndex) {
 }
 
 function noteDriveTracks(driveIndex, discName) {
-    if (window.localStorage.quietDriveTracks) return;
     const tracks = processor.fdc.drives[driveIndex].tracksPerStep === 2 ? "40" : "80";
-    const toast = document.getElementById("drive-tracks-toast");
-    toast.querySelector(".message").textContent = `Drive ${driveIndex} switched to ${tracks} track for ${discName}.`;
-    bootstrap.Toast.getOrCreateInstance(toast).show();
+    toast(`Drive ${driveIndex} switched to ${tracks} track for ${discName}.`, {
+        title: "Disc drive",
+        quietKey: "quietDriveTracks",
+    });
 }
 
 function createCanvasForFilter(filterClass) {
@@ -2054,13 +2055,6 @@ rewindUI.updateButtonState();
 
 if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
 else document.getElementById("disc-visualiser-open").classList.add("disabled");
-
-const driveTracksQuiet = document.getElementById("drive-tracks-quiet");
-driveTracksQuiet.checked = !!window.localStorage.quietDriveTracks;
-driveTracksQuiet.addEventListener("change", () => {
-    if (driveTracksQuiet.checked) window.localStorage.quietDriveTracks = "yes";
-    else window.localStorage.removeItem("quietDriveTracks");
-});
 
 for (const item of document.querySelectorAll(".drive-tracks")) {
     const driveIndex = Number(item.dataset.drive);
