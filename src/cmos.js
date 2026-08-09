@@ -37,15 +37,18 @@ export { defaultCmos };
  * CMOS persistence backed by a browser storage object, which can be unavailable, full or holding
  * something other than what was last saved.
  *
- * @param storage a `Storage`, typically `window.localStorage`
+ * @param {function(): Storage} getStorage typically `() => window.localStorage`. Reading that
+ *   property is itself what throws when a page is refused storage, so it happens per call, inside
+ *   the try.
  * @param {function(*)} onSaveFailure called with the error the first time a save fails
  */
-export function localStoragePersistence(storage, onSaveFailure) {
+export function localStoragePersistence(getStorage, onSaveFailure) {
     let saveFailureReported = false;
     return {
         load() {
             try {
-                return storage.cmosRam ? JSON.parse(storage.cmosRam) : null;
+                const stored = getStorage().cmosRam;
+                return stored ? JSON.parse(stored) : null;
             } catch (error) {
                 console.log(`Unable to read the stored CMOS settings: ${error?.message ?? error}`);
                 return null;
@@ -53,7 +56,7 @@ export function localStoragePersistence(storage, onSaveFailure) {
         },
         save(data) {
             try {
-                storage.cmosRam = JSON.stringify(data);
+                getStorage().cmosRam = JSON.stringify(data);
             } catch (error) {
                 console.log(`Unable to store the CMOS settings: ${error?.message ?? error}`);
                 if (saveFailureReported) return;

@@ -725,11 +725,13 @@ if (config.hasEconet) {
 }
 
 const cmos = new Cmos(
-    localStoragePersistence(window.localStorage, (error) =>
-        toast(
-            `Settings changed with *CONFIGURE will not be kept (${errorText(error)}). Check that this site is allowed to store data, and that its storage is not full.`,
-            { title: "Settings", quietKey: "quietCmosSave" },
-        ),
+    localStoragePersistence(
+        () => window.localStorage,
+        (error) =>
+            toast(
+                `Settings changed with *CONFIGURE will not be kept (${errorText(error)}). Check that this site is allowed to store data, and that its storage is not full.`,
+                { title: "Settings", quietKey: "quietCmosSave" },
+            ),
     ),
     model.cmosOverride,
     econet,

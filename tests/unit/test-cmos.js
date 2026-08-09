@@ -255,15 +255,18 @@ describe("CMOS", () => {
 
         const onSaveFailure = vi.fn();
 
-        beforeEach(() => vi.spyOn(console, "log").mockImplementation(() => {}));
+        beforeEach(() => {
+            onSaveFailure.mockClear();
+            vi.spyOn(console, "log").mockImplementation(() => {});
+        });
         afterEach(() => vi.restoreAllMocks());
 
         it("keeps what was written for the next session", () => {
             const storage = {};
 
-            writeCmos(new Cmos(localStoragePersistence(storage, onSaveFailure)), CMOS_ADDR.CONFIG_1, 0x42);
+            writeCmos(new Cmos(localStoragePersistence(() => storage, onSaveFailure)), CMOS_ADDR.CONFIG_1, 0x42);
 
-            const reloaded = new Cmos(localStoragePersistence(storage, onSaveFailure));
+            const reloaded = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
             expect(readCmos(reloaded, CMOS_ADDR.CONFIG_1)).toBe(0x42);
             expect(onSaveFailure).not.toHaveBeenCalled();
         });
@@ -271,9 +274,21 @@ describe("CMOS", () => {
         it("starts from the defaults when the stored settings are unreadable", () => {
             const storage = { cmosRam: "[0, 1, tru" };
 
-            const cmos = new Cmos(localStoragePersistence(storage, onSaveFailure));
+            const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
 
             expect(readCmos(cmos, 25)).toBe(defaultCmos[25]);
+        });
+
+        it("starts from the defaults when the page is refused storage altogether", () => {
+            const refused = () => {
+                throw new Error("The operation is insecure");
+            };
+
+            const cmos = new Cmos(localStoragePersistence(refused, onSaveFailure));
+            writeCmos(cmos, CMOS_ADDR.CONFIG_1, 0x42);
+
+            expect(readCmos(cmos, 25)).toBe(defaultCmos[25]);
+            expect(onSaveFailure).toHaveBeenCalledTimes(1);
         });
 
         it("reports a save that fails once, however many writes follow", () => {
@@ -286,7 +301,7 @@ describe("CMOS", () => {
                 },
             };
 
-            const cmos = new Cmos(localStoragePersistence(storage, onSaveFailure));
+            const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
             writeCmos(cmos, CMOS_ADDR.CONFIG_1, 0x42);
             writeCmos(cmos, CMOS_ADDR.CONFIG_2, 0x43);
 
