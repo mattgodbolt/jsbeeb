@@ -1,15 +1,40 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import * as bootstrap from "bootstrap";
 
 import { toast } from "../../src/web/toast.js";
 
 describe("toast", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+    });
+
+    // A toast's timers left on the real clock outlive this file's jsdom
+    // window, and fail the run from outside any test when they fire.
     afterEach(() => {
+        vi.runAllTimers();
+        vi.useRealTimers();
         document.body.innerHTML = "";
         window.localStorage.clear();
     });
 
     const toasts = () => [...document.querySelectorAll(".toast")];
+
+    it("leaves no timer running once it has been and gone", () => {
+        toast("A disc was swapped.");
+        vi.runAllTimers();
+
+        expect(vi.getTimerCount()).toBe(0);
+        expect(toasts()).toHaveLength(0);
+    });
+
+    it("lets go of the toast it finished with", () => {
+        const element = toast("A disc was swapped.");
+        vi.runAllTimers();
+
+        expect(bootstrap.Toast.getInstance(element)).toBeNull();
+    });
 
     it("says what it was given", () => {
         toast("A disc was swapped.", { title: "Disc drive" });
