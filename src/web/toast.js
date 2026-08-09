@@ -73,7 +73,11 @@ export function toast(message, { title = "", quietKey = "" } = {}) {
     quiet.querySelector("input").addEventListener("change", (event) => remember(quietKey, event.target.checked));
 
     toastContainer().appendChild(element);
-    element.addEventListener("hidden.bs.toast", () => element.remove());
+    // Bootstrap keys its instances by element, so one only removed stays held.
+    element.addEventListener("hidden.bs.toast", () => {
+        bootstrap.Toast.getInstance(element)?.dispose();
+        element.remove();
+    });
     bootstrap.Toast.getOrCreateInstance(element).show();
     return element;
 }
