@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { allModels, basicOnly, findModel, TEST_6502, TEST_65C02, TEST_65C12 } from "../../src/models.js";
+import { allModels, basicOnly, DefaultModel, findModel, TEST_6502, TEST_65C02, TEST_65C12 } from "../../src/models.js";
 import { fake6502 } from "../../src/fake6502.js";
+import { guessModelFromHostname } from "../../src/url-params.js";
 
 describe("Model", () => {
     it("is frozen so per-session settings cannot be stored on it", () => {
@@ -29,6 +30,26 @@ describe("Model", () => {
         expect(master.hasEconet).toBeUndefined();
         expect(master.hasMusic5000).toBeUndefined();
         expect(master.hasTeletextAdaptor).toBeUndefined();
+    });
+});
+
+describe("findModel", () => {
+    it("finds models by name and by synonym", () => {
+        expect(findModel("BBC Master 128 (DFS)").name).toBe("BBC Master 128 (DFS)");
+        expect(findModel("master")).toBe(findModel("BBC Master 128 (DFS)"));
+    });
+
+    it("has nothing for a name it does not know", () => {
+        expect(findModel("bbcb")).toBeNull();
+    });
+
+    it("has a default to fall back on", () => {
+        expect(findModel(DefaultModel.name)).toBe(DefaultModel);
+    });
+
+    it("knows every model the hostname can ask for", () => {
+        for (const hostname of ["bbc.xania.org", "master.example.com", "atom.example.com", "localhost"])
+            expect(findModel(guessModelFromHostname(hostname)), hostname).not.toBeNull();
     });
 });
 
