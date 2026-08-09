@@ -154,6 +154,11 @@ class Via {
                 }
                 this.updateIFR();
 
+                // The strobe is "data ready": the port settles before CA2 falls.
+                // http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf figures 3-6 and 3-7.
+                this.ora = val;
+                this.recalculatePortAPins();
+
                 mode = this.pcr & 0x0e;
                 if (mode === 8) {
                     // Handshake mode
@@ -163,7 +168,8 @@ class Via {
                     this.setca2(false);
                     this.setca2(true);
                 }
-            /* falls through */
+                break;
+
             case ORAnh:
                 this.ora = val;
                 this.recalculatePortAPins();
