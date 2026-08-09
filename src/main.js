@@ -12,6 +12,7 @@ import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
+import { BbcDiscArchive, describe as describeHfe } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
 import { loadTapeFromData } from "./tapes.js";
@@ -68,6 +69,7 @@ let frameSkip = 0;
 let syncLights;
 let discSth;
 let tapeSth;
+let hfeArchive;
 let running;
 let model;
 
@@ -991,15 +993,26 @@ function setTapeImage(name) {
     config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
 }
 
-function sthClearList() {
-    for (const el of document.querySelectorAll("#sth-list li:not(.template)")) el.remove();
+function clearArchiveList(listId) {
+    for (const el of document.querySelectorAll(`#${listId} li:not(.template)`)) el.remove();
+}
+
+function showArchiveMessage(modalId, listId, message) {
+    const loading = document.querySelector(`#${modalId} .loading`);
+    loading.textContent = message;
+    loading.style.display = "";
+    clearArchiveList(listId);
+}
+
+function filterArchiveList(listId, filter) {
+    filter = filter.toLowerCase();
+    for (const el of document.querySelectorAll(`#${listId} li:not(.template)`)) {
+        el.style.display = el.textContent.toLowerCase().includes(filter) ? "" : "none";
+    }
 }
 
 function sthStartLoad() {
-    const sthLoading = document.querySelector("#sth .loading");
-    sthLoading.textContent = "Loading catalog from STH archive";
-    sthLoading.style.display = "";
-    sthClearList();
+    showArchiveMessage("sth", "sth-list", "Loading catalog from STH archive");
 }
 
 async function discSthClick(item) {
@@ -1047,7 +1060,7 @@ document.getElementById("sth").addEventListener("shown.bs.modal", () => {
 
 function makeOnCat(onClick) {
     return function (cat) {
-        sthClearList();
+        clearArchiveList("sth-list");
         const sthList = document.getElementById("sth-list");
         document.querySelector("#sth .loading").style.display = "none";
         const template = sthList.querySelector(".template");
@@ -1077,24 +1090,30 @@ function makeOnCat(onClick) {
 }
 
 function sthOnError() {
-    const sthLoading = document.querySelector("#sth .loading");
-    sthLoading.textContent = "There was an error accessing the STH archive";
-    sthLoading.style.display = "";
-    sthClearList();
+    showArchiveMessage("sth", "sth-list", "There was an error accessing the STH archive");
 }
 
 discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
 tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
+hfeArchive = new BbcDiscArchive(hfeStartLoad, hfeOnCat, hfeOnError);
 
-const sthAutoboot = document.querySelector("#sth .autoboot");
-sthAutoboot.addEventListener("click", function () {
-    if (sthAutoboot.checked) {
-        parsedQuery.autoboot = "";
-    } else {
-        delete parsedQuery.autoboot;
-    }
-    updateUrl();
-});
+// Every archive picker offers the same autoboot choice, and it is one setting,
+// so ticking it in either has to show in both.
+const autobootChecks = document.querySelectorAll("#sth .autoboot, #hfe .autoboot");
+function showAutoboot(checked) {
+    for (const check of autobootChecks) check.checked = checked;
+}
+for (const check of autobootChecks) {
+    check.addEventListener("click", function () {
+        showAutoboot(check.checked);
+        if (check.checked) {
+            parsedQuery.autoboot = "";
+        } else {
+            delete parsedQuery.autoboot;
+        }
+        updateUrl();
+    });
+}
 
 document.addEventListener("click", function (e) {
     const target = e.target.closest("a.sth");
@@ -1110,15 +1129,93 @@ document.addEventListener("click", function (e) {
 });
 
 function setSthFilter(filter) {
-    filter = filter.toLowerCase();
-    for (const el of document.querySelectorAll("#sth-list li:not(.template)")) {
-        el.style.display = el.textContent.toLowerCase().indexOf(filter) >= 0 ? "" : "none";
-    }
+    filterArchiveList("sth-list", filter);
 }
 
 const sthFilter = document.getElementById("sth-filter");
 sthFilter.addEventListener("change", () => setSthFilter(sthFilter.value));
 sthFilter.addEventListener("keyup", () => setSthFilter(sthFilter.value));
+
+// Rendering is spread over several turns of the event loop, so a list that has
+// been emptied may still have a chain of appends heading for it. Anything that
+// clears the list takes a new ticket; a chain whose ticket is stale gives up.
+let hfeRender = 0;
+
+function hfeStartLoad() {
+    hfeRender++;
+    showArchiveMessage("hfe", "hfe-list", "Loading catalogue from HFE archive");
+}
+
+function hfeOnError() {
+    hfeRender++;
+    showArchiveMessage("hfe", "hfe-list", "There was an error accessing the HFE archive");
+}
+
+async function hfeClick(file) {
+    utils.noteEvent("hfe", "click", file.path);
+    setDisc1Image("hfe:" + file.path);
+    const needsAutoboot = parsedQuery.autoboot !== undefined;
+    if (needsAutoboot) processor.reset(true);
+
+    const name = describeHfe(file).title;
+    popupLoading("Loading " + name);
+    try {
+        const disc = await loadDiscImage(parsedQuery.disc1);
+        processor.fdc.loadDisc(0, disc);
+        loadingFinished();
+        if (needsAutoboot) autoboot(name);
+    } catch (err) {
+        console.error("Error loading disc image:", err);
+        loadingFinished(err);
+    }
+}
+
+function hfeOnCat(catalogue) {
+    const ticket = ++hfeRender;
+    clearArchiveList("hfe-list");
+    const list = document.getElementById("hfe-list");
+    document.querySelector("#hfe .loading").style.display = "none";
+    const template = list.querySelector(".template");
+
+    const addSome = (remaining) => {
+        if (ticket !== hfeRender) return;
+        const MaxAtATime = 100;
+        const Delay = 30;
+        // Read per batch: the filter can be typed into while this is still going.
+        const filter = document.getElementById("hfe-filter").value.toLowerCase();
+        for (const file of remaining.slice(0, MaxAtATime)) {
+            const { title, publisher, detail } = describeHfe(file);
+            const row = template.cloneNode(true);
+            row.classList.remove("template");
+            row.querySelector(".name").textContent = title;
+            row.querySelector(".publisher").textContent = publisher;
+            row.querySelector(".detail").textContent = detail;
+            if (file.notes) row.title = file.notes;
+            // The row is an anchor, and letting it navigate to "#" would push a
+            // history entry of its own on top of the one updateUrl pushes.
+            row.addEventListener("click", (event) => {
+                event.preventDefault();
+                hfeClick(file);
+                $hfeModal.hide();
+            });
+            row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
+            list.appendChild(row);
+        }
+        if (remaining.length > MaxAtATime) setTimeout(() => addSome(remaining.slice(MaxAtATime)), Delay);
+    };
+    addSome(catalogue);
+}
+
+const $hfeModal = new bootstrap.Modal(document.getElementById("hfe"));
+document.getElementById("hfe").addEventListener("shown.bs.modal", () => {
+    document.getElementById("hfe-filter").focus();
+});
+document.getElementById("hfe").addEventListener("show.bs.modal", () => hfeArchive.populate());
+
+const hfeFilter = document.getElementById("hfe-filter");
+const onHfeFilter = () => filterArchiveList("hfe-list", hfeFilter.value);
+hfeFilter.addEventListener("change", onHfeFilter);
+hfeFilter.addEventListener("keyup", onHfeFilter);
 
 function sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
@@ -1249,6 +1346,9 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
         case "|":
         case "sth":
             return disc.discFor(processor.fdc, discImage, await discSth.fetch(discImage), undefined, layout);
+
+        case "hfe":
+            return disc.discFor(processor.fdc, discImage, await hfeArchive.fetch(discImage));
 
         case "gd": {
             const splat = discImage.match(/([^/]+)\/?(.*)/);
@@ -1895,7 +1995,7 @@ const startPromise = (async () => {
 
         switch (needsAutoboot) {
             case "boot":
-                sthAutoboot.checked = true;
+                showAutoboot(true);
                 autoboot(discImage);
                 break;
             case "type":
@@ -1908,7 +2008,7 @@ const startPromise = (async () => {
                 autoRunTape();
                 break;
             default:
-                sthAutoboot.checked = false;
+                showAutoboot(false);
                 break;
         }
 
