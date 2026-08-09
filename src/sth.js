@@ -50,12 +50,12 @@ export class StairwayToHell {
     }
 
     async fetch(file) {
-        const name = this._baseUrl + encodePath(file);
-        console.log("Loading ZIP from " + name);
-        const response = await fetch(name);
+        const url = this._baseUrl + encodePath(file);
+        console.log("Loading ZIP from " + url);
+        const response = await fetch(url);
         if (!response.ok) throw new Error("Network response was not ok");
         try {
-            return (await utils.unzipDiscImage(new Uint8Array(await response.arrayBuffer()))).data;
+            return await utils.unzipDiscImage(new Uint8Array(await response.arrayBuffer()));
         } catch (error) {
             console.error("Failed to fetch file:", error);
             throw error;

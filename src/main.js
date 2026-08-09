@@ -1247,8 +1247,10 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
     // * Dialog box (ugh) saying "is this ok?"
     switch (schema) {
         case "|":
-        case "sth":
-            return disc.discFor(processor.fdc, discImage, await discSth.fetch(discImage), undefined, layout);
+        case "sth": {
+            const { name, data } = await discSth.fetch(discImage);
+            return disc.discFor(processor.fdc, name, data, undefined, layout);
+        }
 
         case "gd": {
             const splat = discImage.match(/([^/]+)\/?(.*)/);
@@ -1293,8 +1295,10 @@ async function loadTapeImage(tapeImage) {
 
     switch (schema) {
         case "|":
-        case "sth":
-            return await loadTapeFromData(tapeImage, await tapeSth.fetch(tapeImage), model);
+        case "sth": {
+            const { name, data } = await tapeSth.fetch(tapeImage);
+            return await loadTapeFromData(name, data, model);
+        }
 
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
