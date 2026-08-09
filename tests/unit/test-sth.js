@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as fs from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { StairwayToHell } from "../../src/sth.js";
 
 const ARCHIVE_BASE = "https://bbc.xania.org/archive/sth";
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function makeManifestResponse(files) {
     return {
@@ -116,5 +120,23 @@ describe("StairwayToHell", () => {
         await expect(sth.fetch("Unreleased/Daxis[droids]-demo.zip")).rejects.toBeDefined();
 
         expect(seen).toEqual([`${ARCHIVE_BASE}/diskimages/Unreleased/Daxis%5Bdroids%5D-demo.zip`]);
+    });
+
+    it("returns the name of the file found inside the zip, not the zip's own path", async () => {
+        const zip = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(makeOk(zip));
+        vi.spyOn(console, "log").mockImplementation(() => {});
+
+        const sth = new StairwayToHell(
+            () => {},
+            () => {},
+            () => {},
+            false,
+        );
+        const { name, data } = await sth.fetch("Mandarin/Lancelot.zip");
+
+        expect(name).toBe("test.ssd");
+        expect(data instanceof Uint8Array).toBe(true);
+        expect(String.fromCharCode(...data)).toBe("This is a test SSD file\n");
     });
 });

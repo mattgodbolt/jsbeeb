@@ -162,6 +162,54 @@ th {
   overflow: auto;
 }
 
+#hfe-list {
+  height: 380px;
+  overflow: auto;
+  list-style: none;
+  padding-left: 0;
+}
+
+#hfe-list li a {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr);
+  gap: 0 1rem;
+  align-items: baseline;
+  padding: 3px 6px;
+  border-radius: 3px;
+  text-decoration: none;
+}
+
+#hfe-list li a:hover,
+#hfe-list li a:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#hfe-list .name {
+  font-weight: 600;
+}
+
+#hfe-list .publisher,
+#hfe-list .detail {
+  opacity: 0.65;
+  font-size: 0.9em;
+}
+
+#hfe-list .detail {
+  font-family: monospace;
+}
+
+.hfe-credit {
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+@media (max-width: 40rem) {
+  #hfe-list li a {
+    grid-template-columns: minmax(0, 1fr);
+    padding-bottom: 6px;
+  }
+}
+
 div.filter {
   margin-top: 8px;
 }

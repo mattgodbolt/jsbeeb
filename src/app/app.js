@@ -173,6 +173,10 @@ const template = [
                 click: showModal("sth", { sthType: "discs" }),
             },
             {
+                label: "Browse HFE Disc Archive...",
+                click: showModal("hfe"),
+            },
+            {
                 label: "Browse Example Discs...",
                 click: showModal("discs"),
             },
