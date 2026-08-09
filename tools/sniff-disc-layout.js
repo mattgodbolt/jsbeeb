@@ -59,21 +59,30 @@ function sniff({ name, data }) {
     return header.is40Track ? header : sniffSurfaceLayout(disc);
 }
 
-/** The tracks an archive manifest records for a disc, which is what its cataloguer saw. */
-function claimedTracks(manifest, name) {
-    const entry = manifest?.files?.find((file) => file.path === name);
-    return entry ? ((entry.tracks ?? [])[0] ?? "") : null;
+/**
+ * The tracks an archive manifest records per disc, which is what its cataloguer saw. A row without
+ * one is left out rather than read as anything, since "nothing recorded" is not a claim.
+ */
+function claimedTracks(manifest) {
+    const claims = new Map();
+    for (const file of manifest?.files ?? []) {
+        const claimed = (file.tracks ?? [])[0];
+        if (claimed) claims.set(file.path, claimed);
+    }
+    return claims;
 }
 
 async function main() {
-    const directory = argv[2];
-    const verbose = argv.includes("--verbose");
-    const manifestPath = argv[argv.indexOf("--manifest") + 1];
-    if (!directory || directory.startsWith("--")) {
+    const args = argv.slice(2);
+    const verbose = args.includes("--verbose");
+    const manifestAt = args.indexOf("--manifest");
+    const manifestPath = manifestAt === -1 ? null : args[manifestAt + 1];
+    const directory = args.find((arg, index) => !arg.startsWith("--") && index !== manifestAt + 1);
+    if (!directory || (manifestAt !== -1 && (!manifestPath || manifestPath.startsWith("--")))) {
         stdout.write("Usage: node tools/sniff-disc-layout.js <directory> [--verbose] [--manifest <path>]\n");
         exit(1);
     }
-    const manifest = argv.includes("--manifest") ? JSON.parse(await readFile(manifestPath, "utf8")) : null;
+    const claims = manifestPath ? claimedTracks(JSON.parse(await readFile(manifestPath, "utf8"))) : new Map();
     // The loaders narrate what they are doing, which would bury the report.
     console.log = () => {};
 
@@ -92,8 +101,8 @@ async function main() {
         total++;
         counts.set(reason, (counts.get(reason) ?? 0) + 1);
         if (is40Track || verbose) stdout.write(`${is40Track ? "40" : "80"} ${image.path}: ${reason}\n`);
-        const claimed = claimedTracks(manifest, image.name);
-        if (claimed === null) continue;
+        const claimed = claims.get(image.name);
+        if (!claimed) continue;
         if (claimed.startsWith("40") === is40Track) agreed++;
         else
             disagreements.push(
@@ -105,7 +114,7 @@ async function main() {
     for (const [reason, count] of [...counts].sort(([, a], [, b]) => b - a)) {
         stdout.write(`${String(count).padStart(6)}  ${reason}\n`);
     }
-    if (manifest) {
+    if (claims.size) {
         stdout.write(`\n${agreed} of ${agreed + disagreements.length} agree with the manifest\n`);
         for (const disagreement of disagreements) stdout.write(`  ${disagreement}\n`);
     }
