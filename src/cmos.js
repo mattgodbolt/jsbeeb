@@ -48,7 +48,11 @@ export function localStoragePersistence(getStorage, onSaveFailure) {
         load() {
             try {
                 const stored = getStorage().cmosRam;
-                return stored ? JSON.parse(stored) : null;
+                if (!stored) return null;
+                const parsed = JSON.parse(stored);
+                if (!Array.isArray(parsed) || parsed.length !== defaultCmos.length)
+                    throw new Error(`the stored settings are not ${defaultCmos.length} bytes`);
+                return parsed;
             } catch (error) {
                 console.log(`Unable to read the stored CMOS settings: ${error?.message ?? error}`);
                 return null;

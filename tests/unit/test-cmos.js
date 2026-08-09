@@ -279,6 +279,13 @@ describe("CMOS", () => {
             expect(readCmos(cmos, 25)).toBe(defaultCmos[25]);
         });
 
+        it("starts from the defaults when the stored settings are the wrong shape", () => {
+            for (const cmosRam of ['"nonsense"', "[1, 2, 3]", '{"config": 1}', "null"]) {
+                const cmos = new Cmos(localStoragePersistence(() => ({ cmosRam }), onSaveFailure));
+                expect(readCmos(cmos, 25), cmosRam).toBe(defaultCmos[25]);
+            }
+        });
+
         it("starts from the defaults when the page is refused storage altogether", () => {
             const refused = () => {
                 throw new Error("The operation is insecure");
