@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.17.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.16.0...v1.17.0) (2026-08-09)
+
+
+### Features
+
+* add a toast, for saying something that needs nothing doing about it ([#796](https://github.com/mattgodbolt/jsbeeb/issues/796)) ([06cdabf](https://github.com/mattgodbolt/jsbeeb/commit/06cdabf800af4c08ca8a3ea41461fb94d635e9fa))
+* browse the HFE disc archive from within jsbeeb ([#800](https://github.com/mattgodbolt/jsbeeb/issues/800)) ([4f8458c](https://github.com/mattgodbolt/jsbeeb/commit/4f8458cd4082bdc41042ad5fab2ef73caefbe69a))
+* let a drive be set to 40 or 80 tracks ([#792](https://github.com/mattgodbolt/jsbeeb/issues/792)) ([3f96acc](https://github.com/mattgodbolt/jsbeeb/commit/3f96acc260694a42e25c339ff7a5133119b45c4e))
+
+
+### Bug Fixes
+
+* keep the unzipped name when loading from the STH archive ([#806](https://github.com/mattgodbolt/jsbeeb/issues/806)) ([3b914cc](https://github.com/mattgodbolt/jsbeeb/commit/3b914cc190c450ececc71355fd362f57eb989e4b))
+* let sniff-disc-layout take the directory where its usage says ([#804](https://github.com/mattgodbolt/jsbeeb/issues/804)) ([e805568](https://github.com/mattgodbolt/jsbeeb/commit/e805568b5b96ff08256a55cb6efadb17c2abc0ba))
+* read a 40 track disc that a flux image holds as an 80 track drive saw it ([#799](https://github.com/mattgodbolt/jsbeeb/issues/799)) ([bc88a46](https://github.com/mattgodbolt/jsbeeb/commit/bc88a46c3afa75db58beb6856974da46c4300c57))
+* read a 40 track disc the way a 40 track drive wrote it ([#791](https://github.com/mattgodbolt/jsbeeb/issues/791)) ([e2a5e6a](https://github.com/mattgodbolt/jsbeeb/commit/e2a5e6a7a6dd56a9807d5fedecbee0b43ab48a3c))
+* survive a bad start (bad image, bad model, unseen audio warning) ([#808](https://github.com/mattgodbolt/jsbeeb/issues/808)) ([9d876e6](https://github.com/mattgodbolt/jsbeeb/commit/9d876e60a5520d5f52ff92c7ecb1e134d51a2ad2))
+* take an HFE out of a zip ([#809](https://github.com/mattgodbolt/jsbeeb/issues/809)) ([e43975e](https://github.com/mattgodbolt/jsbeeb/commit/e43975ec71918a800fd30f501498998300050547))
+* toast the notices that were using the error dialog ([#807](https://github.com/mattgodbolt/jsbeeb/issues/807)) ([68c3b68](https://github.com/mattgodbolt/jsbeeb/commit/68c3b688390fa1070ccf8aae35542242325f8879))
+* unzip an ADFS disc image ([#802](https://github.com/mattgodbolt/jsbeeb/issues/802)) ([8f11bd4](https://github.com/mattgodbolt/jsbeeb/commit/8f11bd4c3a6047ddcf9d7a7fc513020437042f2a))
+
 ## [1.16.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.15.0...v1.16.0) (2026-08-08)
 
 
