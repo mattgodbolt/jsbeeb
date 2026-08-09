@@ -213,7 +213,6 @@ export class GlCanvas {
     }
 }
 
-/** Leaves what stopped the asked-for filter on the canvas, for main.js to quote. */
 function fellBackBecause(canvas, reason) {
     canvas.fallbackReason = reason;
     return canvas;
