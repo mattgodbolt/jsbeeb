@@ -32,16 +32,8 @@ const known = (name) => SectorImages.has(extname(name).toLowerCase()) || FluxIma
 const HfeMagics = ["HXCPICFE", "HXCHFEV3"];
 const isHfe = (data) => HfeMagics.includes(Buffer.from(data.subarray(0, 8)).toString("latin1"));
 
-/**
- * A mirror of flux images keeps its blobs brotli-compressed, to be served with
- * `Content-Encoding: br` and undone by the browser, so what sits on disk is not
- * the image. Brotli has no magic number to test for, so the only way to know is
- * to try it on anything that is not an image already.
- *
- * @param {Uint8Array} data
- * @returns {Uint8Array} the image, decompressed if it needed to be
- */
-export function asFluxImage(data) {
+// Brotli has no magic number, so trying it is the only way to tell.
+export function decompressedIfBrotli(data) {
     if (isHfe(data)) return data;
     try {
         return new Uint8Array(brotliDecompressSync(data));
@@ -52,7 +44,7 @@ export function asFluxImage(data) {
 
 async function readImage(path) {
     const raw = new Uint8Array(await readFile(path));
-    return FluxImages.has(extname(path).toLowerCase()) ? asFluxImage(raw) : raw;
+    return FluxImages.has(extname(path).toLowerCase()) ? decompressedIfBrotli(raw) : raw;
 }
 
 async function* discImages(directory) {
