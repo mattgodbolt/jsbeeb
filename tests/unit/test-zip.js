@@ -27,6 +27,11 @@ describe("zip tests", function () {
 
         expect(result.name).toBe("test.adf");
         expect(result.data instanceof Uint8Array).toBeTruthy();
+
+        const content = Array.from(result.data)
+            .map((b) => String.fromCharCode(b))
+            .join("");
+        expect(content).toBe("This is a test ADF file\n");
     });
 
     it("should unzip ROM files", async () => {
