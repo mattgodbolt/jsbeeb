@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../test-machine.js";
-import { load } from "../../src/fdc.js";
+import { discFor, load } from "../../src/fdc.js";
 
 const SectorSize = 256;
 const SectorsPerTrack = 10;
@@ -53,6 +53,25 @@ describe("disc track layouts", { timeout: 60000 }, function () {
         expect(seen.at(-1).trim()).toBe(`${fill}`);
         // DFS asked for its track 39, which a 40 track format keeps on the 78th track of the surface.
         expect(testMachine.processor.fdc.drives[0].track).toBe(78);
+    });
+
+    it("reads a flux image that holds a 40 track disc as an 80 track drive saw it", async () => {
+        // elite.hfe keeps its catalogue on track 0, which reads at either pitch, and everything
+        // else on every other track. D.MOP is DFS track 36, so the head has to reach past 70.
+        const testMachine = new TestMachine();
+        await testMachine.initialise();
+        const image = await load("discs/elite.hfe");
+        testMachine.processor.fdc.loadDisc(0, discFor(testMachine.processor.fdc, "elite.hfe", image));
+        await testMachine.runUntilInput();
+        const seen = [];
+        testMachine.captureText((element) => seen.push(element.text));
+
+        await testMachine.type("*LOAD D.MOP 3000");
+        await testMachine.runUntilInput(20);
+
+        expect(seen.join("\n")).not.toContain("fault");
+        expect(testMachine.processor.fdc.drives[0].tracksPerStep).toBe(2);
+        expect(testMachine.processor.fdc.drives[0].track).toBeGreaterThan(70);
     });
 
     it("leaves an 80 track disc where it has always been", async () => {

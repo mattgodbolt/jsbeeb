@@ -1,5 +1,14 @@
 // Floppy disc assorted utils.
-import { Disc, DiscConfig, DiscLayout, loadAdf, loadSsd, sniffDfsLayout, toSsdOrDsd } from "./disc.js";
+import {
+    Disc,
+    DiscConfig,
+    DiscLayout,
+    loadAdf,
+    loadSsd,
+    sniffDfsLayout,
+    sniffSurfaceLayout,
+    toSsdOrDsd,
+} from "./disc.js";
 import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import * as utils from "./utils.js";
 
@@ -20,6 +29,7 @@ export class DiscType {
      * @param {function(Disc): Uint8Array} options.saver - Function to save this disc type.
      * @param {function(Uint8Array, string): void|null} [options.nameSetter] - Function to set the name/label in the disc image, or null if not supported.
      * @param {function(Uint8Array): {is40Track: boolean, reason: string}} [options.layoutSniffer] - Function to tell a 40 track image from an 80 track one, for formats that carry the evidence.
+     * @param {boolean} [options.isFluxImage] - Whether the image is a picture of the surface rather than a list of the sectors on it.
      * @param {boolean} [options.isDoubleSided] - Whether the disc format is double-sided.
      * @param {boolean} [options.isDoubleDensity] - Whether the disc format is double density.
      * @param {number|undefined} [options.byteSize] - The size in bytes of this disc format, or undefined if variable.
@@ -30,6 +40,7 @@ export class DiscType {
         saver,
         nameSetter = null,
         layoutSniffer,
+        isFluxImage,
         isDoubleSided,
         isDoubleDensity,
         byteSize,
@@ -39,6 +50,7 @@ export class DiscType {
         this._saver = saver;
         this._nameSetter = nameSetter;
         this._layoutSniffer = layoutSniffer;
+        this._isFluxImage = isFluxImage;
         this._isDoubleSided = isDoubleSided;
         this._isDoubleDensity = isDoubleDensity;
         this._byteSize = byteSize;
@@ -109,6 +121,15 @@ export class DiscType {
     }
 
     /**
+     * Whether the image holds a picture of the surface, so that where its tracks sit is a fact
+     * about the disc rather than a decision the loader made.
+     * @returns {boolean}
+     */
+    get isFluxImage() {
+        return !!this._isFluxImage;
+    }
+
+    /**
      * What an image of this type says about its track layout.
      * @param {Uint8Array} data - The disc image data
      * @returns {?{is40Track: boolean, reason: string}} null for formats that cannot say
@@ -155,6 +176,7 @@ const hfeDiscType = new DiscType({
     loader: loadHfe,
     saver: toHfe,
     layoutSniffer: sniffHfeLayout,
+    isFluxImage: true,
     isDoubleSided: true,
     isDoubleDensity: true,
 });
@@ -256,6 +278,13 @@ export function discFor(fdc, name, stringData, onChange, layout = DiscLayout.aut
     const config = new DiscConfig();
     config.expandTo80 = is40TrackLayout(discType, data, name, layout);
     const disc = discType.loader(new Disc(true, config, name), data, onChange);
+    // A flux image of a 40 track disc read in an 80 track drive already holds it spread across the
+    // surface, so nothing needs moving and only the drive needs telling to step twice.
+    if (layout === DiscLayout.auto && discType.isFluxImage && !disc.is40Track) {
+        const sniffed = sniffSurfaceLayout(disc);
+        disc.is40Track = sniffed.is40Track;
+        console.log(`${name} surface reads as ${sniffed.is40Track ? "40" : "80"} track: ${sniffed.reason}`);
+    }
     disc.setOriginalImageCrc32(data instanceof Uint8Array ? data : new Uint8Array(data));
     return disc;
 }
