@@ -77,7 +77,11 @@ async function main() {
     const verbose = args.includes("--verbose");
     const manifestAt = args.indexOf("--manifest");
     const manifestPath = manifestAt === -1 ? null : args[manifestAt + 1];
-    const directory = args.find((arg, index) => !arg.startsWith("--") && index !== manifestAt + 1);
+    // Only skip the argument after --manifest when there is one: with no
+    // --manifest, manifestAt is -1 and this would skip the first argument,
+    // which is where the usage line says to put the directory.
+    const manifestValueAt = manifestAt === -1 ? -1 : manifestAt + 1;
+    const directory = args.find((arg, index) => !arg.startsWith("--") && index !== manifestValueAt);
     if (!directory || (manifestAt !== -1 && (!manifestPath || manifestPath.startsWith("--")))) {
         stdout.write("Usage: node tools/sniff-disc-layout.js <directory> [--verbose] [--manifest <path>]\n");
         exit(1);
