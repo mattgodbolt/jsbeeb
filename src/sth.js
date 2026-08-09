@@ -53,7 +53,7 @@ export class StairwayToHell {
         const url = this._baseUrl + encodePath(file);
         console.log("Loading ZIP from " + url);
         const response = await fetch(url);
-        if (!response.ok) throw new Error("Network response was not ok");
+        if (!response.ok) throw new Error(`Unable to load ${url}, http code ${response.status}`);
         try {
             return await utils.unzipDiscImage(new Uint8Array(await response.arrayBuffer()));
         } catch (error) {
