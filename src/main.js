@@ -1573,10 +1573,14 @@ async function gdLoad(cat, layout) {
 
 for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "none";
 (async () => {
-    const available = await googleDrive.initialise();
-    if (available) {
-        for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
-        await gdAuth(true);
+    try {
+        const available = await googleDrive.initialise();
+        if (available) {
+            for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
+            await gdAuth(true);
+        }
+    } catch (error) {
+        console.log(`Google Drive is unavailable: ${errorText(error)}`);
     }
 })();
 const googleDriveModal = new bootstrap.Modal(googleDriveEl);
