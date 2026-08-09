@@ -12,23 +12,23 @@ describe("AudioHandler", () => {
         return { connect: () => {}, gain: { value: 0 }, frequency: { value: 0 }, Q: { value: 0 }, type: "" };
     }
 
-    function fakeContext(hasWorklet) {
+    function fakeContext(hasWorklet, addModule) {
         return {
             state: "running",
             destination: {},
-            audioWorklet: hasWorklet ? { addModule: async () => {} } : undefined,
+            audioWorklet: hasWorklet ? { addModule } : undefined,
             createGain: fakeNode,
             createBiquadFilter: fakeNode,
             resume: async () => {},
         };
     }
 
-    function stubAudio({ hasWorklet = true } = {}) {
+    function stubAudio({ hasWorklet = true, addModule = async () => {} } = {}) {
         vi.stubGlobal(
             "AudioContext",
             class {
                 constructor() {
-                    const context = fakeContext(hasWorklet);
+                    const context = fakeContext(hasWorklet, addModule);
                     contexts.push(context);
                     return context;
                 }
@@ -118,6 +118,37 @@ describe("AudioHandler", () => {
             handler.checkStatus();
 
             expect(warning().style.opacity).toBe("0");
+        });
+    });
+
+    describe("when a worklet module fails to load", () => {
+        const rejectModule = (name) => async (url) => {
+            if (url.includes(name)) throw new Error("Blocked by an extension");
+        };
+
+        beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+        afterEach(() => vi.restoreAllMocks());
+
+        it("says there will be no sound in the banner, and leaves it up", async () => {
+            stubAudio({ addModule: rejectModule("audio-renderer") });
+
+            const handler = makeHandler();
+
+            await vi.waitFor(() => expect(warningShown()).toBe(true));
+            expect(warning().textContent).toContain("no sound");
+            expect(warning().textContent).toContain("Blocked by an extension");
+            handler.checkStatus();
+            expect(warningShown()).toBe(true);
+        });
+
+        it("toasts about the Music 5000 and leaves the banner down", async () => {
+            stubAudio({ addModule: rejectModule("music5000") });
+
+            makeHandler();
+
+            await vi.waitFor(() => expect(document.querySelector(".toast .message")).not.toBeNull());
+            expect(document.querySelector(".toast .message").textContent).toContain("Music 5000 will be silent");
+            expect(warningShown()).toBe(false);
         });
     });
 
