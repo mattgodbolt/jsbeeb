@@ -15,6 +15,7 @@ export class AudioHandler {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
         this.warningNode = warningNode;
+        this.noAudioWorklet = false;
         toggle(this.warningNode, false);
         this.stats = {};
         if (statsNode) {
@@ -41,14 +42,15 @@ export class AudioHandler {
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
+                this.noAudioWorklet = true;
                 console.log("Unable to initialise audio: no audio worklet API");
-                toggle(this.warningNode, true);
                 const localhost = new URL(window.location);
                 localhost.hostname = "localhost";
                 this.warningNode.innerHTML = `No audio worklet API was found - there will be no audio.
                     If you are running a local jsbeeb, you must either use a host of
                     <a href="${localhost}">localhost</a>,
                     or serve the content over <em>https</em>.`;
+                toggle(this.warningNode, true);
             }
             this.soundChip = new FakeSoundChip();
             this.ddNoise = new FakeDdNoise();
@@ -56,7 +58,6 @@ export class AudioHandler {
         }
 
         this.warningNode.addEventListener("mousedown", () => this.tryResume());
-        toggle(this.warningNode, false);
 
         // Initialise Music 5000 audio context
         this.audioContextM5000 = createAudioContext({ sampleRate: 46875 });
@@ -145,6 +146,7 @@ export class AudioHandler {
     }
 
     checkStatus() {
+        if (this.noAudioWorklet) return;
         if (!this.audioContext && !this.audioContextM5000) return;
         const suspended =
             (this.audioContext && this.audioContext.state === "suspended") ||
