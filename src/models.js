@@ -263,6 +263,8 @@ export function findModel(name) {
     return null;
 }
 
+export const DefaultModel = findModel("B-DFS1.2");
+
 export const TEST_6502 = new Model({
     name: "TEST",
     synonyms: ["TEST"],

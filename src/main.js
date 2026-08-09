@@ -19,7 +19,7 @@ import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
-import { tubeModelFor } from "./models.js";
+import { DefaultModel, findModel, tubeModelFor } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { Econet } from "./econet.js";
@@ -288,7 +288,13 @@ const config = new Config(
 // Perform mapping of legacy models to the new format
 config.mapLegacyModels(parsedQuery);
 
-config.setModel(parsedQuery.model || guessModelFromHostname(window.location.hostname));
+const requestedModelName = parsedQuery.model || guessModelFromHostname(window.location.hostname);
+const requestedModel = findModel(requestedModelName);
+if (!requestedModel)
+    toast(`There is no model called "${requestedModelName}". Using ${DefaultModel.name} instead.`, {
+        title: "Model",
+    });
+config.setModel((requestedModel ?? DefaultModel).name);
 config.setKeyLayout(keyLayout);
 config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 1);
 config.setMicrophoneChannel(parsedQuery.microphoneChannel);
