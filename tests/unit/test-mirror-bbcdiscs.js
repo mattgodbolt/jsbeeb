@@ -148,6 +148,29 @@ describe("parseCatalogue", () => {
         expect(parseCatalogue(sheet(FlippyRow)).entries[0].dfsTitle).toEqual(["T E S T", "T E S T"]);
     });
 
+    // Dropping the gap would slide side 1's value into side 0's place and
+    // reject a perfectly good disc.
+    it("keeps a blank side in its place", () => {
+        const { entries } = parseCatalogue(
+            sheet(
+                `Testsoft,Gappy,D1DS,"40, 80",3,"AAAA0001, AAAA0002",", AAAA0003",1,` +
+                    `"T, T",", 80",none,${link("1gappy000000000000000000000")},t,,,`,
+            ),
+        );
+        expect(entries[0].crc32As40).toEqual(["", "AAAA0003"]);
+        expect(entries[0].dfsCycle).toEqual(["", "80"]);
+    });
+
+    it("rejects a row missing a CRC32 for one of its sides", () => {
+        const { entries, problems } = parseCatalogue(
+            sheet(
+                `Testsoft,Half,D1DS,"40, 80",3,", AAAA0002",,1,"T, T","04, 04",none,${link("1half0000000000000000000000")},t,,,`,
+            ),
+        );
+        expect(entries).toEqual([]);
+        expect(problems).toEqual([expect.stringContaining("needs a CRC32 for every side")]);
+    });
+
     it("names the blob after the fingerprint, not the sheet's prose", () => {
         const [before] = parseCatalogue(sheet(FlippyRow)).entries;
         const [after] = parseCatalogue(sheet(FlippyRow.replace(",Flippy Demo,", ",Flippy Demoe,"))).entries;
@@ -197,6 +220,19 @@ describe("compareFingerprints", () => {
     it("catches a mismatched DFS cycle number", () => {
         const sides = parseFingerprints(FlippyFingerprints.replace("count 80", "count 81"));
         expect(compareFingerprints(flippy(), sides)).toEqual(["side 1 DFS cycle number: sheet says 80, disc says 81"]);
+    });
+
+    it("reports a column the sheet filled in but the disc has nothing to say about", () => {
+        const entry = singleSided({ crc32As40: ["AAAA0003"] });
+        const sides = parseFingerprints("info:disc:disc side 0 CRC32 fingerprint BBBB0001 title TESTDISC count 04");
+        expect(compareFingerprints(entry, sides)).toEqual([
+            "side 0 CRC32 as 40 tracks: sheet says AAAA0003, disc reports none",
+        ]);
+    });
+
+    it("leaves the other sides alone when a column only describes the first", () => {
+        const sides = parseFingerprints(FlippyFingerprints);
+        expect(compareFingerprints({ ...flippy(), dfsCycle: ["40"] }, sides)).toEqual([]);
     });
 
     it("notices when the disc has fewer sides than the sheet describes", () => {

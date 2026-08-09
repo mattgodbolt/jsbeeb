@@ -34,7 +34,7 @@ at the binary, or pass `--beebjit` when invoking the script directly. Only
 Seed first on a fresh machine. A published blob is the disc, so anything already
 on S3 is decompressed locally rather than fetched again, and a mirror that is
 already complete needs nothing at all from Drive. That matters: the archive is
-about a gigabyte across 725 files, all served by someone else's Drive account.
+most of a gigabyte, all served by someone else's Drive account.
 
 Seeding also relies on the sync leaving the stored encoding alone. If it decodes
 `Content-Encoding` on the way down, the blobs arrive as plain HFE and the next
@@ -63,8 +63,9 @@ node tools/mirror-bbcdiscs.js --csv .bbcdiscs-sheet.csv --out .bbcdiscs-mirror \
     --filter "<publisher or title>" --limit 6
 ```
 
-A filtered or limited run knows nothing about the discs it skipped, so it never
-prunes, and its manifests describe only what it selected. Don't upload from one.
+A filtered or limited run knows nothing about the discs it skipped, so it neither
+prunes nor writes manifests. It leaves blobs behind for the next full run to pick
+up, and there is nothing to upload from it.
 
 ## What the sheet's link column means
 
@@ -96,19 +97,17 @@ whichever of the two suits the side's density, which the `Tracks` column gives
 per side, and its `CRC32 as 40 tracks` column always holds the even-track one.
 A flippy with one side of each density exercises both rules at once.
 
-It costs a beebjit run per disc, around 0.4s, and it is the only thing that ties
-a link to the disc the catalogue says is behind it. Expect it to find some: a
-row whose fingerprint has moved on from the file it links to still reads as a
-perfectly good row until something checks.
+It costs a beebjit run per disc, and it is the only thing that ties a link to
+the disc the catalogue says is behind it: a row whose fingerprint has moved on
+from the file it links to reads as a perfectly good row until something checks.
 
 Discs already published are taken on trust, because a blob is named after its
 fingerprint: a CRC32 that changes arrives as a new blob rather than as a disc
 that needs looking at again. `--reverify` re-checks them anyway, which is what
 to reach for when the sheet's other fingerprint columns change.
 
-Compressing is what actually costs: brotli at maximum quality is around 3.2s for
-a 2 MB image, so a first full run is dominated by it. Seeding from S3 skips it
-entirely for discs already mirrored.
+Compressing is what actually costs: brotli at maximum quality dominates a first
+full run. Seeding from S3 skips it entirely for discs already mirrored.
 
 ## Layout and formats
 
@@ -127,9 +126,8 @@ gigabyte of re-downloading.
 
 Blobs are stored brotli-compressed and served with `Content-Encoding: br`, so
 the browser decodes them and jsbeeb receives the HFE with no work of its own.
-That is worth about 24x: an 80 track double-sided image is 2,074,624 bytes raw
-and around 88 KB compressed. Brotli rather than zstd because Safari has only
-had zstd since 26.0, and brotli matches it on these files anyway.
+These images compress to a few percent of their size. Brotli rather than zstd
+because Safari has only had zstd since 26.0, and brotli matches it here anyway.
 
 The cost is that S3 and CloudFront serve a stored encoding unconditionally
 rather than negotiating it, so a client that doesn't advertise `br` receives

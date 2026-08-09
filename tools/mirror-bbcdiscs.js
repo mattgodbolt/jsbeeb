@@ -35,17 +35,16 @@ const RetryDelayMs = 1000;
 const MaxRetries = 3;
 const HfeMagics = ["HXCPICFE", "HXCHFEV3"];
 
-// The sheet's link column is the distribution decision: rows whose disc is
-// catalogued but deliberately not published carry a fingerprint and no link.
 const LinkColumn = "HFE link";
 const DriveIdPattern = /\/file\/d\/([-\w]{25,})/;
 
 // Cells describing a two-sided disc hold one value per side, comma separated.
-const splitCell = (value) =>
-    (value ?? "")
-        .split(",")
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0);
+// A side left blank keeps its place, or every value after it would be read
+// against the wrong side.
+const splitCell = (value) => {
+    const trimmed = (value ?? "").trim();
+    return trimmed === "" ? [] : trimmed.split(",").map((part) => part.trim());
+};
 
 /**
  * Split a free-text per-side cell, where a comma might be separating the sides
@@ -58,8 +57,8 @@ const splitPerSide = (value, sides) => {
     return parts.length === sides ? parts : (value ?? "").trim() === "" ? [] : [(value ?? "").trim()];
 };
 
-// Most discs leave most of the sheet's optional columns blank, and 725 entries
-// of `"notes": null` would be most of the manifest.
+// Most discs leave most of the sheet's optional columns blank, and a manifest
+// of `"notes": null` says nothing.
 const withoutEmpties = (entry) =>
     Object.fromEntries(
         Object.entries(entry).filter(([, value]) => value !== null && !(Array.isArray(value) && value.length === 0)),
@@ -121,10 +120,9 @@ export function parseCsv(text) {
 /**
  * Turn sheet rows into the discs we intend to mirror.
  *
- * A row with no link is withheld rather than missing: the catalogue records the
- * disc but its owner has chosen not to publish the image, so it is reported and
- * skipped without failing the run. Anything else that stops a row from being
- * mirrored is a fault in the sheet and comes back as a problem.
+ * A row with no link is withheld, not missing: the link is where the archive's
+ * owner says whether an image may be published, so its absence is reported and
+ * skipped rather than treated as a fault.
  *
  * @param {Object<string, string>[]} rows
  * @returns {{entries: object[], withheld: object[], problems: string[]}}
@@ -152,8 +150,8 @@ export function parseCatalogue(rows) {
             continue;
         }
         const crc32 = splitCell(row.CRC32);
-        if (crc32.length === 0) {
-            problems.push(`${where}: has a link but no CRC32, so there is nothing to name the blob after`);
+        if (crc32.length === 0 || crc32.some((value) => value === "")) {
+            problems.push(`${where}: needs a CRC32 for every side; it is what names the blob`);
             continue;
         }
 
@@ -243,7 +241,9 @@ export function compareFingerprints(entry, sides) {
         const is80Track = (entry.tracks[index] ?? entry.tracks[0] ?? "").startsWith("80");
         const actual = is80Track ? side.full : (side.as40 ?? side.full);
         const check = (what, want, got) => {
-            if (want && got && want.toUpperCase() !== got.toUpperCase())
+            if (!want) return;
+            if (got === null) problems.push(`side ${index} ${what}: sheet says ${want}, disc reports none`);
+            else if (want.toUpperCase() !== got.toUpperCase())
                 problems.push(`side ${index} ${what}: sheet says ${want}, disc says ${got}`);
         };
         check("CRC32", expected, actual);
@@ -318,8 +318,8 @@ async function fileSize(path) {
     }
 }
 
-// Write to a temporary name and rename into place, so an interrupted run never
-// leaves a truncated file that a later run would mistake for complete.
+// So an interrupted run never leaves a truncated file that a later run would
+// mistake for complete.
 async function writeAtomically(dest, bytes) {
     const partial = `${dest}.part`;
     await writeFile(partial, bytes);
@@ -422,10 +422,8 @@ async function obtain(entry, blobDir, cacheDir) {
     return { raw, size: null, downloaded, alreadyPublished: false };
 }
 
-// A row losing its link is how the catalogue withdraws a disc, so anything the
-// sheet no longer asks for has to go: the blob, so `aws s3 sync --delete` takes
-// it off the mirror, and the cached original, so a withdrawal doesn't quietly
-// leave us holding a copy.
+// A withdrawal has to take the cached original with it, or we quietly keep a
+// copy of something we were asked to stop publishing.
 async function prune(dir, wanted) {
     const stale = (await readdir(dir)).filter((name) => name.endsWith(".hfe") && !wanted.has(name));
     for (const name of stale) await rm(join(dir, name));
@@ -457,7 +455,7 @@ function parseArgs(args) {
         else if (arg === "--concurrency") opts.concurrency = Number(args[++i]);
         else if (arg === "--beebjit") opts.beebjit = args[++i];
         else if (arg === "--limit") opts.limit = Number(args[++i]);
-        else if (arg === "--filter") opts.filter = args[++i].toLowerCase();
+        else if (arg === "--filter") opts.filter = args[++i]?.toLowerCase();
         else if (arg === "--check-only") opts.checkOnly = true;
         else if (arg === "--reverify") opts.reverify = true;
         else if (arg === "--source") opts.source = args[++i];
@@ -473,6 +471,9 @@ function parseArgs(args) {
     }
     if (!opts.csv) fail("--csv <sheet.csv> is required");
     if (!opts.out && !opts.checkOnly) fail("--out <dir> is required");
+    if (opts.filter === undefined) fail("--filter needs a value");
+    if (opts.limit !== null && (!Number.isInteger(opts.limit) || opts.limit < 1))
+        fail("--limit must be a positive integer");
     // Publishing a disc means asserting it is the one the catalogue describes,
     // and only beebjit can tell us that, so there is no unverified path to S3.
     if (!opts.beebjit && !opts.checkOnly)
@@ -490,11 +491,9 @@ async function main() {
     for (const problem of problems) stderr.write(`  PROBLEM ${problem}\n`);
     if (problems.length) stderr.write(`${problems.length} row(s) need fixing in the sheet; they are not mirrored\n`);
 
-    // --check-only reads the sheet and writes nothing, so it can't leave a
-    // half-populated mirror behind for someone to upload by mistake.
     if (opts.checkOnly) return;
 
-    // Find out now rather than after a gigabyte of downloads.
+    // Before the downloading, not after it.
     try {
         await access(opts.beebjit, fsConstants.X_OK);
     } catch {
@@ -580,15 +579,25 @@ async function main() {
             });
         });
 
-    // A partial run knows nothing about the discs it skipped, so pruning would
-    // delete blobs that are still catalogued.
+    // Keyed on what the catalogue still asks for, not on what verified: a disc
+    // that failed today is withheld from the manifest but keeps whatever blob
+    // it already had, where one it no longer lists is gone for good. A changed
+    // CRC32 arrives as a new blob name, so the old one falls out of here too.
     let stale = [];
     if (!partial) {
-        stale = await prune(blobDir, new Set(files.map((file) => file.path)));
+        stale = await prune(blobDir, new Set(selected.map((entry) => entry.blob)));
         await prune(cacheDir, new Set(entries.map((entry) => `${entry.driveId}.hfe`)));
     }
     for (const name of stale) stderr.write(`  WITHDRAWN ${name}\n`);
-    if (partial) stderr.write("Partial run: nothing pruned, and the manifests describe only what was selected\n");
+
+    // Manifests describe the whole archive, and the upload deletes whatever
+    // they leave out, so a run that only looked at some of it must not write
+    // them.
+    if (partial) {
+        stderr.write(`\n${files.length} of ${selected.length} selected discs published; manifests left alone\n`);
+        if (failures.length) exit(1);
+        return;
+    }
 
     await writeJson(join(blobDir, "manifest.json"), { schemaVersion: SchemaVersion, files });
     const totalBytes = files.reduce((total, file) => total + file.size, 0);
