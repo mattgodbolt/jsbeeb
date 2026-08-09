@@ -433,8 +433,19 @@ function putDiscIn(driveIndex, loadedDisc) {
     const was = drive.tracksPerStep;
     processor.fdc.loadDisc(driveIndex, loadedDisc, fixed);
     showDriveTracks(driveIndex);
+    noteUnsavedWrites(loadedDisc);
     // A switch the user fixed does not move, so anything it does is not news.
     if (fixed === undefined && drive.tracksPerStep !== was) noteDriveTracks(driveIndex, loadedDisc.name);
+}
+
+function noteUnsavedWrites(loadedDisc) {
+    if (loadedDisc.savesChanges) return;
+    loadedDisc.notifyOnFirstTrackWrite(() =>
+        toast(`Changes to ${loadedDisc.name} are not saved. Use Discs, Download to keep a copy.`, {
+            title: "Disc",
+            quietKey: "quietDiscNotSaved",
+        }),
+    );
 }
 
 const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
@@ -1352,7 +1363,12 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
     discImage = split.image;
     const schema = split.schema;
     if (schema[0] === "!" || schema === "local") {
-        return disc.localDisc(processor.fdc, discImage, layout);
+        return disc.localDisc(processor.fdc, discImage, layout, (error) =>
+            toast(
+                `Browser storage would not take changes to ${discImage} (${errorText(error)}). Use Discs, Download to keep a copy.`,
+                { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },
+            ),
+        );
     }
     // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
     // Consider:

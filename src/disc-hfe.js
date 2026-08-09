@@ -208,6 +208,7 @@ export function loadHfe(disc, data, onChange) {
     }
 
     if (onChange) {
+        disc.savesChanges = true;
         disc.addTrackWriteListener((_side, _trackNum, _trackObj) => {
             // Generate a complete HFE image from the current disc state
             const hfeData = toHfe(disc);

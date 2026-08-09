@@ -707,6 +707,7 @@ export function loadSsd(disc, data, isDsd, onChange) {
     }
 
     if (onChange) {
+        disc.savesChanges = true;
         // TODO, maybe construct the disc directly with this stuff?
         // TODO maybe change this entirely and make it lazy; and have the onChange "pull" the disc as the format it wants
         // instead of doing this here. Most stuff doesn't care about changes and only needs the image on save.
@@ -906,6 +907,8 @@ export class Disc {
 
         this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
+        // Set by the loaders that honour onChange; a reload works it out afresh, so it is not snapshotted.
+        this.savesChanges = false;
 
         // Track which tracks have been written since the last snapshot.
         // Keys are numeric: (track | (isSideUpper ? 0x100 : 0)).
@@ -939,6 +942,15 @@ export class Disc {
     /** @param {function(boolean, Number, Track): void} listener */
     removeTrackWriteListener(listener) {
         this._trackWriteListeners.delete(listener);
+    }
+
+    /** @param {function(): void} listener called once, when a track is first written to this disc */
+    notifyOnFirstTrackWrite(listener) {
+        const onFirstWrite = () => {
+            this.removeTrackWriteListener(onFirstWrite);
+            listener();
+        };
+        this.addTrackWriteListener(onFirstWrite);
     }
 
     /**
