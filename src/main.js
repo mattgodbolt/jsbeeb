@@ -1178,13 +1178,13 @@ async function hfeClick(file) {
     const name = describeHfe(file).title;
     popupLoading("Loading " + name);
     try {
-        const disc = await loadDiscImage(parsedQuery.disc1);
-        processor.fdc.loadDisc(0, disc);
+        const loaded = await loadDiscImage(parsedQuery.disc1, layoutForDrive(0));
+        putDiscIn(0, loaded);
         loadingFinished();
         if (needsAutoboot) autoboot(name);
     } catch (err) {
         console.error("Error loading disc image:", err);
-        loadingFinished(err);
+        loadingFinished(`Unable to load ${name} from the HFE archive: ${errorText(err)}`);
     }
 }
 
