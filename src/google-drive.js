@@ -134,7 +134,7 @@ export class GoogleDriveLoader {
         return { fileId: meta.id, disc: this.makeDisc(fdc, data, meta) };
     }
 
-    makeDisc(fdc, data, meta) {
+    makeDisc(fdc, data, meta, layout) {
         let flusher = null;
         const name = meta.name;
         const id = meta.id;
@@ -148,12 +148,12 @@ export class GoogleDriveLoader {
         } else {
             console.log("Making read-only disc");
         }
-        return discFor(fdc, name, data, flusher);
+        return discFor(fdc, name, data, flusher, layout);
     }
 
-    async load(fdc, fileId) {
+    async load(fdc, fileId, layout) {
         const meta = (await this.driveClient.files.get({ fileId, fields: FILE_FIELDS })).result;
         const data = (await this.driveClient.files.get({ fileId, alt: "media" })).body;
-        return this.makeDisc(fdc, data, meta);
+        return this.makeDisc(fdc, data, meta, layout);
     }
 }

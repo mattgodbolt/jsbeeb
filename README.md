@@ -240,10 +240,16 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 ## URL Parameters
 
 - `autoboot` - fakes a shift break
-- `disc1=XXX` - loads disc XXX (from the `discs/` directory) into drive 1
-- `disc2=XXX` - as above
+- `disc1=XXX` - loads disc XXX (from the `discs/` directory) into drive 0
+- `disc2=XXX` - as above, into drive 1
 - `disc1=local:YYY` - creates a local disk YYY which will be kept in browser local storage
 - `disc1=sth:ZZZ` - loads disc ZZZ from the Stairway to Hell archive
+- `drive0Tracks=40` / `drive0Tracks=80` - fixes drive 0's 40/80 track switch, as the switch on the back of a real
+  drive did. `drive1Tracks` does the same for drive 1. Left alone, each drive follows whatever disc is loaded into it:
+  a 40 track image is laid out the way a 40 track drive wrote it, on every other track of the surface, and the drive
+  double steps to read it. `40` reads an 80 track disc through a double stepping head, which is as much of a mess as it
+  was in 1985. `80` turns all of this off for that drive, loading every image the way jsbeeb did before it could tell
+  them apart. [docs/disc-track-layouts.md](docs/disc-track-layouts.md) explains how an image's layout is worked out.
 - `tape=XXX` - loads tape XXX (from the `tapes/` directory)
 - `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
 - `KEY.X=Y` - makes host key `X` press BBC key `Y`, e.g. `KEY.ENTER=COPY`. See

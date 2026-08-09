@@ -1414,8 +1414,15 @@ export class WdFdc {
      * @param {Number} drive
      * @param {Disc} disc
      */
-    loadDisc(drive, disc) {
+    /**
+     * @param {Number} drive
+     * @param {Disc} disc
+     * @param {Number} [tracksPerStep] where to leave the drive's 40/80 switch, which by default
+     *   follows the disc, since no drive can tell what pitch the disc in it was written at
+     */
+    loadDisc(drive, disc, tracksPerStep = disc?.is40Track ? 2 : 1) {
         this._drives[drive].setDisc(disc);
+        this._drives[drive].tracksPerStep = tracksPerStep;
     }
 
     get motorOn() {

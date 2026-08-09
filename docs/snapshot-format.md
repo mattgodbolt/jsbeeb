@@ -38,8 +38,12 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 | `disc2ImageData` | Uint8Array | _(Optional)_ Embedded original disc 2 image bytes (local files)  |
 | `disc1Name`      | string     | _(Optional)_ Original filename for embedded disc 1               |
 | `disc2Name`      | string     | _(Optional)_ Original filename for embedded disc 2               |
+| `disc1Layout`    | string     | _(Optional)_ Track layout drive 0's disc was loaded with         |
+| `disc2Layout`    | string     | _(Optional)_ Track layout drive 1's disc was loaded with         |
 
 On restore, discs are reloaded from these source references before the FDC state is applied. The source string uses the same schema as URL query parameters (`sth:`, `http://`, `gd:`, etc.).
+
+`discNLayout` is `"contiguous"` (logical track N on physical track N) or `"expanded40"` (logical track N on physical track 2N, as a 40-track drive writes). It is recorded because the dirty track overlays below are indexed by physical track: reloading the disc pins it to the layout saved here rather than working the layout out again from the image. Absent means `"contiguous"`, which is what every snapshot written before layout detection existed holds.
 
 For locally-loaded files (via file input), the original disc image bytes are embedded in `discNImageData` so the disc can be reconstructed on restore without requiring the user to reload the file manually.
 
@@ -335,7 +339,7 @@ The FDC type depends on the model: Intel 8271 for BBC B models, WD1770 for Maste
 | `pulsePosition`   | number       | Sub-pulse position (0 or 16)           |
 | `in32usMode`      | boolean      | Double density (MFM) mode              |
 | `spinning`        | boolean      | Drive motor spinning                   |
-| `is40Track`       | boolean      | 40-track disc mode                     |
+| `is40Track`       | boolean      | Drive double steps for a 40 track disc |
 | `timerTaskOffset` | number\|null | Timer task offset from scheduler epoch |
 | `disc`            | object\|null | Disc state (null if no disc loaded)    |
 

@@ -410,7 +410,8 @@ export class MachineSession {
      */
     loadDisc(imagePath) {
         const data = new Uint8Array(readFileSync(imagePath));
-        this._machine.processor.fdc.loadDisc(0, fdc.discFor(this._machine.processor.fdc, imagePath, data));
+        const machineFdc = this._machine.processor.fdc;
+        machineFdc.loadDisc(0, fdc.discFor(machineFdc, imagePath, data));
     }
 
     /**

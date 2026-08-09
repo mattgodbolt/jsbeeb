@@ -12,6 +12,7 @@ const HfeV3OpcodeSetIndex = 0xf1;
 const HfeV3OpcodeSetBitrate = 0xf2;
 const HfeV3OpcodeSkipBits = 0xf3;
 const HfeV3OpcodeRand = 0xf4;
+const HfeTrackCountOffset = 9;
 const HfeBlockSideSize = 256;
 const HfeBlockSize = HfeBlockSideSize * 2;
 const HfeShugartDdFloppyMode = 7;
@@ -53,6 +54,21 @@ function hfeGetTrackOffsetAndLength(metadata, track) {
 }
 
 /**
+ * Whether an HFE image holds a 40 track format. A capture with no more tracks than half a surface
+ * cannot be one of an 80 track disc, whatever drive read it.
+ *
+ * @param {Uint8Array} data
+ * @returns {{is40Track: boolean, reason: string}}
+ */
+export function sniffHfeLayout(data) {
+    const numTracks = data.length > HfeTrackCountOffset ? data[HfeTrackCountOffset] : 0;
+    return {
+        is40Track: numTracks > 0 && numTracks * 2 <= IbmDiscFormat.tracksPerDisc,
+        reason: `its header declares ${numTracks} tracks`,
+    };
+}
+
+/**
  * Load a disc image in HFE format (v1 or v3)
  * @param {import("./disc.js").Disc} disc - The disc object to load into
  * @param {Uint8Array} data - The HFE file data
@@ -84,11 +100,12 @@ export function loadHfe(disc, data, onChange) {
     const numSides = data[10];
     if (numSides < 1 || numSides > 2) throw new Error(`Invalid number of sides: ${numSides}`);
 
-    const numTracks = data[9];
+    const numTracks = data[HfeTrackCountOffset];
     if (numTracks > IbmDiscFormat.tracksPerDisc) throw new Error(`Too many tracks: ${numTracks}`);
     let expandShift = 0;
     if (disc.config.expandTo80 && numTracks * 2 <= IbmDiscFormat.tracksPerDisc) {
         expandShift = 1;
+        disc.is40Track = true;
         console.log("Expanding 40 tracks to 80");
     }
 

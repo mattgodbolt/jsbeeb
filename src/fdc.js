@@ -1,6 +1,15 @@
 // Floppy disc assorted utils.
-import { Disc, DiscConfig, loadAdf, loadSsd, toSsdOrDsd } from "./disc.js";
-import { loadHfe, toHfe } from "./disc-hfe.js";
+import {
+    Disc,
+    DiscConfig,
+    DiscLayout,
+    loadAdf,
+    loadSsd,
+    sniffDfsLayout,
+    sniffSurfaceLayout,
+    toSsdOrDsd,
+} from "./disc.js";
+import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import * as utils from "./utils.js";
 
 export function load(name) {
@@ -19,15 +28,29 @@ export class DiscType {
      * @param {function(Disc, Uint8Array, function?): Disc} options.loader - Function to load this disc type.
      * @param {function(Disc): Uint8Array} options.saver - Function to save this disc type.
      * @param {function(Uint8Array, string): void|null} [options.nameSetter] - Function to set the name/label in the disc image, or null if not supported.
+     * @param {function(Uint8Array): {is40Track: boolean, reason: string}} [options.layoutSniffer] - Function to tell a 40 track image from an 80 track one, for formats that carry the evidence.
+     * @param {boolean} [options.isFluxImage] - Whether the image is a picture of the surface rather than a list of the sectors on it.
      * @param {boolean} [options.isDoubleSided] - Whether the disc format is double-sided.
      * @param {boolean} [options.isDoubleDensity] - Whether the disc format is double density.
      * @param {number|undefined} [options.byteSize] - The size in bytes of this disc format, or undefined if variable.
      */
-    constructor({ extension, loader, saver, nameSetter, isDoubleSided, isDoubleDensity, byteSize } = {}) {
+    constructor({
+        extension,
+        loader,
+        saver,
+        nameSetter = null,
+        layoutSniffer,
+        isFluxImage,
+        isDoubleSided,
+        isDoubleDensity,
+        byteSize,
+    } = {}) {
         this._extension = extension;
         this._loader = loader;
         this._saver = saver;
         this._nameSetter = nameSetter;
+        this._layoutSniffer = layoutSniffer;
+        this._isFluxImage = isFluxImage;
         this._isDoubleSided = isDoubleSided;
         this._isDoubleDensity = isDoubleDensity;
         this._byteSize = byteSize;
@@ -98,6 +121,24 @@ export class DiscType {
     }
 
     /**
+     * Whether the image holds a picture of the surface, so that where its tracks sit is a fact
+     * about the disc rather than a decision the loader made.
+     * @returns {boolean}
+     */
+    get isFluxImage() {
+        return !!this._isFluxImage;
+    }
+
+    /**
+     * What an image of this type says about its track layout.
+     * @param {Uint8Array} data - The disc image data
+     * @returns {?{is40Track: boolean, reason: string}} null for formats that cannot say
+     */
+    sniffLayout(data) {
+        return this._layoutSniffer ? this._layoutSniffer(data) : null;
+    }
+
+    /**
      * Sets the disc name in the disc data using the format-specific setter
      * @param {Uint8Array} data - The disc data to modify
      * @param {string} name - The name to set
@@ -114,8 +155,9 @@ export class DiscType {
 // Standard sizes
 const SsdByteSize = 80 * 10 * 256; // 80 tracks, 10 sectors, 256 bytes/sector
 const DsdByteSize = SsdByteSize * 2; // Double-sided
-const AdfsLargeByteSize = 2 * 80 * 16 * 256; // Double-sided, 16 sectors/track
-const AdfsSmallByteSize = 80 * 16 * 256; // Single-sided, 16 sectors/track
+// ADFS comes in three sizes: S is 40 tracks on one side, M is 80 on one, L is 80 on both.
+const AdfsMediumByteSize = 80 * 16 * 256;
+const AdfsLargeByteSize = AdfsMediumByteSize * 2;
 
 /**
  * Set the name in a DFS disc image (SSD/DSD format)
@@ -133,6 +175,8 @@ const hfeDiscType = new DiscType({
     extension: ".hfe",
     loader: loadHfe,
     saver: toHfe,
+    layoutSniffer: sniffHfeLayout,
+    isFluxImage: true,
     isDoubleSided: true,
     isDoubleDensity: true,
 });
@@ -152,7 +196,7 @@ const adlDiscType = new DiscType({
     byteSize: AdfsLargeByteSize,
 });
 
-// ADFS (Small) discs are standard ADFS (non-double) density, single sided
+// ADFS M and S: single sided, and sized as the larger of the two.
 const adfDiscType = new DiscType({
     extension: ".adf",
     loader: (disc, data, _onChange) => {
@@ -164,7 +208,7 @@ const adfDiscType = new DiscType({
     },
     isDoubleSided: false,
     isDoubleDensity: true,
-    byteSize: AdfsSmallByteSize,
+    byteSize: AdfsMediumByteSize,
 });
 
 // DSD (Double-sided disc)
@@ -173,6 +217,7 @@ const dsdDiscType = new DiscType({
     loader: (disc, data, onChange) => loadSsd(disc, data, true, onChange),
     saver: toSsdOrDsd,
     nameSetter: setDfsDiscName,
+    layoutSniffer: (data) => sniffDfsLayout(data, true),
     isDoubleSided: true,
     isDoubleDensity: false,
     byteSize: DsdByteSize,
@@ -184,6 +229,7 @@ const ssdDiscType = new DiscType({
     loader: (disc, data, onChange) => loadSsd(disc, data, false, onChange),
     saver: toSsdOrDsd,
     nameSetter: setDfsDiscName,
+    layoutSniffer: (data) => sniffDfsLayout(data, false),
     isDoubleSided: false,
     isDoubleDensity: false,
     byteSize: SsdByteSize,
@@ -203,21 +249,47 @@ export function guessDiscTypeFromName(name) {
 }
 
 /**
+ * @param {DiscType} discType
+ * @param {Uint8Array} data
+ * @param {string} name
+ * @param {string} layout - one of DiscLayout
+ * @returns {boolean} whether to lay the image out for a 40 track drive
+ */
+function is40TrackLayout(discType, data, name, layout) {
+    if (layout !== DiscLayout.auto) return layout === DiscLayout.expanded40;
+    const sniffed = discType.sniffLayout(data);
+    if (!sniffed) return false;
+    console.log(`${name} loaded as ${sniffed.is40Track ? "40" : "80"} track: ${sniffed.reason}`);
+    return sniffed.is40Track;
+}
+
+/**
  * Create a disc object of the appropriate type based on the file name
  * @param {Object} fdc - The FDC controller object
  * @param {string} name - The file name with extension
  * @param {string|Uint8Array} stringData - The disc image data as string or Uint8Array
  * @param {function(Uint8Array): void} onChange - Optional callback when disc content changes
+ * @param {string} [layout] - one of DiscLayout; by default the image is asked what it is
  * @returns {Disc} The loaded disc object
  */
-export function discFor(fdc, name, stringData, onChange) {
+export function discFor(fdc, name, stringData, onChange, layout = DiscLayout.auto) {
     const data = typeof stringData !== "string" ? stringData : utils.stringToUint8Array(stringData);
-    const disc = guessDiscTypeFromName(name).loader(new Disc(true, new DiscConfig(), name), data, onChange);
+    const discType = guessDiscTypeFromName(name);
+    const config = new DiscConfig();
+    config.expandTo80 = is40TrackLayout(discType, data, name, layout);
+    const disc = discType.loader(new Disc(true, config, name), data, onChange);
+    // A flux image of a 40 track disc read in an 80 track drive already holds it spread across the
+    // surface, so nothing needs moving and only the drive needs telling to step twice.
+    if (layout === DiscLayout.auto && discType.isFluxImage && !disc.is40Track) {
+        const sniffed = sniffSurfaceLayout(disc);
+        disc.is40Track = sniffed.is40Track;
+        console.log(`${name} surface reads as ${sniffed.is40Track ? "40" : "80"} track: ${sniffed.reason}`);
+    }
     disc.setOriginalImageCrc32(data instanceof Uint8Array ? data : new Uint8Array(data));
     return disc;
 }
 
-export function localDisc(fdc, name) {
+export function localDisc(fdc, name, layout = DiscLayout.auto) {
     const discName = "disc_" + name;
     let data;
     const dataString = window.localStorage[discName];
@@ -243,5 +315,5 @@ export function localDisc(fdc, name) {
             window.alert("Writing to localStorage failed: " + e);
         }
     };
-    return discFor(fdc, name, data, onChange);
+    return discFor(fdc, name, data, onChange, layout);
 }

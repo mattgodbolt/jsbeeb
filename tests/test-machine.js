@@ -213,7 +213,7 @@ export class TestMachine {
 
     async loadDisc(image) {
         const data = await fdc.load(image);
-        this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, "", data));
+        this.processor.fdc.loadDisc(0, fdc.discFor(this.processor.fdc, image, data));
     }
 
     /**
