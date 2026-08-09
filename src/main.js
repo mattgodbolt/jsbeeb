@@ -1812,7 +1812,7 @@ const startPromise = (async () => {
                 await load();
             } catch (error) {
                 console.error(`Error loading ${description}:`, error);
-                toast(`Could not load ${description}: ${error.message ?? error}`, { title: "Loading" });
+                toast(`Could not load ${description}: ${error?.message ?? error}`, { title: "Loading" });
             }
         })();
         imageLoads.push(loading);
