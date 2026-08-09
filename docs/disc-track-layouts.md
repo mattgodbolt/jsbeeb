@@ -60,12 +60,6 @@ truthfully declaring eighty or more tracks.
 
 ## Decisions worth knowing about
 
-**DFS keeps its catalogue entries in descending order of start sector, and we do not check that.**
-The rule is real, but images in the wild were not all written by DFS, and a wrong "yes" here cannot
-hurt: software reads the same logical tracks whichever pitch the image is laid out at, and the one
-case where expanding would lose data has its own rule. Over the STH archive the check cost one
-genuine 40 track disc, The Hobbit, and gained nothing.
-
 **Only the lower side of a flux image is asked.** Both heads are on the same cylinder at any
 instant, but a disc can be written in more than one pass, and some were: a **dual format** disc
 carries side 0 for a 40 track drive and side 1 for an 80 track one, the same game twice. Ten discs
