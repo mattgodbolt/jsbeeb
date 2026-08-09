@@ -907,7 +907,7 @@ export class Disc {
 
         this._trackWriteListeners = new Set();
         this.isWriteable = isWriteable;
-        // Set by the loaders that honour onChange; a reload works it out afresh, so it is not snapshotted.
+        // Not snapshotted: a restore reloads through discFor and the loader decides again.
         this.savesChanges = false;
 
         // Track which tracks have been written since the last snapshot.
