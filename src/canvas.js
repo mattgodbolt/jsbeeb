@@ -224,7 +224,7 @@ export function bestCanvas(canvas, filterClass) {
         return new GlCanvas(canvas, filterClass);
     } catch (e) {
         // Either WebGL is unavailable or this particular filter declined it.
-        reason = e.message;
+        reason = e?.message ?? e;
         console.log(`Unable to use ${filterClass.getDisplayConfig().name} with WebGL: ${e}`);
     }
 

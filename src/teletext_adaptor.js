@@ -81,7 +81,7 @@ export class TeletextAdaptor extends EventTarget {
             this.dispatchEvent(
                 new CustomEvent("notice", {
                     detail: {
-                        message: `Teletext channel ${channel} could not be loaded (${error.message}). The adaptor carries on with nothing to show.`,
+                        message: `Teletext channel ${channel} could not be loaded (${error?.message ?? error}). The adaptor carries on with nothing to show.`,
                     },
                 }),
             );
