@@ -1,7 +1,5 @@
 "use strict";
 
-// Blobs are served with `Content-Encoding: br`, so the browser has already
-// undone the compression by the time `fetch` resolves.
 const mirrorBase = "https://bbc.xania.org/archive/bbcdiscs";
 
 // Numeric so a "Disc 2" would sort before a "Disc 10" rather than after it,
@@ -69,6 +67,10 @@ export class BbcDiscArchive {
     }
 
     /**
+     * Nothing to unzip, unlike sth.js: blobs are stored compressed and served
+     * with `Content-Encoding: br`, which the browser has undone by the time
+     * this resolves.
+     *
      * @param {string} path a manifest entry's `path`
      * @returns {Promise<Uint8Array>} the HFE image
      */
