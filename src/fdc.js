@@ -294,7 +294,8 @@ export function discFor(fdc, name, stringData, onChange, layout = DiscLayout.aut
  * @param {Object} fdc - The FDC controller object
  * @param {string} name - The file name with extension
  * @param {string} [layout] - one of DiscLayout; by default the image is asked what it is
- * @param {function(Error): void} [onSaveError] - called the first time a write cannot be stored
+ * @param {function(*): void} [onSaveError] - called with whatever was thrown, the first time a write
+ *   cannot be stored
  * @returns {Disc} The loaded disc object
  */
 export function localDisc(fdc, name, layout = DiscLayout.auto, onSaveError = () => {}) {
