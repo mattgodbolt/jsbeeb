@@ -742,6 +742,12 @@ function checkPrinterWindow() {
     if (printerWindow && !printerWindow.closed) return;
 
     printerWindow = window.open("", "_blank", "height=300,width=400");
+    if (!printerWindow) {
+        toast("The printer output window was blocked. Allow pop-up windows for this site, then press Ctrl-B again.", {
+            title: "Printer",
+        });
+        return;
+    }
     printerWindow.document.write(
         '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>',
     );
