@@ -10,7 +10,7 @@ import { Debugger } from "./web/debug.js";
 import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
-import { Cmos } from "./cmos.js";
+import { Cmos, localStoragePersistence } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
 import { BbcDiscArchive, describe as describeHfe } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
@@ -725,17 +725,12 @@ if (config.hasEconet) {
 }
 
 const cmos = new Cmos(
-    {
-        load: function () {
-            if (window.localStorage.cmosRam) {
-                return JSON.parse(window.localStorage.cmosRam);
-            }
-            return null;
-        },
-        save: function (data) {
-            window.localStorage.cmosRam = JSON.stringify(data);
-        },
-    },
+    localStoragePersistence(window.localStorage, (error) =>
+        toast(
+            `Settings changed with *CONFIGURE will not be kept (${errorText(error)}). Check that this site is allowed to store data, and that its storage is not full.`,
+            { title: "Settings", quietKey: "quietCmosSave" },
+        ),
+    ),
     model.cmosOverride,
     econet,
 );

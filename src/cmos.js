@@ -33,6 +33,37 @@ function fromBcd(value) {
 
 export { defaultCmos };
 
+/**
+ * CMOS persistence backed by a browser storage object, which can be unavailable, full or holding
+ * something other than what was last saved.
+ *
+ * @param storage a `Storage`, typically `window.localStorage`
+ * @param {function(*)} onSaveFailure called with the error the first time a save fails
+ */
+export function localStoragePersistence(storage, onSaveFailure) {
+    let saveFailureReported = false;
+    return {
+        load() {
+            try {
+                return storage.cmosRam ? JSON.parse(storage.cmosRam) : null;
+            } catch (error) {
+                console.log(`Unable to read the stored CMOS settings: ${error?.message ?? error}`);
+                return null;
+            }
+        },
+        save(data) {
+            try {
+                storage.cmosRam = JSON.stringify(data);
+            } catch (error) {
+                console.log(`Unable to store the CMOS settings: ${error?.message ?? error}`);
+                if (saveFailureReported) return;
+                saveFailureReported = true;
+                onSaveFailure(error);
+            }
+        },
+    };
+}
+
 export class Cmos {
     constructor(persistence, cmosOverride, econet) {
         this.store = persistence ? persistence.load() : null;
