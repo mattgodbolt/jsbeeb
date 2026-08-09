@@ -31,6 +31,7 @@ import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
+import { Printer } from "./printer.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { getFilterForMode } from "./canvas.js";
@@ -208,19 +209,16 @@ if (parsedQuery.audiofilterq !== undefined) audioFilterQ = parsedQuery.audiofilt
 if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
 if (parsedQuery.frameSkip !== undefined) frameSkip = parsedQuery.frameSkip;
 
-const printerPort = {
-    outputStrobe: function (level, output) {
-        if (!printerTextArea) return;
-        if (!output || level) return;
-
-        const uservia = processor.uservia;
-        // Ack the character by pulsing CA1 low.
-        uservia.setca1(false);
-        uservia.setca1(true);
-        const newChar = String.fromCharCode(uservia.ora);
-        printerTextArea.value += newChar;
+const printer = new Printer({
+    onOutput: (char) => {
+        if (printerTextArea) printerTextArea.value += char;
     },
-};
+    onFirstOutput: () =>
+        toast("Printer output is being kept. Press Ctrl-B to open the printer window.", {
+            title: "Printer",
+            quietKey: "quietPrinterOutput",
+        }),
+});
 
 // Accessibility switch state — bits 0-7 correspond to switches 1-8.
 // Active low: 0xff = no switches pressed; clearing a bit = that switch is pressed.
@@ -335,7 +333,7 @@ const emulationConfig = {
     // before any the user asked for with ?rom=.
     extraRoms: [...config.extraRoms, ...extraRoms],
     userPort,
-    printerPort,
+    printerPort: printer,
     getGamepads: function () {
         // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
         return navigator.getGamepads ? navigator.getGamepads() : [];
@@ -751,8 +749,7 @@ function checkPrinterWindow() {
         '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>',
     );
     printerTextArea = printerWindow.document.getElementById("text");
-
-    processor.uservia.setca1(true);
+    printerTextArea.value = printer.text;
 }
 
 const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
@@ -767,6 +764,8 @@ processor = new CpuClass(model, {
     config: emulationConfig,
     econet,
 });
+
+printer.attach(processor.uservia);
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 

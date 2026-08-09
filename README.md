@@ -13,6 +13,7 @@ different peripherals.
 - [Keyboard Mappings](#keyboard-mappings)
 - [Remapping Keys](#remapping-keys)
 - [Emulator Shortcuts](#emulator-shortcuts)
+- [Printer Output](#printer-output)
 - [Save State and Rewind](#save-state-and-rewind)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
 - [Running as a Desktop Application](#running-as-a-desktop-application)
@@ -103,7 +104,14 @@ The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/utils.
 | `Ctrl+Home`    | Stop and enter debugger         |
 | `Ctrl+Insert`  | Toggle turbo (fast-as-possible) |
 | `Ctrl+End`     | Pause emulation                 |
+| `Ctrl+B`       | Open printer output window      |
 | `Alt+PageDown` | Open rewind scrubber            |
+
+### Printer Output
+
+Anything the machine prints is captured whether or not the printer window is open, so programs that print (with `VDU 2`, `*FX5,1` and the like) run rather than waiting for a printer that is not there.
+
+Press `Ctrl+B` to open a window showing what has been printed so far; it then keeps up with the output as it arrives. Only the most recent output is kept, roughly a dozen pages' worth, so a program printing forever cannot fill memory.
 
 ### Save State and Rewind
 
