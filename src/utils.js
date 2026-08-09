@@ -1216,6 +1216,8 @@ const knownDiscExtensions = {
     uef: true,
     ssd: true,
     dsd: true,
+    adf: true,
+    adm: true,
     adl: true,
 };
 

@@ -236,6 +236,34 @@ export function processAutobootParams(parsedQuery) {
     return { needsAutoboot, autoType };
 }
 
+/** Where a drive's 40/80 switch is set, `auto` leaving it to whatever disc is loaded. */
+export const DriveTracks = Object.freeze({ auto: "auto", forty: "40", eighty: "80" });
+
+const NumDrives = 2;
+
+/**
+ * Process the per-drive 40/80 track settings
+ * @param {Object} parsedQuery - The parsed query parameters
+ * @returns {{settings: string[], warnings: string[]}} One DriveTracks per drive, and what was
+ *   unusable about anything asked for that is not in there
+ */
+export function processDriveTrackParams(parsedQuery) {
+    const warnings = [];
+    const settings = [];
+    for (let driveIndex = 0; driveIndex < NumDrives; ++driveIndex) {
+        const name = `drive${driveIndex}Tracks`;
+        const asked = parsedQuery[name];
+        const setting = isDefined(asked) ? `${asked}`.toLowerCase() : DriveTracks.auto;
+        if (Object.values(DriveTracks).includes(setting)) {
+            settings.push(setting);
+        } else {
+            warnings.push(`${name}=${asked}: a drive is set to 40, 80 or auto.`);
+            settings.push(DriveTracks.auto);
+        }
+    }
+    return { settings, warnings };
+}
+
 /**
  * Guess the appropriate model based on the hostname
  * @param {string} hostname - The hostname to check

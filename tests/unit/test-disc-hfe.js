@@ -1,7 +1,16 @@
 import { describe, it, expect } from "vitest";
 
-import { Disc, DiscConfig, IbmDiscFormat, loadSsd, ssdOrDsdShortfalls, toSsdOrDsd } from "../../src/disc.js";
-import { loadHfe, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
+import {
+    Disc,
+    DiscConfig,
+    IbmDiscFormat,
+    loadAdf,
+    loadSsd,
+    sniffSurfaceLayout,
+    ssdOrDsdShortfalls,
+    toSsdOrDsd,
+} from "../../src/disc.js";
+import { loadHfe, sniffHfeLayout, toHfe, convertTrackToHfeV3 } from "../../src/disc-hfe.js";
 import * as fs from "node:fs";
 
 describe("HFE loader tests", function () {
@@ -37,7 +46,8 @@ describe("HFE loader tests", function () {
 
         const saved = toSsdOrDsd(disc, { force: true });
 
-        expect(saved.length).toBe(80 * 2 * 10 * 256);
+        // Elite is a 40 track disc captured in an 80 track drive, so its tracks sit on every other one.
+        expect(saved.length).toBe(40 * 2 * 10 * 256);
         expect(new TextDecoder().decode(saved.slice(0, 8))).toBe("E L I T ");
     });
 
@@ -72,6 +82,86 @@ describe("HFE loader tests", function () {
         expect(() => {
             loadHfe(disc, unsupportedEncoding);
         }).toThrow(/HFE encoding not ISOIBM/);
+    });
+});
+
+describe("telling a 40 track HFE from an 80 track one", () => {
+    const withTracks = (numTracks) => {
+        const data = new Uint8Array(512);
+        data.set(new TextEncoder().encode("HXCHFEV3"), 0);
+        data[9] = numTracks;
+        return data;
+    };
+
+    it("goes by the tracks the header declares", () => {
+        expect(sniffHfeLayout(withTracks(40)).is40Track).toBe(true);
+        expect(sniffHfeLayout(withTracks(42)).is40Track).toBe(true);
+        expect(sniffHfeLayout(withTracks(43)).is40Track).toBe(false);
+        expect(sniffHfeLayout(withTracks(80)).is40Track).toBe(false);
+    });
+
+    it("says nothing of a file with no header to read", () => {
+        expect(sniffHfeLayout(new Uint8Array(4)).is40Track).toBe(false);
+        expect(sniffHfeLayout(withTracks(0)).is40Track).toBe(false);
+    });
+
+    it("reads a capture that already holds one spread across the surface", { timeout: 30000 }, () => {
+        const elite = fs.readFileSync("public/discs/elite.hfe");
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        loadHfe(disc, elite);
+
+        // Elite is a 40 track disc as an 80 track drive sees it, so its header cannot say so.
+        expect(sniffHfeLayout(elite).is40Track).toBe(false);
+        expect(sniffSurfaceLayout(disc).is40Track).toBe(true);
+    });
+
+    it("takes an 80 track disc at its word", { timeout: 60000 }, () => {
+        const source = new Disc(true, new DiscConfig(), "source.ssd");
+        loadSsd(source, fs.readFileSync("public/discs/elite.ssd"), false, null);
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        loadHfe(disc, toHfe(source));
+
+        expect(sniffSurfaceLayout(disc).is40Track).toBe(false);
+    });
+
+    it("judges a disc whose sides disagree on the one that boots", { timeout: 30000 }, () => {
+        // Elite is a dual format disc: side 0 written for a 40 track drive, side 1 for an 80 track
+        // one, the same game on both. A drive's 40/80 switch is not per side, so the side DFS boots
+        // from decides, and reaching the other one means setting the switch by hand.
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        loadHfe(disc, fs.readFileSync("public/discs/elite.hfe"));
+
+        const lower = disc.getTrack(false, 78).findSectors(() => {});
+        const upper = disc.getTrack(true, 39).findSectors(() => {});
+        expect(lower[0].trackNumber).toBe(39);
+        expect(upper[0].trackNumber).toBe(39);
+
+        expect(sniffSurfaceLayout(disc).is40Track).toBe(true);
+    });
+
+    it("wants more than a track or two before it believes", () => {
+        const config = new DiscConfig();
+        config.expandTo80 = true;
+        const disc = loadSsd(new Disc(true, config, "test.ssd"), new Uint8Array(40 * 10 * 256), false, null);
+        // A capture holding only the first couple of tracks cannot say which pitch it was at.
+        for (let trackNum = 4; trackNum < disc.tracksUsed; ++trackNum) disc.eraseTrack(false, trackNum);
+
+        expect(sniffSurfaceLayout(disc).is40Track).toBe(false);
+    });
+
+    it("expands a 40 track capture across the surface", { timeout: 30000 }, () => {
+        const source = new Disc(true, new DiscConfig(), "source.adf");
+        loadAdf(source, new Uint8Array(40 * 16 * 256), false);
+
+        const disc = new Disc(true, new DiscConfig(), "test.hfe");
+        const hfe = toHfe(source);
+        disc.config.expandTo80 = sniffHfeLayout(hfe).is40Track;
+        loadHfe(disc, hfe);
+
+        expect(disc.is40Track).toBe(true);
+        expect(disc.tracksUsed).toBe(79);
+        expect(disc.getTrack(false, 2).findSectors()[0].trackNumber).toBe(1);
+        expect(disc.getTrack(false, 3).findSectors()).toEqual([]);
     });
 });
 

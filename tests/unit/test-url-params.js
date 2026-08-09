@@ -6,7 +6,9 @@ import {
     processInputParams,
     processAutobootParams,
     parseMediaParams,
+    processDriveTrackParams,
     guessModelFromHostname,
+    DriveTracks,
     ParamTypes,
 } from "../../src/url-params.js";
 
@@ -354,6 +356,30 @@ describe("URL Parameters", () => {
                 tapeImage: undefined,
                 mmcImage: "sdcard.zip",
             });
+        });
+    });
+
+    describe("processDriveTrackParams", () => {
+        it("leaves every drive to work it out for itself by default", () => {
+            expect(processDriveTrackParams({})).toEqual({
+                settings: [DriveTracks.auto, DriveTracks.auto],
+                warnings: [],
+            });
+        });
+
+        it("fixes the switch of the drive that was named", () => {
+            expect(processDriveTrackParams({ drive1Tracks: "40" })).toEqual({
+                settings: [DriveTracks.auto, DriveTracks.forty],
+                warnings: [],
+            });
+            expect(processDriveTrackParams({ drive0Tracks: "80" }).settings[0]).toBe(DriveTracks.eighty);
+        });
+
+        it("says what it could not use", () => {
+            const { settings, warnings } = processDriveTrackParams({ drive0Tracks: "35" });
+
+            expect(settings[0]).toBe(DriveTracks.auto);
+            expect(warnings).toEqual(["drive0Tracks=35: a drive is set to 40, 80 or auto."]);
         });
     });
 

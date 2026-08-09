@@ -624,3 +624,20 @@ div.smoothie-chart-tooltip {
   font-size: 10px;
   pointer-events: none;
 }
+
+.drive-tracks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.drive-tracks-label {
+  color: var(--bs-dropdown-link-color);
+}
+
+.drive-tracks .btn {
+  /* The stock small button is taller than the menu rows around it. */
+  padding: 0 6px;
+  line-height: 1.4;
+}
