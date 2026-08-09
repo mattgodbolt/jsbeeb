@@ -17,8 +17,9 @@
  */
 
 import { readdir, readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { argv, exit, stdout } from "node:process";
+import { brotliDecompressSync } from "node:zlib";
 
 import { Disc, DiscConfig, sniffDfsLayout, sniffSurfaceLayout } from "../src/disc.js";
 import { loadHfe, sniffHfeLayout } from "../src/disc-hfe.js";
@@ -27,6 +28,32 @@ import { unzipDiscImage } from "../src/utils.js";
 const SectorImages = new Set([".ssd", ".dsd"]);
 const FluxImages = new Set([".hfe"]);
 const known = (name) => SectorImages.has(extname(name).toLowerCase()) || FluxImages.has(extname(name).toLowerCase());
+
+const HfeMagics = ["HXCPICFE", "HXCHFEV3"];
+const isHfe = (data) => HfeMagics.includes(Buffer.from(data.subarray(0, 8)).toString("latin1"));
+
+/**
+ * A mirror of flux images keeps its blobs brotli-compressed, to be served with
+ * `Content-Encoding: br` and undone by the browser, so what sits on disk is not
+ * the image. Brotli has no magic number to test for, so the only way to know is
+ * to try it on anything that is not an image already.
+ *
+ * @param {Uint8Array} data
+ * @returns {Uint8Array} the image, decompressed if it needed to be
+ */
+export function asFluxImage(data) {
+    if (isHfe(data)) return data;
+    try {
+        return new Uint8Array(brotliDecompressSync(data));
+    } catch {
+        return data;
+    }
+}
+
+async function readImage(path) {
+    const raw = new Uint8Array(await readFile(path));
+    return FluxImages.has(extname(path).toLowerCase()) ? asFluxImage(raw) : raw;
+}
 
 async function* discImages(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -43,7 +70,7 @@ async function* discImages(directory) {
                 stdout.write(`?? ${path}: ${e.message}\n`);
             }
         } else if (known(entry.name)) {
-            yield { path, name: entry.name, data: new Uint8Array(await readFile(path)) };
+            yield { path, name: entry.name, data: await readImage(path) };
         }
     }
 }
@@ -124,7 +151,10 @@ async function main() {
     }
 }
 
-main().catch((e) => {
-    stdout.write(`${e.stack}\n`);
-    exit(1);
-});
+// Only walk a directory when invoked as a script, so the helpers can be tested.
+if (basename(argv[1] ?? "") === "sniff-disc-layout.js") {
+    main().catch((e) => {
+        stdout.write(`${e.stack}\n`);
+        exit(1);
+    });
+}
