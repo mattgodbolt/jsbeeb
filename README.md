@@ -249,7 +249,7 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
   a 40 track image is laid out the way a 40 track drive wrote it, on every other track of the surface, and the drive
   double steps to read it. `40` reads an 80 track disc through a double stepping head, which is as much of a mess as it
   was in 1985. `80` turns all of this off for that drive, loading every image the way jsbeeb did before it could tell
-  them apart.
+  them apart. [docs/disc-track-layouts.md](docs/disc-track-layouts.md) explains how an image's layout is worked out.
 - `tape=XXX` - loads tape XXX (from the `tapes/` directory)
 - `tape=sth:ZZZ` - loads tape ZZZ from the Stairway to Hell archive
 - `KEY.X=Y` - makes host key `X` press BBC key `Y`, e.g. `KEY.ENTER=COPY`. See
