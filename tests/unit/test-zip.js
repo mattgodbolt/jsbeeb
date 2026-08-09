@@ -34,6 +34,19 @@ describe("zip tests", function () {
         expect(content).toBe("This is a test ADF file\n");
     });
 
+    it("should unzip HFE files", async () => {
+        const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-hfe.zip")));
+        const result = await utils.unzipDiscImage(zipData);
+
+        expect(result.name).toBe("test.hfe");
+        expect(result.data instanceof Uint8Array).toBeTruthy();
+
+        const content = Array.from(result.data)
+            .map((b) => String.fromCharCode(b))
+            .join("");
+        expect(content).toBe("This is a test HFE file\n");
+    });
+
     it("should unzip ROM files", async () => {
         const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-rom.zip")));
         const result = await utils.unzipRomImage(zipData);

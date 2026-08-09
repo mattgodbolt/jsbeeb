@@ -1219,6 +1219,7 @@ const knownDiscExtensions = {
     adf: true,
     adm: true,
     adl: true,
+    hfe: true,
 };
 
 const knownRomExtensions = {
