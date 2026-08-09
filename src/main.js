@@ -1368,7 +1368,7 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
         }
 
         case "hfe":
-            return disc.discFor(processor.fdc, discImage, await hfeArchive.fetch(discImage));
+            return disc.discFor(processor.fdc, discImage, await hfeArchive.fetch(discImage), undefined, layout);
 
         case "gd": {
             const splat = discImage.match(/([^/]+)\/?(.*)/);
