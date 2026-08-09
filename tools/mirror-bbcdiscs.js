@@ -23,6 +23,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { argv, env, exit, stderr, stdout } from "node:process";
 import { promisify } from "node:util";
+import Papa from "papaparse";
 
 const SchemaVersion = 1;
 const CategoryId = "hfe";
@@ -72,50 +73,6 @@ const clean = (value) => {
     const trimmed = (value ?? "").trim();
     return trimmed === "" || trimmed === "none" || EmptyTitleMarkers.has(trimmed) ? null : trimmed;
 };
-
-/**
- * Parse a CSV export into row objects keyed by header name.
- *
- * Fields are looked up by header rather than position, so inserting a column in
- * the sheet doesn't silently shift every value one to the left.
- *
- * @param {string} text raw CSV
- * @returns {Object<string, string>[]}
- */
-export function parseCsv(text) {
-    const rows = [];
-    let row = [];
-    let field = "";
-    let quoted = false;
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        if (quoted) {
-            if (char !== '"') field += char;
-            else if (text[i + 1] === '"') field += text[i++];
-            else quoted = false;
-        } else if (char === '"') {
-            quoted = true;
-        } else if (char === ",") {
-            row.push(field);
-            field = "";
-        } else if (char === "\n" || char === "\r") {
-            if (char === "\r" && text[i + 1] === "\n") i++;
-            row.push(field);
-            rows.push(row);
-            row = [];
-            field = "";
-        } else {
-            field += char;
-        }
-    }
-    if (field !== "" || row.length > 0) {
-        row.push(field);
-        rows.push(row);
-    }
-    const [headers, ...body] = rows;
-    if (!headers) return [];
-    return body.map((cells) => Object.fromEntries(headers.map((header, i) => [header, cells[i] ?? ""])));
-}
 
 /**
  * Turn sheet rows into the discs we intend to mirror.
@@ -482,41 +439,29 @@ function parseArgs(args) {
     return opts;
 }
 
-async function main() {
-    const opts = parseArgs(argv.slice(2));
-    const rows = parseCsv(await readFile(opts.csv, "utf8"));
-    const { entries, withheld, problems } = parseCatalogue(rows);
-
-    stderr.write(`${rows.length} rows: ${entries.length} to mirror, ${withheld.length} catalogued but not published\n`);
-    for (const problem of problems) stderr.write(`  PROBLEM ${problem}\n`);
-    if (problems.length) stderr.write(`${problems.length} row(s) need fixing in the sheet; they are not mirrored\n`);
-
-    if (opts.checkOnly) return;
-
-    // Before the downloading, not after it.
-    try {
-        await access(opts.beebjit, fsConstants.X_OK);
-    } catch {
-        fail(`Cannot run beebjit at ${opts.beebjit}: set BEEBJIT=<path> or pass --beebjit <path>`);
-    }
-
+/** Narrow the catalogue to what this run was asked to look at. */
+function select(entries, opts) {
     let selected = entries;
     if (opts.filter)
         selected = selected.filter((entry) => `${entry.publisher} ${entry.title}`.toLowerCase().includes(opts.filter));
     if (opts.limit !== null) selected = selected.slice(0, opts.limit);
-    const partial = selected.length !== entries.length;
-    if (partial) stderr.write(`Selecting ${selected.length} of ${entries.length} discs\n`);
+    if (selected.length !== entries.length) stderr.write(`Selecting ${selected.length} of ${entries.length} discs\n`);
+    return selected;
+}
 
-    const cacheDir = join(opts.out, "cache");
-    const blobDir = join(opts.out, CategoryId);
-    await mkdir(cacheDir, { recursive: true });
-    await mkdir(blobDir, { recursive: true });
-
-    const results = new Map();
+/**
+ * Get each disc, check it against its row, and compress the ones that agree.
+ *
+ * @returns {{sizes: Map<string, {size: number, originalSize: number}>, failures: string[]}}
+ */
+async function mirrorDiscs(selected, opts, blobDir, cacheDir) {
+    const sizes = new Map();
     const failures = [];
     let downloaded = 0;
     let held = 0;
+
     await forEachConcurrently(selected, opts.concurrency, async (entry) => {
+        const what = `${entry.blob} (${entry.publisher} ${entry.title})`;
         try {
             const { raw, size, downloaded: isNew, alreadyPublished } = await obtain(entry, blobDir, cacheDir);
             if (isNew) downloaded++;
@@ -528,23 +473,19 @@ async function main() {
             if (!alreadyPublished || opts.reverify) {
                 const discPath = join(cacheDir, `${entry.driveId}.hfe`);
                 if ((await fileSize(discPath)) === null) await writeAtomically(discPath, raw);
-                const mismatches = compareFingerprints(
-                    entry,
-                    parseFingerprints(await runBeebjitWithRetry(opts.beebjit, discPath)),
-                );
+                const output = await runBeebjitWithRetry(opts.beebjit, discPath);
+                const mismatches = compareFingerprints(entry, parseFingerprints(output));
                 if (mismatches.length) {
-                    failures.push(
-                        `${entry.blob} (${entry.publisher} ${entry.title})\n    ${mismatches.join("\n    ")}`,
-                    );
+                    failures.push(`${what}\n    ${mismatches.join("\n    ")}`);
                     return;
                 }
             }
-            results.set(entry.blob, {
+            sizes.set(entry.blob, {
                 size: size ?? (await compressTo(join(blobDir, entry.blob), raw)),
                 originalSize: raw.length,
             });
         } catch (error) {
-            failures.push(`${entry.blob} (${entry.publisher} ${entry.title}): ${error.message}`);
+            failures.push(`${what}: ${error.message}`);
         }
     });
 
@@ -553,52 +494,32 @@ async function main() {
             `${selected.length - downloaded - held}\n`,
     );
     for (const failure of failures) stderr.write(`  FAILED ${failure}\n`);
+    return { sizes, failures };
+}
 
-    const files = selected
-        .filter((entry) => results.has(entry.blob))
-        .map((entry) => {
-            const { size, originalSize } = results.get(entry.blob);
-            return withoutEmpties({
-                path: entry.blob,
-                size,
-                originalSize,
-                encoding: "br",
-                title: entry.title,
-                publisher: entry.publisher,
-                disc: entry.disc,
-                tracks: entry.tracks,
-                variant: entry.variant,
-                crc32: entry.crc32,
-                crc32As40: entry.crc32As40,
-                dfsTitle: entry.dfsTitle,
-                dfsCycle: entry.dfsCycle,
-                grabVersion: entry.grabVersion,
-                date: entry.date,
-                submitter: entry.submitter,
-                notes: entry.notes,
-            });
-        });
+/** The manifest entry for a disc: everything the catalogue knows, plus how big it is. */
+const manifestEntry = (entry, { size, originalSize }) =>
+    withoutEmpties({
+        path: entry.blob,
+        size,
+        originalSize,
+        encoding: "br",
+        title: entry.title,
+        publisher: entry.publisher,
+        disc: entry.disc,
+        tracks: entry.tracks,
+        variant: entry.variant,
+        crc32: entry.crc32,
+        crc32As40: entry.crc32As40,
+        dfsTitle: entry.dfsTitle,
+        dfsCycle: entry.dfsCycle,
+        grabVersion: entry.grabVersion,
+        date: entry.date,
+        submitter: entry.submitter,
+        notes: entry.notes,
+    });
 
-    // Keyed on what the catalogue still asks for, not on what verified: a disc
-    // that failed today is withheld from the manifest but keeps whatever blob
-    // it already had, where one it no longer lists is gone for good. A changed
-    // CRC32 arrives as a new blob name, so the old one falls out of here too.
-    let stale = [];
-    if (!partial) {
-        stale = await prune(blobDir, new Set(selected.map((entry) => entry.blob)));
-        await prune(cacheDir, new Set(entries.map((entry) => `${entry.driveId}.hfe`)));
-    }
-    for (const name of stale) stderr.write(`  WITHDRAWN ${name}\n`);
-
-    // Manifests describe the whole archive, and the upload deletes whatever
-    // they leave out, so a run that only looked at some of it must not write
-    // them.
-    if (partial) {
-        stderr.write(`\n${files.length} of ${selected.length} selected discs published; manifests left alone\n`);
-        if (failures.length) exit(1);
-        return;
-    }
-
+async function writeManifests(files, opts, blobDir) {
     await writeJson(join(blobDir, "manifest.json"), { schemaVersion: SchemaVersion, files });
     const totalBytes = files.reduce((total, file) => total + file.size, 0);
     const originalBytes = files.reduce((total, file) => total + file.originalSize, 0);
@@ -624,11 +545,62 @@ async function main() {
             ],
         }),
     );
-
     stderr.write(
         `\nWrote manifest: ${files.length} discs, ${(totalBytes / 1024 / 1024).toFixed(1)} MB ` +
             `(${(originalBytes / 1024 / 1024).toFixed(1)} MB uncompressed)\n`,
     );
+}
+
+async function main() {
+    const opts = parseArgs(argv.slice(2));
+    // Blank rows are kept, not skipped: the catalogue uses them as spacers
+    // between publishers, and dropping them would shift every row number this
+    // reports away from the row you would have to go and edit.
+    const { data: rows } = Papa.parse(await readFile(opts.csv, "utf8"), { header: true, skipEmptyLines: false });
+    const { entries, withheld, problems } = parseCatalogue(rows);
+
+    stderr.write(`${rows.length} rows: ${entries.length} to mirror, ${withheld.length} catalogued but not published\n`);
+    for (const problem of problems) stderr.write(`  PROBLEM ${problem}\n`);
+    if (problems.length) stderr.write(`${problems.length} row(s) need fixing in the sheet; they are not mirrored\n`);
+
+    if (opts.checkOnly) return;
+
+    // Before the downloading, not after it.
+    try {
+        await access(opts.beebjit, fsConstants.X_OK);
+    } catch {
+        fail(`Cannot run beebjit at ${opts.beebjit}: set BEEBJIT=<path> or pass --beebjit <path>`);
+    }
+
+    const selected = select(entries, opts);
+    const partial = selected.length !== entries.length;
+    const cacheDir = join(opts.out, "cache");
+    const blobDir = join(opts.out, CategoryId);
+    await mkdir(cacheDir, { recursive: true });
+    await mkdir(blobDir, { recursive: true });
+
+    const { sizes, failures } = await mirrorDiscs(selected, opts, blobDir, cacheDir);
+    const files = selected
+        .filter((entry) => sizes.has(entry.blob))
+        .map((entry) => manifestEntry(entry, sizes.get(entry.blob)));
+
+    // Keyed on what the catalogue still asks for, not on what verified: a disc
+    // that failed today is withheld from the manifest but keeps whatever blob
+    // it already had, where one it no longer lists is gone for good. A changed
+    // CRC32 arrives as a new blob name, so the old one falls out of here too.
+    if (!partial) {
+        const stale = await prune(blobDir, new Set(selected.map((entry) => entry.blob)));
+        await prune(cacheDir, new Set(entries.map((entry) => `${entry.driveId}.hfe`)));
+        for (const name of stale) stderr.write(`  WITHDRAWN ${name}\n`);
+    }
+
+    // Manifests describe the whole archive, and the upload deletes whatever
+    // they leave out, so a run that only looked at some of it must not write
+    // them.
+    if (partial)
+        stderr.write(`\n${files.length} of ${selected.length} selected discs published; manifests left alone\n`);
+    else await writeManifests(files, opts, blobDir);
+
     if (failures.length) exit(1);
 }
 

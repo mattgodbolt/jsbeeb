@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { compareFingerprints, parseCatalogue, parseCsv, parseFingerprints } from "../../tools/mirror-bbcdiscs.js";
+import Papa from "papaparse";
+import { compareFingerprints, parseCatalogue, parseFingerprints } from "../../tools/mirror-bbcdiscs.js";
 
 const Headers = [
     "Publisher",
@@ -22,7 +23,8 @@ const Headers = [
 
 const link = (id) => `https://drive.google.com/file/d/${id}/view`;
 
-const sheet = (...rows) => parseCsv([Headers.join(","), ...rows].join("\n"));
+const sheet = (...rows) =>
+    Papa.parse([Headers.join(","), ...rows].join("\n"), { header: true, skipEmptyLines: false }).data;
 
 // A made-up flippy: one 40 track side and one 80 track side, so every per-side
 // column holds two values and the two density rules both come into play.
@@ -46,30 +48,6 @@ const singleSided = (overrides) => ({
     dfsTitle: ["TESTDISC"],
     dfsCycle: ["04"],
     ...overrides,
-});
-
-describe("parseCsv", () => {
-    it("keeps commas inside quoted fields", () => {
-        expect(parseCsv('a,b\n"one, two",three')).toEqual([{ a: "one, two", b: "three" }]);
-    });
-
-    it("unescapes doubled quotes", () => {
-        expect(parseCsv('a\n"he said ""hi"""')).toEqual([{ a: 'he said "hi"' }]);
-    });
-
-    it("handles newlines inside quoted fields", () => {
-        expect(parseCsv('a,b\n"line one\nline two",x')).toEqual([{ a: "line one\nline two", b: "x" }]);
-    });
-
-    it("pads rows that stop short of the header", () => {
-        expect(parseCsv("a,b,c\n1,2")).toEqual([{ a: "1", b: "2", c: "" }]);
-    });
-
-    it("keeps the blank spacer rows a sheet uses between sections", () => {
-        const rows = parseCsv("a,b\n1,2\n,\n3,4");
-        expect(rows).toHaveLength(3);
-        expect(rows[1]).toEqual({ a: "", b: "" });
-    });
 });
 
 describe("parseCatalogue", () => {
