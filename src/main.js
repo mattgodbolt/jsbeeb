@@ -438,14 +438,18 @@ function putDiscIn(driveIndex, loadedDisc) {
     if (fixed === undefined && drive.tracksPerStep !== was) noteDriveTracks(driveIndex, loadedDisc.name);
 }
 
+let saidWritesAreNotKept = false;
+
 function noteUnsavedWrites(loadedDisc) {
-    if (loadedDisc.savesChanges) return;
-    loadedDisc.notifyOnFirstTrackWrite(() =>
+    if (loadedDisc.savesChanges || saidWritesAreNotKept) return;
+    loadedDisc.notifyOnFirstTrackWrite(() => {
+        if (saidWritesAreNotKept) return;
+        saidWritesAreNotKept = true;
         toast(`Changes to ${loadedDisc.name} are not saved. Use Discs, Download to keep a copy.`, {
             title: "Disc",
             quietKey: "quietDiscNotSaved",
-        }),
-    );
+        });
+    });
 }
 
 const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
