@@ -67,7 +67,7 @@ describe("Printer", () => {
         it("keeps the most recent output when the bound is passed", () => {
             const printer = attach(new Printer());
 
-            const printed = "0123456789".repeat(MaxBufferedChars / 2);
+            const printed = "0123456789".repeat(Math.ceil(MaxBufferedChars / 10) + 1);
             print(uservia, printed);
 
             expect(printer.text.length).toBe(MaxBufferedChars);

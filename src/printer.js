@@ -45,7 +45,7 @@ export class Printer {
     }
 
     _append(char) {
-        // Held as two chunks so appending never copies the buffer; `text` trims to the bound.
+        // Two chunks so the bound costs a trim when the text is read, not one per character.
         this._newerText += char;
         if (this._newerText.length >= MaxBufferedChars) {
             this._olderText = this._newerText;
