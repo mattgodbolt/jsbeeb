@@ -157,7 +157,10 @@ describe("bestCanvas", () => {
         gl.shaderSource = (shader, source) => sources.set(shader, source);
         gl.getShaderParameter = (shader) => sources.get(shader) !== PAL_FRAG_SHADER;
 
-        expect(bestCanvas(fakeCanvasElement(gl), PALCompositeFilter).filterClass).toBe(PassthroughFilter);
+        const canvas = bestCanvas(fakeCanvasElement(gl), PALCompositeFilter);
+
+        expect(canvas.filterClass).toBe(PassthroughFilter);
+        expect(canvas.fallbackReason).toMatch(/Failed to compile PAL composite/);
     });
 });
 

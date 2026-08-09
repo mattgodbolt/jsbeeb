@@ -389,12 +389,23 @@ function showError(context, error) {
     errorDialogModal.show();
 }
 
+const errorText = (error) => error?.message ?? `${error}`;
+
+function showNotice(event) {
+    const { message, title, quietKey } = event.detail;
+    toast(message, { title, quietKey });
+}
+
 if (keyMappingWarnings.length) {
-    showError("applying the key mappings in the URL", keyMappingWarnings.join(" "));
+    toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
+        title: "Mappings in the URL",
+    });
 }
 
 if (driveTrackWarnings.length) {
-    showError("setting the disc drives up from the URL", driveTrackWarnings.join(" "));
+    toast(`${driveTrackWarnings.join(" ")} Auto is in use instead; pick 40 or 80 from the Discs menu.`, {
+        title: "Disc drives",
+    });
 }
 
 /** @returns {string} the DiscLayout to load an image for this drive with */
@@ -454,10 +465,11 @@ function createCanvasForFilter(filterClass) {
     // filter can decline a context that works perfectly well for other modes,
     // in which case bestCanvas quietly gives us an unfiltered GL canvas.
     if (newCanvas.filterClass !== filterClass) {
-        showError(
-            `enabling ${displayConfig.name} mode`,
-            `${displayConfig.name} is not available on this device. Using standard display instead.`,
-        );
+        const reason = newCanvas.fallbackReason ? ` (${newCanvas.fallbackReason})` : "";
+        toast(`${displayConfig.name} is not available on this device, so the standard display is in use${reason}.`, {
+            title: "Display",
+            quietKey: "quietDisplayFallback",
+        });
     }
 
     return newCanvas;
@@ -748,14 +760,14 @@ processor = new CpuClass(model, {
     econet,
 });
 
-processor.teletextAdaptor?.addEventListener("showError", (e) => showError(e.detail.context, e.detail.error));
+processor.teletextAdaptor?.addEventListener("notice", showNotice);
 
 // Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
 // Create MicrophoneInput but don't enable by default
 const microphoneInput = new MicrophoneInput();
 microphoneInput.setErrorCallback((message) => {
-    showError("accessing microphone", message);
+    toast(`${message} The microphone channel has been turned off.`, { title: "Microphone" });
 });
 
 // Create MouseJoystickSource but don't enable by default
@@ -856,7 +868,7 @@ keyboard = new Keyboard({
     keyLayout,
     dbgr,
 });
-keyboard.addEventListener("showError", (e) => showError(e.detail.context, e.detail.error));
+keyboard.addEventListener("notice", showNotice);
 keyboard.addEventListener("pause", () => stop(false));
 keyboard.addEventListener("resume", () => go());
 keyboard.addEventListener("break", (e) => {
@@ -1021,7 +1033,7 @@ async function discSthClick(item) {
         }
     } catch (err) {
         console.error("Error loading disc image:", err);
-        loadingFinished(err);
+        loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
     }
 }
 
@@ -1036,7 +1048,7 @@ async function tapeSthClick(item) {
         loadingFinished();
     } catch (err) {
         console.error("Error loading tape image:", err);
-        loadingFinished(err);
+        loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
     }
 }
 
@@ -1213,9 +1225,9 @@ async function reloadSnapshotMedia(media) {
         // Verify CRC32 if present
         if (media[crcKey] != null && loadedDisc.originalImageCrc32 != null) {
             if (loadedDisc.originalImageCrc32 !== media[crcKey]) {
-                showError(
-                    "loading state",
-                    "The disc image appears to have changed since this snapshot was saved. The restored state may not work correctly.",
+                toast(
+                    `${loadedDisc.name} has changed since this state was saved. The state has been restored anyway and may not run correctly.`,
+                    { title: "Restoring state" },
                 );
             }
         }
@@ -1392,17 +1404,10 @@ function popupLoading(msg) {
     loadingDialogModal.show();
 }
 
-function loadingFinished(error) {
+function loadingFinished(message) {
     googleDriveAuth.style.display = "none";
-    if (error) {
-        loadingDialogModal.show();
-        loadingDialog.querySelector(".loading").textContent = "Error: " + error;
-        setTimeout(function () {
-            loadingDialogModal.hide();
-        }, 5000);
-    } else {
-        loadingDialogModal.hide();
-    }
+    loadingDialogModal.hide();
+    if (message) toast(message);
 }
 
 const googleDrive = new GoogleDriveLoader();
@@ -1457,7 +1462,7 @@ async function gdLoad(cat, layout) {
         return ssd;
     } catch (error) {
         console.error("Google Drive loading error:", error);
-        loadingFinished(error);
+        loadingFinished(`Unable to load ${cat.name} from Google Drive: ${errorText(error)}`);
     }
 }
 
@@ -1531,7 +1536,7 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
         try {
             data = discType.saver(processor.fdc.drives[0].disc);
         } catch (e) {
-            loadingFinished(`Create failed: ${e.message}`);
+            loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(e)}`);
             return;
         }
         name = replaceOrAddExtension(name, discType.extension);
@@ -1556,7 +1561,7 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
         loadingFinished();
     } catch (error) {
         console.error(`Error creating Google Drive disc: ${error}`, error);
-        loadingFinished(`Create failed: ${error}`);
+        loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(error)}`);
     }
 });
 

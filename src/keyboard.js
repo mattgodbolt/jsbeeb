@@ -43,6 +43,7 @@ export class Keyboard extends EventTarget {
         this.pauseEmu = false;
         this.stepEmuWhenPaused = false;
         this.keyLayout = keyLayout;
+        this.saidCapsLockIsTapped = false;
 
         // Modifier key states
         this.lastShiftLocation = 1;
@@ -315,21 +316,19 @@ export class Keyboard extends EventTarget {
         // Simulate a key release after a short delay
         setTimeout(() => this.keyInterface.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
-        if (isMac && window.localStorage && !window.localStorage.getItem("warnedAboutRubbishMacs")) {
-            this.dispatchEvent(
-                new CustomEvent("showError", {
-                    detail: {
-                        context: "handling caps lock on Mac OS X",
-                        error: `Mac OS X does not generate key up events for caps lock presses.
-                jsbeeb can only simulate a 'tap' of the caps lock key. This means it doesn't work well for games
-                that use caps lock for left or fire, as we can't tell if it's being held down. If you need to play
-                such a game, please see the documentation about remapping keys.
-                Close this window to continue (you won't see this error again)`,
-                    },
-                }),
-            );
-            window.localStorage.setItem("warnedAboutRubbishMacs", "true");
-        }
+        if (this.saidCapsLockIsTapped) return;
+        this.saidCapsLockIsTapped = true;
+        this.dispatchEvent(
+            new CustomEvent("notice", {
+                detail: {
+                    message:
+                        "macOS sends no key up for caps lock, so jsbeeb can only tap it. " +
+                        "For a game that holds caps lock for left or fire, remap that key instead.",
+                    title: "Keyboard",
+                    quietKey: "warnedAboutRubbishMacs",
+                },
+            }),
+        );
     }
 
     /**
