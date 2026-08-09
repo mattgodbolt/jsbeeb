@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BbcDiscArchive, describe as describeDisc } from "../../src/bbcdiscs.js";
+import { BbcDiscArchive, byTitle, describe as describeDisc } from "../../src/bbcdiscs.js";
 
 const ArchiveBase = "https://bbc.xania.org/archive/bbcdiscs";
 
@@ -48,6 +48,49 @@ describe("describe", () => {
 
     it("falls back to the blob name when a disc has no title", () => {
         expect(describeDisc({ path: "DEADBEEF.hfe" }).title).toBe("DEADBEEF.hfe");
+    });
+});
+
+describe("byTitle", () => {
+    const sorted = (...files) =>
+        files.sort(byTitle).map((f) => `${f.title} ${f.publisher ?? ""}${f.variant ?? ""}`.trim());
+
+    it("orders by title rather than by publisher, which is how the catalogue arrives", () => {
+        expect(sorted({ title: "Zork", publisher: "Acornsoft" }, { title: "Aviator", publisher: "Zenith" })).toEqual([
+            "Aviator Zenith",
+            "Zork Acornsoft",
+        ]);
+    });
+
+    it("reads a number in a title as a number", () => {
+        expect(sorted({ title: "Games Disc 10" }, { title: "Games Disc 2" })).toEqual([
+            "Games Disc 2",
+            "Games Disc 10",
+        ]);
+    });
+
+    it("keeps a title's variants together and in order", () => {
+        expect(
+            sorted(
+                { title: "Acheton", publisher: "Acornsoft", variant: "2" },
+                { title: "Arcadians", publisher: "Acornsoft", variant: "1" },
+                { title: "Acheton", publisher: "Acornsoft", variant: "1" },
+            ),
+        ).toEqual(["Acheton Acornsoft1", "Acheton Acornsoft2", "Arcadians Acornsoft1"]);
+    });
+
+    it("doesn't separate a title from its neighbours over case", () => {
+        expect(sorted({ title: "elite" }, { title: "Doctor Who" }, { title: "Frak" })).toEqual([
+            "Doctor Who",
+            "elite",
+            "Frak",
+        ]);
+    });
+
+    it("falls back to the blob name for a disc with no title", () => {
+        const untitled = { path: "AAAA0001.hfe" };
+        const zork = { title: "Zork" };
+        expect([zork, untitled].sort(byTitle)).toEqual([untitled, zork]);
     });
 });
 

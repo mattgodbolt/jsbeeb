@@ -4,6 +4,22 @@
 // undone the compression by the time `fetch` resolves.
 const mirrorBase = "https://bbc.xania.org/archive/bbcdiscs";
 
+// Numeric so a "Disc 2" would sort before a "Disc 10" rather than after it,
+// and case-insensitive so a lower-cased title stays with its neighbours.
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * Order the picker by what someone is looking for, which is the disc's name.
+ * The catalogue arrives grouped by publisher, so it has to be sorted here; the
+ * remaining keys only settle ties, keeping a title's variants together and in
+ * a stable order rather than the one the catalogue happens to list them in.
+ */
+export const byTitle = (a, b) =>
+    collator.compare(a.title || a.path, b.title || b.path) ||
+    collator.compare(a.publisher || "", b.publisher || "") ||
+    collator.compare(a.disc || "", b.disc || "") ||
+    collator.compare(a.variant || "", b.variant || "");
+
 /**
  * How a disc reads in the picker. Several fingerprinted variants of one title
  * sit next to each other, so the title alone doesn't identify a disc.
@@ -41,7 +57,7 @@ export class BbcDiscArchive {
                 if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
                 const data = await response.json();
                 if (!Array.isArray(data?.files)) throw new Error("Invalid manifest: missing files array");
-                this._catalogue = data.files;
+                this._catalogue = [...data.files].sort(byTitle);
                 this._loaded = true;
             } catch (error) {
                 console.error("Failed to fetch HFE archive catalogue:", error);
