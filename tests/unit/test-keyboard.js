@@ -529,7 +529,18 @@ describe("Keyboard", () => {
         expect(keyboard.pauseEmu).toBe(false);
     });
 
-    // We don't test Mac-specific code as it requires global mocking
+    test("handleMacCapsLock taps the key and says why, however often it is pressed", () => {
+        const notices = [];
+        keyboard.addEventListener("notice", (e) => notices.push(e.detail));
+
+        keyboard.handleMacCapsLock();
+        keyboard.handleMacCapsLock();
+
+        expect(mockSysvia.keyDown).toHaveBeenCalledWith(utils.keyCodes.CAPSLOCK);
+        expect(notices).toHaveLength(1);
+        expect(notices[0].message).toContain("caps lock");
+        expect(notices[0].quietKey).toBe("warnedAboutRubbishMacs");
+    });
 });
 
 describe("Keyboard Atom adapter", () => {

@@ -244,10 +244,10 @@ describe("TeletextAdaptor", () => {
 
         const settle = () => new Promise((resolve) => setTimeout(resolve));
 
-        const listenForErrors = () => {
-            const errors = [];
-            adaptor.addEventListener("showError", (e) => errors.push(e.detail));
-            return errors;
+        const listenForNotices = () => {
+            const notices = [];
+            adaptor.addEventListener("notice", (e) => notices.push(e.detail));
+            return notices;
         };
 
         it("should ignore a response that arrives after a newer channel's", async () => {
@@ -271,19 +271,20 @@ describe("TeletextAdaptor", () => {
             expect(adaptor.totalFrames).toBe(2);
         });
 
-        it("should report a failed load", async () => {
-            const errors = listenForErrors();
-            const failure = new Error("404");
+        it("should report a failed load, saying which channel and why", async () => {
+            const notices = listenForNotices();
 
             adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
-            failChannel(1, failure);
+            failChannel(1, new Error("http code 404"));
             await settle();
 
-            expect(errors).toEqual([{ context: "loading teletext channel 1", error: failure }]);
+            expect(notices).toHaveLength(1);
+            expect(notices[0].message).toContain("channel 1");
+            expect(notices[0].message).toContain("http code 404");
         });
 
         it("should not report a failure from a superseded request", async () => {
-            const errors = listenForErrors();
+            const notices = listenForNotices();
 
             adaptor.write(0, 0x04 | 1); // Teletext enable, channel 1
             adaptor.write(0, 0x04 | 2); // Teletext enable, channel 2
@@ -291,7 +292,7 @@ describe("TeletextAdaptor", () => {
             resolveChannel(2);
             await settle();
 
-            expect(errors).toEqual([]);
+            expect(notices).toEqual([]);
             expect(adaptor.totalFrames).toBe(1);
         });
 

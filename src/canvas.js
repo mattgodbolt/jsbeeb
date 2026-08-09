@@ -213,11 +213,18 @@ export class GlCanvas {
     }
 }
 
+function fellBackBecause(canvas, reason) {
+    canvas.fallbackReason = reason;
+    return canvas;
+}
+
 export function bestCanvas(canvas, filterClass) {
+    let reason;
     try {
         return new GlCanvas(canvas, filterClass);
     } catch (e) {
         // Either WebGL is unavailable or this particular filter declined it.
+        reason = e?.message ?? e;
         console.log(`Unable to use ${filterClass.getDisplayConfig().name} with WebGL: ${e}`);
     }
 
@@ -226,11 +233,11 @@ export function bestCanvas(canvas, filterClass) {
     // 2D fallback below would throw and take the emulator with it.
     if (filterClass !== PassthroughFilter) {
         try {
-            return new GlCanvas(canvas, PassthroughFilter);
+            return fellBackBecause(new GlCanvas(canvas, PassthroughFilter), reason);
         } catch (e) {
             console.log("Unable to fall back to the passthrough filter: " + e);
         }
     }
 
-    return new Canvas(canvas);
+    return fellBackBecause(new Canvas(canvas), reason);
 }

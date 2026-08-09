@@ -35,8 +35,8 @@ Status register:
 */
 
 /**
- * Emulates the Acorn teletext adaptor. Dispatches a `showError` CustomEvent, carrying
- * `context` and `error` in its detail, when a channel's stream cannot be loaded.
+ * Emulates the Acorn teletext adaptor. Dispatches a `notice` CustomEvent, carrying a
+ * `message` in its detail, when a channel's stream cannot be loaded.
  */
 export class TeletextAdaptor extends EventTarget {
     constructor(cpu) {
@@ -79,8 +79,10 @@ export class TeletextAdaptor extends EventTarget {
             if (request !== this.streamRequest) return;
             console.error(`Teletext adaptor: failed to load channel ${channel}`, error);
             this.dispatchEvent(
-                new CustomEvent("showError", {
-                    detail: { context: `loading teletext channel ${channel}`, error },
+                new CustomEvent("notice", {
+                    detail: {
+                        message: `Teletext channel ${channel} could not be loaded (${error?.message ?? error}). The adaptor carries on with nothing to show.`,
+                    },
                 }),
             );
             return;
