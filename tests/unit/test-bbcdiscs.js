@@ -102,8 +102,6 @@ describe("BbcDiscArchive", () => {
         expect(failed).toBe(true);
     });
 
-    // The browser undoes `Content-Encoding: br` before we see the body, so what
-    // arrives is the HFE itself and there is nothing to decompress or unzip.
     it("returns the fetched image as bytes, untouched", async () => {
         const hfe = new Uint8Array([0x48, 0x58, 0x43, 0x48, 0x46, 0x45, 0x56, 0x33, 0x01, 0x02]);
         vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {

@@ -194,7 +194,6 @@ th {
   font-size: 0.9em;
 }
 
-/* Fingerprints and track counts line up down the column, so keep them monospaced. */
 #hfe-list .detail {
   font-family: monospace;
 }
