@@ -5,14 +5,13 @@ disc preservation work, catalogued in a Google Sheet and hosted on Google Drive,
 into a local tree ready to upload to `s3://bbc.xania.org/archive/bbcdiscs/`.
 Mirrored with his permission.
 
-Unlike the STH mirror, the index is a spreadsheet rather than a set of web
-pages, and the images are flux-derived HFEs rather than zipped sector dumps.
-Everything else is deliberately the same shape: one manifest per category, blobs
-uploaded with a long cache lifetime, manifests with a short one.
+Unlike the STH mirror, the index is a spreadsheet rather than a set of web pages
+and the images are flux-derived HFEs rather than zipped sector dumps. Everything
+else is the same shape: one manifest per category, blobs uploaded with a long
+cache lifetime, manifests with a short one.
 
-The catalogue itself is not this repository's to publish, so its URL and the
-wording of its credit are passed in with `--source` and `--credit` at run time.
-Nothing here links to it or carries a copy of its contents.
+The catalogue's URL and the wording of its credit are passed in with `--source`
+and `--credit` at run time; nothing here links to it or copies its contents.
 
 ## Running it
 
@@ -26,19 +25,18 @@ BEEBJIT=~/dev/beebjit/beebjit npm run mirror-bbcdiscs
 npm run mirror-bbcdiscs:upload   # push to S3
 ```
 
-Every run that publishes needs beebjit, because publishing a disc asserts it is
-the one the catalogue describes and only beebjit can check that. Point `BEEBJIT`
-at the binary, or pass `--beebjit` when invoking the script directly. Only
-`:check`, which writes nothing, runs without it.
+Publishing needs beebjit: point `BEEBJIT` at the binary, or pass `--beebjit`
+when invoking the script directly. Only `:check`, which writes nothing, runs
+without it.
 
 Seed first on a fresh machine. A published blob is the disc, so anything already
-on S3 is decompressed locally rather than fetched again, and a mirror that is
-already complete needs nothing at all from Drive. That matters: the archive is
-most of a gigabyte, all served by someone else's Drive account.
+on S3 is decompressed locally rather than fetched again, and a complete mirror
+needs nothing at all from Drive. The archive is most of a gigabyte, all served
+by someone else's Drive account.
 
-Seeding also relies on the sync leaving the stored encoding alone. If it decodes
-`Content-Encoding` on the way down, the blobs arrive as plain HFE and the next
-run says so rather than re-uploading them as if they were still compressed.
+Seeding relies on the sync leaving the stored encoding alone. If it decodes
+`Content-Encoding` on the way down the blobs arrive as plain HFE, and the next
+run says so rather than re-uploading them as though they were still compressed.
 
 Uploading needs AWS credentials with write access to the `archive/bbcdiscs/`
 prefix of the `bbc.xania.org` bucket, which may not be your default profile:
@@ -47,9 +45,9 @@ prefix of the `bbc.xania.org` bucket, which may not be your default profile:
 AWS_PROFILE=<profile> npm run mirror-bbcdiscs:upload
 ```
 
-Dry-run both upload passes first and check that the blobs land in one and the
-manifests in the other, because the two tag their objects with very different
-cache lifetimes:
+Dry-run both passes first and check that the blobs land in one and the manifests
+in the other, because the two tag their objects with very different cache
+lifetimes:
 
 ```sh
 npm run mirror-bbcdiscs:upload:blobs -- --dryrun
@@ -63,51 +61,41 @@ node tools/mirror-bbcdiscs.js --csv .bbcdiscs-sheet.csv --out .bbcdiscs-mirror \
     --filter "<publisher or title>" --limit 6
 ```
 
-A filtered or limited run knows nothing about the discs it skipped, so it neither
-prunes nor writes manifests. It leaves blobs behind for the next full run to pick
-up, and there is nothing to upload from it.
+A filtered or limited run knows nothing about the discs it skipped, so it
+neither prunes nor writes manifests. It leaves its blobs for the next full run
+to pick up, and there is nothing to upload from it.
 
-## What the sheet's link column means
+## What the link column means
 
 A row with no HFE link is not an omission. The catalogue records the disc's
 fingerprint either way, and the link is where its owner says whether the image
-is published, which for some publishers they have chosen it should not be.
+may be published, which for some publishers he has chosen it should not be.
 
-So a link disappearing is how a disc is withdrawn, and the mirror has to follow.
-A full run deletes the blob, drops it from the manifest, deletes the cached
-original, and prints `WITHDRAWN`; `mirror-bbcdiscs:upload:blobs` passes
-`--delete` so S3 follows too. Nothing else in the pipeline uses `--delete`.
+A link disappearing therefore withdraws a disc, and the mirror follows: a full
+run deletes the blob, deletes the cached original, drops it from the manifest
+and prints `WITHDRAWN`. `mirror-bbcdiscs:upload:blobs` passes `--delete` so S3
+follows too, and nothing else in the pipeline does.
 
-## Verifying against the sheet
+A disc that fails verification is not withdrawn. It is left out of the manifest
+but keeps whatever blob it already had.
 
-Every disc is checked against what the catalogue claims about it before it is
-published. beebjit's `disc:fingerprint` log reproduces four of the catalogue's
-columns, and a disc that disagrees is reported and left out of the manifest
-rather than shipped.
+## Verifying against the catalogue
 
-```sh
-node tools/mirror-bbcdiscs.js --csv .bbcdiscs-sheet.csv --out .bbcdiscs-mirror \
-    --beebjit ~/dev/beebjit/beebjit
-```
+Every disc is checked before it is published, against four columns that
+beebjit's `disc:fingerprint` log reproduces: `CRC32`, `CRC32 as 40 tracks`, the
+DFS title and the DFS cycle number.
 
 beebjit reports two fingerprints per side: the whole surface, and the even
 tracks alone. A 40 track side written to an 80 track surface is double stepped,
-so the even-track fingerprint is the real one. The sheet's `CRC32` column holds
-whichever of the two suits the side's density, which the `Tracks` column gives
-per side, and its `CRC32 as 40 tracks` column always holds the even-track one.
-A flippy with one side of each density exercises both rules at once.
+so the even-track fingerprint is the real one. `CRC32` holds whichever of the
+two suits the side's density, which the `Tracks` column gives per side, while
+`CRC32 as 40 tracks` always holds the even-track one. A flippy with one side of
+each density exercises both rules at once.
 
-It costs a beebjit run per disc, and it is the only thing that ties a link to
-the disc the catalogue says is behind it: a row whose fingerprint has moved on
-from the file it links to reads as a perfectly good row until something checks.
-
-Discs already published are taken on trust, because a blob is named after its
-fingerprint: a CRC32 that changes arrives as a new blob rather than as a disc
-that needs looking at again. `--reverify` re-checks them anyway, which is what
-to reach for when the sheet's other fingerprint columns change.
-
-Compressing is what actually costs: brotli at maximum quality dominates a first
-full run. Seeding from S3 skips it entirely for discs already mirrored.
+Discs already published are taken on trust, since a changed fingerprint arrives
+as a new blob name rather than as a disc needing another look. `--reverify`
+re-checks them anyway, which is what to reach for when the catalogue's other
+columns change.
 
 ## Layout and formats
 
@@ -120,16 +108,18 @@ full run. Seeding from S3 skips it entirely for discs already mirrored.
 ```
 
 Blobs are named after the disc's CRC32 fingerprint, which is unique across the
-sheet and stable under edits to the prose columns. Downloads are cached under
-the Drive file id, which is immutable: fixing a typo in a title must not cause a
-gigabyte of re-downloading.
+catalogue and stable under edits to the prose columns. Downloads are cached
+under the Drive file id, which is immutable: fixing a typo in a title must not
+cause a gigabyte of re-downloading.
 
 Blobs are stored brotli-compressed and served with `Content-Encoding: br`, so
 the browser decodes them and jsbeeb receives the HFE with no work of its own.
 These images compress to a few percent of their size. Brotli rather than zstd
 because Safari has only had zstd since 26.0, and brotli matches it here anyway.
+Compressing at maximum quality is what makes a first full run slow; seeding from
+S3 skips it for discs already mirrored.
 
 The cost is that S3 and CloudFront serve a stored encoding unconditionally
 rather than negotiating it, so a client that doesn't advertise `br` receives
-brotli and has to know to decode it. Every browser and Electron does; `curl`
-needs `--compressed`, and tooling written against the mirror needs to care.
+brotli and has to know to decode it. Browsers, Electron and Node's `fetch` all
+do; `curl` needs `--compressed`.
