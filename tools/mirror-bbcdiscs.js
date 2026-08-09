@@ -194,7 +194,7 @@ export function parseCatalogue(rows) {
  * Read the fingerprints out of `beebjit -log disc:fingerprint` output.
  *
  * @param {string} output combined stdout and stderr
- * @returns {{full: string, as40: string|null, dfsTitle: string, dfsCycle: string}[]} one entry per side
+ * @returns {{full: ?string, as40: ?string, dfsTitle: ?string, dfsCycle: ?string}[]} one entry per side
  */
 export function parseFingerprints(output) {
     const sides = [];

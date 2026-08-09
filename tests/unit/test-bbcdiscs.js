@@ -75,6 +75,14 @@ describe("BbcDiscArchive", () => {
         expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
+    it("doesn't refetch an archive that is legitimately empty", async () => {
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([]));
+        const subject = archive(() => {});
+        await subject.populate();
+        await subject.populate();
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
     it("reports an error rather than throwing when the manifest is missing", async () => {
         vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: false, status: 404 });
         vi.spyOn(console, "error").mockImplementation(() => {});

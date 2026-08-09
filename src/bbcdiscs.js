@@ -25,6 +25,7 @@ export class BbcDiscArchive {
     constructor(onStart, onCat, onError, baseUrl = mirrorBase) {
         this._baseUrl = `${baseUrl}/hfe/`;
         this._catalogue = [];
+        this._loaded = false;
         this._onStart = onStart;
         this._onCat = onCat;
         this._onError = onError;
@@ -32,13 +33,16 @@ export class BbcDiscArchive {
 
     async populate() {
         this._onStart();
-        if (this._catalogue.length === 0) {
+        // Tracked separately from the catalogue: an archive can legitimately be
+        // empty, and an empty array would mean "fetch it again" every time.
+        if (!this._loaded) {
             try {
                 const response = await fetch(`${this._baseUrl}manifest.json`);
                 if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
                 const data = await response.json();
                 if (!Array.isArray(data?.files)) throw new Error("Invalid manifest: missing files array");
                 this._catalogue = data.files;
+                this._loaded = true;
             } catch (error) {
                 console.error("Failed to fetch HFE archive catalogue:", error);
                 if (this._onError) this._onError();

@@ -1139,7 +1139,10 @@ function hfeOnCat(catalogue) {
             row.querySelector(".publisher").textContent = publisher;
             row.querySelector(".detail").textContent = detail;
             if (file.notes) row.title = file.notes;
-            row.addEventListener("click", () => {
+            // The row is an anchor, and letting it navigate to "#" would push a
+            // history entry of its own on top of the one updateUrl pushes.
+            row.addEventListener("click", (event) => {
+                event.preventDefault();
                 hfeClick(file);
                 $hfeModal.hide();
             });
