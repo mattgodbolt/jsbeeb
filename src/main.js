@@ -1806,90 +1806,85 @@ const startPromise = (async () => {
     // Ideally would start the loads first. But their completion needs the FDC from the processor
     const imageLoads = [];
 
+    function startImageLoad(description, load) {
+        const loading = (async () => {
+            try {
+                await load();
+            } catch (error) {
+                console.error(`Error loading ${description}:`, error);
+                toast(`Could not load ${description}: ${error.message ?? error}`, { title: "Loading" });
+            }
+        })();
+        imageLoads.push(loading);
+        return loading;
+    }
+
     if (discImage) {
-        imageLoads.push(
-            (async () => {
-                const loaded = await loadDiscImage(discImage, layoutForDrive(0));
-                putDiscIn(0, loaded);
-            })(),
+        startImageLoad(`disc ${discImage}`, async () =>
+            putDiscIn(0, await loadDiscImage(discImage, layoutForDrive(0))),
         );
     }
 
     if (secondDiscImage) {
-        imageLoads.push(
-            (async () => {
-                const loaded = await loadDiscImage(secondDiscImage, layoutForDrive(1));
-                putDiscIn(1, loaded);
-            })(),
+        startImageLoad(`disc ${secondDiscImage}`, async () =>
+            putDiscIn(1, await loadDiscImage(secondDiscImage, layoutForDrive(1))),
         );
     }
 
     if (parsedQuery.tape) {
-        imageLoads.push(
-            (async () => {
-                const tape = await loadTapeImage(parsedQuery.tape);
-                setProcessorTape(tape);
-            })(),
-        );
+        startImageLoad(`tape ${parsedQuery.tape}`, async () => setProcessorTape(await loadTapeImage(parsedQuery.tape)));
     }
 
     if (mmcImage && model.isAtom) {
-        imageLoads.push(
-            (async () => {
-                const files = await LoadSD(mmcImage);
-                processor.atommc.SetMMCData(files);
-            })(),
-        );
+        startImageLoad(`MMC image ${mmcImage}`, async () => processor.atommc.SetMMCData(await LoadSD(mmcImage)));
     }
 
     async function insertBasic(getBasicPromise, needsRun) {
-        const basicLoadPromise = (async () => {
-            const prog = await getBasicPromise;
-            const t = await tokeniser.create();
-            const tokenised = await t.tokenise(prog);
+        const prog = await getBasicPromise;
+        const t = await tokeniser.create();
+        const tokenised = await t.tokenise(prog);
 
-            const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-            const hook = processor.debugInstruction.add(function (addr) {
-                if (addr !== idleAddr) return;
-                const page = processor.readmem(0x18) << 8;
-                for (let i = 0; i < tokenised.length; ++i) {
-                    processor.writemem(page + i, tokenised.charCodeAt(i));
-                }
-                // Set VARTOP (0x12/3) and TOP(0x02/3)
-                const end = page + tokenised.length;
-                const endLow = end & 0xff;
-                const endHigh = (end >>> 8) & 0xff;
-                processor.writemem(0x02, endLow);
-                processor.writemem(0x03, endHigh);
-                processor.writemem(0x12, endLow);
-                processor.writemem(0x13, endHigh);
-                hook.remove();
-                if (needsRun) {
-                    autoRunBasic();
-                }
-            });
-            return tokenised; // Explicitly return the result
-        })();
-
-        imageLoads.push(basicLoadPromise);
-        return basicLoadPromise; // Return promise for caller to await if needed
+        const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+        const hook = processor.debugInstruction.add(function (addr) {
+            if (addr !== idleAddr) return;
+            const page = processor.readmem(0x18) << 8;
+            for (let i = 0; i < tokenised.length; ++i) {
+                processor.writemem(page + i, tokenised.charCodeAt(i));
+            }
+            // Set VARTOP (0x12/3) and TOP(0x02/3)
+            const end = page + tokenised.length;
+            const endLow = end & 0xff;
+            const endHigh = (end >>> 8) & 0xff;
+            processor.writemem(0x02, endLow);
+            processor.writemem(0x03, endHigh);
+            processor.writemem(0x12, endLow);
+            processor.writemem(0x13, endHigh);
+            hook.remove();
+            if (needsRun) {
+                autoRunBasic();
+            }
+        });
     }
 
     if (parsedQuery.loadBasic) {
         const needsRun = needsAutoboot === "run";
         needsAutoboot = "";
 
-        await insertBasic(
-            (async () => {
-                const data = await utils.loadData(parsedQuery.loadBasic);
-                return String.fromCharCode.apply(null, data);
-            })(),
-            needsRun,
+        await startImageLoad(`BASIC program ${parsedQuery.loadBasic}`, () =>
+            insertBasic(
+                (async () => {
+                    const data = await utils.loadData(parsedQuery.loadBasic);
+                    return String.fromCharCode.apply(null, data);
+                })(),
+                needsRun,
+            ),
         );
     }
 
     if (parsedQuery.embedBasic) {
-        await insertBasic(Promise.resolve(parsedQuery.embedBasic), true);
+        await startImageLoad("the BASIC program from the URL", () =>
+            insertBasic(Promise.resolve(parsedQuery.embedBasic), true),
+        );
     }
 
     return Promise.all(imageLoads);
