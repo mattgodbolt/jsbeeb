@@ -707,7 +707,6 @@ export function loadSsd(disc, data, isDsd, onChange) {
     }
 
     if (onChange) {
-        disc.savesChanges = true;
         // TODO, maybe construct the disc directly with this stuff?
         // TODO maybe change this entirely and make it lazy; and have the onChange "pull" the disc as the format it wants
         // instead of doing this here. Most stuff doesn't care about changes and only needs the image on save.
@@ -721,6 +720,7 @@ export function loadSsd(disc, data, isDsd, onChange) {
                     if (!sectorShortfall(sector)) dataCopy.set(sector.sectorData, ssdOffsetOf(sector, side, numSides));
                 onChange(dataCopy);
             },
+            true,
         );
     }
     return disc;
@@ -906,9 +906,8 @@ export class Disc {
         this.is40Track = false;
 
         this._trackWriteListeners = new Set();
+        this._savingListeners = new Set();
         this.isWriteable = isWriteable;
-        // Not snapshotted: a restore reloads through discFor and the loader decides again.
-        this.savesChanges = false;
 
         // Track which tracks have been written since the last snapshot.
         // Keys are numeric: (track | (isSideUpper ? 0x100 : 0)).
@@ -934,14 +933,23 @@ export class Disc {
         this.initSurface(0);
     }
 
-    /** @param {function(boolean, Number, Track): void} listener called once per flushed track */
-    addTrackWriteListener(listener) {
+    /**
+     * @param {function(boolean, Number, Track): void} listener called once per flushed track
+     * @param {boolean} [savesChanges] whether the listener puts the image somewhere it is read back from
+     */
+    addTrackWriteListener(listener, savesChanges = false) {
         this._trackWriteListeners.add(listener);
+        if (savesChanges) this._savingListeners.add(listener);
+    }
+
+    get savesChanges() {
+        return this._savingListeners.size > 0;
     }
 
     /** @param {function(boolean, Number, Track): void} listener */
     removeTrackWriteListener(listener) {
         this._trackWriteListeners.delete(listener);
+        this._savingListeners.delete(listener);
     }
 
     /** @param {function(): void} listener called once, when a track is first written to this disc */
