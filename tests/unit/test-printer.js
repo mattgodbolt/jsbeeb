@@ -30,7 +30,7 @@ describe("Printer", () => {
     });
 
     function attach(printer) {
-        uservia.ca2changecallback = printer.outputStrobe;
+        uservia.ca2changecallback = (level, output) => printer.outputStrobe(level, output);
         printer.attach(uservia);
         return printer;
     }

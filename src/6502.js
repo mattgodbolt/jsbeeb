@@ -1359,7 +1359,8 @@ export class Cpu6502 extends Base6502 {
     // Override in subclasses for different peripheral sets.
     // Only called on hard reset.
     resetPeripherals() {
-        if (this.config.printerPort) this.uservia.ca2changecallback = this.config.printerPort.outputStrobe;
+        if (this.config.printerPort)
+            this.uservia.ca2changecallback = (level, output) => this.config.printerPort.outputStrobe(level, output);
 
         this.sysvia.reset();
         this.uservia.reset();

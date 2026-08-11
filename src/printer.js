@@ -20,17 +20,16 @@ export class Printer {
         this._olderText = "";
         this._newerText = "";
         this._hasPrinted = false;
+    }
 
-        // Handed straight to the VIA as its CA2 callback, so it cannot rely on being bound.
-        this.outputStrobe = (level, output) => {
-            if (!output || level) return;
+    outputStrobe(level, output) {
+        if (!output || level) return;
 
-            const uservia = this._uservia;
-            // Ack the character by pulsing CA1 low.
-            uservia.setca1(false);
-            uservia.setca1(true);
-            this._append(String.fromCharCode(uservia.ora));
-        };
+        const uservia = this._uservia;
+        // Ack the character by pulsing CA1 low.
+        uservia.setca1(false);
+        uservia.setca1(true);
+        this._append(String.fromCharCode(uservia.ora));
     }
 
     attach(uservia) {
