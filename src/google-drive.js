@@ -49,10 +49,11 @@ export class GoogleDriveLoader {
 
     _loadScript(src) {
         // https://github.com/google/google-api-javascript-client/issues/319
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const script = document.createElement("script");
             script.src = src;
             script.onload = resolve;
+            script.onerror = () => reject(new Error(`Failed to fetch ${src}; a browser extension may be blocking it`));
             document.body.appendChild(script);
         });
     }

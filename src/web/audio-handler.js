@@ -4,6 +4,7 @@ import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
 import { createAudioContext } from "../audio-utils.js";
 import { toggle, fadeIn, fadeOut } from "../dom-utils.js";
+import { toast } from "./toast.js";
 
 // Using this approach means when jsbeeb is embedded in other projects, vite doesn't have a fit.
 // See https://github.com/vitejs/vite/discussions/6459
@@ -15,7 +16,7 @@ export class AudioHandler {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
         this.warningNode = warningNode;
-        this.noAudioWorklet = false;
+        this.noAudio = false;
         toggle(this.warningNode, false);
         this.stats = {};
         if (statsNode) {
@@ -38,11 +39,11 @@ export class AudioHandler {
             this.masterGain.connect(this.audioContext.destination);
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
             this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
-            this._setup(audioFilterFreq, audioFilterQ).then();
+            this._setup(audioFilterFreq, audioFilterQ).catch((error) => this._audioUnavailable(error));
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
-                this.noAudioWorklet = true;
+                this.noAudio = true;
                 console.log("Unable to initialise audio: no audio worklet API");
                 const localhost = new URL(window.location);
                 localhost.hostname = "localhost";
@@ -66,12 +67,21 @@ export class AudioHandler {
             this.audioContextM5000.onstatechange = () => this.checkStatus();
             this.music5000 = new Music5000((buffer) => this._onBufferMusic5000(buffer));
 
-            this.audioContextM5000.audioWorklet.addModule(music5000WorkletUrl).then(() => {
-                this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, "music5000", {
-                    outputChannelCount: [2],
+            this.audioContextM5000.audioWorklet
+                .addModule(music5000WorkletUrl)
+                .then(() => {
+                    this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, "music5000", {
+                        outputChannelCount: [2],
+                    });
+                    this._music5000workletnode.connect(this.audioContextM5000.destination);
+                })
+                .catch((error) => {
+                    console.error("Unable to initialise Music 5000 audio", error);
+                    toast(
+                        `The Music 5000 will be silent: its audio could not be started (${error?.message ?? error}). Reloading the page may help.`,
+                        { title: "Music 5000", quietKey: "quietMusic5000Audio" },
+                    );
                 });
-                this._music5000workletnode.connect(this.audioContextM5000.destination);
-            });
         } else {
             this.music5000 = new FakeMusic5000();
         }
@@ -116,6 +126,13 @@ export class AudioHandler {
         };
     }
 
+    _audioUnavailable(error) {
+        console.error("Unable to initialise audio", error);
+        this.noAudio = true;
+        this.warningNode.textContent = `There will be no sound: the audio system could not be started (${error?.message ?? error}). Reloading the page may help.`;
+        fadeIn(this.warningNode);
+    }
+
     _addStat(stat, info) {
         const timeSeries = new this._TimeSeries();
         this.stats[stat] = timeSeries;
@@ -146,7 +163,7 @@ export class AudioHandler {
     }
 
     checkStatus() {
-        if (this.noAudioWorklet) return;
+        if (this.noAudio) return;
         if (!this.audioContext && !this.audioContextM5000) return;
         const suspended =
             (this.audioContext && this.audioContext.state === "suspended") ||

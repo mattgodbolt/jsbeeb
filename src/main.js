@@ -10,7 +10,7 @@ import { Debugger } from "./web/debug.js";
 import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
-import { Cmos } from "./cmos.js";
+import { Cmos, localStoragePersistence } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
 import { BbcDiscArchive, describe as describeHfe } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
@@ -723,17 +723,14 @@ if (config.hasEconet) {
 }
 
 const cmos = new Cmos(
-    {
-        load: function () {
-            if (window.localStorage.cmosRam) {
-                return JSON.parse(window.localStorage.cmosRam);
-            }
-            return null;
-        },
-        save: function (data) {
-            window.localStorage.cmosRam = JSON.stringify(data);
-        },
-    },
+    localStoragePersistence(
+        () => window.localStorage,
+        (error) =>
+            toast(
+                `Settings changed with *CONFIGURE will not be kept (${errorText(error)}). Check that this site is allowed to store data, and that its storage is not full.`,
+                { title: "Settings", quietKey: "quietCmosSave" },
+            ),
+    ),
     model.cmosOverride,
     econet,
 );
@@ -745,6 +742,12 @@ function checkPrinterWindow() {
     if (printerWindow && !printerWindow.closed) return;
 
     printerWindow = window.open("", "_blank", "height=300,width=400");
+    if (!printerWindow) {
+        toast("The printer output window was blocked. Allow pop-up windows for this site, then press Ctrl-B again.", {
+            title: "Printer",
+        });
+        return;
+    }
     printerWindow.document.write(
         '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>',
     );
@@ -1577,10 +1580,14 @@ async function gdLoad(cat, layout) {
 
 for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "none";
 (async () => {
-    const available = await googleDrive.initialise();
-    if (available) {
-        for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
-        await gdAuth(true);
+    try {
+        const available = await googleDrive.initialise();
+        if (available) {
+            for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
+            await gdAuth(true);
+        }
+    } catch (error) {
+        console.log(`Google Drive is unavailable: ${errorText(error)}`);
     }
 })();
 const googleDriveModal = new bootstrap.Modal(googleDriveEl);
