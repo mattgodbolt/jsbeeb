@@ -543,6 +543,30 @@ describe("track write listeners", () => {
         expect(watcherCalls).toBe(1);
     });
 
+    it("tells a first-write listener once, however many tracks are written", () => {
+        const disc = unobservedDisc();
+        let calls = 0;
+        disc.notifyOnFirstTrackWrite(() => calls++);
+
+        for (const trackNum of [0, 1, 2]) {
+            disc.writePulses(false, trackNum, 0, 0);
+            disc.flushWrites();
+        }
+
+        expect(calls).toBe(1);
+    });
+
+    it("counts first writes per disc, not once for all of them", () => {
+        let calls = 0;
+        for (const disc of [unobservedDisc(), unobservedDisc()]) {
+            disc.notifyOnFirstTrackWrite(() => calls++);
+            disc.writePulses(false, 0, 0, 0);
+            disc.flushWrites();
+        }
+
+        expect(calls).toBe(2);
+    });
+
     it("writes an image back for a track holding a sector it cannot read", () => {
         vi.spyOn(globalThis.console, "log").mockImplementation(() => {});
         const sectorsPerTrack = 10;

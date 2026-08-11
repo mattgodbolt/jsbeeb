@@ -289,7 +289,16 @@ export function discFor(fdc, name, stringData, onChange, layout = DiscLayout.aut
     return disc;
 }
 
-export function localDisc(fdc, name, layout = DiscLayout.auto) {
+/**
+ * Create or open a disc held in the browser's local storage.
+ * @param {Object} fdc - The FDC controller object
+ * @param {string} name - The file name with extension
+ * @param {string} [layout] - one of DiscLayout; by default the image is asked what it is
+ * @param {function(*): void} [onSaveError] - called with whatever was thrown, the first time a write
+ *   cannot be stored
+ * @returns {Disc} The loaded disc object
+ */
+export function localDisc(fdc, name, layout = DiscLayout.auto, onSaveError = () => {}) {
     const discName = "disc_" + name;
     let data;
     const dataString = window.localStorage[discName];
@@ -307,12 +316,16 @@ export function localDisc(fdc, name, layout = DiscLayout.auto) {
         console.log("Loading browser-local disc " + name);
         data = utils.stringToUint8Array(dataString);
     }
+    let reportedSaveError = false;
     const onChange = (data) => {
         try {
             const str = utils.uint8ArrayToString(data);
             window.localStorage.setItem(discName, str);
         } catch (e) {
-            window.alert("Writing to localStorage failed: " + e);
+            console.log(`Unable to save browser-local disc ${name}: ${e}`);
+            if (reportedSaveError) return;
+            reportedSaveError = true;
+            onSaveError(e);
         }
     };
     return discFor(fdc, name, data, onChange, layout);
