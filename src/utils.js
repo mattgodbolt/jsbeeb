@@ -64,10 +64,10 @@ function* candidateMemberEnds(buf, start) {
 // deflate stream, which always fails, so the first candidate that decodes is the boundary.
 async function decompressGzip(data) {
     const members = [];
-    let firstError = null;
     let start = 0;
     do {
         let end = -1;
+        let firstError = null;
         for (const candidate of candidateMemberEnds(data, start)) {
             try {
                 members.push(await decompressOne(data.subarray(start, candidate), "gzip"));
