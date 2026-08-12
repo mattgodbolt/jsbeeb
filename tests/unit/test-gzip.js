@@ -22,6 +22,21 @@ function repeatMember(times) {
     return result;
 }
 
+async function gzipMember(text) {
+    const stream = new Blob([new TextEncoder().encode(text)]).stream().pipeThrough(new CompressionStream("gzip"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function concat(parts) {
+    const result = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+        result.set(part, offset);
+        offset += part.length;
+    }
+    return result;
+}
+
 async function testOneFile(file) {
     const compressed = new Uint8Array(fs.readFileSync(`${file}.gz`));
     const expected = new Uint8Array(fs.readFileSync(file));
@@ -45,9 +60,33 @@ describe("gzip tests", function () {
         expect(new TextDecoder().decode(result)).toBe("hello worldhello worldhello world");
     });
 
+    it("should concatenate members of differing contents", async () => {
+        const members = await Promise.all(["first ", "second ", "third"].map(gzipMember));
+        const result = await utils.ungzip(concat(members));
+        expect(new TextDecoder().decode(result)).toBe("first second third");
+    });
+
     it("should reject a multi-member gzip with a truncated final member", async () => {
         const truncated = repeatMember(2).subarray(0, helloWorldMember.length + 20);
         await expect(utils.ungzip(truncated)).rejects.toThrow();
+    });
+
+    it("should reject a corrupted payload", async () => {
+        const corrupted = helloWorldMember.slice();
+        corrupted[24] ^= 0x01;
+        await expect(utils.ungzip(corrupted)).rejects.toThrow(/Unable to ungzip: incorrect data check/);
+    });
+
+    it("should reject a corrupted member in the middle of a multi-member gzip", async () => {
+        const corrupted = repeatMember(3);
+        corrupted[helloWorldMember.length + 24] ^= 0x01;
+        await expect(utils.ungzip(corrupted)).rejects.toThrow(/Unable to ungzip/);
+    });
+
+    it("should accept a member followed by trailing zeros", async () => {
+        const padded = new Uint8Array(helloWorldMember.length + 8);
+        padded.set(helloWorldMember);
+        expect(new TextDecoder().decode(await utils.ungzip(padded))).toBe("hello world");
     });
 
     it("should reject non-gzip data", async () => {
