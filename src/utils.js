@@ -62,22 +62,24 @@ function* candidateMemberEnds(buf, start) {
 // exactly one and treats the rest as junk, so members are split here. A member's end is
 // the next member's header; a candidate that falls inside a member instead truncates its
 // deflate stream, which always fails, so the first candidate that decodes is the boundary.
+// The last candidate is the whole remaining buffer, so on failure its error is the one to report:
+// it is what the platform says without any splitting of ours in the way.
 async function decompressGzip(data) {
     const members = [];
     let start = 0;
     do {
         let end = -1;
-        let firstError = null;
+        let lastError = null;
         for (const candidate of candidateMemberEnds(data, start)) {
             try {
                 members.push(await decompressOne(data.subarray(start, candidate), "gzip"));
                 end = candidate;
                 break;
             } catch (e) {
-                if (!firstError) firstError = e;
+                lastError = e;
             }
         }
-        if (end < 0) throw firstError;
+        if (end < 0) throw lastError;
         start = end;
     } while (start < data.length);
     return members.length === 1 ? members[0] : concatChunks(members);
