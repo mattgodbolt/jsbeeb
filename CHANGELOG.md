@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.17.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.17.0...v1.17.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* ack printer output so programs do not wait for a printer window ([#813](https://github.com/mattgodbolt/jsbeeb/issues/813)) ([2ebf0cb](https://github.com/mattgodbolt/jsbeeb/commit/2ebf0cbc7a3d7f7ca4c9f5774254a1ba97fb9759)), closes [#288](https://github.com/mattgodbolt/jsbeeb/issues/288)
+* decode every member of a multi-member gzip ([#823](https://github.com/mattgodbolt/jsbeeb/issues/823)) ([34afb25](https://github.com/mattgodbolt/jsbeeb/commit/34afb254ba7a89b4da57d49e75d6cefa17b014e3))
+* let go of a toast once it has been and gone ([#810](https://github.com/mattgodbolt/jsbeeb/issues/810)) ([14e97bb](https://github.com/mattgodbolt/jsbeeb/commit/14e97bb0e71777ff7c8218371b02e80d293c8472))
+* let sniff-disc-layout read a mirror's compressed blobs ([#820](https://github.com/mattgodbolt/jsbeeb/issues/820)) ([8c46f43](https://github.com/mattgodbolt/jsbeeb/commit/8c46f43a7dcddb61ac2ae15504733c1d9b5633a0))
+* put an HFE from the archive in the drive the same way as everything else ([#814](https://github.com/mattgodbolt/jsbeeb/issues/814)) ([c0ad224](https://github.com/mattgodbolt/jsbeeb/commit/c0ad2240b64a9e099e6e22951234b3753720e98a))
+* put port A data on the pins before the CA2 strobe falls ([#817](https://github.com/mattgodbolt/jsbeeb/issues/817)) ([54bfa34](https://github.com/mattgodbolt/jsbeeb/commit/54bfa3494561d1410a74bc6fbfb2aa28d5db2deb)), closes [#816](https://github.com/mattgodbolt/jsbeeb/issues/816)
+* say when a disc write goes nowhere ([#811](https://github.com/mattgodbolt/jsbeeb/issues/811)) ([602be9e](https://github.com/mattgodbolt/jsbeeb/commit/602be9eea6bddd7519ae2db478051f502b26341b))
+* stop four silent failures failing silently ([#815](https://github.com/mattgodbolt/jsbeeb/issues/815)) ([e67be21](https://github.com/mattgodbolt/jsbeeb/commit/e67be219730fb15b450d8840a97c0393816a2c99))
+
 ## [1.17.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.16.0...v1.17.0) (2026-08-09)
 
 
