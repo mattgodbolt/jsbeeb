@@ -7,6 +7,19 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+function readZip(name) {
+    return new Uint8Array(fs.readFileSync(join(__dirname, "zip", name)));
+}
+
+// Flips one bit in the first entry's data, leaving the stored CRC32 intact.
+function corruptFirstEntry(zipData, offsetIntoData) {
+    const nameLen = zipData[26] | (zipData[27] << 8);
+    const extraLen = zipData[28] | (zipData[29] << 8);
+    const corrupted = zipData.slice();
+    corrupted[30 + nameLen + extraLen + offsetIntoData] ^= 0x01;
+    return corrupted;
+}
+
 describe("zip tests", function () {
     it("should unzip SSD files", async () => {
         const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
@@ -104,5 +117,23 @@ describe("zip tests", function () {
         const notZip = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
 
         await expect(utils.unzipDiscImage(notZip)).rejects.toThrow(/Not a ZIP file/);
+    });
+
+    it("should throw for a stored entry whose data does not match its CRC32", async () => {
+        const zipData = corruptFirstEntry(readZip("test-ssd.zip"), 0);
+
+        await expect(utils.unzipDiscImage(zipData)).rejects.toThrow(/Corrupt ZIP entry test\.ssd: CRC32 mismatch/);
+    });
+
+    it("should throw for a deflated entry that inflates cleanly to the wrong bytes", async () => {
+        const zipData = corruptFirstEntry(readZip("test-deflated.zip"), 5);
+
+        await expect(utils.unzipDiscImage(zipData)).rejects.toThrow(/Corrupt ZIP entry test\.ssd: CRC32 mismatch/);
+    });
+
+    it("should throw for a deflated entry whose stream is damaged beyond inflating", async () => {
+        const zipData = corruptFirstEntry(readZip("test-deflated.zip"), 0);
+
+        await expect(utils.unzipDiscImage(zipData)).rejects.toThrow(/Unable to inflate ZIP entry test\.ssd/);
     });
 });

@@ -65,6 +65,7 @@ export async function unzip(buf) {
         const flags = readU16(buf, pos + 8);
         if (flags & 0x0001) throw new Error("Encrypted ZIP entries are not supported");
         const method = readU16(buf, pos + 10);
+        const expectedCrc = readU32(buf, pos + 16);
         const compressedSize = readU32(buf, pos + 20);
         const nameLen = readU16(buf, pos + 28);
         const extraLen = readU16(buf, pos + 30);
@@ -89,21 +90,21 @@ export async function unzip(buf) {
         } else {
             throw new Error(`Unsupported ZIP compression method ${method} for ${name}`);
         }
+        if (crc32(files[name]) >>> 0 !== expectedCrc) throw new Error(`Corrupt ZIP entry ${name}: CRC32 mismatch`);
     }
     return files;
 }
 
 // Standard CRC-32/ISO-HDLC.
+const Crc32Table = new Uint32Array(256).map((_, index) => {
+    let crc = index;
+    for (let bit = 0; bit < 8; ++bit) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    return crc;
+});
+
 export function crc32(data) {
     let crc = 0xffffffff;
-    for (let i = 0; i < data.length; ++i) {
-        crc ^= data[i];
-        for (let j = 0; j < 8; ++j) {
-            const doEor = crc & 1;
-            crc = crc >>> 1;
-            if (doEor) crc ^= 0xedb88320;
-        }
-    }
+    for (let i = 0; i < data.length; ++i) crc = (crc >>> 8) ^ Crc32Table[(crc ^ data[i]) & 0xff];
     return ~crc;
 }
 
