@@ -1,7 +1,8 @@
 "use strict";
-// Minimal ZIP extractor using native DecompressionStream for deflate.
-// Supports methods 0 (stored) and 8 (deflate); other methods (bzip2,
-// lzma, etc.) will throw an error with the method number.
+// Minimal ZIP extractor. Supports methods 0 (stored) and 8 (deflate); other
+// methods (bzip2, lzma, etc.) will throw an error with the method number.
+
+import { inflate as pakoInflate, inflateRaw as pakoInflateRaw, ungzip as pakoUngzip } from "pako";
 
 const ZipLocalHeaderSig = 0x04034b50;
 const ZipCentralDirSig = 0x02014b50;
@@ -35,103 +36,17 @@ function findEocd(buf) {
     throw new Error("Not a ZIP file: EOCD not found");
 }
 
-const GzipId1 = 0x1f;
-const GzipId2 = 0x8b;
-const GzipDeflateMethod = 8;
-const GzipReservedFlags = 0xe0;
-const GzipHeaderSize = 10;
-const GzipTrailerSize = 8;
-
-function looksLikeGzipMember(buf, off) {
-    return (
-        off + GzipHeaderSize + GzipTrailerSize <= buf.length &&
-        buf[off] === GzipId1 &&
-        buf[off + 1] === GzipId2 &&
-        buf[off + 2] === GzipDeflateMethod &&
-        (buf[off + 3] & GzipReservedFlags) === 0
-    );
-}
-
-// Positions a member starting at `start` could end at, in increasing order.
-function* candidateMemberEnds(buf, start) {
-    for (let off = start + GzipHeaderSize; off < buf.length; ++off) if (looksLikeGzipMember(buf, off)) yield off;
-    yield buf.length;
-}
-
-// A gzip file is a sequence of members (RFC 1952 section 2.2) but DecompressionStream decodes
-// exactly one and treats the rest as junk, so members are split here. A member's end is
-// the next member's header; a candidate that falls inside a member instead truncates its
-// deflate stream, which always fails, so the first candidate that decodes is the boundary.
-// The last candidate is the whole remaining buffer, so on failure its error is the one to report:
-// it is what the platform says without any splitting of ours in the way.
-async function decompressGzip(data) {
-    const members = [];
-    let start = 0;
-    do {
-        let end = -1;
-        let lastError = null;
-        for (const candidate of candidateMemberEnds(data, start)) {
-            try {
-                members.push(await decompressOne(data.subarray(start, candidate), "gzip"));
-                end = candidate;
-                break;
-            } catch (e) {
-                lastError = e;
-            }
-        }
-        if (end < 0) throw lastError;
-        start = end;
-    } while (start < data.length);
-    return members.length === 1 ? members[0] : concatChunks(members);
-}
-
-function concatChunks(chunks) {
-    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-    const out = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const chunk of chunks) {
-        out.set(chunk, offset);
-        offset += chunk.length;
-    }
-    return out;
-}
-
-export async function decompress(data, format) {
+function inflateWith(inflater, data, context) {
     if (!(data instanceof Uint8Array)) data = new Uint8Array(data);
-    return format === "gzip" ? await decompressGzip(data) : await decompressOne(data, format);
+    try {
+        return inflater(data);
+    } catch (cause) {
+        throw new Error(`${context}: ${cause.message || cause}`, { cause });
+    }
 }
 
-// Pipe data through a DecompressionStream and return the result.
-// Starts the read loop before writing to avoid backpressure deadlock.
-// On error, Node's DecompressionStream rejects multiple internal promises
-// (write, close, and closed); we catch the write side to prevent unhandled
-// rejections and let the error surface through the read side.
-async function decompressOne(data, format) {
-    const ds = new DecompressionStream(format);
-    const writer = ds.writable.getWriter();
-    const reader = ds.readable.getReader();
-    const chunks = [];
-    const readPromise = (async () => {
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-        }
-    })();
-    const writePromise = (async () => {
-        await writer.write(data);
-        await writer.close();
-    })().catch(() => {
-        // Intentionally empty.
-    });
-    // Intentionally empty: Node's DecompressionStream rejects multiple
-    // promises on error (write, close, closed). The read side surfaces
-    // the same error with proper context — catching these just prevents
-    // unhandled rejections from the write-side promises.
-    writer.closed.catch(() => {});
-    await readPromise;
-    await writePromise;
-    return chunks.length === 1 ? chunks[0] : concatChunks(chunks);
+export function inflate(data) {
+    return inflateWith(pakoInflate, data, "Unable to inflate");
 }
 
 // Extract all files from a ZIP archive.  Returns {filename: Uint8Array}.
@@ -170,7 +85,7 @@ export async function unzip(buf) {
         if (method === ZipMethodStored) {
             files[name] = raw.slice();
         } else if (method === ZipMethodDeflate) {
-            files[name] = await decompress(raw, "deflate-raw");
+            files[name] = inflateWith(pakoInflateRaw, raw, `Unable to inflate ZIP entry ${name}`);
         } else {
             throw new Error(`Unsupported ZIP compression method ${method} for ${name}`);
         }
@@ -1170,11 +1085,7 @@ export function readFloat32(data, offset) {
 }
 
 export async function ungzip(data) {
-    try {
-        return await decompress(data, "gzip");
-    } catch (cause) {
-        throw new Error("Unable to ungzip: " + (cause.message || cause), { cause });
-    }
+    return inflateWith(pakoUngzip, data, "Unable to ungzip");
 }
 
 export class DataStream {

@@ -1,5 +1,5 @@
 "use strict";
-import { decompress } from "./utils.js";
+import { inflate } from "./utils.js";
 
 // B-em snapshot format parser (versions 1 and 3).
 // v1 (BEMSNAP1): Fixed-size 327,885 byte packed struct. Reference: beebjit state.c
@@ -334,7 +334,7 @@ async function parseBemTube(sections, tubeName) {
 
     // Those names come from a config file, so size is the real check. It cannot be exact: the
     // trailing ROM's size comes from that same config, and b-em records it as zero if unset.
-    const parasite = await decompress(sections["P"].data, "deflate");
+    const parasite = inflate(sections["P"].data);
     const romBytes = parasite.length - BemTubeRegisterBytes - BemTubeRamSize;
     if (romBytes < 0 || romBytes > BemTubeRamSize) {
         throw new Error(
@@ -449,9 +449,8 @@ async function parseBemV3(buffer) {
     let roms = null;
     const memSection = sections["M"];
     if (memSection) {
-        // Memory is zlib-compressed; decompression is async.
         // Decompressed layout: 2 bytes (fe30, fe34) + 64KB RAM + 256KB ROM
-        const memData = await decompress(memSection.data, "deflate");
+        const memData = inflate(memSection.data);
         cpuState.fe30 = memData[0];
         cpuState.fe34 = memData[1];
         const ramStart = 2;
