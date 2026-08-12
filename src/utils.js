@@ -35,12 +35,78 @@ function findEocd(buf) {
     throw new Error("Not a ZIP file: EOCD not found");
 }
 
+const GzipId1 = 0x1f;
+const GzipId2 = 0x8b;
+const GzipDeflateMethod = 8;
+const GzipReservedFlags = 0xe0;
+const GzipHeaderSize = 10;
+const GzipTrailerSize = 8;
+
+function looksLikeGzipMember(buf, off) {
+    return (
+        off + GzipHeaderSize + GzipTrailerSize <= buf.length &&
+        buf[off] === GzipId1 &&
+        buf[off + 1] === GzipId2 &&
+        buf[off + 2] === GzipDeflateMethod &&
+        (buf[off + 3] & GzipReservedFlags) === 0
+    );
+}
+
+// Positions a member starting at `start` could end at, in increasing order.
+function* candidateMemberEnds(buf, start) {
+    for (let off = start + GzipHeaderSize; off < buf.length; ++off) if (looksLikeGzipMember(buf, off)) yield off;
+    yield buf.length;
+}
+
+// A gzip file is a sequence of members (RFC 1952 section 2.2) but DecompressionStream decodes
+// exactly one and treats the rest as junk, so members are split here. A member's end is
+// the next member's header; a candidate that falls inside a member instead truncates its
+// deflate stream, which always fails, so the first candidate that decodes is the boundary.
+// The last candidate is the whole remaining buffer, so on failure its error is the one to report:
+// it is what the platform says without any splitting of ours in the way.
+async function decompressGzip(data) {
+    const members = [];
+    let start = 0;
+    do {
+        let end = -1;
+        let lastError = null;
+        for (const candidate of candidateMemberEnds(data, start)) {
+            try {
+                members.push(await decompressOne(data.subarray(start, candidate), "gzip"));
+                end = candidate;
+                break;
+            } catch (e) {
+                lastError = e;
+            }
+        }
+        if (end < 0) throw lastError;
+        start = end;
+    } while (start < data.length);
+    return members.length === 1 ? members[0] : concatChunks(members);
+}
+
+function concatChunks(chunks) {
+    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const chunk of chunks) {
+        out.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return out;
+}
+
+export async function decompress(data, format) {
+    if (!(data instanceof Uint8Array)) data = new Uint8Array(data);
+    return format === "gzip" ? await decompressGzip(data) : await decompressOne(data, format);
+}
+
 // Pipe data through a DecompressionStream and return the result.
 // Starts the read loop before writing to avoid backpressure deadlock.
 // On error, Node's DecompressionStream rejects multiple internal promises
 // (write, close, and closed); we catch the write side to prevent unhandled
 // rejections and let the error surface through the read side.
-export async function decompress(data, format) {
+async function decompressOne(data, format) {
     const ds = new DecompressionStream(format);
     const writer = ds.writable.getWriter();
     const reader = ds.readable.getReader();
@@ -65,15 +131,7 @@ export async function decompress(data, format) {
     writer.closed.catch(() => {});
     await readPromise;
     await writePromise;
-    if (chunks.length === 1) return chunks[0];
-    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-    const out = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const chunk of chunks) {
-        out.set(chunk, offset);
-        offset += chunk.length;
-    }
-    return out;
+    return chunks.length === 1 ? chunks[0] : concatChunks(chunks);
 }
 
 // Extract all files from a ZIP archive.  Returns {filename: Uint8Array}.
