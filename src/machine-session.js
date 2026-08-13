@@ -25,6 +25,12 @@ import sharp from "sharp";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
+// 2MHz for 1/50s: one interlaced frame, the CRTC's power-on setting. Interlace
+// off is 39936, and a program driving the CRTC itself can make a frame any
+// length at all, hence the headroom in runFrames' backstop.
+const CyclesPerInterlacedFrame = 40000;
+const RunFramesBackstopCycles = 4 * CyclesPerInterlacedFrame;
+
 export class MachineSession {
     /**
      * @param {string} modelName - e.g. "B-DFS1.2", "Master"
@@ -46,6 +52,8 @@ export class MachineSession {
         this._completeFb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
         this._lastPaint = { minx: 0, miny: 0, maxx: FB_WIDTH, maxy: FB_HEIGHT };
         this._frameDirty = false;
+        this._frameCount = 0;
+        this._stopAtFrame = Infinity;
 
         // Create a real Video instance so we get pixel output
         const modelObj = findModel(modelName);
@@ -59,6 +67,8 @@ export class MachineSession {
                 // Snapshot the complete frame now, before clearPaintBuffer() wipes _fb32.
                 // This mirrors what the browser does: paint_ext fires → canvas updated → fb32 cleared.
                 this._completeFb8.set(this._fb8);
+                this._frameCount++;
+                if (this._frameCount >= this._stopAtFrame) this._machine.processor.stop();
             },
             { isAtom: modelObj.isAtom },
         );
@@ -306,6 +316,62 @@ export class MachineSession {
      */
     async runFor(cycles) {
         await this._machine.runFor(cycles);
+    }
+
+    /**
+     * Total emulated cycles since power-on, undoing the per-second rebasing
+     * execute() applies to keep the numbers small.
+     */
+    get elapsedCycles() {
+        const cpu = this._machine.processor;
+        return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
+    }
+
+    /**
+     * Run until `count` more frames have been painted, stopping on the paint
+     * itself rather than after a cycle count. A frame is not a fixed number of
+     * cycles (40000 interlaced, 39936 not, anything at all under a program's
+     * own CRTC settings), so stepping by cycles walks the sample point through
+     * the guest's frame instead of holding it still.
+     *
+     * Stops early, with `completed` false, if a breakpoint fires or the
+     * backstop runs out before the machine has painted that many times.
+     *
+     * @param {number} [count=1] frames to advance
+     * @param {Object} [opts]
+     * @param {number} [opts.maxCycles] backstop for a machine painting slowly, or not at all
+     * @returns {Promise<{framesRun: number, cyclesRun: number, completed: boolean}>}
+     */
+    async runFrames(count = 1, { maxCycles = count * RunFramesBackstopCycles } = {}) {
+        const cpu = this._machine.processor;
+        const startFrame = this._frameCount;
+        const startCycles = this.elapsedCycles;
+        // execute() adds each request to a running targetCycles, so budget left
+        // unspent by an early stop would silently lengthen the caller's next run.
+        const unspentBefore = cpu.targetCycles - cpu.currentCycles;
+
+        this._stopAtFrame = startFrame + count;
+        try {
+            await this._machine.runFor(maxCycles);
+        } finally {
+            this._stopAtFrame = Infinity;
+            cpu.targetCycles = cpu.currentCycles + unspentBefore;
+        }
+
+        const framesRun = this._frameCount - startFrame;
+        return {
+            framesRun,
+            cyclesRun: this.elapsedCycles - startCycles,
+            completed: framesRun >= count,
+        };
+    }
+
+    /**
+     * Frames painted since power-on. Compare across calls to tell whether the
+     * screenshot buffer holds anything new.
+     */
+    get frameCount() {
+        return this._frameCount;
     }
 
     /**

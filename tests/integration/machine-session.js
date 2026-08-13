@@ -1,0 +1,109 @@
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { MachineSession } from "../../src/machine-session.js";
+
+const CyclesPerInterlacedFrame = 40000;
+const CyclesPerNonInterlacedFrame = 39936;
+const BootTimeout = 60000;
+
+// A run stops at the instruction boundary after the paint, so cyclesRun lands a
+// few cycles either side of the frame length. The tolerance covers the longest
+// 6502 instruction; the 64 cycles between an interlaced frame and a
+// non-interlaced one sit well outside it, which is the difference these tests
+// are here to catch.
+const InstructionOvershoot = 8;
+
+function expectCyclesNear(actual, expected) {
+    expect(Math.abs(actual - expected)).toBeLessThanOrEqual(InstructionOvershoot);
+}
+
+async function bootedSession() {
+    const session = new MachineSession("B-DFS1.2");
+    await session.initialise();
+    await session.boot(30);
+    await session.runFrames();
+    return session;
+}
+
+async function cyclesOverFrames(session, frames) {
+    const before = session.elapsedCycles;
+    for (let i = 0; i < frames; i++) await session.runFrames();
+    return session.elapsedCycles - before;
+}
+
+describe("MachineSession frame stepping", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    it("advances a single frame", async () => {
+        const before = session.frameCount;
+
+        expect(await session.runFrames()).toMatchObject({ framesRun: 1, completed: true });
+        expect(session.frameCount).toBe(before + 1);
+    });
+
+    it("advances several frames at once", async () => {
+        const before = session.frameCount;
+
+        const result = await session.runFrames(3);
+
+        expect(result).toMatchObject({ framesRun: 3, completed: true });
+        expectCyclesNear(result.cyclesRun, 3 * CyclesPerInterlacedFrame);
+        expect(session.frameCount).toBe(before + 3);
+    });
+
+    it("steps whole frames without drifting", async () => {
+        expectCyclesNear(await cyclesOverFrames(session, 5), 5 * CyclesPerInterlacedFrame);
+    });
+
+    it("leaves no unspent cycles behind for the next run", async () => {
+        await session.runFrames();
+
+        const before = session.elapsedCycles;
+        await session.runFor(1000);
+
+        expectCyclesNear(session.elapsedCycles - before, 1000);
+    });
+
+    it("gives up when the machine cannot paint in the cycles allowed", async () => {
+        const before = session.frameCount;
+
+        expect(await session.runFrames(1, { maxCycles: 100 })).toMatchObject({ framesRun: 0, completed: false });
+        expect(session.frameCount).toBe(before);
+    });
+
+    it("stops short when a breakpoint fires", async () => {
+        const [lo, hi] = session.readMemory(0x204, 2); // IRQ1V, entered every interrupt
+        const id = session.addBreakpoint("execute", lo | (hi << 8));
+
+        const result = await session.runFrames(5);
+        const hit = session.hitBreakpoint();
+        session.removeBreakpoint(id);
+
+        expect(result.completed).toBe(false);
+        expect(result.framesRun).toBeLessThan(5);
+        expect(hit).toMatchObject({ id, type: "execute" });
+    });
+});
+
+describe("MachineSession frame stepping with interlace off", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+        await session.runUntilPrompt(30);
+        await session.type("*TV 0,1\rMODE 1\r");
+        await session.runUntilPrompt(30);
+        await session.runFrames();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    it("follows the shorter frame the CRTC is now producing", async () => {
+        expectCyclesNear(await cyclesOverFrames(session, 5), 5 * CyclesPerNonInterlacedFrame);
+    });
+});
