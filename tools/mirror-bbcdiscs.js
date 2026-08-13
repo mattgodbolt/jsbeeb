@@ -344,8 +344,9 @@ async function forEachConcurrently(items, concurrency, worker) {
     await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
 }
 
-// Drive serves an HTML interstitial rather than an error status when it won't
-// hand over a file, so check what arrived rather than trusting the 200.
+// A disc read from a tree is whatever the tree holds, and Drive serves an HTML
+// interstitial rather than an error status when it won't hand over a file, so
+// check what arrived rather than trusting where it came from.
 function checkIsHfe(bytes, what) {
     const magic = Buffer.from(bytes.subarray(0, 8)).toString("latin1");
     if (!HfeMagics.includes(magic))
@@ -376,7 +377,7 @@ async function fetchDisc(entry, cacheDir) {
     if ((await fileSize(dest)) !== null) return { path: dest, downloaded: false };
     const url = `${DriveDownload}?id=${entry.driveId}&export=download`;
     const bytes = new Uint8Array(await (await fetchWithRetry(url)).arrayBuffer());
-    checkIsHfe(bytes, entry);
+    checkIsHfe(bytes, `${entry.blob}, which Drive may be refusing to hand over as ${entry.driveId}`);
     await writeAtomically(dest, bytes);
     return { path: dest, downloaded: true };
 }
