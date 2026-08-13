@@ -218,6 +218,13 @@ describe("Teletext", () => {
 
             expect(bottom.every((cells) => backgroundOnly(cells[1]))).toBe(true);
         });
+
+        it("drops the held character when the size changes", () => {
+            const cells = renderCells([WhiteGraphics, SolidBlock, HoldGraphics, DoubleHeight, Flash]);
+
+            expect(backgroundOnly(cells[3])).toBe(true);
+            expect(backgroundOnly(cells[4])).toBe(true);
+        });
     });
 
     describe("start of row", () => {
@@ -253,5 +260,95 @@ describe("Teletext", () => {
         const cells = renderCells([0x80 | WhiteGraphics, 0x80 | SolidBlock]);
 
         expect(solidOnly(cells[1], White)).toBe(true);
+    });
+
+    it("shows a byte three cells after it is fetched", () => {
+        const bytes = [WhiteGraphics, SolidBlock, Space, Space, Space];
+        const buffer = makeFast32(new Uint32Array(bytes.length * PixelsPerCell));
+        bytes.forEach((byte, index) => {
+            teletext.fetchData(byte);
+            teletext.render(buffer, index * PixelsPerCell);
+        });
+        const cellAt = (index) => buffer.subarray(index * PixelsPerCell, (index + 1) * PixelsPerCell);
+
+        expect(backgroundOnly(cellAt(3))).toBe(true);
+        expect(solidOnly(cellAt(4), White)).toBe(true);
+    });
+
+    // Codes 0, 16 and 27 are reserved, 10 and 11 drive a boxing output the BBC has nothing wired to,
+    // and 14 and 15 select an alternate character set the chip does not carry. Pages rely on this:
+    // the Ceefax engineering page reveals its concealed text by rewriting code 24 as code 16.
+    describe.each([
+        ["alpha black (0)", 0x00],
+        ["end box (10)", 0x0a],
+        ["start box (11)", 0x0b],
+        ["shift out (14)", 0x0e],
+        ["shift in (15)", 0x0f],
+        ["graphics black (16)", 0x10],
+        ["escape (27)", 0x1b],
+    ])("%s", (_name, code) => {
+        it("is not implemented, and leaves every attribute alone", () => {
+            endFrame();
+            const cells = renderCells([WhiteGraphics, SolidBlock, code, SolidBlock]);
+
+            expect(solidOnly(cells[1], White)).toBe(true);
+            expect(backgroundOnly(cells[2])).toBe(true);
+            expect(solidOnly(cells[3], White)).toBe(true);
+        });
+    });
+
+    describe("scanlines", () => {
+        // Rows 0 and 1 of an "A" are both blank, so RA0 has nothing to choose between there.
+        it("takes the smoothing row from RA0", () => {
+            endScanline();
+            const evenRow = renderCells([LetterA]);
+            teletext.setRA0(true);
+            const oddRow = renderCells([LetterA]);
+
+            expect([...oddRow[0]]).not.toEqual([...evenRow[0]]);
+        });
+
+        it("wraps back to the top of the glyph after ten scanlines", () => {
+            const first = renderCells([LetterA]);
+            for (let scanline = 0; scanline < 10; ++scanline) endScanline();
+
+            expect([...renderCells([LetterA])[0]]).toEqual([...first[0]]);
+        });
+
+        it("restarts the glyph when a frame begins", () => {
+            const first = renderCells([LetterA]);
+            endScanline();
+            const second = renderCells([LetterA]);
+            endFrame();
+
+            expect([...second[0]]).not.toEqual([...first[0]]);
+            expect([...renderCells([LetterA])[0]]).toEqual([...first[0]]);
+        });
+    });
+
+    // A freshly built chip reports flash-on until the first frame ends, so start the count inside
+    // the cycle rather than at construction.
+    it("blanks flashing text for sixteen frames in every sixty-four", () => {
+        endFrame();
+
+        let blanked = 0;
+        for (let frame = 0; frame < 64; ++frame) {
+            if (backgroundOnly(renderCells([WhiteGraphics, Flash, SolidBlock])[2])) ++blanked;
+            endFrame();
+        }
+
+        expect(blanked).toBe(16);
+    });
+
+    it("continues identically from a restored snapshot", () => {
+        const continuation = [SolidBlock, WhiteGraphics, SolidBlock, NewBackground, Space, SolidBlock];
+        renderCells([BlueGraphics, Flash, SeparatedGraphics, SolidBlock, HoldGraphics, Conceal]);
+        const state = teletext.snapshotState();
+        const expected = renderCells(continuation).map((cell) => [...cell]);
+
+        teletext = new Teletext();
+        teletext.restoreState(state);
+
+        expect(renderCells(continuation).map((cell) => [...cell])).toEqual(expected);
     });
 });
