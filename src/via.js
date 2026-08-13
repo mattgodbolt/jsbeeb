@@ -24,8 +24,8 @@ const ORB = 0x0,
     INT_CB1 = 0x10,
     INT_CB2 = 0x08;
 
-// tRS3 holds a pulse-mode CA2/CB2 low for one 1MHz VIA cycle, here in the scheduler's 2MHz ticks.
-// http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
+// Pulse mode holds CA2/CB2 low for one 1MHz VIA cycle, here in the scheduler's 2MHz ticks.
+// Figures 3-4 and 3-6 of https://6502.org/documents/datasheets/wdc/wdc_w65c22s_mar_2004.pdf
 const PulseWidthCycles = 2;
 
 class Via {
