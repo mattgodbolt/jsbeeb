@@ -261,6 +261,9 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 | `outBuffer`      | number[]     | Bytes queued to send to the guest, oldest first      |
 | `pollTaskOffset` | number\|null | Position report task offset (null if polling is off) |
 
+Absent from snapshots written before the touchscreen was saved, and from imported ones. Absent means the
+touchscreen keeps whatever state it currently holds, unpolled, exactly as before.
+
 The pointer position and button state are not saved: like the keyboard, they are host input and are refreshed by the next mouse event.
 
 ### FDC (`state.fdc`) — _v2+_
