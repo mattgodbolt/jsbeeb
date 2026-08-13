@@ -402,6 +402,19 @@ function reportLoadFailure(description, error) {
     toast(`Could not load ${description}: ${errorText(error)}`, { title: "Loading" });
 }
 
+function reportIgnoredFiles(name, ignored) {
+    if (!ignored.length) return;
+    toast(`Loaded ${name}. The archive also holds ${ignored.join(", ")}, and only one file is loaded from it.`, {
+        title: "Archive",
+    });
+}
+
+async function unzipAndReport(data) {
+    const unzipped = await utils.unzipDiscImage(data);
+    reportIgnoredFiles(unzipped.name, unzipped.ignored);
+    return unzipped;
+}
+
 function showNotice(event) {
     const { message, title, quietKey } = event.detail;
     toast(message, { title, quietKey });
@@ -1446,7 +1459,8 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
     switch (schema) {
         case "|":
         case "sth": {
-            const { name, data } = await discSth.fetch(discImage);
+            const { name, data, ignored } = await discSth.fetch(discImage);
+            reportIgnoredFiles(name, ignored);
             return disc.discFor(processor.fdc, name, data, undefined, layout);
         }
 
@@ -1467,7 +1481,7 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
 
         case "data": {
             const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-            const { name, data } = await utils.unzipDiscImage(arr);
+            const { name, data } = await unzipAndReport(arr);
             return disc.discFor(processor.fdc, name, data, undefined, layout);
         }
         case "http":
@@ -1478,7 +1492,7 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
             discImage = new URL(asUrl).pathname;
             let discData = await utils.loadData(asUrl);
             if (/\.zip/i.test(discImage)) {
-                const unzipped = await utils.unzipDiscImage(discData);
+                const unzipped = await unzipAndReport(discData);
                 discData = unzipped.data;
                 discImage = unzipped.name;
             }
@@ -1497,13 +1511,14 @@ async function loadTapeImage(tapeImage) {
     switch (schema) {
         case "|":
         case "sth": {
-            const { name, data } = await tapeSth.fetch(tapeImage);
+            const { name, data, ignored } = await tapeSth.fetch(tapeImage);
+            reportIgnoredFiles(name, ignored);
             return await loadTapeFromData(name, data, model);
         }
 
         case "data": {
             const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-            const { name, data } = await utils.unzipDiscImage(arr);
+            const { name, data } = await unzipAndReport(arr);
             return await loadTapeFromData(name, data, model);
         }
 
@@ -1515,7 +1530,7 @@ async function loadTapeImage(tapeImage) {
             tapeImage = new URL(asUrl).pathname;
             let tapeData = await utils.loadData(asUrl);
             if (/\.zip/i.test(tapeImage)) {
-                const unzipped = await utils.unzipDiscImage(tapeData);
+                const unzipped = await unzipAndReport(tapeData);
                 tapeData = unzipped.data;
                 tapeImage = unzipped.name;
             }
@@ -1527,7 +1542,7 @@ async function loadTapeImage(tapeImage) {
             let tapeData = await utils.loadData(tapePath);
             let tapeName = tapeImage;
             if (/\.zip/i.test(tapeName)) {
-                const unzipped = await utils.unzipDiscImage(tapeData);
+                const unzipped = await unzipAndReport(tapeData);
                 tapeData = unzipped.data;
                 tapeName = unzipped.name;
             }
@@ -1569,7 +1584,7 @@ document.getElementById("tape_load").addEventListener("change", async function (
         let tapeData = await readFileAsBinaryString(file);
         let tapeName = file.name;
         if (/\.zip/i.test(tapeName)) {
-            const unzipped = await utils.unzipDiscImage(utils.stringToUint8Array(tapeData));
+            const unzipped = await unzipAndReport(utils.stringToUint8Array(tapeData));
             tapeData = unzipped.data;
             tapeName = unzipped.name;
         }

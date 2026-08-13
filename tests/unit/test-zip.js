@@ -82,6 +82,20 @@ describe("zip tests", function () {
         expect(result.data instanceof Uint8Array).toBeTruthy();
     });
 
+    it("should name the loadable files it passed over", async () => {
+        const result = await utils.unzipDiscImage(readZip("test-two-sides.zip"));
+
+        expect(result.name).toBe("side1.ssd");
+        expect(result.ignored).toEqual(["side2.ssd"]);
+    });
+
+    it("should not count files of other kinds as passed over", async () => {
+        const result = await utils.unzipDiscImage(readZip("test-mixed.zip"));
+
+        expect(result.name).toBe("test.ssd");
+        expect(result.ignored).toEqual([]);
+    });
+
     it("should throw error for ZIP with no compatible files", async () => {
         const zipData = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
 
