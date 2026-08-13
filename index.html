@@ -485,23 +485,18 @@
           </div>
           <div class="modal-body">
             <div>
-              By <a href="https://xania.org/">Matt Godbolt</a>. Based on Sarah Walker's
-              <a href="http://b-em.bbcmicro.com/">b-em</a> emulator. Huge thanks to her for open sourcing her code. Big
-              thanks too to Richard Talbot-Watkins for his help and support. The disc loaded up by default is the
-              amazing Elite (thanks to <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a> for making it
-              available).
+              By <a href="https://xania.org/">Matt Godbolt</a>, based on Sarah Walker's
+              <a href="http://b-em.bbcmicro.com/">b-em</a>: huge thanks to her for open sourcing it, and to Richard
+              Talbot-Watkins for his help and support. The Acorn Atom emulation is
+              <a href="https://github.com/CommanderCoder">Andrew Hague</a>'s. The cycle-accurate emulation owes a great
+              deal to the fantastic <a href="http://www.visual6502.org/">Visual 6502</a> project, who are well worth a
+              donation. The disc loaded by default is the amazing Elite, made available by
+              <a href="http://www.iancgbell.clara.net/elite/bbc/">Ian Bell</a>.
             </div>
             <div>
-              Source is on <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. Works best in Chrome or Firefox.
-            </div>
-            <div>
-              Cycle-accurate emulation greatly helped by the fantastic
-              <a href="http://www.visual6502.org/">Visual 6502</a> Project. Consider donating to them if you enjoy this
-              stuff as much as I do!
-            </div>
-            <div>
-              I f you're looking for more information on the BBC or to find like-minded people to chat about the
-              hardware or software, check out the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>.
+              <a href="https://github.com/mattgodbolt/jsbeeb">Source on GitHub</a>. For more on the BBC, and people to
+              talk to about it, try the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>. Works best in
+              Chrome or Firefox.
             </div>
           </div>
           <div class="modal-footer">
@@ -520,20 +515,23 @@
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">
+            <ul>
+              <li>
+                jsbeeb uses cookies for simple analytics, to track usage and improve the site. There are no server logs
+                and nothing is kept on the jsbeeb servers; this is a static page served from an AWS bucket.
+              </li>
+              <li>
+                No personal information is kept. Logging in to Google Drive stores only what is needed to reach your own
+                discs, and that is never shared with the jsbeeb developers.
+              </li>
+              <li>
+                Use of jsbeeb is at your own risk, for whatever lawful purpose you wish. Reasonable efforts are used to
+                keep the site up to date and working.
+              </li>
+            </ul>
             <div>
-              jsbeeb uses cookies for simple analytics. Those analytics are used to track usage and improve user
-              experience. If you'd like to run a local copy of jsbeeb instead, the source is on
-              <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>. There's no server logs or information kept on
-              the jsbeeb servers, we just serve up this HTML from an AWS bucket.
-            </div>
-            <div>
-              No personal information is kept. If you choose to access Google Drive for disc storage, only the minimal
-              information needed to log in and access your own discs is kept in cookies. That information is never
-              shared with the jsbeeb developers.
-            </div>
-            <div>
-              Use of jsbeeb is at your own risk. Reasonable efforts are used to keep the site up to date and working.
-              You may use jsbeeb for whatever lawful purpose you wish.
+              Would you rather run your own copy? The source is on
+              <a href="https://github.com/mattgodbolt/jsbeeb">GitHub</a>.
             </div>
           </div>
           <div class="modal-footer">
@@ -552,14 +550,15 @@
           </div>
           <div class="modal-body">
             <div>
-              This is an emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular
-              home computer in the UK in the 1980s. It emulates the BBC B &amp; Master version of the computer.
+              An emulator for the <a href="https://en.wikipedia.org/wiki/Bbc_micro">BBC Micro</a>, a popular home
+              computer in 1980s Britain. It emulates the BBC B and the Master, and also the
+              <a href="https://en.wikipedia.org/wiki/Acorn_Atom">Acorn Atom</a> that came before them. Choose which by
+              clicking the model name at the top left.
             </div>
             <div>
-              The default disc image is Elite - a pioneering 3D space trading game. To boot discs on the BBC, one would
-              press <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The keyboard of the BBC is
-              slightly different from a modern PC, notably in the placement of the symbol characters. Also, the current
-              keyboard layout is optimized for a US keyboard; I am working on improving this situation.
+              The default disc is Elite, a pioneering 3D space trading game. Discs are booted by pressing
+              <span class="key">SHIFT</span> and <span class="key">BREAK</span>. The BBC's keyboard differs from a
+              modern one, mostly in where the symbols are; the layout here currently assumes a US keyboard.
             </div>
             <div>
               <h5>Handy key mappings</h5>
@@ -567,7 +566,7 @@
                 <tr>
                   <th>BBC</th>
                   <th>PC</th>
-                  <th>OSX</th>
+                  <th>macOS</th>
                 </tr>
                 <tr>
                   <td><span class="function key">F0</span></td>
@@ -609,11 +608,9 @@
                 </tr>
               </table>
               <div>
-                Note that caps lock doesn't work well on OS X because browsers don't give proper key down and key up
-                events for that key. That means jsbeeb can't know when you've released the physical key; it just guesses
-                that you tapped the key whenever it notices the caps lock state changes. That's fine for typing but
-                means that some games that use caps lock for left or fire, don't work. Consult the main documentation
-                for details on how to map keys.
+                Caps lock is unreliable on macOS: browsers never report it being released, so games that use it to move
+                or fire don't work. Any key can be
+                <a href="https://github.com/mattgodbolt/jsbeeb#remapping-keys">remapped from the URL</a>.
               </div>
             </div>
           </div>
