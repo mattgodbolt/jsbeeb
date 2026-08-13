@@ -1211,6 +1211,7 @@ async function unzipImage(data, knownExtensions) {
 
     let uncompressed = null;
     let loadedFile;
+    const ignored = [];
 
     for (const [filename, fileData] of Object.entries(files)) {
         const match = filename.match(/.*\.([a-z]+)/i);
@@ -1220,6 +1221,7 @@ async function unzipImage(data, knownExtensions) {
         }
         if (uncompressed) {
             console.log("Ignoring", filename, "as already found a file");
+            ignored.push(filename);
             continue;
         }
         loadedFile = filename;
@@ -1231,9 +1233,14 @@ async function unzipImage(data, knownExtensions) {
     }
 
     console.log("Unzipped '" + loadedFile + "'");
-    return { data: uncompressed, name: loadedFile };
+    return { data: uncompressed, name: loadedFile, ignored };
 }
 
+/**
+ * @param {Uint8Array|number[]} data a ZIP archive
+ * @returns {Promise<{data: Uint8Array, name: string, ignored: string[]}>} the one file loaded, and the
+ *     names of any other loadable files the archive held
+ */
 export async function unzipDiscImage(data) {
     return unzipImage(data, knownDiscExtensions);
 }
