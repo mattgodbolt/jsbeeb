@@ -1300,7 +1300,8 @@ export class Cpu6502 extends Base6502 {
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
 
-        // Touchscreen state (v4+). If absent, it keeps its current state and stays unpolled.
+        // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
+        // touchscreen keeps its current state, unpolled.
         if (state.touchScreen) this.touchScreen.restoreState(state.touchScreen);
 
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
