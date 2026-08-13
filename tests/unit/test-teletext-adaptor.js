@@ -328,6 +328,96 @@ describe("TeletextAdaptor", () => {
         });
     });
 
+    describe("Snapshots", () => {
+        let loadData;
+        let source;
+        let restoredCpu;
+        let restored;
+
+        beforeEach(() => {
+            loadData = vi.spyOn(utils, "loadData").mockImplementation(() => new Promise(() => {}));
+            source = new TeletextAdaptor(mockCpu);
+            restoredCpu = { interrupt: 0, resetLine: true };
+            restored = new TeletextAdaptor(restoredCpu);
+            loadData.mockClear();
+        });
+
+        it("should restore the channel, control bits and frame buffer", () => {
+            source.write(0, 0x0c | 2); // Teletext enable, interrupts, channel 2
+            source.write(1, 3);
+            source.write(2, 0xaa);
+            source.write(2, 0xbb);
+
+            restored.restoreState(source.snapshotState());
+
+            expect(restored.channel).toBe(2);
+            expect(restored.teletextEnable).toBe(true);
+            expect(restored.teletextInts).toBe(true);
+            restored.write(1, 3);
+            expect(restored.read(2)).toBe(0xaa);
+            expect(restored.read(2)).toBe(0xbb);
+        });
+
+        it("should restore the status register and its pointers", () => {
+            source.write(0, 0x0c); // Teletext enable, interrupts, channel 0
+            source.update();
+            source.write(1, 4);
+            source.read(2);
+
+            restored.restoreState(source.snapshotState());
+
+            expect(restored.teletextStatus).toBe(source.teletextStatus);
+            expect(restored.rowPtr).toBe(4);
+            expect(restored.colPtr).toBe(1);
+        });
+
+        it("should reassert an IRQ the adaptor was holding", () => {
+            source.write(0, 0x0c); // Teletext enable, interrupts, channel 0
+            source.update();
+            expect(mockCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
+
+            restored.restoreState(source.snapshotState());
+
+            expect(restoredCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(1 << TELETEXT_IRQ);
+        });
+
+        it("should clear an IRQ the adaptor was not holding", () => {
+            source.update();
+            restoredCpu.interrupt = 1 << TELETEXT_IRQ;
+
+            restored.restoreState(source.snapshotState());
+
+            expect(restoredCpu.interrupt & (1 << TELETEXT_IRQ)).toBe(0);
+        });
+
+        it("should not share the frame buffer with the snapshot it came from", () => {
+            source.write(1, 3);
+            source.write(2, 0xaa);
+            const state = source.snapshotState();
+
+            restored.restoreState(state);
+            restored.write(1, 3);
+            restored.write(2, 0x55);
+
+            expect(source.frameBuffer[3][0]).toBe(0xaa);
+            expect(state.frameBuffer[3][0]).toBe(0xaa);
+        });
+
+        it("should refetch the stream when the restored channel differs", () => {
+            source.write(0, 0x04 | 2); // Teletext enable, channel 2
+
+            restored.restoreState(source.snapshotState());
+
+            expect(loadData).toHaveBeenCalledWith("teletext/txt2.dat");
+        });
+
+        it("should leave the loaded stream alone when the channel is unchanged", () => {
+            restored.restoreState(source.snapshotState());
+
+            expect(loadData).not.toHaveBeenCalled();
+        });
+    });
+
     describe("Update and polling", () => {
         it("should update status and frame counter on update()", () => {
             // Set initial state

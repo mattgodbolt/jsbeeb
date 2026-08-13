@@ -1241,6 +1241,7 @@ export class Cpu6502 extends Base6502 {
             acia: this.acia.snapshotState(),
             adc: this.adconverter.snapshotState(),
             fdc: this.fdc.snapshotState(),
+            teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
     }
@@ -1297,6 +1298,7 @@ export class Cpu6502 extends Base6502 {
         this.soundChip.restoreState(state.soundChip);
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
+        if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
 
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
         if (state.fdc) {

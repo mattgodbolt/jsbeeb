@@ -212,6 +212,42 @@ describe("Snapshot coordinator", () => {
         });
     });
 
+    describe("Teletext adaptor snapshot", () => {
+        // The test model maps 0xfcxx as plain RAM, so the adaptor's registers are driven directly.
+        const StatusRegister = 0x00;
+        const RowRegister = 0x01;
+        const DataRegister = 0x02;
+
+        it("omits the adaptor when none is fitted", () => {
+            expect(createSnapshot(cpu, model).state.teletextAdaptor).toBeUndefined();
+        });
+
+        it("round-trips the fitted adaptor's channel and frame buffer", async () => {
+            const withAdaptor = makeCpu({ hasTeletextAdaptor: true });
+            await withAdaptor.initialise();
+            withAdaptor.teletextAdaptor.write(StatusRegister, 0x04 | 2); // Teletext enable, channel 2
+            withAdaptor.teletextAdaptor.write(RowRegister, 3);
+            withAdaptor.teletextAdaptor.write(DataRegister, 0xaa);
+
+            const snapshot = createSnapshot(withAdaptor, model);
+            const restored = makeCpu({ hasTeletextAdaptor: true });
+            await restored.initialise();
+            restoreSnapshot(restored, model, snapshot);
+
+            expect(snapshot.state.teletextAdaptor.channel).toBe(2);
+            restored.teletextAdaptor.write(RowRegister, 3);
+            expect(restored.teletextAdaptor.read(DataRegister)).toBe(0xaa);
+        });
+
+        it("leaves a fitted adaptor alone when the snapshot has no adaptor state", async () => {
+            const snapshot = createSnapshot(cpu, model);
+            const restored = makeCpu({ hasTeletextAdaptor: true });
+            await restored.initialise();
+
+            expect(() => restoreSnapshot(restored, model, snapshot)).not.toThrow();
+        });
+    });
+
     describe("FDC snapshot", () => {
         it("should round-trip Intel FDC state", () => {
             const snapshot = createSnapshot(cpu, model);

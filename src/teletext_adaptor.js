@@ -94,6 +94,45 @@ export class TeletextAdaptor extends EventTarget {
         this.currentFrame = 0;
     }
 
+    updateIrq() {
+        if (this.teletextInts && this.teletextStatus & 0x80) {
+            this.cpu.interrupt |= 1 << TELETEXT_IRQ;
+        } else {
+            this.cpu.interrupt &= ~(1 << TELETEXT_IRQ);
+        }
+    }
+
+    snapshotState() {
+        return {
+            teletextStatus: this.teletextStatus,
+            teletextInts: this.teletextInts,
+            teletextEnable: this.teletextEnable,
+            channel: this.channel,
+            currentFrame: this.currentFrame,
+            rowPtr: this.rowPtr,
+            colPtr: this.colPtr,
+            pollCount: this.pollCount,
+            frameBuffer: this.frameBuffer.map((row) => row.slice()),
+        };
+    }
+
+    restoreState(state) {
+        this.teletextStatus = state.teletextStatus;
+        this.teletextInts = state.teletextInts;
+        this.teletextEnable = state.teletextEnable;
+        this.currentFrame = state.currentFrame;
+        this.rowPtr = state.rowPtr;
+        this.colPtr = state.colPtr;
+        this.pollCount = state.pollCount;
+        this.frameBuffer = state.frameBuffer.map((row) => row.slice());
+        this.updateIrq();
+        // Refetching the multi-megabyte stream on every restore would be ruinous for rewind.
+        if (this.channel !== state.channel) {
+            this.channel = state.channel;
+            this.loadChannelStream(this.channel);
+        }
+    }
+
     read(addr) {
         let data = 0x00;
 
@@ -120,11 +159,7 @@ export class TeletextAdaptor extends EventTarget {
             case 0x00:
                 // Status register
                 this.teletextInts = (value & 0x08) === 0x08;
-                if (this.teletextInts && this.teletextStatus & 0x80) {
-                    this.cpu.interrupt |= 1 << TELETEXT_IRQ; // Interrupt if INT and interrupts enabled
-                } else {
-                    this.cpu.interrupt &= ~(1 << TELETEXT_IRQ); // Clear interrupt
-                }
+                this.updateIrq();
                 this.teletextEnable = (value & 0x04) === 0x04;
                 if ((value & 0x03) !== this.channel && this.teletextEnable) {
                     this.channel = value & 0x03;

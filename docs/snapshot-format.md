@@ -253,6 +253,26 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 | `high`       | number       | High byte of conversion result |
 | `taskOffset` | number\|null | Conversion task offset         |
 
+### Teletext adaptor (`state.teletextAdaptor`)
+
+Present only when the Acorn teletext adaptor was fitted. Absent means the adaptor, if one is fitted now, keeps its current state, the same fallback as a v1 snapshot's missing FDC. Because absence is already the well-defined case, adding this field did not need a format version bump: v3 readers that predate it ignore it, and readers that know it treat an older v3 snapshot as "adaptor state unchanged".
+
+| Field            | Type       | Description                                              |
+| ---------------- | ---------- | -------------------------------------------------------- |
+| `teletextStatus` | number     | Status register, including the INT, DOR and FSYN latches |
+| `teletextInts`   | boolean    | Whether interrupts are enabled                           |
+| `teletextEnable` | boolean    | Whether the adaptor is enabled                           |
+| `channel`        | number     | Selected channel, 0-3                                    |
+| `currentFrame`   | number     | Playback position within the channel's stream            |
+| `rowPtr`         | number     | Row register                                             |
+| `colPtr`         | number     | Column pointer within the current row                    |
+| `pollCount`      | number     | Cycles accumulated towards the next field                |
+| `frameBuffer`    | number[][] | 16 rows of 64 bytes as the adaptor last filled them      |
+
+The IRQ line is not saved: it follows from `teletextInts` and the INT latch in `teletextStatus`, in the same way the host's `interrupt` follows from the VIA and ACIA state.
+
+The broadcast stream itself (`teletext/txtN.dat`, around 5MB a channel) is not saved. On restore, a channel differing from the one already loaded is fetched again and its playback restarts from the beginning of the stream, exactly as switching channel does on a running machine. `totalFrames` follows from the stream and is likewise recomputed rather than saved.
+
 ### FDC (`state.fdc`) — _v2+_
 
 The FDC field is present in v2+ snapshots. When loading a v1 snapshot, `state.fdc` is absent and the FDC retains its current state.
