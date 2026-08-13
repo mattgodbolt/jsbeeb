@@ -111,7 +111,9 @@ export class TestMachine {
                     stopped = !this.processor.execute(todo);
                     left -= todo;
                 }
-                if (left && !stopped) {
+                // Not truthiness: a negative or NaN request clamps todo to zero,
+                // so left would never move and the loop never end.
+                if (left > 0 && !stopped) {
                     setTimeout(runAnIter, 0);
                 } else {
                     resolve(stopped);

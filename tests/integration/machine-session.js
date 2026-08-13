@@ -5,15 +5,14 @@ const CyclesPerInterlacedFrame = 40000;
 const CyclesPerNonInterlacedFrame = 39936;
 const BootTimeout = 60000;
 
-// A run stops at the instruction boundary after the paint, so cyclesRun lands a
-// few cycles either side of the frame length. The tolerance covers the longest
-// 6502 instruction; the 64 cycles between an interlaced frame and a
-// non-interlaced one sit well outside it, which is the difference these tests
-// are here to catch.
-const InstructionOvershoot = 8;
+// A run stops at the instruction boundary after the paint, so cyclesRun lands
+// either side of the frame length by up to one instruction: seven cycles, plus
+// the stretching an RMW on the 1MHz bus picks up. Still far inside the 64
+// cycles between an interlaced frame and a non-interlaced one.
+const MaxOvershootCycles = 16;
 
 function expectCyclesNear(actual, expected) {
-    expect(Math.abs(actual - expected)).toBeLessThanOrEqual(InstructionOvershoot);
+    expect(Math.abs(actual - expected)).toBeLessThanOrEqual(MaxOvershootCycles);
 }
 
 async function bootedSession() {
@@ -69,6 +68,11 @@ describe("MachineSession frame stepping", () => {
         expectCyclesNear(session.elapsedCycles - before, 1000);
     });
 
+    it("returns rather than spinning when asked for no frames at all", async () => {
+        expect(await session.runFrames(0)).toMatchObject({ framesRun: 0, cyclesRun: 0 });
+        expect(await session.runFrames(-1)).toMatchObject({ framesRun: 0, cyclesRun: 0 });
+    });
+
     it("gives up when the machine cannot paint in the cycles allowed", async () => {
         const before = session.frameCount;
 
@@ -87,6 +91,27 @@ describe("MachineSession frame stepping", () => {
         expect(result.completed).toBe(false);
         expect(result.framesRun).toBeLessThan(5);
         expect(hit).toMatchObject({ id, type: "execute" });
+    });
+});
+
+describe("MachineSession frame stepping across a hard reset", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    it("keeps counting frames where the cycle count starts over", async () => {
+        const framesBefore = session.frameCount;
+        const cyclesBefore = session.elapsedCycles;
+
+        session.reset(true);
+        await session.runFrames(2);
+
+        expect(session.frameCount).toBe(framesBefore + 2);
+        expect(session.elapsedCycles).toBeLessThan(cyclesBefore);
     });
 });
 

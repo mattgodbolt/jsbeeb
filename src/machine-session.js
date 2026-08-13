@@ -25,8 +25,7 @@ import sharp from "sharp";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
-// Generous enough that only a machine which has stopped painting altogether
-// hits it: a frame is a fiftieth of a second, give or take the CRTC settings.
+// Five times a frame, so only a machine that has stopped painting hits it.
 const BackstopSecondsPerFrame = 0.1;
 
 export class MachineSession {
@@ -316,10 +315,7 @@ export class MachineSession {
         await this._machine.runFor(cycles);
     }
 
-    /**
-     * Total emulated cycles since power-on, undoing the per-second rebasing
-     * execute() applies to keep the numbers small.
-     */
+    /** Emulated cycles since power-on, undoing the per-second rebasing execute() applies */
     get elapsedCycles() {
         const cpu = this._machine.processor;
         return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
@@ -327,17 +323,16 @@ export class MachineSession {
 
     /**
      * Run until `count` more frames have been painted, stopping on the paint
-     * itself rather than after a cycle count. A frame is not a fixed number of
-     * cycles (40000 interlaced, 39936 not, anything at all under a program's
-     * own CRTC settings), so stepping by cycles walks the sample point through
-     * the guest's frame instead of holding it still.
+     * itself.  A frame is 40000 cycles interlaced, 39936 not, and whatever a
+     * program driving the CRTC makes it, so stepping by cycles instead walks
+     * the sample point through the guest's frame.
      *
-     * Stops early, with `completed` false, if a breakpoint fires or the
-     * backstop runs out before the machine has painted that many times.
+     * `completed` is false if a breakpoint fired, or the backstop ran out
+     * first.
      *
      * @param {number} [count=1] frames to advance
      * @param {Object} [opts]
-     * @param {number} [opts.maxCycles] how long to wait before giving up on a machine that is not painting
+     * @param {number} [opts.maxCycles] how long to wait on a machine that is not painting
      * @returns {Promise<{framesRun: number, cyclesRun: number, completed: boolean}>}
      */
     async runFrames(count = 1, { maxCycles } = {}) {
@@ -365,10 +360,7 @@ export class MachineSession {
         };
     }
 
-    /**
-     * Frames painted since power-on. Compare across calls to tell whether the
-     * screenshot buffer holds anything new.
-     */
+    /** Frames painted since the session was created; a hard reset does not zero it */
     get frameCount() {
         return this._frameCount;
     }
