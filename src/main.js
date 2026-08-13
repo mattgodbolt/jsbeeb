@@ -397,6 +397,11 @@ function showError(context, error) {
 
 const errorText = (error) => error?.message ?? `${error}`;
 
+function reportLoadFailure(description, error) {
+    console.error(`Error loading ${description}:`, error);
+    toast(`Could not load ${description}: ${errorText(error)}`, { title: "Loading" });
+}
+
 function showNotice(event) {
     const { message, title, quietKey } = event.detail;
     toast(message, { title, quietKey });
@@ -641,14 +646,19 @@ pastetext.addEventListener("dragover", function (event) {
 pastetext.addEventListener("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.dataTransfer.files[0];
-    const arrayBuffer = await file.arrayBuffer();
-    if (isSnapshotFile(file.name, arrayBuffer)) {
-        await loadStateFromFile(file, arrayBuffer);
-    } else if (file.name.toLowerCase().endsWith(".uef")) {
-        // Regular UEF tape image (not a BeebEm save state)
-        setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
-    } else {
-        await loadHTMLFile(file);
+    if (!file) return;
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        if (isSnapshotFile(file.name, arrayBuffer)) {
+            await loadStateFromFile(file, arrayBuffer);
+        } else if (file.name.toLowerCase().endsWith(".uef")) {
+            // Regular UEF tape image (not a BeebEm save state)
+            setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
+        } else {
+            await loadHTMLFile(file);
+        }
+    } catch (error) {
+        reportLoadFailure(file.name, error);
     }
 });
 
@@ -1479,7 +1489,11 @@ document.getElementById("disc_load").addEventListener("change", async function (
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    await loadHTMLFile(file);
+    try {
+        await loadHTMLFile(file);
+    } catch (error) {
+        reportLoadFailure(file.name, error);
+    }
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
@@ -1487,7 +1501,11 @@ document.getElementById("fs_load").addEventListener("change", async function (ev
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    await loadSCSIFile(file);
+    try {
+        await loadSCSIFile(file);
+    } catch (error) {
+        reportLoadFailure(file.name, error);
+    }
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
@@ -1496,17 +1514,21 @@ document.getElementById("tape_load").addEventListener("change", async function (
     const file = evt.target.files[0];
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
-    let tapeData = await readFileAsBinaryString(file);
-    let tapeName = file.name;
-    if (/\.zip/i.test(tapeName)) {
-        const unzipped = await utils.unzipDiscImage(utils.stringToUint8Array(tapeData));
-        tapeData = unzipped.data;
-        tapeName = unzipped.name;
+    try {
+        let tapeData = await readFileAsBinaryString(file);
+        let tapeName = file.name;
+        if (/\.zip/i.test(tapeName)) {
+            const unzipped = await utils.unzipDiscImage(utils.stringToUint8Array(tapeData));
+            tapeData = unzipped.data;
+            tapeName = unzipped.name;
+        }
+        setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
+        delete parsedQuery.tape;
+        updateUrl();
+        bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
+    } catch (error) {
+        reportLoadFailure(file.name, error);
     }
-    setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
-    delete parsedQuery.tape;
-    updateUrl();
-    bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
 
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
@@ -1623,7 +1645,14 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
     gdLoading.textContent = "Loading...";
     gdLoading.style.display = "";
     for (const el of googleDriveEl.querySelectorAll("li:not(.template)")) el.remove();
-    const cat = await googleDrive.listFiles();
+    let cat;
+    try {
+        cat = await googleDrive.listFiles();
+    } catch (error) {
+        console.error("Error listing Google Drive files:", error);
+        gdLoading.textContent = `Unable to list your Google Drive files: ${errorText(error)}`;
+        return;
+    }
     const dbList = googleDriveEl.querySelector(".list");
     gdLoading.style.display = "none";
     const template = dbList.querySelector(".template");
@@ -1653,7 +1682,11 @@ for (const image of availableImages) {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         $discsModal.hide();
-        putDiscIn(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
+        try {
+            putDiscIn(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
+        } catch (error) {
+            reportLoadFailure(`${image.name} (${image.file})`, error);
+        }
     });
 }
 
@@ -1946,8 +1979,7 @@ const startPromise = (async () => {
             try {
                 await load();
             } catch (error) {
-                console.error(`Error loading ${description}:`, error);
-                toast(`Could not load ${description}: ${error?.message ?? error}`, { title: "Loading" });
+                reportLoadFailure(description, error);
             }
         })();
         imageLoads.push(loading);
