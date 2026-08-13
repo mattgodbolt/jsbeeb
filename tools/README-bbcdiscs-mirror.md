@@ -2,7 +2,7 @@
 
 `tools/mirror-bbcdiscs.js` mirrors the HFE disc images from scarybeasts' BBC
 disc preservation work into a local tree ready to upload to
-`s3://bbc.xania.org/archive/bbcdiscs/`. Mirrored with his permission.
+`s3://bbc.xania.org/archive/bbcdiscs/`.
 
 They arrive two ways, and the mirror calls each a source:
 
