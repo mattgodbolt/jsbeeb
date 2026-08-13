@@ -171,7 +171,7 @@ th {
 
 #hfe-list li a {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) minmax(0, 2fr) 7em;
   gap: 0 1rem;
   align-items: baseline;
   padding: 3px 6px;
@@ -198,6 +198,22 @@ th {
   font-family: monospace;
 }
 
+#hfe-list .provenance {
+  font-size: 0.8em;
+  opacity: 0.6;
+  font-style: italic;
+  text-align: right;
+}
+
+.hfe-provenance label {
+  margin-left: 1.5rem;
+  opacity: 0.8;
+}
+
+.hfe-provenance input {
+  margin-right: 0.3em;
+}
+
 .hfe-credit {
   font-size: 0.9em;
   opacity: 0.75;
@@ -207,6 +223,11 @@ th {
   #hfe-list li a {
     grid-template-columns: minmax(0, 1fr);
     padding-bottom: 6px;
+  }
+
+  /* Stacked into one column, so there is no column end to sit against. */
+  #hfe-list .provenance {
+    text-align: left;
   }
 }
 

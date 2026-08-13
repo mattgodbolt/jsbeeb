@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { spawn } from "node:child_process";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { brotliCompressSync } from "node:zlib";
 import Papa from "papaparse";
-import { compareFingerprints, parseCatalogue, parseFingerprints } from "../../tools/mirror-bbcdiscs.js";
+import { parseFingerprints } from "../../tools/beebjit-fingerprint.js";
+import {
+    blobsAndManifestDisagree,
+    compareFingerprints,
+    diffManifests,
+    findCollision,
+    parseCatalogue,
+} from "../../tools/mirror-bbcdiscs.js";
 
 const Headers = [
     "Publisher",
@@ -245,5 +258,266 @@ describe("compareFingerprints", () => {
         expect(compareFingerprints(entry, sides)).toEqual([
             'side 0 DFS title: sheet says "<blank>", disc says "TESTDISC"',
         ]);
+    });
+});
+
+describe("findCollision", () => {
+    const file = (path) => ({ path });
+
+    it("passes two sources whose names cannot overlap", () => {
+        expect(
+            findCollision([
+                ["hfe", [file("AABBCCDD.hfe"), file("AABBCCDD-11223344.hfe")]],
+                ["fsd", [file("0123456789abcdef.hfe")]],
+            ]),
+        ).toBeNull();
+    });
+
+    it("names both sources when one blob is claimed twice", () => {
+        expect(
+            findCollision([
+                ["hfe", [file("AABBCCDD.hfe")]],
+                ["fsd", [file("AABBCCDD.hfe")]],
+            ]),
+        ).toEqual({ path: "AABBCCDD.hfe", sources: ["hfe", "fsd"] });
+    });
+});
+
+/**
+ * A whole run, with a stand-in for beebjit and no network: the catalogued disc
+ * is already published, which is the path a mirror seeded from S3 takes, and
+ * the reconstructed ones are read from a directory.
+ */
+describe("a full run", () => {
+    const Tool = fileURLToPath(new URL("../../tools/mirror-bbcdiscs.js", import.meta.url));
+    const CapturedCrc = "AABBCCDD";
+    const CapturedRow =
+        `Somesoft,Some Game,D1DS,40,3,${CapturedCrc},,1,TEST,04,84/09/06,` +
+        `${link("1captured0000000000000000000")},tester,,,`;
+    const hfeImage = (fill) => Buffer.concat([Buffer.from("HXCHFEV3", "latin1"), Buffer.alloc(64, fill)]);
+
+    let dir;
+
+    beforeEach(async () => {
+        dir = await mkdtemp(join(tmpdir(), "mirror-test-"));
+
+        const beebjit = join(dir, "beebjit");
+        await writeFile(
+            beebjit,
+            "#!/bin/sh\n" + `echo "info:disc:disc side 0 CRC32 fingerprint ${CapturedCrc} title TEST count 04"\n`,
+        );
+        await chmod(beebjit, 0o755);
+
+        await writeFile(join(dir, "sheet.csv"), `${Headers.join(",")}\n${CapturedRow}\n`);
+
+        // Already published, so it is decompressed in place rather than fetched.
+        await mkdir(join(dir, "out", "hfe"), { recursive: true });
+        await writeFile(join(dir, "out", "hfe", `${CapturedCrc}.hfe`), brotliCompressSync(hfeImage(0x11)));
+
+        await mkdir(join(dir, "fsd", "Othersoft"), { recursive: true });
+        await writeFile(join(dir, "fsd", "Othersoft", "Rebuilt_Game_FSD123.hfe"), hfeImage(0x22));
+        await writeFile(join(dir, "fsd", "Othersoft", "Another_Game.hfe"), hfeImage(0x33));
+    });
+
+    afterEach(async () => await rm(dir, { recursive: true, force: true }));
+
+    const run = (...extra) =>
+        new Promise((resolve, reject) => {
+            const args = [
+                Tool,
+                "--csv",
+                join(dir, "sheet.csv"),
+                "--fsd",
+                join(dir, "fsd"),
+                "--out",
+                join(dir, "out"),
+                "--beebjit",
+                join(dir, "beebjit"),
+                ...extra,
+            ];
+            const child = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+            let output = "";
+            child.stdout.on("data", (chunk) => (output += chunk));
+            child.stderr.on("data", (chunk) => (output += chunk));
+            child.on("error", reject);
+            child.on("close", (code) => resolve({ code, output }));
+        });
+
+    const manifest = async () => JSON.parse(await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8"));
+    const blobs = async () => (await readdir(join(dir, "out", "hfe"))).filter((n) => n.endsWith(".hfe")).sort();
+
+    it("gathers every source into one manifest beside one set of blobs", async () => {
+        const { code } = await run();
+        expect(code).toBe(0);
+
+        const files = (await manifest()).files;
+        expect(files.map((f) => [f.title, f.provenance])).toEqual([
+            ["Some Game", "captured"],
+            ["Another Game", "reconstructed"],
+            ["Rebuilt Game", "reconstructed"],
+        ]);
+        expect(await blobs()).toHaveLength(3);
+        // Bare names, so a link to a disc says nothing about where it came from.
+        expect(files.every((f) => !f.path.includes("/"))).toBe(true);
+    });
+
+    it("says the same thing when run again over what it just built", async () => {
+        expect((await run()).code).toBe(0);
+        const first = await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8");
+        const firstBlobs = await blobs();
+
+        expect((await run()).code).toBe(0);
+        expect(await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8")).toBe(first);
+        expect(await blobs()).toEqual(firstBlobs);
+    });
+
+    // The upload compares modification times, so a blob rewritten with the same
+    // bytes is still a blob re-uploaded.
+    it("leaves the blobs it already has alone", async () => {
+        expect((await run()).code).toBe(0);
+        const written = async () =>
+            Object.fromEntries(
+                await Promise.all(
+                    (await blobs()).map(async (name) => [name, (await stat(join(dir, "out", "hfe", name))).mtimeMs]),
+                ),
+            );
+        const before = await written();
+
+        expect((await run()).code).toBe(0);
+        expect(await written()).toEqual(before);
+    });
+
+    // The upload deletes whatever the manifest leaves out, and the blobs are
+    // shared, so this is what stops one source's run withdrawing the other's.
+    it("leaves the other source's discs alone when only one source is run", async () => {
+        expect((await run()).code).toBe(0);
+        const before = await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8");
+
+        const { code, output } = await run("--only", "hfe");
+        expect(code).toBe(0);
+        expect(output).toContain("Partial run");
+        expect(await blobs()).toHaveLength(3);
+        expect(await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8")).toBe(before);
+    });
+
+    // Two dumps of one disc are one blob. Which of them names it must not
+    // depend on which worker got there first.
+    it("publishes byte-identical discs once, always describing them the same way", async () => {
+        await writeFile(join(dir, "fsd", "Othersoft", "Copy_Of_Another_Game.hfe"), hfeImage(0x33));
+
+        const seen = new Set();
+        for (let attempt = 0; attempt < 3; attempt++) {
+            await rm(join(dir, "out", "hfe"), { recursive: true, force: true });
+            await mkdir(join(dir, "out", "hfe"), { recursive: true });
+            await writeFile(join(dir, "out", "hfe", `${CapturedCrc}.hfe`), brotliCompressSync(hfeImage(0x11)));
+            const { code, output } = await run();
+            expect(code).toBe(0);
+            expect(output).toContain("DUPLICATE");
+            const titles = (await manifest()).files.map((f) => f.title);
+            expect(titles).toHaveLength(3);
+            seen.add(titles.join("|"));
+        }
+        expect([...seen]).toHaveLength(1);
+    });
+
+    // Far more likely than an archive being emptied is a tree that never
+    // mounted, and taking it at its word withdraws everything it published.
+    it("refuses to withdraw everything when a source finds nothing at all", async () => {
+        expect((await run()).code).toBe(0);
+        const before = await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8");
+        await rm(join(dir, "fsd"), { recursive: true });
+        await mkdir(join(dir, "fsd"));
+
+        const { code, output } = await run();
+        expect(code).not.toBe(0);
+        expect(output).toContain("found no discs at all");
+        expect(await blobs()).toHaveLength(3);
+        expect(await readFile(join(dir, "out", "hfe", "manifest.json"), "utf8")).toBe(before);
+    });
+
+    // Its shared links have to keep resolving while the disagreement is sorted
+    // out, so it loses its place in the manifest but not its blob.
+    it("keeps the blob of a catalogued disc that stops matching the sheet", async () => {
+        expect((await run()).code).toBe(0);
+        await writeFile(join(dir, "sheet.csv"), `${Headers.join(",")}\n${CapturedRow.replace(",TEST,", ",OTHER,")}\n`);
+
+        const { code, output } = await run("--reverify");
+        expect(code).not.toBe(0);
+        expect(output).toContain("FAILED");
+        expect(output).not.toContain(`WITHDRAWN ${CapturedCrc}.hfe`);
+        expect(await blobs()).toContain(`${CapturedCrc}.hfe`);
+        expect((await manifest()).files.map((f) => f.provenance)).toEqual(["reconstructed", "reconstructed"]);
+    });
+
+    it("drops a disc the catalogue no longer lists, and its blob with it", async () => {
+        expect((await run()).code).toBe(0);
+        // Swapped for a different disc rather than emptied, so this is a
+        // withdrawal and not a catalogue that failed to load.
+        await writeFile(join(dir, "out", "hfe", "BBBBCCDD.hfe"), brotliCompressSync(hfeImage(0x44)));
+        await writeFile(
+            join(dir, "sheet.csv"),
+            `${Headers.join(",")}\n${CapturedRow.replace(CapturedCrc, "BBBBCCDD")}\n`,
+        );
+
+        const { code, output } = await run();
+        expect(code).toBe(0);
+        expect(output).toContain(`WITHDRAWN ${CapturedCrc}.hfe`);
+        expect((await manifest()).files.map((f) => f.path)).toContain("BBBBCCDD.hfe");
+        expect(await blobs()).not.toContain(`${CapturedCrc}.hfe`);
+        expect(await blobs()).toHaveLength(3);
+    });
+});
+
+describe("diffManifests", () => {
+    const file = (path, overrides = {}) => ({ path, size: 100, title: path, ...overrides });
+    const manifest = (...files) => ({ files });
+
+    it("says nothing needs doing when the two agree", () => {
+        const both = manifest(file("AAAA0001.hfe"), file("AAAA0002.hfe"));
+        expect(diffManifests(both, both)).toEqual({ added: [], removed: [], suspect: [], sizeDelta: 0 });
+    });
+
+    it("separates what would arrive from what would be withdrawn", () => {
+        const diff = diffManifests(
+            manifest(file("AAAA0001.hfe"), file("bbbbbbbbbbbbbbbb.hfe")),
+            manifest(file("AAAA0001.hfe"), file("AAAA0002.hfe")),
+        );
+        expect(diff.added.map((f) => f.path)).toEqual(["bbbbbbbbbbbbbbbb.hfe"]);
+        expect(diff.removed.map((f) => f.path)).toEqual(["AAAA0002.hfe"]);
+    });
+
+    it("counts a first upload as all additions", () => {
+        const diff = diffManifests(manifest(file("A.hfe"), file("B.hfe")), manifest());
+        expect(diff.added).toHaveLength(2);
+        expect(diff.removed).toEqual([]);
+    });
+
+    // The name is a fingerprint or a hash of the bytes either way, so the same
+    // name over different bytes means one of the two is not what it says.
+    it("calls out a published blob whose size has moved under it", () => {
+        const diff = diffManifests(manifest(file("A.hfe", { size: 500 })), manifest(file("A.hfe", { size: 200 })));
+        expect(diff.suspect).toEqual(["A.hfe: published as 200 bytes, built as 500"]);
+        expect(diff.sizeDelta).toBe(300);
+    });
+});
+
+describe("blobsAndManifestDisagree", () => {
+    const manifest = (...paths) => ({ files: paths.map((path) => ({ path })) });
+
+    it("passes a directory holding exactly what the manifest names", () => {
+        expect(blobsAndManifestDisagree(manifest("A.hfe"), new Set(["A.hfe", "manifest.json"]))).toEqual({
+            missing: [],
+            unexpected: [],
+        });
+    });
+
+    it("names a disc the manifest promises and the directory does not have", () => {
+        expect(blobsAndManifestDisagree(manifest("A.hfe", "B.hfe"), new Set(["A.hfe"])).missing).toEqual(["B.hfe"]);
+    });
+
+    // The upload sends the directory, so this would be published regardless.
+    it("names a file that would be uploaded without the manifest mentioning it", () => {
+        const disagree = blobsAndManifestDisagree(manifest("A.hfe"), new Set(["A.hfe", "A.hfe.0.part"]));
+        expect(disagree.unexpected).toEqual(["A.hfe.0.part"]);
     });
 });

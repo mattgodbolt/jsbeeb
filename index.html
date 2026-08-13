@@ -805,15 +805,16 @@
           </div>
           <div class="modal-body">
             <p class="hfe-credit">
-              Flux-accurate disc images preserved by
-              <a href="https://github.com/scarybeasts/beebjit">scarybeasts</a> and contributors, mirrored with
-              permission. Several fingerprinted variants of a title may be listed; they differ in protection, track
-              layout or release.
+              Disc images preserved by <a href="https://github.com/scarybeasts/beebjit">scarybeasts</a> and
+              contributors, mirrored with permission. Several fingerprinted variants of a title may be listed; they
+              differ in protection, track layout or release. A disc may also appear more than once because two sources
+              hold it: captured direct from the disc, or rebuilt from a sector dump.
             </p>
             <div style="margin-bottom: 1rem">
               <div class="loading">Loading catalogue from HFE archive...</div>
               <div class="filter">
                 <label>Filter <input type="text" autofocus id="hfe-filter" /></label>
+                <span id="hfe-provenance" class="hfe-provenance"></span>
               </div>
             </div>
             <ul id="hfe-list">
@@ -822,6 +823,7 @@
                   <span class="name"></span>
                   <span class="publisher"></span>
                   <span class="detail"></span>
+                  <span class="provenance"></span>
                 </a>
               </li>
             </ul>

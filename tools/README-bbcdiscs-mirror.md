@@ -1,17 +1,26 @@
 # Mirroring scarybeasts' HFE disc archive
 
 `tools/mirror-bbcdiscs.js` mirrors the HFE disc images from scarybeasts' BBC
-disc preservation work, catalogued in a Google Sheet and hosted on Google Drive,
-into a local tree ready to upload to `s3://bbc.xania.org/archive/bbcdiscs/`.
-Mirrored with his permission.
+disc preservation work into a local tree ready to upload to
+`s3://bbc.xania.org/archive/bbcdiscs/`. Mirrored with his permission.
 
-Unlike the STH mirror, the index is a spreadsheet rather than a set of web pages
-and the images are flux-derived HFEs rather than zipped sector dumps. Everything
-else is the same shape: one manifest per category, blobs uploaded with a long
-cache lifetime, manifests with a short one.
+They arrive two ways, and the mirror calls each a source:
 
-The catalogue's URL and the wording of its credit are passed in with `--source`
-and `--credit` at run time; nothing here links to it or copies its contents.
+- `--csv` reads the Google Sheet cataloguing discs captured off the disc itself,
+  each row naming a Drive file and the fingerprint it must have.
+- `--fsd` reads a directory of discs reconstructed from sector dumps. Nothing
+  catalogues these, so all that is known about one comes from the disc and from
+  where it sits in the tree.
+
+A source is how a disc is acquired, not how it is published. They share one blob
+directory and one manifest, and every entry records its `provenance`, which is
+what the picker filters on. Adding a source therefore adds discs, never a second
+thing for the site to load.
+
+The wording of the archive's credit is passed in with `--credit` at run time;
+nothing here links to the catalogue or copies its contents. The catalogue's own
+URL is not recorded anywhere the mirror publishes: the manifests are world
+readable, and a link shared with us is not ours to hand on.
 
 ## Running it
 
@@ -24,6 +33,10 @@ npm run mirror-bbcdiscs:seed     # pull down what is already mirrored
 BEEBJIT=~/dev/beebjit/beebjit npm run mirror-bbcdiscs
 npm run mirror-bbcdiscs:upload   # push to S3
 ```
+
+The reconstructed tree is not published anywhere to fetch from, so it is synced
+into `.bbcdiscs-mirror/cache-fsd/` by hand, with rclone against a Drive remote
+that can see it.
 
 Publishing needs beebjit: point `BEEBJIT` at the binary, or pass `--beebjit`
 when invoking the script directly. Only `:check`, which writes nothing, runs
@@ -45,9 +58,22 @@ prefix of the `bbc.xania.org` bucket, which may not be your default profile:
 AWS_PROFILE=<profile> npm run mirror-bbcdiscs:upload
 ```
 
-Dry-run both passes first and check that the blobs land in one and the manifests
-in the other, because the two tag their objects with very different cache
-lifetimes:
+`:upload` reads the published manifest first and asks before doing anything:
+
+```sh
+npm run mirror-bbcdiscs:preflight    # the same report, uploading nothing
+```
+
+It names the discs that would arrive and the ones that would be withdrawn,
+listing every withdrawal and a sample of the arrivals, which is what `aws s3
+sync --dryrun` cannot do: that lists the same objects by blob name. It also
+stops without asking if the manifest promises a disc that is not there to
+upload, or if one already published has changed size under a name that should
+have fixed its contents. It will not run unattended; `--yes` says so on purpose.
+
+Dry-run both upload passes too, and check that the blobs land in one and the
+manifests in the other, because the two tag their objects with very different
+cache lifetimes:
 
 ```sh
 npm run mirror-bbcdiscs:upload:blobs -- --dryrun
@@ -61,9 +87,11 @@ node tools/mirror-bbcdiscs.js --csv .bbcdiscs-sheet.csv --out .bbcdiscs-mirror \
     --filter "<publisher or title>" --limit 6
 ```
 
-A filtered or limited run knows nothing about the discs it skipped, so it
-neither prunes nor writes manifests. It leaves its blobs for the next full run
-to pick up, and there is nothing to upload from it.
+A run that looked at only some of the archive writes no manifest and prunes
+nothing, and there is nothing to upload from it. That covers `--filter`,
+`--limit` and `--only <source>`, and it is what stops one source's run
+withdrawing another's discs: the manifest describes every disc, and the upload
+deletes whatever it leaves out.
 
 ## What the link column means
 
@@ -97,20 +125,36 @@ as a new blob name rather than as a disc needing another look. `--reverify`
 re-checks them anyway, which is what to reach for when the catalogue's other
 columns change.
 
+Only the catalogued source has anything to check against. A reconstructed disc
+is still fingerprinted, because the manifest records it, but nothing claims what
+it ought to be, and one beebjit cannot read is published without it.
+
 ## Layout and formats
 
 ```
 .bbcdiscs-mirror/
     cache/<drive file id>.hfe   the original download, never uploaded
-    hfe/<fingerprint>.hfe       brotli-compressed, uploaded
-    hfe/manifest.json
-    manifest.json
+    cache-fsd/<publisher>/...   the reconstructed tree, synced by hand
+    hfe/<blob>.hfe              brotli-compressed, uploaded
+    hfe/manifest.json           every disc, whichever source found it
+    manifest.json               what the archive is, and how big
 ```
 
-Blobs are named after the disc's CRC32 fingerprint, which is unique across the
-catalogue and stable under edits to the prose columns. Downloads are cached
-under the Drive file id, which is immutable: fixing a typo in a title must not
-cause a gigabyte of re-downloading.
+Every blob lives in `hfe/`, and a manifest names it without a directory, so a
+`hfe:<blob>` link means the same thing whatever is added later.
+
+The two sources name blobs differently, and cannot be allowed to collide. A
+catalogued disc is named after its CRC32 fingerprint, which the sheet asserts is
+its identity and which survives edits to the prose columns. A reconstructed disc
+has nothing asserting what it is, and a fingerprint covers only the sectors that
+read cleanly, so two discs differing only in their protection would share one:
+those are named after a hash of their bytes instead. Eight hex digits or two of
+them joined cannot equal sixteen, so the schemes cannot meet, and a run checks
+rather than assumes.
+
+Downloads are cached under the Drive file id, which is immutable: fixing a typo
+in a title must not cause a gigabyte of re-downloading. Reconstructed discs are
+read where they already are and never copied.
 
 Blobs are stored brotli-compressed and served with `Content-Encoding: br`, so
 the browser decodes them and jsbeeb receives the HFE with no work of its own.

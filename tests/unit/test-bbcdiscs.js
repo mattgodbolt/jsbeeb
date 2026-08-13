@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BbcDiscArchive, byTitle, describe as describeDisc } from "../../src/bbcdiscs.js";
+import {
+    BbcDiscArchive,
+    byTitle,
+    describe as describeDisc,
+    matches,
+    Provenance,
+    provenancesIn,
+} from "../../src/bbcdiscs.js";
 
 const ArchiveBase = "https://bbc.xania.org/archive/bbcdiscs";
 
@@ -102,12 +109,19 @@ describe("BbcDiscArchive", () => {
     it("hands the whole manifest entry to the catalogue, not just a name", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
             expect(url).toBe(`${ArchiveBase}/hfe/manifest.json`);
-            return manifestResponse([entry()]);
+            return manifestResponse([entry({ provenance: Provenance.Reconstructed })]);
         });
 
         let received;
         await archive((cat) => (received = cat)).populate();
-        expect(received).toEqual([entry()]);
+        expect(received).toEqual([entry({ provenance: Provenance.Reconstructed })]);
+    });
+
+    it("reads a disc published before provenance was recorded as a captured one", async () => {
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(manifestResponse([entry()]));
+        let received;
+        await archive((cat) => (received = cat)).populate();
+        expect(received[0].provenance).toBe(Provenance.Captured);
     });
 
     it("only fetches the manifest once across repeated opens", async () => {
@@ -183,5 +197,47 @@ describe("BbcDiscArchive", () => {
             "https://example.com/test",
         ).populate();
         expect(seen).toEqual(["https://example.com/test/hfe/manifest.json"]);
+    });
+});
+
+describe("provenancesIn", () => {
+    it("reports each provenance the catalogue holds, once", () => {
+        const captured = entry({ provenance: Provenance.Captured });
+        expect(provenancesIn([captured, entry({ provenance: Provenance.Reconstructed }), captured])).toEqual([
+            "captured",
+            "reconstructed",
+        ]);
+    });
+});
+
+describe("matches", () => {
+    const captured = entry({ title: "Elite", publisher: "Acornsoft", provenance: Provenance.Captured });
+    const rebuilt = entry({ title: "Granny's Garden", publisher: "4mation", provenance: Provenance.Reconstructed });
+
+    // An archive of one provenance offers no tickboxes, and a picker that then
+    // showed nothing would be an empty list with no way to fix it.
+    it("shows everything when no choice of provenance is being offered", () => {
+        expect(matches(captured, "", null)).toBe(true);
+        expect(matches(rebuilt, "", null)).toBe(true);
+    });
+
+    it("hides a disc whose provenance is not ticked", () => {
+        const shown = new Set([Provenance.Captured]);
+        expect(matches(captured, "", shown)).toBe(true);
+        expect(matches(rebuilt, "", shown)).toBe(false);
+    });
+
+    it("searches the title, publisher and detail", () => {
+        expect(matches(captured, "elite", null)).toBe(true);
+        expect(matches(captured, "acornsoft", null)).toBe(true);
+        expect(matches(captured, "d1ds", null)).toBe(true);
+        expect(matches(captured, "zalaga", null)).toBe(false);
+    });
+
+    // It is a word the tickboxes control, and one common enough in a search box
+    // that matching it would surface every rebuilt disc for "re".
+    it("does not treat the provenance as something to search for", () => {
+        expect(matches(rebuilt, "reconstructed", null)).toBe(false);
+        expect(matches(rebuilt, "re", null)).toBe(false);
     });
 });
