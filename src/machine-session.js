@@ -25,11 +25,9 @@ import sharp from "sharp";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
-// 2MHz for 1/50s: one interlaced frame, the CRTC's power-on setting. Interlace
-// off is 39936, and a program driving the CRTC itself can make a frame any
-// length at all, hence the headroom in runFrames' backstop.
-const CyclesPerInterlacedFrame = 40000;
-const RunFramesBackstopCycles = 4 * CyclesPerInterlacedFrame;
+// Generous enough that only a machine which has stopped painting altogether
+// hits it: a frame is a fiftieth of a second, give or take the CRTC settings.
+const BackstopSecondsPerFrame = 0.1;
 
 export class MachineSession {
     /**
@@ -339,11 +337,12 @@ export class MachineSession {
      *
      * @param {number} [count=1] frames to advance
      * @param {Object} [opts]
-     * @param {number} [opts.maxCycles] backstop for a machine painting slowly, or not at all
+     * @param {number} [opts.maxCycles] how long to wait before giving up on a machine that is not painting
      * @returns {Promise<{framesRun: number, cyclesRun: number, completed: boolean}>}
      */
-    async runFrames(count = 1, { maxCycles = count * RunFramesBackstopCycles } = {}) {
+    async runFrames(count = 1, { maxCycles } = {}) {
         const cpu = this._machine.processor;
+        const backstop = maxCycles ?? count * BackstopSecondsPerFrame * cpu.model.cyclesPerSecond;
         const startFrame = this._frameCount;
         const startCycles = this.elapsedCycles;
         // execute() adds each request to a running targetCycles, so budget left
@@ -352,7 +351,7 @@ export class MachineSession {
 
         this._stopAtFrame = startFrame + count;
         try {
-            await this._machine.runFor(maxCycles);
+            await this._machine.runFor(backstop);
         } finally {
             this._stopAtFrame = Infinity;
             cpu.targetCycles = cpu.currentCycles + unspentBefore;
