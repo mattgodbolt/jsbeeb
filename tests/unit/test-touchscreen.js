@@ -70,4 +70,59 @@ describe("TouchScreen", () => {
         expect(touchScreen.tryReceive(false)).toBe(-1);
         expect(touchScreen.tryReceive(true)).toBe(0x43);
     });
+
+    describe("snapshots", () => {
+        /** Save the touchscreen and its scheduler, then restore both into a fresh machine. */
+        function saveAndRestore() {
+            const state = JSON.parse(
+                JSON.stringify({ scheduler: scheduler.snapshotState(), touchScreen: touchScreen.snapshotState() }),
+            );
+            const newScheduler = new Scheduler();
+            const newTouchScreen = new TouchScreen(newScheduler, findModel("B-DFS1.2").cyclesPerSecond);
+            newScheduler.restoreState(state.scheduler);
+            newTouchScreen.restoreState(state.touchScreen);
+            return { scheduler: newScheduler, touchScreen: newTouchScreen };
+        }
+
+        it("keeps polling after a restore", () => {
+            transmit(touchScreen, "M129.");
+            const restored = saveAndRestore();
+            restored.touchScreen.onMouse(0.5, 0.5, true);
+
+            restored.scheduler.polltime(pollCycles);
+            expect(readAll(restored.touchScreen)).toEqual([0x43, 0x4c, 0x43, 0x42, 0x2e]);
+
+            restored.scheduler.polltime(pollCycles);
+            expect(readAll(restored.touchScreen)).toEqual([0x43, 0x4c, 0x43, 0x42, 0x2e]);
+        });
+
+        it("resumes at the same point in the poll period", () => {
+            transmit(touchScreen, "M130.");
+            scheduler.polltime(pollCycles - 10);
+            const restored = saveAndRestore();
+
+            restored.scheduler.polltime(9);
+            expect(readAll(restored.touchScreen)).toEqual([]);
+
+            restored.scheduler.polltime(1);
+            expect(readAll(restored.touchScreen)).toEqual([0x4f, 0x4f, 0x4f, 0x4f, 0x2e]);
+        });
+
+        it("keeps bytes that were queued but not yet sent", () => {
+            touchScreen.onMouse(0.5, 0.5, true);
+            transmit(touchScreen, "M1?");
+            expect(touchScreen.tryReceive(true)).toBe(0x43);
+
+            const restored = saveAndRestore();
+            expect(readAll(restored.touchScreen)).toEqual([0x4c, 0x43, 0x42, 0x2e]);
+        });
+
+        it("stays idle in a mode that does not poll", () => {
+            transmit(touchScreen, "M128.");
+            const restored = saveAndRestore();
+
+            restored.scheduler.polltime(10 * pollCycles);
+            expect(readAll(restored.touchScreen)).toEqual([]);
+        });
+    });
 });

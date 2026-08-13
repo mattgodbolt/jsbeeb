@@ -176,6 +176,32 @@ describe("Snapshot coordinator", () => {
         });
     });
 
+    describe("touchscreen", () => {
+        function selectPollingMode(machine) {
+            for (const char of "M129.") machine.touchScreen.onTransmit(char.charCodeAt(0));
+        }
+
+        it("keeps reporting positions after a restore", () => {
+            selectPollingMode(cpu);
+            const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(cpu, model)));
+
+            const cpu2 = makeCpu();
+            restoreSnapshot(cpu2, model, snapshot);
+            cpu2.touchScreen.onMouse(0.5, 0.5, true);
+            cpu2.scheduler.polltime(cpu2.touchScreen.pollCycles);
+
+            expect(cpu2.touchScreen.tryReceive(true)).toBe(0x43);
+        });
+
+        it("restores a pre-v4 snapshot without touchscreen state", () => {
+            const snapshot = createSnapshot(cpu, model);
+            snapshot.version = 3;
+            delete snapshot.state.touchScreen;
+
+            expect(() => restoreSnapshot(makeCpu(), model, snapshot)).not.toThrow();
+        });
+    });
+
     describe("co-processor", () => {
         it("records that no co-processor was fitted", () => {
             expect(createSnapshot(cpu, model).coProcessor).toBe(false);

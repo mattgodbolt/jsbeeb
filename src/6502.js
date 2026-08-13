@@ -709,6 +709,7 @@ export class Cpu6502 extends Base6502 {
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
         this.serial = new Serial(this.acia);
         this.adconverter = new Adc(this.sysvia, this.scheduler);
+        this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
         this.soundChip.setScheduler(this.scheduler);
         this.fdc = new this.model.Fdc(this, this.ddNoise, this.scheduler, this.debugFlags);
     }
@@ -1240,6 +1241,7 @@ export class Cpu6502 extends Base6502 {
             soundChip: this.soundChip.snapshotState(),
             acia: this.acia.snapshotState(),
             adc: this.adconverter.snapshotState(),
+            touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
@@ -1297,6 +1299,10 @@ export class Cpu6502 extends Base6502 {
         this.soundChip.restoreState(state.soundChip);
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
+
+        // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
+        // touchscreen keeps its current state, unpolled.
+        if (state.touchScreen) this.touchScreen.restoreState(state.touchScreen);
 
         // FDC state (v2+). If absent (v1 snapshot), FDC keeps its current state.
         if (state.fdc) {
@@ -1370,7 +1376,7 @@ export class Cpu6502 extends Base6502 {
         this.fdc.powerOnReset();
         this.adconverter.reset();
 
-        this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
+        this.touchScreen.reset();
         if (this.econet) this.filestore = new Filestore(this, this.econet);
     }
 
