@@ -25,6 +25,9 @@ import sharp from "sharp";
 const FB_WIDTH = 1024;
 const FB_HEIGHT = 625;
 
+// Five times a frame, so only a machine that has stopped painting hits it.
+const BackstopSecondsPerFrame = 0.1;
+
 export class MachineSession {
     /**
      * @param {string} modelName - e.g. "B-DFS1.2", "Master"
@@ -46,6 +49,8 @@ export class MachineSession {
         this._completeFb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
         this._lastPaint = { minx: 0, miny: 0, maxx: FB_WIDTH, maxy: FB_HEIGHT };
         this._frameDirty = false;
+        this._frameCount = 0;
+        this._stopAtFrame = Infinity;
 
         // Create a real Video instance so we get pixel output
         const modelObj = findModel(modelName);
@@ -59,6 +64,8 @@ export class MachineSession {
                 // Snapshot the complete frame now, before clearPaintBuffer() wipes _fb32.
                 // This mirrors what the browser does: paint_ext fires → canvas updated → fb32 cleared.
                 this._completeFb8.set(this._fb8);
+                this._frameCount++;
+                if (this._frameCount >= this._stopAtFrame) this._machine.processor.stop();
             },
             { isAtom: modelObj.isAtom },
         );
@@ -306,6 +313,56 @@ export class MachineSession {
      */
     async runFor(cycles) {
         await this._machine.runFor(cycles);
+    }
+
+    /** Emulated cycles since power-on, undoing the per-second rebasing execute() applies */
+    get elapsedCycles() {
+        const cpu = this._machine.processor;
+        return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
+    }
+
+    /**
+     * Run until `count` more frames have been painted, stopping on the paint
+     * itself.  A frame is 40000 cycles interlaced, 39936 not, and whatever a
+     * program driving the CRTC makes it, so stepping by cycles instead walks
+     * the sample point through the guest's frame.
+     *
+     * `completed` is false if a breakpoint fired, or the backstop ran out
+     * first.
+     *
+     * @param {number} [count=1] frames to advance
+     * @param {Object} [opts]
+     * @param {number} [opts.maxCycles] how long to wait on a machine that is not painting
+     * @returns {Promise<{framesRun: number, cyclesRun: number, completed: boolean}>}
+     */
+    async runFrames(count = 1, { maxCycles } = {}) {
+        const cpu = this._machine.processor;
+        const backstop = maxCycles ?? count * BackstopSecondsPerFrame * cpu.model.cyclesPerSecond;
+        const startFrame = this._frameCount;
+        const startCycles = this.elapsedCycles;
+        // execute() adds each request to a running targetCycles, so budget left
+        // unspent by an early stop would silently lengthen the caller's next run.
+        const unspentBefore = cpu.targetCycles - cpu.currentCycles;
+
+        this._stopAtFrame = startFrame + count;
+        try {
+            await this._machine.runFor(backstop);
+        } finally {
+            this._stopAtFrame = Infinity;
+            cpu.targetCycles = cpu.currentCycles + unspentBefore;
+        }
+
+        const framesRun = this._frameCount - startFrame;
+        return {
+            framesRun,
+            cyclesRun: this.elapsedCycles - startCycles,
+            completed: framesRun >= count,
+        };
+    }
+
+    /** Frames painted since the session was created; a hard reset does not zero it */
+    get frameCount() {
+        return this._frameCount;
     }
 
     /**
