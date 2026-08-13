@@ -213,7 +213,7 @@ export function loadHfe(disc, data, onChange) {
             const hfeData = toHfe(disc);
             // Call the onChange handler with the updated HFE data
             onChange(hfeData);
-        });
+        }, true);
     }
 
     return disc;

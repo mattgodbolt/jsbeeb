@@ -200,6 +200,82 @@ describe("Via snapshotState / restoreState", () => {
     });
 });
 
+describe("Via CA2 write handshake", () => {
+    const ORB = 0x0,
+        ORA = 0x1,
+        DDRA = 0x3,
+        PCR = 0xc,
+        ORAnh = 0xf;
+    const PcrCa2Handshake = 0x08,
+        PcrCa2Pulse = 0x0a;
+    const SeededByte = 0x41,
+        WrittenByte = 0x42;
+
+    let via, events;
+
+    beforeEach(() => {
+        via = new UserVia(makeFakeCpu(), new Scheduler(), false, makeFakeUserPortPeripheral());
+        via.write(DDRA, 0xff);
+        via.write(ORAnh, SeededByte);
+        events = [];
+    });
+
+    function recordCa2Changes() {
+        via.ca2changecallback = (level, output) => events.push({ level, output, ora: via.ora, pins: via.portapins });
+    }
+
+    it("should present the new byte on port A before dropping CA2 in handshake mode", () => {
+        via.write(PCR, PcrCa2Handshake);
+        recordCa2Changes();
+
+        via.write(ORA, WrittenByte);
+
+        expect(events).toEqual([{ level: false, output: true, ora: WrittenByte, pins: WrittenByte }]);
+    });
+
+    it("should present the new byte on port A before pulsing CA2 in pulse mode", () => {
+        via.write(PCR, PcrCa2Pulse);
+        recordCa2Changes();
+
+        via.write(ORA, WrittenByte);
+
+        expect(events).toEqual([
+            { level: false, output: true, ora: WrittenByte, pins: WrittenByte },
+            { level: true, output: true, ora: WrittenByte, pins: WrittenByte },
+        ]);
+    });
+
+    it("should not touch CA2 when writing the no-handshake register", () => {
+        via.write(PCR, PcrCa2Handshake);
+        recordCa2Changes();
+
+        via.write(ORAnh, WrittenByte);
+
+        expect(events).toEqual([]);
+        expect(via.portapins).toBe(WrittenByte);
+    });
+
+    it("should leave CA2 alone when PCR selects a manual output level", () => {
+        via.write(PCR, 0x0e);
+        recordCa2Changes();
+
+        via.write(ORA, WrittenByte);
+
+        expect(events).toEqual([]);
+        expect(via.portapins).toBe(WrittenByte);
+    });
+
+    it("should present the new byte on port B before dropping CB2 in handshake mode", () => {
+        via.write(PCR, PcrCa2Handshake << 4);
+        const cb2Events = [];
+        via.cb2changecallback = (level, output) => cb2Events.push({ level, output, orb: via.orb });
+
+        via.write(ORB, WrittenByte);
+
+        expect(cb2Events).toEqual([{ level: false, output: true, orb: WrittenByte }]);
+    });
+});
+
 function makeMockButton(pressed) {
     return { pressed };
 }

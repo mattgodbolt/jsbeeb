@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { Cmos, defaultCmos } from "../../src/cmos.js";
+import { Cmos, defaultCmos, localStoragePersistence } from "../../src/cmos.js";
 
 describe("CMOS", () => {
     // Mock persistence
@@ -235,6 +235,86 @@ describe("CMOS", () => {
             // seeks within the vsync window on the Master 128.
             const fdriveBits = defaultCmos[25] & 0x03;
             expect(fdriveBits).toBe(0); // FDRIVE 0 = 6ms
+        });
+    });
+
+    describe("localStoragePersistence", () => {
+        function writeCmos(target, address, value) {
+            target.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, address, 0);
+            target.writeControl(PORT_B_ENABLE, address, 0);
+            target.writeControl(PORT_B_ENABLE, value, IC32_DATA_SEL);
+            target.writeControl(PORT_B_ENABLE, value, 0);
+        }
+
+        function readCmos(target, address) {
+            target.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, address, 0);
+            target.writeControl(PORT_B_ENABLE, address, 0);
+            target.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+            return target.read();
+        }
+
+        const onSaveFailure = vi.fn();
+
+        beforeEach(() => {
+            onSaveFailure.mockClear();
+            vi.spyOn(console, "log").mockImplementation(() => {});
+        });
+        afterEach(() => vi.restoreAllMocks());
+
+        it("keeps what was written for the next session", () => {
+            const storage = {};
+
+            writeCmos(new Cmos(localStoragePersistence(() => storage, onSaveFailure)), CMOS_ADDR.CONFIG_1, 0x42);
+
+            const reloaded = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
+            expect(readCmos(reloaded, CMOS_ADDR.CONFIG_1)).toBe(0x42);
+            expect(onSaveFailure).not.toHaveBeenCalled();
+        });
+
+        it("starts from the defaults when the stored settings are unreadable", () => {
+            const storage = { cmosRam: "[0, 1, tru" };
+
+            const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
+
+            expect(readCmos(cmos, 25)).toBe(defaultCmos[25]);
+        });
+
+        it("starts from the defaults when the stored settings are the wrong shape", () => {
+            for (const cmosRam of ['"nonsense"', "[1, 2, 3]", '{"config": 1}', "null"]) {
+                const cmos = new Cmos(localStoragePersistence(() => ({ cmosRam }), onSaveFailure));
+                expect(readCmos(cmos, 25), cmosRam).toBe(defaultCmos[25]);
+            }
+        });
+
+        it("starts from the defaults when the page is refused storage altogether", () => {
+            const refused = () => {
+                throw new Error("The operation is insecure");
+            };
+
+            const cmos = new Cmos(localStoragePersistence(refused, onSaveFailure));
+            writeCmos(cmos, CMOS_ADDR.CONFIG_1, 0x42);
+
+            expect(readCmos(cmos, 25)).toBe(defaultCmos[25]);
+            expect(onSaveFailure).toHaveBeenCalledTimes(1);
+        });
+
+        it("reports a save that fails once, however many writes follow", () => {
+            const storage = {
+                get cmosRam() {
+                    return undefined;
+                },
+                set cmosRam(value) {
+                    throw new Error("Storage is full");
+                },
+            };
+
+            const cmos = new Cmos(localStoragePersistence(() => storage, onSaveFailure));
+            writeCmos(cmos, CMOS_ADDR.CONFIG_1, 0x42);
+            writeCmos(cmos, CMOS_ADDR.CONFIG_2, 0x43);
+
+            expect(onSaveFailure).toHaveBeenCalledTimes(1);
+            expect(onSaveFailure.mock.calls[0][0].message).toBe("Storage is full");
+            expect(readCmos(cmos, CMOS_ADDR.CONFIG_1)).toBe(0x42);
         });
     });
 

@@ -1,7 +1,8 @@
 "use strict";
-// Minimal ZIP extractor using native DecompressionStream for deflate.
-// Supports methods 0 (stored) and 8 (deflate); other methods (bzip2,
-// lzma, etc.) will throw an error with the method number.
+// Minimal ZIP extractor. Supports methods 0 (stored) and 8 (deflate); other
+// methods (bzip2, lzma, etc.) will throw an error with the method number.
+
+import { inflate as pakoInflate, inflateRaw as pakoInflateRaw, ungzip as pakoUngzip } from "pako";
 
 const ZipLocalHeaderSig = 0x04034b50;
 const ZipCentralDirSig = 0x02014b50;
@@ -35,45 +36,17 @@ function findEocd(buf) {
     throw new Error("Not a ZIP file: EOCD not found");
 }
 
-// Pipe data through a DecompressionStream and return the result.
-// Starts the read loop before writing to avoid backpressure deadlock.
-// On error, Node's DecompressionStream rejects multiple internal promises
-// (write, close, and closed); we catch the write side to prevent unhandled
-// rejections and let the error surface through the read side.
-export async function decompress(data, format) {
-    const ds = new DecompressionStream(format);
-    const writer = ds.writable.getWriter();
-    const reader = ds.readable.getReader();
-    const chunks = [];
-    const readPromise = (async () => {
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-        }
-    })();
-    const writePromise = (async () => {
-        await writer.write(data);
-        await writer.close();
-    })().catch(() => {
-        // Intentionally empty.
-    });
-    // Intentionally empty: Node's DecompressionStream rejects multiple
-    // promises on error (write, close, closed). The read side surfaces
-    // the same error with proper context — catching these just prevents
-    // unhandled rejections from the write-side promises.
-    writer.closed.catch(() => {});
-    await readPromise;
-    await writePromise;
-    if (chunks.length === 1) return chunks[0];
-    const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-    const out = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const chunk of chunks) {
-        out.set(chunk, offset);
-        offset += chunk.length;
+function inflateWith(inflater, data, context) {
+    if (!(data instanceof Uint8Array)) data = new Uint8Array(data);
+    try {
+        return inflater(data);
+    } catch (cause) {
+        throw new Error(`${context}: ${cause.message || cause}`, { cause });
     }
-    return out;
+}
+
+export function inflate(data) {
+    return inflateWith(pakoInflate, data, "Unable to inflate");
 }
 
 // Extract all files from a ZIP archive.  Returns {filename: Uint8Array}.
@@ -92,6 +65,7 @@ export async function unzip(buf) {
         const flags = readU16(buf, pos + 8);
         if (flags & 0x0001) throw new Error("Encrypted ZIP entries are not supported");
         const method = readU16(buf, pos + 10);
+        const expectedCrc = readU32(buf, pos + 16);
         const compressedSize = readU32(buf, pos + 20);
         const nameLen = readU16(buf, pos + 28);
         const extraLen = readU16(buf, pos + 30);
@@ -112,25 +86,25 @@ export async function unzip(buf) {
         if (method === ZipMethodStored) {
             files[name] = raw.slice();
         } else if (method === ZipMethodDeflate) {
-            files[name] = await decompress(raw, "deflate-raw");
+            files[name] = inflateWith(pakoInflateRaw, raw, `Unable to inflate ZIP entry ${name}`);
         } else {
             throw new Error(`Unsupported ZIP compression method ${method} for ${name}`);
         }
+        if (crc32(files[name]) >>> 0 !== expectedCrc) throw new Error(`Corrupt ZIP entry ${name}: CRC32 mismatch`);
     }
     return files;
 }
 
 // Standard CRC-32/ISO-HDLC.
+const Crc32Table = new Uint32Array(256).map((_, index) => {
+    let crc = index;
+    for (let bit = 0; bit < 8; ++bit) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    return crc;
+});
+
 export function crc32(data) {
     let crc = 0xffffffff;
-    for (let i = 0; i < data.length; ++i) {
-        crc ^= data[i];
-        for (let j = 0; j < 8; ++j) {
-            const doEor = crc & 1;
-            crc = crc >>> 1;
-            if (doEor) crc ^= 0xedb88320;
-        }
-    }
+    for (let i = 0; i < data.length; ++i) crc = (crc >>> 8) ^ Crc32Table[(crc ^ data[i]) & 0xff];
     return ~crc;
 }
 
@@ -1112,11 +1086,7 @@ export function readFloat32(data, offset) {
 }
 
 export async function ungzip(data) {
-    try {
-        return await decompress(data, "gzip");
-    } catch (cause) {
-        throw new Error("Unable to ungzip: " + (cause.message || cause), { cause });
-    }
+    return inflateWith(pakoUngzip, data, "Unable to ungzip");
 }
 
 export class DataStream {

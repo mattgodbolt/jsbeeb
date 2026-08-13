@@ -33,6 +33,44 @@ function fromBcd(value) {
 
 export { defaultCmos };
 
+/**
+ * CMOS persistence backed by a browser storage object, which can be unavailable, full or holding
+ * something other than what was last saved.
+ *
+ * @param {function(): Storage} getStorage typically `() => window.localStorage`. Reading that
+ *   property is itself what throws when a page is refused storage, so it happens per call, inside
+ *   the try.
+ * @param {function(*)} onSaveFailure called with the error the first time a save fails
+ */
+export function localStoragePersistence(getStorage, onSaveFailure) {
+    let saveFailureReported = false;
+    return {
+        load() {
+            try {
+                const stored = getStorage().cmosRam;
+                if (!stored) return null;
+                const parsed = JSON.parse(stored);
+                if (!Array.isArray(parsed) || parsed.length !== defaultCmos.length)
+                    throw new Error(`the stored settings are not ${defaultCmos.length} bytes`);
+                return parsed;
+            } catch (error) {
+                console.log(`Unable to read the stored CMOS settings: ${error?.message ?? error}`);
+                return null;
+            }
+        },
+        save(data) {
+            try {
+                getStorage().cmosRam = JSON.stringify(data);
+            } catch (error) {
+                console.log(`Unable to store the CMOS settings: ${error?.message ?? error}`);
+                if (saveFailureReported) return;
+                saveFailureReported = true;
+                onSaveFailure(error);
+            }
+        },
+    };
+}
+
 export class Cmos {
     constructor(persistence, cmosOverride, econet) {
         this.store = persistence ? persistence.load() : null;

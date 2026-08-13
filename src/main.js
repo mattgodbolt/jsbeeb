@@ -10,7 +10,7 @@ import { Debugger } from "./web/debug.js";
 import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
-import { Cmos } from "./cmos.js";
+import { Cmos, localStoragePersistence } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
 import { BbcDiscArchive, Provenance, describe as describeHfe, matches, provenancesIn } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
@@ -31,6 +31,7 @@ import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
+import { Printer } from "./printer.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { getFilterForMode } from "./canvas.js";
@@ -208,19 +209,16 @@ if (parsedQuery.audiofilterq !== undefined) audioFilterQ = parsedQuery.audiofilt
 if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
 if (parsedQuery.frameSkip !== undefined) frameSkip = parsedQuery.frameSkip;
 
-const printerPort = {
-    outputStrobe: function (level, output) {
-        if (!printerTextArea) return;
-        if (!output || level) return;
-
-        const uservia = processor.uservia;
-        // Ack the character by pulsing CA1 low.
-        uservia.setca1(false);
-        uservia.setca1(true);
-        const newChar = String.fromCharCode(uservia.ora);
-        printerTextArea.value += newChar;
+const printer = new Printer({
+    onOutput: (char) => {
+        if (printerTextArea) printerTextArea.value += char;
     },
-};
+    onFirstOutput: () =>
+        toast("Printer output is being kept. Press Ctrl-B to open the printer window.", {
+            title: "Printer",
+            quietKey: "quietPrinterOutput",
+        }),
+});
 
 // Accessibility switch state — bits 0-7 correspond to switches 1-8.
 // Active low: 0xff = no switches pressed; clearing a bit = that switch is pressed.
@@ -335,7 +333,7 @@ const emulationConfig = {
     // before any the user asked for with ?rom=.
     extraRoms: [...config.extraRoms, ...extraRoms],
     userPort,
-    printerPort,
+    printerPort: printer,
     getGamepads: function () {
         // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
         return navigator.getGamepads ? navigator.getGamepads() : [];
@@ -399,6 +397,11 @@ function showError(context, error) {
 
 const errorText = (error) => error?.message ?? `${error}`;
 
+function reportLoadFailure(description, error) {
+    console.error(`Error loading ${description}:`, error);
+    toast(`Could not load ${description}: ${errorText(error)}`, { title: "Loading" });
+}
+
 function showNotice(event) {
     const { message, title, quietKey } = event.detail;
     toast(message, { title, quietKey });
@@ -433,8 +436,23 @@ function putDiscIn(driveIndex, loadedDisc) {
     const was = drive.tracksPerStep;
     processor.fdc.loadDisc(driveIndex, loadedDisc, fixed);
     showDriveTracks(driveIndex);
+    noteUnsavedWrites(loadedDisc);
     // A switch the user fixed does not move, so anything it does is not news.
     if (fixed === undefined && drive.tracksPerStep !== was) noteDriveTracks(driveIndex, loadedDisc.name);
+}
+
+let saidWritesAreNotKept = false;
+
+function noteUnsavedWrites(loadedDisc) {
+    if (loadedDisc.savesChanges || saidWritesAreNotKept) return;
+    loadedDisc.notifyOnFirstTrackWrite(() => {
+        if (saidWritesAreNotKept) return;
+        saidWritesAreNotKept = true;
+        toast(`Changes to ${loadedDisc.name} are not saved. Use Discs, Download to keep a copy.`, {
+            title: "Disc",
+            quietKey: "quietDiscNotSaved",
+        });
+    });
 }
 
 const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
@@ -628,14 +646,19 @@ pastetext.addEventListener("dragover", function (event) {
 pastetext.addEventListener("drop", async function (event) {
     utils.noteEvent("local", "drop");
     const file = event.dataTransfer.files[0];
-    const arrayBuffer = await file.arrayBuffer();
-    if (isSnapshotFile(file.name, arrayBuffer)) {
-        await loadStateFromFile(file, arrayBuffer);
-    } else if (file.name.toLowerCase().endsWith(".uef")) {
-        // Regular UEF tape image (not a BeebEm save state)
-        setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
-    } else {
-        await loadHTMLFile(file);
+    if (!file) return;
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        if (isSnapshotFile(file.name, arrayBuffer)) {
+            await loadStateFromFile(file, arrayBuffer);
+        } else if (file.name.toLowerCase().endsWith(".uef")) {
+            // Regular UEF tape image (not a BeebEm save state)
+            setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
+        } else {
+            await loadHTMLFile(file);
+        }
+    } catch (error) {
+        reportLoadFailure(file.name, error);
     }
 });
 
@@ -725,17 +748,14 @@ if (config.hasEconet) {
 }
 
 const cmos = new Cmos(
-    {
-        load: function () {
-            if (window.localStorage.cmosRam) {
-                return JSON.parse(window.localStorage.cmosRam);
-            }
-            return null;
-        },
-        save: function (data) {
-            window.localStorage.cmosRam = JSON.stringify(data);
-        },
-    },
+    localStoragePersistence(
+        () => window.localStorage,
+        (error) =>
+            toast(
+                `Settings changed with *CONFIGURE will not be kept (${errorText(error)}). Check that this site is allowed to store data, and that its storage is not full.`,
+                { title: "Settings", quietKey: "quietCmosSave" },
+            ),
+    ),
     model.cmosOverride,
     econet,
 );
@@ -747,12 +767,17 @@ function checkPrinterWindow() {
     if (printerWindow && !printerWindow.closed) return;
 
     printerWindow = window.open("", "_blank", "height=300,width=400");
+    if (!printerWindow) {
+        toast("The printer output window was blocked. Allow pop-up windows for this site, then press Ctrl-B again.", {
+            title: "Printer",
+        });
+        return;
+    }
     printerWindow.document.write(
         '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>',
     );
     printerTextArea = printerWindow.document.getElementById("text");
-
-    processor.uservia.setca1(true);
+    printerTextArea.value = printer.text;
 }
 
 const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
@@ -767,6 +792,8 @@ processor = new CpuClass(model, {
     config: emulationConfig,
     econet,
 });
+
+printer.attach(processor.uservia);
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 
@@ -1178,13 +1205,13 @@ async function hfeClick(file) {
     const name = describeHfe(file).title;
     popupLoading("Loading " + name);
     try {
-        const disc = await loadDiscImage(parsedQuery.disc1);
-        processor.fdc.loadDisc(0, disc);
+        const loaded = await loadDiscImage(parsedQuery.disc1, layoutForDrive(0));
+        putDiscIn(0, loaded);
         loadingFinished();
         if (needsAutoboot) autoboot(name);
     } catch (err) {
         console.error("Error loading disc image:", err);
-        loadingFinished(err);
+        loadingFinished(`Unable to load ${name} from the HFE archive: ${errorText(err)}`);
     }
 }
 
@@ -1403,7 +1430,12 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
     discImage = split.image;
     const schema = split.schema;
     if (schema[0] === "!" || schema === "local") {
-        return disc.localDisc(processor.fdc, discImage, layout);
+        return disc.localDisc(processor.fdc, discImage, layout, (error) =>
+            toast(
+                `Browser storage would not take changes to ${discImage} (${errorText(error)}). Use Discs, Download to keep a copy.`,
+                { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },
+            ),
+        );
     }
     // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
     // Consider:
@@ -1419,7 +1451,7 @@ async function loadDiscImage(discImage, layout = DiscLayout.auto) {
         }
 
         case "hfe":
-            return disc.discFor(processor.fdc, discImage, await hfeArchive.fetch(discImage));
+            return disc.discFor(processor.fdc, discImage, await hfeArchive.fetch(discImage), undefined, layout);
 
         case "gd": {
             const splat = discImage.match(/([^/]+)\/?(.*)/);
@@ -1508,7 +1540,11 @@ document.getElementById("disc_load").addEventListener("change", async function (
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    await loadHTMLFile(file);
+    try {
+        await loadHTMLFile(file);
+    } catch (error) {
+        reportLoadFailure(file.name, error);
+    }
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
@@ -1516,7 +1552,11 @@ document.getElementById("fs_load").addEventListener("change", async function (ev
     if (evt.target.files.length === 0) return;
     utils.noteEvent("local", "click"); // NB no filename here
     const file = evt.target.files[0];
-    await loadSCSIFile(file);
+    try {
+        await loadSCSIFile(file);
+    } catch (error) {
+        reportLoadFailure(file.name, error);
+    }
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
@@ -1525,17 +1565,21 @@ document.getElementById("tape_load").addEventListener("change", async function (
     const file = evt.target.files[0];
     utils.noteEvent("local", "clickTape"); // NB no filename here
 
-    let tapeData = await readFileAsBinaryString(file);
-    let tapeName = file.name;
-    if (/\.zip/i.test(tapeName)) {
-        const unzipped = await utils.unzipDiscImage(utils.stringToUint8Array(tapeData));
-        tapeData = unzipped.data;
-        tapeName = unzipped.name;
+    try {
+        let tapeData = await readFileAsBinaryString(file);
+        let tapeName = file.name;
+        if (/\.zip/i.test(tapeName)) {
+            const unzipped = await utils.unzipDiscImage(utils.stringToUint8Array(tapeData));
+            tapeData = unzipped.data;
+            tapeName = unzipped.name;
+        }
+        setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
+        delete parsedQuery.tape;
+        updateUrl();
+        bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
+    } catch (error) {
+        reportLoadFailure(file.name, error);
     }
-    setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
-    delete parsedQuery.tape;
-    updateUrl();
-    bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
 
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
@@ -1629,10 +1673,14 @@ async function gdLoad(cat, layout) {
 
 for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "none";
 (async () => {
-    const available = await googleDrive.initialise();
-    if (available) {
-        for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
-        await gdAuth(true);
+    try {
+        const available = await googleDrive.initialise();
+        if (available) {
+            for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
+            await gdAuth(true);
+        }
+    } catch (error) {
+        console.log(`Google Drive is unavailable: ${errorText(error)}`);
     }
 })();
 const googleDriveModal = new bootstrap.Modal(googleDriveEl);
@@ -1648,7 +1696,14 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
     gdLoading.textContent = "Loading...";
     gdLoading.style.display = "";
     for (const el of googleDriveEl.querySelectorAll("li:not(.template)")) el.remove();
-    const cat = await googleDrive.listFiles();
+    let cat;
+    try {
+        cat = await googleDrive.listFiles();
+    } catch (error) {
+        console.error("Error listing Google Drive files:", error);
+        gdLoading.textContent = `Unable to list your Google Drive files: ${errorText(error)}`;
+        return;
+    }
     const dbList = googleDriveEl.querySelector(".list");
     gdLoading.style.display = "none";
     const template = dbList.querySelector(".template");
@@ -1678,7 +1733,11 @@ for (const image of availableImages) {
         utils.noteEvent("images", "click", image.file);
         setDisc1Image(image.file);
         $discsModal.hide();
-        putDiscIn(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
+        try {
+            putDiscIn(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
+        } catch (error) {
+            reportLoadFailure(`${image.name} (${image.file})`, error);
+        }
     });
 }
 
@@ -1971,8 +2030,7 @@ const startPromise = (async () => {
             try {
                 await load();
             } catch (error) {
-                console.error(`Error loading ${description}:`, error);
-                toast(`Could not load ${description}: ${error?.message ?? error}`, { title: "Loading" });
+                reportLoadFailure(description, error);
             }
         })();
         imageLoads.push(loading);
