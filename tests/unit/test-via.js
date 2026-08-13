@@ -203,6 +203,7 @@ describe("Via snapshotState / restoreState", () => {
 describe("Via CA2 write handshake", () => {
     const ORB = 0x0,
         ORA = 0x1,
+        DDRB = 0x2,
         DDRA = 0x3,
         PCR = 0xc,
         ORAnh = 0xf;
@@ -210,12 +211,15 @@ describe("Via CA2 write handshake", () => {
         PcrCa2Pulse = 0x0a;
     const SeededByte = 0x41,
         WrittenByte = 0x42;
+    const PulseWidthCycles = 2;
 
-    let via, events;
+    let via, scheduler, events;
 
     beforeEach(() => {
-        via = new UserVia(makeFakeCpu(), new Scheduler(), false, makeFakeUserPortPeripheral());
+        scheduler = new Scheduler();
+        via = new UserVia(makeFakeCpu(), scheduler, false, makeFakeUserPortPeripheral());
         via.write(DDRA, 0xff);
+        via.write(DDRB, 0xff);
         via.write(ORAnh, SeededByte);
         events = [];
     });
@@ -238,11 +242,57 @@ describe("Via CA2 write handshake", () => {
         recordCa2Changes();
 
         via.write(ORA, WrittenByte);
+        scheduler.polltime(PulseWidthCycles);
 
         expect(events).toEqual([
             { level: false, output: true, ora: WrittenByte, pins: WrittenByte },
             { level: true, output: true, ora: WrittenByte, pins: WrittenByte },
         ]);
+    });
+
+    it("should hold CA2 low for a cycle in pulse mode", () => {
+        via.write(PCR, PcrCa2Pulse);
+        recordCa2Changes();
+
+        via.write(ORA, WrittenByte);
+        expect(via.ca2).toBe(false);
+
+        scheduler.polltime(PulseWidthCycles - 1);
+        expect(via.ca2).toBe(false);
+
+        scheduler.polltime(1);
+        expect(via.ca2).toBe(true);
+    });
+
+    it("should hold CB2 low for a cycle in pulse mode", () => {
+        via.write(PCR, PcrCa2Pulse << 4);
+        const cb2Events = [];
+        via.cb2changecallback = (level, output) => cb2Events.push({ level, output });
+
+        via.write(ORB, WrittenByte);
+        expect(cb2Events).toEqual([{ level: false, output: true }]);
+
+        scheduler.polltime(PulseWidthCycles - 1);
+        expect(via.cb2).toBe(false);
+
+        scheduler.polltime(1);
+        expect(cb2Events).toEqual([
+            { level: false, output: true },
+            { level: true, output: true },
+        ]);
+    });
+
+    it("should carry a pulse in flight across a snapshot", () => {
+        via.write(PCR, PcrCa2Pulse);
+        via.write(ORA, WrittenByte);
+        scheduler.polltime(PulseWidthCycles - 1);
+
+        const restored = new UserVia(makeFakeCpu(), scheduler, false, makeFakeUserPortPeripheral());
+        restored.restoreState(via.snapshotState());
+        expect(restored.ca2).toBe(false);
+
+        scheduler.polltime(1);
+        expect(restored.ca2).toBe(true);
     });
 
     it("should not touch CA2 when writing the no-handshake register", () => {
