@@ -300,7 +300,6 @@ export class Teletext {
         }
         if (wasGfx && (wasHoldChar || this.holdChar) && this.dbl === this.oldDbl) {
             data = this.heldChar;
-            if (data >= 0x40 && data < 0x60) data = 0x20;
             this.curGlyphs = this.heldGlyphs;
         } else {
             this.heldChar = 0x20;
