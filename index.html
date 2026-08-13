@@ -21,6 +21,17 @@
       content="script-src 'self' 'unsafe-inline' 'unsafe-eval' *.google-analytics.com *.google.com;"
     />
     <title>jsbeeb - Javascript BBC Micro emulator</title>
+    <style>
+      /* The document is laid out entirely by the stylesheet; painting it before that arrives shows
+         every modal and debug panel as a wall of text. jsbeeb.css makes the body visible again. */
+      html {
+        background: #222;
+        color-scheme: dark;
+      }
+      body {
+        visibility: hidden;
+      }
+    </style>
     <link rel="shortcut icon" href="/favicon.ico" />
     <script type="module" src="/src/main.js"></script>
   </head>

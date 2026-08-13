@@ -1,5 +1,6 @@
 body {
   overflow: hidden;
+  visibility: visible; /* undoes the anti-flash rule in index.html */
 }
 #outer {
   display: block;
