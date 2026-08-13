@@ -24,6 +24,10 @@ const ORB = 0x0,
     INT_CB1 = 0x10,
     INT_CB2 = 0x08;
 
+// tRS3 holds a pulse-mode CA2/CB2 low for one 1MHz VIA cycle, here in the scheduler's 2MHz ticks.
+// http://archive.6502.org/datasheets/wdc_w65c22s_mar_2004.pdf
+const PulseWidthCycles = 2;
+
 class Via {
     constructor(cpu, scheduler, irq) {
         this.cpu = cpu;
@@ -59,6 +63,8 @@ class Via {
         this.t1_pb7 = 0;
 
         this.task = this.scheduler.newTask(() => this._onTimeout());
+        this.ca2PulseTask = this.scheduler.newTask(() => this.setca2(true));
+        this.cb2PulseTask = this.scheduler.newTask(() => this.setcb2(true));
         this.lastPolltime = 0;
     }
 
@@ -72,6 +78,8 @@ class Via {
         this.t1hit = this.t2hit = true;
         this.acr = this.pcr = 0;
         this.t1_pb7 = 1;
+        this.ca2PulseTask.cancel();
+        this.cb2PulseTask.cancel();
         this.updateNextTime();
     }
 
@@ -166,7 +174,7 @@ class Via {
                 } else if (mode === 0x0a) {
                     // Pulse mode
                     this.setca2(false);
-                    this.setca2(true);
+                    this.ca2PulseTask.reschedule(PulseWidthCycles);
                 }
                 break;
 
@@ -193,7 +201,7 @@ class Via {
                 } else if (mode === 0x0a) {
                     // Pulse mode
                     this.setcb2(false);
-                    this.setcb2(true);
+                    this.cb2PulseTask.reschedule(PulseWidthCycles);
                 }
                 break;
 
@@ -408,6 +416,15 @@ class Via {
         this.portBUpdated();
     }
 
+    _taskOffset(task) {
+        return task.scheduled() ? task.expireEpoch - this.scheduler.epoch : null;
+    }
+
+    _restoreTask(task, offset) {
+        if (offset === null || offset === undefined) task.cancel();
+        else task.reschedule(offset);
+    }
+
     snapshotState() {
         return {
             ora: this.ora,
@@ -436,7 +453,9 @@ class Via {
             justhit: this.justhit,
             t1_pb7: this.t1_pb7,
             lastPolltime: this.lastPolltime,
-            taskOffset: this.task.scheduled() ? this.task.expireEpoch - this.scheduler.epoch : null,
+            taskOffset: this._taskOffset(this.task),
+            ca2PulseTaskOffset: this._taskOffset(this.ca2PulseTask),
+            cb2PulseTaskOffset: this._taskOffset(this.cb2PulseTask),
         };
     }
 
@@ -468,11 +487,9 @@ class Via {
         this.t1_pb7 = state.t1_pb7;
         this.lastPolltime = state.lastPolltime;
         this.updateIFR();
-        if (state.taskOffset !== null) {
-            this.task.reschedule(state.taskOffset);
-        } else {
-            this.task.cancel();
-        }
+        this._restoreTask(this.task, state.taskOffset);
+        this._restoreTask(this.ca2PulseTask, state.ca2PulseTaskOffset);
+        this._restoreTask(this.cb2PulseTask, state.cb2PulseTaskOffset);
     }
 
     setca1(level) {

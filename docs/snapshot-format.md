@@ -132,35 +132,39 @@ Scheduled tasks are not saved directly. Each component saves its task timing as 
 
 ### VIA (`state.sysvia`, `state.uservia`)
 
-| Field          | Type         | Description                                        |
-| -------------- | ------------ | -------------------------------------------------- |
-| `ora`          | number       | Output Register A                                  |
-| `orb`          | number       | Output Register B                                  |
-| `ira`          | number       | Input Register A                                   |
-| `irb`          | number       | Input Register B                                   |
-| `ddra`         | number       | Data Direction Register A                          |
-| `ddrb`         | number       | Data Direction Register B                          |
-| `sr`           | number       | Shift Register                                     |
-| `t1l`          | number       | Timer 1 Latch (doubled 2MHz ticks)                 |
-| `t2l`          | number       | Timer 2 Latch                                      |
-| `t1c`          | number       | Timer 1 Counter                                    |
-| `t2c`          | number       | Timer 2 Counter                                    |
-| `acr`          | number       | Auxiliary Control Register                         |
-| `pcr`          | number       | Peripheral Control Register                        |
-| `ifr`          | number       | Interrupt Flag Register                            |
-| `ier`          | number       | Interrupt Enable Register                          |
-| `t1hit`        | boolean      | Timer 1 has expired                                |
-| `t2hit`        | boolean      | Timer 2 has expired                                |
-| `portapins`    | number       | Port A pin levels                                  |
-| `portbpins`    | number       | Port B pin levels                                  |
-| `ca1`          | boolean      | CA1 line level                                     |
-| `ca2`          | boolean      | CA2 line level                                     |
-| `cb1`          | boolean      | CB1 line level                                     |
-| `cb2`          | boolean      | CB2 line level                                     |
-| `justhit`      | number       | Timer just-hit flags                               |
-| `t1_pb7`       | number       | Timer 1 PB7 output state                           |
-| `lastPolltime` | number       | Last polltime epoch                                |
-| `taskOffset`   | number\|null | Scheduled task offset from epoch (null if no task) |
+| Field                | Type         | Description                                                      |
+| -------------------- | ------------ | ---------------------------------------------------------------- |
+| `ora`                | number       | Output Register A                                                |
+| `orb`                | number       | Output Register B                                                |
+| `ira`                | number       | Input Register A                                                 |
+| `irb`                | number       | Input Register B                                                 |
+| `ddra`               | number       | Data Direction Register A                                        |
+| `ddrb`               | number       | Data Direction Register B                                        |
+| `sr`                 | number       | Shift Register                                                   |
+| `t1l`                | number       | Timer 1 Latch (doubled 2MHz ticks)                               |
+| `t2l`                | number       | Timer 2 Latch                                                    |
+| `t1c`                | number       | Timer 1 Counter                                                  |
+| `t2c`                | number       | Timer 2 Counter                                                  |
+| `acr`                | number       | Auxiliary Control Register                                       |
+| `pcr`                | number       | Peripheral Control Register                                      |
+| `ifr`                | number       | Interrupt Flag Register                                          |
+| `ier`                | number       | Interrupt Enable Register                                        |
+| `t1hit`              | boolean      | Timer 1 has expired                                              |
+| `t2hit`              | boolean      | Timer 2 has expired                                              |
+| `portapins`          | number       | Port A pin levels                                                |
+| `portbpins`          | number       | Port B pin levels                                                |
+| `ca1`                | boolean      | CA1 line level                                                   |
+| `ca2`                | boolean      | CA2 line level                                                   |
+| `cb1`                | boolean      | CB1 line level                                                   |
+| `cb2`                | boolean      | CB2 line level                                                   |
+| `justhit`            | number       | Timer just-hit flags                                             |
+| `t1_pb7`             | number       | Timer 1 PB7 output state                                         |
+| `lastPolltime`       | number       | Last polltime epoch                                              |
+| `taskOffset`         | number\|null | Scheduled task offset from epoch (null if no task)               |
+| `ca2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CA2 returns high (null if no pulse) |
+| `cb2PulseTaskOffset` | number\|null | Offset at which a pulse-mode CB2 returns high (null if no pulse) |
+
+`ca2PulseTaskOffset` and `cb2PulseTaskOffset` are absent from snapshots written before CA2/CB2 pulses had a width, and from imported snapshots; absent means no pulse is in flight.
 
 System VIA additionally includes:
 
