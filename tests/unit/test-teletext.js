@@ -165,6 +165,15 @@ describe("Teletext", () => {
             expect(backgroundOnly(cells[5])).toBe(true);
         });
 
+        // The spec holds "the most recent mosaics character with bit 6 = 1 in its code", so an
+        // alphanumeric seen in graphics mode leaves the previous mosaic held.
+        it("does not hold an alphanumeric character", () => {
+            const cells = renderCells([WhiteGraphics, SolidBlock, LetterA, HoldGraphics, Flash]);
+
+            expect(solidOnly(cells[3], White)).toBe(true);
+            expect(solidOnly(cells[4], White)).toBe(true);
+        });
+
         it("holds nothing over from the previous row", () => {
             renderCells([WhiteGraphics, SolidBlock, HoldGraphics], Steady);
             endScanline();
