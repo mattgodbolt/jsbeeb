@@ -12,7 +12,7 @@ import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos } from "./cmos.js";
 import { StairwayToHell } from "./sth.js";
-import { BbcDiscArchive, describe as describeHfe } from "./bbcdiscs.js";
+import { BbcDiscArchive, Provenance, describe as describeHfe, matches, provenancesIn } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
 import { loadTapeFromData } from "./tapes.js";
@@ -1194,13 +1194,15 @@ function hfeOnCat(catalogue) {
     const list = document.getElementById("hfe-list");
     document.querySelector("#hfe .loading").style.display = "none";
     const template = list.querySelector(".template");
+    showProvenanceChoices(catalogue, onHfeFilter);
 
     const addSome = (remaining) => {
         if (ticket !== hfeRender) return;
         const MaxAtATime = 100;
         const Delay = 30;
-        // Read per batch: the filter can be typed into while this is still going.
+        // Read per batch: both can be changed while this is still going.
         const filter = document.getElementById("hfe-filter").value.toLowerCase();
+        const shown = shownProvenances();
         for (const file of remaining.slice(0, MaxAtATime)) {
             const { title, publisher, detail } = describeHfe(file);
             const row = template.cloneNode(true);
@@ -1208,6 +1210,8 @@ function hfeOnCat(catalogue) {
             row.querySelector(".name").textContent = title;
             row.querySelector(".publisher").textContent = publisher;
             row.querySelector(".detail").textContent = detail;
+            row.querySelector(".provenance").textContent =
+                file.provenance === Provenance.Reconstructed ? "reconstructed" : "";
             if (file.notes) row.title = file.notes;
             // The row is an anchor, and letting it navigate to "#" would push a
             // history entry of its own on top of the one updateUrl pushes.
@@ -1216,8 +1220,9 @@ function hfeOnCat(catalogue) {
                 hfeClick(file);
                 $hfeModal.hide();
             });
-            row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
+            row.hfeFile = file;
             list.appendChild(row);
+            showHfeRow(row, file, filter, shown);
         }
         if (remaining.length > MaxAtATime) setTimeout(() => addSome(remaining.slice(MaxAtATime)), Delay);
     };
@@ -1231,7 +1236,53 @@ document.getElementById("hfe").addEventListener("shown.bs.modal", () => {
 document.getElementById("hfe").addEventListener("show.bs.modal", () => hfeArchive.populate());
 
 const hfeFilter = document.getElementById("hfe-filter");
-const onHfeFilter = () => filterArchiveList("hfe-list", hfeFilter.value);
+const hfeProvenance = document.getElementById("hfe-provenance");
+
+const HfeProvenanceLabels = {
+    [Provenance.Captured]: ["Captured", "Direct from disc"],
+    [Provenance.Reconstructed]: ["Reconstructed", "Rebuilt from a sector dump"],
+};
+
+/** Which provenances the picker is showing, or null when it is not offering the choice. */
+const shownProvenances = () => {
+    const boxes = [...hfeProvenance.querySelectorAll("input")];
+    return boxes.length ? new Set(boxes.filter((box) => box.checked).map((box) => box.value)) : null;
+};
+
+// Offer one tick per provenance the archive actually holds, rather than naming
+// them here: a source added later should appear without this having to change.
+function showProvenanceChoices(catalogue, onChange) {
+    const present = provenancesIn(catalogue);
+    // Nothing to choose between: no ticks, and shownProvenances says "all".
+    if (present.length < 2) {
+        hfeProvenance.replaceChildren();
+        return;
+    }
+    const wasShown = shownProvenances();
+    hfeProvenance.replaceChildren(
+        ...present.map((provenance) => {
+            const [text, why] = HfeProvenanceLabels[provenance] ?? [provenance, ""];
+            const label = document.createElement("label");
+            label.title = why;
+            const box = document.createElement("input");
+            box.type = "checkbox";
+            box.value = provenance;
+            box.checked = !wasShown || wasShown.has(provenance);
+            box.addEventListener("change", onChange);
+            label.append(box, text);
+            return label;
+        }),
+    );
+}
+
+const showHfeRow = (row, file, filter, shown) => (row.style.display = matches(file, filter, shown) ? "" : "none");
+
+const onHfeFilter = () => {
+    const filter = hfeFilter.value.toLowerCase();
+    const shown = shownProvenances();
+    for (const row of document.querySelectorAll("#hfe-list li:not(.template)"))
+        showHfeRow(row, row.hfeFile, filter, shown);
+};
 hfeFilter.addEventListener("change", onHfeFilter);
 hfeFilter.addEventListener("keyup", onHfeFilter);
 
