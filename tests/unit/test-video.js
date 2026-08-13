@@ -500,6 +500,47 @@ describe("Video", () => {
 
             expect(mockTeletext.fetchData).toHaveBeenCalledWith(0x42);
         });
+
+        // IC37/IC36 force bit 6 high during H blanking, so the pipeline sees a graphics character
+        // rather than a control code. Gated here on DISPEN; issue #832 says hardware uses MA13.
+        it("should force bit 6 high when feeding the pipeline during H blanking", () => {
+            mockCpu.videoRead.mockReturnValue(0x05);
+            video.dispEnabled = VDISPENABLE;
+            mockTeletext.fetchData.mockClear();
+            video.horizCounter = 10;
+
+            video.polltime(1);
+
+            expect(mockTeletext.fetchData).toHaveBeenCalledWith(0x45);
+        });
+
+        it("should not feed the pipeline outside the vertical display", () => {
+            video.dispEnabled = 0;
+            mockTeletext.fetchData.mockClear();
+            video.horizCounter = 10;
+
+            video.polltime(1);
+
+            expect(mockTeletext.fetchData).not.toHaveBeenCalled();
+        });
+
+        // The "TTX trick": with the teletext bit set in a 2MHz mode the ULA holds the SAA5050's
+        // DISPEN low, so it outputs black rather than characters.
+        it("should draw black instead of characters with the teletext bit set at 2MHz", () => {
+            video.ula.write(0, 2 | 0x10);
+            expect(video.teletextMode).toBe(true);
+            expect(video.halfClock).toBe(false);
+
+            mockTeletext.render.mockClear();
+            video.horizCounter = 10;
+            video.bitmapX = 100;
+            video.bitmapY = 100;
+
+            video.polltime(1);
+
+            expect(mockTeletext.render).not.toHaveBeenCalled();
+            expect(mockFb32[TEST_FB_OFFSET]).toBe(0xff000000);
+        });
     });
 
     describe("NULA palette mode", () => {
