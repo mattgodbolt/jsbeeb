@@ -11,6 +11,7 @@ export class Teletext {
         this.sep = false;
         this.dbl = this.oldDbl = this.secondHalfOfDouble = this.wasDbl = false;
         this.gfx = false;
+        this.conceal = false;
         this.flash = this.flashOn = false;
         this.flashTime = 0;
         this.heldChar = 0;
@@ -172,6 +173,7 @@ export class Teletext {
             secondHalfOfDouble: this.secondHalfOfDouble,
             wasDbl: this.wasDbl,
             gfx: this.gfx,
+            conceal: this.conceal,
             flash: this.flash,
             flashOn: this.flashOn,
             flashTime: this.flashTime,
@@ -198,6 +200,7 @@ export class Teletext {
         this.secondHalfOfDouble = state.secondHalfOfDouble;
         this.wasDbl = state.wasDbl;
         this.gfx = state.gfx;
+        this.conceal = state.conceal ?? false;
         this.flash = state.flash;
         this.flashOn = state.flashOn;
         this.flashTime = state.flashTime;
@@ -245,6 +248,7 @@ export class Teletext {
             case 7:
                 this.gfx = false;
                 this.col = data;
+                this.conceal = false;
                 this.setNextChars();
                 break;
             case 8:
@@ -267,10 +271,11 @@ export class Teletext {
             case 23:
                 this.gfx = true;
                 this.col = data & 7;
+                this.conceal = false;
                 this.setNextChars();
                 break;
             case 24:
-                this.col = this.prevCol = this.bg;
+                this.conceal = true;
                 break;
             case 25:
                 this.sep = false;
@@ -358,6 +363,7 @@ export class Teletext {
         this.flash = false;
         this.sep = false;
         this.gfx = false;
+        this.conceal = false;
         this.dbl = false;
 
         this.scanlineCounter++;
@@ -396,6 +402,7 @@ export class Teletext {
         this.curGlyphs = this.nextGlyphs;
 
         let flashThisCell = this.flash;
+        let concealThisCell = this.conceal;
         if (data < 0x20) {
             data = this.handleControlCode(data);
         } else if (this.gfx) {
@@ -419,7 +426,10 @@ export class Teletext {
         // Steady (code 9) is "Set At" — update so this cell stops flashing immediately.
         if (flashThisCell && !this.flash) flashThisCell = false;
 
-        if ((flashThisCell && this.flashOn) || (this.secondHalfOfDouble && !this.dbl)) {
+        // Conceal (code 24) is "Set At", and a colour code only reveals from the cell after itself.
+        if (this.conceal) concealThisCell = true;
+
+        if (concealThisCell || (flashThisCell && this.flashOn) || (this.secondHalfOfDouble && !this.dbl)) {
             const backgroundColour = this.colour[(this.bg & 7) << 5];
             for (let i = 0; i < 16; ++i) {
                 buf[offset++] = backgroundColour;
