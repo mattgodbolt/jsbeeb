@@ -1685,7 +1685,7 @@ for (const image of availableImages) {
         try {
             putDiscIn(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
         } catch (error) {
-            reportLoadFailure(image.name, error);
+            reportLoadFailure(`${image.name} (${image.file})`, error);
         }
     });
 }
