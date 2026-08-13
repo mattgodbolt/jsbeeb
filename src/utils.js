@@ -1293,4 +1293,11 @@ export class Fifo {
         this._size--;
         return res;
     }
+
+    /** @returns {number[]} pending bytes, oldest first */
+    toArray() {
+        const result = [];
+        for (let i = 0; i < this._size; ++i) result.push(this._buffer[(this._rPtr + i) % this._buffer.length]);
+        return result;
+    }
 }

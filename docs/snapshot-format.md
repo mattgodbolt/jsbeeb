@@ -64,7 +64,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC or disc state (`state.fdc` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC, disc or touchscreen state (`state.fdc` and `state.touchScreen` will be absent).
 
 B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots only include sideways RAM banks via the `swRamBanks` field (an object keyed by bank number, each value a `Uint8Array` of 16KB). On restore, `swRamBanks` selectively overwrites individual ROM banks without touching the ROMs jsbeeb has already loaded.
 
@@ -252,6 +252,19 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 | `low`        | number       | Low byte of conversion result  |
 | `high`       | number       | High byte of conversion result |
 | `taskOffset` | number\|null | Conversion task offset         |
+
+### Touchscreen (`state.touchScreen`)
+
+| Field            | Type         | Description                                          |
+| ---------------- | ------------ | ---------------------------------------------------- |
+| `mode`           | number       | Mode selected by the guest's `M<n>.` command         |
+| `outBuffer`      | number[]     | Bytes queued to send to the guest, oldest first      |
+| `pollTaskOffset` | number\|null | Position report task offset (null if polling is off) |
+
+Absent from snapshots written before the touchscreen was saved, and from imported ones. Absent means the
+touchscreen keeps whatever state it currently holds, unpolled, exactly as before.
+
+The pointer position and button state are not saved: like the keyboard, they are host input and are refreshed by the next mouse event.
 
 ### Teletext adaptor (`state.teletextAdaptor`)
 

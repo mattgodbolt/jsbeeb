@@ -13,11 +13,32 @@ export class TouchScreen {
     constructor(scheduler, cyclesPerSecond) {
         this.scheduler = scheduler;
         this.pollCycles = cyclesPerSecond / PollHz;
-        this.mouse = { x: 0, y: 0, button: 0 };
         this.outBuffer = new utils.Fifo(16);
-        this.delay = 0;
-        this.mode = 0;
         this.pollTask = this.scheduler.newTask(() => this.poll());
+        this.reset();
+    }
+
+    reset() {
+        this.mouse = { x: 0, y: 0, button: 0 };
+        this.mode = 0;
+        this.outBuffer.clear();
+        this.pollTask.cancel();
+    }
+
+    snapshotState() {
+        return {
+            mode: this.mode,
+            outBuffer: this.outBuffer.toArray(),
+            pollTaskOffset: this.pollTask.scheduled() ? this.pollTask.expireEpoch - this.scheduler.epoch : null,
+        };
+    }
+
+    restoreState(state) {
+        this.mode = state.mode;
+        this.outBuffer.clear();
+        for (const byte of state.outBuffer) this.store(byte);
+        this.pollTask.cancel();
+        if (state.pollTaskOffset !== null) this.pollTask.schedule(state.pollTaskOffset);
     }
 
     tryReceive(rts) {
