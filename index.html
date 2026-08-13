@@ -24,10 +24,12 @@
     <style>
       /* Unstyled, the document is a wall of modal text; jsbeeb.css reveals the body. */
       html {
-        background: #222;
         color-scheme: dark;
       }
+      /* The colour goes here, not on html: #screen is at z-index -1, so it only stays visible
+         while body's background propagates to the canvas instead of painting a box over it. */
       body {
+        background: #222;
         visibility: hidden;
       }
     </style>
