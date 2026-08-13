@@ -44,7 +44,7 @@ describe("Snapshot coordinator", () => {
             const snapshot = createSnapshot(cpu, model);
 
             expect(snapshot.format).toBe("jsbeeb-snapshot");
-            expect(snapshot.version).toBe(4);
+            expect(snapshot.version).toBe(3);
             expect(snapshot.model).toBe(model.name);
             expect(snapshot.timestamp).toBeDefined();
             expect(snapshot.state).toBeDefined();
@@ -106,7 +106,7 @@ describe("Snapshot coordinator", () => {
 
             // Verify metadata survived
             expect(restored.format).toBe("jsbeeb-snapshot");
-            expect(restored.version).toBe(4);
+            expect(restored.version).toBe(3);
             expect(restored.model).toBe(model.name);
 
             // Verify TypedArrays were properly reconstructed
