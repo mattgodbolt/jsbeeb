@@ -84,6 +84,11 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: us-east-1
         run: |
-          aws s3 sync dist s3://bbc.xania.org \
+          # Names under assets/ contain a content hash, so they can be cached forever. Upload them
+          # first: index.html must never reach a browser before the assets it names.
+          aws s3 sync dist/assets s3://bbc.xania.org/assets \
             --no-progress \
+            --cache-control "max-age=31536000,immutable" --metadata-directive REPLACE
+          aws s3 sync dist s3://bbc.xania.org \
+            --no-progress --exclude "assets/*" \
             --cache-control max-age=30 --metadata-directive REPLACE
