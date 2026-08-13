@@ -44,7 +44,7 @@ describe("Snapshot coordinator", () => {
             const snapshot = createSnapshot(cpu, model);
 
             expect(snapshot.format).toBe("jsbeeb-snapshot");
-            expect(snapshot.version).toBe(3);
+            expect(snapshot.version).toBe(4);
             expect(snapshot.model).toBe(model.name);
             expect(snapshot.timestamp).toBeDefined();
             expect(snapshot.state).toBeDefined();
@@ -106,7 +106,7 @@ describe("Snapshot coordinator", () => {
 
             // Verify metadata survived
             expect(restored.format).toBe("jsbeeb-snapshot");
-            expect(restored.version).toBe(3);
+            expect(restored.version).toBe(4);
             expect(restored.model).toBe(model.name);
 
             // Verify TypedArrays were properly reconstructed
@@ -173,6 +173,32 @@ describe("Snapshot coordinator", () => {
             const cpu2 = makeCpu();
             // Should not throw — FDC keeps its current state
             expect(() => restoreSnapshot(cpu2, model, snapshot)).not.toThrow();
+        });
+    });
+
+    describe("touchscreen", () => {
+        function selectPollingMode(machine) {
+            for (const char of "M129.") machine.touchScreen.onTransmit(char.charCodeAt(0));
+        }
+
+        it("keeps reporting positions after a restore", () => {
+            selectPollingMode(cpu);
+            const snapshot = snapshotFromJSON(snapshotToJSON(createSnapshot(cpu, model)));
+
+            const cpu2 = makeCpu();
+            restoreSnapshot(cpu2, model, snapshot);
+            cpu2.touchScreen.onMouse(0.5, 0.5, true);
+            cpu2.scheduler.polltime(cpu2.touchScreen.pollCycles);
+
+            expect(cpu2.touchScreen.tryReceive(true)).toBe(0x43);
+        });
+
+        it("restores a pre-v4 snapshot without touchscreen state", () => {
+            const snapshot = createSnapshot(cpu, model);
+            snapshot.version = 3;
+            delete snapshot.state.touchScreen;
+
+            expect(() => restoreSnapshot(makeCpu(), model, snapshot)).not.toThrow();
         });
     });
 

@@ -1,4 +1,4 @@
-# jsbeeb Snapshot Format (Version 3)
+# jsbeeb Snapshot Format (Version 4)
 
 jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.json.gz`. TypedArrays (RAM, palette data, etc.) are encoded as base64 within the JSON. Uncompressed `.json` files are also accepted on load for backward compatibility.
 
@@ -7,7 +7,7 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 ```json
 {
   "format": "jsbeeb-snapshot",
-  "version": 3,
+  "version": 4,
   "model": "BBC B with DFS 1.2",
   "coProcessor": false,
   "timestamp": "2026-03-15T12:00:00.000Z",
@@ -19,7 +19,7 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 | Field         | Type    | Description                                                                     |
 | ------------- | ------- | ------------------------------------------------------------------------------- |
 | `format`      | string  | Always `"jsbeeb-snapshot"`                                                      |
-| `version`     | number  | Format version (currently `3`)                                                  |
+| `version`     | number  | Format version (currently `4`)                                                  |
 | `model`       | string  | jsbeeb model name or synonym (e.g. `"B"`, `"Master"`, `"BBC Master 128 (DFS)"`) |
 | `coProcessor` | boolean | _(v3+)_ Whether a second processor was fitted. Absent means no                  |
 | `timestamp`   | string  | ISO 8601 timestamp of when the snapshot was created                             |
@@ -54,6 +54,7 @@ When `discNCrc32` is present, it is compared against the CRC32 of the reloaded d
 - **v1** — Initial release. CPU, memory, VIA, video, sound, ACIA, ADC.
 - **v2** — Added FDC, disc drive, and disc track data. Dirty track persistence, embedded disc image data for local files, and CRC32 verification. v1 snapshots load with FDC state unchanged.
 - **v3** — Added second processor state (`state.tube`) and the top-level `coProcessor` flag. Nothing before v3 captured tube state, so earlier snapshots are always host-only and load into a machine without a co-processor unchanged.
+- **v4** — Added touchscreen state (`state.touchScreen`). Earlier snapshots restore with the touchscreen in whatever mode it currently holds and with polling stopped, since restoring cancels every scheduled task and nothing re-registers the poll.
 
 ### Imported snapshots
 
@@ -64,7 +65,7 @@ Snapshots can be imported from other emulators. The `importedFrom` field in the 
 | `"b-em"`       | B-em snapshot (`.snp` file, v1 or v3)            |
 | `"beebem-uef"` | BeebEm UEF save state (`.uef` with 0x046C chunk) |
 
-Imported snapshots use the same `jsbeeb-snapshot` format (version 3) and do not include FDC or disc state (`state.fdc` will be absent).
+Imported snapshots use the same `jsbeeb-snapshot` format and are labelled version 3: they carry no FDC or disc state (`state.fdc` will be absent) and no touchscreen state.
 
 B-em snapshots include the full ROM contents in the `roms` field (256KB, all 16 banks). BeebEm UEF snapshots only include sideways RAM banks via the `swRamBanks` field (an object keyed by bank number, each value a `Uint8Array` of 16KB). On restore, `swRamBanks` selectively overwrites individual ROM banks without touching the ROMs jsbeeb has already loaded.
 
@@ -253,6 +254,16 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 | `high`       | number       | High byte of conversion result |
 | `taskOffset` | number\|null | Conversion task offset         |
 
+### Touchscreen (`state.touchScreen`) — _v4+_
+
+| Field            | Type         | Description                                          |
+| ---------------- | ------------ | ---------------------------------------------------- |
+| `mode`           | number       | Mode selected by the guest's `M<n>.` command         |
+| `outBuffer`      | number[]     | Bytes queued to send to the guest, oldest first      |
+| `pollTaskOffset` | number\|null | Position report task offset (null if polling is off) |
+
+The pointer position and button state are not saved: like the keyboard, they are host input and are refreshed by the next mouse event.
+
 ### FDC (`state.fdc`) — _v2+_
 
 The FDC field is present in v2+ snapshots. When loading a v1 snapshot, `state.fdc` is absent and the FDC retains its current state.
@@ -404,7 +415,7 @@ The IRQ and reset lines are not saved: they follow from the status registers and
 
 The parasite's NMI does not. The ULA latches its request rather than presenting the register 3 condition as a level, so once the parasite takes an NMI the request is retired while the condition that raised it may still hold. `parasiteNmi` is therefore real state and cannot be recomputed. Snapshots written before it existed fall back to the register 3 condition on restore, which is what the emulator used to derive the line from. `nmiLevel` and `nmiEdge` on the parasite itself are saved for the same reason: an edge already taken leaves no trace in the ULA.
 
-## Known limitations (v3)
+## Known limitations (v4)
 
 - **No tape position** — tape playback position is not saved.
 - **BeebEm UEF co-processor state is not imported** — BeebEm records a tube type in its `EmuState` chunk, but jsbeeb does not read it, so a UEF save state taken with a second processor imports as host-only.

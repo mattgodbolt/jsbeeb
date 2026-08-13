@@ -4,7 +4,7 @@ import { typedArrayToBase64, base64ToTypedArray } from "./state-utils.js";
 import { findModel } from "./models.js";
 
 const SnapshotFormat = "jsbeeb-snapshot";
-const SnapshotVersion = 3;
+const SnapshotVersion = 4;
 
 /**
  * Whether a snapshot was taken on a machine with a second processor fitted.

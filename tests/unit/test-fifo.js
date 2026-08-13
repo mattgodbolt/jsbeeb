@@ -32,4 +32,18 @@ describe("FIFO tests", function () {
         expect(f.get()).toBe(127);
         expect(f.size).toBe(0);
     });
+
+    it("lists its pending contents oldest first, including once wrapped", function () {
+        const f = new Fifo(4);
+        expect(f.toArray()).toEqual([]);
+        f.put(1);
+        f.put(2);
+        f.put(3);
+        expect(f.toArray()).toEqual([1, 2, 3]);
+        expect(f.get()).toBe(1);
+        f.put(4);
+        f.put(5);
+        expect(f.toArray()).toEqual([2, 3, 4, 5]);
+        expect(f.size).toBe(4);
+    });
 });
