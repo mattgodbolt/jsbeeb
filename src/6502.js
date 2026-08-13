@@ -1243,6 +1243,7 @@ export class Cpu6502 extends Base6502 {
             adc: this.adconverter.snapshotState(),
             touchScreen: this.touchScreen.snapshotState(),
             fdc: this.fdc.snapshotState(),
+            teletextAdaptor: this.teletextAdaptor ? this.teletextAdaptor.snapshotState() : undefined,
             tube: this.hasTube ? this.tube.snapshotState({ includeRoms }) : undefined,
         };
     }
@@ -1299,6 +1300,7 @@ export class Cpu6502 extends Base6502 {
         this.soundChip.restoreState(state.soundChip);
         this.acia.restoreState(state.acia);
         this.adconverter.restoreState(state.adc);
+        if (this.teletextAdaptor && state.teletextAdaptor) this.teletextAdaptor.restoreState(state.teletextAdaptor);
 
         // Touchscreen state, added without a version bump. Absent from an older snapshot, whose
         // touchscreen keeps its current state, unpolled.

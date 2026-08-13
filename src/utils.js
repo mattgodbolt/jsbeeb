@@ -1013,7 +1013,10 @@ function loadDataHttp(url) {
         request.open("GET", baseUrl + url, true);
         request.overrideMimeType("text/plain; charset=x-user-defined");
         request.onload = function () {
-            if (request.status !== 200) reject(new Error("Unable to load " + url + ", http code " + request.status));
+            if (request.status !== 200) {
+                reject(new Error("Unable to load " + url + ", http code " + request.status));
+                return;
+            }
             if (typeof request.response !== "string") {
                 resolve(request.response);
             } else {
