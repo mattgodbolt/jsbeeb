@@ -21,6 +21,16 @@
       content="script-src 'self' 'unsafe-inline' 'unsafe-eval' *.google-analytics.com *.google.com;"
     />
     <title>jsbeeb - Javascript BBC Micro emulator</title>
+    <style>
+      /* Unstyled, the document is a wall of modal text; jsbeeb.css reveals the body. */
+      html {
+        background: #222;
+        color-scheme: dark;
+      }
+      body {
+        visibility: hidden;
+      }
+    </style>
     <link rel="shortcut icon" href="/favicon.ico" />
     <script type="module" src="/src/main.js"></script>
   </head>
