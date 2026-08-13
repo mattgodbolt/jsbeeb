@@ -1,6 +1,6 @@
 body {
   overflow: hidden;
-  visibility: visible; /* see index.html */
+  visibility: visible !important; /* see index.html */
 }
 #outer {
   display: block;
