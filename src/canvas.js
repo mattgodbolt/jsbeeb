@@ -38,6 +38,11 @@ export class Canvas {
     /** Nothing to release: the 2D context owns no objects of ours. */
     dispose() {}
 
+    setFilter(filterClass) {
+        if (filterClass !== PassthroughFilter)
+            throw new Error(`${filterClass.getDisplayConfig().name} needs WebGL, which is not in use here`);
+    }
+
     paint(minx, miny, maxx, maxy, _frame) {
         const width = maxx - minx;
         const height = maxy - miny;
@@ -78,23 +83,14 @@ export class GlCanvas {
 
         checkedGl.depthMask(false);
 
-        this.filter = new filterClass(checkedGl);
-        const program = this.filter.program;
-        checkedGl.useProgram(program);
-
-        // Filters that pick their own samples want the texels they asked for,
-        // not a hardware blend of the ones either side.
-        const sampling = filterClass.getDisplayConfig().nearestSampling ? checkedGl.NEAREST : checkedGl.LINEAR;
-
         this.fb8 = new Uint8Array(width * height * 4);
         this.fb32 = new Uint32Array(this.fb8.buffer);
         this.texture = checkedGl.createTexture();
+        checkedGl.activeTexture(checkedGl.TEXTURE0);
         checkedGl.bindTexture(checkedGl.TEXTURE_2D, this.texture);
         checkedGl.pixelStorei(checkedGl.UNPACK_ALIGNMENT, 4);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_S, checkedGl.CLAMP_TO_EDGE);
         checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_WRAP_T, checkedGl.CLAMP_TO_EDGE);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MAG_FILTER, sampling);
-        checkedGl.texParameteri(checkedGl.TEXTURE_2D, checkedGl.TEXTURE_MIN_FILTER, sampling);
         checkedGl.texImage2D(
             checkedGl.TEXTURE_2D,
             0,
@@ -106,44 +102,72 @@ export class GlCanvas {
             checkedGl.UNSIGNED_BYTE,
             this.fb8,
         );
-        checkedGl.bindTexture(checkedGl.TEXTURE_2D, null);
 
-        const vertexPositionAttrLoc = checkedGl.getAttribLocation(program, "pos");
-        checkedGl.enableVertexAttribArray(vertexPositionAttrLoc);
         this.vertexPositionBuffer = checkedGl.createBuffer();
         checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, this.vertexPositionBuffer);
         checkedGl.bufferData(checkedGl.ARRAY_BUFFER, new Float32Array([0, 0, 0, 1, 1, 0, 1, 1]), checkedGl.STATIC_DRAW);
-        checkedGl.vertexAttribPointer(vertexPositionAttrLoc, 2, checkedGl.FLOAT, false, 0, 0);
-
-        const uvAttrLoc = checkedGl.getAttribLocation(program, "uvIn");
-        checkedGl.enableVertexAttribArray(uvAttrLoc);
         this.uvBuffer = checkedGl.createBuffer();
-        checkedGl.bindBuffer(checkedGl.ARRAY_BUFFER, this.uvBuffer);
-        checkedGl.vertexAttribPointer(uvAttrLoc, 2, checkedGl.FLOAT, false, 0, 0);
-
-        checkedGl.activeTexture(gl.TEXTURE0);
-        checkedGl.bindTexture(gl.TEXTURE_2D, this.texture);
 
         this.checkedGl = checkedGl;
+        this.filter = null;
+        this.attribLocations = [];
         this.viewportWidth = this.viewportHeight = 0;
         this.uvFloatArray = new Float32Array(8);
         this.lastExtent = {};
+
+        try {
+            this.setFilter(filterClass);
+        } catch (e) {
+            this.dispose();
+            throw e;
+        }
 
         console.log("GL Canvas set up");
     }
 
     /**
-     * Release the GL objects this canvas owns.
+     * Draw with `filterClass` from here on, keeping the framebuffer texture and
+     * the vertex buffers: only the program, the texture sampling mode and the
+     * attribute locations differ between filters.
      *
-     * Switching display mode builds a new canvas over the same element, and a
-     * canvas only ever hands out one WebGL context — so the new one inherits
-     * the old one's context and the old one's objects stay resident unless
-     * they are deleted here. That is a megabytes-per-switch leak: the
-     * framebuffer texture alone is 1024x1024 RGBA.
+     * The new filter is built before the old one is disposed, so a filter that
+     * will not build leaves the canvas drawing as it was.
+     */
+    setFilter(filterClass) {
+        const gl = this.checkedGl;
+        const filter = new filterClass(gl);
+        this.filter?.dispose();
+        this.filter = filter;
+        gl.useProgram(filter.program);
+
+        // Filters that pick their own samples want the texels they asked for,
+        // not a hardware blend of the ones either side.
+        const sampling = filterClass.getDisplayConfig().nearestSampling ? gl.NEAREST : gl.LINEAR;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, sampling);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, sampling);
+
+        const bindAttribute = (name, buffer) => {
+            const location = gl.getAttribLocation(filter.program, name);
+            gl.enableVertexAttribArray(location);
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0);
+            return location;
+        };
+        for (const location of this.attribLocations) gl.disableVertexAttribArray(location);
+        this.attribLocations = [bindAttribute("pos", this.vertexPositionBuffer), bindAttribute("uvIn", this.uvBuffer)];
+    }
+
+    /**
+     * Release the GL objects this canvas owns. Nothing else will: a canvas
+     * element hands out one WebGL context for its lifetime, so anything created
+     * through that context stays resident however many wrappers come and go.
      */
     dispose() {
         const gl = this.checkedGl;
-        this.filter.dispose();
+        this.filter?.dispose();
+        this.filter = null;
         gl.deleteTexture(this.texture);
         gl.deleteBuffer(this.vertexPositionBuffer);
         gl.deleteBuffer(this.uvBuffer);
@@ -216,6 +240,24 @@ export class GlCanvas {
 function fellBackBecause(canvas, reason) {
     canvas.fallbackReason = reason;
     return canvas;
+}
+
+/**
+ * Draw with `filterClass`, or with the unfiltered display if it will not build,
+ * in which case `fallbackReason` says why.
+ */
+export function useBestFilter(canvas, filterClass) {
+    let reason;
+    try {
+        canvas.setFilter(filterClass);
+        return fellBackBecause(canvas, undefined);
+    } catch (e) {
+        console.log(`Unable to use ${filterClass.getDisplayConfig().name}: ${e}`);
+        if (filterClass === PassthroughFilter) throw e;
+        reason = e?.message ?? e;
+    }
+    canvas.setFilter(PassthroughFilter);
+    return fellBackBecause(canvas, reason);
 }
 
 export function bestCanvas(canvas, filterClass) {

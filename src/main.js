@@ -489,59 +489,57 @@ function noteDriveTracks(driveIndex, discName) {
     });
 }
 
-function createCanvasForFilter(filterClass) {
+// Test which filter is actually in use, not merely whether we got WebGL: a
+// filter can decline a context that works perfectly well for other modes, in
+// which case we are quietly left with an unfiltered display.
+function reportAnyFallback(displayCanvas, filterClass) {
+    if (displayCanvas.filterClass === filterClass) return;
+    const reason = displayCanvas.fallbackReason ? ` (${displayCanvas.fallbackReason})` : "";
+    const { name } = filterClass.getDisplayConfig();
+    toast(`${name} is not available on this device, so the standard display is in use${reason}.`, {
+        title: "Display",
+        quietKey: "quietDisplayFallback",
+    });
+}
+
+function sizeCanvasFor(filterClass) {
     // Not `config`: that is the emulator's live configuration object, declared
     // at module scope and used throughout this file.
     const displayConfig = filterClass.getDisplayConfig();
-    // Each mode says how many pixels it wants to draw into. Set this before
-    // creating the context, which fixes its initial viewport.
+    if (screenCanvas.width === displayConfig.canvasWidth && screenCanvas.height === displayConfig.canvasHeight) return;
     screenCanvas.width = displayConfig.canvasWidth;
     screenCanvas.height = displayConfig.canvasHeight;
+}
+
+function createCanvasForFilter(filterClass) {
+    // Each mode says how many pixels it wants to draw into. Set this before
+    // creating the context, which fixes its initial viewport.
+    sizeCanvasFor(filterClass);
 
     const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
-
-    // Test which filter was actually built, not merely whether we got WebGL: a
-    // filter can decline a context that works perfectly well for other modes,
-    // in which case bestCanvas quietly gives us an unfiltered GL canvas.
-    if (newCanvas.filterClass !== filterClass) {
-        const reason = newCanvas.fallbackReason ? ` (${newCanvas.fallbackReason})` : "";
-        toast(`${displayConfig.name} is not available on this device, so the standard display is in use${reason}.`, {
-            title: "Display",
-            quietKey: "quietDisplayFallback",
-        });
-    }
-
+    reportAnyFallback(newCanvas, filterClass);
     return newCanvas;
 }
 
 let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
 function swapCanvas(newFilterClass) {
-    const oldCanvas = canvas;
-    const newCanvas = createCanvasForFilter(newFilterClass);
-    // Carry the picture over; the buffers differ in height, so copy what fits.
-    newCanvas.fb32.set(oldCanvas.fb32.subarray(0, newCanvas.fb32.length));
-    // Only once the replacement exists, so a failure to build it leaves the
-    // display we already had. The two share a GL context but no GL objects.
-    oldCanvas.dispose();
-    video.fb32 = newCanvas.fb32;
-    video.paint_ext = function paint(minx, miny, maxx, maxy) {
-        frames++;
-        if (frames < frameSkip) return;
-        frames = 0;
-        newCanvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
-    };
-    canvas = newCanvas;
+    // Everything but the filter is the same whatever the mode: the framebuffer
+    // texture, the vertex buffers and fb32 all carry over untouched.
+    canvasLib.useBestFilter(canvas, newFilterClass);
+    reportAnyFallback(canvas, newFilterClass);
     // Follow the filter we ended up with, not the one we asked for: everything
-    // downstream — the monitor picture, the canvas geometry, how large a
-    // drawing buffer to ask for — comes from its display config.
-    displayModeFilter = newCanvas.filterClass;
+    // downstream (the monitor picture, the canvas geometry, how large a drawing
+    // buffer to ask for) comes from its display config.
+    displayModeFilter = canvas.filterClass;
+    // Back to the mode's own size, undoing any scaling the last one asked for.
+    sizeCanvasFor(displayModeFilter);
     // Nothing else will redraw: the mode is changed from a modal, which stops
     // the emulator.
     video.paint();
     window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
 }
 
-let canvas = createCanvasForFilter(displayModeFilter);
+const canvas = createCanvasForFilter(displayModeFilter);
 displayModeFilter = canvas.filterClass;
 
 video = new Video(

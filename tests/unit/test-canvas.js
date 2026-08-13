@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { GlCanvas, Canvas, bestCanvas } from "../../src/canvas.js";
+import { GlCanvas, Canvas, bestCanvas, useBestFilter } from "../../src/canvas.js";
 import PAL_FRAG_SHADER from "../../src/video-filters/shaders/pal-composite.frag.glsl?raw";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { PALCompositeFilter } from "../../src/video-filters/pal-composite.js";
 import { XbrFilter } from "../../src/video-filters/xbr-filter.js";
 
 // A canvas element hands out a WebGL context once and returns that same context
-// for every later request, so switching display mode builds a new GlCanvas over
-// the old one's context. Anything the old one created stays resident until it
-// is deleted, and the framebuffer texture alone is 1024x1024 RGBA.
+// for every later request, so anything created through it stays resident until
+// it is deleted, whatever happens to the JS objects holding it. The framebuffer
+// texture alone is 1024x1024 RGBA.
 
 /**
  * A WebGL context that records the objects created and deleted through it.
@@ -60,7 +60,7 @@ function recordingGl() {
     for (const name of (
         "shaderSource compileShader attachShader linkProgram useProgram depthMask viewport " +
         "bindTexture bindBuffer bufferData texImage2D texSubImage2D texParameteri pixelStorei activeTexture " +
-        "enableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f"
+        "enableVertexAttribArray disableVertexAttribArray vertexAttribPointer drawArrays uniform1i uniform1f uniform2f"
     ).split(" "))
         gl[name] = () => {};
 
@@ -74,6 +74,13 @@ function fakeCanvasElement(gl) {
         height: 600,
         getContext: (kind) => (kind === "2d" ? null : gl),
     };
+}
+
+/** Make `gl` reject one particular shader, as a device without the features for it would. */
+function failToCompile(gl, shaderSource) {
+    const sources = new Map();
+    gl.shaderSource = (shader, source) => sources.set(shader, source);
+    gl.getShaderParameter = (shader) => sources.get(shader) !== shaderSource;
 }
 
 describe("GlCanvas", () => {
@@ -93,12 +100,18 @@ describe("GlCanvas", () => {
         expect([...gl.live]).toEqual([]);
     });
 
+    it.each(filters)("releases what it created when the filter will not build (%s)", (_name, filterClass) => {
+        const gl = recordingGl();
+        gl.getProgramParameter = () => false;
+
+        expect(() => new GlCanvas(fakeCanvasElement(gl), filterClass)).toThrow(/Failed to link/);
+        expect([...gl.live]).toEqual([]);
+    });
+
     it("does not accumulate objects over repeated display mode switches", () => {
-        // This is the shape of the leak: swapping modes builds a new canvas over
-        // the same context, so without disposal each switch strands a texture,
-        // two buffers and a program. Filters own different numbers of objects —
-        // xBR has a second texture — so the invariant is that returning to a
-        // filter returns to its own count, not that every count is the same.
+        // Filters own different numbers of objects (xBR has a second texture),
+        // so the invariant is that returning to a filter returns to its own
+        // count, not that every count is the same.
         const gl = recordingGl();
         const element = fakeCanvasElement(gl);
 
@@ -112,14 +125,37 @@ describe("GlCanvas", () => {
             only.dispose();
         }
 
-        let canvas = new GlCanvas(element, filters[0][1]);
+        const canvas = new GlCanvas(element, filters[0][1]);
         for (let switches = 1; switches <= 3 * filters.length; ++switches) {
             const [name, filterClass] = filters[switches % filters.length];
-            const next = new GlCanvas(element, filterClass);
-            canvas.dispose();
-            canvas = next;
+            canvas.setFilter(filterClass);
             expect(gl.live.size, `after switching to ${name}`).toBe(expected.get(filterClass));
         }
+    });
+
+    it("keeps its framebuffer and vertex buffers when the filter changes", () => {
+        const gl = recordingGl();
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        const fb32 = canvas.fb32;
+        const kept = [...gl.live].filter((object) => object.kind !== "Program");
+        expect(kept.length).toBeGreaterThan(0);
+
+        canvas.setFilter(PALCompositeFilter);
+
+        expect(canvas.filterClass).toBe(PALCompositeFilter);
+        expect([...gl.live]).toEqual(expect.arrayContaining(kept));
+        expect(canvas.fb32).toBe(fb32);
+    });
+
+    it("goes on drawing with the filter it has when a new one will not build", () => {
+        const gl = recordingGl();
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        const live = gl.live.size;
+        gl.getProgramParameter = () => false;
+
+        expect(() => canvas.setFilter(PALCompositeFilter)).toThrow(/Failed to link/);
+        expect(canvas.filterClass).toBe(PassthroughFilter);
+        expect(gl.live.size).toBe(live);
     });
 
     it("frees its shaders as soon as they are linked", () => {
@@ -153,14 +189,47 @@ describe("bestCanvas", () => {
         // The 2D fallback is unreachable once a WebGL context exists, so a
         // filter that fails to build has to be replaced on the context we have.
         const gl = recordingGl();
-        const sources = new Map();
-        gl.shaderSource = (shader, source) => sources.set(shader, source);
-        gl.getShaderParameter = (shader) => sources.get(shader) !== PAL_FRAG_SHADER;
+        failToCompile(gl, PAL_FRAG_SHADER);
 
         const canvas = bestCanvas(fakeCanvasElement(gl), PALCompositeFilter);
 
         expect(canvas.filterClass).toBe(PassthroughFilter);
         expect(canvas.fallbackReason).toMatch(/Failed to compile PAL composite/);
+    });
+});
+
+describe("useBestFilter", () => {
+    it("falls back to the passthrough filter when the one asked for will not build", () => {
+        const gl = recordingGl();
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        failToCompile(gl, PAL_FRAG_SHADER);
+
+        useBestFilter(canvas, PALCompositeFilter);
+
+        expect(canvas.filterClass).toBe(PassthroughFilter);
+        expect(canvas.fallbackReason).toMatch(/Failed to compile PAL composite/);
+    });
+
+    it("forgets a previous fallback once a filter builds", () => {
+        const gl = recordingGl();
+        const canvas = new GlCanvas(fakeCanvasElement(gl), PassthroughFilter);
+        failToCompile(gl, PAL_FRAG_SHADER);
+        useBestFilter(canvas, PALCompositeFilter);
+
+        useBestFilter(canvas, XbrFilter);
+
+        expect(canvas.filterClass).toBe(XbrFilter);
+        expect(canvas.fallbackReason).toBeUndefined();
+    });
+
+    it("leaves a 2D canvas unfiltered, saying why", () => {
+        // Not a constructed one: it wants a document to build its back buffer.
+        const canvas = Object.create(Canvas.prototype);
+
+        useBestFilter(canvas, PALCompositeFilter);
+
+        expect(canvas.filterClass).toBe(PassthroughFilter);
+        expect(canvas.fallbackReason).toMatch(/WebGL/);
     });
 });
 
