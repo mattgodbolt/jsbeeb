@@ -337,8 +337,6 @@ describe("Teletext", () => {
         });
     });
 
-    // A freshly built chip reports flash-on until the first frame ends, so start the count inside
-    // the cycle rather than at construction.
     it("blanks flashing text for sixteen frames in every sixty-four", () => {
         endFrame();
 
