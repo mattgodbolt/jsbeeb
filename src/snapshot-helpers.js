@@ -139,7 +139,6 @@ export function buildVideoState(ulaControl, ulaPalette, crtcRegs, nulaCollook, c
             wasDbl: false,
             gfx: false,
             flash: false,
-            flashBlanked: false,
             flashTime: 0,
             heldChar: 0,
             holdChar: false,

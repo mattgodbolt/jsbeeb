@@ -136,17 +136,13 @@ export class TestMachine {
         throw new Error(`Cursor did not reach state ${on} in time (cursorOnThisFrame=${video.cursorOnThisFrame})`);
     }
 
-    /**
-     * Run until the teletext flash phase reaches the desired state.
-     * @param {boolean} blanked - true to wait until flashing cells are blanked
-     */
-    async runToFlashState(blanked) {
+    async runUntilFlashHidden() {
         const teletext = this.processor.video.teletext;
         for (let i = 0; i < 100; i++) {
-            if (teletext.flashBlanked === blanked) return;
+            if (teletext.hideFlashing) return;
             await this.runFor(40000);
         }
-        throw new Error(`Flash did not reach state ${blanked} in time (flashBlanked=${teletext.flashBlanked})`);
+        throw new Error("Flashing text did not reach its hidden phase in time");
     }
 
     async runUntilVblank() {
