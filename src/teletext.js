@@ -12,7 +12,7 @@ export class Teletext {
         this.dbl = this.oldDbl = this.secondHalfOfDouble = this.wasDbl = false;
         this.gfx = false;
         this.conceal = false;
-        this.flash = this.flashOn = false;
+        this.flash = this.flashBlanked = false;
         this.flashTime = 0;
         this.heldChar = 0;
         this.holdChar = false;
@@ -175,7 +175,7 @@ export class Teletext {
             gfx: this.gfx,
             conceal: this.conceal,
             flash: this.flash,
-            flashOn: this.flashOn,
+            flashBlanked: this.flashBlanked,
             flashTime: this.flashTime,
             heldChar: this.heldChar,
             holdChar: this.holdChar,
@@ -202,7 +202,7 @@ export class Teletext {
         this.gfx = state.gfx;
         this.conceal = state.conceal ?? false;
         this.flash = state.flash;
-        this.flashOn = state.flashOn;
+        this.flashBlanked = state.flashBlanked ?? state.flashOn ?? false;
         this.flashTime = state.flashTime;
         this.heldChar = state.heldChar;
         this.holdChar = state.holdChar;
@@ -339,7 +339,7 @@ export class Teletext {
         // TODO: this point is being reached a MOS-dependent number of times
         // before Video.frameCount rises.  The next line achieves initial
         // sync under MOS 1.20 only.
-        this.flashOn = this.flashTime < 16;
+        this.flashBlanked = this.flashTime < 16;
     }
 
     setDISPTMG(level) {
@@ -429,7 +429,7 @@ export class Teletext {
         // Conceal (code 24) is "Set At", and a colour code only reveals from the cell after itself.
         if (this.conceal) concealThisCell = true;
 
-        if (concealThisCell || (flashThisCell && this.flashOn) || (this.secondHalfOfDouble && !this.dbl)) {
+        if (concealThisCell || (flashThisCell && this.flashBlanked) || (this.secondHalfOfDouble && !this.dbl)) {
             const backgroundColour = this.colour[(this.bg & 7) << 5];
             for (let i = 0; i < 16; ++i) {
                 buf[offset++] = backgroundColour;

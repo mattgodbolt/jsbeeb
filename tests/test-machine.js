@@ -137,16 +137,16 @@ export class TestMachine {
     }
 
     /**
-     * Run until the teletext flash state reaches the desired phase.
-     * @param {boolean} on - true for flash-on (flashing cells blanked), false for flash-off
+     * Run until the teletext flash phase reaches the desired state.
+     * @param {boolean} blanked - true to wait until flashing cells are blanked
      */
-    async runToFlashState(on) {
+    async runToFlashState(blanked) {
         const teletext = this.processor.video.teletext;
         for (let i = 0; i < 100; i++) {
-            if (teletext.flashOn === on) return;
+            if (teletext.flashBlanked === blanked) return;
             await this.runFor(40000);
         }
-        throw new Error(`Flash did not reach state ${on} in time (flashOn=${teletext.flashOn})`);
+        throw new Error(`Flash did not reach state ${blanked} in time (flashBlanked=${teletext.flashBlanked})`);
     }
 
     async runUntilVblank() {
