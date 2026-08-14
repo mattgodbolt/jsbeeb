@@ -203,7 +203,9 @@ describe("Teletext", () => {
             expect(solidOnly(cells[5], White)).toBe(true);
         });
 
-        it("shows flashing text for the rest of the frame period", () => {
+        it("shows flashing text during the visible phase", () => {
+            for (let frame = 0; frame < 16; ++frame) endFrame();
+
             const cells = renderCells([WhiteGraphics, Flash, SolidBlock]);
 
             expect(solidOnly(cells[2], White)).toBe(true);
