@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.19.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.18.0...v1.19.0) (2026-08-15)
+
+
+### Features
+
+* ask for a low latency canvas ([#856](https://github.com/mattgodbolt/jsbeeb/issues/856)) ([4fa235a](https://github.com/mattgodbolt/jsbeeb/commit/4fa235a7c600c175d43c5f4c1bef8708d31fb7a7))
+
+
+### Bug Fixes
+
+* size the audio start threshold from the latency target ([#859](https://github.com/mattgodbolt/jsbeeb/issues/859)) ([dbf7e52](https://github.com/mattgodbolt/jsbeeb/commit/dbf7e52f08ac0ca0d304da7f8d214cb6818bf320))
+
 ## [1.18.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.17.1...v1.18.0) (2026-08-13)
 
 
