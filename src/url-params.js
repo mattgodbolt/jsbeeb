@@ -52,7 +52,7 @@ export function parseQueryString(queryString, paramTypes = {}) {
         const keyAndVal = keyval.split("=");
         const key = decodeURIComponent(keyAndVal[0]);
         let val = null;
-        if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal[1]);
+        if (keyAndVal.length > 1) val = decodeURIComponent(keyAndVal.slice(1).join("="));
 
         const paramType = paramTypes[key] || ParamTypes.STRING;
 
@@ -90,12 +90,29 @@ export function parseQueryString(queryString, paramTypes = {}) {
 }
 
 /**
- * Build a URL string from base URL and query parameters
- * @param {string} baseUrl - The base URL (without query string)
- * @param {Object} parsedQuery - Object containing query parameters
- * @param {Object.<string, ParamType>} [paramTypes={}] - Object mapping parameter names to their types
- * @returns {string} The complete URL with query parameters
+ * Characters RFC 3986 allows literally in a query that `encodeURIComponent` escapes anyway. `&`,
+ * `=`, `+`, `#`, `%` and space are left escaped because they delimit something, and `?` because a
+ * URL with a second one in it reads as broken even though the grammar permits it.
  */
+const QueryLiterals = "$,/:;@";
+
+const EscapedQueryLiterals = new RegExp(
+    [...QueryLiterals].map((char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`).join("|"),
+    "g",
+);
+
+/**
+ * Percent-encode a key or value for a query string, escaping only what the query grammar or our
+ * own parser needs escaped
+ * @param {string} component - The key or value to encode
+ * @returns {string} The encoded component
+ */
+function encodeQueryComponent(component) {
+    const encoded = encodeURIComponent(component).replace(EscapedQueryLiterals, decodeURIComponent);
+    // parseQueryString drops one trailing slash from the whole query string, so never end in one.
+    return encoded.endsWith("/") ? `${encoded.slice(0, -1)}%2F` : encoded;
+}
+
 /**
  * Append a parameter to the URL
  * @param {string} url - Current URL
@@ -105,13 +122,20 @@ export function parseQueryString(queryString, paramTypes = {}) {
  * @returns {Object} Updated URL and separator
  */
 function appendParam(url, sep, key, value = undefined) {
-    url += sep + encodeURIComponent(key);
+    url += sep + encodeQueryComponent(key);
     if (value !== undefined) {
-        url += "=" + encodeURIComponent(value);
+        url += "=" + encodeQueryComponent(value);
     }
     return { url, sep: "&" };
 }
 
+/**
+ * Build a URL string from base URL and query parameters
+ * @param {string} baseUrl - The base URL (without query string)
+ * @param {Object} parsedQuery - Object containing query parameters
+ * @param {Object.<string, ParamType>} [paramTypes={}] - Object mapping parameter names to their types
+ * @returns {string} The complete URL with query parameters
+ */
 export function buildUrlFromParams(baseUrl, parsedQuery, paramTypes = {}) {
     let url = baseUrl;
     let sep = "?";

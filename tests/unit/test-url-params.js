@@ -383,6 +383,55 @@ describe("URL Parameters", () => {
         });
     });
 
+    describe("round tripping", () => {
+        const awkwardValues = [
+            "sth:Micropower/Ghouls.zip",
+            "!local/My Disc (1984).ssd",
+            "|Superior/Repton 3.zip",
+            "http://example.com/a b?c=d#e",
+            "b64data:AAAAgH8=",
+            "a=b=c",
+            "100% pure",
+            "%41",
+            "%2F",
+            "one & two",
+            "plus+plus",
+            "hash#tag",
+            "trailing/",
+            "line\nbreak",
+            "café",
+            "日本語",
+            "!$'()*,;:@/-_.~",
+            "0",
+        ];
+
+        it.each(awkwardValues)("should survive a build and parse of %j", (value) => {
+            const url = buildUrlFromParams("", { disc1: value, autoboot: true });
+            expect(parseQueryString(url.substring(1), { autoboot: ParamTypes.BOOL })).toEqual({
+                disc1: value,
+                autoboot: true,
+            });
+        });
+
+        it.each(awkwardValues)("should survive a build and parse of %j as a key", (key) => {
+            const url = buildUrlFromParams("", { [key]: "value" });
+            expect(parseQueryString(url.substring(1))).toEqual({ [key]: "value" });
+        });
+
+        it("should parse URLs generated before the encoding was relaxed", () => {
+            expect(parseQueryString("disc1=sth%3AMicropower%2FGhouls.zip&model=Master&autoboot")).toEqual({
+                disc1: "sth:Micropower/Ghouls.zip",
+                model: "Master",
+                autoboot: null,
+            });
+            expect(parseQueryString("disc1=sth:Micropower/Ghouls.zip&model=Master&autoboot")).toEqual({
+                disc1: "sth:Micropower/Ghouls.zip",
+                model: "Master",
+                autoboot: null,
+            });
+        });
+    });
+
     describe("guessModelFromHostname", () => {
         it("should return B-DFS1.2 for hostnames starting with 'bbc'", () => {
             expect(guessModelFromHostname("bbc.example.com")).toBe("B-DFS1.2");
@@ -414,6 +463,11 @@ describe("URL Parameters", () => {
             expect(parseQueryString("key&key=value")).toEqual({ key: "value" });
         });
 
+        it("should keep everything after the first equals in the value", () => {
+            expect(parseQueryString("a=b=c")).toEqual({ a: "b=c" });
+            expect(parseQueryString("data=AAAA==&model=B")).toEqual({ data: "AAAA==", model: "B" });
+        });
+
         it("should handle special characters in query parameters", () => {
             const qs = "text=Hello%20%26%20World%21&file=file%2Bname%40domain.com";
             expect(parseQueryString(qs)).toEqual({
@@ -435,8 +489,29 @@ describe("URL Parameters", () => {
                 text: "Hello & World!",
                 file: "file+name@domain.com",
             };
-            const expected = "http://localhost:8080/index.html?text=Hello%20%26%20World!&file=file%2Bname%40domain.com";
+            const expected = "http://localhost:8080/index.html?text=Hello%20%26%20World!&file=file%2Bname@domain.com";
             expect(buildUrlFromParams(baseUrl, params)).toBe(expected);
+        });
+
+        it("should leave characters the query grammar allows alone", () => {
+            expect(buildUrlFromParams(baseUrl, { disc1: "sth:Micropower/Ghouls.zip" })).toBe(
+                "http://localhost:8080/index.html?disc1=sth:Micropower/Ghouls.zip",
+            );
+            expect(buildUrlFromParams(baseUrl, { punctuation: "!$'()*,;:@/-_.~" })).toBe(
+                "http://localhost:8080/index.html?punctuation=!$'()*,;:@/-_.~",
+            );
+        });
+
+        it("should escape everything that delimits, and question marks", () => {
+            expect(buildUrlFromParams(baseUrl, { "a&b": "c=d", "e#f": "g%h", "i+j": "k l", "m?n": "o?p" })).toBe(
+                "http://localhost:8080/index.html?a%26b=c%3Dd&e%23f=g%25h&i%2Bj=k%20l&m%3Fn=o%3Fp",
+            );
+        });
+
+        it("should not end a component in the slash the parser strips", () => {
+            const url = buildUrlFromParams(baseUrl, { dir: "archive/sth/" });
+            expect(url).toBe("http://localhost:8080/index.html?dir=archive/sth%2F");
+            expect(parseQueryString(url.substring(url.indexOf("?") + 1))).toEqual({ dir: "archive/sth/" });
         });
 
         it("should handle explicit parameter types", () => {
