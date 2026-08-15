@@ -418,6 +418,13 @@ describe("URL Parameters", () => {
             expect(parseQueryString(url.substring(1))).toEqual({ [key]: "value" });
         });
 
+        // The parser strips a trailing slash from the whole query string, which only a value in the
+        // final position can run into.
+        it.each(awkwardValues)("should survive a build and parse of %j when it ends the query", (value) => {
+            const url = buildUrlFromParams("", { disc1: value });
+            expect(parseQueryString(url.substring(1))).toEqual({ disc1: value });
+        });
+
         it("should parse URLs generated before the encoding was relaxed", () => {
             expect(parseQueryString("disc1=sth%3AMicropower%2FGhouls.zip&model=Master&autoboot")).toEqual({
                 disc1: "sth:Micropower/Ghouls.zip",
