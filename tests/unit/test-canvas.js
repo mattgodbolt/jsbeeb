@@ -217,6 +217,13 @@ describe("low latency canvas", () => {
         expect(element.asked[0].preserveDrawingBuffer).toBe(false);
     });
 
+    it("survives a context that reports no attributes at all", () => {
+        const gl = recordingGl();
+        gl.getContextAttributes = () => null;
+
+        expect(() => new GlCanvas(attributeRecordingElement(gl), PassthroughFilter)).not.toThrow();
+    });
+
     it("passes the choice on through bestCanvas", () => {
         const element = attributeRecordingElement(recordingGl());
 

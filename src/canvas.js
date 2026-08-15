@@ -19,7 +19,8 @@ export function getFilterForMode(mode) {
 // what we actually got.
 // https://developer.chrome.com/blog/desynchronized
 function reportDesynchronized(ctx, asked) {
-    const honoured = ctx.getContextAttributes?.().desynchronized ?? false;
+    // A lost context returns null here rather than an attributes object.
+    const honoured = ctx.getContextAttributes?.()?.desynchronized ?? false;
     if (!asked) console.log("Low latency canvas turned off");
     else console.log(`Low latency canvas ${honoured ? "in use" : "not available"}`);
 }
