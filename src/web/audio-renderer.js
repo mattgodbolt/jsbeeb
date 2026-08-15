@@ -3,21 +3,26 @@
 const lowPassFilterFreq = sampleRate / 2;
 const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
 
+const InputSampleRate = 4000000.0 / 8;
+const MaxQueuedMs = 250;
+
+const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
+
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
         super(...args);
 
-        this.inputSampleRate = 4000000.0 / 8;
+        this.inputSampleRate = InputSampleRate;
         this._lastSample = 0;
         this._lastFilteredOutput = 0;
         this.queue = [];
-        this._queueSizeBytes = 0;
+        this._queueSizeSamples = 0;
         this.dropped = 0;
         this.underruns = 0;
         this.targetLatencyMs = 1000 * (1 / 50); // One frame
-        this.startQueueSizeBytes = this.inputSampleRate / this.targetLatencyMs / 2;
+        this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
         this.running = false;
-        this.maxQueueSizeBytes = this.inputSampleRate * 0.25;
+        this.maxQueueSizeSamples = samplesFor(MaxQueuedMs);
         this.port.onmessage = (event) => {
             // TODO: even better than this, send over register settings/catch up and run the audio work _here_
             this.onBuffer(event.data.time, event.data.buffer);
@@ -47,19 +52,19 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
     onBuffer(time, buffer) {
         this.queue.push({ offset: 0, time, buffer });
-        this._queueSizeBytes += buffer.length;
+        this._queueSizeSamples += buffer.length;
         this.cleanQueue();
-        if (!this.running && this._queueSizeBytes >= this.startQueueSizeBytes) this.running = true;
+        if (!this.running && this._queueSizeSamples >= this.startQueueSizeSamples) this.running = true;
     }
 
     _shift() {
         const dropped = this.queue.shift();
-        this._queueSizeBytes -= dropped.buffer.length;
+        this._queueSizeSamples -= dropped.buffer.length;
     }
 
     cleanQueue() {
         const maxLatency = this.targetLatencyMs * 2;
-        while (this._queueSizeBytes > this.maxQueueSizeBytes || this._queueAge() > maxLatency) {
+        while (this._queueSizeSamples > this.maxQueueSizeSamples || this._queueAge() > maxLatency) {
             this._shift();
             this.dropped++;
         }
