@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.19.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.0...v1.19.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* keep URLs readable by only escaping what delimits ([#866](https://github.com/mattgodbolt/jsbeeb/issues/866)) ([5588f95](https://github.com/mattgodbolt/jsbeeb/commit/5588f953e721bf0a197ee0e138a0634bf8e64146))
+
 ## [1.19.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.18.0...v1.19.0) (2026-08-15)
 
 
