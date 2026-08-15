@@ -14,6 +14,15 @@ export function getFilterForMode(mode) {
     return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
 }
 
+// The hint asks the browser to skip the renderer compositor queue and hand the buffer straight to
+// the display controller, saving a frame or so of output latency. It is only a hint, so read back
+// what we actually got.
+// https://developer.chrome.com/blog/desynchronized
+function reportDesynchronized(ctx) {
+    const honoured = ctx.getContextAttributes?.().desynchronized ?? false;
+    console.log(`Low latency canvas ${honoured ? "in use" : "not available"}`);
+}
+
 export class Canvas {
     /** The 2D canvas draws the framebuffer as-is, which is what this filter is. */
     get filterClass() {
@@ -21,8 +30,9 @@ export class Canvas {
     }
 
     constructor(canvas) {
-        this.ctx = canvas.getContext("2d", { alpha: false });
+        this.ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
         if (this.ctx === null) throw new Error("Unable to get a 2D context");
+        reportDesynchronized(this.ctx);
         this.ctx.fillStyle = "black";
         this.ctx.fillRect(0, 0, 1024, 625);
         this.backBuffer = window.document.createElement("canvas");
@@ -68,15 +78,19 @@ export class GlCanvas {
             alpha: false,
             antialias: false,
             depth: false,
-            preserveDrawingBuffer: false,
+            // A desynchronized context can be scanned out while it is cleared but not yet redrawn,
+            // which flickers unless the buffer is preserved between frames.
+            preserveDrawingBuffer: true,
             stencil: false,
             failIfMajorPerformanceCaveat: true,
+            desynchronized: true,
         };
         const gl = canvas.getContext("webgl", glAttrs) || canvas.getContext("experimental-webgl", glAttrs);
         this.gl = gl;
         if (!gl) {
             throw new Error("Unable to create a GL context");
         }
+        reportDesynchronized(gl);
         const checkedGl = webglDebug.makeDebugContext(gl, function (err, funcName) {
             throw new Error("Problem creating GL context: " + webglDebug.glEnumToString(err) + " in " + funcName);
         });
