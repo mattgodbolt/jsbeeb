@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.19.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.18.0...v1.19.0) (2026-08-15)
+
+
+### Features
+
+* ask for a low latency canvas ([#856](https://github.com/mattgodbolt/jsbeeb/issues/856)) ([4fa235a](https://github.com/mattgodbolt/jsbeeb/commit/4fa235a7c600c175d43c5f4c1bef8708d31fb7a7))
+
+
+### Bug Fixes
+
+* size the audio start threshold from the latency target ([#859](https://github.com/mattgodbolt/jsbeeb/issues/859)) ([dbf7e52](https://github.com/mattgodbolt/jsbeeb/commit/dbf7e52f08ac0ca0d304da7f8d214cb6818bf320))
+
+## [1.18.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.17.1...v1.18.0) (2026-08-13)
+
+
+### Features
+
+* add the reconstructed discs to the HFE archive ([#831](https://github.com/mattgodbolt/jsbeeb/issues/831)) ([80eb015](https://github.com/mattgodbolt/jsbeeb/commit/80eb0151d842e0bf0d36577ced9a824e67b0beb6))
+* step MachineSession by frames rather than by cycles ([#850](https://github.com/mattgodbolt/jsbeeb/issues/850)) ([a9bccc4](https://github.com/mattgodbolt/jsbeeb/commit/a9bccc45428fe55915c64676ad04740053cac762))
+
+
+### Bug Fixes
+
+* give CA2/CB2 pulse mode a real width ([#836](https://github.com/mattgodbolt/jsbeeb/issues/836)) ([e7afa21](https://github.com/mattgodbolt/jsbeeb/commit/e7afa2122ed3cb4a831d6f1240e9aaec26feb8fc))
+* keep the touchscreen polling across a snapshot restore ([#839](https://github.com/mattgodbolt/jsbeeb/issues/839)) ([b5f3679](https://github.com/mattgodbolt/jsbeeb/commit/b5f3679ddc53e7900afc17068bba0c334b89b8d2))
+* model teletext conceal as a state, not a recolour ([#840](https://github.com/mattgodbolt/jsbeeb/issues/840)) ([03e6163](https://github.com/mattgodbolt/jsbeeb/commit/03e6163d545ee02165344e5d7ddc382818da08f9)), closes [#833](https://github.com/mattgodbolt/jsbeeb/issues/833)
+* restore the emulator display ([#847](https://github.com/mattgodbolt/jsbeeb/issues/847)) ([ffba2c5](https://github.com/mattgodbolt/jsbeeb/commit/ffba2c517238ff33f6159a053bed29f7a294f93a))
+* say when a load fails instead of failing silently ([#829](https://github.com/mattgodbolt/jsbeeb/issues/829)) ([48d87cf](https://github.com/mattgodbolt/jsbeeb/commit/48d87cf0f583f94d0a1e1d563641102253a40b5b))
+* say which files a zip archive held but did not load ([#837](https://github.com/mattgodbolt/jsbeeb/issues/837)) ([4e8f406](https://github.com/mattgodbolt/jsbeeb/commit/4e8f406e8116fea8feed4178f7f00a52429a01a8))
+* snapshot the teletext adaptor, and return after rejecting a failed load ([#838](https://github.com/mattgodbolt/jsbeeb/issues/838)) ([7fdd226](https://github.com/mattgodbolt/jsbeeb/commit/7fdd226ac8993a8f89c7701cff701c5d842cab10)), closes [#745](https://github.com/mattgodbolt/jsbeeb/issues/745)
+* stop the unstyled flash on load ([#844](https://github.com/mattgodbolt/jsbeeb/issues/844)) ([4a9051b](https://github.com/mattgodbolt/jsbeeb/commit/4a9051b85489a2001e82fd718a2f9ce683f17ddf))
+
 ## [1.17.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.17.0...v1.17.1) (2026-08-12)
 
 

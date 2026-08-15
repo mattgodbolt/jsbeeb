@@ -184,6 +184,55 @@ describe("GlCanvas", () => {
     });
 });
 
+describe("low latency canvas", () => {
+    /** Records the attributes each context was asked for. */
+    function attributeRecordingElement(gl) {
+        const asked = [];
+        return {
+            asked,
+            width: 896,
+            height: 600,
+            getContext: (kind, attrs) => {
+                asked.push(attrs);
+                return kind === "2d" ? null : gl;
+            },
+        };
+    }
+
+    it("asks for a desynchronized context by default", () => {
+        const element = attributeRecordingElement(recordingGl());
+
+        new GlCanvas(element, PassthroughFilter);
+
+        expect(element.asked[0].desynchronized).toBe(true);
+        expect(element.asked[0].preserveDrawingBuffer).toBe(true);
+    });
+
+    it("does not when turned off", () => {
+        const element = attributeRecordingElement(recordingGl());
+
+        new GlCanvas(element, PassthroughFilter, false);
+
+        expect(element.asked[0].desynchronized).toBe(false);
+        expect(element.asked[0].preserveDrawingBuffer).toBe(false);
+    });
+
+    it("survives a context that reports no attributes at all", () => {
+        const gl = recordingGl();
+        gl.getContextAttributes = () => null;
+
+        expect(() => new GlCanvas(attributeRecordingElement(gl), PassthroughFilter)).not.toThrow();
+    });
+
+    it("passes the choice on through bestCanvas", () => {
+        const element = attributeRecordingElement(recordingGl());
+
+        bestCanvas(element, PassthroughFilter, false);
+
+        expect(element.asked[0].desynchronized).toBe(false);
+    });
+});
+
 describe("bestCanvas", () => {
     it("falls back to the passthrough filter when the one asked for will not build", () => {
         // The 2D fallback is unreachable once a WebGL context exists, so a

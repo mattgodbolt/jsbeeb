@@ -111,7 +111,9 @@ export class TestMachine {
                     stopped = !this.processor.execute(todo);
                     left -= todo;
                 }
-                if (left && !stopped) {
+                // Not truthiness: a negative or NaN request clamps todo to zero,
+                // so left would never move and the loop never end.
+                if (left > 0 && !stopped) {
                     setTimeout(runAnIter, 0);
                 } else {
                     resolve(stopped);
@@ -136,17 +138,13 @@ export class TestMachine {
         throw new Error(`Cursor did not reach state ${on} in time (cursorOnThisFrame=${video.cursorOnThisFrame})`);
     }
 
-    /**
-     * Run until the teletext flash state reaches the desired phase.
-     * @param {boolean} on - true for flash-on (flashing cells blanked), false for flash-off
-     */
-    async runToFlashState(on) {
+    async runUntilFlashHidden() {
         const teletext = this.processor.video.teletext;
         for (let i = 0; i < 100; i++) {
-            if (teletext.flashOn === on) return;
+            if (teletext.hideFlashing) return;
             await this.runFor(40000);
         }
-        throw new Error(`Flash did not reach state ${on} in time (flashOn=${teletext.flashOn})`);
+        throw new Error("Flashing text did not reach its hidden phase in time");
     }
 
     async runUntilVblank() {

@@ -374,6 +374,10 @@ let tryGl = true;
 if (parsedQuery.glEnabled !== undefined) {
     tryGl = parsedQuery.glEnabled === "true";
 }
+let lowLatency = true;
+if (parsedQuery.lowLatency !== undefined) {
+    lowLatency = parsedQuery.lowLatency === "true";
+}
 const screenCanvas = document.getElementById("screen");
 
 const errorDialog = document.getElementById("error-dialog");
@@ -516,7 +520,9 @@ function createCanvasForFilter(filterClass) {
     // creating the context, which fixes its initial viewport.
     sizeCanvasFor(filterClass);
 
-    const newCanvas = tryGl ? canvasLib.bestCanvas(screenCanvas, filterClass) : new canvasLib.Canvas(screenCanvas);
+    const newCanvas = tryGl
+        ? canvasLib.bestCanvas(screenCanvas, filterClass, lowLatency)
+        : new canvasLib.Canvas(screenCanvas, lowLatency);
     reportAnyFallback(newCanvas, filterClass);
     return newCanvas;
 }
