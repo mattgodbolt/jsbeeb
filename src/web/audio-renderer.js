@@ -3,11 +3,16 @@
 const lowPassFilterFreq = sampleRate / 2;
 const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
 
+const InputSampleRate = 4000000.0 / 8;
+const MaxQueuedMs = 250;
+
+const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
+
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
         super(...args);
 
-        this.inputSampleRate = 4000000.0 / 8;
+        this.inputSampleRate = InputSampleRate;
         this._lastSample = 0;
         this._lastFilteredOutput = 0;
         this.queue = [];
@@ -15,9 +20,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.dropped = 0;
         this.underruns = 0;
         this.targetLatencyMs = 1000 * (1 / 50); // One frame
-        this.startQueueSizeBytes = this.inputSampleRate / this.targetLatencyMs / 2;
+        this.startQueueSizeBytes = samplesFor(this.targetLatencyMs);
         this.running = false;
-        this.maxQueueSizeBytes = this.inputSampleRate * 0.25;
+        this.maxQueueSizeBytes = samplesFor(MaxQueuedMs);
         this.port.onmessage = (event) => {
             // TODO: even better than this, send over register settings/catch up and run the audio work _here_
             this.onBuffer(event.data.time, event.data.buffer);
