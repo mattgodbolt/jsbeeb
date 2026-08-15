@@ -14,15 +14,27 @@ export function getFilterForMode(mode) {
     return DISPLAY_MODE_FILTERS[mode] || DISPLAY_MODE_FILTERS.rgb;
 }
 
+// The hint asks the browser to skip the renderer compositor queue and hand the buffer straight to
+// the display controller, saving a frame or so of output latency. It is only a hint, so read back
+// what we actually got.
+// https://developer.chrome.com/blog/desynchronized
+function reportDesynchronized(ctx, asked) {
+    // A lost context returns null here rather than an attributes object.
+    const honoured = ctx.getContextAttributes?.()?.desynchronized ?? false;
+    if (!asked) console.log("Low latency canvas turned off");
+    else console.log(`Low latency canvas ${honoured ? "in use" : "not available"}`);
+}
+
 export class Canvas {
     /** The 2D canvas draws the framebuffer as-is, which is what this filter is. */
     get filterClass() {
         return PassthroughFilter;
     }
 
-    constructor(canvas) {
-        this.ctx = canvas.getContext("2d", { alpha: false });
+    constructor(canvas, lowLatency = true) {
+        this.ctx = canvas.getContext("2d", { alpha: false, desynchronized: lowLatency });
         if (this.ctx === null) throw new Error("Unable to get a 2D context");
+        reportDesynchronized(this.ctx, lowLatency);
         this.ctx.fillStyle = "black";
         this.ctx.fillRect(0, 0, 1024, 625);
         this.backBuffer = window.document.createElement("canvas");
@@ -60,7 +72,7 @@ export class GlCanvas {
         return this.filter.constructor;
     }
 
-    constructor(canvas, filterClass) {
+    constructor(canvas, filterClass, lowLatency = true) {
         // failIfMajorPerformanceCaveat prevents the use of CPU based WebGL
         // rendering, which is much worse than simply using a 2D canvas for
         // rendering.
@@ -68,15 +80,19 @@ export class GlCanvas {
             alpha: false,
             antialias: false,
             depth: false,
-            preserveDrawingBuffer: false,
+            // A desynchronized context can be scanned out while it is cleared but not yet redrawn,
+            // which flickers unless the buffer is preserved between frames.
+            preserveDrawingBuffer: lowLatency,
             stencil: false,
             failIfMajorPerformanceCaveat: true,
+            desynchronized: lowLatency,
         };
         const gl = canvas.getContext("webgl", glAttrs) || canvas.getContext("experimental-webgl", glAttrs);
         this.gl = gl;
         if (!gl) {
             throw new Error("Unable to create a GL context");
         }
+        reportDesynchronized(gl, lowLatency);
         const checkedGl = webglDebug.makeDebugContext(gl, function (err, funcName) {
             throw new Error("Problem creating GL context: " + webglDebug.glEnumToString(err) + " in " + funcName);
         });
@@ -260,10 +276,10 @@ export function useBestFilter(canvas, filterClass) {
     return fellBackBecause(canvas, reason);
 }
 
-export function bestCanvas(canvas, filterClass) {
+export function bestCanvas(canvas, filterClass, lowLatency = true) {
     let reason;
     try {
-        return new GlCanvas(canvas, filterClass);
+        return new GlCanvas(canvas, filterClass, lowLatency);
     } catch (e) {
         // Either WebGL is unavailable or this particular filter declined it.
         reason = e?.message ?? e;
@@ -275,11 +291,11 @@ export function bestCanvas(canvas, filterClass) {
     // 2D fallback below would throw and take the emulator with it.
     if (filterClass !== PassthroughFilter) {
         try {
-            return fellBackBecause(new GlCanvas(canvas, PassthroughFilter), reason);
+            return fellBackBecause(new GlCanvas(canvas, PassthroughFilter, lowLatency), reason);
         } catch (e) {
             console.log("Unable to fall back to the passthrough filter: " + e);
         }
     }
 
-    return fellBackBecause(new Canvas(canvas), reason);
+    return fellBackBecause(new Canvas(canvas, lowLatency), reason);
 }
