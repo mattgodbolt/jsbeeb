@@ -44,11 +44,11 @@ describe("URL Parameters", () => {
             });
         });
 
-        it("should handle query strings ending with /", () => {
-            const qs = "model=B&disc=elite.ssd/";
+        it("should keep a trailing slash, which is part of the value", () => {
+            const qs = "model=B&disc=archive/sth/";
             expect(parseQueryString(qs)).toEqual({
                 model: "B",
-                disc: "elite.ssd",
+                disc: "archive/sth/",
             });
         });
 
@@ -418,8 +418,6 @@ describe("URL Parameters", () => {
             expect(parseQueryString(url.substring(1))).toEqual({ [key]: "value" });
         });
 
-        // The parser strips a trailing slash from the whole query string, which only a value in the
-        // final position can run into.
         it.each(awkwardValues)("should survive a build and parse of %j when it ends the query", (value) => {
             const url = buildUrlFromParams("", { disc1: value });
             expect(parseQueryString(url.substring(1))).toEqual({ disc1: value });
@@ -515,9 +513,9 @@ describe("URL Parameters", () => {
             );
         });
 
-        it("should not end a component in the slash the parser strips", () => {
+        it("should leave a trailing slash alone", () => {
             const url = buildUrlFromParams(baseUrl, { dir: "archive/sth/" });
-            expect(url).toBe("http://localhost:8080/index.html?dir=archive/sth%2F");
+            expect(url).toBe("http://localhost:8080/index.html?dir=archive/sth/");
             expect(parseQueryString(url.substring(url.indexOf("?") + 1))).toEqual({ dir: "archive/sth/" });
         });
 

@@ -41,12 +41,9 @@ export const ParamTypes = {
 export function parseQueryString(queryString, paramTypes = {}) {
     if (!queryString) return {};
 
-    // workaround for shonky python web server
-    const cleanQueryString = queryString.endsWith("/") ? queryString.substring(0, queryString.length - 1) : queryString;
-
     const parsedQuery = {};
 
-    cleanQueryString.split("&").forEach(function (keyval) {
+    queryString.split("&").forEach(function (keyval) {
         if (!keyval) return;
 
         const keyAndVal = keyval.split("=");
@@ -102,15 +99,12 @@ const EscapedQueryLiterals = new RegExp(
 );
 
 /**
- * Percent-encode a key or value for a query string, escaping only what the query grammar or our
- * own parser needs escaped
+ * Percent-encode a key or value for a query string, escaping only what delimits something
  * @param {string} component - The key or value to encode
  * @returns {string} The encoded component
  */
 function encodeQueryComponent(component) {
-    const encoded = encodeURIComponent(component).replace(EscapedQueryLiterals, decodeURIComponent);
-    // parseQueryString drops one trailing slash from the whole query string, so never end in one.
-    return encoded.endsWith("/") ? `${encoded.slice(0, -1)}%2F` : encoded;
+    return encodeURIComponent(component).replace(EscapedQueryLiterals, decodeURIComponent);
 }
 
 /**
