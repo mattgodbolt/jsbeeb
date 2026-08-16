@@ -51,7 +51,8 @@ describe("Video", () => {
             setDISPTMG: vi.fn(),
             setRA0: vi.fn(),
             fetchData: vi.fn(),
-            render: vi.fn(),
+            advance: vi.fn(),
+            emit: vi.fn(),
         };
 
         // Replace the teletext instance
@@ -455,9 +456,9 @@ describe("Video", () => {
             expect(mockTeletext.fetchData).toHaveBeenCalledWith(0x42);
         });
 
-        it("should call render in teletext mode", () => {
+        it("should emit pixels in teletext mode", () => {
             // Clear mock history
-            mockTeletext.render.mockClear();
+            mockTeletext.emit.mockClear();
 
             // Set up horizCounter to avoid vsync logic
             video.horizCounter = 10;
@@ -465,17 +466,18 @@ describe("Video", () => {
             // Poll to trigger rendering
             video.polltime(1);
 
-            // Verify render was called with the expected parameters
-            expect(mockTeletext.render).toHaveBeenCalledWith(expect.any(Uint32Array), expect.any(Number));
+            // Verify emit was called with the expected parameters
+            expect(mockTeletext.emit).toHaveBeenCalledWith(expect.any(Uint32Array), expect.any(Number));
         });
 
-        it("should not render in non-teletext mode", () => {
+        it("should clock the SAA5050 but emit nothing in non-teletext mode", () => {
             // Switch to non-teletext mode
             video.ula.write(0, 0);
             expect(video.teletextMode).toBe(false);
 
             // Clear mock history
-            mockTeletext.render.mockClear();
+            mockTeletext.advance.mockClear();
+            mockTeletext.emit.mockClear();
 
             // Set up horizCounter to avoid vsync logic
             video.horizCounter = 10;
@@ -483,8 +485,11 @@ describe("Video", () => {
             // Poll to trigger rendering
             video.polltime(1);
 
-            // Verify render was not called
-            expect(mockTeletext.render).not.toHaveBeenCalled();
+            // The chip keeps running whatever the ULA shows, so a control code seen here
+            // still takes effect; only its output is switched away.
+            // See https://github.com/mattgodbolt/jsbeeb/issues/832
+            expect(mockTeletext.advance).toHaveBeenCalled();
+            expect(mockTeletext.emit).not.toHaveBeenCalled();
         });
 
         it("should call fetchData even in non-teletext mode (SAA5050 pipeline always runs)", () => {
@@ -531,14 +536,14 @@ describe("Video", () => {
             expect(video.teletextMode).toBe(true);
             expect(video.halfClock).toBe(false);
 
-            mockTeletext.render.mockClear();
+            mockTeletext.emit.mockClear();
             video.horizCounter = 10;
             video.bitmapX = 100;
             video.bitmapY = 100;
 
             video.polltime(1);
 
-            expect(mockTeletext.render).not.toHaveBeenCalled();
+            expect(mockTeletext.emit).not.toHaveBeenCalled();
             expect(mockFb32[TEST_FB_OFFSET]).toBe(0xff000000);
         });
     });

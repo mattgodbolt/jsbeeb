@@ -149,6 +149,25 @@ describe("Teletext", () => {
         });
     });
 
+    describe("clocking without painting", () => {
+        // The ULA selects whether the chip's output reaches the screen; the chip itself keeps
+        // running either way, so codes seen while a bitmap mode is displayed still take effect.
+        // See https://github.com/mattgodbolt/jsbeeb/issues/832
+        it("applies a colour code clocked in while nothing was painted", () => {
+            const buffer = makeFast32(new Uint32Array(PixelsPerCell));
+            // The pipeline is three cells deep, so the code is consumed several advances after
+            // it is fetched, and every one of those happens with no call to emit.
+            const bytes = [RedGraphics, SolidBlock, Space, Space, Space];
+            bytes.forEach((byte, index) => {
+                teletext.fetchData(byte);
+                teletext.advance();
+                if (index === bytes.length - 1) teletext.emit(buffer, 0);
+            });
+
+            expect(solidOnly(buffer, Red)).toBe(true);
+        });
+    });
+
     describe("graphics", () => {
         it("separates the blocks once code 26 is seen", () => {
             const cells = renderCells([WhiteGraphics, SolidBlock, SeparatedGraphics, SolidBlock]);

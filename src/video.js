@@ -984,12 +984,15 @@ export class Video {
                 // Read data from address pointer if both horizontal and vertical display enabled.
                 const dat = this.readVideoMem();
                 if (insideBorder) {
-                    // Always feed the SAA5050 pipeline, whatever the ULA mode: IC15 latches the
-                    // video bus into the chip and it is MA13, not the ULA's teletext bit, that
-                    // gates it. We do not model the MA13 gate yet, so this feeds unconditionally.
+                    // Always clock the SAA5050, whatever the ULA mode: IC15 latches the video bus
+                    // into the chip and it is MA13, not the ULA's teletext bit, that gates it. We
+                    // do not model the MA13 gate yet, so this feeds unconditionally. The chip is
+                    // clocked here and painted later, so a control code seen while the ULA shows
+                    // bitmap still takes effect.
                     // See https://github.com/mattgodbolt/jsbeeb/issues/546
                     // and https://github.com/mattgodbolt/jsbeeb/issues/832
                     this.teletext.fetchData(dat);
+                    this.teletext.advance();
 
                     // Check cursor start.
                     if (
@@ -1034,7 +1037,7 @@ export class Video {
                         if (this.teletextMode) {
                             if (this.halfClock) {
                                 // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
-                                this.teletext.render(this.fb32, offset);
+                                this.teletext.emit(this.fb32, offset);
                             } else {
                                 // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
                                 // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
