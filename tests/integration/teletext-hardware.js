@@ -14,7 +14,7 @@ const HardwareDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../
 const Disc = path.join(HardwareDir, "teletext-tests.ssd");
 const RefDir = path.join(HardwareDir, "refs");
 const OutputDir = "tests/integration/output";
-const Pages = ["T1", "T2", "T3", "T4", "T5", "T6"];
+const Pages = ["T1", "T2", "T3", "T4", "T5", "T6", "T7"];
 
 async function renderPage(page) {
     const session = new MachineSession("Master");

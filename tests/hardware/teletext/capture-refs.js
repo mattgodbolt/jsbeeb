@@ -15,7 +15,7 @@ import { MachineSession } from "../../../src/machine-session.js";
 const ScriptDir = path.dirname(fileURLToPath(import.meta.url));
 const Disc = path.join(ScriptDir, "teletext-tests.ssd");
 const OutputDir = path.join(ScriptDir, "refs");
-const Pages = ["T1", "T2", "T3", "T4", "T5", "T6"];
+const Pages = ["T1", "T2", "T3", "T4", "T5", "T6", "T7"];
 
 async function main() {
     mkdirSync(OutputDir, { recursive: true });
