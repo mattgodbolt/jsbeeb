@@ -16,6 +16,12 @@ export class Teletext {
         this.flashTime = 0;
         this.heldChar = 0;
         this.holdChar = false;
+        // Latched by `advance` for `emit` to paint. Not snapshotted: a cell is always
+        // advanced before it is emitted, within the same video poll.
+        this.cellGlyphIndex = 0;
+        this.cellFlash = false;
+        this.cellConceal = false;
+        this.cellPalette = 0;
         // The three cell delay between the CRTC selecting a byte and it reaching the
         // screen, held as scalars: an Array here costs more per frame than the whole
         // character state machine, and stops V8 inlining fetchData.
@@ -394,13 +400,12 @@ export class Teletext {
         this.levelRA0 = level;
     }
 
-    render(buf, offset) {
+    /**
+     * Clock one character through the chip: take the oldest byte in the pipeline, apply it
+     * to the character state, and latch how the resulting cell should look.
+     */
+    advance() {
         let data = this.dataQueue0;
-
-        let scanline = this.scanlineCounter << 1;
-        if (this.levelRA0) {
-            scanline++;
-        }
 
         this.oldDbl = this.dbl;
 
@@ -420,14 +425,6 @@ export class Teletext {
             this.heldChar = 32;
         }
 
-        if (this.oldDbl) {
-            scanline = scanline >>> 1;
-            if (this.secondHalfOfDouble) {
-                scanline += 10;
-            }
-        }
-        let chardef = this.curGlyphs[(data - 32) * 20 + scanline];
-
         // Flash (code 8) is "Set After" — flashThisCell retains the pre-control-code state.
         // Steady (code 9) is "Set At" — update so this cell stops flashing immediately.
         if (flashThisCell && !this.flash) flashThisCell = false;
@@ -435,18 +432,47 @@ export class Teletext {
         // Conceal (code 24) is "Set At", and a colour code only reveals from the cell after itself.
         if (this.conceal) concealThisCell = true;
 
-        if (concealThisCell || (flashThisCell && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
-            const backgroundColour = this.colour[(this.bg & 7) << 5];
+        this.cellGlyphIndex = (data - 32) * 20;
+        this.cellFlash = flashThisCell;
+        this.cellConceal = concealThisCell;
+        this.cellPalette = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
+    }
+
+    /**
+     * Paint the cell most recently latched by `advance`. The `cell` fields come from that
+     * latch; everything else read here changes per scanline or per field, not per character.
+     */
+    emit(buf, offset) {
+        let scanline = this.scanlineCounter << 1;
+        if (this.levelRA0) {
+            scanline++;
+        }
+
+        if (this.oldDbl) {
+            scanline = scanline >>> 1;
+            if (this.secondHalfOfDouble) {
+                scanline += 10;
+            }
+        }
+
+        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
+            const backgroundColour = this.colour[this.cellPalette & 0xe0];
             for (let i = 0; i < 16; ++i) {
                 buf[offset++] = backgroundColour;
             }
         } else {
-            const paletteIndex = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
+            let chardef = this.curGlyphs[this.cellGlyphIndex + scanline];
+            const paletteIndex = this.cellPalette;
 
             for (let pixel = 0; pixel < 16; ++pixel) {
                 buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
                 chardef >>>= 2;
             }
         }
+    }
+
+    render(buf, offset) {
+        this.advance();
+        this.emit(buf, offset);
     }
 }
