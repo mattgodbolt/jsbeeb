@@ -1,0 +1,31 @@
+REM T4 black codes, conceal and background
+MODE 7
+VDU 23,1,0;0;0;0;
+AW$=CHR$135:AG$=CHR$130:AY$=CHR$131:AK$=CHR$128
+GW$=CHR$151:GK$=CHR$144
+CN$=CHR$152:NB$=CHR$157:BB$=CHR$156
+SB$=CHR$139:EB$=CHR$138
+MB$=CHR$172
+PRINT TAB(0,0);CHR$134;"T4 BLACK, CONCEAL, BACKGROUND";
+PRINT TAB(7,2);CHR$131;"0123456789012345";
+PROCrow(3,"ABLK",AW$+"AB"+AK$+"CD")
+PROCrow(4,"GBLK",GW$+MB$+MB$+GK$+MB$+MB$)
+PROCrow(6,"CNCL",AW$+"SHOWN"+CN$+"HIDDEN")
+PROCrow(7,"CNCO",AW$+"SHOWN"+CN$+"HID"+AG$+"BACK?")
+PROCrow(8,"CNGF",GW$+MB$+MB$+CN$+MB$+MB$)
+PROCrow(10,"NEWB",AY$+NB$+AW$+"WHITE ON YELLOW")
+PROCrow(11,"BLKB",AY$+NB$+AW$+"AB"+BB$+"CD")
+PROCrow(13,"BOX",AW$+"A"+SB$+"B"+EB$+"C")
+PRINT TAB(0,15);CHR$131;"Cell 0 is screen column 8.";
+PRINT TAB(0,16);CHR$131;"ABLK cells 3,4: white or invisible?";
+PRINT TAB(0,17);CHR$131;"CNCO: does the colour code reveal?";
+PRINT TAB(0,18);CHR$131;"NEWB cell 1: black or yellow?";
+PRINT TAB(0,19);CHR$131;"BLKB cell 5: black or yellow?";
+PRINT TAB(0,21);CHR$135;"Any key: menu";
+*FX15,1
+K=GET
+CHAIN "MENU"
+END
+DEF PROCrow(Y,L$,S$)
+PRINT TAB(0,Y);L$;TAB(8,Y);S$;
+ENDPROC
