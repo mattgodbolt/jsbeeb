@@ -22,13 +22,10 @@ export class Teletext {
         this.cellFlash = false;
         this.cellConceal = false;
         this.cellPalette = 0;
-        // The three cell delay between the CRTC selecting a byte and it reaching the
-        // screen, held as scalars: an Array here costs more per frame than the whole
-        // character state machine, and stops V8 inlining fetchData.
-        this.dataQueue0 = 0;
-        this.dataQueue1 = 0;
-        this.dataQueue2 = 0;
-        this.dataQueue3 = 0;
+        // The three cell delay between the CRTC selecting a byte and it reaching the screen.
+        // Copied down rather than with `copyWithin`, which over four bytes is slower than the
+        // moves it saves.
+        this.dataQueue = new Uint8Array(4);
         this.scanlineCounter = 0;
         this.levelDEW = false;
         this.levelDISPTMG = false;
@@ -190,7 +187,7 @@ export class Teletext {
             flashTime: this.flashTime,
             heldChar: this.heldChar,
             holdChar: this.holdChar,
-            dataQueue: [this.dataQueue0, this.dataQueue1, this.dataQueue2, this.dataQueue3],
+            dataQueue: [...this.dataQueue],
             scanlineCounter: this.scanlineCounter,
             levelDEW: this.levelDEW,
             levelDISPTMG: this.levelDISPTMG,
@@ -216,7 +213,7 @@ export class Teletext {
         this.flashTime = state.flashTime;
         this.heldChar = state.heldChar;
         this.holdChar = state.holdChar;
-        [this.dataQueue0, this.dataQueue1, this.dataQueue2, this.dataQueue3] = state.dataQueue;
+        this.dataQueue.set(state.dataQueue);
         this.scanlineCounter = state.scanlineCounter;
         this.levelDEW = state.levelDEW;
         this.levelDISPTMG = state.levelDISPTMG;
@@ -320,10 +317,10 @@ export class Teletext {
     }
 
     fetchData(data) {
-        this.dataQueue0 = this.dataQueue1;
-        this.dataQueue1 = this.dataQueue2;
-        this.dataQueue2 = this.dataQueue3;
-        this.dataQueue3 = data & 0x7f;
+        this.dataQueue[0] = this.dataQueue[1];
+        this.dataQueue[1] = this.dataQueue[2];
+        this.dataQueue[2] = this.dataQueue[3];
+        this.dataQueue[3] = data & 0x7f;
     }
 
     setDEW(level) {
@@ -405,7 +402,7 @@ export class Teletext {
      * to the character state, and latch how the resulting cell should look.
      */
     advance() {
-        let data = this.dataQueue0;
+        let data = this.dataQueue[0];
 
         this.oldDbl = this.dbl;
 
