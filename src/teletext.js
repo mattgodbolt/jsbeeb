@@ -16,7 +16,13 @@ export class Teletext {
         this.flashTime = 0;
         this.heldChar = 0;
         this.holdChar = false;
-        this.dataQueue = [0, 0, 0, 0];
+        // The three cell delay between the CRTC selecting a byte and it reaching the
+        // screen, held as scalars: an Array here costs more per frame than the whole
+        // character state machine, and stops V8 inlining fetchData.
+        this.dataQueue0 = 0;
+        this.dataQueue1 = 0;
+        this.dataQueue2 = 0;
+        this.dataQueue3 = 0;
         this.scanlineCounter = 0;
         this.levelDEW = false;
         this.levelDISPTMG = false;
@@ -178,7 +184,7 @@ export class Teletext {
             flashTime: this.flashTime,
             heldChar: this.heldChar,
             holdChar: this.holdChar,
-            dataQueue: [...this.dataQueue],
+            dataQueue: [this.dataQueue0, this.dataQueue1, this.dataQueue2, this.dataQueue3],
             scanlineCounter: this.scanlineCounter,
             levelDEW: this.levelDEW,
             levelDISPTMG: this.levelDISPTMG,
@@ -204,7 +210,7 @@ export class Teletext {
         this.flashTime = state.flashTime;
         this.heldChar = state.heldChar;
         this.holdChar = state.holdChar;
-        this.dataQueue = [...state.dataQueue];
+        [this.dataQueue0, this.dataQueue1, this.dataQueue2, this.dataQueue3] = state.dataQueue;
         this.scanlineCounter = state.scanlineCounter;
         this.levelDEW = state.levelDEW;
         this.levelDISPTMG = state.levelDISPTMG;
@@ -308,8 +314,10 @@ export class Teletext {
     }
 
     fetchData(data) {
-        this.dataQueue.shift();
-        this.dataQueue.push(data & 0x7f);
+        this.dataQueue0 = this.dataQueue1;
+        this.dataQueue1 = this.dataQueue2;
+        this.dataQueue2 = this.dataQueue3;
+        this.dataQueue3 = data & 0x7f;
     }
 
     setDEW(level) {
@@ -387,7 +395,7 @@ export class Teletext {
     }
 
     render(buf, offset) {
-        let data = this.dataQueue[0];
+        let data = this.dataQueue0;
 
         let scanline = this.scanlineCounter << 1;
         if (this.levelRA0) {
