@@ -1,0 +1,8 @@
+# Linguist has no BBC BASIC, so .bas falls through its ambiguous-extension
+# heuristics and lands on QuickBASIC or BASIC depending on whether the first
+# line happens to start with a line number.
+*.bas linguist-language=BASIC
+
+# BeebAsm 6502 sources. Linguist has no 6502 Assembly, and .asm is otherwise
+# decided by a classifier that can pick Motorola 68K Assembly.
+*.asm linguist-language=Assembly
