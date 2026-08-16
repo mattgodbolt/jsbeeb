@@ -16,15 +16,10 @@ export class Teletext {
         this.flashTime = 0;
         this.heldChar = 0;
         this.holdChar = false;
-        // Latched by `advance` for `emit` to paint. Not snapshotted: a cell is always
-        // advanced before it is emitted, within the same video poll.
         this.cellGlyphIndex = 0;
         this.cellFlash = false;
         this.cellConceal = false;
         this.cellPalette = 0;
-        // The three cell delay between the CRTC selecting a byte and it reaching the screen.
-        // Copied down rather than with `copyWithin`, which over four bytes is slower than the
-        // moves it saves.
         this.dataQueue = new Uint8Array(4);
         this.scanlineCounter = 0;
         this.levelDEW = false;
@@ -317,6 +312,7 @@ export class Teletext {
     }
 
     fetchData(data) {
+        // `copyWithin` over four bytes costs more than the moves it saves.
         this.dataQueue[0] = this.dataQueue[1];
         this.dataQueue[1] = this.dataQueue[2];
         this.dataQueue[2] = this.dataQueue[3];
@@ -436,8 +432,8 @@ export class Teletext {
     }
 
     /**
-     * Paint the cell most recently latched by `advance`. The `cell` fields come from that
-     * latch; everything else read here changes per scanline or per field, not per character.
+     * Paint the cell most recently latched by `advance`. Everything else read here changes
+     * per scanline or per field, not per character.
      */
     emit(buf, offset) {
         let scanline = this.scanlineCounter << 1;
