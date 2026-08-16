@@ -984,10 +984,10 @@ export class Video {
                 // Read data from address pointer if both horizontal and vertical display enabled.
                 const dat = this.readVideoMem();
                 if (insideBorder) {
-                    // Always feed the SAA5050 pipeline: on real hardware IC15
-                    // permanently connects the video bus to the SAA5050 inputs
-                    // regardless of ULA mode. Required for the "TTX trick".
-                    // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                    // Always feed the SAA5050 pipeline, whatever the ULA mode: IC15 latches the
+                    // video bus into the chip and it is MA13, not the ULA's teletext bit, that
+                    // gates it. We do not model the MA13 gate yet, so this feeds unconditionally.
+                    // See https://github.com/mattgodbolt/jsbeeb/issues/546 and #832
                     this.teletext.fetchData(dat);
 
                     // Check cursor start.
@@ -1035,10 +1035,10 @@ export class Video {
                                 // Proper MODE 7 (1MHz clock + teletext): render SAA5050 output normally.
                                 this.teletext.render(this.fb32, offset);
                             } else {
-                                // 2MHz clock + teletext bit set (the "TTX trick"): the Video ULA
-                                // forces DISPEN to the SAA5050 to 0 in 2MHz modes (0/1/2/3), so
-                                // the SAA5050 outputs black. Confirmed by Rich Talbot-Watkins (RTW)
-                                // at ABUG 2026-03-13.
+                                // 2MHz clock + teletext bit set (the "TTX trick"): the SAA5050
+                                // outputs black. Behaviour confirmed by Rich Talbot-Watkins (RTW)
+                                // at ABUG 2026-03-13; the mechanism is not established, as the
+                                // Model B ULA has no connection to the SAA5050 at all.
                                 // See https://github.com/mattgodbolt/jsbeeb/issues/546
                                 this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
                             }
