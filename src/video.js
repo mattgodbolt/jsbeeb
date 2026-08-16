@@ -987,7 +987,8 @@ export class Video {
                     // Always feed the SAA5050 pipeline, whatever the ULA mode: IC15 latches the
                     // video bus into the chip and it is MA13, not the ULA's teletext bit, that
                     // gates it. We do not model the MA13 gate yet, so this feeds unconditionally.
-                    // See https://github.com/mattgodbolt/jsbeeb/issues/546 and #832
+                    // See https://github.com/mattgodbolt/jsbeeb/issues/546
+                    // and https://github.com/mattgodbolt/jsbeeb/issues/832
                     this.teletext.fetchData(dat);
 
                     // Check cursor start.
