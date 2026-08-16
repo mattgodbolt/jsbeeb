@@ -1,6 +1,8 @@
 REM T4 black codes, conceal and background
 MODE 7
 VDU 23,1,0;0;0;0;
+PROCrule(1)
+PROCrule(24)
 AW$=CHR$135:AG$=CHR$130:AY$=CHR$131:AK$=CHR$128
 GW$=CHR$151:GK$=CHR$144
 CN$=CHR$152:NB$=CHR$157:BB$=CHR$156
@@ -17,7 +19,7 @@ PROCrow(10,"NEWB",AY$+NB$+AW$+"WHITE ON YELLOW")
 PROCrow(11,"BLKB",AY$+NB$+AW$+"AB"+BB$+"CD")
 PROCrow(13,"BOX",AW$+"A"+SB$+"B"+EB$+"C")
 PRINT TAB(0,15);CHR$131;"Cell 0 is screen column 8.";
-PRINT TAB(0,16);CHR$131;"ABLK cells 3,4: white or invisible?";
+PRINT TAB(0,16);CHR$131;"ABLK cells 4,5: white or invisible?";
 PRINT TAB(0,17);CHR$131;"CNCO: does the colour code reveal?";
 PRINT TAB(0,18);CHR$131;"NEWB cell 1: black or yellow?";
 PRINT TAB(0,19);CHR$131;"BLKB cell 5: black or yellow?";
@@ -28,4 +30,11 @@ CHAIN "MENU"
 END
 DEF PROCrow(Y,L$,S$)
 PRINT TAB(0,Y);L$;TAB(8,Y);S$;
+ENDPROC
+DEF PROCrule(Y)
+LOCAL I
+PRINT TAB(0,Y);CHR$151;
+FOR I=1 TO 38
+PRINT CHR$172;
+NEXT
 ENDPROC

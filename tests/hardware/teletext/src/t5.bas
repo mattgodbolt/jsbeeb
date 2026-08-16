@@ -1,6 +1,8 @@
 REM T5 character set reference
 MODE 7
 VDU 23,1,0;0;0;0;
+PROCrule(1)
+PROCrule(24)
 GW$=CHR$151:SG$=CHR$154:DH$=CHR$141
 A$=FNchars(&20,&3F)
 B$=FNchars(&40,&5F)
@@ -34,3 +36,10 @@ FOR C=F TO T
 S$=S$+CHR$(C+128)
 NEXT
 =S$
+DEF PROCrule(Y)
+LOCAL I
+PRINT TAB(0,Y);CHR$151;
+FOR I=1 TO 38
+PRINT CHR$172;
+NEXT
+ENDPROC
