@@ -39,8 +39,8 @@ The same disc runs under jsbeeb, so a photograph can be held against the emulato
 
     node tests/hardware/teletext/capture-refs.js
 
-run from the repository root, writes `refs/t1.png` to `refs/t6.png`. Committed copies are already
-there.
+writes `t1.png` to `t6.png` into the `refs` directory beside the script, whatever directory you run
+it from. Committed copies are already there.
 
 ## Photographing a page
 
