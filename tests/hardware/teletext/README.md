@@ -196,14 +196,17 @@ numbers columns 30 to 39. Not yet measured on hardware.
 
 Not a MODE 7 page. It is MODE 4, a 1MHz mode, with the screen start moved to &2800 so that MA13 is
 set and the SAA5050 is fed the same bytes the bitmap is showing. The bytes are &FF, which the bitmap
-shows as solid red (logical colour 1) and the SAA5050 shows as its solid block. A cycle counted
+shows as solid red (logical colour 1) and the SAA5050 shows as its block character. A cycle counted
 raster loop then flips the ULA's teletext select bit six times on each of 128 scanlines, 11 cycles
 apart: **5.5 character cells**. Alternate flips therefore land on a cell boundary and half way
 through a cell.
 
-So the picture is a red field with three white boxes across it, the boxes and the gaps between them
-all 5.5 cells wide, and the ruler rows of one cell ticks above and below it, with a half width tick
-every eight cells, are there to measure them against.
+So the picture is a red field with three boxes of teletext across it, the boxes and the gaps
+between them all 5.5 cells wide, and the ruler rows of one cell ticks above and below it, with a
+half width tick every eight cells, are there to measure them against. The boxes are a lattice of
+block glyphs rather than solid white: the SAA5050 counts its own ten scanline rows, not the CRTC's
+eight, so a blank glyph row and the blank column between characters show through. Measure the box
+edges, not the fill.
 
 What to look for is whether the boxes and gaps are **equal**, or alternate between 5 and 6 cells.
 Equal means the ULA switches its output at 2MHz regardless of the character clock, so a write half

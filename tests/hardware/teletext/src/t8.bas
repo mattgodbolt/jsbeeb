@@ -15,7 +15,7 @@ REM Straight to the CRTC: the Master MOS folds its *TV setting into R8 writes ma
 ?&FE00=8:?&FE01=0
 ?&FE00=12:?&FE01=&28
 ?&FE00=13:?&FE01=0
-DIM C% 255
+DIM C% 511:C%=(C%+255) AND -256
 FOR P=0 TO 2 STEP 2
 P%=C%
 [OPT P
