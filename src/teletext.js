@@ -469,7 +469,7 @@ export class Teletext {
         }
     }
 
-    // The second half of the cell `emit` last painted, for the render loop's 1MHz repaint.
+    // The second half of the cell `emit` last painted, for the ULA's 1MHz repaint.
     emitSecondHalf(buf, offset) {
         const scanline = this.glyphScanline();
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
