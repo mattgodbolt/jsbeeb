@@ -305,6 +305,15 @@ describe("Teletext", () => {
         expect(solidOnly(cellAt(4), White)).toBe(true);
     });
 
+    it("can paint the second half of a cell on its own", () => {
+        const [whole] = renderCells([SolidBlock], LetterA);
+        const buffer = makeFast32(new Uint32Array(PixelsPerCell)).fill(0x0badf00d);
+        teletext.emitSecondHalf(buffer, 0);
+
+        expect(Array.from(buffer.subarray(0, PixelsPerCell / 2))).toEqual(Array(PixelsPerCell / 2).fill(0x0badf00d));
+        expect(Array.from(buffer.subarray(PixelsPerCell / 2))).toEqual(Array.from(whole.subarray(PixelsPerCell / 2)));
+    });
+
     // Codes 0, 16 and 27 are reserved, 10 and 11 drive a boxing output the BBC has nothing wired to,
     // and 14 and 15 select an alternate character set the chip does not carry. Pages rely on this:
     // the Ceefax engineering page reveals its concealed text by rewriting code 24 as code 16.

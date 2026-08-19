@@ -431,11 +431,7 @@ export class Teletext {
         this.cellPalette = ((this.bg & 7) << 5) | ((this.prevCol & 7) << 2);
     }
 
-    /**
-     * Paint the cell most recently latched by `advance`. Everything else read here changes
-     * per scanline or per field, not per character.
-     */
-    emit(buf, offset) {
+    glyphScanline() {
         let scanline = this.scanlineCounter << 1;
         if (this.levelRA0) {
             scanline++;
@@ -447,6 +443,15 @@ export class Teletext {
                 scanline += 10;
             }
         }
+        return scanline;
+    }
+
+    /**
+     * Paint the cell most recently latched by `advance`. Everything else read here changes
+     * per scanline or per field, not per character.
+     */
+    emit(buf, offset) {
+        const scanline = this.glyphScanline();
 
         if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
             const backgroundColour = this.colour[this.cellPalette & 0xe0];
@@ -458,6 +463,24 @@ export class Teletext {
             const paletteIndex = this.cellPalette;
 
             for (let pixel = 0; pixel < 16; ++pixel) {
+                buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
+                chardef >>>= 2;
+            }
+        }
+    }
+
+    // The second half of the cell `emit` last painted, for the render loop's 1MHz repaint.
+    emitSecondHalf(buf, offset) {
+        const scanline = this.glyphScanline();
+        if (this.cellConceal || (this.cellFlash && this.hideFlashing) || (this.secondHalfOfDouble && !this.dbl)) {
+            const backgroundColour = this.colour[this.cellPalette & 0xe0];
+            for (let pixel = 8; pixel < 16; ++pixel) {
+                buf[offset + pixel] = backgroundColour;
+            }
+        } else {
+            let chardef = this.curGlyphs[this.cellGlyphIndex + scanline] >>> 16;
+            const paletteIndex = this.cellPalette;
+            for (let pixel = 8; pixel < 16; ++pixel) {
                 buf[offset + pixel] = this.colour[paletteIndex + (chardef & 3)];
                 chardef >>>= 2;
             }
