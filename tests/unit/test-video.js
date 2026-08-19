@@ -549,9 +549,7 @@ describe("Video", () => {
         });
     });
 
-    // In a 1MHz mode the render loop paints a whole 16 texel cell on one 2MHz tick and skips the
-    // next, but the ULA's output stage still switches at 2MHz: a register write landing on the
-    // skipped tick changes the second half of the cell that has just been painted.
+    // See Video.repaintSecondHalfOfCell.
     describe("ULA writes half way through a 1MHz cell", () => {
         const Mode4 = 0x88;
         const Mode4Teletext = 0x8a;

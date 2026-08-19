@@ -549,6 +549,8 @@ export class Video {
         this.cursorOn = state.cursorOn;
         this.cursorOff = state.cursorOff;
         this.cursorOnThisFrame = state.cursorOnThisFrame;
+        this.cursorInvertedOffset = -1;
+        this.cellData = 0;
         this.cursorDrawIndex = state.cursorDrawIndex;
         this.cursorPos = state.cursorPos;
         this.interlacedSyncAndVideo = state.interlacedSyncAndVideo;
