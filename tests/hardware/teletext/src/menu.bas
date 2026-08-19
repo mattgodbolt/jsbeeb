@@ -10,11 +10,12 @@ PRINT TAB(0,10);CHR$135;"4";CHR$134;" Black codes, conceal, background";
 PRINT TAB(0,12);CHR$135;"5";CHR$134;" Character set reference";
 PRINT TAB(0,14);CHR$135;"6";CHR$134;" Flash timing";
 PRINT TAB(0,16);CHR$135;"7";CHR$134;" Row edges";
-PRINT TAB(0,18);CHR$131;"Photograph the whole screen for each.";
-PRINT TAB(0,19);CHR$131;"Any key on a test page returns here.";
-PRINT TAB(0,21);CHR$135;"Press 1 to 7";
+PRINT TAB(0,18);CHR$135;"8";CHR$134;" ULA switching at 2MHz (MODE 4)";
+PRINT TAB(0,20);CHR$131;"Photograph the whole screen for each.";
+PRINT TAB(0,21);CHR$131;"Any key on a test page returns here.";
+PRINT TAB(0,23);CHR$135;"Press 1 to 8";
 *FX15,1
 REPEAT
 K=GET
-UNTIL K>=49 AND K<=55
+UNTIL K>=49 AND K<=56
 CHAIN "T"+CHR$K
