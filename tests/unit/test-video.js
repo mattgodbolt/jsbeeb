@@ -623,6 +623,16 @@ describe("Video", () => {
             expect(mockTeletext.emitSecondHalf).not.toHaveBeenCalled();
         });
 
+        it("leaves the frame alone while the beam is above it", () => {
+            video.ula.write(0, Mode4);
+            video.polltime(1);
+            video.bitmapY = -1;
+
+            video.ula.write(0, Mode4Teletext);
+
+            expect(mockTeletext.emitSecondHalf).not.toHaveBeenCalled();
+        });
+
         it("leaves a 2MHz mode alone, where every tick already paints", () => {
             video.ula.write(0, Mode0);
             video.polltime(1);
