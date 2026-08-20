@@ -714,7 +714,7 @@ export class Video {
     repaintSecondHalfOfCell() {
         if (!this.halfClock || !this.oddClock) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
-        if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY >= 625) return;
+        if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
         // The same line doubling decision as the render loop, which inlines it for speed.
         const doubledLines =
             (this.doubledScanlines && !this.interlacedSyncAndVideo) || this.isEvenRender === this.lastRenderWasEven;
