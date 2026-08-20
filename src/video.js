@@ -84,6 +84,7 @@ class Ula {
                 this._writeNulaPalette(val);
                 break;
         }
+        this.video.repaintSecondHalfOfCell();
     }
 
     snapshotState() {
@@ -385,7 +386,9 @@ export class Video {
         this.cursorOff = false;
         this.cursorOnThisFrame = false;
         this.cursorDrawIndex = 0;
+        this.cursorInvertedOffset = -1;
         this.cursorPos = 0;
+        this.cellData = 0;
         this.interlacedSyncAndVideo = false;
         this.doubledScanlines = true;
         this.frameSkipCount = 0;
@@ -546,6 +549,8 @@ export class Video {
         this.cursorOn = state.cursorOn;
         this.cursorOff = state.cursorOff;
         this.cursorOnThisFrame = state.cursorOnThisFrame;
+        this.cursorInvertedOffset = -1;
+        this.cellData = 0;
         this.cursorDrawIndex = state.cursorDrawIndex;
         this.cursorPos = state.cursorPos;
         this.interlacedSyncAndVideo = state.interlacedSyncAndVideo;
@@ -599,6 +604,7 @@ export class Video {
             if (this.frameCount % this.frameSkipCount) enable = 0;
         }
         this.dispEnabled |= enable;
+        this.cursorInvertedOffset = -1;
 
         this.bitmapY = 0;
         // Interlace even frame fires vsync midway through a scanline.
@@ -650,11 +656,7 @@ export class Video {
         destOffset |= 0;
         const offset = table4bppOffset(this.ulaMode, dat);
         const fb32 = this.fb32;
-        // In NULA palette mode, bypass the ULA palette (ulaPal) and look up
-        // pixel colours directly from the NULA 12-bit colour table (collook).
-        // This skips the XOR-7 logical↔physical colour mapping that the
-        // standard ULA applies.  Reference: b-em src/video.c lines 1083, 1117.
-        const colourLookup = this.ula.paletteMode ? this.ula.collook : this.ulaPal;
+        const colourLookup = this.pixelColours();
         const table4bpp = this.table4bpp;
         // Take advantage of numPixels being either 8 or 16
         if (numPixels === 8) {
@@ -668,18 +670,68 @@ export class Video {
         }
     }
 
+    // The second half of a 16 pixel cell, for the 1MHz repaint.
+    blitFbSecondHalf(dat, destOffset) {
+        const offset = table4bppOffset(this.ulaMode, dat);
+        const colourLookup = this.pixelColours();
+        for (let i = 8; i < 16; ++i) {
+            this.fb32[destOffset + i] = colourLookup[this.table4bpp[offset + i]];
+        }
+    }
+
+    // In NULA palette mode, bypass the ULA palette (ulaPal) and look up
+    // pixel colours directly from the NULA 12-bit colour table (collook).
+    // This skips the XOR-7 logical↔physical colour mapping that the
+    // standard ULA applies.  Reference: b-em src/video.c lines 1083, 1117.
+    pixelColours() {
+        return this.ula.paletteMode ? this.ula.collook : this.ulaPal;
+    }
+
     handleCursor(offset) {
         if (this.cursorOnThisFrame && this.ulactrl & this.cursorTable[this.cursorDrawIndex]) {
-            for (let i = 0; i < this.pixelsPerChar; ++i) {
-                this.fb32[offset + i] ^= 0x00ffffff;
-            }
-            if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
-                for (let i = 0; i < this.pixelsPerChar; ++i) {
-                    this.fb32[offset + 1024 + i] ^= 0x00ffffff;
-                }
-            }
+            this.invertForCursor(offset, 0);
+            this.cursorInvertedOffset = offset;
+        } else {
+            this.cursorInvertedOffset = -1;
         }
         if (++this.cursorDrawIndex === 7) this.cursorDrawIndex = 0;
+    }
+
+    invertForCursor(offset, fromPixel) {
+        for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
+            this.fb32[offset + i] ^= 0x00ffffff;
+        }
+        if (this.doubledScanlines && !this.interlacedSyncAndVideo) {
+            for (let i = fromPixel; i < this.pixelsPerChar; ++i) {
+                this.fb32[offset + 1024 + i] ^= 0x00ffffff;
+            }
+        }
+    }
+
+    // The render loop paints a whole 1MHz cell on one 2MHz tick and skips the next, but the ULA
+    // output stage switches at 2MHz: a register write landing on the skipped tick changes the
+    // second half of the cell just painted. See https://github.com/mattgodbolt/jsbeeb/issues/766
+    repaintSecondHalfOfCell() {
+        if (!this.halfClock || !this.oddClock) return;
+        if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
+        if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
+        // The same line doubling decision as the render loop, which inlines it for speed.
+        const doubledLines =
+            (this.doubledScanlines && !this.interlacedSyncAndVideo) || this.isEvenRender === this.lastRenderWasEven;
+        const bitmapRow = doubledLines ? this.bitmapY & ~1 : this.bitmapY;
+        const offset = bitmapRow * 1024 + this.bitmapX;
+        const halfCell = this.pixelsPerChar >>> 1;
+        if (this.teletextMode) {
+            this.teletext.emitSecondHalf(this.fb32, offset);
+        } else {
+            this.blitFbSecondHalf(this.cellData, offset);
+        }
+        if (doubledLines) {
+            this.fb32.copyWithin(offset + 1024 + halfCell, offset + halfCell, offset + this.pixelsPerChar);
+        }
+        if (this.cursorInvertedOffset === offset) {
+            this.invertForCursor(offset, halfCell);
+        }
     }
 
     setScreenHwScroll(viaScreenHwScroll) {
@@ -1022,6 +1074,7 @@ export class Video {
                     }
 
                     const offset = bitmapRow * 1024 + this.bitmapX;
+                    this.cellData = dat;
 
                     if ((this.dispEnabled & EVERYTHINGENABLED) === EVERYTHINGENABLED) {
                         // Note this row's logical pixel size for display
@@ -1047,14 +1100,14 @@ export class Video {
                                 this.fb32.fill(OPAQUE_BLACK, offset, offset + this.pixelsPerChar);
                             }
                         } else {
-                            this.blitFb(dat, offset, this.pixelsPerChar, doubledLines);
+                            this.blitFb(dat, offset, this.pixelsPerChar);
                         }
                         if (doubledLines) {
                             this.fb32.copyWithin(offset + 1024, offset, offset + this.pixelsPerChar);
                         }
                     }
                     if (this.cursorDrawIndex) {
-                        this.handleCursor(offset, doubledLines);
+                        this.handleCursor(offset);
                     }
                 }
             }

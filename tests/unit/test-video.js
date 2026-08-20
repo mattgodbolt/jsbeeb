@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED } from "../../src/video.js";
+import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED, OPAQUE_BLACK } from "../../src/video.js";
 import * as utils from "../../src/utils.js";
 import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../line-grid.js";
@@ -53,6 +53,7 @@ describe("Video", () => {
             fetchData: vi.fn(),
             advance: vi.fn(),
             emit: vi.fn(),
+            emitSecondHalf: vi.fn(),
         };
 
         // Replace the teletext instance
@@ -545,6 +546,130 @@ describe("Video", () => {
 
             expect(mockTeletext.emit).not.toHaveBeenCalled();
             expect(mockFb32[TEST_FB_OFFSET]).toBe(0xff000000);
+        });
+    });
+
+    // See Video.repaintSecondHalfOfCell.
+    describe("ULA writes half way through a 1MHz cell", () => {
+        const Mode4 = 0x88;
+        const Mode4Teletext = 0x8a;
+        const Mode0 = 0x9c;
+        const Red = 0xffff0000;
+        const Green = 0xff00ff00;
+        const AllPixelsSet = 0xff;
+        const CellWidth = 16;
+        const HalfCell = 8;
+        const inverted = (colour) => (colour ^ 0x00ffffff) >>> 0;
+        let offset;
+
+        // Leaves the beam at the start of a cell with the body about to run on the next tick.
+        beforeEach(() => {
+            video.dispEnabled = EVERYTHINGENABLED;
+            video.regs[7] = 30; // keep vsync, and the flyback it brings, away from the cell under test
+            video.horizCounter = 10;
+            video.bitmapX = 92;
+            video.bitmapY = 100;
+            video.oddClock = false;
+            mockCpu.videoRead.mockReturnValue(AllPixelsSet);
+            video.ulaPal.fill(Red);
+            offset = 100 * 1024 + 100;
+        });
+
+        const cell = () => Array.from(mockFb32.subarray(offset, offset + CellWidth));
+        const firstHalf = () => cell().slice(0, HalfCell);
+        const secondHalf = () => cell().slice(HalfCell);
+
+        it("repaints the second half as teletext when the teletext bit is set", () => {
+            video.ula.write(0, Mode4);
+            video.polltime(1);
+            expect(cell()).toEqual(Array(CellWidth).fill(Red));
+
+            video.ula.write(0, Mode4Teletext);
+
+            expect(mockTeletext.emitSecondHalf).toHaveBeenCalledWith(expect.any(Uint32Array), offset);
+        });
+
+        it("repaints the second half as bitmap when the teletext bit is cleared", () => {
+            video.ula.write(0, Mode4Teletext);
+            video.polltime(1);
+            expect(mockTeletext.emit).toHaveBeenCalledWith(expect.any(Uint32Array), offset);
+            expect(cell()).toEqual(Array(CellWidth).fill(OPAQUE_BLACK));
+
+            video.ula.write(0, Mode4);
+
+            expect(firstHalf()).toEqual(Array(HalfCell).fill(OPAQUE_BLACK));
+            expect(secondHalf()).toEqual(Array(HalfCell).fill(Red));
+        });
+
+        it("applies a palette write to the second half only", () => {
+            video.ula.write(0, Mode4);
+            video.polltime(1);
+
+            video.ula.write(1, 0xf0 | (7 ^ 2)); // a set pixel in a two colour mode is logical colour 15
+            expect(video.ulaPal[15]).toBe(Green);
+
+            expect(firstHalf()).toEqual(Array(HalfCell).fill(Red));
+            expect(secondHalf()).toEqual(Array(HalfCell).fill(Green));
+        });
+
+        it("leaves the cell alone when the write lands at the start of the next cell", () => {
+            video.ula.write(0, Mode4);
+            video.polltime(2);
+            const before = cell();
+
+            video.ula.write(0, Mode4Teletext);
+
+            expect(cell()).toEqual(before);
+            expect(mockTeletext.emitSecondHalf).not.toHaveBeenCalled();
+        });
+
+        it("leaves the frame alone while the beam is above it", () => {
+            video.ula.write(0, Mode4);
+            video.polltime(1);
+            video.bitmapY = -1;
+
+            video.ula.write(0, Mode4Teletext);
+
+            expect(mockTeletext.emitSecondHalf).not.toHaveBeenCalled();
+        });
+
+        it("leaves a 2MHz mode alone, where every tick already paints", () => {
+            video.ula.write(0, Mode0);
+            video.polltime(1);
+            const before = Array.from(mockFb32.subarray(offset, offset + CellWidth));
+
+            video.ula.write(1, 0xf0 | (7 ^ 2));
+
+            expect(Array.from(mockFb32.subarray(offset, offset + CellWidth))).toEqual(before);
+        });
+
+        it("repaints the doubled scanline too", () => {
+            video.doubledScanlines = true;
+            video.interlacedSyncAndVideo = false;
+            video.ula.write(0, Mode4);
+            video.polltime(1);
+            expect(Array.from(mockFb32.subarray(offset + 1024, offset + 1024 + CellWidth))).toEqual(
+                Array(CellWidth).fill(Red),
+            );
+
+            video.ula.write(1, 0xf0 | (7 ^ 2));
+
+            expect(Array.from(mockFb32.subarray(offset + 1024 + HalfCell, offset + 1024 + CellWidth))).toEqual(
+                Array(HalfCell).fill(Green),
+            );
+        });
+
+        it("keeps the cursor inverted over the repainted half", () => {
+            video.ula.write(0, Mode4 | 0x60); // cursor on both halves of the master cursor table
+            video.cursorOnThisFrame = true;
+            video.cursorDrawIndex = 3;
+            video.polltime(1);
+            expect(cell()).toEqual(Array(CellWidth).fill(inverted(Red)));
+
+            video.ula.write(1, 0xf0 | (7 ^ 2));
+
+            expect(firstHalf()).toEqual(Array(HalfCell).fill(inverted(Red)));
+            expect(secondHalf()).toEqual(Array(HalfCell).fill(inverted(Green)));
         });
     });
 
