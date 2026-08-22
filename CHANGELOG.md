@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.19.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.1...v1.19.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* apply teletext control codes seen while a bitmap mode is displayed ([#873](https://github.com/mattgodbolt/jsbeeb/issues/873)) ([90449f0](https://github.com/mattgodbolt/jsbeeb/commit/90449f0f4ae8b91582986d03705cbf5ef1420c9e))
+* let the Video ULA switch its output at 2MHz in 1MHz modes ([#877](https://github.com/mattgodbolt/jsbeeb/issues/877)) ([670923c](https://github.com/mattgodbolt/jsbeeb/commit/670923c2e9083bb6ff8ce508125c17f9d1d4534f))
+
 ## [1.19.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.0...v1.19.1) (2026-08-15)
 
 
