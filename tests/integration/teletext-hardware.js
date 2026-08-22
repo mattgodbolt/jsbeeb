@@ -5,10 +5,12 @@ import sharp from "sharp";
 import pixelmatch from "pixelmatch";
 import { Pages, RefDir, renderPage } from "../hardware/teletext/render-page.js";
 
-// The T1 to T6 reference images were photographed against a real BBC Master 128
+// The T1 to T6 and T8 reference images were checked against a real BBC Master 128
 // running MOS 3.20 and agreed with it on every page, so they pin behaviour we have
-// measured rather than behaviour we have merely chosen. T7 and T8 await a
-// photograph. See tests/hardware/teletext/README.md for what each page tests.
+// measured rather than behaviour we have merely chosen (T8's capture sat on the
+// opposite power-on clock phase, a known half-cell ambiguity; the box widths and
+// half-cell edges agreed). T7 awaits a photograph. See
+// tests/hardware/teletext/README.md for what each page tests.
 const OutputDir = "tests/integration/output";
 
 async function compareToReference(page, actualPng) {
