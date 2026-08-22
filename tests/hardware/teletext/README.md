@@ -6,7 +6,8 @@ answers are read off the photograph afterwards.
 
 ## Results so far
 
-Measured on **one BBC Master 128, MOS 3.20**, on 16 August 2026, photographed from an LCD.
+Measured on **one BBC Master 128, MOS 3.20**: T1 to T6 on 16 August 2026, photographed from an
+LCD; T8 on 22 August 2026, captured over composite.
 
 Everything measured agreed with jsbeeb, on all six pages. Two questions that were open before are
 answered:
@@ -33,13 +34,13 @@ and the markings on the character generator chip (IC14 on a Model B) with the ph
 
 ## Running it
 
-SHIFT+BREAK boots to a menu. Press 1 to 6 for a page; any key returns to the menu.
+SHIFT+BREAK boots to a menu. Press 1 to 8 for a page; any key returns to the menu.
 
 The same disc runs under jsbeeb, so a photograph can be held against the emulator's own output:
 
     node tests/hardware/teletext/capture-refs.js
 
-writes `t1.png` to `t6.png` into the `refs` directory beside the script, whatever directory you run
+writes `t1.png` to `t8.png` into the `refs` directory beside the script, whatever directory you run
 it from. Committed copies are already there.
 
 ## Photographing a page
@@ -186,13 +187,69 @@ So 16 blanked of every 64. The steady band stayed lit in all 662 frames.
 | b2      | 64 fields | 16 (3:1) | agrees   |
 | beebjit | 48 fields | 16 (2:1) | does not |
 
+## T7: row edges
+
+Bars that run to the right hand edge of the row, held and unheld, and rows that end in spaces, to
+see where the held character stops and whether anything leaks into the next row. The ruler on row 2
+numbers columns 30 to 39. Not yet measured on hardware.
+
+## T8: the ULA switches at 2MHz, even in a 1MHz mode
+
+Not a MODE 7 page. It is MODE 4, a 1MHz mode, with the screen start moved to &2800 so that MA13 is
+set and the SAA5050 is fed the same bytes the bitmap is showing. The bytes are &FF, which the bitmap
+shows as solid red (logical colour 1) and the SAA5050 shows as its block character. A cycle counted
+raster loop then flips the ULA's teletext select bit six times on each of 128 scanlines, 11 cycles
+apart: **5.5 character cells**. Alternate flips therefore land on a cell boundary and half way
+through a cell.
+
+So the picture is a red field with three boxes of teletext across it, the boxes and the gaps
+between them all 5.5 cells wide, and the ruler rows of one cell ticks above and below it, with a
+half width tick every eight cells, are there to measure them against. The boxes are a lattice of
+block glyphs rather than solid white: the SAA5050 counts its own ten scanline rows, not the CRTC's
+eight, so a blank glyph row and the blank column between characters show through. Measure the box
+edges, not the fill.
+
+What to look for is whether the boxes and gaps are **equal**, or alternate between 5 and 6 cells.
+Equal means the ULA switches its output at 2MHz regardless of the character clock, so a write half
+way through a cell changes the second half of that cell. Alternating means it only switches on cell
+boundaries.
+
+|          | boxes            |                                                                  |
+| -------- | ---------------- | ---------------------------------------------------------------- |
+| hardware | equal, 5.5 cells | the ULA's output stage runs at 2MHz whatever the character clock |
+| jsbeeb   | equal, 5.5 cells | since the fix below; 5 and 6 alternating before it               |
+
+The hardware line was confirmed on the Master on 22 August 2026, captured over composite rather
+than photographed from the LCD: the three boxes measured identical in width to the pixel, 5.5
+cells each against the ruler, with one edge of each box on a cell boundary and the other half way
+through a cell. b2 already rendered it this way. The test program that showed
+jsbeeb and beebjit rounding every flip out to a cell boundary had the same structure as this page,
+which is the publishable version of it. The fix in jsbeeb is in `video.js`: a ULA register write
+landing between the two 2MHz ticks of a 1MHz cell repaints the second half of the cell. See
+[#766](https://github.com/mattgodbolt/jsbeeb/issues/766).
+
+Two things about running it on hardware:
+
+- The loop is locked to the raster once it starts, but where the boxes sit horizontally depends on
+  when the program happened to catch vsync, to within about four cells. Only the widths matter.
+- The CPU's 1MHz bus and the video clock can come up in either of two phases at power on, half a
+  cell apart ([#876](https://github.com/mattgodbolt/jsbeeb/issues/876)). That swaps which flips
+  land on a boundary and which on a half cell, so the boxes may start on a boundary on one power
+  cycle and on a half cell on the next. They should be 5.5 cells wide either way. The 22 August
+  capture landed on the opposite phase to `refs/t8.png`: boxes starting on a boundary where the
+  reference starts on a half cell.
+
+The program writes its CRTC registers directly rather than through `VDU 23`, because MOS 3.20 folds
+the `*TV` interlace setting into R8 writes made that way and the loop needs R8 at zero to know the
+frame is exactly 312 lines.
+
 ## Building the disc
 
     beebasm -i build.asm -do teletext-tests.ssd -title "TTTESTS" -opt 3
 
 Sources are plain text BASIC in `src/`, tokenised by beebasm's `PUTBASIC`. `!BOOT` chains `MENU`.
 
-Three things to know before editing a page:
+Four things to know before editing a page:
 
 - `TAB(n)` inside a `PRINT` compares against BASIC's `COUNT`, and `TAB(x,y)` (VDU 31) does not reset
   `COUNT`. After a long line, `TAB(8)` sees a count past 8 and issues a newline instead, which puts
@@ -202,11 +259,12 @@ Three things to know before editing a page:
   cannot be padded with spaces. End the row instead.
 - Rows 1 and 24 belong to the alignment rules, and the rules stop at column 38 because printing in
   the last column of the last row scrolls the screen.
+- A `\` comment in BASIC's inline assembler ends at a colon as well as at the end of the line, and
+  what follows the colon is assembled. Keep colons out of assembler comments.
 
 ## Not covered here
 
-The teletext questions that need machine code and a reprogrammed CRTC rather than a MODE 7 page:
-mid-character changes of the teletext select bit
-([#766](https://github.com/mattgodbolt/jsbeeb/issues/766)), and teletext fed while in a bitmapped
-mode ([#832](https://github.com/mattgodbolt/jsbeeb/issues/832)). beebjit carries a test image for
-the latter at `test/display/teletext_bytes_pipeline.ssd`.
+Teletext fed while in a bitmapped mode, and the relative timing of the two pipelines
+([#832](https://github.com/mattgodbolt/jsbeeb/issues/832),
+[#876](https://github.com/mattgodbolt/jsbeeb/issues/876)). beebjit carries a test image for this at
+`test/display/teletext_bytes_pipeline.ssd`.
