@@ -8,6 +8,18 @@ const MaxQueuedMs = 250;
 
 const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 
+// Rate control: proportional control on queue occupancy, smoothed to reject
+// the producer's once-per-animation-frame burst pattern (issue #864). The
+// loop's time constant is seconds (gain 0.2/s, the old controller's pole), so
+// half a second of smoothing costs nothing in responsiveness. Proportional
+// only, deliberately: occupancy already integrates any rate offset, so adding
+// an integral term makes the loop second order (overshooting into underrun
+// and settling in ~40 s at plausible gains), and the offset it would remove
+// costs under a millisecond of static latency error at realistic clock skew.
+const OccupancySmoothingTau = 0.5;
+const ProportionalGain = 0.2;
+const MaxAdjust = InputSampleRate * 0.01;
+
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
         super(...args);
@@ -21,6 +33,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.underruns = 0;
         this.targetLatencyMs = 1000 * (1 / 50); // One frame
         this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
+        this.smoothedOccupancyError = 0;
         this.running = false;
         this.maxQueueSizeSamples = samplesFor(MaxQueuedMs);
         this.port.onmessage = (event) => {
@@ -48,6 +61,23 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         if (this.queue.length === 0) return 0;
         const timeInBufferMs = 1000 * (this.queue[0].offset / this.inputSampleRate) + this.queue[0].time;
         return Date.now() - timeInBufferMs;
+    }
+
+    _occupancySamples() {
+        return this._queueSizeSamples - (this.queue.length ? this.queue[0].offset : 0);
+    }
+
+    // Returns the resampling rate for one process() quantum of dtSeconds.
+    // Occupancy needs no clock, unlike the queue age it replaced: the age
+    // measurement stamped postMessage time rather than generation time (so it
+    // carried the producer's burst sawtooth at full amplitude) and used the
+    // non-monotonic Date.now().
+    _effectiveSampleRate(dtSeconds) {
+        const error = this._occupancySamples() - this.startQueueSizeSamples;
+        const alpha = Math.min(1, dtSeconds / OccupancySmoothingTau);
+        this.smoothedOccupancyError += alpha * (error - this.smoothedOccupancyError);
+        const adjustment = ProportionalGain * this.smoothedOccupancyError;
+        return this.inputSampleRate + Math.min(MaxAdjust, Math.max(-MaxAdjust, adjustment));
     }
 
     onBuffer(time, buffer) {
@@ -88,13 +118,10 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
         // I looked into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API),
         // but we fiddle the sample rate here to catch up with the target latency, which is harder to do with that API.
-        const outByMs = this._queueAge() - this.targetLatencyMs;
-        const maxAdjust = this.inputSampleRate * 0.01;
-        const adjustment = Math.min(maxAdjust, Math.max(-maxAdjust, outByMs * 100));
-        const effectiveSampleRate = this.inputSampleRate + adjustment;
+        const channel = outputs[0][0];
+        const effectiveSampleRate = this._effectiveSampleRate(channel.length / sampleRate);
         const sampleRatio = effectiveSampleRate / sampleRate;
 
-        const channel = outputs[0][0];
         const dt = 1 / effectiveSampleRate;
         const filterAlpha = dt / (RC + dt);
 
