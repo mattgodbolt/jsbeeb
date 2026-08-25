@@ -16,9 +16,13 @@ const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 // an integral term makes the loop second order (overshooting into underrun
 // and settling in ~40 s at plausible gains), and the offset it would remove
 // costs under a millisecond of static latency error at realistic clock skew.
+// The authority is small: clock skew and the resampler's per-quantum rounding
+// are both under 0.04%, and a slow loop with the old 1% clamp turned queue
+// disturbances (a double burst, a dropped buffer) into pitch bends of several
+// cents held for seconds. Anything the clamp cannot absorb, the queue does.
 const OccupancySmoothingTau = 0.5;
 const ProportionalGain = 0.2;
-const MaxAdjust = InputSampleRate * 0.01;
+const MaxAdjust = InputSampleRate * 0.001;
 
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {

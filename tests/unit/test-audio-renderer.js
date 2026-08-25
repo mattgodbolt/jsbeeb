@@ -126,6 +126,25 @@ describe("SoundChipProcessor rate control", () => {
         expect(under._effectiveSampleRate(0)).toBeLessThan(under.inputSampleRate);
     });
 
+    it("should never bend pitch audibly, however far the queue is from target", () => {
+        // Queue disturbances are the queue's problem, not the pitch's: the
+        // controller's authority stays under two cents (0.1%) in both directions.
+        const outputs = [[new Float32Array(OutputQuantum)]];
+        const over = new SoundChipProcessor();
+        for (let i = 0; i < Math.ceil((5 * over.startQueueSizeSamples) / 512); ++i)
+            over.onBuffer(Date.now(), new Float32Array(512));
+        for (let i = 0; i < 400; ++i) over.process([], outputs);
+        expect(over._effectiveSampleRate(0)).toBeLessThanOrEqual(over.inputSampleRate + over.inputSampleRate * 0.001);
+
+        const under = new SoundChipProcessor();
+        under.onBuffer(Date.now(), new Float32Array(512));
+        under.running = true;
+        for (let i = 0; i < 400; ++i) under.process([], outputs);
+        expect(under._effectiveSampleRate(0)).toBeGreaterThanOrEqual(
+            under.inputSampleRate - under.inputSampleRate * 0.001,
+        );
+    });
+
     it("should converge the queue occupancy to the target", () => {
         const proc = new SoundChipProcessor();
         // Start a target's worth over target; production then matches
