@@ -229,6 +229,8 @@ Contains ~20 scalar fields for SAA5050 rendering state. Glyph table references a
 | `sineOn`          | boolean      | Sine tone generator active                     |
 | `sineStep`        | number       | Sine generator step size                       |
 | `sineTime`        | number       | Sine generator phase                           |
+| `dcPrevIn`        | number       | DC blocker previous input (0 if absent)        |
+| `dcPrevOut`       | number       | DC blocker previous output (0 if absent)       |
 
 ### ACIA (`state.acia`)
 
