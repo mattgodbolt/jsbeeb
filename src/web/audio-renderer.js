@@ -8,6 +8,13 @@ const MaxQueuedMs = 250;
 
 const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 
+// Smoothing rejects the producer's per-frame bursts; proportional only, as
+// occupancy already integrates rate error; 0.05% authority covers clock skew
+// without audibly bending pitch.
+const OccupancySmoothingTau = 0.5;
+const ProportionalGain = 0.2;
+const MaxAdjust = InputSampleRate * 0.0005;
+
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
         super(...args);
@@ -15,12 +22,15 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.inputSampleRate = InputSampleRate;
         this._lastSample = 0;
         this._lastFilteredOutput = 0;
+        this._phase = 0;
+        this._source = new Float32Array(0);
         this.queue = [];
         this._queueSizeSamples = 0;
         this.dropped = 0;
         this.underruns = 0;
         this.targetLatencyMs = 1000 * (1 / 50); // One frame
         this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
+        this.smoothedOccupancyError = 0;
         this.running = false;
         this.maxQueueSizeSamples = samplesFor(MaxQueuedMs);
         this.port.onmessage = (event) => {
@@ -48,6 +58,18 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         if (this.queue.length === 0) return 0;
         const timeInBufferMs = 1000 * (this.queue[0].offset / this.inputSampleRate) + this.queue[0].time;
         return Date.now() - timeInBufferMs;
+    }
+
+    _occupancySamples() {
+        return this._queueSizeSamples - (this.queue.length ? this.queue[0].offset : 0);
+    }
+
+    _effectiveSampleRate(dtSeconds) {
+        const error = this._occupancySamples() - this.startQueueSizeSamples;
+        const alpha = Math.min(1, dtSeconds / OccupancySmoothingTau);
+        this.smoothedOccupancyError += alpha * (error - this.smoothedOccupancyError);
+        const adjustment = ProportionalGain * this.smoothedOccupancyError;
+        return this.inputSampleRate + Math.min(MaxAdjust, Math.max(-MaxAdjust, adjustment));
     }
 
     onBuffer(time, buffer) {
@@ -88,30 +110,34 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
         // I looked into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API),
         // but we fiddle the sample rate here to catch up with the target latency, which is harder to do with that API.
-        const outByMs = this._queueAge() - this.targetLatencyMs;
-        const maxAdjust = this.inputSampleRate * 0.01;
-        const adjustment = Math.min(maxAdjust, Math.max(-maxAdjust, outByMs * 100));
-        const effectiveSampleRate = this.inputSampleRate + adjustment;
+        const channel = outputs[0][0];
+        const effectiveSampleRate = this._effectiveSampleRate(channel.length / sampleRate);
         const sampleRatio = effectiveSampleRate / sampleRate;
 
-        const channel = outputs[0][0];
         const dt = 1 / effectiveSampleRate;
         const filterAlpha = dt / (RC + dt);
 
-        const numInputSamples = Math.round(sampleRatio * channel.length);
-        const source = new Float32Array(numInputSamples);
+        // The fractional read position carries across quanta, so consumption
+        // averages exactly sampleRatio and the pitch never steps at a rounding
+        // boundary. source[0] is the last input sample of the previous quantum.
+        const end = this._phase + channel.length * sampleRatio;
+        const numInputSamples = Math.floor(end);
+        if (this._source.length <= numInputSamples) this._source = new Float32Array(numInputSamples * 2);
+        const source = this._source;
+        source[0] = this._lastFilteredOutput;
         let prevSample = this._lastFilteredOutput;
-        for (let i = 0; i < numInputSamples; ++i) {
+        for (let i = 1; i <= numInputSamples; ++i) {
             prevSample += filterAlpha * (this.nextSample() - prevSample);
             source[i] = prevSample;
         }
         this._lastFilteredOutput = prevSample;
         for (let i = 0; i < channel.length; i++) {
-            const pos = (i + 0.5) * sampleRatio;
+            const pos = this._phase + i * sampleRatio;
             const loc = Math.floor(pos);
             const alpha = pos - loc;
             channel[i] = source[loc] * (1 - alpha) + source[loc + 1] * alpha;
         }
+        this._phase = end - numInputSamples;
         this.stats(sampleRatio);
         return true;
     }
