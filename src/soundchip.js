@@ -194,8 +194,8 @@ export class SoundChip {
                 this.generators[i](i, out, offset, length);
             }
         }
-        // Runs over muted (all-zero) output too, so the pedestal decays away
-        // on mute like the real circuit instead of vanishing in a step.
+        // Runs over muted (all-zero) output too: skipping it would leave
+        // stale filter state to discharge as a spurious transient at unmute.
         for (let i = 0; i < length; ++i) {
             const x = out[i + offset];
             this.dcPrevOut = x - this.dcPrevIn + this.dcAlpha * this.dcPrevOut;
