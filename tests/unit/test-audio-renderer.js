@@ -55,23 +55,32 @@ function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
         return rate;
     };
 
-    const dtOut = OutputQuantum / globalThis.sampleRate;
-    const outputs = [[new Float32Array(OutputQuantum)]];
-    let nextBurst = 0;
-    let pendingSamples = 0;
-    while (simTime < seconds) {
-        if (simTime >= nextBurst) {
-            pendingSamples += proc.inputSampleRate / frameRateHz;
-            while (pendingSamples >= 512) {
-                proc.onBuffer(Date.now(), new Float32Array(512));
-                pendingSamples -= 512;
+    // cleanQueue judges buffer age against Date.now(), so drive the clock
+    // from simulated time: on the real clock a slow run (say a GC pause
+    // longer than the 40 ms age cap) could drop buffers mid-test.
+    const start = Date.now();
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => start + simTime * 1000);
+    try {
+        const dtOut = OutputQuantum / globalThis.sampleRate;
+        const outputs = [[new Float32Array(OutputQuantum)]];
+        let nextBurst = 0;
+        let pendingSamples = 0;
+        while (simTime < seconds) {
+            if (simTime >= nextBurst) {
+                pendingSamples += proc.inputSampleRate / frameRateHz;
+                while (pendingSamples >= 512) {
+                    proc.onBuffer(Date.now(), new Float32Array(512));
+                    pendingSamples -= 512;
+                }
+                nextBurst += 1 / frameRateHz;
             }
-            nextBurst += 1 / frameRateHz;
+            proc.process([], outputs);
+            simTime += dtOut;
         }
-        proc.process([], outputs);
-        simTime += dtOut;
+    } finally {
+        clock.mockRestore();
+        proc._effectiveSampleRate = originalRate;
     }
-    proc._effectiveSampleRate = originalRate;
     return rates;
 }
 
@@ -119,14 +128,16 @@ describe("SoundChipProcessor rate control", () => {
 
     it("should converge the queue occupancy to the target", () => {
         const proc = new SoundChipProcessor();
-        // Start with twice the target queued; production then matches
-        // consumption, so only the controller can drain the excess.
-        for (let i = 0; i < Math.ceil((2 * proc.startQueueSizeSamples) / 512); ++i)
+        // Start a target's worth over target; production then matches
+        // consumption, so only the controller can drain the excess. (Any
+        // higher an excess and the 40 ms age cap, not the controller, would
+        // shed it: the post-burst backlog must stay under 20000 samples.)
+        for (let i = 0; i < Math.ceil(proc.startQueueSizeSamples / 512); ++i)
             proc.onBuffer(Date.now(), new Float32Array(512));
-        simulate(proc, 25, { frameRateHz: 60 });
+        simulate(proc, 20, { frameRateHz: 60 });
         // Instantaneous occupancy rides the burst sawtooth (a whole frame's
         // samples, ~8300 peak to peak), so judge the smoothed error instead.
-        expect(Math.abs(proc.smoothedOccupancyError)).toBeLessThan(proc.startQueueSizeSamples * 0.2);
+        expect(Math.abs(proc.smoothedOccupancyError)).toBeLessThan(proc.startQueueSizeSamples * 0.1);
         expect(proc.underruns).toBe(0);
         expect(proc.dropped).toBe(0);
     });
