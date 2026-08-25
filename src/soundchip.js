@@ -194,9 +194,6 @@ export class SoundChip {
                 this.generators[i](i, out, offset, length);
             }
         }
-        // The blocker models circuitry downstream of the chip, so it
-        // processes everything the chip emits, muted (all-zero) output
-        // included.
         const alpha = this.dcAlpha;
         let prevIn = this.dcPrevIn;
         let prevOut = this.dcPrevOut;
