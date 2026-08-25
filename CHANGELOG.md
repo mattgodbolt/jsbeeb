@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.19.3](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.2...v1.19.3) (2026-08-25)
+
+
+### Bug Fixes
+
+* cancel the sound chip's DC pedestal as the hardware does ([#879](https://github.com/mattgodbolt/jsbeeb/issues/879)) ([4e1ab49](https://github.com/mattgodbolt/jsbeeb/commit/4e1ab4976cdf9551a003637587e33dc11a0d62e6))
+* replace the resonant output filter with the board's actual response ([#880](https://github.com/mattgodbolt/jsbeeb/issues/880)) ([43c750f](https://github.com/mattgodbolt/jsbeeb/commit/43c750fa32b0005b89919bf1c3d8fa7f907338bd))
+* stop the audio rate control warbling at the display frame rate ([#881](https://github.com/mattgodbolt/jsbeeb/issues/881)) ([d6bfd8c](https://github.com/mattgodbolt/jsbeeb/commit/d6bfd8cb3447850b750de40fe70330e89b726710))
+
 ## [1.19.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.1...v1.19.2) (2026-08-22)
 
 
