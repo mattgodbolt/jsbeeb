@@ -55,6 +55,79 @@ describe("SoundChip advance", () => {
     });
 });
 
+// Amplitude of the frequency-bin component at freq, via the Goertzel algorithm.
+function goertzelAmplitude(samples, freq, sampleRate) {
+    const w = (2 * Math.PI * freq) / sampleRate;
+    const coeff = 2 * Math.cos(w);
+    let s1 = 0;
+    let s2 = 0;
+    for (const sample of samples) {
+        const s0 = sample + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
+}
+
+describe("SoundChip DC restoration", () => {
+    // 500 kHz chip rate; the blocker's 47 ms time constant settles well inside half a second.
+    const SettleSamples = 250000;
+
+    function settle(chip, scratch) {
+        for (let done = 0; done < SettleSamples; done += scratch.length) chip.generate(scratch, 0, scratch.length);
+    }
+
+    it("should centre a steady tone around zero instead of riding a pedestal", () => {
+        const { chip } = makeSoundChip();
+        chip.poke(0x80 | 0x00); // channel 0, period low nibble
+        chip.poke(0x20); // period high bits: period 512, a 2048-sample square
+        chip.poke(0x90 | 0x00); // channel 0, full volume
+        const out = new Float32Array(4096); // exactly two square-wave periods
+        settle(chip, out);
+        chip.generate(out, 0, out.length);
+
+        let mean = 0;
+        let min = Infinity;
+        let max = -Infinity;
+        for (const sample of out) {
+            mean += sample;
+            min = Math.min(min, sample);
+            max = Math.max(max, sample);
+        }
+        mean /= out.length;
+        // Unipolar output would have mean vol/2 = 0.125 and min 0.
+        expect(Math.abs(mean)).toBeLessThan(0.01);
+        expect(max).toBeGreaterThan(0.1);
+        expect(min).toBeLessThan(-0.1);
+    });
+
+    it("should preserve volume-register PCM on a period-1 carrier", () => {
+        // Sampled speech sets tone period 1 (a 125 kHz carrier) and writes the
+        // sample data to the volume register: the audio is the carrier's mean
+        // level, vol/2. A zero-mean (bipolar) output would silence it, which
+        // is why the generators stay unipolar (issue #863).
+        const { chip } = makeSoundChip();
+        chip.poke(0x80 | 0x01); // channel 0, period 1
+        chip.poke(0x00);
+        const half = 250; // half a 1 kHz modulation period at 500 kHz
+        const chunk = new Float32Array(half);
+        settle(chip, chunk);
+
+        const modulated = [];
+        const totalHalves = 100; // 50 cycles of 1 kHz, an integral Goertzel bin
+        for (let i = 0; i < totalHalves; ++i) {
+            chip.poke(0x90 | (i % 2 ? 0x08 : 0x00));
+            chip.generate(chunk, 0, half);
+            modulated.push(...chunk);
+        }
+        // Means are vol/2 = 0.125 and 0.0198, so the 1 kHz square modulation
+        // has a fundamental of ((0.125 - 0.0198) / 2) * 4/pi = 0.067.
+        const amplitude = goertzelAmplitude(modulated, 1000, chip.soundchipFreq);
+        expect(amplitude).toBeGreaterThan(0.05);
+        expect(amplitude).toBeLessThan(0.09);
+    });
+});
+
 describe("SoundChip snapshotState / restoreState", () => {
     it("should snapshot and restore tone channel registers", () => {
         const { chip } = makeSoundChip();
