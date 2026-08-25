@@ -174,8 +174,12 @@ const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 let fastAsPossible = false;
 let fastTape = false;
 let noSeek;
-let audioFilterFreq = 7000;
-let audioFilterQ = 5;
+// The board's output filter is an equal-component Sallen-Key (Service Manual
+// section 3.8: 10K and 2n2 twice, gain 1 + 22/39): f0 = 1/(2*pi*RC) = 7234 Hz,
+// Q = 1/(3 - K) = 0.696, below 1/sqrt(2), so no resonant peak. BiquadFilterNode
+// takes lowpass Q in decibels: 20*log10(0.696) = -3.15.
+let audioFilterFreq = 7234;
+let audioFilterQ = -3.15;
 let stationId = 101;
 let econet = null;
 
