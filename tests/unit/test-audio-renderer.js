@@ -82,8 +82,8 @@ function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
 
 describe("SoundChipProcessor rate control", () => {
     it("should not modulate the playback rate with the producer's frame-rate sawtooth", () => {
-        // Judge the 60 Hz component specifically: the total swing also carries a
-        // slow (~15 s), inaudible limit cycle from the resampler's rounding.
+        // Judge the 60 Hz component specifically: the total swing also carries the
+        // startup glide as the loop settles.
         const proc = new SoundChipProcessor();
         const rates = simulate(proc, 6, { frameRateHz: 60, collectAfter: 3 });
         const controlRate = globalThis.sampleRate / OutputQuantum;
@@ -125,15 +125,34 @@ describe("SoundChipProcessor rate control", () => {
         for (let i = 0; i < Math.ceil((5 * over.startQueueSizeSamples) / 512); ++i)
             over.onBuffer(Date.now(), new Float32Array(512));
         for (let i = 0; i < 400; ++i) over.process([], outputs);
-        expect(over._effectiveSampleRate(0)).toBeLessThanOrEqual(over.inputSampleRate + over.inputSampleRate * 0.001);
+        expect(over._effectiveSampleRate(0)).toBeLessThanOrEqual(over.inputSampleRate + over.inputSampleRate * 0.0005);
 
         const under = new SoundChipProcessor();
         under.onBuffer(Date.now(), new Float32Array(512));
         under.running = true;
         for (let i = 0; i < 400; ++i) under.process([], outputs);
         expect(under._effectiveSampleRate(0)).toBeGreaterThanOrEqual(
-            under.inputSampleRate - under.inputSampleRate * 0.001,
+            under.inputSampleRate - under.inputSampleRate * 0.0005,
         );
+    });
+
+    it("should consume exactly the resampling ratio, never rounding it per quantum", () => {
+        // Rounding the per-quantum consumption quantises the pitch in steps of
+        // one part in ~1300 (1.3 cents), audible once the rate stops jittering.
+        const proc = new SoundChipProcessor();
+        for (let i = 0; i < 60; ++i) proc.onBuffer(Date.now(), new Float32Array(512));
+        const outputs = [[new Float32Array(OutputQuantum)]];
+        const before = proc._occupancySamples();
+        let expected = 0;
+        const originalRate = proc._effectiveSampleRate.bind(proc);
+        proc._effectiveSampleRate = (dt) => {
+            const rate = originalRate(dt);
+            expected += (OutputQuantum * rate) / globalThis.sampleRate;
+            return rate;
+        };
+        for (let i = 0; i < 20; ++i) proc.process([], outputs);
+        expect(proc.underruns).toBe(0);
+        expect(Math.abs(before - proc._occupancySamples() - expected)).toBeLessThan(1);
     });
 
     it("should converge the queue occupancy to the target", () => {

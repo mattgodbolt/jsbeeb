@@ -9,11 +9,11 @@ const MaxQueuedMs = 250;
 const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 
 // Smoothing rejects the producer's per-frame bursts; proportional only, as
-// occupancy already integrates rate error; 0.1% authority covers clock skew
-// and resampler rounding without audibly bending pitch.
+// occupancy already integrates rate error; 0.05% authority covers clock skew
+// without audibly bending pitch.
 const OccupancySmoothingTau = 0.5;
 const ProportionalGain = 0.2;
-const MaxAdjust = InputSampleRate * 0.001;
+const MaxAdjust = InputSampleRate * 0.0005;
 
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(...args) {
@@ -22,6 +22,8 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.inputSampleRate = InputSampleRate;
         this._lastSample = 0;
         this._lastFilteredOutput = 0;
+        this._phase = 0;
+        this._source = new Float32Array(0);
         this.queue = [];
         this._queueSizeSamples = 0;
         this.dropped = 0;
@@ -115,20 +117,27 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         const dt = 1 / effectiveSampleRate;
         const filterAlpha = dt / (RC + dt);
 
-        const numInputSamples = Math.round(sampleRatio * channel.length);
-        const source = new Float32Array(numInputSamples);
+        // The fractional read position carries across quanta, so consumption
+        // averages exactly sampleRatio and the pitch never steps at a rounding
+        // boundary. source[0] is the last input sample of the previous quantum.
+        const end = this._phase + channel.length * sampleRatio;
+        const numInputSamples = Math.floor(end);
+        if (this._source.length <= numInputSamples) this._source = new Float32Array(numInputSamples * 2);
+        const source = this._source;
+        source[0] = this._lastFilteredOutput;
         let prevSample = this._lastFilteredOutput;
-        for (let i = 0; i < numInputSamples; ++i) {
+        for (let i = 1; i <= numInputSamples; ++i) {
             prevSample += filterAlpha * (this.nextSample() - prevSample);
             source[i] = prevSample;
         }
         this._lastFilteredOutput = prevSample;
         for (let i = 0; i < channel.length; i++) {
-            const pos = (i + 0.5) * sampleRatio;
+            const pos = this._phase + i * sampleRatio;
             const loc = Math.floor(pos);
             const alpha = pos - loc;
             channel[i] = source[loc] * (1 - alpha) + source[loc + 1] * alpha;
         }
+        this._phase = end - numInputSamples;
         this.stats(sampleRatio);
         return true;
     }
