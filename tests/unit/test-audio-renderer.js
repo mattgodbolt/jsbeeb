@@ -85,6 +85,11 @@ describe("SoundChipProcessor rate control", () => {
         // Judge the 60 Hz component specifically: the total swing also carries the
         // startup glide as the loop settles.
         const proc = new SoundChipProcessor();
+        // Start on target (half a burst below the threshold) so the loop is
+        // live rather than pinned at its clamp for the whole window.
+        for (let i = 0; i < Math.round(proc.startQueueSizeSamples / 2 / 512); ++i)
+            proc.onBuffer(Date.now(), new Float32Array(512));
+        proc.running = true;
         const rates = simulate(proc, 6, { frameRateHz: 60, collectAfter: 3 });
         const controlRate = globalThis.sampleRate / OutputQuantum;
         expect(rates.length).toBeGreaterThan(1000);
