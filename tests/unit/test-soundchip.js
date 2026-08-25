@@ -223,6 +223,32 @@ describe("SoundChip snapshotState / restoreState", () => {
         expect(chip2.latchedRegister).toBe(0x60);
     });
 
+    it("should snapshot and restore the DC blocker state", () => {
+        const { chip } = makeSoundChip();
+        chip.dcPrevIn = 0.125;
+        chip.dcPrevOut = -0.0625;
+
+        const snapshot = chip.snapshotState();
+        const { chip: chip2 } = makeSoundChip();
+        chip2.restoreState(snapshot);
+
+        expect(chip2.dcPrevIn).toBeCloseTo(0.125);
+        expect(chip2.dcPrevOut).toBeCloseTo(-0.0625);
+    });
+
+    it("should zero the DC blocker for snapshots that predate it", () => {
+        const { chip } = makeSoundChip();
+        const snapshot = chip.snapshotState();
+        delete snapshot.dcPrevIn;
+        delete snapshot.dcPrevOut;
+        chip.dcPrevIn = 0.5;
+        chip.dcPrevOut = 0.5;
+        chip.restoreState(snapshot);
+
+        expect(chip.dcPrevIn).toBe(0);
+        expect(chip.dcPrevOut).toBe(0);
+    });
+
     it("should snapshot and restore sine generator state", () => {
         const { chip } = makeSoundChip();
         chip.sineOn = true;

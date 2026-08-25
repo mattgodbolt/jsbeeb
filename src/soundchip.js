@@ -317,6 +317,8 @@ export class SoundChip {
             sineOn: this.sineOn,
             sineStep: this.sineStep,
             sineTime: this.sineTime,
+            dcPrevIn: this.dcPrevIn,
+            dcPrevOut: this.dcPrevOut,
         };
     }
 
@@ -339,11 +341,12 @@ export class SoundChip {
         // Rebind the LFSR function based on noise register
         this.shiftLfsr =
             this.registers[3] & 4 ? this.shiftLfsrWhiteNoise.bind(this) : this.shiftLfsrPeriodicNoise.bind(this);
-        // Reset output buffer and DC blocker
+        // Reset output buffer
         this.position = 0;
         this.buffer.fill(0);
-        this.dcPrevIn = 0;
-        this.dcPrevOut = 0;
+        // Older snapshots predate the DC blocker
+        this.dcPrevIn = state.dcPrevIn ?? 0;
+        this.dcPrevOut = state.dcPrevOut ?? 0;
     }
 
     reset(hard) {
