@@ -41,10 +41,8 @@ function goertzelAmplitude(samples, freq, rate) {
     return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
 }
 
-// Drives the processor as the real system does: the producer delivers a whole
-// animation frame's worth of 512-sample buffers in one burst, the consumer
-// runs one 128-frame quantum at a time. Returns every effective sample rate
-// the controller computed after collectAfter seconds.
+// Producer delivers a frame's worth of 512-sample buffers per burst, consumer
+// runs 128-frame quanta. Returns the rates computed after collectAfter seconds.
 function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
     const rates = [];
     const originalRate = proc._effectiveSampleRate.bind(proc);
@@ -55,9 +53,7 @@ function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
         return rate;
     };
 
-    // cleanQueue judges buffer age against Date.now(), so drive the clock
-    // from simulated time: on the real clock a slow run (say a GC pause
-    // longer than the 40 ms age cap) could drop buffers mid-test.
+    // cleanQueue's age cap reads Date.now(), so it must see simulated time too.
     const start = Date.now();
     const clock = vi.spyOn(Date, "now").mockImplementation(() => start + simTime * 1000);
     try {
@@ -86,11 +82,8 @@ function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
 
 describe("SoundChipProcessor rate control", () => {
     it("should not modulate the playback rate with the producer's frame-rate sawtooth", () => {
-        // Issue #864: the old queue-age controller carried the 60 Hz burst
-        // pattern into the resampling rate at ~6.7 cents peak to peak, about
-        // 2000 Hz of input-rate swing at 60 Hz. Judge the 60 Hz component
-        // specifically: the total swing also contains a much slower (~15 s)
-        // inaudible limit cycle from the resampler's per-quantum rounding.
+        // Judge the 60 Hz component specifically: the total swing also carries a
+        // slow (~15 s), inaudible limit cycle from the resampler's rounding.
         const proc = new SoundChipProcessor();
         const rates = simulate(proc, 6, { frameRateHz: 60, collectAfter: 3 });
         const controlRate = globalThis.sampleRate / OutputQuantum;
@@ -127,8 +120,6 @@ describe("SoundChipProcessor rate control", () => {
     });
 
     it("should never bend pitch audibly, however far the queue is from target", () => {
-        // Queue disturbances are the queue's problem, not the pitch's: the
-        // controller's authority stays under two cents (0.1%) in both directions.
         const outputs = [[new Float32Array(OutputQuantum)]];
         const over = new SoundChipProcessor();
         for (let i = 0; i < Math.ceil((5 * over.startQueueSizeSamples) / 512); ++i)
@@ -147,10 +138,8 @@ describe("SoundChipProcessor rate control", () => {
 
     it("should converge the queue occupancy to the target", () => {
         const proc = new SoundChipProcessor();
-        // Start a target's worth over target; production then matches
-        // consumption, so only the controller can drain the excess. (Any
-        // higher an excess and the 40 ms age cap, not the controller, would
-        // shed it: the post-burst backlog must stay under 20000 samples.)
+        // A target's worth over is the most the 40 ms age cap leaves the
+        // controller to drain, rather than shedding it itself.
         for (let i = 0; i < Math.ceil(proc.startQueueSizeSamples / 512); ++i)
             proc.onBuffer(Date.now(), new Float32Array(512));
         simulate(proc, 20, { frameRateHz: 60 });
