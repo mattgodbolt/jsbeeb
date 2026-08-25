@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as bootstrap from "bootstrap";
+
 import { AudioHandler } from "../../src/web/audio-handler.js";
 
 const SuspendedText = "Your browser has suspended audio";
@@ -127,7 +129,21 @@ describe("AudioHandler", () => {
         };
 
         beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
-        afterEach(() => vi.restoreAllMocks());
+
+        // A toast left mid-show leaks timers past this file's jsdom window:
+        // bootstrap fakes transitionend with an uncancellable short timer,
+        // which in turn arms the five second autohide. Let the transition
+        // finish while this window is still current, then dispose to cancel
+        // the autohide; either timer firing later crashes the run from
+        // whichever test file is running at the time.
+        afterEach(async () => {
+            vi.restoreAllMocks();
+            await vi.waitFor(() => {
+                for (const el of document.querySelectorAll(".toast"))
+                    expect(el.classList.contains("showing")).toBe(false);
+            });
+            for (const el of document.querySelectorAll(".toast")) bootstrap.Toast.getInstance(el)?.dispose();
+        });
 
         it("says there will be no sound in the banner, and leaves it up", async () => {
             stubAudio({ addModule: rejectModule("audio-renderer") });

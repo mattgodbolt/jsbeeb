@@ -5,6 +5,13 @@ const speakerVolume = 0.5;
 // Samples per output chunk handed to the onBuffer callback.
 export const SoundBufferSamples = 512;
 
+// The BBC's DC restoration circuit (Service Manual section 3.8: R8 10K, C2
+// 4u7) cancels the SN76489's unipolar pedestal. Modelled as a first-order DC
+// blocker with the same corner, 1/(2*pi*R*C). The generators must stay
+// unipolar: sampled speech is amplitude modulation of a 125 kHz carrier's
+// mean level, which a zero-mean output would silence (see issue #863).
+const DcRestoreCornerHz = 1 / (2 * Math.PI * 10e3 * 4.7e-6);
+
 const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -71,6 +78,10 @@ export class SoundChip {
         this.residual = 0;
         this.position = 0;
         this.buffer = new Float32Array(SoundBufferSamples);
+
+        this.dcAlpha = 1 - (2 * Math.PI * DcRestoreCornerHz) / sampleRate;
+        this.dcPrevIn = 0;
+        this.dcPrevOut = 0;
 
         this.latchedRegister = 0;
         this.slowDataBus = 0;
@@ -178,10 +189,22 @@ export class SoundChip {
         for (let i = 0; i < length; ++i) {
             out[i + offset] = 0.0;
         }
-        if (!this.enabled) return;
-        for (let i = 0; i < this.generators.length; ++i) {
-            this.generators[i](i, out, offset, length);
+        if (this.enabled) {
+            for (let i = 0; i < this.generators.length; ++i) {
+                this.generators[i](i, out, offset, length);
+            }
         }
+        const alpha = this.dcAlpha;
+        let prevIn = this.dcPrevIn;
+        let prevOut = this.dcPrevOut;
+        for (let i = 0; i < length; ++i) {
+            const x = out[i + offset];
+            prevOut = x - prevIn + alpha * prevOut;
+            prevIn = x;
+            out[i + offset] = prevOut;
+        }
+        this.dcPrevIn = prevIn;
+        this.dcPrevOut = prevOut;
     }
 
     catchUp() {
@@ -297,6 +320,8 @@ export class SoundChip {
             sineOn: this.sineOn,
             sineStep: this.sineStep,
             sineTime: this.sineTime,
+            dcPrevIn: this.dcPrevIn,
+            dcPrevOut: this.dcPrevOut,
         };
     }
 
@@ -322,6 +347,9 @@ export class SoundChip {
         // Reset output buffer
         this.position = 0;
         this.buffer.fill(0);
+        // Older snapshots predate the DC blocker
+        this.dcPrevIn = state.dcPrevIn ?? 0;
+        this.dcPrevOut = state.dcPrevOut ?? 0;
     }
 
     reset(hard) {
