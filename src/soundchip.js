@@ -194,14 +194,20 @@ export class SoundChip {
                 this.generators[i](i, out, offset, length);
             }
         }
-        // Runs over muted (all-zero) output too: skipping it would leave
-        // stale filter state to discharge as a spurious transient at unmute.
+        // The blocker models circuitry downstream of the chip, so it
+        // processes everything the chip emits, muted (all-zero) output
+        // included.
+        const alpha = this.dcAlpha;
+        let prevIn = this.dcPrevIn;
+        let prevOut = this.dcPrevOut;
         for (let i = 0; i < length; ++i) {
             const x = out[i + offset];
-            this.dcPrevOut = x - this.dcPrevIn + this.dcAlpha * this.dcPrevOut;
-            this.dcPrevIn = x;
-            out[i + offset] = this.dcPrevOut;
+            prevOut = x - prevIn + alpha * prevOut;
+            prevIn = x;
+            out[i + offset] = prevOut;
         }
+        this.dcPrevIn = prevIn;
+        this.dcPrevOut = prevOut;
     }
 
     catchUp() {
