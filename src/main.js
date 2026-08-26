@@ -2349,15 +2349,20 @@ for (const item of document.querySelectorAll(".drive-tracks")) {
 // chip's samples (issue #885). Video paints on emulated flyback whenever the
 // tick lands, and the desynchronised canvas is scanned out from there.
 const TickMs = 10;
-let tickHandle = null;
+let tickToken = null;
 
+// A user-blocking task runs ahead of rendering and ordinary timers, so a stuck
+// compositor does not hold the tick off too.
 function scheduleTick(delayMs) {
-    if (tickHandle !== null) window.clearTimeout(tickHandle);
-    tickHandle = window.setTimeout(tick, delayMs);
+    const token = (tickToken = {});
+    const fire = () => {
+        if (tickToken === token) tick();
+    };
+    if (window.scheduler?.postTask) window.scheduler.postTask(fire, { delay: delayMs, priority: "user-blocking" });
+    else window.setTimeout(fire, delayMs);
 }
 
 function tick() {
-    tickHandle = null;
     if (!running) {
         last = 0;
         return;
