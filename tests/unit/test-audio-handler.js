@@ -29,8 +29,9 @@ describe("AudioHandler", () => {
         vi.stubGlobal(
             "AudioContext",
             class {
-                constructor() {
+                constructor(options) {
                     const context = fakeContext(hasWorklet, addModule);
+                    context.options = options;
                     contexts.push(context);
                     return context;
                 }
@@ -47,13 +48,14 @@ describe("AudioHandler", () => {
         );
     }
 
-    function makeHandler() {
+    function makeHandler(options = {}) {
         return new AudioHandler({
             warningNode: document.getElementById("audio-warning"),
             audioFilterFreq: 0,
             audioFilterQ: 0,
             noSeek: true,
             cpuSpeed: 2000000,
+            ...options,
         });
     }
 
@@ -111,6 +113,19 @@ describe("AudioHandler", () => {
             expect(warning().textContent).toContain(SuspendedText);
         });
 
+        it("creates no Music 5000 audio context unless one is fitted", () => {
+            makeHandler();
+
+            expect(contexts).toHaveLength(1);
+        });
+
+        it("creates a Music 5000 audio context at the board's sample rate when one is fitted", () => {
+            makeHandler({ hasMusic5000: true });
+
+            expect(contexts).toHaveLength(2);
+            expect(contexts[1].options).toEqual({ sampleRate: 46875 });
+        });
+
         it("fades the warning out once the audio is running again", () => {
             const handler = makeHandler();
 
@@ -160,7 +175,7 @@ describe("AudioHandler", () => {
         it("toasts about the Music 5000 and leaves the banner down", async () => {
             stubAudio({ addModule: rejectModule("music5000") });
 
-            makeHandler();
+            makeHandler({ hasMusic5000: true });
 
             await vi.waitFor(() => expect(document.querySelector(".toast .message")).not.toBeNull());
             expect(document.querySelector(".toast .message").textContent).toContain("Music 5000 will be silent");
