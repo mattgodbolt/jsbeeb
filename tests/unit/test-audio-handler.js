@@ -127,6 +127,20 @@ describe("AudioHandler", () => {
             ]);
         });
 
+        it("ships a mute at once, since the stopped emulator will not tick", async () => {
+            const handler = makeHandler();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+            const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
+
+            handler.mute();
+            handler.unmute();
+
+            expect(posted.mock.calls.map((call) => call[0].events)).toEqual([
+                [{ cycle: 0, enabled: false }],
+                [{ cycle: 0, enabled: true }],
+            ]);
+        });
+
         it("fades the warning out once the audio is running again", () => {
             const handler = makeHandler();
 

@@ -240,13 +240,16 @@ export class AudioHandler {
         await this.relayNoise.initialise();
     }
 
+    // The emulator is stopping, so no tick will ship the change; send it now.
     mute() {
         this.soundChip.mute();
+        this.flushChipEvents();
         if (this.masterGain) this.masterGain.gain.value = 0;
     }
 
     unmute() {
         this.soundChip.unmute();
+        this.flushChipEvents();
         if (this.masterGain) this.masterGain.gain.value = 1;
     }
 }
