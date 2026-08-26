@@ -34,6 +34,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             Number.isFinite(requestedLatencyMs) && requestedLatencyMs > 0 ? requestedLatencyMs : DefaultTargetLatencyMs;
         this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
         this.smoothedOccupancyError = 0;
+        this.minOccupancySamples = Infinity;
         this.running = false;
         this.maxQueueSizeSamples = samplesFor(MaxQueuedMs);
         this.port.onmessage = (event) => {
@@ -53,8 +54,10 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             underruns: this.underruns,
             queueSize: this.queue.length,
             queueAge: this._queueAge(),
+            queueMinMs: (1000 * this.minOccupancySamples) / this.inputSampleRate,
             sampleRatio: sampleRatio,
         });
+        this.minOccupancySamples = Infinity;
     }
 
     _queueAge() {
@@ -166,6 +169,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             channel[i] = source[loc] * (1 - alpha) + source[loc + 1] * alpha;
         }
         this._phase = end - numInputSamples;
+        this.minOccupancySamples = Math.min(this.minOccupancySamples, this._occupancySamples());
         this.stats(sampleRatio);
         return true;
     }

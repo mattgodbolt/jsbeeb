@@ -373,7 +373,7 @@ sbBind(document.querySelector(".sidebar.bottom"), parsedQuery.sbBottom, function
 if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
-const MaxCyclesPerFrame = clocksPerSecond / 10;
+const MaxCyclesPerTick = clocksPerSecond / 10;
 
 let tryGl = true;
 if (parsedQuery.glEnabled !== undefined) {
@@ -553,14 +553,40 @@ function swapCanvas(newFilterClass) {
 const canvas = createCanvasForFilter(displayModeFilter);
 displayModeFilter = canvas.filterClass;
 
+// The emulator paints into its own framebuffer; flyback copies the finished
+// frame into the canvas and an animation frame presents it, so a stalled
+// display holds up the picture and not the emulation (issue #885).
+const videoFb32 = new Uint32Array(canvas.fb32.length);
+const pendingFrame = { minx: 0, miny: 0, maxx: 0, maxy: 0, frameCount: 0, lineGrid: new Uint8Array(0) };
+let presentScheduled = false;
+let paintMsThisTick = 0;
+let presentMsMax = 0;
+
+function present() {
+    presentScheduled = false;
+    const start = performance.now();
+    canvas.paint(pendingFrame.minx, pendingFrame.miny, pendingFrame.maxx, pendingFrame.maxy, pendingFrame);
+    presentMsMax = Math.max(presentMsMax, performance.now() - start);
+}
+
 video = new Video(
     model.isMaster,
-    canvas.fb32,
+    videoFb32,
     function paint(minx, miny, maxx, maxy) {
         frames++;
         if (frames < frameSkip) return;
         frames = 0;
-        canvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
+        const start = performance.now();
+        canvas.fb32.set(videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
+        if (pendingFrame.lineGrid.length !== this.lineGrid.length)
+            pendingFrame.lineGrid = new Uint8Array(this.lineGrid.length);
+        pendingFrame.lineGrid.set(this.lineGrid);
+        Object.assign(pendingFrame, { minx, miny, maxx, maxy, frameCount: this.frameCount });
+        paintMsThisTick += performance.now() - start;
+        if (!presentScheduled) {
+            presentScheduled = true;
+            window.requestAnimationFrame(present);
+        }
     },
     { isAtom: model.isAtom },
 );
@@ -2250,6 +2276,7 @@ function profileVideo(arg) {
 }
 
 let last = 0;
+let lastEnd = 0;
 
 function VirtualSpeedUpdater() {
     this.cycles = 0;
@@ -2283,33 +2310,49 @@ function VirtualSpeedUpdater() {
 const virtualSpeedUpdater = new VirtualSpeedUpdater();
 
 const rewindBuffer = new RewindBuffer(30);
-let rewindFrameCounter = 0;
-const RewindCaptureInterval = 50; // ~1 second at 50fps
+let rewindCycleCounter = 0;
+const RewindCaptureInterval = 50; // emulated frames, ~1 second
+const RewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
 
-// Under ?audioDebug, one console line per second in which a frame ran late
-// or the audio queue underran or dropped, so a click can be matched to a cause.
-const FrameLogIntervalMs = 1000;
-const SlowFrameLogMs = 30;
-const frameLog = { start: 0, frames: 0, maxGap: 0, maxExecute: 0, maxSnapshot: 0 };
+// Under ?audioDebug, one console line per second in which the emulator sat
+// idle between ticks or a tick ran long, or the audio queue underran or
+// dropped, so a click can be matched to a cause. The sound chip posts samples
+// throughout execute(), so only the idle time starves the audio queue.
+const AudioDebugLogIntervalMs = 1000;
+const AudioDebugSlowTickMs = 30;
+const audioDebugLog = { start: 0, ticks: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
+const AudioDebugSlowPresentMs = 30;
 
-function logFrame(now, gapMs, executeMs, snapshotMs) {
-    const log = frameLog;
+function logAudioDebugTick(now, idleMs, executeMs, paintMs, snapshotMs) {
+    const log = audioDebugLog;
     if (log.start === 0) log.start = now;
-    log.frames++;
-    log.maxGap = Math.max(log.maxGap, gapMs);
+    log.ticks++;
+    log.maxIdle = Math.max(log.maxIdle, idleMs);
     log.maxExecute = Math.max(log.maxExecute, executeMs);
+    log.maxPaint = Math.max(log.maxPaint, paintMs);
     log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
-    if (now - log.start < FrameLogIntervalMs) return;
+    if (now - log.start < AudioDebugLogIntervalMs) return;
     const audio = audioHandler.takeEventCounts();
-    if (log.maxGap > SlowFrameLogMs || log.maxExecute > SlowFrameLogMs || audio.underrun || audio.drop) {
+    const present = presentMsMax;
+    presentMsMax = 0;
+    const queueMin = Number.isFinite(audio.queueMinMs) ? `${audio.queueMinMs.toFixed(1)}ms` : "(no stats)";
+    if (
+        log.maxIdle > AudioDebugSlowTickMs ||
+        log.maxExecute > AudioDebugSlowTickMs ||
+        present > AudioDebugSlowPresentMs ||
+        audio.underrun ||
+        audio.drop
+    ) {
         console.log(
-            `${(now / 1000).toFixed(0)}s: ${log.frames} frames, gap max ${log.maxGap.toFixed(0)}ms, ` +
-                `execute max ${log.maxExecute.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
-                `audio underruns ${audio.underrun}, dropped ${audio.drop} buffers`,
+            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
+                `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
+                `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
+                `audio queue min ${queueMin}, underruns ${audio.underrun}, ` +
+                `dropped ${audio.drop} buffers`,
         );
     }
     log.start = now;
-    log.frames = log.maxGap = log.maxExecute = log.maxSnapshot = 0;
+    log.ticks = log.maxIdle = log.maxExecute = log.maxPaint = log.maxSnapshot = 0;
 }
 
 rewindUI = new RewindUI({
@@ -2343,21 +2386,31 @@ for (const item of document.querySelectorAll(".drive-tracks")) {
     if (drive) showDriveTracks(driveIndex);
 }
 
-function draw(now) {
+// A timer, not requestAnimationFrame: a display presentation stall withholds
+// animation frames, and with them the sound chip's samples (issue #885).
+const TickMs = 10;
+let tickToken = null;
+
+// A user-blocking task runs ahead of rendering and ordinary timers, so a stuck
+// compositor does not hold the tick off too.
+function scheduleTick(delayMs) {
+    const token = (tickToken = {});
+    const fire = () => {
+        if (tickToken === token) tick();
+    };
+    if (window.scheduler?.postTask) window.scheduler.postTask(fire, { delay: delayMs, priority: "user-blocking" });
+    else window.setTimeout(fire, delayMs);
+}
+
+function tick() {
     if (!running) {
         last = 0;
         return;
     }
-    // If we got here via setTimeout, we don't get passed the time.
-    if (now === undefined) {
-        now = window.performance.now();
-    }
+    const now = performance.now();
 
     const motorOn = processor.acia.motorOn;
-    const discOn = processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
     const speedy = fastAsPossible || (fastTape && motorOn);
-    const useTimeout = speedy || motorOn || discOn;
-    const timeout = speedy ? 0 : 1000.0 / 50;
 
     // In speedy mode, we still run all the state machines accurately
     // but we paint less often because painting is the most expensive
@@ -2366,14 +2419,7 @@ function draw(now) {
     // modes, i.e. MODE 7, still look ok.
     video.frameSkipCount = speedy ? 9 : 0;
 
-    // We use setTimeout instead of requestAnimationFrame in two cases:
-    // a) We're trying to run as fast as possible.
-    // b) Tape is playing, normal speed but backgrounded tab should run.
-    if (useTimeout) {
-        window.setTimeout(draw, timeout);
-    } else {
-        window.requestAnimationFrame(draw);
-    }
+    scheduleTick(speedy ? 0 : TickMs);
 
     audioHandler.soundChip.catchUp();
     gamepad.update(processor.sysvia);
@@ -2381,10 +2427,9 @@ function draw(now) {
     if (last !== 0) {
         let cycles;
         if (!speedy) {
-            // Now and last are DOMHighResTimeStamp, just a double.
             const sinceLast = now - last;
             cycles = (sinceLast * clocksPerSecond) / 1000;
-            cycles = Math.min(cycles, MaxCyclesPerFrame);
+            cycles = Math.min(cycles, MaxCyclesPerTick);
         } else {
             cycles = clocksPerSecond / 50;
         }
@@ -2395,15 +2440,17 @@ function draw(now) {
             }
             const end = performance.now();
             virtualSpeedUpdater.update(cycles, end - now, speedy);
-            // Capture rewind snapshot periodically
             let snapshotMs = 0;
-            if (++rewindFrameCounter >= RewindCaptureInterval) {
-                rewindFrameCounter = 0;
+            rewindCycleCounter += cycles;
+            if (rewindCycleCounter >= RewindCaptureCycles) {
+                rewindCycleCounter -= RewindCaptureCycles;
                 rewindBuffer.push(processor.snapshotState());
                 rewindUI.updateButtonState();
                 snapshotMs = performance.now() - end;
             }
-            if (audioStatsNode) logFrame(now, speedy ? 0 : now - last, end - now, snapshotMs);
+            if (audioStatsNode)
+                logAudioDebugTick(now, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
+            paintMsThisTick = 0;
         } catch (e) {
             running = false;
             utils.noteEvent("exception", "thrown", e.stack);
@@ -2415,10 +2462,11 @@ function draw(now) {
         }
     }
     last = now;
+    lastEnd = performance.now();
 }
 
 function run() {
-    window.requestAnimationFrame(draw);
+    scheduleTick(0);
 }
 
 let wasPreviouslyRunning = false;
