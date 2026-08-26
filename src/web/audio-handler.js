@@ -14,6 +14,11 @@ const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).
 // Drops plot as buffers dropped, on the queueSize scale; underruns as a fixed spike.
 const UnderrunSpikeHeight = 20;
 
+// Nobody is watching an unfocused window, so its sound can run far behind
+// the picture, deep enough to ride out the browser starving the tab.
+export const UnfocusedLatencyMs = 200;
+export const DefaultLatencyMs = 20;
+
 export class AudioHandler {
     constructor({
         warningNode,
@@ -27,6 +32,8 @@ export class AudioHandler {
     } = {}) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
+        this.audioLatencyMs = audioLatencyMs ?? DefaultLatencyMs;
+        this.windowFocused = document.hasFocus();
         this.warningNode = warningNode;
         this.noAudio = false;
         toggle(this.warningNode, false);
@@ -52,7 +59,7 @@ export class AudioHandler {
             this.masterGain.connect(this.audioContext.destination);
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
             this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
-            this._setup(audioFilterFreq, audioFilterQ, audioLatencyMs).catch((error) => this._audioUnavailable(error));
+            this._setup(audioFilterFreq, audioFilterQ).catch((error) => this._audioUnavailable(error));
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
@@ -118,7 +125,7 @@ export class AudioHandler {
         this.chart.streamTo(statsNode, 100);
     }
 
-    async _setup(audioFilterFreq, audioFilterQ, audioLatencyMs) {
+    async _setup(audioFilterFreq, audioFilterQ) {
         await this.audioContext.audioWorklet.addModule(rendererUrl);
         if (audioFilterFreq !== 0) {
             const filterNode = this.audioContext.createBiquadFilter();
@@ -132,7 +139,7 @@ export class AudioHandler {
         }
 
         this._jsAudioNode = new AudioWorkletNode(this.audioContext, "sound-chip-processor", {
-            processorOptions: { targetLatencyMs: audioLatencyMs },
+            processorOptions: { targetLatencyMs: this._targetLatencyMs() },
         });
         this._jsAudioNode.connect(this._audioDestination);
         this._jsAudioNode.port.onmessage = (event) => {
@@ -155,6 +162,18 @@ export class AudioHandler {
         series.append(now - 1, 0);
         series.append(now, event === "underrun" ? UnderrunSpikeHeight : count);
         series.append(now + 1, 0);
+    }
+
+    _targetLatencyMs() {
+        return this.windowFocused ? this.audioLatencyMs : UnfocusedLatencyMs;
+    }
+
+    // Returns how far ahead of the sound the picture should now run, in ms.
+    setWindowFocused(focused) {
+        this.windowFocused = focused;
+        const targetLatencyMs = this._targetLatencyMs();
+        this._jsAudioNode?.port.postMessage({ command: "setTargetLatency", targetLatencyMs });
+        return targetLatencyMs - this.audioLatencyMs;
     }
 
     takeEventCounts() {

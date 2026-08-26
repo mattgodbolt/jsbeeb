@@ -752,7 +752,9 @@ setCrtPic(displayModeFilter);
 
 window.addEventListener("blur", function () {
     keyboard.clearKeys();
+    setEmulationLead(audioHandler.setWindowFocused(false));
 });
+window.addEventListener("focus", () => setEmulationLead(audioHandler.setWindowFocused(true)));
 
 document.getElementById("fs").addEventListener("click", function (event) {
     screenCanvas.requestFullscreen();
@@ -2320,13 +2322,14 @@ const RewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
 // throughout execute(), so only the idle time starves the audio queue.
 const AudioDebugLogIntervalMs = 1000;
 const AudioDebugSlowTickMs = 30;
-const audioDebugLog = { start: 0, ticks: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
+const audioDebugLog = { start: 0, ticks: 0, cycles: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
 const AudioDebugSlowPresentMs = 30;
 
-function logAudioDebugTick(now, idleMs, executeMs, paintMs, snapshotMs) {
+function logAudioDebugTick(now, cycles, idleMs, executeMs, paintMs, snapshotMs) {
     const log = audioDebugLog;
     if (log.start === 0) log.start = now;
     log.ticks++;
+    log.cycles += cycles;
     log.maxIdle = Math.max(log.maxIdle, idleMs);
     log.maxExecute = Math.max(log.maxExecute, executeMs);
     log.maxPaint = Math.max(log.maxPaint, paintMs);
@@ -2344,7 +2347,8 @@ function logAudioDebugTick(now, idleMs, executeMs, paintMs, snapshotMs) {
         audio.drop
     ) {
         console.log(
-            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
+            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks emulating ${((1000 * log.cycles) / clocksPerSecond).toFixed(0)}ms, ` +
+                `idle max ${log.maxIdle.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
                 `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
                 `audio queue min ${queueMin}, underruns ${audio.underrun}, ` +
@@ -2352,7 +2356,7 @@ function logAudioDebugTick(now, idleMs, executeMs, paintMs, snapshotMs) {
         );
     }
     log.start = now;
-    log.ticks = log.maxIdle = log.maxExecute = log.maxPaint = log.maxSnapshot = 0;
+    log.ticks = log.cycles = log.maxIdle = log.maxExecute = log.maxPaint = log.maxSnapshot = 0;
 }
 
 rewindUI = new RewindUI({
@@ -2427,7 +2431,7 @@ function tick() {
     if (last !== 0) {
         let cycles;
         if (!speedy) {
-            const sinceLast = now - last;
+            const sinceLast = Math.max(0, now - last);
             cycles = (sinceLast * clocksPerSecond) / 1000;
             cycles = Math.min(cycles, MaxCyclesPerTick);
         } else {
@@ -2449,7 +2453,7 @@ function tick() {
                 snapshotMs = performance.now() - end;
             }
             if (audioStatsNode)
-                logAudioDebugTick(now, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
+                logAudioDebugTick(now, cycles, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
             paintMsThisTick = 0;
         } catch (e) {
             running = false;
@@ -2461,12 +2465,29 @@ function tick() {
             stop(false);
         }
     }
-    last = now;
+    last = Math.max(last, now);
     lastEnd = performance.now();
 }
 
 function run() {
     scheduleTick(0);
+}
+
+// A change of audio buffer depth is taken by the picture, not the sound:
+// gaining lead emulates ahead at once; losing it moves `last` forward so the
+// ticks emulate nothing until the queue has drained by that much.
+let emulationLeadMs = 0;
+
+function setEmulationLead(leadMs) {
+    if (!running) return;
+    const aheadMs = leadMs - emulationLeadMs;
+    emulationLeadMs = leadMs;
+    if (aheadMs > 0) {
+        audioHandler.soundChip.catchUp();
+        if (!processor.execute((aheadMs * clocksPerSecond) / 1000)) stop(true);
+    } else {
+        last -= aheadMs;
+    }
 }
 
 let wasPreviouslyRunning = false;
