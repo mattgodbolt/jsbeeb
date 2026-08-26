@@ -5,7 +5,9 @@ const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
 
 const InputSampleRate = 4000000.0 / 8;
 const MaxQueuedMs = 250;
-const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
+// Enough to ride out a skipped display frame or an execute() that runs late;
+// a single frame's worth underran on either.
+const DefaultTargetLatencyMs = 40;
 
 const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 
