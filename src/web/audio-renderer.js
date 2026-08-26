@@ -18,6 +18,12 @@ const OccupancySmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjust = InputSampleRate * 0.0005;
 
+// An underrun holds the last sample and fades it out; the restart fades the
+// new audio in. Long enough to take the click out of the step, short enough
+// to hide inside the gap.
+const FadeSeconds = 0.001;
+const GainStep = 1 / (sampleRate * FadeSeconds);
+
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super(options);
@@ -26,6 +32,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._lastSample = 0;
         this._lastFilteredOutput = 0;
         this._phase = 0;
+        this._gain = 0;
         this._source = new Float32Array(0);
         this.queue = [];
         this._queueSizeSamples = 0;
@@ -143,7 +150,6 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     process(inputs, outputs) {
         this.cleanQueue();
         if (!this.running && this._queueSizeSamples >= this.startQueueSizeSamples) this._restart();
-        if (this.queue.length === 0) return true;
 
         // I looked into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API),
         // but we fiddle the sample rate here to catch up with the target latency, which is harder to do with that API.
@@ -168,12 +174,15 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             source[i] = prevSample;
         }
         this._lastFilteredOutput = prevSample;
+        let gain = this._gain;
         for (let i = 0; i < channel.length; i++) {
             const pos = this._phase + i * sampleRatio;
             const loc = Math.floor(pos);
             const alpha = pos - loc;
-            channel[i] = source[loc] * (1 - alpha) + source[loc + 1] * alpha;
+            gain = this.running ? Math.min(1, gain + GainStep) : Math.max(0, gain - GainStep);
+            channel[i] = (source[loc] * (1 - alpha) + source[loc + 1] * alpha) * gain;
         }
+        this._gain = gain;
         this._phase = end - numInputSamples;
         this.minOccupancySamples = Math.min(this.minOccupancySamples, this._occupancySamples());
         this.stats(sampleRatio);
