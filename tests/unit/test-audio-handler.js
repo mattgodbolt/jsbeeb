@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as bootstrap from "bootstrap";
 
+import { Scheduler } from "../../src/scheduler.js";
 import { AudioHandler } from "../../src/web/audio-handler.js";
 
 const SuspendedText = "Your browser has suspended audio";
@@ -124,6 +125,21 @@ describe("AudioHandler", () => {
             expect(posted.mock.calls.map((call) => call[0])).toEqual([
                 { upTo: 5000, events: [{ cycle: 5000, poke: 0x8d }] },
                 { upTo: 5000, events: [] },
+            ]);
+        });
+
+        it("ships events as the emulation progresses, not only at the end of a tick", async () => {
+            const handler = makeHandler();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+            const scheduler = new Scheduler();
+            handler.soundChip.setScheduler(scheduler);
+            const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
+
+            handler.soundChip.poke(0x8d);
+            scheduler.polltime(4000);
+
+            expect(posted.mock.calls.map((call) => call[0])).toEqual([
+                { upTo: 4000, events: [{ cycle: 0, poke: 0x8d }] },
             ]);
         });
 

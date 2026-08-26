@@ -12,6 +12,10 @@ export const SoundBufferSamples = 512;
 // mean level, which a zero-mean output would silence (see issue #863).
 const DcRestoreCornerHz = 1 / (2 * Math.PI * 10e3 * 4.7e-6);
 
+// A chip with an event sink reports progress this often, so its events can
+// stream through a long execute() rather than all arriving at its end.
+const EventProgressCycles = 4000;
+
 const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -249,6 +253,13 @@ export class SoundChip {
         this.activeTask = this.scheduler.newTask(() => {
             if (this.active) this.poke(this.slowDataBus);
         });
+        if (this._onEvent) {
+            this.progressTask = this.scheduler.newTask(() => {
+                this._emit({ progress: true });
+                this.progressTask.schedule(EventProgressCycles);
+            });
+            this.progressTask.schedule(EventProgressCycles);
+        }
     }
 
     render(out, offset, length) {
@@ -382,6 +393,7 @@ export class SoundChip {
         // Older snapshots predate the DC blocker
         this.dcPrevIn = state.dcPrevIn ?? 0;
         this.dcPrevOut = state.dcPrevOut ?? 0;
+        this.progressTask?.ensureScheduled(true, EventProgressCycles);
         this._emit({ state: this.snapshotState() });
     }
 

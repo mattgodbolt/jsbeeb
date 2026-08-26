@@ -53,7 +53,10 @@ export class AudioHandler {
         this._jsAudioNode = null;
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
-            const onEvent = (event) => this._chipEvents.push(event);
+            const onEvent = (event) => {
+                if (event.progress) this.flushChipEvents();
+                else this._chipEvents.push(event);
+            };
             this.soundChip = this.isAtom
                 ? new AtomSoundChip(null, { cpuSpeed: this.cpuSpeed, onEvent })
                 : new SoundChip(null, { onEvent });

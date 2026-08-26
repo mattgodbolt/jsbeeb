@@ -458,6 +458,20 @@ describe("SoundChip events", () => {
         expect(events[2].enabled).toBe(false);
     });
 
+    it("should report progress every few emulated milliseconds, and keep doing so after a restore", () => {
+        const { chip, scheduler, events } = makeEventChip();
+        scheduler.polltime(10000);
+        expect(events).toEqual([
+            { cycle: 4000, progress: true },
+            { cycle: 8000, progress: true },
+        ]);
+        scheduler.restoreState({ epoch: 20000 });
+        chip.restoreState(chip.snapshotState());
+        events.length = 0;
+        scheduler.polltime(4000);
+        expect(events).toEqual([{ cycle: 24000, progress: true }]);
+    });
+
     it("should not render when it has an event sink", () => {
         const buffers = [];
         const scheduler = new Scheduler();
