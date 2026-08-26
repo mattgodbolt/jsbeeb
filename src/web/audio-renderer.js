@@ -1,53 +1,91 @@
 /* global sampleRate, currentTime, registerProcessor, AudioWorkletProcessor */
+import { SoundChip, AtomSoundChip } from "../soundchip.js";
 
 const lowPassFilterFreq = sampleRate / 2;
 const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
 
-const InputSampleRate = 4000000.0 / 8;
-const MaxQueuedMs = 500;
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
-// Leaves room above the target for the producer's catch-up bursts.
-const MaxTargetLatencyMs = MaxQueuedMs / 2;
+const MaxTargetLatencyMs = 250;
 
-const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
-
-// Smoothing rejects the producer's per-frame bursts; proportional only, as
-// occupancy already integrates rate error; 0.05% authority covers clock skew
+// Smoothing rejects the producer's per-tick bursts; proportional only, as
+// lead already integrates rate error; 0.05% authority covers clock skew
 // without audibly bending pitch.
-const OccupancySmoothingTau = 0.5;
+const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
-const MaxAdjust = InputSampleRate * 0.0005;
+const MaxAdjustFraction = 0.0005;
 
-// An underrun holds the last sample and fades it out; the restart fades the
-// new audio in. Long enough to take the click out of the step, short enough
-// to hide inside the gap.
-const FadeSeconds = 0.001;
-const GainStep = 1 / (sampleRate * FadeSeconds);
+const isResync = (event) => event.state !== undefined || event.reset !== undefined;
 
+// Renders the chip from its timestamped state changes, so a producer that
+// falls behind leaves the chip sounding its current state (a stall) rather
+// than silent; the missed time is skipped once the producer is ahead again.
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super(options);
+        const { isAtom = false, cpuSpeed = 1000000, targetLatencyMs } = options?.processorOptions ?? {};
+        this.chip = isAtom ? new AtomSoundChip(null, { cpuSpeed }) : new SoundChip(null);
+        this.inputSampleRate = this.chip.soundchipFreq;
+        this.samplesPerCycle = this.chip.samplesPerCycle;
 
-        this.inputSampleRate = InputSampleRate;
-        this._lastSample = 0;
+        this.events = [];
+        this.eventsHead = 0;
+        this.clock = 0;
+        this.upTo = 0;
+        this.stalled = true;
+        this.stalls = 0;
+        this.skippedMs = 0;
+        this.minLeadMs = Infinity;
+
         this._lastFilteredOutput = 0;
         this._phase = 0;
-        this._gain = 0;
         this._source = new Float32Array(0);
-        this.queue = [];
-        this._queueSizeSamples = 0;
-        this.dropped = 0;
-        this.underruns = 0;
-        this.setTargetLatency(options?.processorOptions?.targetLatencyMs);
-        this.minOccupancySamples = Infinity;
-        this.running = false;
-        this.maxQueueSizeSamples = samplesFor(MaxQueuedMs);
+        this._rendered = new Float32Array(0);
+        this.smoothedLeadError = 0;
+        this.setTargetLatency(targetLatencyMs);
         this.port.onmessage = (event) => {
             if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
-            // TODO: even better than this, send over register settings/catch up and run the audio work _here_
-            else this.onBuffer(event.data.time, event.data.buffer);
+            else this.onProduced(event.data.upTo, event.data.events);
         };
         this.nextStats = 0;
+    }
+
+    setTargetLatency(ms) {
+        const valid = Number.isFinite(ms) && ms > 0;
+        this.targetLatencyMs = valid ? Math.min(ms, MaxTargetLatencyMs) : DefaultTargetLatencyMs;
+        this.targetLeadCycles = this._cycles(this.targetLatencyMs);
+        this.smoothedLeadError = 0;
+    }
+
+    _cycles(ms) {
+        return ((ms / 1000) * this.inputSampleRate) / this.samplesPerCycle;
+    }
+
+    _ms(cycles) {
+        return (1000 * cycles * this.samplesPerCycle) / this.inputSampleRate;
+    }
+
+    leadMs() {
+        return this._ms(this.upTo - this.clock);
+    }
+
+    // A resync (restore or reset) starts a new timeline; anything queued
+    // before it belongs to the old one.
+    onProduced(upTo, events) {
+        let from = 0;
+        for (let i = events.length - 1; i >= 0; --i) {
+            if (isResync(events[i])) {
+                from = i;
+                this.events = [];
+                this.eventsHead = 0;
+                break;
+            }
+        }
+        if (this.eventsHead > 0) {
+            this.events = this.events.slice(this.eventsHead);
+            this.eventsHead = 0;
+        }
+        for (let i = from; i < events.length; ++i) this.events.push(events[i]);
+        this.upTo = upTo;
     }
 
     stats(sampleRatio) {
@@ -56,103 +94,97 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.port.postMessage({
             sampleRate: sampleRate,
             inputSampleRate: this.inputSampleRate,
-            dropped: this.dropped,
-            underruns: this.underruns,
-            queueSize: this.queue.length,
-            queueAge: this._queueAge(),
-            queueMinMs: (1000 * this.minOccupancySamples) / this.inputSampleRate,
+            stalls: this.stalls,
+            skippedMs: this.skippedMs,
+            leadMs: this.leadMs(),
+            leadMinMs: this.minLeadMs,
+            queuedEvents: this.events.length - this.eventsHead,
             sampleRatio: sampleRatio,
         });
-        this.minOccupancySamples = Infinity;
-    }
-
-    _queueAge() {
-        if (this.queue.length === 0) return 0;
-        const timeInBufferMs = 1000 * (this.queue[0].offset / this.inputSampleRate) + this.queue[0].time;
-        return Date.now() - timeInBufferMs;
-    }
-
-    _occupancySamples() {
-        return this._queueSizeSamples - (this.queue.length ? this.queue[0].offset : 0);
-    }
-
-    _effectiveSampleRate(dtSeconds) {
-        const error = this._occupancySamples() - this.startQueueSizeSamples;
-        const alpha = Math.min(1, dtSeconds / OccupancySmoothingTau);
-        this.smoothedOccupancyError += alpha * (error - this.smoothedOccupancyError);
-        const adjustment = ProportionalGain * this.smoothedOccupancyError;
-        return this.inputSampleRate + Math.min(MaxAdjust, Math.max(-MaxAdjust, adjustment));
-    }
-
-    onBuffer(time, buffer) {
-        this.queue.push({ offset: 0, time, buffer });
-        this._queueSizeSamples += buffer.length;
-        this.cleanQueue();
-    }
-
-    _shift() {
-        const dropped = this.queue.shift();
-        this._queueSizeSamples -= dropped.buffer.length;
-    }
-
-    _drop(count) {
-        for (let i = 0; i < count; ++i) this._shift();
-        this.dropped += count;
-        this._notify("drop", count);
-    }
-
-    cleanQueue() {
-        let dropped = 0;
-        for (let size = this._queueSizeSamples; size > this.maxQueueSizeSamples; ++dropped)
-            size -= this.queue[dropped].buffer.length;
-        if (dropped) this._drop(dropped);
-    }
-
-    // The queue refills after an underrun in one catch-up burst, which has all
-    // arrived by the next quantum; the excess is trimmed here, where the output
-    // is already discontinuous.
-    _restart() {
-        let dropped = 0;
-        for (let occupancy = this._occupancySamples(); dropped < this.queue.length - 1; ++dropped) {
-            const head = this.queue[dropped];
-            const without = occupancy - (head.buffer.length - head.offset);
-            if (without < this.startQueueSizeSamples) break;
-            occupancy = without;
-        }
-        if (dropped) this._drop(dropped);
-        this.running = true;
+        this.minLeadMs = Infinity;
     }
 
     _notify(event, count) {
         this.port.postMessage({ event, count });
     }
 
-    setTargetLatency(ms) {
-        const valid = Number.isFinite(ms) && ms > 0;
-        this.targetLatencyMs = valid ? Math.min(ms, MaxTargetLatencyMs) : DefaultTargetLatencyMs;
-        this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
-        this.smoothedOccupancyError = 0;
+    _effectiveSampleRate(dtSeconds) {
+        const error = this.upTo - this.clock - this.targetLeadCycles;
+        const alpha = Math.min(1, dtSeconds / LeadSmoothingTau);
+        this.smoothedLeadError += alpha * (error - this.smoothedLeadError);
+        const adjustment = ProportionalGain * this.smoothedLeadError * this.samplesPerCycle;
+        const maxAdjust = this.inputSampleRate * MaxAdjustFraction;
+        return this.inputSampleRate + Math.min(maxAdjust, Math.max(-maxAdjust, adjustment));
     }
 
-    nextSample() {
-        if (this.running && this.queue.length) {
-            const queueElement = this.queue[0];
-            this._lastSample = queueElement.buffer[queueElement.offset];
-            if (++queueElement.offset === queueElement.buffer.length) this._shift();
-        } else if (this.running) {
-            this.running = false;
-            this.underruns++;
-            this._notify("underrun", 1);
+    _applyHead() {
+        this.chip.applyEvent(this.events[this.eventsHead++]);
+    }
+
+    // Applies every queued change up to `cycle` at once and moves the clock
+    // there, so the sound continues from the producer's state without a gap.
+    _skipTo(cycle) {
+        while (this.eventsHead < this.events.length && this.events[this.eventsHead].cycle <= cycle) this._applyHead();
+        this.skippedMs += this._ms(cycle - this.clock);
+        this.clock = cycle;
+    }
+
+    _restart() {
+        const skipTo = this.upTo - this.targetLeadCycles;
+        if (skipTo > this.clock) {
+            this._notify("skip", this._ms(skipTo - this.clock));
+            this._skipTo(skipTo);
         }
-        return this._lastSample;
+        this.stalled = false;
+    }
+
+    _stall(out, offset, length) {
+        if (!this.stalled) {
+            this.stalled = true;
+            this.stalls++;
+            this._notify("stall", 1);
+        }
+        this.chip.renderAt(this.clock, out, offset, length);
+    }
+
+    // Input samples before the next change of state: the head event, or
+    // the producer's position, whichever the clock reaches first. A resync
+    // takes effect at once, since it starts a new timeline.
+    _samplesUntilNextChange() {
+        const head = this.events[this.eventsHead];
+        if (head !== undefined && isResync(head)) return 0;
+        const boundary = head === undefined ? this.upTo : Math.min(head.cycle, this.upTo);
+        return Math.floor((boundary - this.clock) * this.samplesPerCycle);
+    }
+
+    _renderInput(out, length) {
+        if (this.stalled) {
+            this._stall(out, 0, length);
+            return;
+        }
+        let offset = 0;
+        while (length > 0) {
+            const n = Math.min(length, this._samplesUntilNextChange());
+            if (n > 0) {
+                this.chip.renderAt(this.clock, out, offset, n);
+                this.clock += n / this.samplesPerCycle;
+                offset += n;
+                length -= n;
+                continue;
+            }
+            const head = this.events[this.eventsHead];
+            if (head === undefined) {
+                this._stall(out, offset, length);
+                return;
+            }
+            if (isResync(head)) this.clock = head.cycle;
+            this._applyHead();
+        }
     }
 
     process(inputs, outputs) {
-        this.cleanQueue();
-        if (!this.running && this._queueSizeSamples >= this.startQueueSizeSamples) this._restart();
+        if (this.stalled && this.upTo - this.clock >= this.targetLeadCycles) this._restart();
 
-        // I looked into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API),
-        // but we fiddle the sample rate here to catch up with the target latency, which is harder to do with that API.
         const channel = outputs[0][0];
         const effectiveSampleRate = this._effectiveSampleRate(channel.length / sampleRate);
         const sampleRatio = effectiveSampleRate / sampleRate;
@@ -165,30 +197,28 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         // boundary. source[0] is the last input sample of the previous quantum.
         const end = this._phase + channel.length * sampleRatio;
         const numInputSamples = Math.floor(end);
-        if (this._source.length <= numInputSamples) this._source = new Float32Array(numInputSamples * 2);
+        if (this._source.length <= numInputSamples) {
+            this._source = new Float32Array(numInputSamples * 2);
+            this._rendered = new Float32Array(numInputSamples * 2);
+        }
         const source = this._source;
+        const rendered = this._rendered;
+        this._renderInput(rendered, numInputSamples);
         source[0] = this._lastFilteredOutput;
         let prevSample = this._lastFilteredOutput;
-        // The input position from which the queue was dry, so the fade starts
-        // there rather than at the top of the quantum.
-        let dryFrom = this.running ? Infinity : 0;
         for (let i = 1; i <= numInputSamples; ++i) {
-            prevSample += filterAlpha * (this.nextSample() - prevSample);
+            prevSample += filterAlpha * (rendered[i - 1] - prevSample);
             source[i] = prevSample;
-            if (!this.running && dryFrom === Infinity) dryFrom = i;
         }
         this._lastFilteredOutput = prevSample;
-        let gain = this._gain;
         for (let i = 0; i < channel.length; i++) {
             const pos = this._phase + i * sampleRatio;
             const loc = Math.floor(pos);
             const alpha = pos - loc;
-            gain = pos < dryFrom ? Math.min(1, gain + GainStep) : Math.max(0, gain - GainStep);
-            channel[i] = (source[loc] * (1 - alpha) + source[loc + 1] * alpha) * gain;
+            channel[i] = source[loc] * (1 - alpha) + source[loc + 1] * alpha;
         }
-        this._gain = gain;
         this._phase = end - numInputSamples;
-        this.minOccupancySamples = Math.min(this.minOccupancySamples, this._occupancySamples());
+        this.minLeadMs = Math.min(this.minLeadMs, this.leadMs());
         this.stats(sampleRatio);
         return true;
     }

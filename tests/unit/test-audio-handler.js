@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as bootstrap from "bootstrap";
 
+import { Scheduler } from "../../src/scheduler.js";
 import { AudioHandler } from "../../src/web/audio-handler.js";
 
 const SuspendedText = "Your browser has suspended audio";
@@ -111,6 +112,51 @@ describe("AudioHandler", () => {
 
             expect(warningShown()).toBe(true);
             expect(warning().textContent).toContain(SuspendedText);
+        });
+
+        it("ships the chip's writes with the emulator's position on flush", async () => {
+            const handler = makeHandler();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+            const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
+
+            handler.soundChip.scheduler.epoch = 5000;
+            handler.soundChip.poke(0x8d);
+            handler.flushChipEvents();
+            handler.flushChipEvents();
+
+            expect(posted.mock.calls.map((call) => call[0])).toEqual([
+                { upTo: 5000, events: [{ cycle: 5000, poke: 0x8d }] },
+                { upTo: 5000, events: [] },
+            ]);
+        });
+
+        it("ships events as the emulation progresses, not only at the end of a tick", async () => {
+            const handler = makeHandler();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+            const scheduler = new Scheduler();
+            handler.soundChip.setScheduler(scheduler);
+            const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
+
+            handler.soundChip.poke(0x8d);
+            scheduler.polltime(4000);
+
+            expect(posted.mock.calls.map((call) => call[0])).toEqual([
+                { upTo: 4000, events: [{ cycle: 0, poke: 0x8d }] },
+            ]);
+        });
+
+        it("ships a mute at once, since the stopped emulator will not tick", async () => {
+            const handler = makeHandler();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+            const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
+
+            handler.mute();
+            handler.unmute();
+
+            expect(posted.mock.calls.map((call) => call[0].events)).toEqual([
+                [{ cycle: 0, enabled: false }],
+                [{ cycle: 0, enabled: true }],
+            ]);
         });
 
         it("creates no Music 5000 audio context unless one is fitted", () => {

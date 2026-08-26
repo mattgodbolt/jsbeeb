@@ -6,13 +6,11 @@ import { createAudioContext } from "../audio-utils.js";
 import { toggle, fadeIn, fadeOut } from "../dom-utils.js";
 import { toast } from "./toast.js";
 
-// Using this approach means when jsbeeb is embedded in other projects, vite doesn't have a fit.
-// See https://github.com/vitejs/vite/discussions/6459
-const rendererUrl = new URL("./audio-renderer.js", import.meta.url).href;
-const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
+import rendererUrl from "./audio-renderer.js?worker&url";
+import music5000WorkletUrl from "../music5000-worklet.js?worker&url";
 
-// Drops plot as buffers dropped, on the queueSize scale; underruns as a fixed spike.
-const UnderrunSpikeHeight = 20;
+// Skips plot as the milliseconds skipped, on the lead scale; stalls as a fixed spike.
+const StallSpikeHeight = 20;
 
 // Nobody is watching an unfocused window, so its sound can run far behind
 // the picture, deep enough to ride out the browser starving the tab.
@@ -39,7 +37,8 @@ export class AudioHandler {
         this.noAudio = false;
         toggle(this.warningNode, false);
         this.stats = {};
-        this.eventCounts = { underrun: 0, drop: 0, queueMinMs: Infinity };
+        this.eventCounts = { stall: 0, skip: 0, leadMinMs: Infinity };
+        this._chipEvents = [];
         if (statsNode) {
             this._initStats(statsNode).catch((error) => {
                 console.error("Unable to initialise audio stats", error);
@@ -51,10 +50,13 @@ export class AudioHandler {
         this._jsAudioNode = null;
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
-            const onBuffer = (buffer, time) => this._onBuffer(buffer, time);
+            const onEvent = (event) => {
+                if (event.progress) this.flushChipEvents();
+                else this._chipEvents.push(event);
+            };
             this.soundChip = this.isAtom
-                ? new AtomSoundChip(onBuffer, { cpuSpeed: this.cpuSpeed })
-                : new SoundChip(onBuffer);
+                ? new AtomSoundChip(null, { cpuSpeed: this.cpuSpeed, onEvent })
+                : new SoundChip(null, { onEvent });
             // Master gain node for all sample-based audio (disc, relay, etc.).
             this.masterGain = this.audioContext.createGain();
             this.masterGain.connect(this.audioContext.destination);
@@ -119,10 +121,9 @@ export class AudioHandler {
                 return { min: 0, max: range.max };
             },
         });
-        this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
-        this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
-        this._addStat("underrun", { strokeStyle: "rgb(220,50,50)", lineWidth: 2 });
-        this._addStat("drop", { strokeStyle: "rgb(120,80,200)", lineWidth: 2 });
+        this._addStat("leadMs", { strokeStyle: "rgb(51,126,108)" });
+        this._addStat("stall", { strokeStyle: "rgb(220,50,50)", lineWidth: 2 });
+        this._addStat("skip", { strokeStyle: "rgb(120,80,200)", lineWidth: 2 });
         this.chart.streamTo(statsNode, 100);
     }
 
@@ -140,7 +141,11 @@ export class AudioHandler {
         }
 
         this._jsAudioNode = new AudioWorkletNode(this.audioContext, "sound-chip-processor", {
-            processorOptions: { targetLatencyMs: this._targetLatencyMs() },
+            processorOptions: {
+                targetLatencyMs: this._targetLatencyMs(),
+                isAtom: this.isAtom,
+                cpuSpeed: this.cpuSpeed,
+            },
         });
         this._jsAudioNode.connect(this._audioDestination);
         this._jsAudioNode.port.onmessage = (event) => {
@@ -149,7 +154,7 @@ export class AudioHandler {
                 this._onAudioEvent(now, event.data);
                 return;
             }
-            this.eventCounts.queueMinMs = Math.min(this.eventCounts.queueMinMs, event.data.queueMinMs);
+            this.eventCounts.leadMinMs = Math.min(this.eventCounts.leadMinMs, event.data.leadMinMs);
             for (const stat of Object.keys(event.data)) {
                 if (this.stats[stat]) this.stats[stat].append(now, event.data[stat]);
             }
@@ -161,7 +166,7 @@ export class AudioHandler {
         const series = this.stats[event];
         if (!series) return;
         series.append(now - 1, 0);
-        series.append(now, event === "underrun" ? UnderrunSpikeHeight : count);
+        series.append(now, event === "stall" ? StallSpikeHeight : count);
         series.append(now + 1, 0);
     }
 
@@ -179,7 +184,7 @@ export class AudioHandler {
 
     takeEventCounts() {
         const counts = this.eventCounts;
-        this.eventCounts = { underrun: 0, drop: 0, queueMinMs: Infinity };
+        this.eventCounts = { stall: 0, skip: 0, leadMinMs: Infinity };
         return counts;
     }
 
@@ -197,11 +202,12 @@ export class AudioHandler {
         this.chart.addTimeSeries(timeSeries, info);
     }
 
-    _onBuffer(buffer) {
-        // No transfer list, deliberately: the chip reuses this buffer, and
-        // transferring would detach it and trip crbug.com/537801199. The clone
-        // costs little (512 floats per 1.024ms of chip output, ~2MB/s).
-        if (this._jsAudioNode) this._jsAudioNode.port.postMessage({ time: Date.now(), buffer });
+    // Ships the chip's state changes since the last call, and how far the
+    // emulator has got, so the worklet knows its lead even when nothing changed.
+    flushChipEvents() {
+        if (!this._jsAudioNode) return;
+        this._jsAudioNode.port.postMessage({ upTo: this.soundChip.scheduler.epoch, events: this._chipEvents });
+        this._chipEvents = [];
     }
 
     // Recent browsers, particularly Safari and Chrome, require a user interaction in order to enable sound playback.
@@ -234,13 +240,16 @@ export class AudioHandler {
         await this.relayNoise.initialise();
     }
 
+    // The emulator is stopping, so no tick will ship the change; send it now.
     mute() {
         this.soundChip.mute();
+        this.flushChipEvents();
         if (this.masterGain) this.masterGain.gain.value = 0;
     }
 
     unmute() {
         this.soundChip.unmute();
+        this.flushChipEvents();
         if (this.masterGain) this.masterGain.gain.value = 1;
     }
 }
