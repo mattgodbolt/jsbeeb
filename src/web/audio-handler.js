@@ -31,7 +31,7 @@ export class AudioHandler {
         this.noAudio = false;
         toggle(this.warningNode, false);
         this.stats = {};
-        this.eventCounts = { underrun: 0, dropped: 0 };
+        this.eventCounts = { underrun: 0, dropped: 0, queueMinMs: Infinity };
         if (statsNode) {
             this._initStats(statsNode).catch((error) => {
                 console.error("Unable to initialise audio stats", error);
@@ -141,6 +141,7 @@ export class AudioHandler {
                 this._onAudioEvent(now, event.data);
                 return;
             }
+            this.eventCounts.queueMinMs = Math.min(this.eventCounts.queueMinMs, event.data.queueMinMs);
             for (const stat of Object.keys(event.data)) {
                 if (this.stats[stat]) this.stats[stat].append(now, event.data[stat]);
             }
@@ -158,7 +159,7 @@ export class AudioHandler {
 
     takeEventCounts() {
         const counts = this.eventCounts;
-        this.eventCounts = { underrun: 0, dropped: 0 };
+        this.eventCounts = { underrun: 0, dropped: 0, queueMinMs: Infinity };
         return counts;
     }
 

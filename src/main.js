@@ -2346,7 +2346,8 @@ function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
             `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
                 `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
-                `audio underruns ${audio.underrun}, dropped ${audio.dropped} buffers`,
+                `audio queue min ${audio.queueMinMs.toFixed(1)}ms, underruns ${audio.underrun}, ` +
+                `dropped ${audio.dropped} buffers`,
         );
     }
     log.start = now;
