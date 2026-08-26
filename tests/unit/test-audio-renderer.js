@@ -53,9 +53,6 @@ function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
         return rate;
     };
 
-    // cleanQueue's age cap reads Date.now(), so it must see simulated time too.
-    const start = Date.now();
-    const clock = vi.spyOn(Date, "now").mockImplementation(() => start + simTime * 1000);
     try {
         const dtOut = OutputQuantum / globalThis.sampleRate;
         const outputs = [[new Float32Array(OutputQuantum)]];
@@ -74,7 +71,6 @@ function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
             simTime += dtOut;
         }
     } finally {
-        clock.mockRestore();
         proc._effectiveSampleRate = originalRate;
     }
     return rates;
@@ -110,6 +106,7 @@ describe("SoundChipProcessor rate control", () => {
 
     it("should speed up when the queue is over target and slow down when under", () => {
         const over = new SoundChipProcessor();
+        over.running = true;
         for (let i = 0; i < Math.ceil((2 * over.startQueueSizeSamples) / 512); ++i)
             over.onBuffer(Date.now(), new Float32Array(512));
         const outputs = [[new Float32Array(OutputQuantum)]];
@@ -127,6 +124,7 @@ describe("SoundChipProcessor rate control", () => {
     it("should never bend pitch audibly, however far the queue is from target", () => {
         const outputs = [[new Float32Array(OutputQuantum)]];
         const over = new SoundChipProcessor();
+        over.running = true;
         for (let i = 0; i < Math.ceil((5 * over.startQueueSizeSamples) / 512); ++i)
             over.onBuffer(Date.now(), new Float32Array(512));
         for (let i = 0; i < 400; ++i) over.process([], outputs);
@@ -145,6 +143,7 @@ describe("SoundChipProcessor rate control", () => {
         // Rounding the per-quantum consumption quantises the pitch in steps of
         // one part in ~1300 (1.3 cents), audible once the rate stops jittering.
         const proc = new SoundChipProcessor();
+        proc.running = true;
         for (let i = 0; i < 60; ++i) proc.onBuffer(Date.now(), new Float32Array(512));
         const outputs = [[new Float32Array(OutputQuantum)]];
         const before = proc._occupancySamples();
@@ -162,8 +161,7 @@ describe("SoundChipProcessor rate control", () => {
 
     it("should converge the queue occupancy to the target", () => {
         const proc = new SoundChipProcessor();
-        // A target's worth over is the most the 40 ms age cap leaves the
-        // controller to drain, rather than shedding it itself.
+        proc.running = true;
         for (let i = 0; i < Math.ceil(proc.startQueueSizeSamples / 512); ++i)
             proc.onBuffer(Date.now(), new Float32Array(512));
         simulate(proc, 20, { frameRateHz: 60 });
@@ -172,5 +170,49 @@ describe("SoundChipProcessor rate control", () => {
         expect(Math.abs(proc.smoothedOccupancyError)).toBeLessThan(proc.startQueueSizeSamples * 0.1);
         expect(proc.underruns).toBe(0);
         expect(proc.dropped).toBe(0);
+    });
+});
+
+describe("SoundChipProcessor queue trimming", () => {
+    const outputs = [[new Float32Array(OutputQuantum)]];
+    const fill = (proc, samples) => {
+        for (let i = 0; i < Math.ceil(samples / 512); ++i) proc.onBuffer(Date.now(), new Float32Array(512));
+    };
+    const runDry = (proc) => {
+        while (proc.running) proc.process([], outputs);
+    };
+
+    it("should not drop from a running queue that sits above target", () => {
+        const proc = new SoundChipProcessor();
+        proc.running = true;
+        fill(proc, 3 * proc.startQueueSizeSamples);
+        for (let i = 0; i < 20; ++i) proc.process([], outputs);
+        expect(proc.dropped).toBe(0);
+    });
+
+    it("should trim a catch-up burst to the target when restarting after an underrun", () => {
+        const proc = new SoundChipProcessor();
+        fill(proc, proc.startQueueSizeSamples);
+        proc.process([], outputs);
+        expect(proc.running).toBe(true);
+        runDry(proc);
+        expect(proc.underruns).toBe(1);
+        expect(proc.dropped).toBe(0);
+
+        const target = proc.startQueueSizeSamples;
+        fill(proc, 4 * target);
+        proc.process([], outputs);
+        expect(proc.running).toBe(true);
+        const filled = Math.ceil((4 * target) / 512);
+        const fewestHoldingTarget = Math.ceil(target / 512);
+        expect(proc.dropped).toBe(filled - fewestHoldingTarget);
+    });
+
+    it("should only drop from a queue beyond the hard maximum", () => {
+        const proc = new SoundChipProcessor();
+        fill(proc, proc.maxQueueSizeSamples + 4 * 512);
+        expect(proc.dropped).toBeGreaterThan(0);
+        expect(proc._queueSizeSamples).toBeLessThanOrEqual(proc.maxQueueSizeSamples);
+        expect(proc._queueSizeSamples).toBeGreaterThan(proc.maxQueueSizeSamples - 512);
     });
 });

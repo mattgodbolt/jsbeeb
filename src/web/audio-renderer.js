@@ -76,7 +76,6 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.queue.push({ offset: 0, time, buffer });
         this._queueSizeSamples += buffer.length;
         this.cleanQueue();
-        if (!this.running && this._queueSizeSamples >= this.startQueueSizeSamples) this.running = true;
     }
 
     _shift() {
@@ -84,17 +83,32 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._queueSizeSamples -= dropped.buffer.length;
     }
 
+    _drop(count) {
+        for (let i = 0; i < count; ++i) this._shift();
+        this.dropped += count;
+        this._notify("dropped", count);
+    }
+
     cleanQueue() {
-        const maxLatency = this.targetLatencyMs * 2;
         let dropped = 0;
-        while (this._queueSizeSamples > this.maxQueueSizeSamples || this._queueAge() > maxLatency) {
-            this._shift();
-            dropped++;
+        for (let size = this._queueSizeSamples; size > this.maxQueueSizeSamples; ++dropped)
+            size -= this.queue[dropped].buffer.length;
+        if (dropped) this._drop(dropped);
+    }
+
+    // The queue refills after an underrun in one catch-up burst, which has all
+    // arrived by the next quantum; the excess is trimmed here, where the output
+    // is already discontinuous.
+    _restart() {
+        let dropped = 0;
+        for (let occupancy = this._occupancySamples(); dropped < this.queue.length - 1; ++dropped) {
+            const head = this.queue[dropped];
+            const without = occupancy - (head.buffer.length - head.offset);
+            if (without < this.startQueueSizeSamples) break;
+            occupancy = without;
         }
-        if (dropped) {
-            this.dropped += dropped;
-            this._notify("dropped", dropped);
-        }
+        if (dropped) this._drop(dropped);
+        this.running = true;
     }
 
     _notify(event, count) {
@@ -116,6 +130,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
     process(inputs, outputs) {
         this.cleanQueue();
+        if (!this.running && this._queueSizeSamples >= this.startQueueSizeSamples) this._restart();
         if (this.queue.length === 0) return true;
 
         // I looked into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API),
