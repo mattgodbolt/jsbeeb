@@ -157,6 +157,7 @@ describe("AudioHandler", () => {
                 [{ cycle: 0, enabled: false }],
                 [{ cycle: 0, enabled: true }],
             ]);
+        });
 
         it("creates no Music 5000 audio context unless one is fitted", () => {
             makeHandler();
