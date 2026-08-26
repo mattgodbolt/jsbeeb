@@ -752,7 +752,9 @@ setCrtPic(displayModeFilter);
 
 window.addEventListener("blur", function () {
     keyboard.clearKeys();
+    audioHandler.setWindowFocused(false);
 });
+window.addEventListener("focus", () => audioHandler.setWindowFocused(true));
 
 document.getElementById("fs").addEventListener("click", function (event) {
     screenCanvas.requestFullscreen();
@@ -2320,13 +2322,14 @@ const RewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
 // throughout execute(), so only the idle time starves the audio queue.
 const TickLogIntervalMs = 1000;
 const SlowTickLogMs = 30;
-const tickLog = { start: 0, ticks: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
+const tickLog = { start: 0, ticks: 0, cycles: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
 const SlowPresentLogMs = 30;
 
-function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
+function logTick(now, cycles, idleMs, executeMs, paintMs, snapshotMs) {
     const log = tickLog;
     if (log.start === 0) log.start = now;
     log.ticks++;
+    log.cycles += cycles;
     log.maxIdle = Math.max(log.maxIdle, idleMs);
     log.maxExecute = Math.max(log.maxExecute, executeMs);
     log.maxPaint = Math.max(log.maxPaint, paintMs);
@@ -2344,7 +2347,8 @@ function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
         audio.dropped
     ) {
         console.log(
-            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
+            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks emulating ${((1000 * log.cycles) / clocksPerSecond).toFixed(0)}ms, ` +
+                `idle max ${log.maxIdle.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
                 `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
                 `audio queue min ${queueMin}, underruns ${audio.underrun}, ` +
@@ -2352,7 +2356,7 @@ function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
         );
     }
     log.start = now;
-    log.ticks = log.maxIdle = log.maxExecute = log.maxPaint = log.maxSnapshot = 0;
+    log.ticks = log.cycles = log.maxIdle = log.maxExecute = log.maxPaint = log.maxSnapshot = 0;
 }
 
 rewindUI = new RewindUI({
@@ -2450,7 +2454,8 @@ function tick() {
                 rewindUI.updateButtonState();
                 snapshotMs = performance.now() - end;
             }
-            if (audioStatsNode) logTick(now, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
+            if (audioStatsNode)
+                logTick(now, cycles, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
             paintMsThisTick = 0;
         } catch (e) {
             running = false;

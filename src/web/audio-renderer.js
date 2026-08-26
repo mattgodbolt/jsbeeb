@@ -36,8 +36,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.running = false;
         this.maxQueueSizeSamples = samplesFor(MaxQueuedMs);
         this.port.onmessage = (event) => {
+            if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
             // TODO: even better than this, send over register settings/catch up and run the audio work _here_
-            this.onBuffer(event.data.time, event.data.buffer);
+            else this.onBuffer(event.data.time, event.data.buffer);
         };
         this.nextStats = 0;
     }
@@ -104,6 +105,11 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     // arrived by the next quantum; the excess is trimmed here, where the output
     // is already discontinuous.
     _restart() {
+        this._trimToTarget();
+        this.running = true;
+    }
+
+    _trimToTarget() {
         let dropped = 0;
         for (let occupancy = this._occupancySamples(); dropped < this.queue.length - 1; ++dropped) {
             const head = this.queue[dropped];
@@ -112,11 +118,20 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             occupancy = without;
         }
         if (dropped) this._drop(dropped);
-        this.running = true;
     }
 
     _notify(event, count) {
         this.port.postMessage({ event, count });
+    }
+
+    // Lowering the target trims the queue now; raising it holds the output
+    // until the queue has filled to the new target, as after an underrun.
+    setTargetLatency(ms = DefaultTargetLatencyMs) {
+        this.targetLatencyMs = ms;
+        this.startQueueSizeSamples = samplesFor(ms);
+        this.smoothedOccupancyError = 0;
+        if (this._occupancySamples() >= this.startQueueSizeSamples) this._trimToTarget();
+        else this.running = false;
     }
 
     nextSample() {

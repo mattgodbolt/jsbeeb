@@ -14,6 +14,10 @@ const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).
 // Chart units are queued buffers; drops plot as their count, underruns as a fixed spike.
 const UnderrunSpikeHeight = 20;
 
+// Nobody is watching an unfocused window, so its sound can run far behind
+// the picture, deep enough to ride out the browser starving the tab.
+const UnfocusedLatencyMs = 200;
+
 export class AudioHandler {
     constructor({
         warningNode,
@@ -27,6 +31,7 @@ export class AudioHandler {
     } = {}) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
+        this.audioLatencyMs = audioLatencyMs;
         this.warningNode = warningNode;
         this.noAudio = false;
         toggle(this.warningNode, false);
@@ -155,6 +160,13 @@ export class AudioHandler {
         series.append(now - 1, 0);
         series.append(now, event === "underrun" ? UnderrunSpikeHeight : count);
         series.append(now + 1, 0);
+    }
+
+    setWindowFocused(focused) {
+        this._jsAudioNode?.port.postMessage({
+            command: "setTargetLatency",
+            targetLatencyMs: focused ? this.audioLatencyMs : UnfocusedLatencyMs,
+        });
     }
 
     takeEventCounts() {

@@ -216,3 +216,43 @@ describe("SoundChipProcessor queue trimming", () => {
         expect(proc._queueSizeSamples).toBeGreaterThan(proc.maxQueueSizeSamples - 512);
     });
 });
+
+describe("SoundChipProcessor target latency changes", () => {
+    const outputs = [[new Float32Array(OutputQuantum)]];
+    const fill = (proc, samples) => {
+        for (let i = 0; i < Math.ceil(samples / 512); ++i) proc.onBuffer(Date.now(), new Float32Array(512));
+    };
+
+    it("should hold the output until the queue reaches a raised target", () => {
+        const proc = new SoundChipProcessor();
+        const oldTarget = proc.startQueueSizeSamples;
+        fill(proc, oldTarget);
+        proc.process([], outputs);
+        expect(proc.running).toBe(true);
+
+        proc.setTargetLatency(10 * proc.targetLatencyMs);
+        expect(proc.running).toBe(false);
+        expect(proc.startQueueSizeSamples).toBe(10 * oldTarget);
+        proc.process([], outputs);
+        expect(proc.running).toBe(false);
+
+        fill(proc, 10 * oldTarget);
+        proc.process([], outputs);
+        expect(proc.running).toBe(true);
+        expect(proc.underruns).toBe(0);
+    });
+
+    it("should trim the queue at once when the target is lowered", () => {
+        const proc = new SoundChipProcessor();
+        proc.setTargetLatency(10 * proc.targetLatencyMs);
+        const bigTarget = proc.startQueueSizeSamples;
+        fill(proc, bigTarget);
+        proc.process([], outputs);
+        expect(proc.running).toBe(true);
+
+        proc.setTargetLatency();
+        expect(proc.running).toBe(true);
+        expect(proc.dropped).toBeGreaterThan(0);
+        expect(proc._occupancySamples()).toBeLessThan(proc.startQueueSizeSamples + 512);
+    });
+});
