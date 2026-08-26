@@ -288,7 +288,7 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
   file assumed to be within.
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `audioDebug` - show audio queue stats chart.
-- `audioLatencyMs` - target audio buffer depth in milliseconds (default 40); raise it if sound clicks on a machine that drops frames, lower it to trade clicks for latency.
+- `audioLatencyMs` - target audio buffer depth in milliseconds (default 20); raise it if sound clicks on a machine that drops frames.
 
 ### Atom-specific parameters
 
