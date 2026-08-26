@@ -169,9 +169,13 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         const source = this._source;
         source[0] = this._lastFilteredOutput;
         let prevSample = this._lastFilteredOutput;
+        // The input position from which the queue was dry, so the fade starts
+        // there rather than at the top of the quantum.
+        let dryFrom = this.running ? Infinity : 0;
         for (let i = 1; i <= numInputSamples; ++i) {
             prevSample += filterAlpha * (this.nextSample() - prevSample);
             source[i] = prevSample;
+            if (!this.running && dryFrom === Infinity) dryFrom = i;
         }
         this._lastFilteredOutput = prevSample;
         let gain = this._gain;
@@ -179,7 +183,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             const pos = this._phase + i * sampleRatio;
             const loc = Math.floor(pos);
             const alpha = pos - loc;
-            gain = this.running ? Math.min(1, gain + GainStep) : Math.max(0, gain - GainStep);
+            gain = pos < dryFrom ? Math.min(1, gain + GainStep) : Math.max(0, gain - GainStep);
             channel[i] = (source[loc] * (1 - alpha) + source[loc + 1] * alpha) * gain;
         }
         this._gain = gain;

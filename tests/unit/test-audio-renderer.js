@@ -299,6 +299,20 @@ describe("SoundChipProcessor underrun fade", () => {
         expect(played[played.length - 1]).toBe(0);
     });
 
+    it("should hold full gain up to the sample the queue ran dry at", () => {
+        const proc = new SoundChipProcessor();
+        settled(proc);
+        // Leave the queue with about half a quantum's worth so it runs dry mid-quantum.
+        const perQuantum = Math.floor((OutputQuantum * proc.inputSampleRate) / 48000);
+        while (proc._occupancySamples() > perQuantum / 2) quantum(proc);
+        const before = proc._occupancySamples();
+        const out = quantum(proc);
+        expect(proc.running).toBe(false);
+        const dryAtOutput = Math.floor(before / (proc.inputSampleRate / 48000));
+        for (let i = 0; i < dryAtOutput - 1; ++i) expect(out[i]).toBeCloseTo(level, 3);
+        expect(out[out.length - 1]).toBeLessThan(level);
+    });
+
     it("should fade back in on restart", () => {
         const proc = new SoundChipProcessor();
         settled(proc);
