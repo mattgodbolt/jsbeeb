@@ -444,6 +444,7 @@ describe("SoundChip events", () => {
         chip.toneGenerator.tone(1200);
         chip.toneGenerator.mute();
         chip.mute();
+        chip.reset(false);
         chip.reset(true);
         chip.restoreState(chip.snapshotState());
         expect(events.map((event) => Object.keys(event).find((key) => key !== "cycle"))).toEqual([

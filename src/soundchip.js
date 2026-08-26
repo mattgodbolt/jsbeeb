@@ -398,8 +398,8 @@ export class SoundChip {
     }
 
     reset(hard) {
-        this._emit({ reset: hard });
         if (!hard) return;
+        this._emit({ reset: true });
         for (let i = 0; i < 4; ++i) {
             this.counter[i] = 0;
             this.registers[i] = 0;

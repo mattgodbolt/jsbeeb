@@ -16,11 +16,9 @@ const MaxAdjustFraction = 0.0005;
 
 const isResync = (event) => event.state !== undefined || event.reset !== undefined;
 
-// The chip renders from a stream of timestamped state changes rather than
-// from samples, so when the producer falls behind the chip carries on in its
-// current state (a stall) instead of going silent. Once the producer is back
-// far enough ahead, the stalled time is skipped by applying the missed
-// changes at once.
+// Renders the chip from its timestamped state changes, so a producer that
+// falls behind leaves the chip sounding its current state (a stall) rather
+// than silent; the missed time is skipped once the producer is ahead again.
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super(options);
@@ -133,10 +131,11 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
     _restart() {
         const skipTo = this.upTo - this.targetLeadCycles;
-        const skipped = Math.max(0, this._ms(skipTo - this.clock));
-        if (skipTo > this.clock) this._skipTo(skipTo);
+        if (skipTo > this.clock) {
+            this._notify("skip", this._ms(skipTo - this.clock));
+            this._skipTo(skipTo);
+        }
         this.stalled = false;
-        this._notify("skip", skipped);
     }
 
     _stall(out, offset, length) {

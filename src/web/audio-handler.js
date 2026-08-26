@@ -6,10 +6,8 @@ import { createAudioContext } from "../audio-utils.js";
 import { toggle, fadeIn, fadeOut } from "../dom-utils.js";
 import { toast } from "./toast.js";
 
-// The renderer imports the sound chip, so it is bundled as a worker; a plain
-// URL copies a worklet verbatim, which is fine for one with no imports and is
-// what keeps vite happy when jsbeeb is embedded in other projects
-// (https://github.com/vitejs/vite/discussions/6459).
+// The renderer imports the sound chip, so it must be bundled; a plain URL
+// copies a worklet verbatim (https://github.com/vitejs/vite/discussions/6459).
 import rendererUrl from "./audio-renderer.js?worker&url";
 const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
 
