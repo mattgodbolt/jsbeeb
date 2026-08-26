@@ -120,7 +120,8 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.port.postMessage({ event, count });
     }
 
-    // The producer moves the queue to the new depth; see main.js.
+    // Only records the depth: the main thread fills or drains the queue to it
+    // by emulating ahead or pausing (setEmulationLead in main.js).
     setTargetLatency(ms) {
         const valid = Number.isFinite(ms) && ms > 0;
         this.targetLatencyMs = valid ? Math.min(ms, MaxTargetLatencyMs) : DefaultTargetLatencyMs;
