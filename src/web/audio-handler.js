@@ -11,7 +11,7 @@ import { toast } from "./toast.js";
 const rendererUrl = new URL("./audio-renderer.js", import.meta.url).href;
 const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
 
-// Chart units are queued buffers; drops plot as their count, underruns as a fixed spike.
+// Drops plot as buffers dropped, on the queueSize scale; underruns as a fixed spike.
 const UnderrunSpikeHeight = 20;
 
 export class AudioHandler {
@@ -31,7 +31,7 @@ export class AudioHandler {
         this.noAudio = false;
         toggle(this.warningNode, false);
         this.stats = {};
-        this.eventCounts = { underrun: 0, dropped: 0, queueMinMs: Infinity };
+        this.eventCounts = { underrun: 0, drop: 0, queueMinMs: Infinity };
         if (statsNode) {
             this._initStats(statsNode).catch((error) => {
                 console.error("Unable to initialise audio stats", error);
@@ -114,7 +114,7 @@ export class AudioHandler {
         this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
         this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
         this._addStat("underrun", { strokeStyle: "rgb(220,50,50)", lineWidth: 2 });
-        this._addStat("dropped", { strokeStyle: "rgb(120,80,200)", lineWidth: 2 });
+        this._addStat("drop", { strokeStyle: "rgb(120,80,200)", lineWidth: 2 });
         this.chart.streamTo(statsNode, 100);
     }
 
@@ -159,7 +159,7 @@ export class AudioHandler {
 
     takeEventCounts() {
         const counts = this.eventCounts;
-        this.eventCounts = { underrun: 0, dropped: 0, queueMinMs: Infinity };
+        this.eventCounts = { underrun: 0, drop: 0, queueMinMs: Infinity };
         return counts;
     }
 

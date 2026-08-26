@@ -29,7 +29,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._queueSizeSamples = 0;
         this.dropped = 0;
         this.underruns = 0;
-        this.targetLatencyMs = options?.processorOptions?.targetLatencyMs ?? DefaultTargetLatencyMs;
+        const requestedLatencyMs = options?.processorOptions?.targetLatencyMs;
+        this.targetLatencyMs =
+            Number.isFinite(requestedLatencyMs) && requestedLatencyMs > 0 ? requestedLatencyMs : DefaultTargetLatencyMs;
         this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
         this.smoothedOccupancyError = 0;
         this.minOccupancySamples = Infinity;
@@ -90,7 +92,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     _drop(count) {
         for (let i = 0; i < count; ++i) this._shift();
         this.dropped += count;
-        this._notify("dropped", count);
+        this._notify("drop", count);
     }
 
     cleanQueue() {

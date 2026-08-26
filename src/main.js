@@ -2341,14 +2341,14 @@ function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
         log.maxExecute > SlowTickLogMs ||
         present > SlowPresentLogMs ||
         audio.underrun ||
-        audio.dropped
+        audio.drop
     ) {
         console.log(
             `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
                 `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
                 `audio queue min ${queueMin}, underruns ${audio.underrun}, ` +
-                `dropped ${audio.dropped} buffers`,
+                `dropped ${audio.drop} buffers`,
         );
     }
     log.start = now;
@@ -2386,10 +2386,8 @@ for (const item of document.querySelectorAll(".drive-tracks")) {
     if (drive) showDriveTracks(driveIndex);
 }
 
-// The emulator advances on a timer rather than requestAnimationFrame: a stall
-// in display presentation withholds animation frames, and with them the sound
-// chip's samples (issue #885). Video paints on emulated flyback whenever the
-// tick lands, and the desynchronised canvas is scanned out from there.
+// A timer, not requestAnimationFrame: a display presentation stall withholds
+// animation frames, and with them the sound chip's samples (issue #885).
 const TickMs = 10;
 let tickToken = null;
 
@@ -2445,7 +2443,7 @@ function tick() {
             let snapshotMs = 0;
             rewindCycleCounter += cycles;
             if (rewindCycleCounter >= RewindCaptureCycles) {
-                rewindCycleCounter = 0;
+                rewindCycleCounter -= RewindCaptureCycles;
                 rewindBuffer.push(processor.snapshotState());
                 rewindUI.updateButtonState();
                 snapshotMs = performance.now() - end;
