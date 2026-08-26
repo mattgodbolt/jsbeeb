@@ -5,6 +5,7 @@ const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
 
 const InputSampleRate = 4000000.0 / 8;
 const MaxQueuedMs = 250;
+const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 
 const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 
@@ -16,8 +17,8 @@ const ProportionalGain = 0.2;
 const MaxAdjust = InputSampleRate * 0.0005;
 
 class SoundChipProcessor extends AudioWorkletProcessor {
-    constructor(...args) {
-        super(...args);
+    constructor(options) {
+        super(options);
 
         this.inputSampleRate = InputSampleRate;
         this._lastSample = 0;
@@ -28,7 +29,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._queueSizeSamples = 0;
         this.dropped = 0;
         this.underruns = 0;
-        this.targetLatencyMs = 1000 * (1 / 50); // One frame
+        this.targetLatencyMs = options?.processorOptions?.targetLatencyMs ?? DefaultTargetLatencyMs;
         this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
         this.smoothedOccupancyError = 0;
         this.running = false;
