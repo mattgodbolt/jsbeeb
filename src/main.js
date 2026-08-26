@@ -2283,6 +2283,7 @@ const virtualSpeedUpdater = new VirtualSpeedUpdater();
 const rewindBuffer = new RewindBuffer(30);
 let rewindFrameCounter = 0;
 const RewindCaptureInterval = 50; // ~1 second at 50fps
+const SlowFrameLogMs = 30;
 
 rewindUI = new RewindUI({
     rewindBuffer,
@@ -2361,17 +2362,23 @@ function draw(now) {
             cycles = clocksPerSecond / 50;
         }
         cycles |= 0;
+        if (audioStatsNode && !speedy && now - last > SlowFrameLogMs)
+            console.log(`frame gap ${(now - last).toFixed(1)}ms (wall ${now.toFixed(0)}ms)`);
         try {
             if (!processor.execute(cycles)) {
                 stop(true);
             }
             const end = performance.now();
+            if (audioStatsNode && end - now > SlowFrameLogMs)
+                console.log(`execute took ${(end - now).toFixed(1)}ms (wall ${now.toFixed(0)}ms)`);
             virtualSpeedUpdater.update(cycles, end - now, speedy);
             // Capture rewind snapshot periodically
             if (++rewindFrameCounter >= RewindCaptureInterval) {
                 rewindFrameCounter = 0;
                 rewindBuffer.push(processor.snapshotState());
                 rewindUI.updateButtonState();
+                if (audioStatsNode)
+                    console.log(`snapshot took ${(performance.now() - end).toFixed(1)}ms (wall ${now.toFixed(0)}ms)`);
             }
         } catch (e) {
             running = false;

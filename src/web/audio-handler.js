@@ -100,6 +100,8 @@ export class AudioHandler {
         });
         this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
         this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
+        this._addStat("underrun", { strokeStyle: "rgb(220,50,50)", lineWidth: 2 });
+        this._addStat("dropped", { strokeStyle: "rgb(120,80,200)", lineWidth: 2 });
         this.chart.streamTo(statsNode, 100);
     }
 
@@ -120,10 +122,27 @@ export class AudioHandler {
         this._jsAudioNode.connect(this._audioDestination);
         this._jsAudioNode.port.onmessage = (event) => {
             const now = Date.now();
+            if (event.data.event) {
+                this._onAudioEvent(now, event.data);
+                return;
+            }
             for (const stat of Object.keys(event.data)) {
                 if (this.stats[stat]) this.stats[stat].append(now, event.data[stat]);
             }
         };
+    }
+
+    // Each underrun or drop is a spike on the chart and a console line, so a
+    // click can be matched (or not) to one.
+    _onAudioEvent(now, { event, count, time, occupancyMs }) {
+        const series = this.stats[event === "underrun" ? "underrun" : "dropped"];
+        if (!series) return;
+        series.append(now - 1, 0);
+        series.append(now, count * 10);
+        series.append(now + 1, 0);
+        console.log(
+            `audio ${event} x${count} at ${time.toFixed(3)}s (wall ${performance.now().toFixed(0)}ms), queue ${occupancyMs.toFixed(1)}ms`,
+        );
     }
 
     _audioUnavailable(error) {

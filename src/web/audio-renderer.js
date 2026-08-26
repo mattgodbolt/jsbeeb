@@ -86,10 +86,24 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
     cleanQueue() {
         const maxLatency = this.targetLatencyMs * 2;
+        let dropped = 0;
         while (this._queueSizeSamples > this.maxQueueSizeSamples || this._queueAge() > maxLatency) {
             this._shift();
-            this.dropped++;
+            dropped++;
         }
+        if (dropped) {
+            this.dropped += dropped;
+            this._notify("dropped", dropped);
+        }
+    }
+
+    _notify(event, count) {
+        this.port.postMessage({
+            event,
+            count,
+            time: currentTime,
+            occupancyMs: 1000 * (this._occupancySamples() / this.inputSampleRate),
+        });
     }
 
     nextSample() {
@@ -97,9 +111,10 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             const queueElement = this.queue[0];
             this._lastSample = queueElement.buffer[queueElement.offset];
             if (++queueElement.offset === queueElement.buffer.length) this._shift();
-        } else {
-            this.underruns++;
+        } else if (this.running) {
             this.running = false;
+            this.underruns++;
+            this._notify("underrun", 1);
         }
         return this._lastSample;
     }
