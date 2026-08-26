@@ -2318,28 +2318,28 @@ const RewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
 // idle between ticks or a tick ran long, or the audio queue underran or
 // dropped, so a click can be matched to a cause. The sound chip posts samples
 // throughout execute(), so only the idle time starves the audio queue.
-const TickLogIntervalMs = 1000;
-const SlowTickLogMs = 30;
-const tickLog = { start: 0, ticks: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
-const SlowPresentLogMs = 30;
+const AudioDebugLogIntervalMs = 1000;
+const AudioDebugSlowTickMs = 30;
+const audioDebugLog = { start: 0, ticks: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
+const AudioDebugSlowPresentMs = 30;
 
-function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
-    const log = tickLog;
+function logAudioDebugTick(now, idleMs, executeMs, paintMs, snapshotMs) {
+    const log = audioDebugLog;
     if (log.start === 0) log.start = now;
     log.ticks++;
     log.maxIdle = Math.max(log.maxIdle, idleMs);
     log.maxExecute = Math.max(log.maxExecute, executeMs);
     log.maxPaint = Math.max(log.maxPaint, paintMs);
     log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
-    if (now - log.start < TickLogIntervalMs) return;
+    if (now - log.start < AudioDebugLogIntervalMs) return;
     const audio = audioHandler.takeEventCounts();
     const present = presentMsMax;
     presentMsMax = 0;
     const queueMin = Number.isFinite(audio.queueMinMs) ? `${audio.queueMinMs.toFixed(1)}ms` : "(no stats)";
     if (
-        log.maxIdle > SlowTickLogMs ||
-        log.maxExecute > SlowTickLogMs ||
-        present > SlowPresentLogMs ||
+        log.maxIdle > AudioDebugSlowTickMs ||
+        log.maxExecute > AudioDebugSlowTickMs ||
+        present > AudioDebugSlowPresentMs ||
         audio.underrun ||
         audio.drop
     ) {
@@ -2448,7 +2448,8 @@ function tick() {
                 rewindUI.updateButtonState();
                 snapshotMs = performance.now() - end;
             }
-            if (audioStatsNode) logTick(now, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
+            if (audioStatsNode)
+                logAudioDebugTick(now, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
             paintMsThisTick = 0;
         } catch (e) {
             running = false;
