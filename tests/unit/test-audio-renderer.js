@@ -107,7 +107,7 @@ describe("SoundChipProcessor rate control", () => {
     it("should speed up when the queue is over target and slow down when under", () => {
         const over = new SoundChipProcessor();
         over.running = true;
-        for (let i = 0; i < Math.ceil((2 * over.startQueueSizeSamples) / 512); ++i)
+        for (let i = 0; i < Math.ceil((4 * over.startQueueSizeSamples) / 512); ++i)
             over.onBuffer(Date.now(), new Float32Array(512));
         const outputs = [[new Float32Array(OutputQuantum)]];
         for (let i = 0; i < 20; ++i) over.process([], outputs);
@@ -262,5 +262,78 @@ describe("SoundChipProcessor target latency option", () => {
         expect(proc.startQueueSizeSamples).toBeLessThanOrEqual(proc.maxQueueSizeSamples / 2);
         proc.setTargetLatency("abc");
         expect(proc.targetLatencyMs).toBe(new SoundChipProcessor().targetLatencyMs);
+    });
+});
+
+describe("SoundChipProcessor underrun fade", () => {
+    const FadeSamples = 48000 * 0.001;
+    const level = 0.5;
+    const fill = (proc, samples) => {
+        for (let i = 0; i < Math.ceil(samples / 512); ++i) proc.onBuffer(Date.now(), new Float32Array(512).fill(level));
+    };
+    const quantum = (proc) => {
+        const outputs = [[new Float32Array(OutputQuantum)]];
+        proc.process([], outputs);
+        return outputs[0][0];
+    };
+    const maxStep = (samples) => {
+        let worst = 0;
+        for (let i = 1; i < samples.length; ++i) worst = Math.max(worst, Math.abs(samples[i] - samples[i - 1]));
+        return worst;
+    };
+    // Two targets' worth queued, played until settled at the fill level.
+    const settled = (proc) => {
+        fill(proc, 2 * proc.startQueueSizeSamples);
+        let out;
+        for (let i = 0; i < 4; ++i) out = quantum(proc);
+        expect(out[out.length - 1]).toBeCloseTo(level, 3);
+    };
+
+    it("should fade out on underrun instead of stepping to silence", () => {
+        const proc = new SoundChipProcessor();
+        settled(proc);
+        const played = [];
+        for (let i = 0; i < 40; ++i) played.push(...quantum(proc));
+        expect(proc.underruns).toBe(1);
+        expect(maxStep(played)).toBeLessThanOrEqual(level / FadeSamples + 1e-6);
+        expect(played[played.length - 1]).toBe(0);
+    });
+
+    it("should hold full gain up to the sample the queue ran dry at", () => {
+        const proc = new SoundChipProcessor();
+        settled(proc);
+        // Leave the queue with about half a quantum's worth so it runs dry mid-quantum.
+        const perQuantum = Math.floor((OutputQuantum * proc.inputSampleRate) / 48000);
+        while (proc._occupancySamples() > perQuantum / 2) quantum(proc);
+        const before = proc._occupancySamples();
+        const out = quantum(proc);
+        expect(proc.running).toBe(false);
+        const dryAtOutput = Math.floor(before / (proc.inputSampleRate / 48000));
+        for (let i = 0; i < dryAtOutput - 1; ++i) expect(out[i]).toBeCloseTo(level, 3);
+        expect(out[out.length - 1]).toBeLessThan(level);
+    });
+
+    it("should fade back in on restart", () => {
+        const proc = new SoundChipProcessor();
+        settled(proc);
+        for (let i = 0; i < 40; ++i) quantum(proc);
+        expect(proc.running).toBe(false);
+        fill(proc, proc.startQueueSizeSamples);
+        const first = quantum(proc);
+        expect(proc.running).toBe(true);
+        expect(Math.abs(first[0])).toBeLessThanOrEqual(level / FadeSamples + 1e-6);
+        expect(maxStep(first)).toBeLessThanOrEqual(level / FadeSamples + 1e-6);
+        expect(first[first.length - 1]).toBeCloseTo(level, 1);
+    });
+
+    it("should keep posting stats while the queue is empty", () => {
+        const proc = new SoundChipProcessor();
+        settled(proc);
+        for (let i = 0; i < 40; ++i) quantum(proc);
+        expect(proc.queue.length).toBe(0);
+        const posted = vi.spyOn(proc.port, "postMessage");
+        proc.nextStats = 0;
+        quantum(proc);
+        expect(posted).toHaveBeenCalledWith(expect.objectContaining({ queueSize: 0 }));
     });
 });
