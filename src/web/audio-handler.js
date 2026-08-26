@@ -11,6 +11,9 @@ import { toast } from "./toast.js";
 const rendererUrl = new URL("./audio-renderer.js", import.meta.url).href;
 const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
 
+// Chart units are queued buffers; drops plot as their count, underruns as a fixed spike.
+const UnderrunSpikeHeight = 20;
+
 export class AudioHandler {
     constructor({
         warningNode,
@@ -149,7 +152,7 @@ export class AudioHandler {
         const series = this.stats[event];
         if (!series) return;
         series.append(now - 1, 0);
-        series.append(now, count * 10);
+        series.append(now, event === "underrun" ? UnderrunSpikeHeight : count);
         series.append(now + 1, 0);
     }
 
