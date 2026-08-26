@@ -245,3 +245,22 @@ describe("SoundChipProcessor target latency changes", () => {
         expect(proc.underruns).toBe(0);
     });
 });
+
+describe("SoundChipProcessor target latency option", () => {
+    it("should fall back to the default for a missing, zero or non-numeric target", () => {
+        const fallback = new SoundChipProcessor().targetLatencyMs;
+        for (const targetLatencyMs of [undefined, 0, -5, NaN, Infinity, "abc"]) {
+            const proc = new SoundChipProcessor({ processorOptions: { targetLatencyMs } });
+            expect(proc.targetLatencyMs).toBe(fallback);
+        }
+        expect(new SoundChipProcessor({ processorOptions: { targetLatencyMs: 35 } }).targetLatencyMs).toBe(35);
+    });
+
+    it("should cap the target so a catch-up burst still fits under the hard maximum", () => {
+        const proc = new SoundChipProcessor();
+        proc.setTargetLatency(100000);
+        expect(proc.startQueueSizeSamples).toBeLessThanOrEqual(proc.maxQueueSizeSamples / 2);
+        proc.setTargetLatency("abc");
+        expect(proc.targetLatencyMs).toBe(new SoundChipProcessor().targetLatencyMs);
+    });
+});

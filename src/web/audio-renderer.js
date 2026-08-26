@@ -4,8 +4,10 @@ const lowPassFilterFreq = sampleRate / 2;
 const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
 
 const InputSampleRate = 4000000.0 / 8;
-const MaxQueuedMs = 250;
+const MaxQueuedMs = 500;
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
+// Leaves room above the target for the producer's catch-up bursts.
+const MaxTargetLatencyMs = MaxQueuedMs / 2;
 
 const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 
@@ -29,9 +31,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._queueSizeSamples = 0;
         this.dropped = 0;
         this.underruns = 0;
-        this.targetLatencyMs = options?.processorOptions?.targetLatencyMs ?? DefaultTargetLatencyMs;
-        this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
-        this.smoothedOccupancyError = 0;
+        this.setTargetLatency(options?.processorOptions?.targetLatencyMs);
         this.minOccupancySamples = Infinity;
         this.running = false;
         this.maxQueueSizeSamples = samplesFor(MaxQueuedMs);
@@ -91,7 +91,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     _drop(count) {
         for (let i = 0; i < count; ++i) this._shift();
         this.dropped += count;
-        this._notify("dropped", count);
+        this._notify("drop", count);
     }
 
     cleanQueue() {
@@ -121,9 +121,10 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 
     // The producer moves the queue to the new depth; see main.js.
-    setTargetLatency(ms = DefaultTargetLatencyMs) {
-        this.targetLatencyMs = ms;
-        this.startQueueSizeSamples = samplesFor(ms);
+    setTargetLatency(ms) {
+        const valid = Number.isFinite(ms) && ms > 0;
+        this.targetLatencyMs = valid ? Math.min(ms, MaxTargetLatencyMs) : DefaultTargetLatencyMs;
+        this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
         this.smoothedOccupancyError = 0;
     }
 
