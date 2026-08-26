@@ -88,8 +88,8 @@ export class AudioHandler {
 
     // The Music 5000 gets its own context, running at the board's own sample rate.
     _createMusic5000() {
+        if (!this.audioContext?.audioWorklet) return new FakeMusic5000();
         const context = createAudioContext({ sampleRate: 46875 });
-        if (!context?.audioWorklet) return new FakeMusic5000();
         this.audioContextM5000 = context;
         context.onstatechange = () => this.checkStatus();
         context.audioWorklet
