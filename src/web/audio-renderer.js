@@ -98,12 +98,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     }
 
     _notify(event, count) {
-        this.port.postMessage({
-            event,
-            count,
-            time: currentTime,
-            occupancyMs: 1000 * (this._occupancySamples() / this.inputSampleRate),
-        });
+        this.port.postMessage({ event, count });
     }
 
     nextSample() {

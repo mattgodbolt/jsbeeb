@@ -19,6 +19,7 @@ export class AudioHandler {
         this.noAudio = false;
         toggle(this.warningNode, false);
         this.stats = {};
+        this.eventCounts = { underrun: 0, dropped: 0 };
         if (statsNode) {
             this._initStats(statsNode).catch((error) => {
                 console.error("Unable to initialise audio stats", error);
@@ -132,17 +133,19 @@ export class AudioHandler {
         };
     }
 
-    // Each underrun or drop is a spike on the chart and a console line, so a
-    // click can be matched (or not) to one.
-    _onAudioEvent(now, { event, count, time, occupancyMs }) {
-        const series = this.stats[event === "underrun" ? "underrun" : "dropped"];
+    _onAudioEvent(now, { event, count }) {
+        this.eventCounts[event] += count;
+        const series = this.stats[event];
         if (!series) return;
         series.append(now - 1, 0);
         series.append(now, count * 10);
         series.append(now + 1, 0);
-        console.log(
-            `audio ${event} x${count} at ${time.toFixed(3)}s (wall ${performance.now().toFixed(0)}ms), queue ${occupancyMs.toFixed(1)}ms`,
-        );
+    }
+
+    takeEventCounts() {
+        const counts = this.eventCounts;
+        this.eventCounts = { underrun: 0, dropped: 0 };
+        return counts;
     }
 
     _audioUnavailable(error) {
