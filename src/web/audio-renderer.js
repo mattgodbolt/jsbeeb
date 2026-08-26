@@ -147,9 +147,16 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.chip.renderAt(this.clock, out, offset, length);
     }
 
-    // Renders `length` input samples, applying each change when the clock
-    // reaches it. Past `upTo` the chip's state is held and the clock waits,
-    // until the producer is a full target ahead again (see _restart).
+    // Input samples before the next change of state: the head event, or
+    // the producer's position, whichever the clock reaches first. A resync
+    // takes effect at once, since it starts a new timeline.
+    _samplesUntilNextChange() {
+        const head = this.events[this.eventsHead];
+        if (head !== undefined && isResync(head)) return 0;
+        const boundary = head === undefined ? this.upTo : Math.min(head.cycle, this.upTo);
+        return Math.floor((boundary - this.clock) * this.samplesPerCycle);
+    }
+
     _renderInput(out, length) {
         if (this.stalled) {
             this._stall(out, 0, length);
@@ -157,27 +164,21 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         }
         let offset = 0;
         while (length > 0) {
-            const head = this.events[this.eventsHead];
-            if (head !== undefined && isResync(head)) {
-                this.clock = head.cycle;
-                this._applyHead();
+            const n = Math.min(length, this._samplesUntilNextChange());
+            if (n > 0) {
+                this.chip.renderAt(this.clock, out, offset, n);
+                this.clock += n / this.samplesPerCycle;
+                offset += n;
+                length -= n;
                 continue;
             }
-            const boundary = Math.min(head === undefined ? Infinity : head.cycle, this.upTo);
-            const untilBoundary = Math.floor((boundary - this.clock) * this.samplesPerCycle);
-            if (untilBoundary <= 0) {
-                if (head !== undefined && head.cycle <= this.upTo) {
-                    this._applyHead();
-                    continue;
-                }
+            const head = this.events[this.eventsHead];
+            if (head === undefined) {
                 this._stall(out, offset, length);
                 return;
             }
-            const n = Math.min(length, untilBoundary);
-            this.chip.renderAt(this.clock, out, offset, n);
-            this.clock += n / this.samplesPerCycle;
-            offset += n;
-            length -= n;
+            if (isResync(head)) this.clock = head.cycle;
+            this._applyHead();
         }
     }
 
