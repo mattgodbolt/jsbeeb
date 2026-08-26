@@ -29,6 +29,7 @@ export class AudioHandler {
         noSeek,
         cpuSpeed,
         isAtom,
+        hasMusic5000,
     } = {}) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
@@ -84,31 +85,31 @@ export class AudioHandler {
 
         this.warningNode.addEventListener("mousedown", () => this.tryResume());
 
-        // Initialise Music 5000 audio context
-        this.audioContextM5000 = createAudioContext({ sampleRate: 46875 });
+        this.audioContextM5000 = null;
+        this._music5000workletnode = null;
+        this.music5000 = hasMusic5000 ? this._createMusic5000() : new FakeMusic5000();
+    }
 
-        if (this.audioContextM5000 && this.audioContextM5000.audioWorklet) {
-            this.audioContextM5000.onstatechange = () => this.checkStatus();
-            this.music5000 = new Music5000((buffer) => this._onBufferMusic5000(buffer));
-
-            this.audioContextM5000.audioWorklet
-                .addModule(music5000WorkletUrl)
-                .then(() => {
-                    this._music5000workletnode = new AudioWorkletNode(this.audioContextM5000, "music5000", {
-                        outputChannelCount: [2],
-                    });
-                    this._music5000workletnode.connect(this.audioContextM5000.destination);
-                })
-                .catch((error) => {
-                    console.error("Unable to initialise Music 5000 audio", error);
-                    toast(
-                        `The Music 5000 will be silent: its audio could not be started (${error?.message ?? error}). Reloading the page may help.`,
-                        { title: "Music 5000", quietKey: "quietMusic5000Audio" },
-                    );
-                });
-        } else {
-            this.music5000 = new FakeMusic5000();
-        }
+    // The Music 5000 gets its own context, running at the board's own sample rate.
+    _createMusic5000() {
+        if (!this.audioContext?.audioWorklet) return new FakeMusic5000();
+        const context = createAudioContext({ sampleRate: 46875 });
+        this.audioContextM5000 = context;
+        context.onstatechange = () => this.checkStatus();
+        context.audioWorklet
+            .addModule(music5000WorkletUrl)
+            .then(() => {
+                this._music5000workletnode = new AudioWorkletNode(context, "music5000", { outputChannelCount: [2] });
+                this._music5000workletnode.connect(context.destination);
+            })
+            .catch((error) => {
+                console.error("Unable to initialise Music 5000 audio", error);
+                toast(
+                    `The Music 5000 will be silent: its audio could not be started (${error?.message ?? error}). Reloading the page may help.`,
+                    { title: "Music 5000", quietKey: "quietMusic5000Audio" },
+                );
+            });
+        return new Music5000((buffer) => this._onBufferMusic5000(buffer));
     }
 
     // Lazily load smoothie and set up the audio stats chart.
