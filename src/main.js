@@ -2335,6 +2335,7 @@ function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
     const audio = audioHandler.takeEventCounts();
     const present = presentMsMax;
     presentMsMax = 0;
+    const queueMin = Number.isFinite(audio.queueMinMs) ? `${audio.queueMinMs.toFixed(1)}ms` : "(no stats)";
     if (
         log.maxIdle > SlowTickLogMs ||
         log.maxExecute > SlowTickLogMs ||
@@ -2346,7 +2347,7 @@ function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
             `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
                 `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
-                `audio queue min ${audio.queueMinMs.toFixed(1)}ms, underruns ${audio.underrun}, ` +
+                `audio queue min ${queueMin}, underruns ${audio.underrun}, ` +
                 `dropped ${audio.dropped} buffers`,
         );
     }
