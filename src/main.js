@@ -2250,6 +2250,7 @@ function profileVideo(arg) {
 }
 
 let last = 0;
+let lastEnd = 0;
 
 function VirtualSpeedUpdater() {
     this.cycles = 0;
@@ -2287,30 +2288,32 @@ let rewindCycleCounter = 0;
 const RewindCaptureInterval = 50; // emulated frames, ~1 second
 const RewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
 
-// Under ?audioDebug, one console line per second in which a tick ran late
-// or the audio queue underran or dropped, so a click can be matched to a cause.
+// Under ?audioDebug, one console line per second in which the emulator sat
+// idle between ticks or a tick ran long, or the audio queue underran or
+// dropped, so a click can be matched to a cause. The sound chip posts samples
+// throughout execute(), so only the idle time starves the audio queue.
 const TickLogIntervalMs = 1000;
 const SlowTickLogMs = 30;
-const tickLog = { start: 0, ticks: 0, maxGap: 0, maxExecute: 0, maxSnapshot: 0 };
+const tickLog = { start: 0, ticks: 0, maxIdle: 0, maxExecute: 0, maxSnapshot: 0 };
 
-function logTick(now, gapMs, executeMs, snapshotMs) {
+function logTick(now, idleMs, executeMs, snapshotMs) {
     const log = tickLog;
     if (log.start === 0) log.start = now;
     log.ticks++;
-    log.maxGap = Math.max(log.maxGap, gapMs);
+    log.maxIdle = Math.max(log.maxIdle, idleMs);
     log.maxExecute = Math.max(log.maxExecute, executeMs);
     log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
     if (now - log.start < TickLogIntervalMs) return;
     const audio = audioHandler.takeEventCounts();
-    if (log.maxGap > SlowTickLogMs || log.maxExecute > SlowTickLogMs || audio.underrun || audio.dropped) {
+    if (log.maxIdle > SlowTickLogMs || log.maxExecute > SlowTickLogMs || audio.underrun || audio.dropped) {
         console.log(
-            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, gap max ${log.maxGap.toFixed(0)}ms, ` +
+            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
                 `audio underruns ${audio.underrun}, dropped ${audio.dropped} buffers`,
         );
     }
     log.start = now;
-    log.ticks = log.maxGap = log.maxExecute = log.maxSnapshot = 0;
+    log.ticks = log.maxIdle = log.maxExecute = log.maxSnapshot = 0;
 }
 
 rewindUI = new RewindUI({
@@ -2408,7 +2411,7 @@ function tick() {
                 rewindUI.updateButtonState();
                 snapshotMs = performance.now() - end;
             }
-            if (audioStatsNode) logTick(now, speedy ? 0 : now - last, end - now, snapshotMs);
+            if (audioStatsNode) logTick(now, speedy ? 0 : now - lastEnd, end - now, snapshotMs);
         } catch (e) {
             running = false;
             utils.noteEvent("exception", "thrown", e.stack);
@@ -2420,6 +2423,7 @@ function tick() {
         }
     }
     last = now;
+    lastEnd = performance.now();
 }
 
 function run() {
