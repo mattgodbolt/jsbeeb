@@ -216,3 +216,14 @@ describe("SoundChipProcessor queue trimming", () => {
         expect(proc._queueSizeSamples).toBeGreaterThan(proc.maxQueueSizeSamples - 512);
     });
 });
+
+describe("SoundChipProcessor target latency option", () => {
+    it("should fall back to the default for a missing, zero or non-numeric target", () => {
+        const fallback = new SoundChipProcessor().targetLatencyMs;
+        for (const targetLatencyMs of [undefined, 0, -5, NaN, Infinity, "abc"]) {
+            const proc = new SoundChipProcessor({ processorOptions: { targetLatencyMs } });
+            expect(proc.targetLatencyMs).toBe(fallback);
+        }
+        expect(new SoundChipProcessor({ processorOptions: { targetLatencyMs: 35 } }).targetLatencyMs).toBe(35);
+    });
+});

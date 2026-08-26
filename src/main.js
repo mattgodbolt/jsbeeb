@@ -2301,11 +2301,11 @@ function logFrame(now, gapMs, executeMs, snapshotMs) {
     log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
     if (now - log.start < FrameLogIntervalMs) return;
     const audio = audioHandler.takeEventCounts();
-    if (log.maxGap > SlowFrameLogMs || log.maxExecute > SlowFrameLogMs || audio.underrun || audio.dropped) {
+    if (log.maxGap > SlowFrameLogMs || log.maxExecute > SlowFrameLogMs || audio.underrun || audio.drop) {
         console.log(
             `${(now / 1000).toFixed(0)}s: ${log.frames} frames, gap max ${log.maxGap.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
-                `audio underruns ${audio.underrun}, dropped ${audio.dropped} buffers`,
+                `audio underruns ${audio.underrun}, dropped ${audio.drop} buffers`,
         );
     }
     log.start = now;
