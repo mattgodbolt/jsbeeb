@@ -111,6 +111,22 @@ describe("AudioHandler", () => {
             expect(warning().textContent).toContain(SuspendedText);
         });
 
+        it("ships the chip's writes with the emulator's position on flush", async () => {
+            const handler = makeHandler();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+            const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
+
+            handler.soundChip.scheduler.epoch = 5000;
+            handler.soundChip.poke(0x8d);
+            handler.flushChipEvents();
+            handler.flushChipEvents();
+
+            expect(posted.mock.calls.map((call) => call[0])).toEqual([
+                { upTo: 5000, events: [{ cycle: 5000, poke: 0x8d }] },
+                { upTo: 5000, events: [] },
+            ]);
+        });
+
         it("fades the warning out once the audio is running again", () => {
             const handler = makeHandler();
 

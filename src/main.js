@@ -2338,21 +2338,20 @@ function logAudioDebugTick(now, cycles, idleMs, executeMs, paintMs, snapshotMs) 
     const audio = audioHandler.takeEventCounts();
     const present = presentMsMax;
     presentMsMax = 0;
-    const queueMin = Number.isFinite(audio.queueMinMs) ? `${audio.queueMinMs.toFixed(1)}ms` : "(no stats)";
+    const leadMin = Number.isFinite(audio.leadMinMs) ? `${audio.leadMinMs.toFixed(1)}ms` : "(no stats)";
     if (
         log.maxIdle > AudioDebugSlowTickMs ||
         log.maxExecute > AudioDebugSlowTickMs ||
         present > AudioDebugSlowPresentMs ||
-        audio.underrun ||
-        audio.drop
+        audio.stall ||
+        audio.skip
     ) {
         console.log(
             `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks emulating ${((1000 * log.cycles) / clocksPerSecond).toFixed(0)}ms, ` +
                 `idle max ${log.maxIdle.toFixed(0)}ms, ` +
                 `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
                 `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
-                `audio queue min ${queueMin}, underruns ${audio.underrun}, ` +
-                `dropped ${audio.drop} buffers`,
+                `audio lead min ${leadMin}, stalls ${audio.stall}, skipped ${audio.skip.toFixed(0)}ms`,
         );
     }
     log.start = now;
@@ -2425,7 +2424,6 @@ function tick() {
 
     scheduleTick(speedy ? 0 : TickMs);
 
-    audioHandler.soundChip.catchUp();
     gamepad.update(processor.sysvia);
     syncLights();
     if (last !== 0) {
@@ -2442,6 +2440,7 @@ function tick() {
             if (!processor.execute(cycles)) {
                 stop(true);
             }
+            audioHandler.flushChipEvents();
             const end = performance.now();
             virtualSpeedUpdater.update(cycles, end - now, speedy);
             let snapshotMs = 0;
@@ -2483,8 +2482,8 @@ function setEmulationLead(leadMs) {
     const aheadMs = leadMs - emulationLeadMs;
     emulationLeadMs = leadMs;
     if (aheadMs > 0) {
-        audioHandler.soundChip.catchUp();
         if (!processor.execute((aheadMs * clocksPerSecond) / 1000)) stop(true);
+        audioHandler.flushChipEvents();
     } else {
         last -= aheadMs;
     }
