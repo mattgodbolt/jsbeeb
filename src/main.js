@@ -752,9 +752,9 @@ setCrtPic(displayModeFilter);
 
 window.addEventListener("blur", function () {
     keyboard.clearKeys();
-    audioHandler.setWindowFocused(false);
+    setEmulationLead(audioHandler.setWindowFocused(false));
 });
-window.addEventListener("focus", () => audioHandler.setWindowFocused(true));
+window.addEventListener("focus", () => setEmulationLead(audioHandler.setWindowFocused(true)));
 
 document.getElementById("fs").addEventListener("click", function (event) {
     screenCanvas.requestFullscreen();
@@ -2433,7 +2433,7 @@ function tick() {
     if (last !== 0) {
         let cycles;
         if (!speedy) {
-            const sinceLast = now - last;
+            const sinceLast = Math.max(0, now - last);
             cycles = (sinceLast * clocksPerSecond) / 1000;
             cycles = Math.min(cycles, MaxCyclesPerTick);
         } else {
@@ -2467,12 +2467,29 @@ function tick() {
             stop(false);
         }
     }
-    last = now;
+    last = Math.max(last, now);
     lastEnd = performance.now();
 }
 
 function run() {
     scheduleTick(0);
+}
+
+// A change of audio buffer depth is taken by the picture, not the sound:
+// gaining lead emulates ahead at once; losing it moves `last` forward so the
+// ticks emulate nothing until the queue has drained by that much.
+let emulationLeadMs = 0;
+
+function setEmulationLead(leadMs) {
+    if (!running) return;
+    const aheadMs = leadMs - emulationLeadMs;
+    emulationLeadMs = leadMs;
+    if (aheadMs > 0) {
+        audioHandler.soundChip.catchUp();
+        if (!processor.execute((aheadMs * clocksPerSecond) / 1000)) stop(true);
+    } else {
+        last -= aheadMs;
+    }
 }
 
 let wasPreviouslyRunning = false;

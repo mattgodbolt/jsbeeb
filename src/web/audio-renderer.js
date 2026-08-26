@@ -105,11 +105,6 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     // arrived by the next quantum; the excess is trimmed here, where the output
     // is already discontinuous.
     _restart() {
-        this._trimToTarget();
-        this.running = true;
-    }
-
-    _trimToTarget() {
         let dropped = 0;
         for (let occupancy = this._occupancySamples(); dropped < this.queue.length - 1; ++dropped) {
             const head = this.queue[dropped];
@@ -118,20 +113,18 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             occupancy = without;
         }
         if (dropped) this._drop(dropped);
+        this.running = true;
     }
 
     _notify(event, count) {
         this.port.postMessage({ event, count });
     }
 
-    // Lowering the target trims the queue now; raising it holds the output
-    // until the queue has filled to the new target, as after an underrun.
+    // The producer moves the queue to the new depth; see main.js.
     setTargetLatency(ms = DefaultTargetLatencyMs) {
         this.targetLatencyMs = ms;
         this.startQueueSizeSamples = samplesFor(ms);
         this.smoothedOccupancyError = 0;
-        if (this._occupancySamples() >= this.startQueueSizeSamples) this._trimToTarget();
-        else this.running = false;
     }
 
     nextSample() {

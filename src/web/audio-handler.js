@@ -16,7 +16,8 @@ const UnderrunSpikeHeight = 20;
 
 // Nobody is watching an unfocused window, so its sound can run far behind
 // the picture, deep enough to ride out the browser starving the tab.
-const UnfocusedLatencyMs = 200;
+export const UnfocusedLatencyMs = 200;
+export const DefaultLatencyMs = 20;
 
 export class AudioHandler {
     constructor({
@@ -31,7 +32,7 @@ export class AudioHandler {
     } = {}) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
-        this.audioLatencyMs = audioLatencyMs;
+        this.audioLatencyMs = audioLatencyMs ?? DefaultLatencyMs;
         this.warningNode = warningNode;
         this.noAudio = false;
         toggle(this.warningNode, false);
@@ -162,11 +163,11 @@ export class AudioHandler {
         series.append(now + 1, 0);
     }
 
+    // Returns how far ahead of the sound the picture should now run, in ms.
     setWindowFocused(focused) {
-        this._jsAudioNode?.port.postMessage({
-            command: "setTargetLatency",
-            targetLatencyMs: focused ? this.audioLatencyMs : UnfocusedLatencyMs,
-        });
+        const targetLatencyMs = focused ? this.audioLatencyMs : UnfocusedLatencyMs;
+        this._jsAudioNode?.port.postMessage({ command: "setTargetLatency", targetLatencyMs });
+        return targetLatencyMs - this.audioLatencyMs;
     }
 
     takeEventCounts() {
