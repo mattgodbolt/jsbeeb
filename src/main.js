@@ -553,17 +553,40 @@ function swapCanvas(newFilterClass) {
 const canvas = createCanvasForFilter(displayModeFilter);
 displayModeFilter = canvas.filterClass;
 
+// The emulator paints into its own framebuffer; flyback copies the finished
+// frame into the canvas and an animation frame presents it, so a stalled
+// display holds up the picture and not the emulation (issue #885).
+const videoFb32 = new Uint32Array(canvas.fb32.length);
+const pendingFrame = { minx: 0, miny: 0, maxx: 0, maxy: 0, frameCount: 0, lineGrid: new Uint8Array(0) };
+let presentScheduled = false;
 let paintMsThisTick = 0;
+let presentMsMax = 0;
+
+function present() {
+    presentScheduled = false;
+    const start = performance.now();
+    canvas.paint(pendingFrame.minx, pendingFrame.miny, pendingFrame.maxx, pendingFrame.maxy, pendingFrame);
+    presentMsMax = Math.max(presentMsMax, performance.now() - start);
+}
+
 video = new Video(
     model.isMaster,
-    canvas.fb32,
+    videoFb32,
     function paint(minx, miny, maxx, maxy) {
         frames++;
         if (frames < frameSkip) return;
         frames = 0;
         const start = performance.now();
-        canvas.paint(minx, miny, maxx, maxy, { frameCount: this.frameCount, lineGrid: this.lineGrid });
+        canvas.fb32.set(videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
+        if (pendingFrame.lineGrid.length !== this.lineGrid.length)
+            pendingFrame.lineGrid = new Uint8Array(this.lineGrid.length);
+        pendingFrame.lineGrid.set(this.lineGrid);
+        Object.assign(pendingFrame, { minx, miny, maxx, maxy, frameCount: this.frameCount });
         paintMsThisTick += performance.now() - start;
+        if (!presentScheduled) {
+            presentScheduled = true;
+            window.requestAnimationFrame(present);
+        }
     },
     { isAtom: model.isAtom },
 );
@@ -2298,6 +2321,7 @@ const RewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
 const TickLogIntervalMs = 1000;
 const SlowTickLogMs = 30;
 const tickLog = { start: 0, ticks: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
+const SlowPresentLogMs = 30;
 
 function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
     const log = tickLog;
@@ -2309,11 +2333,19 @@ function logTick(now, idleMs, executeMs, paintMs, snapshotMs) {
     log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
     if (now - log.start < TickLogIntervalMs) return;
     const audio = audioHandler.takeEventCounts();
-    if (log.maxIdle > SlowTickLogMs || log.maxExecute > SlowTickLogMs || audio.underrun || audio.dropped) {
+    const present = presentMsMax;
+    presentMsMax = 0;
+    if (
+        log.maxIdle > SlowTickLogMs ||
+        log.maxExecute > SlowTickLogMs ||
+        present > SlowPresentLogMs ||
+        audio.underrun ||
+        audio.dropped
+    ) {
         console.log(
             `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks, idle max ${log.maxIdle.toFixed(0)}ms, ` +
-                `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(0)}ms), ` +
-                `snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
+                `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
+                `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
                 `audio underruns ${audio.underrun}, dropped ${audio.dropped} buffers`,
         );
     }
