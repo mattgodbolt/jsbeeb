@@ -5,6 +5,7 @@ const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
 
 const InputSampleRate = 4000000.0 / 8;
 const MaxQueuedMs = 250;
+const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 
 const samplesFor = (ms) => (InputSampleRate * ms) / 1000;
 
@@ -16,8 +17,8 @@ const ProportionalGain = 0.2;
 const MaxAdjust = InputSampleRate * 0.0005;
 
 class SoundChipProcessor extends AudioWorkletProcessor {
-    constructor(...args) {
-        super(...args);
+    constructor(options) {
+        super(options);
 
         this.inputSampleRate = InputSampleRate;
         this._lastSample = 0;
@@ -28,7 +29,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._queueSizeSamples = 0;
         this.dropped = 0;
         this.underruns = 0;
-        this.targetLatencyMs = 1000 * (1 / 50); // One frame
+        const requestedLatencyMs = options?.processorOptions?.targetLatencyMs;
+        this.targetLatencyMs =
+            Number.isFinite(requestedLatencyMs) && requestedLatencyMs > 0 ? requestedLatencyMs : DefaultTargetLatencyMs;
         this.startQueueSizeSamples = samplesFor(this.targetLatencyMs);
         this.smoothedOccupancyError = 0;
         this.running = false;
@@ -76,7 +79,6 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.queue.push({ offset: 0, time, buffer });
         this._queueSizeSamples += buffer.length;
         this.cleanQueue();
-        if (!this.running && this._queueSizeSamples >= this.startQueueSizeSamples) this.running = true;
     }
 
     _shift() {
@@ -84,12 +86,36 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._queueSizeSamples -= dropped.buffer.length;
     }
 
+    _drop(count) {
+        for (let i = 0; i < count; ++i) this._shift();
+        this.dropped += count;
+        this._notify("drop", count);
+    }
+
     cleanQueue() {
-        const maxLatency = this.targetLatencyMs * 2;
-        while (this._queueSizeSamples > this.maxQueueSizeSamples || this._queueAge() > maxLatency) {
-            this._shift();
-            this.dropped++;
+        let dropped = 0;
+        for (let size = this._queueSizeSamples; size > this.maxQueueSizeSamples; ++dropped)
+            size -= this.queue[dropped].buffer.length;
+        if (dropped) this._drop(dropped);
+    }
+
+    // The queue refills after an underrun in one catch-up burst, which has all
+    // arrived by the next quantum; the excess is trimmed here, where the output
+    // is already discontinuous.
+    _restart() {
+        let dropped = 0;
+        for (let occupancy = this._occupancySamples(); dropped < this.queue.length - 1; ++dropped) {
+            const head = this.queue[dropped];
+            const without = occupancy - (head.buffer.length - head.offset);
+            if (without < this.startQueueSizeSamples) break;
+            occupancy = without;
         }
+        if (dropped) this._drop(dropped);
+        this.running = true;
+    }
+
+    _notify(event, count) {
+        this.port.postMessage({ event, count });
     }
 
     nextSample() {
@@ -97,15 +123,17 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             const queueElement = this.queue[0];
             this._lastSample = queueElement.buffer[queueElement.offset];
             if (++queueElement.offset === queueElement.buffer.length) this._shift();
-        } else {
-            this.underruns++;
+        } else if (this.running) {
             this.running = false;
+            this.underruns++;
+            this._notify("underrun", 1);
         }
         return this._lastSample;
     }
 
     process(inputs, outputs) {
         this.cleanQueue();
+        if (!this.running && this._queueSizeSamples >= this.startQueueSizeSamples) this._restart();
         if (this.queue.length === 0) return true;
 
         // I looked into using https://www.npmjs.com/package/@alexanderolsen/libsamplerate-js or similar (the full API),

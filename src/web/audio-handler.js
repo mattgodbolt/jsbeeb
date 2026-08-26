@@ -11,14 +11,27 @@ import { toast } from "./toast.js";
 const rendererUrl = new URL("./audio-renderer.js", import.meta.url).href;
 const music5000WorkletUrl = new URL("../music5000-worklet.js", import.meta.url).href;
 
+// Drops plot as buffers dropped, on the queueSize scale; underruns as a fixed spike.
+const UnderrunSpikeHeight = 20;
+
 export class AudioHandler {
-    constructor({ warningNode, statsNode, audioFilterFreq, audioFilterQ, noSeek, cpuSpeed, isAtom } = {}) {
+    constructor({
+        warningNode,
+        statsNode,
+        audioFilterFreq,
+        audioFilterQ,
+        audioLatencyMs,
+        noSeek,
+        cpuSpeed,
+        isAtom,
+    } = {}) {
         this.cpuSpeed = cpuSpeed;
         this.isAtom = isAtom;
         this.warningNode = warningNode;
         this.noAudio = false;
         toggle(this.warningNode, false);
         this.stats = {};
+        this.eventCounts = { underrun: 0, drop: 0 };
         if (statsNode) {
             this._initStats(statsNode).catch((error) => {
                 console.error("Unable to initialise audio stats", error);
@@ -39,7 +52,7 @@ export class AudioHandler {
             this.masterGain.connect(this.audioContext.destination);
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
             this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
-            this._setup(audioFilterFreq, audioFilterQ).catch((error) => this._audioUnavailable(error));
+            this._setup(audioFilterFreq, audioFilterQ, audioLatencyMs).catch((error) => this._audioUnavailable(error));
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
@@ -100,10 +113,12 @@ export class AudioHandler {
         });
         this._addStat("queueSize", { strokeStyle: "rgb(51,126,108)" });
         this._addStat("queueAge", { strokeStyle: "rgb(162,119,22)" });
+        this._addStat("underrun", { strokeStyle: "rgb(220,50,50)", lineWidth: 2 });
+        this._addStat("drop", { strokeStyle: "rgb(120,80,200)", lineWidth: 2 });
         this.chart.streamTo(statsNode, 100);
     }
 
-    async _setup(audioFilterFreq, audioFilterQ) {
+    async _setup(audioFilterFreq, audioFilterQ, audioLatencyMs) {
         await this.audioContext.audioWorklet.addModule(rendererUrl);
         if (audioFilterFreq !== 0) {
             const filterNode = this.audioContext.createBiquadFilter();
@@ -116,14 +131,35 @@ export class AudioHandler {
             this._audioDestination = this.audioContext.destination;
         }
 
-        this._jsAudioNode = new AudioWorkletNode(this.audioContext, "sound-chip-processor");
+        this._jsAudioNode = new AudioWorkletNode(this.audioContext, "sound-chip-processor", {
+            processorOptions: { targetLatencyMs: audioLatencyMs },
+        });
         this._jsAudioNode.connect(this._audioDestination);
         this._jsAudioNode.port.onmessage = (event) => {
             const now = Date.now();
+            if (event.data.event) {
+                this._onAudioEvent(now, event.data);
+                return;
+            }
             for (const stat of Object.keys(event.data)) {
                 if (this.stats[stat]) this.stats[stat].append(now, event.data[stat]);
             }
         };
+    }
+
+    _onAudioEvent(now, { event, count }) {
+        this.eventCounts[event] += count;
+        const series = this.stats[event];
+        if (!series) return;
+        series.append(now - 1, 0);
+        series.append(now, event === "underrun" ? UnderrunSpikeHeight : count);
+        series.append(now + 1, 0);
+    }
+
+    takeEventCounts() {
+        const counts = this.eventCounts;
+        this.eventCounts = { underrun: 0, drop: 0 };
+        return counts;
     }
 
     _audioUnavailable(error) {

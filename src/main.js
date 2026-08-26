@@ -145,6 +145,7 @@ const paramTypes = {
     frameSkip: ParamTypes.INT,
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
+    audioLatencyMs: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
     tubeCpuMultiplier: ParamTypes.FLOAT,
     microphoneChannel: ParamTypes.INT,
@@ -573,6 +574,7 @@ const audioHandler = new AudioHandler({
     statsNode: audioStatsNode,
     audioFilterFreq,
     audioFilterQ,
+    audioLatencyMs: parsedQuery.audioLatencyMs,
     noSeek,
     cpuSpeed,
     isAtom: model.isAtom,
@@ -2284,6 +2286,32 @@ const rewindBuffer = new RewindBuffer(30);
 let rewindFrameCounter = 0;
 const RewindCaptureInterval = 50; // ~1 second at 50fps
 
+// Under ?audioDebug, one console line per second in which a frame ran late
+// or the audio queue underran or dropped, so a click can be matched to a cause.
+const FrameLogIntervalMs = 1000;
+const SlowFrameLogMs = 30;
+const frameLog = { start: 0, frames: 0, maxGap: 0, maxExecute: 0, maxSnapshot: 0 };
+
+function logFrame(now, gapMs, executeMs, snapshotMs) {
+    const log = frameLog;
+    if (log.start === 0) log.start = now;
+    log.frames++;
+    log.maxGap = Math.max(log.maxGap, gapMs);
+    log.maxExecute = Math.max(log.maxExecute, executeMs);
+    log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
+    if (now - log.start < FrameLogIntervalMs) return;
+    const audio = audioHandler.takeEventCounts();
+    if (log.maxGap > SlowFrameLogMs || log.maxExecute > SlowFrameLogMs || audio.underrun || audio.drop) {
+        console.log(
+            `${(now / 1000).toFixed(0)}s: ${log.frames} frames, gap max ${log.maxGap.toFixed(0)}ms, ` +
+                `execute max ${log.maxExecute.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
+                `audio underruns ${audio.underrun}, dropped ${audio.drop} buffers`,
+        );
+    }
+    log.start = now;
+    log.frames = log.maxGap = log.maxExecute = log.maxSnapshot = 0;
+}
+
 rewindUI = new RewindUI({
     rewindBuffer,
     processor,
@@ -2368,11 +2396,14 @@ function draw(now) {
             const end = performance.now();
             virtualSpeedUpdater.update(cycles, end - now, speedy);
             // Capture rewind snapshot periodically
+            let snapshotMs = 0;
             if (++rewindFrameCounter >= RewindCaptureInterval) {
                 rewindFrameCounter = 0;
                 rewindBuffer.push(processor.snapshotState());
                 rewindUI.updateButtonState();
+                snapshotMs = performance.now() - end;
             }
+            if (audioStatsNode) logFrame(now, speedy ? 0 : now - last, end - now, snapshotMs);
         } catch (e) {
             running = false;
             utils.noteEvent("exception", "thrown", e.stack);
