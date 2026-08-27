@@ -185,6 +185,10 @@ Apply horizontal low-pass filter to composite signal before Y/C separation.
 - Just added blur without fixing underlying issues
 - Abandoned as unnecessary once phase and gain issues were fixed
 
+Filtering luma _after_ Y/C separation is a different matter, and is available as an option: the
+`palLumaBandwidth` and `palLumaNotch` URL parameters apply a short symmetric FIR to the separated
+luma, as a set's video amplifier and subcarrier notch do.
+
 ### Working Approaches (Evolution)
 
 #### Early Success: 2H Comb Filter with Weighted Coefficients

@@ -289,6 +289,13 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
+- `displayMode=X` - picks the display: `rgb` (the default, a plain monitor), `pal` (a television on a composite lead)
+  or `xbr` (an upscaler, see [docs/xbr-display-mode.md](docs/xbr-display-mode.md)).
+- `palLumaBandwidth=X` - low-passes the PAL television's luma to `X` MHz, as a set's video amplifier does (about 5 on
+  composite, about 4.5 through the aerial socket). Left out or `0`, the luma is not filtered and single pixel mode 0
+  detail comes through sharper than any set could show it.
+- `palLumaNotch` - also cuts the colour subcarrier out of the luma, as a cheap set without a comb filter does. Works
+  with or without `palLumaBandwidth`.
 
 ### Atom-specific parameters
 
