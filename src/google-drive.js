@@ -23,7 +23,17 @@ export class GoogleDriveLoader {
         this.driveClient = undefined;
     }
 
-    async initialise() {
+    initialise() {
+        if (!this._initialising) {
+            this._initialising = this._initialise().catch((error) => {
+                this._initialising = undefined;
+                throw error;
+            });
+        }
+        return this._initialising;
+    }
+
+    async _initialise() {
         console.log("Creating GAPI");
         await this._loadScript("https://apis.google.com/js/api.js");
         console.log("Got GAPI, creating token client");

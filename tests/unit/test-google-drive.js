@@ -21,4 +21,31 @@ describe("GoogleDriveLoader", () => {
         expect(script.src).toContain("apis.google.com");
         await expect(initialising).rejects.toThrow(/apis\.google\.com/);
     });
+
+    it("shares one initialisation between concurrent callers", async () => {
+        const loader = new GoogleDriveLoader();
+
+        const first = loader.initialise();
+        const second = loader.initialise();
+        expect(second).toBe(first);
+        expect(document.querySelectorAll("script")).toHaveLength(1);
+
+        document.querySelector("script").dispatchEvent(new Event("error"));
+        await expect(first).rejects.toThrow();
+        await expect(second).rejects.toThrow();
+    });
+
+    it("tries again after a failed initialisation", async () => {
+        const loader = new GoogleDriveLoader();
+
+        const failed = loader.initialise();
+        document.querySelector("script").dispatchEvent(new Event("error"));
+        await expect(failed).rejects.toThrow();
+
+        const retried = loader.initialise();
+        expect(retried).not.toBe(failed);
+        expect(document.querySelectorAll("script")).toHaveLength(2);
+        document.querySelectorAll("script")[1].dispatchEvent(new Event("error"));
+        await expect(retried).rejects.toThrow();
+    });
 });
