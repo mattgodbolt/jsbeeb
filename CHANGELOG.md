@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.20.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.3...v1.20.0) (2026-08-27)
+
+
+### Features
+
+* deepen the audio buffer while the window is unfocused ([#889](https://github.com/mattgodbolt/jsbeeb/issues/889)) ([17d7399](https://github.com/mattgodbolt/jsbeeb/commit/17d73990f29f721730006dd9c0aa3fe12f127aba))
+* synthesise the sound chip in the audio worklet from timestamped register writes ([#897](https://github.com/mattgodbolt/jsbeeb/issues/897)) ([bac0fbe](https://github.com/mattgodbolt/jsbeeb/commit/bac0fbe7df6abcfe19f9d107de3b8e0abf7ae800))
+
+
+### Bug Fixes
+
+* advance the emulator on a timer instead of requestAnimationFrame ([#891](https://github.com/mattgodbolt/jsbeeb/issues/891)) ([8daf02e](https://github.com/mattgodbolt/jsbeeb/commit/8daf02ee2d5eb8b793496a1e237230e51b0ed633))
+* initialise Google Drive on the first click that needs it, not at boot ([#896](https://github.com/mattgodbolt/jsbeeb/issues/896)) ([4a4eb01](https://github.com/mattgodbolt/jsbeeb/commit/4a4eb01f3dad2e96940b60c33a8d62d5b205c4f4))
+* only create the Music 5000 audio context when one is fitted ([#895](https://github.com/mattgodbolt/jsbeeb/issues/895)) ([4bcc1ac](https://github.com/mattgodbolt/jsbeeb/commit/4bcc1ac1a1ce7ec30cc98ad583eda92cd50348bb))
+* stop the audio queue chopping buffers during normal running, and instrument the clicks ([#886](https://github.com/mattgodbolt/jsbeeb/issues/886)) ([5d64c46](https://github.com/mattgodbolt/jsbeeb/commit/5d64c46097f13fefa77174fafd3139f7eb61bf5a))
+
 ## [1.19.3](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.2...v1.19.3) (2026-08-25)
 
 
