@@ -1,3 +1,4 @@
+import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 
 import { lumaFilterKernel, LumaTaps, PALCompositeFilter } from "../../src/video-filters/pal-composite.js";
@@ -62,5 +63,17 @@ describe("PALCompositeFilter.setLumaFilter", () => {
         expect(PALCompositeFilter.lumaKernel).toHaveLength(LumaTaps);
         PALCompositeFilter.setLumaFilter({ bandwidthMhz: 0 });
         expect(PALCompositeFilter.lumaKernel).toBeNull();
+    });
+});
+
+describe("PAL luma filter shader", () => {
+    it("declares as many taps as the kernel supplies", () => {
+        const shader = readFileSync(
+            new URL("../../src/video-filters/shaders/pal-composite.frag.glsl", import.meta.url),
+            "utf8",
+        );
+        const taps = /const int LUMA_TAPS = (\d+);/.exec(shader);
+        expect(taps).not.toBeNull();
+        expect(Number(taps[1])).toBe(LumaTaps);
     });
 });

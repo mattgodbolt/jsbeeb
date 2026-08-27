@@ -16,7 +16,6 @@ import VERT_SHADER from "./shaders/pal-composite.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/pal-composite.frag.glsl?raw";
 import { compileProgram } from "./shader-program.js";
 
-// Must match LUMA_TAPS in the fragment shader.
 export const LumaTaps = 15;
 const SampleRateMhz = 16;
 const PalSubcarrierMhz = 4.43361875;
