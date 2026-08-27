@@ -1725,22 +1725,16 @@ async function gdLoad(cat, layout) {
     }
 }
 
-for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "none";
-// Loading the Google client holds the main thread for ~100ms; keep that clear of boot.
-const GoogleDriveInitDelayMs = 3000;
-async function showGoogleDriveWhenAvailable() {
-    try {
-        const available = await googleDrive.initialise();
-        if (available) {
-            for (const el of document.querySelectorAll(".if-drive-available")) el.style.display = "";
-            await gdAuth(true);
-        }
-    } catch (error) {
-        console.log(`Google Drive is unavailable: ${errorText(error)}`);
-    }
-}
 const googleDriveModal = new bootstrap.Modal(googleDriveEl);
+// Loading the Google client holds the main thread for ~100ms, so it waits for
+// someone to ask for Drive.
 document.getElementById("open-drive-link").addEventListener("click", async function () {
+    try {
+        await googleDrive.initialise();
+    } catch (error) {
+        toast(`Google Drive is unavailable: ${errorText(error)}`, { title: "Google Drive" });
+        return false;
+    }
     const authed = await gdAuth(false);
     if (authed) {
         googleDriveModal.show();
@@ -2208,7 +2202,6 @@ const startPromise = (async () => {
         }
 
         go();
-        window.setTimeout(showGoogleDriveWhenAvailable, GoogleDriveInitDelayMs);
     } catch (error) {
         console.error("Error initialising emulator:", error);
         showError("initialising", error);
