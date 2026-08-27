@@ -27,7 +27,7 @@ The shader implements these steps for each pixel:
 
 2. **Demodulate with FIR filter**
    - Multiply composite by sin(ωt) and cos(ωt) to shift chroma to baseband
-   - Apply 21-tap FIR low-pass filter (~2.2 MHz cutoff) horizontally
+   - Apply 21-tap FIR low-pass filter (1.108 MHz design cutoff, -3 dB at about 0.83 MHz) horizontally
    - FIR_GAIN = 2.0 compensates for demodulation amplitude loss (sin²(x) = 0.5)
    - Process current line AND previous line (2H delay) separately
 
@@ -85,8 +85,7 @@ Y = composite_curr - remodulated_chroma;
 
 **Why it failed:**
 
-- 1H spacing = 0.75 cycles = 270° phase shift
-- Mathematical analysis showed U/V mixing:
+- The delay used was one whole 1024-texel texture line, which is 64 µs = 283.75 subcarrier cycles, so the delayed chroma arrived 270° from the direct chroma and the sum mixed U into V and V into U:
   ```
   chroma_band = (U_N + V_{N-1})·sin(ωt) + (V_N + U_{N-1})·cos(ωt)
   ```
@@ -94,7 +93,7 @@ Y = composite_curr - remodulated_chroma;
 - Tried compensating with FIR_GAIN = 4.0 (double amplitude loss) - made it worse
 - Result: Severe checkerboard artifacts, washed out colors
 
-**Lesson:** 1H comb at composite level doesn't work for PAL due to phase relationships. Must demodulate FIRST with correct phase, THEN blend.
+**Lesson:** A 1H comb at composite level does work for PAL; every delay-line PAL set uses one. The glass delay line is 63.943 µs (283.5 cycles), not 64 µs, precisely so the delayed chroma is 180° from the direct chroma. Reproducing that needs a 283.5-cycle delay (about 1023.1 texels), not a whole texture line. Demodulating first and blending at baseband sidesteps the requirement, which is what the shipped design does.
 
 #### 2. 3-Tap Bandpass Comb with Complementary Subtraction
 
@@ -283,8 +282,10 @@ See shader source for actual matrix values.
 
 ### FIR Filter
 
-- **Taps:** 21 (symmetric)
-- **Cutoff frequency:** 2.217 MHz (half subcarrier)
+- **Taps:** 21 (symmetric), Kaiser window with β=5
+- **Cutoff frequency:** 1.108 MHz design cutoff (quarter subcarrier), which for a windowed sinc is the -6 dB point
+- **Measured response:** -1.05 dB at 0.5 MHz, -3 dB at 0.83 MHz, -5.6 dB at 1.108 MHz, -32 dB at 2.2 MHz, -86 dB at 4.43 MHz
+- **Why this narrow:** broadcast PAL chroma extends to ±1.3 MHz at -3 dB, but consumer decoders commonly roll off between 0.5 and 1 MHz; this filter models a domestic set rather than a studio decoder
 - **Sample rate:** 16 MHz
 - **Gain compensation:** FIR_GAIN = 2.0 to compensate for demodulation amplitude loss
 - **Source:** Derived from svofski/CRT project
@@ -320,9 +321,9 @@ See shader source for actual matrix values.
    - Caused by chroma blending with black (correct behavior)
    - May need comparison with real hardware to validate
 
-4. **No gamma correction**
-   - Should ideally use sRGB framebuffer (GL_FRAMEBUFFER_SRGB)
-   - Deferred for future implementation
+### Gamma
+
+No gamma handling is needed, and an sRGB framebuffer would be the wrong direction. PAL encoders work on gamma-corrected R'G'B' and the decoder's R'G'B' output goes to the display as-is, so the whole chain runs on gamma-coded values. With one bit per gun the YUV matrix gives the same result either way, and NULA palette values are already gamma-coded.
 
 ## Integration with jsbeeb
 

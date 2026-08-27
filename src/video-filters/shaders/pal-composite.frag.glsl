@@ -85,7 +85,7 @@ void main() {
     // BEGIN_FIR_COEFFICIENTS
     // This section is replaced by the Vite build to include FIR filter coefficients.
     // Change Cutoff (in comment below) or FIRTAPS value to configure.
-    // Cutoff: 1.108 MHz (quarter subcarrier)
+    // Cutoff: 1.108 MHz (quarter subcarrier; the -6 dB design point, -3 dB at about 0.83 MHz)
     const int FIRTAPS = 21;
     float FIR[FIRTAPS];
     // END_FIR_COEFFICIENTS

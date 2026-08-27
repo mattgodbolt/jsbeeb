@@ -1,5 +1,7 @@
 # Authentic PAL TV Comb Filter Research
 
+**Status:** this is research into a luma comb as an option, not a description of the shipped shader. The current design (see [pal-simulation-design.md](pal-simulation-design.md)) has no luma comb: chroma is demodulated per line, blended at baseband with the line two texture rows above, remodulated and subtracted from the composite to give luma.
+
 ## Sources
 
 1. **Watkinson "Engineer's Guide to Decoding & Encoding"** (pages 37-39)
