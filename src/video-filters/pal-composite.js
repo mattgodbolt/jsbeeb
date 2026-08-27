@@ -106,7 +106,7 @@ export class PALCompositeFilter {
             uTexelSize: gl.getUniformLocation(this.program, "uTexelSize"),
             uFrameCount: gl.getUniformLocation(this.program, "uFrameCount"),
             uLumaFilter: gl.getUniformLocation(this.program, "uLumaFilter"),
-            uLumaFir: gl.getUniformLocation(this.program, "uLumaFir"),
+            uLumaFir: gl.getUniformLocation(this.program, "uLumaFir[0]"),
         };
     }
 
