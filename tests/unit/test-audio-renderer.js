@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 
+import { SoundChip } from "../../src/soundchip.js";
+
 // audio-renderer.js reads AudioWorklet globals at import time, so stub them
 // before dynamically importing it.
 let SoundChipProcessor;
@@ -26,6 +28,15 @@ afterAll(() => {
 });
 
 const OutputQuantum = 128;
+const OutputRate = 48000;
+const CyclesPerMs = 2000;
+const CyclesPerSample = 4; // 2MHz CPU, 500kHz chip
+
+// SN76489 writes for a 1kHz tone on channel 0 at full volume: 4MHz / (32 * 125).
+const TonePeriod = 125;
+const ToneHz = 4000000 / (32 * TonePeriod);
+const ToneOn = [0x80 | (TonePeriod & 0x0f), TonePeriod >> 4, 0x90];
+const ToneOff = [0x9f];
 
 // Amplitude of the frequency-bin component at freq, via the Goertzel algorithm.
 function goertzelAmplitude(samples, freq, rate) {
@@ -41,10 +52,39 @@ function goertzelAmplitude(samples, freq, rate) {
     return (2 * Math.sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2)) / samples.length;
 }
 
-// Producer delivers a frame's worth of 512-sample buffers per burst, consumer
-// runs 128-frame quanta. Returns the rates computed after collectAfter seconds.
-function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
+// Stands in for the main thread: a chip that emits events, an epoch that
+// advances with emulated time, and a flush that ships both to the worklet.
+function makeProducer(proc) {
+    const events = [];
+    const chip = new SoundChip(null, { onEvent: (event) => events.push(event) });
+    return {
+        chip,
+        get epoch() {
+            return chip.scheduler.epoch;
+        },
+        poke(...values) {
+            for (const value of values) chip.poke(value);
+        },
+        advance(ms) {
+            chip.scheduler.epoch += ms * CyclesPerMs;
+        },
+        flush() {
+            proc.onProduced(chip.scheduler.epoch, events.splice(0));
+        },
+    };
+}
+
+const quantum = (proc) => {
+    const outputs = [[new Float32Array(OutputQuantum)]];
+    proc.process([], outputs);
+    return outputs[0][0];
+};
+
+// Producer ticks every tickMs of simulated time, consumer runs 128-frame
+// quanta. Returns the effective rates and output collected after collectAfter.
+function simulate(proc, producer, seconds, { tickMs = 10, collectAfter = 0, ticking = () => true } = {}) {
     const rates = [];
+    const output = [];
     const originalRate = proc._effectiveSampleRate.bind(proc);
     let simTime = 0;
     proc._effectiveSampleRate = (dt) => {
@@ -52,201 +92,192 @@ function simulate(proc, seconds, { frameRateHz = 60, collectAfter = 0 } = {}) {
         if (simTime >= collectAfter) rates.push(rate);
         return rate;
     };
-
     try {
-        const dtOut = OutputQuantum / globalThis.sampleRate;
-        const outputs = [[new Float32Array(OutputQuantum)]];
-        let nextBurst = 0;
-        let pendingSamples = 0;
+        const dtOut = OutputQuantum / OutputRate;
+        let nextTick = 0;
         while (simTime < seconds) {
-            if (simTime >= nextBurst) {
-                pendingSamples += proc.inputSampleRate / frameRateHz;
-                while (pendingSamples >= 512) {
-                    proc.onBuffer(Date.now(), new Float32Array(512));
-                    pendingSamples -= 512;
+            if (simTime >= nextTick) {
+                if (ticking(simTime)) {
+                    producer.advance(tickMs);
+                    producer.flush();
                 }
-                nextBurst += 1 / frameRateHz;
+                nextTick += tickMs / 1000;
             }
-            proc.process([], outputs);
+            const out = quantum(proc);
+            if (simTime >= collectAfter) output.push(...out);
             simTime += dtOut;
         }
     } finally {
         proc._effectiveSampleRate = originalRate;
     }
-    return rates;
+    return { rates, output };
 }
 
-describe("SoundChipProcessor rate control", () => {
-    it("should not modulate the playback rate with the producer's frame-rate sawtooth", () => {
-        // Judge the 60 Hz component specifically: the total swing also carries the
-        // startup glide as the loop settles.
+// A processor already running with a target's lead, playing the test tone.
+function startedWithTone(proc) {
+    const producer = makeProducer(proc);
+    producer.poke(...ToneOn);
+    producer.advance(proc.targetLatencyMs);
+    producer.flush();
+    quantum(proc);
+    expect(proc.stalled).toBe(false);
+    return producer;
+}
+
+describe("SoundChipProcessor rendering", () => {
+    it("should render the chip's tone from its register writes", () => {
         const proc = new SoundChipProcessor();
-        // Start on target (half a burst below the threshold) so the loop is
-        // live rather than pinned at its clamp for the whole window.
-        for (let i = 0; i < Math.round(proc.startQueueSizeSamples / 2 / 512); ++i)
-            proc.onBuffer(Date.now(), new Float32Array(512));
-        proc.running = true;
-        const rates = simulate(proc, 6, { frameRateHz: 60, collectAfter: 3 });
-        const controlRate = globalThis.sampleRate / OutputQuantum;
-        expect(rates.length).toBeGreaterThan(1000);
-        // Remove the mean and trim to whole 60 Hz cycles (25 samples at the
-        // 375 Hz control rate), or the ~500 kHz DC term leaks into the bin.
-        const samplesPerFourCycles = 25;
-        const trimmed = rates.slice(0, Math.floor(rates.length / samplesPerFourCycles) * samplesPerFourCycles);
-        const mean = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
-        const frameRateWobble = goertzelAmplitude(
-            trimmed.map((r) => r - mean),
-            60,
-            controlRate,
-        );
-        expect(frameRateWobble).toBeLessThan(50);
-        const peakToPeak = Math.max(...rates) - Math.min(...rates);
-        expect(peakToPeak).toBeLessThan(400);
+        const producer = startedWithTone(proc);
+        const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1 });
+        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeGreaterThan(0.1);
+        expect(goertzelAmplitude(output, ToneHz * 1.5, OutputRate)).toBeLessThan(0.02);
     });
 
-    it("should speed up when the queue is over target and slow down when under", () => {
+    it("should apply a write at its cycle, part way through a quantum", () => {
+        const proc = new SoundChipProcessor();
+        const producer = startedWithTone(proc);
+        const rendered = new Float32Array(1000);
+        // The tone goes quiet at a cycle in the middle of the samples rendered.
+        const offCycle = proc.clock + 500 * CyclesPerSample;
+        producer.chip.scheduler.epoch = offCycle;
+        producer.poke(...ToneOff);
+        producer.advance(10);
+        producer.flush();
+        proc._renderInput(rendered, rendered.length);
+        const loud = rendered.subarray(0, 500);
+        const quiet = rendered.subarray(520, 1000);
+        expect(Math.max(...loud) - Math.min(...loud)).toBeGreaterThan(0.1);
+        expect(Math.max(...quiet) - Math.min(...quiet)).toBeLessThan(0.01);
+    });
+
+    it("should keep sounding the current state when the producer stalls, then skip the stalled time", () => {
+        const proc = new SoundChipProcessor();
+        const producer = startedWithTone(proc);
+        // The producer stops for 100ms of the consumer's time, then resumes at
+        // real-time rate: the lead drains, time stands still, and once the
+        // producer is a target ahead again nothing needs skipping.
+        simulate(proc, producer, 0.3, { ticking: (t) => !(t > 0.1 && t < 0.2) });
+        expect(proc.stalls).toBe(1);
+        expect(proc.stalled).toBe(false);
+        expect(proc.skippedMs).toBeLessThan(1);
+    });
+
+    it("should skip the missed time when the producer catches up in one burst", () => {
+        const proc = new SoundChipProcessor();
+        const producer = startedWithTone(proc);
+        for (let i = 0; i < 200; ++i) quantum(proc);
+        expect(proc.stalled).toBe(true);
+        producer.advance(100);
+        producer.flush();
+        quantum(proc);
+        expect(proc.stalled).toBe(false);
+        expect(proc.skippedMs).toBeCloseTo(100 - proc.targetLatencyMs, 0);
+    });
+
+    it("should carry on with the tone, not silence, while stalled", () => {
+        const proc = new SoundChipProcessor();
+        startedWithTone(proc);
+        // No more production: the lead drains, then the chip is held.
+        const output = [];
+        for (let i = 0; i < 200; ++i) output.push(...quantum(proc));
+        expect(proc.stalled).toBe(true);
+        const held = output.slice(output.length - 2000);
+        expect(goertzelAmplitude(held, ToneHz, OutputRate)).toBeGreaterThan(0.1);
+    });
+
+    it("should be in the producer's state after skipping, having applied the writes it skipped", () => {
+        const proc = new SoundChipProcessor();
+        const producer = startedWithTone(proc);
+        for (let i = 0; i < 200; ++i) quantum(proc);
+        expect(proc.stalled).toBe(true);
+        producer.advance(50);
+        producer.poke(...ToneOff);
+        producer.advance(50);
+        producer.flush();
+        quantum(proc);
+        expect(proc.stalled).toBe(false);
+        expect(proc.leadMs()).toBeLessThanOrEqual(proc.targetLatencyMs);
+        expect(proc.leadMs()).toBeGreaterThan(proc.targetLatencyMs - 3);
+        const output = [];
+        for (let i = 0; i < 40; ++i) output.push(...quantum(proc));
+        expect(goertzelAmplitude(output.slice(1000), ToneHz, OutputRate)).toBeLessThan(0.01);
+    });
+
+    it("should jump to a restored state's timeline and discard what came before it", () => {
+        const proc = new SoundChipProcessor();
+        const producer = startedWithTone(proc);
+        const state = producer.chip.snapshotState();
+        producer.poke(...ToneOff);
+        // A rewind: the epoch goes backwards and the chip is restored.
+        producer.chip.scheduler.epoch = 1000;
+        producer.chip.restoreState(state);
+        producer.advance(proc.targetLatencyMs);
+        producer.flush();
+        quantum(proc);
+        expect(proc.clock).toBeGreaterThanOrEqual(1000);
+        expect(proc.clock).toBeLessThan(1000 + proc.targetLatencyMs * CyclesPerMs);
+        const output = [];
+        for (let i = 0; i < 10; ++i) output.push(...quantum(proc));
+        expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeGreaterThan(0.1);
+    });
+});
+
+describe("SoundChipProcessor rate control", () => {
+    it("should not modulate the playback rate at the producer's tick rate", () => {
+        const proc = new SoundChipProcessor();
+        const producer = startedWithTone(proc);
+        const { rates } = simulate(proc, producer, 3, { collectAfter: 2 });
+        const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
+        const wobble = goertzelAmplitude(
+            rates.map((r) => r - mean),
+            100,
+            OutputRate / OutputQuantum,
+        );
+        expect(wobble).toBeLessThan(50);
+        expect(Math.max(...rates) - Math.min(...rates)).toBeLessThan(400);
+        expect(proc.stalls).toBe(0);
+    });
+
+    it("should speed up when the lead is over target and slow down when under", () => {
         const over = new SoundChipProcessor();
-        over.running = true;
-        for (let i = 0; i < Math.ceil((4 * over.startQueueSizeSamples) / 512); ++i)
-            over.onBuffer(Date.now(), new Float32Array(512));
-        const outputs = [[new Float32Array(OutputQuantum)]];
-        for (let i = 0; i < 20; ++i) over.process([], outputs);
+        const overProducer = startedWithTone(over);
+        overProducer.advance(3 * over.targetLatencyMs);
+        overProducer.flush();
+        for (let i = 0; i < 20; ++i) quantum(over);
         expect(over._effectiveSampleRate(0)).toBeGreaterThan(over.inputSampleRate);
 
         const under = new SoundChipProcessor();
-        for (let i = 0; i < Math.ceil(under.startQueueSizeSamples / 2 / 512); ++i)
-            under.onBuffer(Date.now(), new Float32Array(512));
-        under.running = true;
-        for (let i = 0; i < 20; ++i) under.process([], outputs);
+        startedWithTone(under);
+        for (let i = 0; i < 3; ++i) quantum(under);
         expect(under._effectiveSampleRate(0)).toBeLessThan(under.inputSampleRate);
     });
 
-    it("should never bend pitch audibly, however far the queue is from target", () => {
-        const outputs = [[new Float32Array(OutputQuantum)]];
+    it("should never bend pitch audibly, however far the lead is from target", () => {
         const over = new SoundChipProcessor();
-        over.running = true;
-        for (let i = 0; i < Math.ceil((5 * over.startQueueSizeSamples) / 512); ++i)
-            over.onBuffer(Date.now(), new Float32Array(512));
-        for (let i = 0; i < 400; ++i) over.process([], outputs);
+        const producer = startedWithTone(over);
+        producer.advance(20 * over.targetLatencyMs);
+        producer.flush();
+        for (let i = 0; i < 400; ++i) quantum(over);
         expect(over._effectiveSampleRate(0)).toBeLessThanOrEqual(over.inputSampleRate + over.inputSampleRate * 0.0005);
 
         const under = new SoundChipProcessor();
-        under.onBuffer(Date.now(), new Float32Array(512));
-        under.running = true;
-        for (let i = 0; i < 400; ++i) under.process([], outputs);
+        startedWithTone(under);
+        for (let i = 0; i < 400; ++i) quantum(under);
         expect(under._effectiveSampleRate(0)).toBeGreaterThanOrEqual(
             under.inputSampleRate - under.inputSampleRate * 0.0005,
         );
     });
 
-    it("should consume exactly the resampling ratio, never rounding it per quantum", () => {
-        // Rounding the per-quantum consumption quantises the pitch in steps of
-        // one part in ~1300 (1.3 cents), audible once the rate stops jittering.
+    it("should converge the lead to the target without stalling", () => {
         const proc = new SoundChipProcessor();
-        proc.running = true;
-        for (let i = 0; i < 60; ++i) proc.onBuffer(Date.now(), new Float32Array(512));
-        const outputs = [[new Float32Array(OutputQuantum)]];
-        const before = proc._occupancySamples();
-        let expected = 0;
-        const originalRate = proc._effectiveSampleRate.bind(proc);
-        proc._effectiveSampleRate = (dt) => {
-            const rate = originalRate(dt);
-            expected += (OutputQuantum * rate) / globalThis.sampleRate;
-            return rate;
-        };
-        for (let i = 0; i < 20; ++i) proc.process([], outputs);
-        expect(proc.underruns).toBe(0);
-        expect(Math.abs(before - proc._occupancySamples() - expected)).toBeLessThan(1);
-    });
-
-    it("should converge the queue occupancy to the target", () => {
-        const proc = new SoundChipProcessor();
-        proc.running = true;
-        for (let i = 0; i < Math.ceil(proc.startQueueSizeSamples / 512); ++i)
-            proc.onBuffer(Date.now(), new Float32Array(512));
-        simulate(proc, 20, { frameRateHz: 60 });
-        // Instantaneous occupancy rides the burst sawtooth (a whole frame's
-        // samples, ~8300 peak to peak), so judge the smoothed error instead.
-        expect(Math.abs(proc.smoothedOccupancyError)).toBeLessThan(proc.startQueueSizeSamples * 0.1);
-        expect(proc.underruns).toBe(0);
-        expect(proc.dropped).toBe(0);
+        const producer = startedWithTone(proc);
+        simulate(proc, producer, 20);
+        expect(Math.abs(proc.smoothedLeadError)).toBeLessThan(proc.targetLeadCycles * 0.1);
+        expect(proc.stalls).toBe(0);
     });
 });
 
-describe("SoundChipProcessor queue trimming", () => {
-    const outputs = [[new Float32Array(OutputQuantum)]];
-    const fill = (proc, samples) => {
-        for (let i = 0; i < Math.ceil(samples / 512); ++i) proc.onBuffer(Date.now(), new Float32Array(512));
-    };
-    const runDry = (proc) => {
-        while (proc.running) proc.process([], outputs);
-    };
-
-    it("should not drop from a running queue that sits above target", () => {
-        const proc = new SoundChipProcessor();
-        proc.running = true;
-        fill(proc, 3 * proc.startQueueSizeSamples);
-        for (let i = 0; i < 20; ++i) proc.process([], outputs);
-        expect(proc.dropped).toBe(0);
-    });
-
-    it("should trim a catch-up burst to the target when restarting after an underrun", () => {
-        const proc = new SoundChipProcessor();
-        fill(proc, proc.startQueueSizeSamples);
-        proc.process([], outputs);
-        expect(proc.running).toBe(true);
-        runDry(proc);
-        expect(proc.underruns).toBe(1);
-        expect(proc.dropped).toBe(0);
-
-        const target = proc.startQueueSizeSamples;
-        fill(proc, 4 * target);
-        proc.process([], outputs);
-        expect(proc.running).toBe(true);
-        const filled = Math.ceil((4 * target) / 512);
-        const fewestHoldingTarget = Math.ceil(target / 512);
-        expect(proc.dropped).toBe(filled - fewestHoldingTarget);
-    });
-
-    it("should only drop from a queue beyond the hard maximum", () => {
-        const proc = new SoundChipProcessor();
-        fill(proc, proc.maxQueueSizeSamples + 4 * 512);
-        expect(proc.dropped).toBeGreaterThan(0);
-        expect(proc._queueSizeSamples).toBeLessThanOrEqual(proc.maxQueueSizeSamples);
-        expect(proc._queueSizeSamples).toBeGreaterThan(proc.maxQueueSizeSamples - 512);
-    });
-});
-
-describe("SoundChipProcessor target latency changes", () => {
-    const outputs = [[new Float32Array(OutputQuantum)]];
-    const fill = (proc, samples) => {
-        for (let i = 0; i < Math.ceil(samples / 512); ++i) proc.onBuffer(Date.now(), new Float32Array(512));
-    };
-
-    it("should keep playing through a change of target, leaving the queue to the producer", () => {
-        const proc = new SoundChipProcessor();
-        const oldTarget = proc.startQueueSizeSamples;
-        fill(proc, oldTarget);
-        proc.process([], outputs);
-        expect(proc.running).toBe(true);
-
-        proc.setTargetLatency(10 * proc.targetLatencyMs);
-        expect(proc.startQueueSizeSamples).toBe(10 * oldTarget);
-        proc.process([], outputs);
-        expect(proc.running).toBe(true);
-        expect(proc.dropped).toBe(0);
-
-        fill(proc, 10 * oldTarget);
-        proc.setTargetLatency();
-        expect(proc.startQueueSizeSamples).toBe(oldTarget);
-        proc.process([], outputs);
-        expect(proc.running).toBe(true);
-        expect(proc.dropped).toBe(0);
-        expect(proc.underruns).toBe(0);
-    });
-});
-
-describe("SoundChipProcessor target latency option", () => {
+describe("SoundChipProcessor target latency", () => {
     it("should fall back to the default for a missing, zero or non-numeric target", () => {
         const fallback = new SoundChipProcessor().targetLatencyMs;
         for (const targetLatencyMs of [undefined, 0, -5, NaN, Infinity, "abc"]) {
@@ -256,84 +287,19 @@ describe("SoundChipProcessor target latency option", () => {
         expect(new SoundChipProcessor({ processorOptions: { targetLatencyMs: 35 } }).targetLatencyMs).toBe(35);
     });
 
-    it("should cap the target so a catch-up burst still fits under the hard maximum", () => {
+    it("should cap the target and keep playing through a change of it", () => {
         const proc = new SoundChipProcessor();
+        const producer = startedWithTone(proc);
         proc.setTargetLatency(100000);
-        expect(proc.startQueueSizeSamples).toBeLessThanOrEqual(proc.maxQueueSizeSamples / 2);
-        proc.setTargetLatency("abc");
-        expect(proc.targetLatencyMs).toBe(new SoundChipProcessor().targetLatencyMs);
-    });
-});
-
-describe("SoundChipProcessor underrun fade", () => {
-    const FadeSamples = 48000 * 0.001;
-    const level = 0.5;
-    const fill = (proc, samples) => {
-        for (let i = 0; i < Math.ceil(samples / 512); ++i) proc.onBuffer(Date.now(), new Float32Array(512).fill(level));
-    };
-    const quantum = (proc) => {
-        const outputs = [[new Float32Array(OutputQuantum)]];
-        proc.process([], outputs);
-        return outputs[0][0];
-    };
-    const maxStep = (samples) => {
-        let worst = 0;
-        for (let i = 1; i < samples.length; ++i) worst = Math.max(worst, Math.abs(samples[i] - samples[i - 1]));
-        return worst;
-    };
-    // Two targets' worth queued, played until settled at the fill level.
-    const settled = (proc) => {
-        fill(proc, 2 * proc.startQueueSizeSamples);
-        let out;
-        for (let i = 0; i < 4; ++i) out = quantum(proc);
-        expect(out[out.length - 1]).toBeCloseTo(level, 3);
-    };
-
-    it("should fade out on underrun instead of stepping to silence", () => {
-        const proc = new SoundChipProcessor();
-        settled(proc);
-        const played = [];
-        for (let i = 0; i < 40; ++i) played.push(...quantum(proc));
-        expect(proc.underruns).toBe(1);
-        expect(maxStep(played)).toBeLessThanOrEqual(level / FadeSamples + 1e-6);
-        expect(played[played.length - 1]).toBe(0);
-    });
-
-    it("should hold full gain up to the sample the queue ran dry at", () => {
-        const proc = new SoundChipProcessor();
-        settled(proc);
-        // Leave the queue with about half a quantum's worth so it runs dry mid-quantum.
-        const perQuantum = Math.floor((OutputQuantum * proc.inputSampleRate) / 48000);
-        while (proc._occupancySamples() > perQuantum / 2) quantum(proc);
-        const before = proc._occupancySamples();
-        const out = quantum(proc);
-        expect(proc.running).toBe(false);
-        const dryAtOutput = Math.floor(before / (proc.inputSampleRate / 48000));
-        for (let i = 0; i < dryAtOutput - 1; ++i) expect(out[i]).toBeCloseTo(level, 3);
-        expect(out[out.length - 1]).toBeLessThan(level);
-    });
-
-    it("should fade back in on restart", () => {
-        const proc = new SoundChipProcessor();
-        settled(proc);
-        for (let i = 0; i < 40; ++i) quantum(proc);
-        expect(proc.running).toBe(false);
-        fill(proc, proc.startQueueSizeSamples);
-        const first = quantum(proc);
-        expect(proc.running).toBe(true);
-        expect(Math.abs(first[0])).toBeLessThanOrEqual(level / FadeSamples + 1e-6);
-        expect(maxStep(first)).toBeLessThanOrEqual(level / FadeSamples + 1e-6);
-        expect(first[first.length - 1]).toBeCloseTo(level, 1);
-    });
-
-    it("should keep posting stats while the queue is empty", () => {
-        const proc = new SoundChipProcessor();
-        settled(proc);
-        for (let i = 0; i < 40; ++i) quantum(proc);
-        expect(proc.queue.length).toBe(0);
-        const posted = vi.spyOn(proc.port, "postMessage");
-        proc.nextStats = 0;
+        expect(proc.targetLatencyMs).toBeLessThanOrEqual(250);
+        proc.setTargetLatency(2 * proc.targetLatencyMs);
         quantum(proc);
-        expect(posted).toHaveBeenCalledWith(expect.objectContaining({ queueSize: 0 }));
+        expect(proc.stalled).toBe(false);
+        producer.advance(100);
+        producer.flush();
+        proc.setTargetLatency();
+        quantum(proc);
+        expect(proc.stalled).toBe(false);
+        expect(proc.skippedMs).toBe(0);
     });
 });

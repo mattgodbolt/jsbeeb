@@ -287,8 +287,8 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
   Doesn't support the sth: pseudo URL unlike `disc` and `tape`, but if given a ZIP file will attempt to use the `.rom`
   file assumed to be within.
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
-- `audioDebug` - show the audio queue chart, and log one console line per second in which the emulator tick ran late or the audio queue underran or dropped.
-- `audioLatencyMs` - target audio buffer depth in milliseconds (default 20). Raising it can stop clicks on a machine that drops frames, at the cost of the sound lagging the picture by that much.
+- `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
+- `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
 
 ### Atom-specific parameters
 

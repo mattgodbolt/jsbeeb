@@ -12,6 +12,10 @@ export const SoundBufferSamples = 512;
 // mean level, which a zero-mean output would silence (see issue #863).
 const DcRestoreCornerHz = 1 / (2 * Math.PI * 10e3 * 4.7e-6);
 
+// A chip with an event sink reports progress this often, so its events can
+// stream through a long execute() rather than all arriving at its end.
+const EventProgressCycles = 4000;
+
 const volumeTable = new Float32Array(16);
 (() => {
     let f = 1.0;
@@ -35,9 +39,15 @@ export class SoundChip {
      * @param {function(Float32Array): void} onBuffer called with each full
      *     SoundBufferSamples-sized buffer of output. Receives the same buffer
      *     every call, overwritten afterwards: copy the contents if they are kept.
+     * @param {object} [options]
+     * @param {function(object): void} [options.onEvent] called with each
+     *     change to the chip's state, stamped with the cycle it takes effect at.
+     *     A chip with an event sink does not render; something else renders
+     *     from the events (see audio-renderer.js).
      */
-    constructor(onBuffer) {
+    constructor(onBuffer, { onEvent = null } = {}) {
         this._onBuffer = onBuffer;
+        this._onEvent = onEvent;
         // 4MHz input signal. Internal divide-by-8
         this.soundchipFreq = 4000000.0 / 8;
         const sampleRate = this.soundchipFreq;
@@ -91,13 +101,36 @@ export class SoundChip {
             mute: () => {
                 this.catchUp();
                 this.sineOn = false;
+                this._emit({ sine: 0 });
             },
             tone: (freq) => {
                 this.catchUp();
                 this.sineOn = true;
                 this.sineStep = (freq / sampleRate) * this.sineTable.length;
+                this._emit({ sine: freq });
             },
         };
+    }
+
+    _emit(event) {
+        if (this._onEvent) this._onEvent({ cycle: this.scheduler.epoch, ...event });
+    }
+
+    /** Applies an event from another chip's onEvent, at the cycle this chip is rendering. */
+    applyEvent(event) {
+        if (event.poke !== undefined) this.poke(event.poke);
+        else if (event.sine !== undefined) {
+            if (event.sine) this.toneGenerator.tone(event.sine);
+            else this.toneGenerator.mute();
+        } else if (event.enabled !== undefined) this.enabled = event.enabled;
+        else if (event.state !== undefined) this.restoreState(event.state);
+        else if (event.reset !== undefined) this.reset(event.reset);
+    }
+
+    /** Renders `length` samples of output from `cycle`, for a chip that is driven by events. */
+    renderAt(cycle, out, offset, length) {
+        this.scheduler.epoch = this.lastRunEpoch = cycle;
+        this.generate(out, offset, length);
     }
 
     sineChannel(channel, out, offset, length) {
@@ -181,6 +214,7 @@ export class SoundChip {
         this.volume[2] = volumeTable[v2];
         this.volume[3] = volumeTable[v3];
         this.noisePoked();
+        this._emit({ state: this.snapshotState() });
     }
 
     generate(out, offset, length) {
@@ -219,6 +253,13 @@ export class SoundChip {
         this.activeTask = this.scheduler.newTask(() => {
             if (this.active) this.poke(this.slowDataBus);
         });
+        if (this._onEvent) {
+            this.progressTask = this.scheduler.newTask(() => {
+                this._emit({ progress: true });
+                this.progressTask.schedule(EventProgressCycles);
+            });
+            this.progressTask.schedule(EventProgressCycles);
+        }
     }
 
     render(out, offset, length) {
@@ -239,6 +280,7 @@ export class SoundChip {
     }
 
     advance(cycles) {
+        if (this._onEvent) return;
         const num = cycles * this.samplesPerCycle + this.residual;
         let rounded = num | 0;
         this.residual = num - rounded;
@@ -270,6 +312,7 @@ export class SoundChip {
 
     poke(value) {
         this.catchUp();
+        this._emit({ poke: value });
 
         let command;
         if (value & 0x80) {
@@ -350,10 +393,13 @@ export class SoundChip {
         // Older snapshots predate the DC blocker
         this.dcPrevIn = state.dcPrevIn ?? 0;
         this.dcPrevOut = state.dcPrevOut ?? 0;
+        this.progressTask?.ensureScheduled(true, EventProgressCycles);
+        this._emit({ state: this.snapshotState() });
     }
 
     reset(hard) {
         if (!hard) return;
+        this._emit({ reset: true });
         for (let i = 0; i < 4; ++i) {
             this.counter[i] = 0;
             this.registers[i] = 0;
@@ -366,14 +412,15 @@ export class SoundChip {
 
     enable(e) {
         this.enabled = e;
+        this._emit({ enabled: e });
     }
 
     mute() {
-        this.enabled = false;
+        this.enable(false);
     }
 
     unmute() {
-        this.enabled = true;
+        this.enable(true);
     }
 }
 
@@ -383,8 +430,8 @@ export class SoundChip {
  * channel with DC-blocking filter.
  */
 export class AtomSoundChip extends SoundChip {
-    constructor(onBuffer, { cpuSpeed = 1000000 } = {}) {
-        super(onBuffer);
+    constructor(onBuffer, { cpuSpeed = 1000000, onEvent = null } = {}) {
+        super(onBuffer, { onEvent });
         this.samplesPerCycle = this.soundchipFreq / cpuSpeed;
         this.secondsPerCycle = 1 / cpuSpeed;
 
@@ -423,7 +470,19 @@ export class AtomSoundChip extends SoundChip {
         this._speakerCycleOffset = 0;
     }
 
+    applyEvent(event) {
+        if (event.bit !== undefined) this.bitChange.push({ bit: event.bit, cycles: event.cycle });
+        else if (event.speakerReset !== undefined) this.speakerReset();
+        else super.applyEvent(event);
+    }
+
+    renderAt(cycle, out, offset, length) {
+        this._speakerCycleOffset = 0;
+        super.renderAt(cycle, out, offset, length);
+    }
+
     speakerReset() {
+        this._emit({ speakerReset: true });
         this.bitChange = [];
         this.currentSpeakerBit = 0.0;
         this._speakerPrevIn = 0;
@@ -461,7 +520,9 @@ export class AtomSoundChip extends SoundChip {
 
     updateSpeaker(value, microCycle, seconds) {
         const cycles = microCycle + seconds / this.secondsPerCycle;
-        this.bitChange.push({ bit: value ? 1.0 : 0.0, cycles });
+        const bit = value ? 1.0 : 0.0;
+        if (this._onEvent) this._onEvent({ cycle: cycles, bit });
+        else this.bitChange.push({ bit, cycles });
     }
 }
 

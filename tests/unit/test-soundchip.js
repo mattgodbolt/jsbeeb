@@ -417,3 +417,103 @@ describe("AtomSoundChip", () => {
         expect(chip.bitChange).toHaveLength(0);
     });
 });
+
+describe("SoundChip events", () => {
+    function makeEventChip() {
+        const events = [];
+        const scheduler = new Scheduler();
+        const chip = new SoundChip(() => {}, { onEvent: (event) => events.push(event) });
+        chip.setScheduler(scheduler);
+        return { chip, scheduler, events };
+    }
+
+    it("should stamp each write with the cycle it takes effect at", () => {
+        const { chip, scheduler, events } = makeEventChip();
+        scheduler.polltime(1234);
+        chip.poke(0x8d);
+        scheduler.polltime(10);
+        chip.poke(0x07);
+        expect(events).toEqual([
+            { cycle: 1234, poke: 0x8d },
+            { cycle: 1244, poke: 0x07 },
+        ]);
+    });
+
+    it("should report tape tones, muting, resets and restores as events", () => {
+        const { chip, events } = makeEventChip();
+        chip.toneGenerator.tone(1200);
+        chip.toneGenerator.mute();
+        chip.mute();
+        chip.reset(false);
+        chip.reset(true);
+        chip.restoreState(chip.snapshotState());
+        expect(events.map((event) => Object.keys(event).find((key) => key !== "cycle"))).toEqual([
+            "sine",
+            "sine",
+            "enabled",
+            "reset",
+            "state",
+        ]);
+        expect(events[0].sine).toBe(1200);
+        expect(events[1].sine).toBe(0);
+        expect(events[2].enabled).toBe(false);
+    });
+
+    it("should report progress every few emulated milliseconds, and keep doing so after a restore", () => {
+        const { chip, scheduler, events } = makeEventChip();
+        scheduler.polltime(10000);
+        expect(events).toEqual([
+            { cycle: 4000, progress: true },
+            { cycle: 8000, progress: true },
+        ]);
+        scheduler.restoreState({ epoch: 20000 });
+        chip.restoreState(chip.snapshotState());
+        events.length = 0;
+        scheduler.polltime(4000);
+        expect(events).toEqual([{ cycle: 24000, progress: true }]);
+    });
+
+    it("should not render when it has an event sink", () => {
+        const buffers = [];
+        const scheduler = new Scheduler();
+        const chip = new SoundChip((buffer) => buffers.push(buffer), { onEvent: () => {} });
+        chip.setScheduler(scheduler);
+        scheduler.polltime(2000000);
+        chip.catchUp();
+        expect(buffers).toEqual([]);
+    });
+
+    it("should render the same output from the events as the chip they came from", () => {
+        const { chip: source, scheduler, events } = makeEventChip();
+        const { chip: renderer } = makeSoundChip();
+        source.poke(0x8d);
+        source.poke(0x07);
+        source.poke(0x90);
+        scheduler.polltime(4000);
+        source.poke(0x9f);
+        for (const event of events) renderer.applyEvent(event);
+        const out = new Float32Array(2000);
+        renderer.renderAt(0, out, 0, out.length);
+        // With the tone latched then silenced, applying every event at once leaves silence.
+        expect(Math.max(...out) - Math.min(...out)).toBeLessThan(1e-3);
+
+        const { chip: playing } = makeSoundChip();
+        for (const event of events.slice(0, 3)) playing.applyEvent(event);
+        playing.renderAt(0, out, 0, out.length);
+        expect(goertzelAmplitude(out, 1000, 500000)).toBeGreaterThan(0.05);
+    });
+
+    it("should carry Atom speaker bits as events with their exact cycle", () => {
+        const events = [];
+        const scheduler = new Scheduler();
+        const chip = new AtomSoundChip(() => {}, { onEvent: (event) => events.push(event) });
+        chip.setScheduler(scheduler);
+        chip.updateSpeaker(true, 10, 0.5);
+        expect(events).toEqual([{ cycle: 10 + 0.5 * 1000000, bit: 1 }]);
+        expect(chip.bitChange).toEqual([]);
+
+        const { chip: renderer } = makeAtomSoundChip();
+        renderer.applyEvent(events[0]);
+        expect(renderer.bitChange).toEqual([{ bit: 1, cycles: 10 + 0.5 * 1000000 }]);
+    });
+});
