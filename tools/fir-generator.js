@@ -3,7 +3,7 @@
  *
  * Based on reverse-engineering Rich's original coefficients (generated via ChatGPT):
  * - Uses Kaiser window with β=5
- * - Actual cutoff frequency is 0.5× the specified nominal frequency
+ * - The cutoff is the -6 dB point of the windowed sinc
  * - Normalized coefficients (sum = 1.0)
  * - Sample rate: 16 MHz
  */
@@ -25,7 +25,7 @@ function kaiserWindow(n, M, beta) {
     return Math.cosh(arg) / Math.cosh(beta);
 }
 
-function generateFirLowpass(numTaps, cutoffNormalized, beta) {
+function generateFirLowpass(numTaps, cutoffCyclesPerSample, beta) {
     // Generate FIR lowpass filter using Kaiser windowed sinc
     const center = (numTaps - 1) / 2;
     const coefficients = [];
@@ -33,7 +33,7 @@ function generateFirLowpass(numTaps, cutoffNormalized, beta) {
     for (let n = 0; n < numTaps; n++) {
         // Ideal lowpass filter (sinc function)
         const t = n - center;
-        const h = 2 * cutoffNormalized * sinc(2 * cutoffNormalized * t);
+        const h = 2 * cutoffCyclesPerSample * sinc(2 * cutoffCyclesPerSample * t);
 
         // Apply Kaiser window
         const w = kaiserWindow(n, numTaps, beta);
@@ -49,24 +49,22 @@ function generateFirLowpass(numTaps, cutoffNormalized, beta) {
  * Generate FIR filter coefficients and format as GLSL array initialization.
  *
  * @param {number} numTaps - Number of filter taps (must be odd)
- * @param {number} nominalCutoffMhz - Nominal cutoff frequency in MHz
+ * @param {number} cutoffMhz - Cutoff frequency in MHz
  * @param {string} indent - Indentation string to prepend to each line
  * @returns {string} GLSL array initialization code
  */
-export function generateFirCoefficients(numTaps, nominalCutoffMhz, indent) {
+export function generateFirCoefficients(numTaps, cutoffMhz, indent) {
     // Validate inputs
     if (numTaps <= 0 || numTaps % 2 === 0) {
         throw new Error(`numTaps must be a positive odd number, got ${numTaps}`);
     }
-    if (nominalCutoffMhz <= 0 || nominalCutoffMhz > 8) {
-        throw new Error(`nominalCutoffMhz must be between 0 and 8 MHz (Nyquist), got ${nominalCutoffMhz}`);
+    if (cutoffMhz <= 0 || cutoffMhz > 8) {
+        throw new Error(`cutoffMhz must be between 0 and 8 MHz (Nyquist), got ${cutoffMhz}`);
     }
 
-    // Key discovery: actual cutoff is 0.5× the specified frequency
-    const actualCutoffHz = nominalCutoffMhz * 1e6 * 0.5;
-    const cutoffNormalized = actualCutoffHz / (SAMPLE_RATE_HZ / 2.0);
+    const cutoffCyclesPerSample = (cutoffMhz * 1e6) / SAMPLE_RATE_HZ;
 
-    const coeffs = generateFirLowpass(numTaps, cutoffNormalized, BETA);
+    const coeffs = generateFirLowpass(numTaps, cutoffCyclesPerSample, BETA);
 
     // Format as GLSL array initialization (4 per line)
     const lines = [];
