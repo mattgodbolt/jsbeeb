@@ -19,11 +19,8 @@ const float PI = 3.14159265359;
 // 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma
 // 7. Combine luma and chroma, convert back to RGB
 //
-// NOTE: Texture rows are half-lines: a scanline is doubled onto two rows in the usual
-// non-interlaced modes, and an interlaced field occupies every other row. The previous
-// scanline of the same field is therefore two rows up in every mode, and it is one line
-// earlier, so the subcarrier phase and V-switch come from the line number that video.js
-// records per row parity, not from the row.
+// NOTE: Texture rows are half-lines, so the previous scanline of the same field is two rows
+// up, and the subcarrier phase and V-switch come from uLineBase, not from the row.
 
 // Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
 const float FIR_GAIN = 2.0;
