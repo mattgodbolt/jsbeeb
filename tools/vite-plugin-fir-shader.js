@@ -70,12 +70,14 @@ ${indent}${FIR_END_MARKER}`;
  * @throws {Error} when the marked section is malformed
  */
 export function applyFirCoefficients(code) {
-    if (!code.includes(FIR_BEGIN_MARKER) || !code.includes(FIR_END_MARKER)) {
-        return null;
-    }
-
     const beginIdx = code.indexOf(FIR_BEGIN_MARKER);
     const endIdx = code.indexOf(FIR_END_MARKER);
+    if (beginIdx < 0 && endIdx < 0) {
+        return null;
+    }
+    if (beginIdx < 0 || endIdx < 0) {
+        throw new Error("Unpaired FIR marker");
+    }
     if (endIdx < beginIdx) {
         throw new Error("Invalid FIR marker order");
     }
@@ -125,7 +127,7 @@ export function firShaderPlugin() {
             try {
                 result = applyFirCoefficients(code);
             } catch (err) {
-                console.warn(`[FIR Plugin] ${err.message} in ${filePath}`);
+                console.warn(`[FIR Plugin] ${err instanceof Error ? err.message : err} in ${filePath}`);
                 return null;
             }
             if (!result) {

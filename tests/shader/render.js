@@ -80,8 +80,9 @@ function findChrome() {
  *
  * @param {object} pattern
  * @param {string} pattern.name
- * @param {string[]} pattern.rows one character per logical pixel
- * @param {Object<string, number>} pattern.palette character to 0xAABBGGRR colour
+ * @param {(string | string[])[]} pattern.rows one palette key per logical pixel,
+ *     as a string of single-character keys or an array of keys of any length
+ * @param {Object<string, number>} pattern.palette key to 0xAABBGGRR colour
  * @param {number} [pattern.texelsWide] as MODE 1 is two and MODE 2 is four
  * @param {number} [pattern.texelsHigh] 2 for the usual non-interlaced doubling
  * @param {number} [pattern.scale] output pixels per logical pixel

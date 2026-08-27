@@ -12,11 +12,13 @@ const ShaderCutoffMhz = 1.108;
 
 const ShaderPath = new URL("../../src/video-filters/shaders/pal-composite.frag.glsl", import.meta.url);
 
-/** The numbers out of the generated GLSL, in tap order. */
+/** The numbers out of the generated GLSL, in tap order; an index never assigned is left undefined. */
 function coefficientsOf(code) {
-    const taps = [];
-    for (const [, index, value] of code.matchAll(/FIR\[(\d+)\] = ([-0-9.e]+);/g)) taps[Number(index)] = Number(value);
-    return taps;
+    const byIndex = new Map();
+    for (const [, index, value] of code.matchAll(/FIR\[(\d+)\] = ([-0-9.e]+);/g))
+        byIndex.set(Number(index), Number(value));
+    const count = byIndex.size === 0 ? 0 : Math.max(...byIndex.keys()) + 1;
+    return Array.from({ length: count }, (_, i) => byIndex.get(i));
 }
 
 /** Magnitude of the filter's response at `hz`, in dB relative to DC gain of one. */

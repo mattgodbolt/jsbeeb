@@ -39,6 +39,11 @@ describe("FIR shader substitution", () => {
         expect(() => applyFirCoefficients("// END_FIR_COEFFICIENTS\n// BEGIN_FIR_COEFFICIENTS")).toThrow();
     });
 
+    it("rejects a lone marker", () => {
+        expect(() => applyFirCoefficients("// BEGIN_FIR_COEFFICIENTS\n")).toThrow();
+        expect(() => applyFirCoefficients("// END_FIR_COEFFICIENTS\n")).toThrow();
+    });
+
     it("rejects a section that names no cutoff or tap count", () => {
         expect(() => applyFirCoefficients("// BEGIN_FIR_COEFFICIENTS\n// END_FIR_COEFFICIENTS")).toThrow();
     });
