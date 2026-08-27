@@ -59,6 +59,41 @@ ${indent}${FIR_END_MARKER}`;
 }
 
 /**
+ * Replace the marked section of a shader with freshly generated coefficients.
+ *
+ * @param {string} code - GLSL source
+ * @returns {{ code: string, taps: number, cutoff: number } | null} the transformed
+ *     source and the parameters it was generated from, or null when the source has
+ *     no marked section
+ * @throws {Error} when the marked section is malformed
+ */
+export function applyFirCoefficients(code) {
+    if (!code.includes(FIR_BEGIN_MARKER) || !code.includes(FIR_END_MARKER)) {
+        return null;
+    }
+
+    const beginIdx = code.indexOf(FIR_BEGIN_MARKER);
+    const endIdx = code.indexOf(FIR_END_MARKER);
+    if (endIdx < beginIdx) {
+        throw new Error("Invalid FIR marker order");
+    }
+
+    // Detect indentation by finding the start of the line containing BEGIN marker
+    const lineStart = code.lastIndexOf("\n", beginIdx) + 1;
+    const indent = code.substring(lineStart, beginIdx);
+
+    const markedSection = code.substring(beginIdx, endIdx + FIR_END_MARKER.length);
+
+    const params = parseFirParams(markedSection);
+    if (!params) {
+        throw new Error("Could not parse FIR parameters");
+    }
+
+    const newSection = generateFirSection(params.taps, params.cutoff, indent);
+    return { code: code.replace(markedSection, newSection), ...params };
+}
+
+/**
  * Vite plugin for FIR coefficient generation.
  */
 export function firShaderPlugin() {
@@ -84,47 +119,25 @@ export function firShaderPlugin() {
                 return null;
             }
 
-            // Check if file contains FIR coefficient markers
-            if (!code.includes(FIR_BEGIN_MARKER) || !code.includes(FIR_END_MARKER)) {
+            let result;
+            try {
+                result = applyFirCoefficients(code);
+            } catch (err) {
+                console.warn(`[FIR Plugin] ${err.message} in ${filePath}`);
                 return null;
             }
-
-            // Extract the marked section and detect indentation
-            const beginIdx = code.indexOf(FIR_BEGIN_MARKER);
-            const endIdx = code.indexOf(FIR_END_MARKER);
-
-            if (endIdx < beginIdx) {
-                console.warn(`[FIR Plugin] Invalid FIR marker order in ${filePath}`);
+            if (!result) {
                 return null;
             }
-
-            // Detect indentation by finding the start of the line containing BEGIN marker
-            const lineStart = code.lastIndexOf("\n", beginIdx) + 1;
-            const indent = code.substring(lineStart, beginIdx);
-
-            const markedSection = code.substring(beginIdx, endIdx + FIR_END_MARKER.length);
-
-            // Parse parameters from comments
-            const params = parseFirParams(markedSection);
-            if (!params) {
-                console.warn(`[FIR Plugin] Could not parse FIR parameters in ${filePath}`);
-                return null;
-            }
-
-            // Generate new section with preserved indentation
-            const newSection = generateFirSection(params.taps, params.cutoff, indent);
-
-            // Replace old section with new
-            const transformedCode = code.replace(markedSection, newSection);
 
             console.log(
-                `[FIR Plugin] Generated ${params.taps}-tap filter @ ${params.cutoff} MHz for ${filePath.split("/").pop()}`,
+                `[FIR Plugin] Generated ${result.taps}-tap filter @ ${result.cutoff} MHz for ${filePath.split("/").pop()}`,
             );
 
             // Return as a JavaScript module exporting the string.
             // moduleType is required by Vite 8+ for non-.js file extensions.
             return {
-                code: `export default ${JSON.stringify(transformedCode)}`,
+                code: `export default ${JSON.stringify(result.code)}`,
                 map: null,
                 moduleType: "js",
             };
