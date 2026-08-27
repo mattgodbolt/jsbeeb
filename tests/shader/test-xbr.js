@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { buildPattern, renderPatterns } from "./render.js";
+import { buildPattern, eachPixel, pixelAt, renderJobs, TextureSize } from "./render.js";
+import { encodeLineGrid, LineGridRows } from "../../src/video-filters/pixel-grid.js";
 
 // These assert the xBR shader's behaviour by running the shader itself: the
 // GLSL is what ships, and Node cannot execute it, so the patterns are drawn in
@@ -22,6 +23,80 @@ const Blue = 0xffff0000;
 const Tolerance = 2;
 
 const Scale = 4;
+
+/**
+ * Logical pixels drawn around the picture and then cropped off. The last row of
+ * fragments in a drawn quad picks up a blend even where the picture either side
+ * of it is uniform, so the picture's own edges are kept away from the quad's.
+ */
+const Margin = 1;
+
+/** xBR reads a 5x5 neighbourhood, so the outermost pixel of the picture needs two more beyond it. */
+const Padding = Margin + 2;
+
+/** WebGL setup as XbrFilter does it; see render.js for why these run in the page. */
+const XbrHarness = {
+    vert: "xbr.vert.glsl",
+    frag: "xbr.frag.glsl",
+    nearestSampling: true,
+    constants: { LineGridRows, TextureSize },
+    setup(gl, program, constants) {
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.LUMINANCE,
+            constants.LineGridRows,
+            1,
+            0,
+            gl.LUMINANCE,
+            gl.UNSIGNED_BYTE,
+            null,
+        );
+        gl.activeTexture(gl.TEXTURE0);
+
+        gl.uniform1i(gl.getUniformLocation(program, "tex"), 0);
+        gl.uniform1i(gl.getUniformLocation(program, "lineGrid"), 1);
+        gl.uniform2f(gl.getUniformLocation(program, "uTextureSize"), constants.TextureSize, constants.TextureSize);
+        gl.uniform2f(
+            gl.getUniformLocation(program, "uTexelSize"),
+            1 / constants.TextureSize,
+            1 / constants.TextureSize,
+        );
+        return { texelsPerOutputPixel: gl.getUniformLocation(program, "uTexelsPerOutputPixel") };
+    },
+    bind(gl, state, params) {
+        gl.uniform1f(state.texelsPerOutputPixel, params.texelsPerOutputPixel);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texSubImage2D(
+            gl.TEXTURE_2D,
+            0,
+            0,
+            0,
+            params.lineGrid.length,
+            1,
+            gl.LUMINANCE,
+            gl.UNSIGNED_BYTE,
+            params.lineGrid,
+        );
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        gl.activeTexture(gl.TEXTURE0);
+    },
+};
+/** A pattern with xBR's geometry, described in a line grid the shader can read. */
+function xbrPattern({ scale = Scale, ...pattern }) {
+    const job = buildPattern({ ...pattern, scale, padding: Padding, margin: Margin });
+    const lineGrid = new Uint8Array(LineGridRows);
+    lineGrid.fill(encodeLineGrid(job.texelsWide, job.texelsHigh === 2), 0, job.texelRows);
+    job.bytes = { lineGrid };
+    return job;
+}
 
 // A right triangle: one pixel at the top left growing to a full bottom row.
 // Asymmetric in both axes, so a flipped or mirrored result fails the corner
@@ -56,16 +131,6 @@ const Patterns = [
 
 const rgbOf = (word) => [word & 0xff, (word >>> 8) & 0xff, (word >>> 16) & 0xff];
 
-/** Every output pixel, as [r, g, b, a]. */
-function* eachPixel(image) {
-    for (let i = 0; i < image.width * image.height; ++i) yield [...image.data.subarray(i * 4, i * 4 + 4)];
-}
-
-function pixelAt(image, x, y) {
-    const offset = (y * image.width + x) * 4;
-    return [...image.data.subarray(offset, offset + 4)];
-}
-
 /** The middle of one logical pixel, far enough from any edge to be unblended. */
 const pixelCentre = (image, x, y, scale = Scale) =>
     pixelAt(image, Math.floor((x + 0.5) * scale), Math.floor((y + 0.5) * scale));
@@ -79,7 +144,7 @@ describe("xBR shader", () => {
     let rendered;
 
     beforeAll(() => {
-        rendered = renderPatterns(Patterns.map(buildPattern));
+        rendered = renderJobs(XbrHarness, Patterns.map(xbrPattern));
     }, 180000);
 
     it("renders every pattern at the size asked for", () => {
