@@ -240,7 +240,8 @@ export class GlCanvas {
         this.filter.setUniforms({
             width,
             height,
-            frameCount: frame.frameCount,
+            lineBaseEven: frame.lineBaseEven,
+            lineBaseOdd: frame.lineBaseOdd,
             lineGrid: frame.lineGrid,
             // How much of the framebuffer each output pixel covers, which sets
             // how wide an edge-smoothing ramp should be. `extent` holds texel
