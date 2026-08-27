@@ -40,7 +40,9 @@ function parseFirParams(markedSection) {
 }
 
 /**
- * Generate the complete FIR coefficient section including markers.
+ * Generate the complete FIR coefficient section including markers. The
+ * section replaces text that begins at the BEGIN marker, after the line's
+ * indent, so the first line carries none of its own.
  *
  * @param {number} taps - Number of filter taps
  * @param {number} cutoff - Cutoff frequency in MHz
@@ -50,7 +52,7 @@ function parseFirParams(markedSection) {
 function generateFirSection(taps, cutoff, indent) {
     const coeffCode = generateFirCoefficients(taps, cutoff, indent);
 
-    return `${indent}${FIR_BEGIN_MARKER}
+    return `${FIR_BEGIN_MARKER}
 ${indent}// Cutoff: ${cutoff}
 ${indent}const int FIRTAPS = ${taps};
 ${indent}float FIR[FIRTAPS];

@@ -24,10 +24,15 @@ describe("FIR shader substitution", () => {
             expect(line.startsWith("    ")).toBe(true);
     });
 
-    it("regenerates a section it has already filled to the same coefficients", () => {
+    it("regenerates a section it has already filled to the same text", () => {
         const once = applyFirCoefficients(Section).code;
-        const twice = applyFirCoefficients(once).code;
-        expect(twice.match(/FIR\[\d+\] = [^;]*/g)).toEqual(once.match(/FIR\[\d+\] = [^;]*/g));
+        expect(applyFirCoefficients(once).code).toBe(once);
+    });
+
+    it("indents the marker lines once", () => {
+        const { code } = applyFirCoefficients(`void main() {\n${Section}\n}\n`);
+        expect(code).toContain("\n    // BEGIN_FIR_COEFFICIENTS\n    // Cutoff: 2\n");
+        expect(code).toContain("\n    // END_FIR_COEFFICIENTS\n");
     });
 
     it("rejects markers in the wrong order", () => {
