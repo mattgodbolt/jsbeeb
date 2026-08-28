@@ -138,6 +138,23 @@ const StripeHeight = 4;
 const StripeRows = Array.from({ length: StripeHeight }, () => StripeRow);
 const DoubledStripes = { rows: StripeRows, palette: Palette, padding: Padding, texelsWide: 2, texelsHigh: 2, scale: 2 };
 
+/**
+ * Luma detail at two rates, drawn one texel per pixel: alternate texels are
+ * 8 MHz, which a set cannot resolve, and four-texel bars are 2 MHz, which it
+ * shows at nearly full contrast. Wide enough to have an interior beyond the
+ * shader's reach from the picture's edges.
+ */
+const DetailWidth = 96;
+const DetailHeight = 4;
+const detailRows = (period) =>
+    Array.from({ length: DetailHeight }, () =>
+        Array.from({ length: DetailWidth }, (_, x) => (x % period < period / 2 ? "white" : "black")),
+    );
+const Detail = {
+    unresolved: { period: 2 },
+    resolved: { period: 8 },
+};
+
 const stripeName = (lineBase, origin) => `stripes-${lineBase}-${origin.x}-${origin.y}`;
 /** The line the picture is compared against when moved, wrapped or stepped. */
 const StripeBase = 3;
@@ -181,6 +198,16 @@ function buildJobs() {
                 padding: Padding,
                 origin: BarOrigin,
                 scale,
+                params: sameLine(0),
+            }),
+        );
+    for (const [name, { period }] of Object.entries(Detail))
+        jobs.push(
+            buildPattern({
+                name: `detail-${name}`,
+                rows: detailRows(period),
+                palette: Palette,
+                padding: Padding,
                 params: sameLine(0),
             }),
         );
@@ -335,6 +362,48 @@ describe("PAL composite shader", () => {
             const expected = renderedNearest["bars-1"];
             const actual = downsample(renderedNearest["bars-2"], 2);
             expect(pictureDifference(actual, expected)).toBeLessThanOrEqual(Tolerance);
+        });
+    });
+
+    describe("luma bandwidth", () => {
+        /** Columns of a detail pattern the shader reaches no padding from. */
+        const interior = [];
+        for (let x = Reach; x < DetailWidth - Reach; ++x) interior.push(x);
+
+        /** Peak-to-peak of the interior, per channel, and its mean. */
+        function interiorContrast(image) {
+            const low = [255, 255, 255];
+            const high = [0, 0, 0];
+            let total = 0;
+            for (const x of interior)
+                for (let y = 0; y < image.height; ++y) {
+                    const pixel = pixelAt(image, x, y);
+                    for (let i = 0; i < 3; ++i) {
+                        low[i] = Math.min(low[i], pixel[i]);
+                        high[i] = Math.max(high[i], pixel[i]);
+                        total += pixel[i];
+                    }
+                }
+            return {
+                contrast: Math.max(...high.map((h, i) => h - low[i])),
+                mean: total / (interior.length * image.height * 3),
+            };
+        }
+
+        it("has interior columns to measure", () => {
+            expect(interior.length).toBeGreaterThan(8);
+        });
+
+        it("cannot resolve alternate texels, and shows them as a flat grey", () => {
+            const { contrast, mean } = interiorContrast(rendered["detail-unresolved"]);
+            expect(contrast).toBeLessThanOrEqual(8);
+            expect(mean).toBeGreaterThan(96);
+            expect(mean).toBeLessThan(160);
+        });
+
+        it("keeps the contrast of detail well inside its bandwidth", () => {
+            const { contrast } = interiorContrast(rendered["detail-resolved"]);
+            expect(contrast).toBeGreaterThan(190);
         });
     });
 
