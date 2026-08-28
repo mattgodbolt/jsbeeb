@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { buildPattern, eachPixel, pixelAt, renderJobs } from "./render.js";
+import { buildPattern, eachPixel, pixelAt, renderJobs, TextureSize } from "./render.js";
 import { applyFirCoefficients } from "../../tools/vite-plugin-fir-shader.js";
+import { LumaKernel, LumaTaps } from "../../src/video-filters/pal-composite.js";
 
 // These run the PAL composite shader itself, as shipped, and assert on what it
 // draws; see test-xbr.js for why that means headless Chrome. The properties
@@ -32,14 +33,20 @@ const Palette = {
 /** Eight-bit rounding through the shader; colours meant to be equal land within this. */
 const Tolerance = 2;
 
-/** Texels the fragment shader reads either side of the one it is drawing: half the FIR's taps. */
+/** Texels the chroma FIR reads either side of the one it is drawing: half its taps. */
 const FirReach = 10;
+
+/** Texels the luma FIR reads either side of that, again. */
+const LumaReach = (LumaTaps - 1) / 2;
+
+/** Texels either side of the one drawn that the shader reads at all. */
+const Reach = FirReach + LumaReach;
 
 /** The shader blends chroma with the line two above, so that line must be picture too. */
 const LineReach = 2;
 
 /** Context around each pattern so its outermost texels see picture rather than nothing. */
-const Padding = { x: FirReach + 2, y: LineReach + 1 };
+const Padding = { x: Reach + 2, y: LineReach + 1 };
 
 /** Frame counts spanning the shader's 8-field sequence; the app hands it frameCount % 8. */
 const FrameCounts = [0, 3, 7];
@@ -49,7 +56,9 @@ const PalHarness = {
     vert: "pal-composite.vert.glsl",
     frag: "pal-composite.frag.glsl",
     prepareFragment: (source) => applyFirCoefficients(source).code,
-    setup(gl, program) {
+    constants: { lumaKernel: Array.from(LumaKernel) },
+    setup(gl, program, constants) {
+        gl.uniform1fv(gl.getUniformLocation(program, "uLumaFir[0]"), new Float32Array(constants.lumaKernel));
         return {
             uFramebuffer: gl.getUniformLocation(program, "uFramebuffer"),
             uResolution: gl.getUniformLocation(program, "uResolution"),
@@ -78,27 +87,27 @@ const ParityOrigins = [
     { x: 1, y: 1 },
 ];
 
+const FlatWidth = 8;
+const FlatHeight = 4;
+
 /** Elsewhere in the texture, out to its far column and well down it. */
 const FarOrigins = [
     { x: 2, y: 3 },
     { x: 500, y: 61 },
-    { x: 992, y: 200 },
+    { x: TextureSize - FlatWidth - 2 * Padding.x, y: 200 },
 ];
 
-const FlatWidth = 8;
-const FlatHeight = 4;
-
-/** Colour bars wide enough that the FIR sees only one bar from the middle of each. */
-const BarWidth = 32;
+/** Colour bars wide enough that the shader sees only one bar from the middle of each. */
+const BarWidth = 48;
 const BarHeight = 8;
 const BarOrder = ["red", "green", "blue", "white", "yellow", "cyan", "magenta", "black"];
 const BarRows = Array.from({ length: BarHeight }, () => BarOrder.flatMap((colour) => Array(BarWidth).fill(colour)));
 const BarOrigin = { x: 20, y: 40 };
 
-/** Columns of a bar the FIR reaches no neighbour from. */
+/** Columns of a bar the shader reaches no neighbour from. */
 const barInterior = (bar) => {
     const columns = [];
-    for (let x = bar * BarWidth + FirReach; x < (bar + 1) * BarWidth - FirReach; ++x) columns.push(x);
+    for (let x = bar * BarWidth + Reach; x < (bar + 1) * BarWidth - Reach; ++x) columns.push(x);
     return columns;
 };
 

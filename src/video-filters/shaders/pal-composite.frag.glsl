@@ -15,8 +15,8 @@ const float PI = 3.14159265359;
 // 3. Demodulate previous line (2H for interlaced, same field) → U_prev, V_prev
 // 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
 // 5. Remodulate blended chroma back to composite frequency
-// 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma
-//    (optionally low-passed to the TV's luma bandwidth, with a subcarrier notch)
+// 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma,
+//    low-passed to the set's video bandwidth
 // 7. Combine luma and chroma, convert back to RGB
 //
 // NOTE: Uses 2H delay (line-2) not 1H (line-1) because jsbeeb simulates interlacing by
@@ -45,9 +45,7 @@ const float PAL_FIELD_PHASE_OFFSET = PAL_LINE_PHASE_OFFSET * PAL_LINES_PER_FIELD
 const float TEXTURE_WIDTH = 1024.0;          // Framebuffer width (896 visible + 128 blanking)
 
 // Luma bandwidth limit: a symmetric FIR across neighbouring texels, designed on the JS side.
-// uLumaFilter is 0 for the unfiltered path, 1 to apply uLumaFir.
 const int LUMA_TAPS = 15;
-uniform float uLumaFilter;
 uniform float uLumaFir[LUMA_TAPS];
 
 // RGB → YUV conversion with proper PAL signal levels baked in
@@ -151,19 +149,12 @@ void main() {
     // Step 4: Get luma via complementary subtraction, luma = composite - remodulated blended chroma.
     // The bandwidth limit repeats the subtraction at neighbouring texels, each at its own carrier
     // phase but sharing this texel's blended chroma, which varies too slowly to matter over 15 taps.
-    float y_out;
-    if (uLumaFilter > 0.5) {
-        y_out = 0.0;
-        for (int i = 0; i < LUMA_TAPS; i++) {
-            float offset = float(i - (LUMA_TAPS - 1) / 2);
-            float t = carrier_phase(pixelCoord.x, offset, cycles_per_pixel, phase_offset);
-            float composite = encode_composite(vTexCoord, offset, t, v_switch);
-            y_out += (composite - remodulate_chroma(filtered_uv, t, v_switch)) * uLumaFir[i];
-        }
-    } else {
-        float t_curr = carrier_phase(pixelCoord.x, 0.0, cycles_per_pixel, phase_offset);
-        float composite_curr = encode_composite(vTexCoord, 0.0, t_curr, v_switch);
-        y_out = composite_curr - remodulate_chroma(filtered_uv, t_curr, v_switch);
+    float y_out = 0.0;
+    for (int i = 0; i < LUMA_TAPS; i++) {
+        float offset = float(i - (LUMA_TAPS - 1) / 2);
+        float t = carrier_phase(pixelCoord.x, offset, cycles_per_pixel, phase_offset);
+        float composite = encode_composite(vTexCoord, offset, t, v_switch);
+        y_out += (composite - remodulate_chroma(filtered_uv, t, v_switch)) * uLumaFir[i];
     }
 
     vec3 rgb_out = yuv_to_rgb(vec3(y_out, filtered_uv.x, filtered_uv.y));

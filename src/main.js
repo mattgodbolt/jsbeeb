@@ -35,7 +35,6 @@ import { Printer } from "./printer.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { getFilterForMode } from "./canvas.js";
-import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 import {
     createSnapshot,
     restoreSnapshot,
@@ -139,7 +138,6 @@ const paramTypes = {
     mouseJoystickEnabled: ParamTypes.BOOL,
     speechOutput: ParamTypes.BOOL,
     audioDebug: ParamTypes.BOOL,
-    palLumaNotch: ParamTypes.BOOL,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -150,7 +148,6 @@ const paramTypes = {
     audioLatencyMs: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
     tubeCpuMultiplier: ParamTypes.FLOAT,
-    palLumaBandwidth: ParamTypes.FLOAT,
     microphoneChannel: ParamTypes.INT,
 
     // String parameters (these are the default but listed for clarity)
@@ -316,7 +313,6 @@ config.setCheckboxes({
 });
 let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
-PALCompositeFilter.setLumaFilter({ bandwidthMhz: parsedQuery.palLumaBandwidth, notch: parsedQuery.palLumaNotch });
 
 model = config.model;
 
