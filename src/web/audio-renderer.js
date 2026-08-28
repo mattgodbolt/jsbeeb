@@ -1,13 +1,20 @@
 /* global sampleRate, currentTime, registerProcessor, AudioWorkletProcessor */
 import { SoundChip, AtomSoundChip } from "../soundchip.js";
 import { LowPassBiquad } from "../biquad.js";
+import { PolyphaseResampler } from "../resampler.js";
 
 // The board's output filter is an equal-component Sallen-Key (Service Manual
 // section 3.8: 10K and 2n2 twice, gain K = 1 + 22/39): f0 = 1/(2*pi*RC) = 7234 Hz,
 // Q = 1/(3 - K) = 0.696, below 1/sqrt(2), so no resonant peak. Run at the chip
-// rate, ahead of decimation, it is also the anti-alias filter.
+// rate, ahead of the resampler.
 const OutputFilterHz = 7234;
 const OutputFilterQ = 0.696;
+
+// The resampler's sinc is cut off below the output Nyquist so that its
+// transition band has finished before anything folds; sampled sound rides on
+// a 31 kHz or higher carrier that would otherwise land in the audible band.
+const ResamplerCutoffOfOutputRate = 0.4;
+const ResamplerTaps = 201;
 
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 const MaxTargetLatencyMs = 250;
@@ -38,6 +45,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.inputSampleRate = this.chip.soundchipFreq;
         this.samplesPerCycle = this.chip.samplesPerCycle;
         this.outputFilter = this._makeOutputFilter(audioFilterFreq, audioFilterQ);
+        this.resampler = new PolyphaseResampler(this.inputSampleRate, ResamplerCutoffOfOutputRate * sampleRate, {
+            taps: ResamplerTaps,
+        });
 
         this.events = [];
         this.eventsHead = 0;
@@ -48,9 +58,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.skippedMs = 0;
         this.minLeadMs = Infinity;
 
-        this._lastInputSample = 0;
         this._phase = 0;
-        this._source = new Float32Array(0);
         this.smoothedLeadError = 0;
         this.setTargetLatency(targetLatencyMs);
         this.port.onmessage = (event) => {
@@ -210,21 +218,15 @@ class SoundChipProcessor extends AudioWorkletProcessor {
 
         // The fractional read position carries across quanta, so consumption
         // averages exactly sampleRatio and the pitch never steps at a rounding
-        // boundary. source[0] is the last input sample of the previous quantum.
+        // boundary.
         const end = this._phase + channel.length * sampleRatio;
         const numInputSamples = Math.floor(end);
-        if (this._source.length <= numInputSamples) this._source = new Float32Array(numInputSamples * 2);
-        const source = this._source;
-        source[0] = this._lastInputSample;
-        this._renderInput(source, 1, numInputSamples);
-        this.outputFilter?.process(source, 1, numInputSamples);
-        this._lastInputSample = source[numInputSamples];
-        for (let i = 0; i < channel.length; i++) {
-            const pos = this._phase + i * sampleRatio;
-            const loc = Math.floor(pos);
-            const alpha = pos - loc;
-            channel[i] = source[loc] * (1 - alpha) + source[loc + 1] * alpha;
-        }
+        const resampler = this.resampler;
+        resampler.reserve(numInputSamples);
+        this._renderInput(resampler.buffer, resampler.inputOffset, numInputSamples);
+        this.outputFilter?.process(resampler.buffer, resampler.inputOffset, numInputSamples);
+        resampler.read(channel, this._phase, sampleRatio);
+        resampler.commit();
         this._phase = end - numInputSamples;
         this.minLeadMs = Math.min(this.minLeadMs, this.leadMs());
         this.stats(sampleRatio);
