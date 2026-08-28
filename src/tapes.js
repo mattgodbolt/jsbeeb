@@ -315,6 +315,5 @@ export async function loadTapeFromData(name, data, model) {
         console.log("Detected a UEF tape");
         return new UefTape(stream, model);
     }
-    console.log("Unknown tape format");
-    return null;
+    throw new Error(`${name} is not a UEF or tapefile tape image`);
 }

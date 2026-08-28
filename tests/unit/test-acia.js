@@ -68,6 +68,22 @@ describe("Acia", () => {
         });
     });
 
+    describe("receive overrun", () => {
+        it("should raise one notice for a burst of overruns", () => {
+            const acia = createMockAcia();
+            const notices = [];
+            acia.addEventListener("notice", (event) => notices.push(event.detail));
+
+            acia.receive(0x41);
+            expect(notices).toHaveLength(0);
+            acia.receive(0x42);
+            acia.receive(0x43);
+            expect(notices).toHaveLength(1);
+            expect(notices[0].quietKey).toBe("quietSerialOverrun");
+            expect(acia.read(0) & 0x20).toBe(0x20);
+        });
+    });
+
     describe("transmit timing", () => {
         // A 10 bit byte at 75 baud takes 0.1333s: 266666 cycles of the 2MHz clock.
         const ByteCyclesAt75Baud = 266666;
