@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { Video, HDISPENABLE, VDISPENABLE, USERDISPENABLE, EVERYTHINGENABLED, OPAQUE_BLACK } from "../../src/video.js";
+import {
+    Video,
+    HDISPENABLE,
+    VDISPENABLE,
+    USERDISPENABLE,
+    EVERYTHINGENABLED,
+    OPAQUE_BLACK,
+    PalPhasePeriodLines,
+} from "../../src/video.js";
 import * as utils from "../../src/utils.js";
 import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../line-grid.js";
@@ -824,64 +832,73 @@ describe("Video", () => {
         });
     });
 
+    // A freshly constructed Video runs a 2MHz character clock, so with
+    // R0=127 a scanline is 128 characters of one video clock each.
+    const ClocksPerScanline = 128;
+    const ScanlinesPerFrame = 312;
+    const ClocksPerFrame = ClocksPerScanline * ScanlinesPerFrame;
+    const ClocksPerSecond = 2 * 1000 * 1000;
+
+    // Frame-driving tests run millions of video clocks, so they use plain
+    // callbacks instead of the shared vi.fn() mocks, which would record every
+    // call. `onPaint` sees the video the way main.js's paint callback does.
+    function makeVideo(onPaint = () => {}) {
+        let paintCount = 0;
+        const v = new Video(false, new Uint32Array(1024 * 768), function () {
+            paintCount++;
+            onPaint(this);
+        });
+        v.reset({ videoRead: () => 0, interrupt: 0 }, { cb2changecallback: null, setVBlankInt: () => {} });
+        const self = {
+            video: v,
+            paints: () => paintCount,
+            resetPaints: () => (paintCount = 0),
+            run: (clocks) => v.polltime(clocks),
+            writeCrtc: (reg, val) => {
+                v.crtc.write(0, reg);
+                v.crtc.write(1, val);
+            },
+            // Aim R7 at the current row for a scanline, the way a program
+            // driving vsync from a VIA timer does.
+            forceVSync: () => {
+                self.writeCrtc(7, 0);
+                self.run(ClocksPerScanline);
+                self.writeCrtc(7, 0x7f);
+            },
+        };
+        return self;
+    }
+
+    function programCommonTiming(v) {
+        v.writeCrtc(0, 127); // Horizontal total
+        v.writeCrtc(1, 80); // Horizontal displayed
+        v.writeCrtc(2, 98); // Hsync position
+        v.writeCrtc(3, 0x24); // Sync widths
+        v.writeCrtc(5, 0); // Vertical adjust
+        v.writeCrtc(6, 32); // Vertical displayed
+        v.writeCrtc(8, 0); // No interlace
+    }
+
+    function programStandardFrame(v) {
+        programCommonTiming(v);
+        v.writeCrtc(4, 38); // Vertical total
+        v.writeCrtc(7, 34); // Vsync position
+        v.writeCrtc(9, 7); // Scanlines per character row
+    }
+
+    // R4=0 gives no CRTC-generated vertical structure, so vsync only
+    // happens when the program asks for it.
+    function programExternallySyncedTiming(v) {
+        programCommonTiming(v);
+        v.writeCrtc(4, 0); // Vertical total
+        v.writeCrtc(9, 0); // One scanline per character row
+        v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
+    }
+
     describe("Painting short frames", () => {
-        // A freshly constructed Video runs a 2MHz character clock, so with
-        // R0=127 a scanline is 128 characters of one video clock each.
-        const ClocksPerScanline = 128;
-        const ScanlinesPerFrame = 312;
-        const ClocksPerFrame = ClocksPerScanline * ScanlinesPerFrame;
-        const ClocksPerSecond = 2 * 1000 * 1000;
-
-        // These tests run millions of video clocks, so they use plain callbacks
-        // instead of the shared vi.fn() mocks, which would record every call.
-        function makeVideo() {
-            let paintCount = 0;
-            const v = new Video(false, new Uint32Array(1024 * 768), () => paintCount++);
-            v.reset({ videoRead: () => 0, interrupt: 0 }, { cb2changecallback: null, setVBlankInt: () => {} });
-            const self = {
-                paints: () => paintCount,
-                resetPaints: () => (paintCount = 0),
-                run: (clocks) => v.polltime(clocks),
-                writeCrtc: (reg, val) => {
-                    v.crtc.write(0, reg);
-                    v.crtc.write(1, val);
-                },
-                // Aim R7 at the current row for a scanline, the way a program
-                // driving vsync from a VIA timer does.
-                forceVSync: () => {
-                    self.writeCrtc(7, 0);
-                    self.run(ClocksPerScanline);
-                    self.writeCrtc(7, 0x7f);
-                },
-            };
-            return self;
-        }
-
-        function programCommonTiming(v) {
-            v.writeCrtc(0, 127); // Horizontal total
-            v.writeCrtc(1, 80); // Horizontal displayed
-            v.writeCrtc(2, 98); // Hsync position
-            v.writeCrtc(3, 0x24); // Sync widths
-            v.writeCrtc(5, 0); // Vertical adjust
-            v.writeCrtc(6, 32); // Vertical displayed
-            v.writeCrtc(8, 0); // No interlace
-        }
-
-        // R4=0 gives no CRTC-generated vertical structure, so vsync only
-        // happens when the program asks for it.
-        function programExternallySyncedTiming(v) {
-            programCommonTiming(v);
-            v.writeCrtc(4, 0); // Vertical total
-            v.writeCrtc(9, 0); // One scanline per character row
-            v.writeCrtc(7, 0x7f); // Out of reach, so the CRTC never syncs itself
-        }
-
         it("should paint once per frame for a normally programmed display", () => {
             const v = makeVideo();
-            programCommonTiming(v);
-            v.writeCrtc(4, 38); // Vertical total
-            v.writeCrtc(7, 34); // Vsync position
-            v.writeCrtc(9, 7); // Scanlines per character row
+            programStandardFrame(v);
             v.resetPaints();
 
             v.run(10 * ClocksPerFrame);
@@ -928,6 +945,141 @@ describe("Video", () => {
 
             // The beam gives up and flies back every 384 scanlines.
             expect(v.paints()).toBe(Math.floor(ClocksPerSecond / (384 * ClocksPerScanline)));
+        });
+    });
+
+    describe("PAL line phase", () => {
+        // The field parity bookkeeping takes a frame or two to settle after
+        // the registers change, as it does on a mode change.
+        const SettleFrames = 4;
+
+        const programNonInterlacedFrame = (v) => programStandardFrame(v);
+
+        function programInterlaceSyncFrame(v) {
+            programStandardFrame(v);
+            v.writeCrtc(8, 1);
+        }
+
+        // MODE 7's vertical timing: with interlace sync and video the scanline
+        // counter steps by two, so R9 must be even for rows to end at all.
+        function programInterlaceSyncAndVideoFrame(v) {
+            programCommonTiming(v);
+            v.writeCrtc(4, 30); // Vertical total
+            v.writeCrtc(5, 2); // Vertical adjust
+            v.writeCrtc(6, 25); // Vertical displayed
+            v.writeCrtc(7, 27); // Vsync position
+            v.writeCrtc(8, 3); // Interlace sync and video
+            v.writeCrtc(9, 18); // Scanlines per character row
+        }
+
+        // The line bases of each painted frame, read as main.js reads them.
+        function paintedBases(program, frames) {
+            const bases = [];
+            const v = makeVideo((video) => bases.push({ even: video.lineBaseEven, odd: video.lineBaseOdd }));
+            program(v);
+            v.run(SettleFrames * ClocksPerFrame);
+            bases.length = 0;
+            v.run(frames * ClocksPerFrame);
+            return bases;
+        }
+
+        function advances(values) {
+            return values.slice(1).map((value, i) => (value - values[i] + PalPhasePeriodLines) % PalPhasePeriodLines);
+        }
+
+        // Every painted row must decode to the hsync count it was drawn under,
+        // in whichever rows the mode puts a scanline.
+        function checkRowsDecodeToTheirLine(program) {
+            const drawnUnder = new Map();
+            const mismatches = [];
+            let paints = 0;
+            const v = makeVideo((video) => {
+                paints++;
+                for (const [row, line] of drawnUnder) {
+                    const base = row & 1 ? video.lineBaseOdd : video.lineBaseEven;
+                    const decoded = (base + (row >> 1)) % PalPhasePeriodLines;
+                    if (decoded !== line) mismatches.push({ row, line, decoded });
+                }
+            });
+            const video = v.video;
+            const blitFb = video.blitFb.bind(video);
+            video.blitFb = (dat, offset, pixels) => {
+                const row = Math.floor(offset / 1024);
+                drawnUnder.set(row, video.hsyncCount);
+                if (video.doublesLines()) drawnUnder.set(row + 1, video.hsyncCount);
+                blitFb(dat, offset, pixels);
+            };
+            program(v);
+            v.run(SettleFrames * ClocksPerFrame);
+            drawnUnder.clear();
+            mismatches.length = 0;
+            paints = 0;
+            v.run(6 * ClocksPerFrame);
+
+            expect(paints).toBeGreaterThan(2);
+            expect(drawnUnder.size).toBeGreaterThan(200);
+            expect(mismatches).toEqual([]);
+            return video;
+        }
+
+        it("should count hsyncs modulo the phase period", () => {
+            const v = makeVideo();
+            programStandardFrame(v);
+            v.run(10 * ClocksPerFrame);
+            expect(v.video.hsyncCount).toBeLessThan(PalPhasePeriodLines);
+            expect(v.video.hsyncCount).toBeGreaterThanOrEqual(0);
+        });
+
+        it("should advance both bases by a whole frame of lines without interlace", () => {
+            const bases = paintedBases(programNonInterlacedFrame, 10);
+            expect(bases.map((b) => b.odd)).toEqual(bases.map((b) => b.even));
+            expect(advances(bases.map((b) => b.even))).toEqual(Array(9).fill(ScanlinesPerFrame));
+            for (const { even } of bases) expect(even).toBeLessThan(PalPhasePeriodLines);
+        });
+
+        it("should advance by alternate 312 and 313 line fields with interlace sync", () => {
+            const bases = paintedBases(programInterlaceSyncFrame, 8);
+            expect(bases.map((b) => b.odd)).toEqual(bases.map((b) => b.even));
+            const steps = advances(bases.map((b) => b.even));
+            expect(steps.length).toBeGreaterThanOrEqual(6);
+            for (let i = 1; i < steps.length; ++i) expect(steps[i - 1] + steps[i]).toBe(625);
+            expect(new Set(steps)).toEqual(new Set([312, 313]));
+        });
+
+        it("should keep a base per field with interlace sync and video", () => {
+            const bases = paintedBases(programInterlaceSyncAndVideoFrame, 8);
+            // Each field updates only its own rows' base, so each base changes
+            // every other frame and by two fields' worth of lines when it does.
+            const changes = (key) => advances(bases.map((b) => b[key]));
+            for (const key of ["even", "odd"]) {
+                const steps = changes(key);
+                expect(steps.length).toBeGreaterThanOrEqual(6);
+                for (let i = 1; i < steps.length; ++i) {
+                    expect([steps[i - 1], steps[i]].sort()).toEqual([0, 625]);
+                }
+            }
+        });
+
+        it("should decode every row to the line it was drawn under without interlace", () => {
+            checkRowsDecodeToTheirLine(programNonInterlacedFrame);
+        });
+
+        it("should decode every row to the line it was drawn under with interlace sync", () => {
+            checkRowsDecodeToTheirLine(programInterlaceSyncFrame);
+        });
+
+        it("should decode every row to the line it was drawn under with interlace sync and video", () => {
+            const video = checkRowsDecodeToTheirLine(programInterlaceSyncAndVideoFrame);
+            expect(video.lineBaseEven).not.toBe(video.lineBaseOdd);
+        });
+
+        it("should decode every row when interlace sync and video is stuck on one field", () => {
+            // R6 above R4 stops the frame counter, so every field is drawn
+            // doubled onto both rows.
+            checkRowsDecodeToTheirLine((v) => {
+                programInterlaceSyncAndVideoFrame(v);
+                v.writeCrtc(6, 40);
+            });
         });
     });
 
@@ -978,6 +1130,34 @@ describe("Video", () => {
             expect(v2.teletextMode).toBe(false);
             expect(v2.cursorPos).toBe(0x2000);
             expect(v2.screenSubtract).toBe(5);
+        });
+
+        it("should snapshot and restore the PAL line phase state", () => {
+            const v = makeRealVideo();
+            v.hsyncCount = 1234;
+            v.lineBaseEven = 1000;
+            v.lineBaseOdd = 1313;
+
+            const v2 = makeRealVideo();
+            v2.restoreState(v.snapshotState());
+
+            expect(v2.hsyncCount).toBe(1234);
+            expect(v2.lineBaseEven).toBe(1000);
+            expect(v2.lineBaseOdd).toBe(1313);
+        });
+
+        it("should restart the PAL line phase from zero for a snapshot without it", () => {
+            const v = makeRealVideo();
+            const { hsyncCount, lineBaseEven, lineBaseOdd, ...older } = v.snapshotState();
+            expect([hsyncCount, lineBaseEven, lineBaseOdd]).toEqual([0, 0, 0]);
+
+            const v2 = makeRealVideo();
+            v2.hsyncCount = 99;
+            v2.lineBaseEven = 98;
+            v2.lineBaseOdd = 97;
+            v2.restoreState(older);
+
+            expect([v2.hsyncCount, v2.lineBaseEven, v2.lineBaseOdd]).toEqual([0, 0, 0]);
         });
 
         it("should rebuild the line grid descriptor on restore", () => {

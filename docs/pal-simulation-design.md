@@ -57,11 +57,11 @@ The shader implements these steps for each pixel:
 - Avoids vertical blur from comb filters
 - Slightly less sharp than notch filter, but more authentic
 
-**2H delay for interlaced rendering:**
+**Texture rows are half-lines:**
 
-- jsbeeb renders only odd OR even lines per frame
-- Using line-2 samples from same field (both fresh data)
-- Represents TV's 1H delay within a single field
+- The framebuffer holds two rows per scanline: the non-interlaced modes double each scanline onto both, and an interlaced field draws every other row
+- The previous scanline of the same field is two rows up in every mode, so the chroma blend samples row-2
+- Phase and V-switch come from the scanline's line number, which video.js records per row parity (see "Line Number Propagation")
 
 ## Evolution: What Was Tried and Why
 
@@ -264,11 +264,11 @@ luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current;
 
 ### PAL Parameters
 
-- **Subcarrier frequency:** 283.75 cycles per scanline (4.43 MHz over 64μs)
-- **Line phase offset:** 0.7516 fractional cycles per line
-- **Field phase offset:** 234.875 cycles per field (= 0.7516 × 312.5 lines)
+- **Subcarrier frequency:** 283.7516 cycles per scanline (4.43361875 MHz over 64μs)
+- **Line phase offset:** 0.7516 fractional cycles per line, so the residual dot pattern repeats every four lines
+- **Frame phase step:** whatever the frame's line count gives. The Beeb's usual 312-line non-interlaced frame steps 0.4992 cycles, so the dots nearly invert every frame (a 25 Hz twinkle) and drift through a cycle in about 50 s; a 312.5-line interlaced field steps 0.375 cycles
 - **V phase alternation:** ±1 per scanline (PAL's defining characteristic)
-- **8-field sequence:** Phase repeats every 8 fields, creating animated dot crawl
+- **Phase period:** 0.7516 = 1879 / 2500, so the line counter that drives the phase wraps at 2500 lines and never drifts
 
 ### Color Space Conversion
 
@@ -305,18 +305,7 @@ See shader source for actual matrix values.
 
 ### Outstanding Issues
 
-1. **Non-interlaced mode sub-optimal**
-   - Current: Uses same 2H delay as interlaced (blends same-phase lines)
-   - Better: Should use 1H delay (blend opposite-phase lines N and N-1)
-   - Impact: Less accurate chroma in non-interlaced modes
-   - Fix: Add `uInterlaced` uniform, use `line_offset = interlaced ? 2.0 : 1.0`
-
-2. **Fixed field line count**
-   - Assumes 312.5 lines/field for phase calculation
-   - CRTC can configure variable line counts
-   - May affect dot crawl accuracy in unusual configurations
-
-3. **Edge artifacts at borders**
+1. **Edge artifacts at borders**
    - Visible color fringe where content meets black border
    - Caused by chroma blending with black (correct behavior)
    - May need comparison with real hardware to validate
@@ -327,14 +316,16 @@ No gamma handling is needed, and an sRGB framebuffer would be the wrong directio
 
 ## Integration with jsbeeb
 
-### Frame Counter Propagation
+### Line Number Propagation
 
-The 8-field PAL sequence requires frame-accurate phase:
+`video.js` counts hsyncs in `hsyncCount`, modulo 2500, and at each flyback records the count that texture rows 0 and 1 are about to be drawn under (`lineBaseEven`, `lineBaseOdd`): the even field's row 0 is the rest of the line the vsync fell in, the odd interlaced field's row 1 is the first hsync after it, and a doubled scanline gives both rows the same line. Row `r` was drawn during line `lineBase[r & 1] + (r >> 1)`. In interlaced modes the texture holds both fields, so each parity keeps the base from its own field's flyback. The bases travel with each painted frame:
 
 ```javascript
 // video.js → main.js → canvas.js → shader
-video.frameCount → gl.uniform1f(frameCountLocation, frameCount)
+video.lineBaseEven, video.lineBaseOdd → gl.uniform2f(uLineBase, even, odd)
 ```
+
+The shader takes `line = uLineBase[row & 1] + floor(row / 2)`, the V-switch from the line's parity and `phase = fract(line * 0.7516)`; the previous scanline of the same field is `line - 1`, two rows up. Nothing is reset per frame, so the phase steps between frames by the frame's true line count.
 
 ### Interlaced Rendering Interaction
 

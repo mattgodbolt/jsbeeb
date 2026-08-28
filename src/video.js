@@ -19,6 +19,10 @@ export const OPAQUE_WHITE = 0xffffffff;
 
 export const MinPaintedFrameRows = 64;
 
+// The PAL subcarrier advances 283.7516 cycles per line (4433618.75 Hz / 15625 Hz), and
+// 0.7516 = 1879 / 2500, so its phase against the line is periodic in 2500 lines.
+export const PalPhasePeriodLines = 2500;
+
 ////////////////////
 // VideoNULA - programmable 12-bit RGB palette extension (RobC hardware mod).
 // Reference: b-em src/video.c (stardot/b-em).
@@ -348,6 +352,11 @@ export class Video {
         this.bitmapY = 0;
         this.oddClock = false;
         this.frameCount = 0;
+        this.hsyncCount = 0;
+        // The hsyncCount in effect while framebuffer rows 0 and 1 were drawn: row r was drawn
+        // during line lineBase[r & 1] + (r >> 1), which sets its PAL subcarrier phase.
+        this.lineBaseEven = 0;
+        this.lineBaseOdd = 0;
         this.doEvenFrameLogic = false;
         this.isEvenRender = true;
         this.lastRenderWasEven = false;
@@ -460,6 +469,9 @@ export class Video {
             bitmapY: this.bitmapY,
             oddClock: this.oddClock,
             frameCount: this.frameCount,
+            hsyncCount: this.hsyncCount,
+            lineBaseEven: this.lineBaseEven,
+            lineBaseOdd: this.lineBaseOdd,
             doEvenFrameLogic: this.doEvenFrameLogic,
             isEvenRender: this.isEvenRender,
             lastRenderWasEven: this.lastRenderWasEven,
@@ -512,6 +524,9 @@ export class Video {
         this.bitmapY = state.bitmapY;
         this.oddClock = state.oddClock;
         this.frameCount = state.frameCount;
+        this.hsyncCount = state.hsyncCount ?? 0;
+        this.lineBaseEven = state.lineBaseEven ?? 0;
+        this.lineBaseOdd = state.lineBaseOdd ?? 0;
         this.doEvenFrameLogic = state.doEvenFrameLogic;
         this.isEvenRender = state.isEvenRender;
         this.lastRenderWasEven = state.lastRenderWasEven;
@@ -606,11 +621,24 @@ export class Video {
         this.dispEnabled |= enable;
         this.cursorInvertedOffset = -1;
 
-        this.bitmapY = 0;
         // Interlace even frame fires vsync midway through a scanline.
-        if (!!(this.regs[8] & 1) && !!(this.frameCount & 1)) {
-            this.bitmapY = -1;
+        const oddField = !!(this.regs[8] & 1) && !!(this.frameCount & 1);
+        this.bitmapY = oddField ? -1 : 0;
+
+        // The even field draws the rest of the vsync line on row 0; the odd field's first row
+        // is the first hsync after it.
+        const firstRowLine = (this.hsyncCount + (oddField ? 1 : 0)) % PalPhasePeriodLines;
+        if (this.doublesLines()) {
+            this.lineBaseEven = this.lineBaseOdd = firstRowLine;
+        } else if (oddField) {
+            this.lineBaseOdd = firstRowLine;
+        } else {
+            this.lineBaseEven = firstRowLine;
         }
+    }
+
+    doublesLines() {
+        return (this.doubledScanlines && !this.interlacedSyncAndVideo) || this.isEvenRender === this.lastRenderWasEven;
     }
 
     debugOffset(x, y) {
@@ -715,9 +743,7 @@ export class Video {
         if (!this.halfClock || !this.oddClock) return;
         if ((this.dispEnabled & EVERYTHINGENABLED) !== EVERYTHINGENABLED) return;
         if (this.bitmapX < 0 || this.bitmapX >= 1024 || this.bitmapY < 0 || this.bitmapY >= 625) return;
-        // The same line doubling decision as the render loop, which inlines it for speed.
-        const doubledLines =
-            (this.doubledScanlines && !this.interlacedSyncAndVideo) || this.isEvenRender === this.lastRenderWasEven;
+        const doubledLines = this.doublesLines();
         const bitmapRow = doubledLines ? this.bitmapY & ~1 : this.bitmapY;
         const offset = bitmapRow * 1024 + this.bitmapX;
         const halfCell = this.pixelsPerChar >>> 1;
@@ -903,6 +929,7 @@ export class Video {
             // The CRT vertical beam speed is constant, so this is actually
             // an approximation that works if hsyncs are spaced evenly.
             this.bitmapY += 2;
+            this.hsyncCount = (this.hsyncCount + 1) % PalPhasePeriodLines;
 
             // Arbitrary moment when TV will give up and start flyback in the absence of an explicit VSync signal
             return this.bitmapY >= 768;
@@ -1064,7 +1091,8 @@ export class Video {
                     // There's a painting subtlety here: if we're in an
                     // interlace mode but R6>R4 then we'll get stuck
                     // painting just an odd or even frame, so we double up
-                    // scanlines to avoid a ghost half frame.
+                    // scanlines to avoid a ghost half frame. This is
+                    // doublesLines(), inlined for speed.
                     if (
                         (this.doubledScanlines && !this.interlacedSyncAndVideo) ||
                         this.isEvenRender === this.lastRenderWasEven
