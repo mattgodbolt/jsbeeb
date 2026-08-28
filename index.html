@@ -449,6 +449,10 @@
           <div><span class="register">S</span>: <span id="cpu6502_s">00</span></div>
           <div><span class="register">PC</span>: <span id="cpu6502_pc">0000</span></div>
         </div>
+        <div id="debug-keys">
+          g run &middot; n step &middot; m step over &middot; o step out &middot; t breakpoint &middot; j/k move
+          &middot; b back &middot; u/i memory &plusmn;8 &middot; U/I memory &plusmn;64
+        </div>
       </div>
       <div id="hardware_debug" class="initially-hidden">
         <div class="via_regs" id="sysvia">
@@ -606,7 +610,32 @@
                   <td><span class="key">Ctrl-Home</span></td>
                   <td><span class="key">Ctrl-Home</span></td>
                 </tr>
+                <tr>
+                  <td>Pause</td>
+                  <td><span class="key">Ctrl-End</span></td>
+                  <td><span class="key">Ctrl-End</span></td>
+                </tr>
+                <tr>
+                  <td>Full speed</td>
+                  <td><span class="key">Ctrl-Insert</span></td>
+                  <td><span class="key">Ctrl-Insert</span></td>
+                </tr>
+                <tr>
+                  <td>Rewind</td>
+                  <td><span class="key">Alt-PageDown</span></td>
+                  <td><span class="key">Alt-PageDown</span></td>
+                </tr>
               </table>
+              <div>
+                While paused, <span class="key">g</span> resumes and <span class="key">n</span> runs one frame. In the
+                debugger, <span class="key">g</span> resumes, <span class="key">n</span> steps one instruction,
+                <span class="key">m</span> steps over a call, <span class="key">o</span> steps out of one,
+                <span class="key">t</span> toggles a breakpoint on the highlighted instruction,
+                <span class="key">j</span> and <span class="key">k</span> move the disassembly,
+                <span class="key">b</span> goes back to where it was, and <span class="key">u</span> and
+                <span class="key">i</span> move the memory view by 8 bytes (<span class="key">U</span> and
+                <span class="key">I</span> by 64).
+              </div>
               <div>
                 Caps lock is unreliable on macOS: browsers never report it being released, so games that use it to move
                 or fire don't work. Any key can be

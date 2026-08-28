@@ -251,6 +251,16 @@ const template = [
             },
             { type: "separator" },
             {
+                label: "Pause and Show Debugger",
+                accelerator: "CmdOrCtrl+Home",
+                click: sendAction("pause"),
+            },
+            {
+                label: "Resume",
+                click: sendAction("resume"),
+            },
+            { type: "separator" },
+            {
                 label: "Soft Reset",
                 click: sendAction("soft-reset"),
             },
