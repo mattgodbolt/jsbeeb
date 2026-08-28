@@ -15,9 +15,8 @@ const float PI = 3.14159265359;
 // 2. Demodulate current line (with correct phase) → U_curr, V_curr
 // 3. Demodulate previous line (2H for interlaced, same field) → U_prev, V_prev
 // 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
-// 5. Remodulate blended chroma back to composite frequency
-// 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma
-// 7. Combine luma and chroma, convert back to RGB
+// 5. Luma: composite through the set's low-pass and subcarrier trap
+// 6. Combine luma and chroma, convert back to RGB
 //
 // NOTE: Texture rows are half-lines, so the previous scanline of the same field is two rows
 // up, and the subcarrier phase and V-switch come from uLineBase, not from the row.
@@ -58,16 +57,23 @@ vec3 yuv_to_rgb(vec3 yuv) {
     );
 }
 
-// Demodulate composite signal at given position
-vec2 demodulate_uv(vec2 xy, float pixel_x, float offset_pixels, float v_switch, float cycles_per_pixel, float phase_offset) {
-    float t = ((pixel_x + offset_pixels) * cycles_per_pixel + phase_offset) * 2.0 * PI;
+// Subcarrier phase (radians) at offset_pixels from pixel_x
+float carrier_phase(float pixel_x, float offset_pixels, float cycles_per_pixel, float phase_offset) {
+    return ((pixel_x + offset_pixels) * cycles_per_pixel + phase_offset) * 2.0 * PI;
+}
 
+// Encode the texel at offset_pixels from xy to composite: Y + U*sin(ωt) + V*cos(ωt)*v_switch
+float encode_composite(vec2 xy, float offset_pixels, float t, float v_switch) {
     vec2 sample_uv = xy + vec2(offset_pixels * uTexelSize.x, 0.0);
     vec3 rgb = texture2D(uFramebuffer, sample_uv).rgb;
     vec3 yuv = rgb_to_yuv(rgb);
+    return yuv.x + yuv.y * sin(t) + yuv.z * cos(t) * v_switch;
+}
 
-    // Encode to composite: Y + U*sin(ωt) + V*cos(ωt)*v_switch
-    float composite = yuv.x + yuv.y * sin(t) + yuv.z * cos(t) * v_switch;
+// Demodulate composite signal at given position
+vec2 demodulate_uv(vec2 xy, float pixel_x, float offset_pixels, float v_switch, float cycles_per_pixel, float phase_offset) {
+    float t = carrier_phase(pixel_x, offset_pixels, cycles_per_pixel, phase_offset);
+    float composite = encode_composite(xy, offset_pixels, t, v_switch);
 
     // Demodulate: multiply by carrier to shift chroma to baseband
     return vec2(composite * sin(t), composite * cos(t) * v_switch);
@@ -84,6 +90,13 @@ void main() {
     const int FIRTAPS = 21;
     float FIR[FIRTAPS];
     // END_FIR_COEFFICIENTS
+
+    // BEGIN_LUMA_COEFFICIENTS
+    // This section is replaced by the Vite build with the set's luma path, low-pass and
+    // subcarrier trap in one symmetric FIR, as designed in tools/luma-fir-generator.js.
+    const int LUMA_TAPS = 31;
+    float LUMA_FIR[LUMA_TAPS];
+    // END_LUMA_COEFFICIENTS
 
     float row = pixelCoord.y;
     float line = (mod(row, 2.0) < 1.0 ? uLineBase.x : uLineBase.y) + floor(row / 2.0);
@@ -121,17 +134,13 @@ void main() {
     // Step 3: Blend chroma at baseband
     vec2 filtered_uv = mix(filtered_uv_curr, filtered_uv_prev, CHROMA_BLEND_WEIGHT);
 
-    // Step 4: Get luma via complementary subtraction
-    float t_curr = (pixelCoord.x * cycles_per_pixel + phase_offset) * 2.0 * PI;
-    vec3 rgb_curr = texture2D(uFramebuffer, vTexCoord).rgb;
-    vec3 yuv_curr = rgb_to_yuv(rgb_curr);
-    float composite_curr = yuv_curr.x + yuv_curr.y * sin(t_curr) + yuv_curr.z * cos(t_curr) * v_switch;
-
-    // Remodulate blended chroma back to composite frequency
-    float remodulated_chroma = filtered_uv.x * sin(t_curr) + filtered_uv.y * cos(t_curr) * v_switch;
-
-    // Complementary subtraction: luma = composite - chroma
-    float y_out = composite_curr - remodulated_chroma;
+    // Step 4: Luma is the composite through the set's low-pass and subcarrier trap
+    float y_out = 0.0;
+    for (int i = 0; i < LUMA_TAPS; i++) {
+        float offset = float(i - (LUMA_TAPS - 1) / 2);
+        float t = carrier_phase(pixelCoord.x, offset, cycles_per_pixel, phase_offset);
+        y_out += encode_composite(vTexCoord, offset, t, v_switch) * LUMA_FIR[i];
+    }
 
     vec3 rgb_out = yuv_to_rgb(vec3(y_out, filtered_uv.x, filtered_uv.y));
     gl_FragColor = vec4(clamp(rgb_out, 0.0, 1.0), 1.0);

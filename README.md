@@ -289,6 +289,8 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - (mostly internal use) `logFdcCommands`, `logFdcStateChanges` - turn on logging in the disc controller.
 - `audioDebug` - show the audio lead chart, and log one console line per second in which the emulator tick ran late or the sound stalled or skipped.
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
+- `displayMode=X` - picks the display: `rgb` (the default, a plain monitor), `pal` (a television fed by the Beeb's UHF modulator)
+  or `xbr` (an upscaler, see [docs/xbr-display-mode.md](docs/xbr-display-mode.md)).
 
 ### Atom-specific parameters
 

@@ -4,7 +4,7 @@
 //
 // Simulates PAL composite video artifacts by encoding the framebuffer to a
 // composite signal and decoding it back to RGB, mimicking the behavior of
-// connecting a BBC Micro to a PAL television via composite cable.
+// a BBC Micro's UHF-modulated picture on a PAL television.
 //
 // REFERENCES:
 // - John Watkinson's "Engineer's Guide to Decoding & Encoding" (Section 3.4)

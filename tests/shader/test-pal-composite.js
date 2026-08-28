@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { buildPattern, eachPixel, pixelAt, renderJobs } from "./render.js";
-import { applyFirCoefficients } from "../../tools/vite-plugin-fir-shader.js";
+import { buildPattern, eachPixel, pixelAt, renderJobs, TextureSize } from "./render.js";
+import { applyFirCoefficients, applyLumaCoefficients } from "../../tools/vite-plugin-fir-shader.js";
+import { LumaTaps } from "../../tools/luma-fir-generator.js";
 
 // These run the PAL composite shader itself, as shipped, and assert on what it
 // draws; see test-xbr.js for why that means headless Chrome. The properties
@@ -34,14 +35,20 @@ const Palette = {
 /** Eight-bit rounding through the shader; colours meant to be equal land within this. */
 const Tolerance = 2;
 
-/** Texels the fragment shader reads either side of the one it is drawing: half the FIR's taps. */
+/** Texels the chroma FIR reads either side of the one it is drawing: half its taps. */
 const FirReach = 10;
+
+/** Texels the luma FIR reads either side of that, again. */
+const LumaReach = (LumaTaps - 1) / 2;
+
+/** Texels either side of the one drawn that the shader reads at all. */
+const Reach = FirReach + LumaReach;
 
 /** The shader blends chroma with the line two above, so that line must be picture too. */
 const LineReach = 2;
 
 /** Context around each pattern so its outermost texels see picture rather than nothing. */
-const Padding = { x: FirReach + 2, y: LineReach + 1 };
+const Padding = { x: Reach + 2, y: LineReach + 1 };
 
 /** The subcarrier's phase against the line repeats every 2500 lines; see video.js. */
 const PhasePeriodLines = 2500;
@@ -53,7 +60,7 @@ const LineBases = [0, 1, 2, 3, PhasePeriodLines - 1];
 const PalHarness = {
     vert: "pal-composite.vert.glsl",
     frag: "pal-composite.frag.glsl",
-    prepareFragment: (source) => applyFirCoefficients(source).code,
+    prepareFragment: (source) => applyLumaCoefficients(applyFirCoefficients(source).code).code,
     setup(gl, program) {
         return {
             uFramebuffer: gl.getUniformLocation(program, "uFramebuffer"),
@@ -86,27 +93,27 @@ const ParityOrigins = [
     { x: 1, y: 1 },
 ];
 
+const FlatWidth = 8;
+const FlatHeight = 4;
+
 /** Elsewhere in the texture, out to its far column and well down it. */
 const FarOrigins = [
     { x: 2, y: 3 },
     { x: 500, y: 61 },
-    { x: 992, y: 200 },
+    { x: TextureSize - FlatWidth - 2 * Padding.x, y: 200 },
 ];
 
-const FlatWidth = 8;
-const FlatHeight = 4;
-
-/** Colour bars wide enough that the FIR sees only one bar from the middle of each. */
-const BarWidth = 32;
+/** Colour bars wide enough that the shader sees only one bar from the middle of each. */
+const BarWidth = 64;
 const BarHeight = 8;
 const BarOrder = ["red", "green", "blue", "white", "yellow", "cyan", "magenta", "black"];
 const BarRows = Array.from({ length: BarHeight }, () => BarOrder.flatMap((colour) => Array(BarWidth).fill(colour)));
 const BarOrigin = { x: 20, y: 40 };
 
-/** Columns of a bar the FIR reaches no neighbour from. */
+/** Columns of a bar the shader reaches no neighbour from. */
 const barInterior = (bar) => {
     const columns = [];
-    for (let x = bar * BarWidth + FirReach; x < (bar + 1) * BarWidth - FirReach; ++x) columns.push(x);
+    for (let x = bar * BarWidth + Reach; x < (bar + 1) * BarWidth - Reach; ++x) columns.push(x);
     return columns;
 };
 
@@ -128,6 +135,23 @@ const StripeRow = [
 const StripeHeight = 4;
 const StripeRows = Array.from({ length: StripeHeight }, () => StripeRow);
 const DoubledStripes = { rows: StripeRows, palette: Palette, padding: Padding, texelsWide: 2, texelsHigh: 2, scale: 2 };
+
+/**
+ * Luma detail at two rates, drawn one texel per pixel: alternate texels are
+ * 8 MHz, which a set cannot resolve, and four-texel bars are 2 MHz, which it
+ * shows at nearly full contrast. Wide enough to have an interior beyond the
+ * shader's reach from the picture's edges.
+ */
+const DetailWidth = 96;
+const DetailHeight = 4;
+const detailRows = (period) =>
+    Array.from({ length: DetailHeight }, () =>
+        Array.from({ length: DetailWidth }, (_, x) => (x % period < period / 2 ? "white" : "black")),
+    );
+const Detail = {
+    unresolved: { period: 2 },
+    resolved: { period: 8 },
+};
 
 const stripeName = (lineBase, origin) => `stripes-${lineBase}-${origin.x}-${origin.y}`;
 /** The line the picture is compared against when moved, wrapped or stepped. */
@@ -172,6 +196,16 @@ function buildJobs() {
                 padding: Padding,
                 origin: BarOrigin,
                 scale,
+                params: sameLine(0),
+            }),
+        );
+    for (const [name, { period }] of Object.entries(Detail))
+        jobs.push(
+            buildPattern({
+                name: `detail-${name}`,
+                rows: detailRows(period),
+                palette: Palette,
+                padding: Padding,
                 params: sameLine(0),
             }),
         );
@@ -326,6 +360,48 @@ describe("PAL composite shader", () => {
             const expected = renderedNearest["bars-1"];
             const actual = downsample(renderedNearest["bars-2"], 2);
             expect(pictureDifference(actual, expected)).toBeLessThanOrEqual(Tolerance);
+        });
+    });
+
+    describe("luma bandwidth", () => {
+        /** Columns of a detail pattern the shader reaches no padding from. */
+        const interior = [];
+        for (let x = Reach; x < DetailWidth - Reach; ++x) interior.push(x);
+
+        /** Peak-to-peak of the interior, per channel, and its mean. */
+        function interiorContrast(image) {
+            const low = [255, 255, 255];
+            const high = [0, 0, 0];
+            let total = 0;
+            for (const x of interior)
+                for (let y = 0; y < image.height; ++y) {
+                    const pixel = pixelAt(image, x, y);
+                    for (let i = 0; i < 3; ++i) {
+                        low[i] = Math.min(low[i], pixel[i]);
+                        high[i] = Math.max(high[i], pixel[i]);
+                        total += pixel[i];
+                    }
+                }
+            return {
+                contrast: Math.max(...high.map((h, i) => h - low[i])),
+                mean: total / (interior.length * image.height * 3),
+            };
+        }
+
+        it("has interior columns to measure", () => {
+            expect(interior.length).toBeGreaterThan(8);
+        });
+
+        it("cannot resolve alternate texels, and shows them as a flat grey", () => {
+            const { contrast, mean } = interiorContrast(rendered["detail-unresolved"]);
+            expect(contrast).toBeLessThanOrEqual(8);
+            expect(mean).toBeGreaterThan(96);
+            expect(mean).toBeLessThan(160);
+        });
+
+        it("keeps the contrast of detail well inside its bandwidth", () => {
+            const { contrast } = interiorContrast(rendered["detail-resolved"]);
+            expect(contrast).toBeGreaterThan(190);
         });
     });
 
