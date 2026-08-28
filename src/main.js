@@ -89,6 +89,11 @@ function stringToMachineKeys(text) {
 }
 
 const gamepad = new GamePad();
+if (!window.isSecureContext)
+    toast("Gamepads only work over https, so any joystick plugged in here is not seen.", {
+        title: "Gamepads",
+        quietKey: "quietInsecureGamepads",
+    });
 const availableImages = [
     {
         name: "Elite",
@@ -239,7 +244,15 @@ const userPort = {
 // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
 // Must be created before Config so the onClose callback and the initial checkbox state can reference it.
 const speechOutput = new SpeechOutput();
-speechOutput.enabled = !!parsedQuery.speechOutput;
+
+function setSpeechOutput(enabled) {
+    speechOutput.enabled = enabled;
+    if (enabled && typeof speechSynthesis === "undefined")
+        toast("This browser has no speech synthesis, so speech output has nothing to speak with.", {
+            title: "Speech",
+        });
+}
+setSpeechOutput(!!parsedQuery.speechOutput);
 
 const config = new Config(
     function onChange(changed) {
@@ -266,9 +279,7 @@ const config = new Config(
                 setupMicrophone();
             }
         }
-        if (changed.speechOutput !== undefined) {
-            speechOutput.enabled = !!changed.speechOutput;
-        }
+        if (changed.speechOutput !== undefined) setSpeechOutput(!!changed.speechOutput);
         if (changed.tubeCpuMultiplier !== undefined) {
             emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
             config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
@@ -719,8 +730,10 @@ pastetext.addEventListener("drop", async function (event) {
         } else if (file.name.toLowerCase().endsWith(".uef")) {
             // Regular UEF tape image (not a BeebEm save state)
             setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
+            toast(`Loaded ${file.name} as the tape.`, { title: "Dropped" });
         } else {
             await loadHTMLFile(file);
+            toast(`Loaded ${file.name} into drive 0.`, { title: "Dropped" });
         }
     } catch (error) {
         reportLoadFailure(file.name, error);
@@ -872,6 +885,7 @@ processor = new CpuClass(model, {
 printer.attach(processor.uservia);
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
+processor.acia.addEventListener("notice", showNotice);
 
 // Create input sources
 const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
@@ -1716,12 +1730,6 @@ document.querySelector("#google-drive-auth form").addEventListener("submit", asy
 });
 
 async function gdLoad(cat, layout) {
-    // TODO: have a onclose flush event, handle errors
-    /*
-     $(window).bind("beforeunload", function() {
-     return confirm("Do you really want to close?");
-     });
-     */
     popupLoading("Loading '" + cat.name + "' from Google Drive");
     try {
         const available = await googleDrive.initialise();
@@ -1742,6 +1750,12 @@ async function gdLoad(cat, layout) {
         const ssd = await googleDrive.load(processor.fdc, cat.id, layout);
         console.log("Google Drive loading finished");
         loadingFinished();
+        if (!ssd.savesChanges) {
+            toast(`${cat.name} is read only on Google Drive, so changes to it are not written back.`, {
+                title: "Google Drive",
+                quietKey: "quietDriveReadOnly",
+            });
+        }
         return ssd;
     } catch (error) {
         console.error("Google Drive loading error:", error);

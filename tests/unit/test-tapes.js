@@ -93,10 +93,11 @@ describe("tapes", () => {
             expect(tape.poll(mockAcia())).toBe(5 * 2 * 1000 * 1000);
         });
 
-        it("should return null for unknown format", async () => {
+        it("should reject an unknown format, naming the file", async () => {
             const unknown = new Uint8Array([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b]);
-            const tape = await loadTapeFromData("test.bin", unknown, BbcModel);
-            expect(tape).toBeNull();
+            await expect(loadTapeFromData("test.bin", unknown, BbcModel)).rejects.toThrow(
+                "test.bin is not a UEF or tapefile tape image",
+            );
         });
 
         it("should reject UEF with unsupported major version", async () => {

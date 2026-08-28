@@ -4,8 +4,9 @@
 // https://books.google.com/books?id=wUecAQAAQBAJ&pg=PA431&lpg=PA431&dq=acia+tdre&source=bl&ots=mp-yF-mK-P&sig=e6aXkFRfiIOb57WZmrvdIGsCooI&hl=en&sa=X&ei=0g2fVdDyFIXT-QG8-JD4BA&ved=0CCwQ6AEwAw#v=onepage&q=acia%20tdre&f=false
 // http://www.classiccmp.org/dunfield/r/6850.pdf
 
-export class Acia {
+export class Acia extends EventTarget {
     constructor(cpu, toneGen, scheduler, relayNoise) {
+        super();
         this.cpu = cpu;
         this.toneGen = toneGen;
         this.rs423Handler = null;
@@ -20,6 +21,7 @@ export class Acia {
         this.tapeCarrierCount = 0;
         this.tapeDcdLineLevel = false;
         this.hadDcdHigh = false;
+        this.saidOverrun = false;
         this.serialReceiveRate = 0;
         this.serialReceiveCyclesPerByte = 0;
         this.serialTransmitRate = 0;
@@ -200,14 +202,30 @@ export class Acia {
             // TODO: this doesn't match the datasheet:
             // "The Overrun does not occur in the Status Register until the
             // valid character prior to Overrun has been read."
-            console.log("Serial overrun");
             this.sr |= 0xa0;
+            this.noteOverrun();
         } else {
             // If bit 7 contains parity, mask it off.
             this.dr = byte & (this.cr & 0x10 ? 0xff : 0x7f);
             this.sr |= 0x81;
         }
         this.updateIrq();
+    }
+
+    noteOverrun() {
+        if (this.saidOverrun) return;
+        this.saidOverrun = true;
+        this.dispatchEvent(
+            new CustomEvent("notice", {
+                detail: {
+                    message:
+                        "A serial byte arrived before the previous one was read, so it was lost. " +
+                        "A tape load that stops with Data? is usually this.",
+                    title: "Serial",
+                    quietKey: "quietSerialOverrun",
+                },
+            }),
+        );
     }
 
     snapshotState() {
