@@ -45,6 +45,15 @@ const AliasTonePeriod = 100;
 const AliasToneHz = 4000000 / (32 * AliasTonePeriod);
 const FoldedSpurHz = 39 * AliasToneHz - OutputRate;
 
+// Sample playback parks a channel on an ultrasonic carrier and modulates its
+// volume; period 4 is the usual choice, 31.25 kHz.
+const SampledSoundCarrierPeriod = 4;
+const SampledSoundCarrierHz = 4000000 / (32 * SampledSoundCarrierPeriod);
+
+// 6250 Hz: its third harmonic sits where the board's filter has bitten hard.
+const HighTonePeriod = 20;
+const HighToneHz = 4000000 / (32 * HighTonePeriod);
+
 // Amplitude of the frequency-bin component at freq, via the Goertzel algorithm.
 function goertzelAmplitude(samples, freq, rate) {
     const w = (2 * Math.PI * freq) / rate;
@@ -146,16 +155,33 @@ describe("SoundChipProcessor rendering", () => {
         expect(goertzelAmplitude(output, ToneHz * 1.5, OutputRate)).toBeLessThan(0.02);
     });
 
-    it("should filter the chip at its own rate, ahead of the resampler, unless the filter is off", () => {
-        const foldedSpur = (options) => {
-            const proc = new SoundChipProcessor({ processorOptions: options });
-            const producer = startedWithTone(proc, toneWrites(AliasTonePeriod));
-            const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1, nominalRate: true });
-            return goertzelAmplitude(output, FoldedSpurHz, OutputRate);
-        };
-        const unfiltered = foldedSpur({ audioFilterFreq: 0 });
-        expect(unfiltered).toBeGreaterThan(0.002);
-        expect(foldedSpur({})).toBeLessThan(unfiltered / 10);
+    const spectralLine = (options, writes, hz) => {
+        const proc = new SoundChipProcessor({ processorOptions: options });
+        const producer = startedWithTone(proc, writes);
+        const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1, nominalRate: true });
+        return goertzelAmplitude(output, hz, OutputRate);
+    };
+
+    it("should not fold a harmonic from above the output rate into the audible band", () => {
+        const writes = toneWrites(AliasTonePeriod);
+        const fundamental = spectralLine({}, writes, AliasToneHz);
+        expect(fundamental).toBeGreaterThan(0.1);
+        expect(spectralLine({}, writes, FoldedSpurHz)).toBeLessThan(fundamental / 3000);
+        expect(spectralLine({ audioFilterFreq: 0 }, writes, FoldedSpurHz)).toBeLessThan(fundamental / 3000);
+    });
+
+    it("should not fold the carrier of sampled sound into the audible band", () => {
+        const writes = toneWrites(SampledSoundCarrierPeriod);
+        const folded = spectralLine({ audioFilterFreq: 0 }, writes, OutputRate - SampledSoundCarrierHz);
+        expect(folded).toBeLessThan(1e-4);
+    });
+
+    it("should apply the board's filter at the chip rate, ahead of the resampler", () => {
+        const writes = toneWrites(HighTonePeriod);
+        const harmonic = 3 * HighToneHz;
+        const unfiltered = spectralLine({ audioFilterFreq: 0 }, writes, harmonic);
+        expect(unfiltered).toBeGreaterThan(0.01);
+        expect(spectralLine({}, writes, harmonic)).toBeLessThan(unfiltered / 4);
     });
 
     it("should fall back to the board's filter when the settings cannot be realised", () => {
