@@ -2,12 +2,12 @@
 import { SoundChip, AtomSoundChip } from "../soundchip.js";
 import { LowPassBiquad } from "../biquad.js";
 
-// The board's output filter, an equal-component Sallen-Key (Service Manual
-// section 3.8: 10K and 2n2 twice, gain K = 1 + 22/39): f0 = 1/(2*pi*RC),
-// Q = 1/(3 - K). Run at the chip rate, ahead of decimation, it is also the
-// anti-alias filter.
-const OutputFilterHz = 1 / (2 * Math.PI * 10e3 * 2.2e-9);
-const OutputFilterQ = 1 / (3 - (1 + 22 / 39));
+// The board's output filter is an equal-component Sallen-Key (Service Manual
+// section 3.8: 10K and 2n2 twice, gain K = 1 + 22/39): f0 = 1/(2*pi*RC) = 7234 Hz,
+// Q = 1/(3 - K) = 0.696, below 1/sqrt(2), so no resonant peak. Run at the chip
+// rate, ahead of decimation, it is also the anti-alias filter.
+const OutputFilterHz = 7234;
+const OutputFilterQ = 0.696;
 
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 const MaxTargetLatencyMs = 250;
