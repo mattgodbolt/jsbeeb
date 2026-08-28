@@ -790,11 +790,18 @@ let keyboard; // This will be initialised after the processor is created
 
 const debugPause = document.getElementById("debug-pause");
 const debugPlay = document.getElementById("debug-play");
-debugPause.addEventListener("click", () => stop(true));
-debugPlay.addEventListener("click", () => {
+
+function pauseIntoDebugger() {
+    stop(true);
+}
+
+function resumeFromDebugger() {
     dbgr.hide();
     go();
-});
+}
+
+debugPause.addEventListener("click", pauseIntoDebugger);
+debugPlay.addEventListener("click", resumeFromDebugger);
 
 // To lower chance of data loss, only accept drop events in the drop
 // zone in the menu bar.
@@ -2705,6 +2712,8 @@ electron({
         "hard-reset": hardReset,
         "save-state": () => document.getElementById("save-state").click(),
         rewind: () => rewindUI.open(),
+        pause: pauseIntoDebugger,
+        resume: resumeFromDebugger,
     },
 });
 

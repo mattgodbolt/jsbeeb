@@ -81,6 +81,12 @@ body {
   width: 90px;
 }
 
+#debug-keys {
+  clear: both;
+  padding-top: 3px;
+  color: #aaaaaa;
+}
+
 #crtc_debug {
   background-color: #333333;
   border: 1px solid #555555;
