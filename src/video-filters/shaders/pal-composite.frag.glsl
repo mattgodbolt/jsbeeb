@@ -13,7 +13,7 @@ const float PI = 3.14159265359;
 // IMPLEMENTATION (Baseband Blending Method):
 // 1. Encode RGB to PAL composite: Y + U*sin(ωt) + V*cos(ωt)*v_switch
 // 2. Demodulate current line (with correct phase) → U_curr, V_curr
-// 3. Demodulate previous line (2H for interlaced, same field) → U_prev, V_prev
+// 3. Demodulate the previous scanline (two texture rows up) → U_prev, V_prev
 // 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
 // 5. Luma: composite through the set's low-pass and subcarrier trap
 // 6. Combine luma and chroma, convert back to RGB
