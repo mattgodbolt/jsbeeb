@@ -35,8 +35,15 @@ const CyclesPerSample = 4; // 2MHz CPU, 500kHz chip
 // SN76489 writes for a 1kHz tone on channel 0 at full volume: 4MHz / (32 * 125).
 const TonePeriod = 125;
 const ToneHz = 4000000 / (32 * TonePeriod);
-const ToneOn = [0x80 | (TonePeriod & 0x0f), TonePeriod >> 4, 0x90];
+const toneWrites = (period) => [0x80 | (period & 0x0f), period >> 4, 0x90];
+const ToneOn = toneWrites(TonePeriod);
 const ToneOff = [0x9f];
+
+// A 1250 Hz tone's 39th harmonic folds about the output rate to a frequency
+// no real harmonic occupies; only a filter ahead of the resampler can touch it.
+const AliasTonePeriod = 100;
+const AliasToneHz = 4000000 / (32 * AliasTonePeriod);
+const FoldedSpurHz = 39 * AliasToneHz - OutputRate;
 
 // Amplitude of the frequency-bin component at freq, via the Goertzel algorithm.
 function goertzelAmplitude(samples, freq, rate) {
@@ -82,13 +89,19 @@ const quantum = (proc) => {
 
 // Producer ticks every tickMs of simulated time, consumer runs 128-frame
 // quanta. Returns the effective rates and output collected after collectAfter.
-function simulate(proc, producer, seconds, { tickMs = 10, collectAfter = 0, ticking = () => true } = {}) {
+// nominalRate pins the resampling ratio, for spectral measurements.
+function simulate(
+    proc,
+    producer,
+    seconds,
+    { tickMs = 10, collectAfter = 0, ticking = () => true, nominalRate = false } = {},
+) {
     const rates = [];
     const output = [];
     const originalRate = proc._effectiveSampleRate.bind(proc);
     let simTime = 0;
     proc._effectiveSampleRate = (dt) => {
-        const rate = originalRate(dt);
+        const rate = nominalRate ? proc.inputSampleRate : originalRate(dt);
         if (simTime >= collectAfter) rates.push(rate);
         return rate;
     };
@@ -114,9 +127,9 @@ function simulate(proc, producer, seconds, { tickMs = 10, collectAfter = 0, tick
 }
 
 // A processor already running with a target's lead, playing the test tone.
-function startedWithTone(proc) {
+function startedWithTone(proc, writes = ToneOn) {
     const producer = makeProducer(proc);
-    producer.poke(...ToneOn);
+    producer.poke(...writes);
     producer.advance(proc.targetLatencyMs);
     producer.flush();
     quantum(proc);
@@ -133,6 +146,18 @@ describe("SoundChipProcessor rendering", () => {
         expect(goertzelAmplitude(output, ToneHz * 1.5, OutputRate)).toBeLessThan(0.02);
     });
 
+    it("should filter the chip at its own rate, ahead of the resampler, unless the filter is off", () => {
+        const foldedSpur = (options) => {
+            const proc = new SoundChipProcessor({ processorOptions: options });
+            const producer = startedWithTone(proc, toneWrites(AliasTonePeriod));
+            const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1, nominalRate: true });
+            return goertzelAmplitude(output, FoldedSpurHz, OutputRate);
+        };
+        const unfiltered = foldedSpur({ audioFilterFreq: 0 });
+        expect(unfiltered).toBeGreaterThan(0.002);
+        expect(foldedSpur({})).toBeLessThan(unfiltered / 10);
+    });
+
     it("should apply a write at its cycle, part way through a quantum", () => {
         const proc = new SoundChipProcessor();
         const producer = startedWithTone(proc);
@@ -143,7 +168,7 @@ describe("SoundChipProcessor rendering", () => {
         producer.poke(...ToneOff);
         producer.advance(10);
         producer.flush();
-        proc._renderInput(rendered, rendered.length);
+        proc._renderInput(rendered, 0, rendered.length);
         const loud = rendered.subarray(0, 500);
         const quiet = rendered.subarray(520, 1000);
         expect(Math.max(...loud) - Math.min(...loud)).toBeGreaterThan(0.1);

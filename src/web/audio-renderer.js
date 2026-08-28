@@ -1,8 +1,13 @@
 /* global sampleRate, currentTime, registerProcessor, AudioWorkletProcessor */
 import { SoundChip, AtomSoundChip } from "../soundchip.js";
+import { LowPassBiquad } from "../biquad.js";
 
-const lowPassFilterFreq = sampleRate / 2;
-const RC = 1 / (2 * Math.PI * lowPassFilterFreq);
+// The board's output filter, an equal-component Sallen-Key (Service Manual
+// section 3.8: 10K and 2n2 twice, gain K = 1 + 22/39): f0 = 1/(2*pi*RC),
+// Q = 1/(3 - K). Run at the chip rate, ahead of decimation, it is also the
+// anti-alias filter.
+const OutputFilterHz = 1 / (2 * Math.PI * 10e3 * 2.2e-9);
+const OutputFilterQ = 1 / (3 - (1 + 22 / 39));
 
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 const MaxTargetLatencyMs = 250;
@@ -22,10 +27,18 @@ const isResync = (event) => event.state !== undefined || event.reset !== undefin
 class SoundChipProcessor extends AudioWorkletProcessor {
     constructor(options) {
         super(options);
-        const { isAtom = false, cpuSpeed = 1000000, targetLatencyMs } = options?.processorOptions ?? {};
+        const {
+            isAtom = false,
+            cpuSpeed = 1000000,
+            targetLatencyMs,
+            audioFilterFreq = OutputFilterHz,
+            audioFilterQ = OutputFilterQ,
+        } = options?.processorOptions ?? {};
         this.chip = isAtom ? new AtomSoundChip(null, { cpuSpeed }) : new SoundChip(null);
         this.inputSampleRate = this.chip.soundchipFreq;
         this.samplesPerCycle = this.chip.samplesPerCycle;
+        this.outputFilter =
+            audioFilterFreq > 0 ? new LowPassBiquad(this.inputSampleRate, audioFilterFreq, audioFilterQ) : null;
 
         this.events = [];
         this.eventsHead = 0;
@@ -36,10 +49,9 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.skippedMs = 0;
         this.minLeadMs = Infinity;
 
-        this._lastFilteredOutput = 0;
+        this._lastInputSample = 0;
         this._phase = 0;
         this._source = new Float32Array(0);
-        this._rendered = new Float32Array(0);
         this.smoothedLeadError = 0;
         this.setTargetLatency(targetLatencyMs);
         this.port.onmessage = (event) => {
@@ -157,12 +169,11 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         return Math.floor((boundary - this.clock) * this.samplesPerCycle);
     }
 
-    _renderInput(out, length) {
+    _renderInput(out, offset, length) {
         if (this.stalled) {
-            this._stall(out, 0, length);
+            this._stall(out, offset, length);
             return;
         }
-        let offset = 0;
         while (length > 0) {
             const n = Math.min(length, this._samplesUntilNextChange());
             if (n > 0) {
@@ -189,28 +200,17 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         const effectiveSampleRate = this._effectiveSampleRate(channel.length / sampleRate);
         const sampleRatio = effectiveSampleRate / sampleRate;
 
-        const dt = 1 / effectiveSampleRate;
-        const filterAlpha = dt / (RC + dt);
-
         // The fractional read position carries across quanta, so consumption
         // averages exactly sampleRatio and the pitch never steps at a rounding
         // boundary. source[0] is the last input sample of the previous quantum.
         const end = this._phase + channel.length * sampleRatio;
         const numInputSamples = Math.floor(end);
-        if (this._source.length <= numInputSamples) {
-            this._source = new Float32Array(numInputSamples * 2);
-            this._rendered = new Float32Array(numInputSamples * 2);
-        }
+        if (this._source.length <= numInputSamples) this._source = new Float32Array(numInputSamples * 2);
         const source = this._source;
-        const rendered = this._rendered;
-        this._renderInput(rendered, numInputSamples);
-        source[0] = this._lastFilteredOutput;
-        let prevSample = this._lastFilteredOutput;
-        for (let i = 1; i <= numInputSamples; ++i) {
-            prevSample += filterAlpha * (rendered[i - 1] - prevSample);
-            source[i] = prevSample;
-        }
-        this._lastFilteredOutput = prevSample;
+        source[0] = this._lastInputSample;
+        this._renderInput(source, 1, numInputSamples);
+        this.outputFilter?.process(source, 1, numInputSamples);
+        this._lastInputSample = source[numInputSamples];
         for (let i = 0; i < channel.length; i++) {
             const pos = this._phase + i * sampleRatio;
             const loc = Math.floor(pos);
