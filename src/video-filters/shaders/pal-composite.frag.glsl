@@ -5,7 +5,7 @@ varying vec2 vTexCoord;
 uniform sampler2D uFramebuffer;
 uniform vec2 uResolution;
 uniform vec2 uTexelSize;
-// Line number of texture rows 0 (x) and 1 (y); row r is line uLineBase[r & 1] + (r >> 1).
+// Line numbers of texture rows 0 (x) and 1 (y)
 uniform vec2 uLineBase;
 
 const float PI = 3.14159265359;
@@ -35,8 +35,7 @@ const float PAL_SUBCARRIER_MHZ = 4.43361875; // PAL color subcarrier frequency (
 
 // Derived PAL parameters
 const float PAL_CYCLES_PER_LINE = PAL_SUBCARRIER_MHZ * 1e6 / (PAL_TOTAL_LINES * PAL_FRAME_RATE);
-// fract(PAL_CYCLES_PER_LINE), as a literal so a float holds it to 1e-8 rather than the 1e-5 it
-// keeps at 283; it is multiplied by line numbers up to 2813.
+// fract(PAL_CYCLES_PER_LINE), spelt out: float keeps more of it alone than inside 283.7516
 const float PAL_LINE_PHASE_OFFSET = 0.7516;
 
 // RGB → YUV conversion with proper PAL signal levels baked in
