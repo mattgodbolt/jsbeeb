@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.20.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.20.1...v1.20.2) (2026-08-28)
+
+
+### Bug Fixes
+
+* add pause and resume to the desktop menu and a debugger key legend ([#918](https://github.com/mattgodbolt/jsbeeb/issues/918)) ([7f26212](https://github.com/mattgodbolt/jsbeeb/commit/7f262128cc19dbf1c57feca9603fa27bcb620ac2))
+* resample the sound chip through a windowed sinc so nothing above the output rate folds into hearing ([#919](https://github.com/mattgodbolt/jsbeeb/issues/919)) ([5c3c2c4](https://github.com/mattgodbolt/jsbeeb/commit/5c3c2c4c776d9c09f16118c0e1653a90222010a1)), closes [#862](https://github.com/mattgodbolt/jsbeeb/issues/862)
+
 ## [1.20.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.20.0...v1.20.1) (2026-08-28)
 
 
