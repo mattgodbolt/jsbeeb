@@ -32,7 +32,7 @@ The shader implements these steps for each pixel:
    - Process the current line and the previous scanline (two texture rows up) separately
 
 3. **Blend chroma at baseband**
-   - Mix current and previous line's U/V values: 50/50 weighted average
+   - Mix the current and previous scanline's U/V values: 50/50 weighted average
    - **Critical:** Blend AFTER demodulation to avoid phase mixing
    - Exploits slow vertical chroma changes for noise reduction
 
