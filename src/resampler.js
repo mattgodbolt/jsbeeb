@@ -66,7 +66,7 @@ export class PolyphaseResampler {
             const pos = phase + i * ratio;
             const loc = Math.floor(pos);
             const fracPhase = (pos - loc) * phases;
-            const p = Math.floor(fracPhase);
+            const p = Math.min(Math.floor(fracPhase), phases - 1);
             const mix = fracPhase - p;
             const rowA = p * taps;
             const rowB = rowA + taps;
