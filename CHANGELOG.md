@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.20.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.20.0...v1.20.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* apply the board's output filter at the chip rate, before decimation ([#915](https://github.com/mattgodbolt/jsbeeb/issues/915)) ([f62802b](https://github.com/mattgodbolt/jsbeeb/commit/f62802b3d373579b63e9af8dcdc53304885113dd))
+* drive the PAL subcarrier phase from real scanlines, not texture rows ([#908](https://github.com/mattgodbolt/jsbeeb/issues/908)) ([33f74c1](https://github.com/mattgodbolt/jsbeeb/commit/33f74c152ccd58a8edae1636c73269860b9169f9)), closes [#899](https://github.com/mattgodbolt/jsbeeb/issues/899) [#901](https://github.com/mattgodbolt/jsbeeb/issues/901) [#903](https://github.com/mattgodbolt/jsbeeb/issues/903) [#905](https://github.com/mattgodbolt/jsbeeb/issues/905)
+* give the PAL display's luma the RF path's low-pass and subcarrier trap ([#909](https://github.com/mattgodbolt/jsbeeb/issues/909)) ([2a1c284](https://github.com/mattgodbolt/jsbeeb/commit/2a1c284a8fa6501230b3a0bae9b77ec7dfa77e64))
+* hide the Fullscreen menu item where the API is missing and report refusals ([#912](https://github.com/mattgodbolt/jsbeeb/issues/912)) ([8c003c1](https://github.com/mattgodbolt/jsbeeb/commit/8c003c16f1cf89135374a4bea13b746a04ac5b19))
+* say what was only logged: overruns, bad tapes, drops, read-only Drive discs, no speech, no gamepads ([#914](https://github.com/mattgodbolt/jsbeeb/issues/914)) ([df62a7e](https://github.com/mattgodbolt/jsbeeb/commit/df62a7e5e50986b87036efe62783d95df5bc2288))
+
 ## [1.20.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.19.3...v1.20.0) (2026-08-27)
 
 
