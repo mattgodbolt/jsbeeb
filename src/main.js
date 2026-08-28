@@ -797,7 +797,7 @@ function pauseIntoDebugger() {
 
 function resumeFromDebugger() {
     dbgr.hide();
-    go();
+    keyboard.resumeEmulation();
 }
 
 debugPause.addEventListener("click", pauseIntoDebugger);
