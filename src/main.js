@@ -772,10 +772,19 @@ window.addEventListener("blur", function () {
 });
 window.addEventListener("focus", () => setEmulationLead(audioHandler.setWindowFocused(true)));
 
-document.getElementById("fs").addEventListener("click", function (event) {
-    screenCanvas.requestFullscreen();
-    event.preventDefault();
-});
+const fullscreenItem = document.getElementById("fs");
+if (document.fullscreenEnabled) {
+    fullscreenItem.addEventListener("click", async (event) => {
+        event.preventDefault();
+        try {
+            await screenCanvas.requestFullscreen();
+        } catch (error) {
+            toast(`Could not go fullscreen: ${errorText(error)}`, { title: "Fullscreen" });
+        }
+    });
+} else {
+    fullscreenItem.closest("li").hidden = true;
+}
 
 let keyboard; // This will be initialised after the processor is created
 
