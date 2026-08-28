@@ -184,9 +184,12 @@ Apply horizontal low-pass filter to composite signal before Y/C separation.
 - Just added blur without fixing underlying issues
 - Abandoned as unnecessary once phase and gain issues were fixed
 
-Filtering luma _after_ Y/C separation is a different matter: the separated luma is low-passed at
-5 MHz (-6 dB) by a short symmetric FIR, the video bandwidth of a set's composite input. A subcarrier
-notch was tried and left out; it models a set without a delay-line decoder, which this is not.
+The set's own bandwidth limits are a different matter. A stock BBC Micro's colour picture reached
+the set by UHF through the UM1233 modulator, so every bandwidth here is an RF-path figure: the IF
+strip rolls off below the sound carrier, which clips the upper chroma sideband (chroma -3 dB at
+about 0.83 MHz) and delivers luma to about 4.5 MHz (-6 dB); a domestic set's luma path is the
+composite through that low-pass and a subcarrier trap at 4.43361875 MHz, with no complementary
+subtraction of the decoded chroma. No sound trap: nothing rendered here carries a sound carrier.
 
 ### Working Approaches (Evolution)
 
@@ -289,7 +292,7 @@ See shader source for actual matrix values.
 - **Taps:** 21 (symmetric), Kaiser window with β=5
 - **Cutoff frequency:** 1.108 MHz design cutoff (quarter subcarrier), which for a windowed sinc is the -6 dB point
 - **Measured response:** -1.05 dB at 0.5 MHz, -3 dB at 0.83 MHz, -5.6 dB at 1.108 MHz, -32 dB at 2.2 MHz, -86 dB at 4.43 MHz
-- **Why this narrow:** broadcast PAL chroma extends to ±1.3 MHz at -3 dB, but consumer decoders commonly roll off between 0.5 and 1 MHz; this filter models a domestic set rather than a studio decoder
+- **Why this narrow:** the picture came in by UHF, and the IF strip's roll-off below the sound carrier clips the upper chroma sideband to about 0.83 MHz at -3 dB
 - **Sample rate:** 16 MHz
 - **Gain compensation:** FIR_GAIN = 2.0 to compensate for demodulation amplitude loss
 - **Source:** Derived from svofski/CRT project

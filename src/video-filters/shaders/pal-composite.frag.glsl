@@ -15,10 +15,8 @@ const float PI = 3.14159265359;
 // 2. Demodulate current line (with correct phase) → U_curr, V_curr
 // 3. Demodulate previous line (2H for interlaced, same field) → U_prev, V_prev
 // 4. Blend at baseband: U_final = mix(U_curr, U_prev), V_final = mix(V_curr, V_prev)
-// 5. Remodulate blended chroma back to composite frequency
-// 6. Extract luma via complementary subtraction: Y = composite - remodulated_chroma,
-//    low-passed to the set's video bandwidth
-// 7. Combine luma and chroma, convert back to RGB
+// 5. Luma: composite through the set's low-pass and subcarrier trap
+// 6. Combine luma and chroma, convert back to RGB
 //
 // NOTE: Texture rows are half-lines, so the previous scanline of the same field is two rows
 // up, and the subcarrier phase and V-switch come from uLineBase, not from the row.
@@ -39,8 +37,8 @@ const float PAL_CYCLES_PER_LINE = PAL_SUBCARRIER_MHZ * 1e6 / (PAL_TOTAL_LINES * 
 // fract(PAL_CYCLES_PER_LINE), spelt out: float keeps more of it alone than inside 283.7516
 const float PAL_LINE_PHASE_OFFSET = 0.7516;
 
-// Luma bandwidth limit: a symmetric FIR across neighbouring texels, designed on the JS side.
-const int LUMA_TAPS = 15;
+// The set's luma path, low-pass and subcarrier trap in one symmetric FIR designed on the JS side.
+const int LUMA_TAPS = 31;
 uniform float uLumaFir[LUMA_TAPS];
 
 // RGB → YUV conversion with proper PAL signal levels baked in
@@ -74,10 +72,6 @@ float encode_composite(vec2 xy, float offset_pixels, float t, float v_switch) {
     vec3 rgb = texture2D(uFramebuffer, sample_uv).rgb;
     vec3 yuv = rgb_to_yuv(rgb);
     return yuv.x + yuv.y * sin(t) + yuv.z * cos(t) * v_switch;
-}
-
-float remodulate_chroma(vec2 uv, float t, float v_switch) {
-    return uv.x * sin(t) + uv.y * cos(t) * v_switch;
 }
 
 // Demodulate composite signal at given position
@@ -137,15 +131,12 @@ void main() {
     // Step 3: Blend chroma at baseband
     vec2 filtered_uv = mix(filtered_uv_curr, filtered_uv_prev, CHROMA_BLEND_WEIGHT);
 
-    // Step 4: Get luma via complementary subtraction, luma = composite - remodulated blended chroma.
-    // The bandwidth limit repeats the subtraction at neighbouring texels, each at its own carrier
-    // phase but sharing this texel's blended chroma, which varies too slowly to matter over 15 taps.
+    // Step 4: Luma is the composite through the set's low-pass and subcarrier trap
     float y_out = 0.0;
     for (int i = 0; i < LUMA_TAPS; i++) {
         float offset = float(i - (LUMA_TAPS - 1) / 2);
         float t = carrier_phase(pixelCoord.x, offset, cycles_per_pixel, phase_offset);
-        float composite = encode_composite(vTexCoord, offset, t, v_switch);
-        y_out += (composite - remodulate_chroma(filtered_uv, t, v_switch)) * uLumaFir[i];
+        y_out += encode_composite(vTexCoord, offset, t, v_switch) * uLumaFir[i];
     }
 
     vec3 rgb_out = yuv_to_rgb(vec3(y_out, filtered_uv.x, filtered_uv.y));

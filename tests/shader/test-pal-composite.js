@@ -106,7 +106,7 @@ const FarOrigins = [
 ];
 
 /** Colour bars wide enough that the shader sees only one bar from the middle of each. */
-const BarWidth = 48;
+const BarWidth = 64;
 const BarHeight = 8;
 const BarOrder = ["red", "green", "blue", "white", "yellow", "cyan", "magenta", "black"];
 const BarRows = Array.from({ length: BarHeight }, () => BarOrder.flatMap((colour) => Array(BarWidth).fill(colour)));

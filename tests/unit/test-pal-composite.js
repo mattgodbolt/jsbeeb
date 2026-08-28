@@ -73,6 +73,7 @@ describe("PAL composite shader matrices", () => {
 });
 
 const SampleRateMhz = 16;
+const SubcarrierMhz = 4.43361875;
 
 // Gain of a symmetric kernel at frequencyMhz; symmetric kernels are real (zero phase).
 function gainAt(kernel, frequencyMhz) {
@@ -90,9 +91,15 @@ describe("PAL luma filter kernel", () => {
         expect(gainAt(LumaKernel, 0)).toBeCloseTo(1, 5);
     });
 
-    it("passes the low band and is 6 dB down at 5 MHz", () => {
-        expect(decibels(gainAt(LumaKernel, 1))).toBeCloseTo(0, 0);
-        expect(decibels(gainAt(LumaKernel, 5))).toBeCloseTo(-6, 0);
+    it("passes luma to 3.5 MHz within 3 dB and holds the band below flat within 1 dB", () => {
+        for (let frequency = 0; frequency <= 3; frequency += 0.1)
+            expect(Math.abs(decibels(gainAt(LumaKernel, frequency)))).toBeLessThanOrEqual(1);
+        expect(decibels(gainAt(LumaKernel, 3.5))).toBeGreaterThanOrEqual(-3);
+    });
+
+    it("traps the subcarrier by 60 dB and is at least 6 dB down at 4.5 MHz", () => {
+        expect(decibels(gainAt(LumaKernel, SubcarrierMhz))).toBeLessThan(-60);
+        expect(decibels(gainAt(LumaKernel, 4.5))).toBeLessThanOrEqual(-6);
         expect(decibels(gainAt(LumaKernel, 8))).toBeLessThan(-30);
     });
 
