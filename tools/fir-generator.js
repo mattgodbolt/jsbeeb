@@ -65,14 +65,23 @@ export function generateFirCoefficients(numTaps, cutoffMhz, indent) {
     const cutoffCyclesPerSample = (cutoffMhz * 1e6) / SAMPLE_RATE_HZ;
 
     const coeffs = generateFirLowpass(numTaps, cutoffCyclesPerSample, BETA);
+    return formatCoefficients("FIR", coeffs, indent);
+}
 
-    // Format as GLSL array initialization (4 per line)
+/**
+ * Format coefficients as GLSL array initialization, four to a line.
+ *
+ * @param {string} name - GLSL array to assign to
+ * @param {number[]} coeffs - Filter coefficients in tap order
+ * @param {string} indent - Indentation string to prepend to each line
+ * @returns {string} GLSL array initialization code
+ */
+export function formatCoefficients(name, coeffs, indent) {
     const lines = [];
     for (let i = 0; i < coeffs.length; i += 4) {
         const chunk = coeffs.slice(i, i + 4);
-        const formatted = chunk.map((c, j) => `FIR[${i + j}] = ${c.toPrecision(10)}`).join("; ");
+        const formatted = chunk.map((c, j) => `${name}[${i + j}] = ${c.toPrecision(10)}`).join("; ");
         lines.push(`${indent}${formatted};`);
     }
-
     return lines.join("\n");
 }

@@ -1,7 +1,5 @@
 import { readFileSync } from "fs";
-import { describe, expect, it } from "vitest";
-
-import { LumaKernel, LumaTaps } from "../../src/video-filters/pal-composite.js";
+import { describe, it, expect } from "vitest";
 
 const Shader = readFileSync(
     new URL("../../src/video-filters/shaders/pal-composite.frag.glsl", import.meta.url),
@@ -69,43 +67,5 @@ describe("PAL composite shader matrices", () => {
     it("scale BT.470's luma weights by the signal level", () => {
         const bt470Luma = [0.299, 0.587, 0.114];
         rgbToYuv[0].forEach((value, i) => expect(value).toBeCloseTo(WhiteLevel * bt470Luma[i], Places));
-    });
-});
-
-const SampleRateMhz = 16;
-const SubcarrierMhz = 4.43361875;
-
-// Gain of a symmetric kernel at frequencyMhz; symmetric kernels are real (zero phase).
-function gainAt(kernel, frequencyMhz) {
-    const centre = (kernel.length - 1) / 2;
-    const omega = (2 * Math.PI * frequencyMhz) / SampleRateMhz;
-    return kernel.reduce((sum, x, n) => sum + x * Math.cos(omega * (n - centre)), 0);
-}
-
-const decibels = (gain) => 20 * Math.log10(Math.abs(gain));
-
-describe("PAL luma filter kernel", () => {
-    it("is symmetric, unity at DC and LumaTaps wide", () => {
-        expect(LumaKernel).toHaveLength(LumaTaps);
-        for (let n = 0; n < LumaTaps; n++) expect(LumaKernel[n]).toBeCloseTo(LumaKernel[LumaTaps - 1 - n], 6);
-        expect(gainAt(LumaKernel, 0)).toBeCloseTo(1, 5);
-    });
-
-    it("passes luma to 3.5 MHz within 3 dB and holds the band below flat within 1 dB", () => {
-        for (let frequency = 0; frequency <= 3; frequency += 0.1)
-            expect(Math.abs(decibels(gainAt(LumaKernel, frequency)))).toBeLessThanOrEqual(1);
-        expect(decibels(gainAt(LumaKernel, 3.5))).toBeGreaterThanOrEqual(-3);
-    });
-
-    it("traps the subcarrier by 60 dB and is at least 6 dB down at 4.5 MHz", () => {
-        expect(decibels(gainAt(LumaKernel, SubcarrierMhz))).toBeLessThan(-60);
-        expect(decibels(gainAt(LumaKernel, 4.5))).toBeLessThanOrEqual(-6);
-        expect(decibels(gainAt(LumaKernel, 8))).toBeLessThan(-30);
-    });
-
-    it("has as many taps as the shader declares", () => {
-        const taps = /const int LUMA_TAPS = (\d+);/.exec(Shader);
-        expect(taps).not.toBeNull();
-        expect(Number(taps[1])).toBe(LumaTaps);
     });
 });

@@ -37,10 +37,6 @@ const float PAL_CYCLES_PER_LINE = PAL_SUBCARRIER_MHZ * 1e6 / (PAL_TOTAL_LINES * 
 // fract(PAL_CYCLES_PER_LINE), spelt out: float keeps more of it alone than inside 283.7516
 const float PAL_LINE_PHASE_OFFSET = 0.7516;
 
-// The set's luma path: low-pass and subcarrier trap in one symmetric FIR
-const int LUMA_TAPS = 31;
-uniform float uLumaFir[LUMA_TAPS];
-
 // RGB → YUV conversion with proper PAL signal levels baked in
 // Derived from ITU-R BT.470-6: white at 0.7V, peak at 0.931V
 // Matrix ensures RGB(1,1,1) → YUV(0.7,0,0) and worst case (yellow) peaks at 0.931V
@@ -95,6 +91,13 @@ void main() {
     float FIR[FIRTAPS];
     // END_FIR_COEFFICIENTS
 
+    // BEGIN_LUMA_COEFFICIENTS
+    // This section is replaced by the Vite build with the set's luma path, low-pass and
+    // subcarrier trap in one symmetric FIR, as designed in tools/luma-fir-generator.js.
+    const int LUMA_TAPS = 31;
+    float LUMA_FIR[LUMA_TAPS];
+    // END_LUMA_COEFFICIENTS
+
     float row = pixelCoord.y;
     float line = (mod(row, 2.0) < 1.0 ? uLineBase.x : uLineBase.y) + floor(row / 2.0);
 
@@ -136,7 +139,7 @@ void main() {
     for (int i = 0; i < LUMA_TAPS; i++) {
         float offset = float(i - (LUMA_TAPS - 1) / 2);
         float t = carrier_phase(pixelCoord.x, offset, cycles_per_pixel, phase_offset);
-        y_out += encode_composite(vTexCoord, offset, t, v_switch) * uLumaFir[i];
+        y_out += encode_composite(vTexCoord, offset, t, v_switch) * LUMA_FIR[i];
     }
 
     vec3 rgb_out = yuv_to_rgb(vec3(y_out, filtered_uv.x, filtered_uv.y));

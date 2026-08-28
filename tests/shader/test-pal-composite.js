@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { buildPattern, eachPixel, pixelAt, renderJobs, TextureSize } from "./render.js";
-import { applyFirCoefficients } from "../../tools/vite-plugin-fir-shader.js";
-import { LumaKernel, LumaTaps } from "../../src/video-filters/pal-composite.js";
+import { applyFirCoefficients, applyLumaCoefficients } from "../../tools/vite-plugin-fir-shader.js";
+import { LumaTaps } from "../../tools/luma-fir-generator.js";
 
 // These run the PAL composite shader itself, as shipped, and assert on what it
 // draws; see test-xbr.js for why that means headless Chrome. The properties
@@ -60,10 +60,8 @@ const LineBases = [0, 1, 2, 3, PhasePeriodLines - 1];
 const PalHarness = {
     vert: "pal-composite.vert.glsl",
     frag: "pal-composite.frag.glsl",
-    prepareFragment: (source) => applyFirCoefficients(source).code,
-    constants: { lumaKernel: Array.from(LumaKernel) },
-    setup(gl, program, constants) {
-        gl.uniform1fv(gl.getUniformLocation(program, "uLumaFir[0]"), new Float32Array(constants.lumaKernel));
+    prepareFragment: (source) => applyLumaCoefficients(applyFirCoefficients(source).code).code,
+    setup(gl, program) {
         return {
             uFramebuffer: gl.getUniformLocation(program, "uFramebuffer"),
             uResolution: gl.getUniformLocation(program, "uResolution"),
