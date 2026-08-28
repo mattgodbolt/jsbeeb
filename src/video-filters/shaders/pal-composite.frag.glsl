@@ -37,7 +37,7 @@ const float PAL_CYCLES_PER_LINE = PAL_SUBCARRIER_MHZ * 1e6 / (PAL_TOTAL_LINES * 
 // fract(PAL_CYCLES_PER_LINE), spelt out: float keeps more of it alone than inside 283.7516
 const float PAL_LINE_PHASE_OFFSET = 0.7516;
 
-// The set's luma path, low-pass and subcarrier trap in one symmetric FIR designed on the JS side.
+// The set's luma path: low-pass and subcarrier trap in one symmetric FIR
 const int LUMA_TAPS = 31;
 uniform float uLumaFir[LUMA_TAPS];
 
