@@ -60,7 +60,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.nextStats = 0;
     }
 
-    // Off below 1 Hz; a setting the biquad cannot realise (non-finite, at or
+    // Zero turns it off; a setting the biquad cannot realise (non-finite, at or
     // above Nyquist, non-positive Q) falls back to the board's own values.
     _makeOutputFilter(frequency = OutputFilterHz, q = OutputFilterQ) {
         if (frequency <= 0) return null;
