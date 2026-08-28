@@ -13,9 +13,10 @@ function besselI0(x) {
  * Rate conversion by a Kaiser-windowed sinc evaluated only where an output
  * sample falls, so the cost scales with the output rate, not the input rate.
  * The kernel is tabulated at `phases` fractional offsets and interpolated
- * between them. The caller renders each quantum's input into the buffer from
- * `inputBuffer`, reads its output with `read`, then calls `commit` to carry
- * the last `taps` input samples over as the next quantum's history.
+ * between them. Each quantum the caller reserves room for its input, renders
+ * into `buffer` at `inputOffset`, reads the output with `read`, then calls
+ * `commit` to carry the last `taps` input samples over as the next quantum's
+ * history. Nothing is allocated once the buffer has reached its working size.
  */
 export class PolyphaseResampler {
     constructor(inputRate, cutoffHz, { taps = 201, phases = 64, beta = 8.5 } = {}) {
@@ -43,8 +44,8 @@ export class PolyphaseResampler {
         this.newSamples = 0;
     }
 
-    /** Where to render `count` new input samples; the history precedes it. */
-    inputBuffer(count) {
+    /** Make room for `count` new input samples after the history. */
+    reserve(count) {
         const needed = this.taps + count + 1;
         if (this.buffer.length < needed) {
             const grown = new Float32Array(needed * 2);
@@ -52,7 +53,10 @@ export class PolyphaseResampler {
             this.buffer = grown;
         }
         this.newSamples = count;
-        return this.buffer.subarray(this.taps, this.taps + count);
+    }
+
+    get inputOffset() {
+        return this.taps;
     }
 
     /**

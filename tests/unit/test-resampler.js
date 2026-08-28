@@ -31,7 +31,8 @@ function resampleInQuanta(signal, quantum, options = {}) {
         const end = phase + quantum * Ratio;
         const count = Math.floor(end);
         if (consumed + count > signal.length) break;
-        resampler.inputBuffer(count).set(signal.subarray(consumed, consumed + count));
+        resampler.reserve(count);
+        resampler.buffer.set(signal.subarray(consumed, consumed + count), resampler.inputOffset);
         consumed += count;
         resampler.read(chunk, phase, Ratio);
         resampler.commit();

@@ -221,11 +221,12 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         // boundary.
         const end = this._phase + channel.length * sampleRatio;
         const numInputSamples = Math.floor(end);
-        const source = this.resampler.inputBuffer(numInputSamples);
-        this._renderInput(source, 0, numInputSamples);
-        this.outputFilter?.process(source, 0, numInputSamples);
-        this.resampler.read(channel, this._phase, sampleRatio);
-        this.resampler.commit();
+        const resampler = this.resampler;
+        resampler.reserve(numInputSamples);
+        this._renderInput(resampler.buffer, resampler.inputOffset, numInputSamples);
+        this.outputFilter?.process(resampler.buffer, resampler.inputOffset, numInputSamples);
+        resampler.read(channel, this._phase, sampleRatio);
+        resampler.commit();
         this._phase = end - numInputSamples;
         this.minLeadMs = Math.min(this.minLeadMs, this.leadMs());
         this.stats(sampleRatio);
