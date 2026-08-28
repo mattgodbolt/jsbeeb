@@ -12,7 +12,7 @@ describe("AudioHandler", () => {
     let contexts;
 
     function fakeNode() {
-        return { connect: () => {}, gain: { value: 0 }, frequency: { value: 0 }, Q: { value: 0 }, type: "" };
+        return { connect: () => {}, gain: { value: 0 } };
     }
 
     function fakeContext(hasWorklet, addModule) {
@@ -21,7 +21,6 @@ describe("AudioHandler", () => {
             destination: {},
             audioWorklet: hasWorklet ? { addModule } : undefined,
             createGain: fakeNode,
-            createBiquadFilter: fakeNode,
             resume: async () => {},
         };
     }
@@ -41,7 +40,8 @@ describe("AudioHandler", () => {
         vi.stubGlobal(
             "AudioWorkletNode",
             class {
-                constructor() {
+                constructor(context, name, options) {
+                    this.options = options;
                     this.port = { postMessage: () => {}, onmessage: null };
                 }
                 connect() {}
@@ -52,8 +52,6 @@ describe("AudioHandler", () => {
     function makeHandler(options = {}) {
         return new AudioHandler({
             warningNode: document.getElementById("audio-warning"),
-            audioFilterFreq: 0,
-            audioFilterQ: 0,
             noSeek: true,
             cpuSpeed: 2000000,
             ...options,
@@ -157,6 +155,16 @@ describe("AudioHandler", () => {
                 [{ cycle: 0, enabled: false }],
                 [{ cycle: 0, enabled: true }],
             ]);
+        });
+
+        it("hands the output filter settings to the worklet", async () => {
+            const handler = makeHandler({ audioFilterFreq: 1234, audioFilterQ: 0.5 });
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+
+            expect(handler._jsAudioNode.options.processorOptions).toMatchObject({
+                audioFilterFreq: 1234,
+                audioFilterQ: 0.5,
+            });
         });
 
         it("creates no Music 5000 audio context unless one is fitted", () => {
