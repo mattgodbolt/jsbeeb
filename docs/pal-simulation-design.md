@@ -10,7 +10,7 @@
 
 This document describes the PAL composite video simulation in jsbeeb, which adds authentic analog TV artifacts (dot crawl, color bleeding) that were part of the original BBC Micro viewing experience.
 
-The implementation uses WebGL fragment shaders to simulate the complete PAL signal path: RGB → YUV encoding → composite signal → PAL decoding → RGB display. The approach uses **baseband chroma blending** with **complementary luma extraction**, achieving sharp luminance with smooth chrominance and no checkerboard artifacts.
+The implementation uses WebGL fragment shaders to simulate the complete PAL signal path: RGB → YUV encoding → composite signal → PAL decoding → RGB display. The approach uses **baseband chroma blending** for chroma and the set's own **low-pass and subcarrier trap** for luma, giving smooth chrominance and the luma a UHF-fed television would show.
 
 **Performance:** Real-time 60fps on modern GPUs, ~1-2ms per frame.
 
@@ -29,17 +29,16 @@ The shader implements these steps for each pixel:
    - Multiply composite by sin(ωt) and cos(ωt) to shift chroma to baseband
    - Apply 21-tap FIR low-pass filter (1.108 MHz design cutoff, -3 dB at about 0.83 MHz) horizontally
    - FIR_GAIN = 2.0 compensates for demodulation amplitude loss (sin²(x) = 0.5)
-   - Process current line AND previous line (2H delay) separately
+   - Process the current line and the previous scanline (two texture rows up) separately
 
 3. **Blend chroma at baseband**
-   - Mix current and previous line's U/V values: 50/50 weighted average
+   - Mix the current and previous scanline's U/V values: 50/50 weighted average
    - **Critical:** Blend AFTER demodulation to avoid phase mixing
    - Exploits slow vertical chroma changes for noise reduction
 
-4. **Extract luma via complementary subtraction**
-   - Remodulate blended chroma back to composite frequency
-   - Subtract from current line's composite: `Y_out = composite - chroma_remod`
-   - Gives sharp luma without vertical averaging
+4. **Luma through the set's luma path**
+   - The composite goes through a 31-tap FIR: the tuner's 4.5 MHz low-pass and a trap at the subcarrier
+   - No complementary subtraction: a domestic set does not feed its decoded chroma back into luma
 
 5. **Convert back to RGB** for display
 
@@ -51,11 +50,11 @@ The shader implements these steps for each pixel:
 - Then clean U and V components blended (no phase mixing)
 - Contrast with failed approaches that blended at composite level
 
-**Complementary decoder preserves luma sharpness:**
+**Luma is what the set would show:**
 
-- Luma extracted by subtraction, not averaging
-- Avoids vertical blur from comb filters
-- Slightly less sharp than notch filter, but more authentic
+- No vertical averaging, so nothing blurs between scanlines
+- The trap removes the subcarrier and the low-pass rolls off the fine detail a UHF path loses
+- Whatever the chroma blend fails to predict shows as dot crawl, as it does on a television
 
 **Texture rows are half-lines:**
 
@@ -215,17 +214,17 @@ luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current;
 
 **Approach:**
 
-1. Demodulate current and previous (2H for interlaced) lines separately
+1. Demodulate the current line and the previous scanline (two texture rows up) separately
 2. Each demodulation uses correct phase for that line (avoids U/V mixing)
 3. Blend clean U/V at baseband: `mix(uv_curr, uv_prev, 0.5)`
-4. Extract luma via complementary subtraction from composite
+4. Luma from the composite through the set's low-pass and subcarrier trap
 5. FIR_GAIN = 2.0 for proper amplitude compensation
 
 **Why this works:**
 
 - **Phase-correct demodulation first:** Each line processed with its own PAL phase
 - **Baseband blending:** No U/V mixing (pure U with U, pure V with V)
-- **Complementary decoder:** Luma from composite minus remodulated chroma (sharp)
+- **Luma as the set sees it:** The trap takes out the subcarrier; nothing is subtracted or averaged
 - **Proper gain compensation:** FIR_GAIN = 2.0 handles demodulation loss only
 
 **Result:**
@@ -257,10 +256,10 @@ luma = COMB_PREV_WEIGHT * prev_2H + (1-COMB_PREV_WEIGHT) * current;
    - 1024px = 64μs complete scanline (visible + blanking)
    - Phase must map across full width, not just visible pixels
 
-4. **The "0.75 cycle offset" is essential**
-   - 1H spacing = 270° phase shift
-   - 2H spacing = 180° phase shift (used for PAL cancellation)
-   - This fractional offset creates the 8-field dot crawl pattern
+4. **The fractional line offset is essential**
+   - Each scanline advances the subcarrier by 0.7516 cycles, 270.6°
+   - The residual dot pattern therefore repeats every four scanlines
+   - The frame-to-frame step follows from the frame's real line count (see Line Number Propagation)
 
 5. **Properly scaled YUV matrix eliminates separate gain constant**
    - ITU-R BT.470-6 defines white at 0.7V, peak at 0.931V
@@ -341,7 +340,7 @@ jsbeeb simulates interlacing by clearing alternate lines each frame:
 - Even frames: render lines 1,3,5... (clear 0,2,4...)
 - Odd frames: render lines 0,2,4... (clear 1,3,5...)
 
-The shader's 2H delay (line-2) ensures we sample from the same field, avoiding stale/black data.
+Texture rows are half-lines, so the previous scanline is two rows up in every mode; in an interlaced mode that tap lands in the same field, never on the other field's stale or black row.
 
 ## References
 
