@@ -7,8 +7,10 @@ import { LumaKernel, LumaTaps } from "../../src/video-filters/pal-composite.js";
 // draws; see test-xbr.js for why that means headless Chrome. The properties
 // here are the ones a composite encode and decode must keep whatever else it
 // does to a picture: a flat field comes back as the colour that went in, and
-// nothing about where that field sits in the framebuffer or which field of
-// the 8-field sequence is showing changes that.
+// nothing about where that field sits in the framebuffer or which line of
+// the subcarrier's cycle it lands on changes that. Where the picture has
+// cross-colour, that depends on the scanline it was drawn on and nothing
+// else: not the texture row, not the size it is drawn at.
 
 const Black = 0xff000000;
 const Red = 0xff0000ff;
@@ -48,8 +50,11 @@ const LineReach = 2;
 /** Context around each pattern so its outermost texels see picture rather than nothing. */
 const Padding = { x: Reach + 2, y: LineReach + 1 };
 
-/** Frame counts spanning the shader's 8-field sequence; the app hands it frameCount % 8. */
-const FrameCounts = [0, 3, 7];
+/** The subcarrier's phase against the line repeats every 2500 lines; see video.js. */
+const PhasePeriodLines = 2500;
+
+/** Line numbers spanning the four-line phase cycle and both V-switch parities, and the last before the period wraps. */
+const LineBases = [0, 1, 2, 3, PhasePeriodLines - 1];
 
 /** WebGL setup as PALCompositeFilter does it; see render.js for why these run in the page. */
 const PalHarness = {
@@ -63,20 +68,23 @@ const PalHarness = {
             uFramebuffer: gl.getUniformLocation(program, "uFramebuffer"),
             uResolution: gl.getUniformLocation(program, "uResolution"),
             uTexelSize: gl.getUniformLocation(program, "uTexelSize"),
-            uFrameCount: gl.getUniformLocation(program, "uFrameCount"),
+            uLineBase: gl.getUniformLocation(program, "uLineBase"),
         };
     },
     bind(gl, state, params) {
         gl.uniform1i(state.uFramebuffer, 0);
         gl.uniform2f(state.uResolution, params.width, params.height);
         gl.uniform2f(state.uTexelSize, 1 / params.width, 1 / params.height);
-        gl.uniform1f(state.uFrameCount, params.frameCount % 8);
+        gl.uniform2f(state.uLineBase, params.lineBaseEven ?? 0, params.lineBaseOdd ?? 0);
     },
 };
 
+/** Both rows of a doubled scanline drawn under the same line, as video.js records it. */
+const sameLine = (lineBase) => ({ lineBaseEven: lineBase, lineBaseOdd: lineBase });
+
 const flatRows = (colour, width, height) => Array.from({ length: height }, () => Array(width).fill(colour));
 
-const flatName = (colour, origin, frameCount) => `flat-${colour}-${origin.x}-${origin.y}-${frameCount}`;
+const flatName = (colour, origin, lineBase) => `flat-${colour}-${origin.x}-${origin.y}-${lineBase}`;
 
 /** The two whose every channel is at an extreme, in different combinations. */
 const PlacedColours = ["white", "magenta"];
@@ -111,19 +119,45 @@ const barInterior = (bar) => {
     return columns;
 };
 
+/**
+ * A picture full of cross-colour: saturated edges, and a one-pixel stripe whose
+ * 4 MHz sits beside the 4.43 MHz subcarrier. Drawn as MODE 1 draws, two texels
+ * wide and doubled onto two rows, at one output pixel per texel so both rows of
+ * each scanline can be read back.
+ */
+const StripeWidth = 12;
+const StripeRow = [
+    ...Array(StripeWidth).fill("red"),
+    ...Array(StripeWidth).fill("cyan"),
+    ...Array(StripeWidth).fill("white"),
+    ...Array(StripeWidth).fill("black"),
+    ...Array.from({ length: StripeWidth }, (_, i) => (i % 2 ? "black" : "white")),
+    ...Array(StripeWidth).fill("green"),
+];
+const StripeHeight = 4;
+const StripeRows = Array.from({ length: StripeHeight }, () => StripeRow);
+const DoubledStripes = { rows: StripeRows, palette: Palette, padding: Padding, texelsWide: 2, texelsHigh: 2, scale: 2 };
+
+const stripeName = (lineBase, origin) => `stripes-${lineBase}-${origin.x}-${origin.y}`;
+/** The line the picture is compared against when moved, wrapped or stepped. */
+const StripeBase = 3;
+const StripeOrigin = { x: 0, y: 0 };
+/** Two texel rows lower: the next scanline's rows. */
+const NextScanlineOrigin = { x: 0, y: 2 };
+
 function buildJobs() {
     const jobs = [];
     for (const colour of Object.keys(Palette))
         for (const origin of ParityOrigins)
-            for (const frameCount of FrameCounts)
+            for (const lineBase of LineBases)
                 jobs.push(
                     buildPattern({
-                        name: flatName(colour, origin, frameCount),
+                        name: flatName(colour, origin, lineBase),
                         rows: flatRows(colour, FlatWidth, FlatHeight),
                         palette: Palette,
                         padding: Padding,
                         origin,
-                        params: { frameCount },
+                        params: sameLine(lineBase),
                     }),
                 );
     for (const colour of PlacedColours)
@@ -135,7 +169,7 @@ function buildJobs() {
                     palette: Palette,
                     padding: Padding,
                     origin,
-                    params: { frameCount: 0 },
+                    params: sameLine(0),
                 }),
             );
     for (const scale of [1, 2])
@@ -147,10 +181,57 @@ function buildJobs() {
                 padding: Padding,
                 origin: BarOrigin,
                 scale,
-                params: { frameCount: 0 },
+                params: sameLine(0),
+            }),
+        );
+    for (const lineBase of LineBases)
+        jobs.push(
+            buildPattern({
+                ...DoubledStripes,
+                name: stripeName(lineBase, StripeOrigin),
+                origin: StripeOrigin,
+                params: sameLine(lineBase),
+            }),
+        );
+    jobs.push(
+        buildPattern({
+            ...DoubledStripes,
+            name: stripeName(StripeBase + PhasePeriodLines, StripeOrigin),
+            origin: StripeOrigin,
+            params: sameLine(StripeBase + PhasePeriodLines),
+        }),
+    );
+    for (const lineBase of [StripeBase, StripeBase - 1])
+        jobs.push(
+            buildPattern({
+                ...DoubledStripes,
+                name: stripeName(lineBase, NextScanlineOrigin),
+                origin: NextScanlineOrigin,
+                params: sameLine(lineBase),
             }),
         );
     return jobs;
+}
+
+/**
+ * The bars again, sampled nearest-texel. At two output pixels per texel the
+ * app's linear sampling reads a quarter of a texel into each neighbour, which
+ * softens every edge before the shader sees it; nearest sampling leaves the
+ * shader's own handling of the output size as the only difference between
+ * the two scales.
+ */
+function buildNearestJobs() {
+    return [1, 2].map((scale) =>
+        buildPattern({
+            name: `bars-${scale}`,
+            rows: BarRows,
+            palette: Palette,
+            padding: Padding,
+            origin: BarOrigin,
+            scale,
+            params: sameLine(0),
+        }),
+    );
 }
 
 const rgbOf = (word) => [word & 0xff, (word >>> 8) & 0xff, (word >>> 16) & 0xff];
@@ -158,6 +239,15 @@ const rgbOf = (word) => [word & 0xff, (word >>> 8) & 0xff, (word >>> 16) & 0xff]
 const isColour = (pixel, word) => rgbOf(word).every((channel, i) => Math.abs(pixel[i] - channel) <= Tolerance);
 
 const channelDifference = (a, b) => Math.max(...a.slice(0, 3).map((channel, i) => Math.abs(channel - b[i])));
+
+/** The largest channel difference between two pictures of the same size. */
+function pictureDifference(a, b) {
+    let worst = 0;
+    for (let y = 0; y < a.height; ++y)
+        for (let x = 0; x < a.width; ++x)
+            worst = Math.max(worst, channelDifference(pixelAt(a, x, y), pixelAt(b, x, y)));
+    return worst;
+}
 
 /** Box-filter a picture drawn at `scale` back down to one output pixel per logical pixel. */
 function downsample(image, scale) {
@@ -181,10 +271,12 @@ function downsample(image, scale) {
 describe("PAL composite shader", () => {
     let jobs;
     let rendered;
+    let renderedNearest;
 
     beforeAll(() => {
         jobs = buildJobs();
         rendered = renderJobs(PalHarness, jobs);
+        renderedNearest = renderJobs({ ...PalHarness, nearestSampling: true }, buildNearestJobs());
     }, 180000);
 
     it("renders every job at the size asked for", () => {
@@ -197,27 +289,20 @@ describe("PAL composite shader", () => {
     });
 
     describe("flat fields", () => {
-        it.each(Object.entries(Palette))(
-            "decodes a field of %s to itself at every parity and frame count",
-            (colour, word) => {
-                for (const origin of ParityOrigins)
-                    for (const frameCount of FrameCounts) {
-                        const image = rendered[flatName(colour, origin, frameCount)];
-                        for (const pixel of eachPixel(image)) expect(isColour(pixel, word)).toBe(true);
-                    }
-            },
-        );
+        it.each(Object.entries(Palette))("decodes a field of %s to itself at every parity and line", (colour, word) => {
+            for (const origin of ParityOrigins)
+                for (const lineBase of LineBases) {
+                    const image = rendered[flatName(colour, origin, lineBase)];
+                    for (const pixel of eachPixel(image)) expect(isColour(pixel, word)).toBe(true);
+                }
+        });
 
         it("decodes the same wherever the field sits in the texture", () => {
             for (const colour of PlacedColours) {
                 const reference = rendered[flatName(colour, ParityOrigins[0], 0)];
                 for (const origin of [...ParityOrigins.slice(1), ...FarOrigins]) {
                     const image = rendered[flatName(colour, origin, 0)];
-                    for (let y = 0; y < reference.height; ++y)
-                        for (let x = 0; x < reference.width; ++x)
-                            expect(
-                                channelDifference(pixelAt(image, x, y), pixelAt(reference, x, y)),
-                            ).toBeLessThanOrEqual(Tolerance);
+                    expect(pictureDifference(image, reference)).toBeLessThanOrEqual(Tolerance);
                 }
             }
         });
@@ -244,16 +329,66 @@ describe("PAL composite shader", () => {
                         );
         });
 
-        // Skipped until #903 lands: the shader takes subcarrier phase and row
-        // parity from gl_FragCoord, so at scale 2 the edges decode differently.
-        it.skip("gives the same picture when drawn at twice the size", () => {
-            const expected = rendered["bars-1"];
-            const actual = downsample(rendered["bars-2"], 2);
-            for (let y = 0; y < expected.height; ++y)
-                for (let x = 0; x < expected.width; ++x)
-                    expect(channelDifference(pixelAt(actual, x, y), pixelAt(expected, x, y))).toBeLessThanOrEqual(
-                        Tolerance,
-                    );
+        it("gives the same picture, edges included, when drawn at twice the size", () => {
+            // Sampled nearest-texel, so that the edges reach the shader
+            // unsoftened at both scales; see buildNearestJobs.
+            const expected = renderedNearest["bars-1"];
+            const actual = downsample(renderedNearest["bars-2"], 2);
+            expect(pictureDifference(actual, expected)).toBeLessThanOrEqual(Tolerance);
+        });
+    });
+
+    describe("doubled scanlines", () => {
+        /** Cross-colour large enough that a change of line has to show. */
+        const VisibleChange = 16;
+
+        it("has cross-colour to test with", () => {
+            // Guards the tests below: rows that agree because the picture
+            // decoded to flat colour would prove nothing.
+            const image = rendered[stripeName(StripeBase, StripeOrigin)];
+            let worst = 0;
+            for (let x = 0; x < image.width; ++x)
+                for (let y = 0; y < image.height; ++y)
+                    worst = Math.max(worst, channelDifference(pixelAt(image, x, y), pixelAt(image, x, 0)));
+            expect(worst).toBeGreaterThan(VisibleChange);
+        });
+
+        it("decodes both rows of a scanline identically", () => {
+            for (const lineBase of LineBases) {
+                const image = rendered[stripeName(lineBase, StripeOrigin)];
+                for (let y = 0; y < image.height; y += 2)
+                    for (let x = 0; x < image.width; ++x)
+                        expect(channelDifference(pixelAt(image, x, y), pixelAt(image, x, y + 1))).toBeLessThanOrEqual(
+                            Tolerance,
+                        );
+            }
+        });
+
+        it("takes its phase from the line, not the texture row", () => {
+            // Two rows lower is the next line down, unless the base is one
+            // less, when every row keeps its line number. A per-row phase
+            // would miss both: two rows is half a cycle, which cancels.
+            const reference = rendered[stripeName(StripeBase, StripeOrigin)];
+            const nextLine = rendered[stripeName(StripeBase, NextScanlineOrigin)];
+            const sameLines = rendered[stripeName(StripeBase - 1, NextScanlineOrigin)];
+            expect(pictureDifference(nextLine, reference)).toBeGreaterThan(VisibleChange);
+            expect(pictureDifference(sameLines, reference)).toBeLessThanOrEqual(Tolerance);
+        });
+
+        it("repeats its phase every 2500 lines", () => {
+            const reference = rendered[stripeName(StripeBase, StripeOrigin)];
+            const wrapped = rendered[stripeName(StripeBase + PhasePeriodLines, StripeOrigin)];
+            expect(pictureDifference(wrapped, reference)).toBeLessThanOrEqual(Tolerance);
+        });
+
+        it("decodes consecutive lines differently", () => {
+            const consecutive = LineBases.filter((lineBase, i) => i > 0 && lineBase === LineBases[i - 1] + 1);
+            expect(consecutive.length).toBeGreaterThan(0);
+            for (const lineBase of consecutive) {
+                const previous = rendered[stripeName(lineBase - 1, StripeOrigin)];
+                const image = rendered[stripeName(lineBase, StripeOrigin)];
+                expect(pictureDifference(image, previous)).toBeGreaterThan(VisibleChange);
+            }
         });
     });
 });

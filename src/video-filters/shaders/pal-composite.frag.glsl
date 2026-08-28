@@ -5,7 +5,8 @@ varying vec2 vTexCoord;
 uniform sampler2D uFramebuffer;
 uniform vec2 uResolution;
 uniform vec2 uTexelSize;
-uniform float uFrameCount;
+// Line numbers of texture rows 0 (x) and 1 (y)
+uniform vec2 uLineBase;
 
 const float PI = 3.14159265359;
 
@@ -19,10 +20,8 @@ const float PI = 3.14159265359;
 //    low-passed to the set's video bandwidth
 // 7. Combine luma and chroma, convert back to RGB
 //
-// NOTE: Uses 2H delay (line-2) not 1H (line-1) because jsbeeb simulates interlacing by
-// rendering only odd or even lines per frame. A real PAL TV's 1H delay line would contain
-// the previous scanline from the SAME field, which is 2 texture lines apart. Proper
-// support for non-interlaced modes needs to be added.
+// NOTE: Texture rows are half-lines, so the previous scanline of the same field is two rows
+// up, and the subcarrier phase and V-switch come from uLineBase, not from the row.
 
 // Chroma demodulation gain: compensates for sin²(x) = 0.5 - 0.5·cos(2x) amplitude loss
 const float FIR_GAIN = 2.0;
@@ -36,13 +35,9 @@ const float PAL_FRAME_RATE = 25.0;           // Frames per second
 const float PAL_SUBCARRIER_MHZ = 4.43361875; // PAL color subcarrier frequency (exact)
 
 // Derived PAL parameters
-const float PAL_LINES_PER_FIELD = PAL_TOTAL_LINES / 2.0;
 const float PAL_CYCLES_PER_LINE = PAL_SUBCARRIER_MHZ * 1e6 / (PAL_TOTAL_LINES * PAL_FRAME_RATE);
-const float PAL_LINE_PHASE_OFFSET = fract(PAL_CYCLES_PER_LINE);
-const float PAL_FIELD_PHASE_OFFSET = PAL_LINE_PHASE_OFFSET * PAL_LINES_PER_FIELD;
-
-// jsbeeb texture parameters
-const float TEXTURE_WIDTH = 1024.0;          // Framebuffer width (896 visible + 128 blanking)
+// fract(PAL_CYCLES_PER_LINE), spelt out: float keeps more of it alone than inside 283.7516
+const float PAL_LINE_PHASE_OFFSET = 0.7516;
 
 // Luma bandwidth limit: a symmetric FIR across neighbouring texels, designed on the JS side.
 const int LUMA_TAPS = 15;
@@ -95,8 +90,8 @@ vec2 demodulate_uv(vec2 xy, float pixel_x, float offset_pixels, float v_switch, 
 }
 
 void main() {
-    // Use gl_FragCoord for pixel coordinates - it's hardware-provided and avoids interpolation artifacts
-    vec2 pixelCoord = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
+    // Texel column and row, whatever size the drawing buffer is.
+    vec2 pixelCoord = floor(vTexCoord * uResolution);
 
     // BEGIN_FIR_COEFFICIENTS
     // This section is replaced by the Vite build to include FIR filter coefficients.
@@ -106,18 +101,17 @@ void main() {
     float FIR[FIRTAPS];
     // END_FIR_COEFFICIENTS
 
-    float line = floor(pixelCoord.y);
+    float row = pixelCoord.y;
+    float line = (mod(row, 2.0) < 1.0 ? uLineBase.x : uLineBase.y) + floor(row / 2.0);
 
     // PAL phase alternates each scanline (V component inverts)
     float v_switch = mod(line, 2.0) < 1.0 ? 1.0 : -1.0;
 
-    // Map PAL subcarrier across texture width
-    float cycles_per_pixel = PAL_CYCLES_PER_LINE / TEXTURE_WIDTH;
+    // Map PAL subcarrier across the full line, blanking included
+    float cycles_per_pixel = PAL_CYCLES_PER_LINE / uResolution.x;
 
-    // PAL temporal phase (8-field sequence creates animated dot crawl)
-    float line_phase_offset = line * PAL_LINE_PHASE_OFFSET;
-    float frame_phase_offset = uFrameCount * PAL_FIELD_PHASE_OFFSET;
-    float phase_offset = line_phase_offset + frame_phase_offset;
+    // Subcarrier phase at the start of this line, carried across frames by the line count
+    float phase_offset = fract(line * PAL_LINE_PHASE_OFFSET);
 
     // Step 1: Demodulate current line with FIR filter
     vec2 filtered_uv_curr = vec2(0.0);
@@ -127,14 +121,11 @@ void main() {
         filtered_uv_curr += FIR_GAIN * uv * FIR[i];
     }
 
-    // Step 2: Demodulate previous line (2H for interlaced, same field) with FIR filter
-    // In interlaced mode, only odd OR even lines are rendered per frame.
-    // Using 2H (line-2) ensures we sample from the same field (both fresh data).
-    // This represents the TV's 1H delay within a single field.
+    // Step 2: Demodulate the previous scanline of the same field (two rows up, one line
+    // earlier) with FIR filter. This represents the TV's 1H delay line.
     vec2 prev_uv = vTexCoord - vec2(0.0, 2.0 * uTexelSize.y);
-    float prev_line = line - 2.0;
-    float prev_v_switch = v_switch * -1.0;
-    float prev_phase_offset = prev_line * PAL_LINE_PHASE_OFFSET + frame_phase_offset;
+    float prev_v_switch = -v_switch;
+    float prev_phase_offset = fract((line - 1.0) * PAL_LINE_PHASE_OFFSET);
 
     vec2 filtered_uv_prev = vec2(0.0);
     for (int i = 0; i < FIRTAPS; i++) {

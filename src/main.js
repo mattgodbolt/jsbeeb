@@ -557,7 +557,15 @@ displayModeFilter = canvas.filterClass;
 // frame into the canvas and an animation frame presents it, so a stalled
 // display holds up the picture and not the emulation (issue #885).
 const videoFb32 = new Uint32Array(canvas.fb32.length);
-const pendingFrame = { minx: 0, miny: 0, maxx: 0, maxy: 0, frameCount: 0, lineGrid: new Uint8Array(0) };
+const pendingFrame = {
+    minx: 0,
+    miny: 0,
+    maxx: 0,
+    maxy: 0,
+    lineBaseEven: 0,
+    lineBaseOdd: 0,
+    lineGrid: new Uint8Array(0),
+};
 let presentScheduled = false;
 let paintMsThisTick = 0;
 let presentMsMax = 0;
@@ -581,7 +589,14 @@ video = new Video(
         if (pendingFrame.lineGrid.length !== this.lineGrid.length)
             pendingFrame.lineGrid = new Uint8Array(this.lineGrid.length);
         pendingFrame.lineGrid.set(this.lineGrid);
-        Object.assign(pendingFrame, { minx, miny, maxx, maxy, frameCount: this.frameCount });
+        Object.assign(pendingFrame, {
+            minx,
+            miny,
+            maxx,
+            maxy,
+            lineBaseEven: this.lineBaseEven,
+            lineBaseOdd: this.lineBaseOdd,
+        });
         paintMsThisTick += performance.now() - start;
         if (!presentScheduled) {
             presentScheduled = true;

@@ -178,23 +178,26 @@ System VIA additionally includes:
 
 Contains ~40 scalar fields for display timing and rendering state, plus nested objects:
 
-| Key field                | Type       | Description                                     |
-| ------------------------ | ---------- | ----------------------------------------------- |
-| `regs`                   | Uint8Array | CRTC registers (32 bytes, first 18 significant) |
-| `ulaPal`                 | Int32Array | Resolved 32-bit ABGR palette (16 entries)       |
-| `actualPal`              | Uint8Array | Raw palette register values (16 entries)        |
-| `ulactrl`                | number     | ULA control register                            |
-| `ulaMode`                | number     | Graphics mode (0-3)                             |
-| `teletextMode`           | boolean    | MODE 7 active                                   |
-| `interlacedSyncAndVideo` | boolean    | Interlace mode active                           |
-| `horizCounter`           | number     | Horizontal character counter                    |
-| `vertCounter`            | number     | Vertical character row counter                  |
-| `scanlineCounter`        | number     | Scanline within character row                   |
-| `addr`                   | number     | Current CRTC memory address                     |
-| `lineStartAddr`          | number     | Line start address (maback)                     |
-| `ula`                    | object     | ULA/NULA state (see below)                      |
-| `crtc`                   | object     | CRTC state (`{ curReg }`)                       |
-| `teletext`               | object     | SAA5050 teletext chip state                     |
+| Key field                | Type       | Description                                                            |
+| ------------------------ | ---------- | ---------------------------------------------------------------------- |
+| `regs`                   | Uint8Array | CRTC registers (32 bytes, first 18 significant)                        |
+| `ulaPal`                 | Int32Array | Resolved 32-bit ABGR palette (16 entries)                              |
+| `actualPal`              | Uint8Array | Raw palette register values (16 entries)                               |
+| `ulactrl`                | number     | ULA control register                                                   |
+| `ulaMode`                | number     | Graphics mode (0-3)                                                    |
+| `teletextMode`           | boolean    | MODE 7 active                                                          |
+| `interlacedSyncAndVideo` | boolean    | Interlace mode active                                                  |
+| `hsyncCount`             | number     | Hsyncs seen, modulo 2500, for the PAL subcarrier phase. Absent means 0 |
+| `lineBaseEven`           | number     | `hsyncCount` under which framebuffer row 0 was drawn. Absent means 0   |
+| `lineBaseOdd`            | number     | `hsyncCount` under which framebuffer row 1 was drawn. Absent means 0   |
+| `horizCounter`           | number     | Horizontal character counter                                           |
+| `vertCounter`            | number     | Vertical character row counter                                         |
+| `scanlineCounter`        | number     | Scanline within character row                                          |
+| `addr`                   | number     | Current CRTC memory address                                            |
+| `lineStartAddr`          | number     | Line start address (maback)                                            |
+| `ula`                    | object     | ULA/NULA state (see below)                                             |
+| `crtc`                   | object     | CRTC state (`{ curReg }`)                                              |
+| `teletext`               | object     | SAA5050 teletext chip state                                            |
 
 #### ULA (`state.video.ula`)
 

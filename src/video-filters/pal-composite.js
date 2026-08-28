@@ -61,7 +61,7 @@ export class PALCompositeFilter {
             uFramebuffer: gl.getUniformLocation(this.program, "uFramebuffer"),
             uResolution: gl.getUniformLocation(this.program, "uResolution"),
             uTexelSize: gl.getUniformLocation(this.program, "uTexelSize"),
-            uFrameCount: gl.getUniformLocation(this.program, "uFrameCount"),
+            uLineBase: gl.getUniformLocation(this.program, "uLineBase"),
             uLumaFir: gl.getUniformLocation(this.program, "uLumaFir[0]"),
         };
     }
@@ -77,7 +77,7 @@ export class PALCompositeFilter {
         gl.uniform1i(this.locations.uFramebuffer, 0); // Texture unit 0
         gl.uniform2f(this.locations.uResolution, params.width, params.height);
         gl.uniform2f(this.locations.uTexelSize, 1.0 / params.width, 1.0 / params.height);
-        gl.uniform1f(this.locations.uFrameCount, params.frameCount % 8); // 8-field temporal phase sequence
+        gl.uniform2f(this.locations.uLineBase, params.lineBaseEven, params.lineBaseOdd);
         gl.uniform1fv(this.locations.uLumaFir, LumaKernel);
     }
 }
