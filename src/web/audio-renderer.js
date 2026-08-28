@@ -31,14 +31,13 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             isAtom = false,
             cpuSpeed = 1000000,
             targetLatencyMs,
-            audioFilterFreq = OutputFilterHz,
-            audioFilterQ = OutputFilterQ,
+            audioFilterFreq,
+            audioFilterQ,
         } = options?.processorOptions ?? {};
         this.chip = isAtom ? new AtomSoundChip(null, { cpuSpeed }) : new SoundChip(null);
         this.inputSampleRate = this.chip.soundchipFreq;
         this.samplesPerCycle = this.chip.samplesPerCycle;
-        this.outputFilter =
-            audioFilterFreq > 0 ? new LowPassBiquad(this.inputSampleRate, audioFilterFreq, audioFilterQ) : null;
+        this.outputFilter = this._makeOutputFilter(audioFilterFreq, audioFilterQ);
 
         this.events = [];
         this.eventsHead = 0;
@@ -59,6 +58,15 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             else this.onProduced(event.data.upTo, event.data.events);
         };
         this.nextStats = 0;
+    }
+
+    // Off below 1 Hz; a setting the biquad cannot realise (non-finite, at or
+    // above Nyquist, non-positive Q) falls back to the board's own values.
+    _makeOutputFilter(frequency = OutputFilterHz, q = OutputFilterQ) {
+        if (frequency <= 0) return null;
+        const usable = frequency < this.inputSampleRate / 2 && q > 0;
+        if (!usable) return new LowPassBiquad(this.inputSampleRate, OutputFilterHz, OutputFilterQ);
+        return new LowPassBiquad(this.inputSampleRate, frequency, q);
     }
 
     setTargetLatency(ms) {

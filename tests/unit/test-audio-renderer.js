@@ -158,6 +158,16 @@ describe("SoundChipProcessor rendering", () => {
         expect(foldedSpur({})).toBeLessThan(unfiltered / 10);
     });
 
+    it("should fall back to the board's filter when the settings cannot be realised", () => {
+        for (const options of [{ audioFilterQ: 0 }, { audioFilterQ: NaN }, { audioFilterFreq: 1e6 }]) {
+            const proc = new SoundChipProcessor({ processorOptions: options });
+            const producer = startedWithTone(proc);
+            const { output } = simulate(proc, producer, 0.3, { collectAfter: 0.1 });
+            expect(output.every(Number.isFinite)).toBe(true);
+            expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeGreaterThan(0.1);
+        }
+    });
+
     it("should apply a write at its cycle, part way through a quantum", () => {
         const proc = new SoundChipProcessor();
         const producer = startedWithTone(proc);
