@@ -57,14 +57,30 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._phase = 0;
         this.smoothedLeadError = 0;
         this.setTargetLatency(targetLatencyMs);
-        this.port.onmessage = (event) => {
-            if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
-            else if (event.data.command === "setAudioOutput") this.setAudioOutput(event.data.audioOutput);
-            else if (event.data.command === "setSpeakerAmount") this.setSpeakerAmount(event.data.speakerAmount);
-            else if (event.data.command === "setEnabled") this.chip.enabled = event.data.enabled;
-            else this.onProduced(event.data.upTo, event.data.events);
-        };
+        this.port.onmessage = (event) => this.onMessage(event.data);
         this.nextStats = 0;
+    }
+
+    onMessage(message) {
+        switch (message.command) {
+            case "produced":
+                this.onProduced(message.upTo, message.events);
+                break;
+            case "setEnabled":
+                this.chip.enabled = message.enabled;
+                break;
+            case "setTargetLatency":
+                this.setTargetLatency(message.targetLatencyMs);
+                break;
+            case "setAudioOutput":
+                this.setAudioOutput(message.audioOutput);
+                break;
+            case "setSpeakerAmount":
+                this.setSpeakerAmount(message.speakerAmount);
+                break;
+            default:
+                throw new Error(`Unknown sound command ${message.command}`);
+        }
     }
 
     setAudioOutput(audioOutput) {

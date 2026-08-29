@@ -129,8 +129,8 @@ describe("AudioHandler", () => {
             handler.flushChipEvents();
 
             expect(posted.mock.calls.map((call) => call[0])).toEqual([
-                { upTo: 5000, events: [{ cycle: 5000, poke: 0x8d }] },
-                { upTo: 5000, events: [] },
+                { command: "produced", upTo: 5000, events: [{ cycle: 5000, poke: 0x8d }] },
+                { command: "produced", upTo: 5000, events: [] },
             ]);
         });
 
@@ -145,7 +145,7 @@ describe("AudioHandler", () => {
             scheduler.polltime(4000);
 
             expect(posted.mock.calls.map((call) => call[0])).toEqual([
-                { upTo: 4000, events: [{ cycle: 0, poke: 0x8d }] },
+                { command: "produced", upTo: 4000, events: [{ cycle: 0, poke: 0x8d }] },
             ]);
         });
 
@@ -159,9 +159,9 @@ describe("AudioHandler", () => {
 
             expect(posted.mock.calls.map((call) => call[0])).toEqual([
                 { command: "setEnabled", enabled: false },
-                { upTo: 0, events: [] },
+                { command: "produced", upTo: 0, events: [] },
                 { command: "setEnabled", enabled: true },
-                { upTo: 0, events: [] },
+                { command: "produced", upTo: 0, events: [] },
             ]);
         });
 

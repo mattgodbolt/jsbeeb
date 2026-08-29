@@ -216,7 +216,11 @@ export class AudioHandler {
     // emulator has got, so the worklet knows its lead even when nothing changed.
     flushChipEvents() {
         if (!this._jsAudioNode) return;
-        this._jsAudioNode.port.postMessage({ upTo: this.soundChip.scheduler.epoch, events: this._chipEvents });
+        this._jsAudioNode.port.postMessage({
+            command: "produced",
+            upTo: this.soundChip.scheduler.epoch,
+            events: this._chipEvents,
+        });
         this._chipEvents = [];
     }
 
