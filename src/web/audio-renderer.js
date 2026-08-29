@@ -2,19 +2,7 @@
 import { SoundChip, AtomSoundChip } from "../soundchip.js";
 import { LowPassBiquad } from "../biquad.js";
 import { PolyphaseResampler } from "../resampler.js";
-
-// The board's output filter is an equal-component Sallen-Key (Service Manual
-// section 3.8: 10K and 2n2 twice, gain K = 1 + 22/39): f0 = 1/(2*pi*RC) = 7234 Hz,
-// Q = 1/(3 - K) = 0.696, below 1/sqrt(2), so no resonant peak. Run at the chip
-// rate, ahead of the resampler.
-const OutputFilterHz = 7234;
-const OutputFilterQ = 0.696;
-
-// The resampler's sinc is cut off below the output Nyquist so that its
-// transition band has finished before anything folds; sampled sound rides on
-// a 31 kHz or higher carrier that would otherwise land in the audible band.
-const ResamplerCutoffOfOutputRate = 0.4;
-const ResamplerTaps = 201;
+import { OutputFilterHz, OutputFilterQ, ResamplerCutoffOfOutputRate, ResamplerTaps } from "../audio-output.js";
 
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 const MaxTargetLatencyMs = 250;
