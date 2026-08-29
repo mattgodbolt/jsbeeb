@@ -68,8 +68,8 @@ confirms them.
   count ticks up on screen and it prints "Done".
 - `reference out.wav [--model Master] [--rate 48000] [--output speaker|board|off]` boots the disc headlessly
   through the real `SoundChip`, board filter and resampler and writes what jsbeeb would play.
-- `analyse a.wav [b.wav]` aligns each capture on its markers, measures the clock difference
-  between the machine and the recorder from the marker spacing, and prints per step the
+- `analyse a.wav [b.wav]` aligns each capture on its markers, measures the rate difference
+  between the machine's clock and the recorder's from the marker spacing, and prints per step the
   fundamental in dBFS, the second and third harmonics, the staircase, noise band levels and
   the carrier segments. With two files, `rel` is b relative to a with each normalised to its
   977 Hz full-volume tone, so recorder gain drops out.
@@ -82,7 +82,7 @@ does not model, in one ratio.
 
 Four takes on a Master 128 through its internal speaker, microphone a few centimetres from
 the grille under a blanket, 16-bit mono 44.1 kHz. (The recordings are not in the repository.)
-The clock offset between the machine and the recorder came out at 430 to 460 ppm on every
+The machine's clock and the recorder's ran at rates 430 to 460 ppm apart on every
 take. Noise in the gaps between tones was around -60 dBFS broadband and -70 to -110 dBFS
 within a tone's bin; every step from 200 Hz to 18 kHz had 25 to 68 dB of signal above it.
 The -8 and -16 dB sweeps agreed with the full-volume one within a dB or two wherever there was
