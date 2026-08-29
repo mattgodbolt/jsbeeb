@@ -523,11 +523,11 @@ function printAnalysis(a, b) {
     const seconds = (s) => (s / a.rate).toFixed(3);
     console.log(`start marker at ${seconds(a.start)} s (match ${a.startQuality?.toFixed(2) ?? "forced"})`);
     console.log(
-        `end marker match ${a.endMarkerQuality.toFixed(2)}, clock ratio ${a.clockRatio.toFixed(6)} (${((a.clockRatio - 1) * 1e6).toFixed(0)} ppm)`,
+        `end marker match ${a.endMarkerQuality.toFixed(2)}, rate ratio ${a.clockRatio.toFixed(6)} (${((a.clockRatio - 1) * 1e6).toFixed(0)} ppm)`,
     );
     if (b) {
         console.log(
-            `second capture: start at ${(b.start / b.rate).toFixed(3)} s, clock ratio ${b.clockRatio.toFixed(6)}`,
+            `second capture: start at ${(b.start / b.rate).toFixed(3)} s, rate ratio ${b.clockRatio.toFixed(6)}`,
         );
     }
     const pair = a.results.map((r, i) => [r, b?.results[i]]);
