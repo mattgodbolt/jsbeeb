@@ -46,6 +46,22 @@ describe("audio output stages", () => {
         }
     });
 
+    it("scales the speaker fit toward the board output as the amount falls", () => {
+        const board = outputStages(ChipRate, AudioOutputs.board);
+        const flat = outputStages(ChipRate, AudioOutputs.speaker, { speakerAmount: 0 });
+        const half = outputStages(ChipRate, AudioOutputs.speaker, { speakerAmount: 0.5 });
+        const full = outputStages(ChipRate, AudioOutputs.speaker, { speakerAmount: 1 });
+        const whole = outputStages(ChipRate, AudioOutputs.speaker, { speakerAmount: 7 });
+        for (const hz of [200, 488, 1000, 2750, 8000]) {
+            expect(relativeDb(flat, hz)).toBeCloseTo(relativeDb(board, hz), 0);
+            const lo = Math.min(relativeDb(board, hz), relativeDb(full, hz)) - 0.5;
+            const hi = Math.max(relativeDb(board, hz), relativeDb(full, hz)) + 0.5;
+            expect(relativeDb(half, hz)).toBeGreaterThanOrEqual(lo);
+            expect(relativeDb(half, hz)).toBeLessThanOrEqual(hi);
+            expect(relativeDb(whole, hz)).toBeCloseTo(relativeDb(full, hz), 5);
+        }
+    });
+
     it("shapes the speaker output like the measured Master, never above unity", () => {
         const speaker = outputStages(ChipRate, AudioOutputs.speaker);
         expect(relativeDb(speaker, 488)).toBeGreaterThan(4);

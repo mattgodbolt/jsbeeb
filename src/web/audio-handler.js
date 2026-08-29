@@ -24,6 +24,7 @@ export class AudioHandler {
         audioOutput,
         audioFilterFreq,
         audioFilterQ,
+        speakerAmount,
         audioLatencyMs,
         noSeek,
         cpuSpeed,
@@ -63,7 +64,9 @@ export class AudioHandler {
             this.masterGain.connect(this.audioContext.destination);
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
             this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
-            this._setup({ audioOutput, audioFilterFreq, audioFilterQ }).catch((error) => this._audioUnavailable(error));
+            this._setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }).catch((error) =>
+                this._audioUnavailable(error),
+            );
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
@@ -128,7 +131,7 @@ export class AudioHandler {
         this.chart.streamTo(statsNode, 100);
     }
 
-    async _setup({ audioOutput, audioFilterFreq, audioFilterQ }) {
+    async _setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }) {
         await this.audioContext.audioWorklet.addModule(rendererUrl);
         this._jsAudioNode = new AudioWorkletNode(this.audioContext, "sound-chip-processor", {
             processorOptions: {
@@ -138,6 +141,7 @@ export class AudioHandler {
                 audioOutput,
                 audioFilterFreq,
                 audioFilterQ,
+                speakerAmount,
             },
         });
         this._jsAudioNode.connect(this.audioContext.destination);
