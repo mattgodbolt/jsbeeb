@@ -19,7 +19,8 @@ const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjustFraction = 0.0005;
 
-const isResync = (event) => event.state !== undefined || event.reset !== undefined;
+const ResyncKinds = new Set(["state", "reset"]);
+const isResync = (event) => ResyncKinds.has(event.kind);
 
 // Renders the chip from its timestamped state changes, so a producer that
 // falls behind leaves the chip sounding its current state (a stall) rather
@@ -57,30 +58,21 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._phase = 0;
         this.smoothedLeadError = 0;
         this.setTargetLatency(targetLatencyMs);
+        this.commands = {
+            produced: (m) => this.onProduced(m.upTo, m.events),
+            setEnabled: (m) => (this.chip.enabled = m.enabled),
+            setTargetLatency: (m) => this.setTargetLatency(m.targetLatencyMs),
+            setAudioOutput: (m) => this.setAudioOutput(m.audioOutput),
+            setSpeakerAmount: (m) => this.setSpeakerAmount(m.speakerAmount),
+        };
         this.port.onmessage = (event) => this.onMessage(event.data);
         this.nextStats = 0;
     }
 
     onMessage(message) {
-        switch (message.command) {
-            case "produced":
-                this.onProduced(message.upTo, message.events);
-                break;
-            case "setEnabled":
-                this.chip.enabled = message.enabled;
-                break;
-            case "setTargetLatency":
-                this.setTargetLatency(message.targetLatencyMs);
-                break;
-            case "setAudioOutput":
-                this.setAudioOutput(message.audioOutput);
-                break;
-            case "setSpeakerAmount":
-                this.setSpeakerAmount(message.speakerAmount);
-                break;
-            default:
-                throw new Error(`Unknown sound command ${message.command}`);
-        }
+        const command = this.commands[message.command];
+        if (!command) throw new Error(`Unknown sound command ${message.command}`);
+        command(message);
     }
 
     setAudioOutput(audioOutput) {

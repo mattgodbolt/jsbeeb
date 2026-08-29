@@ -53,7 +53,7 @@ export class AudioHandler {
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
             const onEvent = (event) => {
-                if (event.progress) this.flushChipEvents();
+                if (event.kind === "progress") this.flushChipEvents();
                 else this._chipEvents.push(event);
             };
             this.soundChip = this.isAtom
