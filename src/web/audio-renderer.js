@@ -1,8 +1,7 @@
 /* global sampleRate, currentTime, registerProcessor, AudioWorkletProcessor */
 import { SoundChip, AtomSoundChip } from "../soundchip.js";
-import { LowPassBiquad } from "../biquad.js";
 import { PolyphaseResampler } from "../resampler.js";
-import { OutputFilterHz, OutputFilterQ, ResamplerCutoffOfOutputRate, ResamplerTaps } from "../audio-output.js";
+import { DefaultAudioOutput, ResamplerCutoffOfOutputRate, ResamplerTaps, outputStages } from "../audio-output.js";
 
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 const MaxTargetLatencyMs = 250;
@@ -26,13 +25,16 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             isAtom = false,
             cpuSpeed = 1000000,
             targetLatencyMs,
+            audioOutput = DefaultAudioOutput,
             audioFilterFreq,
             audioFilterQ,
+            speakerAmount,
         } = options?.processorOptions ?? {};
         this.chip = isAtom ? new AtomSoundChip(null, { cpuSpeed }) : new SoundChip(null);
         this.inputSampleRate = this.chip.soundchipFreq;
         this.samplesPerCycle = this.chip.samplesPerCycle;
-        this.outputFilter = this._makeOutputFilter(audioFilterFreq, audioFilterQ);
+        this.boardFilter = { filterHz: audioFilterFreq, filterQ: audioFilterQ, speakerAmount };
+        this.setAudioOutput(audioOutput);
         this.resampler = new PolyphaseResampler(this.inputSampleRate, ResamplerCutoffOfOutputRate * sampleRate, {
             taps: ResamplerTaps,
         });
@@ -51,18 +53,15 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.setTargetLatency(targetLatencyMs);
         this.port.onmessage = (event) => {
             if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
+            else if (event.data.command === "setAudioOutput") this.setAudioOutput(event.data.audioOutput);
             else this.onProduced(event.data.upTo, event.data.events);
         };
         this.nextStats = 0;
     }
 
-    // Zero turns it off; a setting the biquad cannot realise (non-finite, at or
-    // above Nyquist, non-positive Q) falls back to the board's own values.
-    _makeOutputFilter(frequency = OutputFilterHz, q = OutputFilterQ) {
-        if (frequency <= 0) return null;
-        const usable = frequency < this.inputSampleRate / 2 && q > 0;
-        if (!usable) return new LowPassBiquad(this.inputSampleRate, OutputFilterHz, OutputFilterQ);
-        return new LowPassBiquad(this.inputSampleRate, frequency, q);
+    setAudioOutput(audioOutput) {
+        this.audioOutput = audioOutput;
+        this.outputFilters = outputStages(this.inputSampleRate, audioOutput, this.boardFilter);
     }
 
     setTargetLatency(ms) {
@@ -212,7 +211,8 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         const resampler = this.resampler;
         resampler.reserve(numInputSamples);
         this._renderInput(resampler.buffer, resampler.inputOffset, numInputSamples);
-        this.outputFilter?.process(resampler.buffer, resampler.inputOffset, numInputSamples);
+        for (const filter of this.outputFilters)
+            filter.process(resampler.buffer, resampler.inputOffset, numInputSamples);
         resampler.read(channel, this._phase, sampleRatio);
         resampler.commit();
         this._phase = end - numInputSamples;

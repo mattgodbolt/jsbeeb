@@ -23,6 +23,7 @@ import { Config } from "./config.js";
 import { DefaultModel, findModel, tubeModelFor } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
+import { DefaultAudioOutput, isAudioOutput } from "./audio-output.js";
 import { Econet } from "./econet.js";
 import { DiscLayout, toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
@@ -143,6 +144,7 @@ const paramTypes = {
     mouseJoystickEnabled: ParamTypes.BOOL,
     speechOutput: ParamTypes.BOOL,
     audioDebug: ParamTypes.BOOL,
+    audioOutput: ParamTypes.STRING,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -150,6 +152,7 @@ const paramTypes = {
     frameSkip: ParamTypes.INT,
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
+    speakerAmount: ParamTypes.FLOAT,
     audioLatencyMs: ParamTypes.FLOAT,
     cpuMultiplier: ParamTypes.FLOAT,
     tubeCpuMultiplier: ParamTypes.FLOAT,
@@ -248,6 +251,7 @@ setSpeechOutput(!!parsedQuery.speechOutput);
 
 const config = new Config(
     function onChange(changed) {
+        if (changed.audioOutput) audioHandler.setAudioOutput(changed.audioOutput);
         if (changed.displayMode) {
             // swapCanvas settles displayModeFilter on whatever was really
             // built, so take the picture from that rather than the request.
@@ -259,6 +263,7 @@ const config = new Config(
     },
     function onClose(changed) {
         parsedQuery = Object.assign(parsedQuery, changed);
+        if (changed.audioOutput) window.localStorage.audioOutput = changed.audioOutput;
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
@@ -316,6 +321,9 @@ config.setCheckboxes({
 });
 let displayMode = parsedQuery.displayMode || "rgb";
 config.setDisplayMode(displayMode);
+const audioOutput =
+    [parsedQuery.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
+config.setAudioOutput(audioOutput);
 
 model = config.model;
 
@@ -616,8 +624,10 @@ const audioStatsNode = parsedQuery.audioDebug ? audioStatsEl : null;
 const audioHandler = new AudioHandler({
     warningNode: document.getElementById("audio-warning"),
     statsNode: audioStatsNode,
+    audioOutput,
     audioFilterFreq: parsedQuery.audiofilterfreq,
     audioFilterQ: parsedQuery.audiofilterq,
+    speakerAmount: parsedQuery.speakerAmount,
     audioLatencyMs: parsedQuery.audioLatencyMs,
     noSeek,
     cpuSpeed,

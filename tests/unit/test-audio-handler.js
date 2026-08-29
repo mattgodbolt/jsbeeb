@@ -158,13 +158,24 @@ describe("AudioHandler", () => {
         });
 
         it("hands the output filter settings to the worklet", async () => {
-            const handler = makeHandler({ audioFilterFreq: 1234, audioFilterQ: 0.5 });
+            const handler = makeHandler({ audioOutput: "board", audioFilterFreq: 1234, audioFilterQ: 0.5 });
             await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
 
             expect(handler._jsAudioNode.options.processorOptions).toMatchObject({
+                audioOutput: "board",
                 audioFilterFreq: 1234,
                 audioFilterQ: 0.5,
             });
+        });
+
+        it("tells the worklet when the output changes", async () => {
+            const handler = makeHandler();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+            const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
+
+            handler.setAudioOutput("off");
+
+            expect(posted).toHaveBeenCalledWith({ command: "setAudioOutput", audioOutput: "off" });
         });
 
         it("creates no Music 5000 audio context unless one is fitted", () => {

@@ -128,7 +128,8 @@ export class Config extends EventTarget {
 
         for (const link of document.querySelectorAll(".keyboard-menu a")) {
             link.addEventListener("click", (e) => {
-                const keyLayout = e.target.dataset.target;
+                e.preventDefault();
+                const keyLayout = e.currentTarget.dataset.target;
                 this.changed.keyLayout = keyLayout;
                 this.setKeyLayout(keyLayout);
             });
@@ -136,16 +137,28 @@ export class Config extends EventTarget {
 
         for (const option of document.querySelectorAll(".mic-channel-option")) {
             option.addEventListener("click", (e) => {
-                const channelString = e.target.dataset.channel;
+                e.preventDefault();
+                const channelString = e.currentTarget.dataset.channel;
                 const channel = channelString === "" ? undefined : parseInt(channelString, 10);
                 this.changed.microphoneChannel = channel;
                 this.setMicrophoneChannel(channel);
             });
         }
 
+        for (const option of document.querySelectorAll(".audio-output-option")) {
+            option.addEventListener("click", (e) => {
+                e.preventDefault();
+                const audioOutput = e.currentTarget.dataset.output;
+                this.changed.audioOutput = audioOutput;
+                this.setAudioOutput(audioOutput);
+                this.onChange({ audioOutput });
+            });
+        }
+
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
-                const mode = e.target.dataset.mode;
+                e.preventDefault();
+                const mode = e.currentTarget.dataset.mode;
                 this.changed.displayMode = mode;
                 this.setDisplayMode(mode);
                 this.onChange({ displayMode: mode });
@@ -178,6 +191,10 @@ export class Config extends EventTarget {
         }
     }
 
+    setAudioOutput(audioOutput) {
+        const option = document.querySelector(`.audio-output-option[data-output="${audioOutput}"]`);
+        for (const el of document.querySelectorAll(".audio-output-text")) el.textContent = option.textContent;
+    }
     setMicrophoneChannel(channel) {
         const text = channel !== undefined ? `Channel ${channel}` : "Disabled";
         for (const el of document.querySelectorAll(".mic-channel-text")) el.textContent = text;

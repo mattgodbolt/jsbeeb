@@ -21,8 +21,10 @@ export class AudioHandler {
     constructor({
         warningNode,
         statsNode,
+        audioOutput,
         audioFilterFreq,
         audioFilterQ,
+        speakerAmount,
         audioLatencyMs,
         noSeek,
         cpuSpeed,
@@ -62,7 +64,9 @@ export class AudioHandler {
             this.masterGain.connect(this.audioContext.destination);
             this.ddNoise = noSeek ? new FakeDdNoise() : new DdNoise(this.audioContext, this.masterGain);
             this.relayNoise = new RelayNoise(this.audioContext, this.masterGain);
-            this._setup({ audioFilterFreq, audioFilterQ }).catch((error) => this._audioUnavailable(error));
+            this._setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }).catch((error) =>
+                this._audioUnavailable(error),
+            );
         } else {
             if (this.audioContext && !this.audioContext.audioWorklet) {
                 this.audioContext = null;
@@ -127,15 +131,17 @@ export class AudioHandler {
         this.chart.streamTo(statsNode, 100);
     }
 
-    async _setup({ audioFilterFreq, audioFilterQ }) {
+    async _setup({ audioOutput, audioFilterFreq, audioFilterQ, speakerAmount }) {
         await this.audioContext.audioWorklet.addModule(rendererUrl);
         this._jsAudioNode = new AudioWorkletNode(this.audioContext, "sound-chip-processor", {
             processorOptions: {
                 targetLatencyMs: this._targetLatencyMs(),
                 isAtom: this.isAtom,
                 cpuSpeed: this.cpuSpeed,
+                audioOutput,
                 audioFilterFreq,
                 audioFilterQ,
+                speakerAmount,
             },
         });
         this._jsAudioNode.connect(this.audioContext.destination);
@@ -163,6 +169,10 @@ export class AudioHandler {
 
     _targetLatencyMs() {
         return this.windowFocused ? this.audioLatencyMs : UnfocusedLatencyMs;
+    }
+
+    setAudioOutput(audioOutput) {
+        this._jsAudioNode?.port.postMessage({ command: "setAudioOutput", audioOutput });
     }
 
     // Returns how far ahead of the sound the picture should now run, in ms.

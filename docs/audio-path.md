@@ -1,26 +1,32 @@
 # The audio path, and what a real Master 128 measures
 
-**Status:** working notes for issue #921. The board model below is what ships; the measurements
-are the first set, taken with a microphone, and the "as heard" filter and the output selection
-UI they point at are not built yet.
+**Status:** working notes for issue #921. The outputs below are what ships, fitted to a first set
+of measurements from one Master 128; the open questions are at the end.
 
-## What jsbeeb models today
+## What jsbeeb models
 
 `SoundChip` (`src/soundchip.js`) renders the SN76489 at 500 kHz (the 4 MHz chip clock over 8) with a
 first-order DC blocker whose corner comes from the board's peak detector (10K into 4µ7, issue #863).
-The worklet (`src/web/audio-renderer.js`) then applies, at the chip rate:
+The worklet (`src/web/audio-renderer.js`) then runs, at the chip rate, the stages for the chosen
+output, and a `PolyphaseResampler` (`src/resampler.js`, a windowed sinc cut off at 0.4 of the output
+rate so the sample-playback carriers at 31 kHz and above fold nowhere, #919).
 
-1. `LowPassBiquad` (`src/biquad.js`): the board's Sallen-Key output filter, f0 = 7234 Hz, Q = 0.696
-   (#915). The URL parameters `audiofilterfreq` and `audiofilterq` override it; `audiofilterfreq=0`
-   turns it off.
-2. `PolyphaseResampler` (`src/resampler.js`): a windowed sinc down to the device rate, cut off at 0.4
-   of the output rate so the sample-playback carriers at 31 kHz and above fold nowhere (#919).
+The outputs, chosen in the configuration dialog or with `audioOutput=` in the URL, are defined in
+`src/audio-output.js` and shared with `tools/audio-sweep.js` so a headless run replays the same path:
 
-The defaults for both live in `src/audio-output.js`, shared with `tools/audio-sweep.js` so a
-headless run replays the same path.
-
-Nothing after the Sallen-Key is modelled: not the coupling capacitors, the LM386, the speaker or
-the case.
+- **board**: the board's output stage as measured at the speaker terminals. The Sallen-Key low-pass
+  (7234 Hz, Q 0.696; `audiofilterfreq` and `audiofilterq` override it, and `audiofilterfreq=0` turns
+  the whole path off) and three first-order high-passes from the coupling capacitors: C10 100nF into
+  the LM386's 50K (32 Hz), C79 330nF into 4K7 + 1K (85 Hz), and C18 47µF into the 8 Ω speaker
+  (423 Hz).
+- **speaker**, the default: the board stages and then the internal speaker and case, fitted to the
+  microphone measurements below as five biquads (a second-order high-pass at 550 Hz, Q 1.56; a
+  peak of +16.5 dB at 460 Hz, Q 3.5; a peak of +13.9 dB at 2750 Hz, Q 0.5; a high shelf of
+  -16.7 dB from 5600 Hz, Q 1.3; a low-pass at 11.7 kHz, Q 1.7), then scaled so the chain peaks at
+  unity, which leaves it about 10 dB quieter than the board output at 1 kHz. Replayed headlessly
+  and compared with the four microphone takes, it is within 3 dB at every step from 173 Hz to
+  7.8 kHz except the three interference dips on which the takes disagree among themselves.
+- **off**: the resampled chip output alone.
 
 ## The Master 128 output stage
 
@@ -60,7 +66,7 @@ confirms them.
   one again at -8 and -16 dB, a 16-step volume staircase at 1250 Hz, the eight noise modes,
   the four sample-playback carriers with a slow volume ramp, and a closing marker. The event
   count ticks up on screen and it prints "Done".
-- `reference out.wav [--model Master] [--rate 48000] [--unfiltered]` boots the disc headlessly
+- `reference out.wav [--model Master] [--rate 48000] [--output speaker|board|off]` boots the disc headlessly
   through the real `SoundChip`, board filter and resampler and writes what jsbeeb would play.
 - `analyse a.wav [b.wav]` aligns each capture on its markers, measures the rate difference
   between the machine's clock and the recorder's from the marker spacing, and prints per step the
@@ -236,28 +242,11 @@ already differs, the corner is upstream and the next probes are IC9 pin 14 and t
 junction. Either way the board's design values stay as the defaults; what changes is whether
 this machine has a defect worth documenting.
 
-## What can be modelled now
-
-Three outputs, matching the plan for a selectable output:
-
-1. **Board, line level (the current path, with its low end filled in).** The Sallen-Key at
-   7234 Hz / 0.696, confirmed by measurement, plus the three first-order high-passes the parts
-   give: C10 into the LM386 (32 Hz), C79 into R26 + R13 (85 Hz as drawn, 70 Hz on this board),
-   and C18 into the 8 Ω speaker (423 Hz with a fresh 47µF; nearer 800 Hz with this machine's
-   tired one). The 423 Hz corner is the audible one and is what the schematic says the speaker
-   is driven with; the design value is the right default.
-2. **As heard through the internal speaker.** Fitted to the microphone table above, which is
-   the whole real-versus-emulated difference through the speaker (plus the microphone's own
-   response) and does not depend on the cable question: a resonant peak near 490 Hz, roughly
-   flat to 1.4 kHz, a broad +8 dB presence bump from 2 to 4 kHz, a steep drop from 6 kHz. A
-   handful of biquads. Likely the default, since it is what a Master sounds like.
-3. **Off**: the resampled chip output alone, for people who want it clinical.
-
 ## Where this goes
 
-- Add the high-passes to the board model and fit the "as heard" filter from the microphone
-  table; make the output selectable in the UI (board, speaker, off) rather than through the
-  `audiofilterfreq` URL parameter.
 - The oscilloscope test above, for the record; and a fresh 47µF in C18 with a before-and-after
-  sweep would give both the design and the aged curves from the same machine.
+  sweep would give both the design and the aged curves from the same machine, and a "speaker"
+  fit for a healthy one.
 - Repeat with a Model B, whose Sallen-Key is the same but which has the volume pot and no C79.
+- A microphone with a known response, or two microphones, would separate the speaker from the
+  Blue's own colour in the "speaker" fit.
