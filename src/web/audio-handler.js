@@ -173,8 +173,6 @@ export class AudioHandler {
         return this.windowFocused ? this.audioLatencyMs : UnfocusedLatencyMs;
     }
 
-    // Muting is a control, not part of the chip's timeline: it takes effect on
-    // arrival rather than when the worklet's clock reaches it.
     _setEnabled(enabled) {
         this._jsAudioNode?.port.postMessage({ command: "setEnabled", enabled });
     }
