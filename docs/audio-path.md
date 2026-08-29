@@ -54,7 +54,7 @@ confirms them.
 
 `tools/audio-sweep.js` (run from the repository root):
 
-- `build [sweep.ssd]` writes a test disc. The programme pokes the chip's registers directly
+- `build [sweep.ssd]` writes a test disc. The program pokes the chip's registers directly
   with interrupts off, so each step's frequency is exact, 4 MHz / (32 N). The sequence is 62 s:
   a marker, 32 tones a quarter octave apart from 122 Hz to 25 kHz at full volume, every other
   one again at -8 and -16 dB, a 16-step volume staircase at 1250 Hz, the eight noise modes,
