@@ -175,6 +175,10 @@ export class AudioHandler {
         this._jsAudioNode?.port.postMessage({ command: "setAudioOutput", audioOutput });
     }
 
+    setSpeakerAmount(speakerAmount) {
+        this._jsAudioNode?.port.postMessage({ command: "setSpeakerAmount", speakerAmount });
+    }
+
     // Returns how far ahead of the sound the picture should now run, in ms.
     setWindowFocused(focused) {
         this.windowFocused = focused;

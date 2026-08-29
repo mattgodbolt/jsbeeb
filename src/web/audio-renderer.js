@@ -54,6 +54,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.port.onmessage = (event) => {
             if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
             else if (event.data.command === "setAudioOutput") this.setAudioOutput(event.data.audioOutput);
+            else if (event.data.command === "setSpeakerAmount") this.setSpeakerAmount(event.data.speakerAmount);
             else this.onProduced(event.data.upTo, event.data.events);
         };
         this.nextStats = 0;
@@ -62,6 +63,11 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     setAudioOutput(audioOutput) {
         this.audioOutput = audioOutput;
         this.outputFilters = outputStages(this.inputSampleRate, audioOutput, this.boardFilter);
+    }
+
+    setSpeakerAmount(speakerAmount) {
+        this.boardFilter.speakerAmount = speakerAmount;
+        this.setAudioOutput(this.audioOutput);
     }
 
     setTargetLatency(ms) {

@@ -26,6 +26,8 @@ The outputs, chosen in the configuration dialog or with `audioOutput=` in the UR
   unity, which leaves it about 10 dB quieter than the board output at 1 kHz. Replayed headlessly
   and compared with the four microphone takes, it is within 3 dB at every step from 173 Hz to
   7.8 kHz except the three interference dips on which the takes disagree among themselves.
+  `speakerAmount` (the slider beside the output on the top bar) scales the fit toward flat, 1
+  being as measured and 0 the board output alone.
 - **off**: the resampled chip output alone.
 
 ## The Master 128 output stage
