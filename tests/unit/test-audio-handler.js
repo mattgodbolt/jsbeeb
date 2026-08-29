@@ -42,7 +42,13 @@ describe("AudioHandler", () => {
             class {
                 constructor(context, name, options) {
                     this.options = options;
-                    this.port = { postMessage: () => {}, onmessage: null };
+                    this.port = {
+                        posted: [],
+                        postMessage(message) {
+                            this.posted.push(message);
+                        },
+                        onmessage: null,
+                    };
                 }
                 connect() {}
             },
@@ -143,7 +149,7 @@ describe("AudioHandler", () => {
             ]);
         });
 
-        it("ships a mute at once, since the stopped emulator will not tick", async () => {
+        it("mutes and unmutes by command, ahead of the chip's timeline, and flushes what the stopped emulator will not", async () => {
             const handler = makeHandler();
             await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
             const posted = vi.spyOn(handler._jsAudioNode.port, "postMessage");
@@ -151,10 +157,20 @@ describe("AudioHandler", () => {
             handler.mute();
             handler.unmute();
 
-            expect(posted.mock.calls.map((call) => call[0].events)).toEqual([
-                [{ cycle: 0, enabled: false }],
-                [{ cycle: 0, enabled: true }],
+            expect(posted.mock.calls.map((call) => call[0])).toEqual([
+                { command: "setEnabled", enabled: false },
+                { upTo: 0, events: [] },
+                { command: "setEnabled", enabled: true },
+                { upTo: 0, events: [] },
             ]);
+        });
+
+        it("tells a worklet built after a mute that it starts muted", async () => {
+            const handler = makeHandler();
+            handler.mute();
+            await vi.waitFor(() => expect(handler._jsAudioNode).not.toBeNull());
+
+            expect(handler._jsAudioNode.port.posted).toContainEqual({ command: "setEnabled", enabled: false });
         });
 
         it("hands the output filter settings to the worklet", async () => {

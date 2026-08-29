@@ -54,6 +54,7 @@ export class AudioHandler {
             this.audioContext.onstatechange = () => this.checkStatus();
             const onEvent = (event) => {
                 if (event.progress) this.flushChipEvents();
+                else if (event.enabled !== undefined) this._setEnabled(event.enabled);
                 else this._chipEvents.push(event);
             };
             this.soundChip = this.isAtom
@@ -145,6 +146,7 @@ export class AudioHandler {
             },
         });
         this._jsAudioNode.connect(this.audioContext.destination);
+        if (!this.soundChip.enabled) this._setEnabled(false);
         this._jsAudioNode.port.onmessage = (event) => {
             const now = Date.now();
             if (event.data.event) {
@@ -169,6 +171,12 @@ export class AudioHandler {
 
     _targetLatencyMs() {
         return this.windowFocused ? this.audioLatencyMs : UnfocusedLatencyMs;
+    }
+
+    // Muting is a control, not part of the chip's timeline: it takes effect on
+    // arrival rather than when the worklet's clock reaches it.
+    _setEnabled(enabled) {
+        this._jsAudioNode?.port.postMessage({ command: "setEnabled", enabled });
     }
 
     setAudioOutput(audioOutput) {

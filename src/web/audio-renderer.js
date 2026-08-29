@@ -61,6 +61,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
             else if (event.data.command === "setAudioOutput") this.setAudioOutput(event.data.audioOutput);
             else if (event.data.command === "setSpeakerAmount") this.setSpeakerAmount(event.data.speakerAmount);
+            else if (event.data.command === "setEnabled") this.chip.enabled = event.data.enabled;
             else this.onProduced(event.data.upTo, event.data.events);
         };
         this.nextStats = 0;
@@ -166,15 +167,12 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.stalled = false;
     }
 
-    // Holding the producer's state means following its changes; a resync
-    // starts a new timeline, so it waits for the restart.
     _stall(out, offset, length) {
         if (!this.stalled) {
             this.stalled = true;
             this.stalls++;
             this._notify("stall", 1);
         }
-        while (this.eventsHead < this.events.length && !isResync(this.events[this.eventsHead])) this._applyHead();
         this.chip.renderAt(this.clock, out, offset, length);
     }
 

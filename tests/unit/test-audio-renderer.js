@@ -268,23 +268,25 @@ describe("SoundChipProcessor rendering", () => {
         expect(proc.skippedMs).toBeCloseTo(100 - proc.targetLatencyMs, 0);
     });
 
-    it("should go silent when the producer mutes as it stops", () => {
+    const mute = (proc) => proc.port.onmessage({ data: { command: "setEnabled", enabled: false } });
+
+    it("should go silent when muted as the producer stops", () => {
         const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
-        producer.chip.mute();
+        mute(proc);
         producer.flush();
         const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.25, ticking: () => false });
         expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeLessThan(1e-3);
         expect(Math.max(...output.map(Math.abs))).toBeLessThan(1e-3);
     });
 
-    it("should go silent when muted while already stalled, without waiting for a lead it will never get", () => {
+    it("should go silent when muted while stalled, without waiting for a lead it will never get", () => {
         const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         simulate(proc, producer, 0.2, { ticking: () => false });
         expect(proc.stalled).toBe(true);
         producer.advance(1);
-        producer.chip.mute();
+        mute(proc);
         producer.flush();
         const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.25, ticking: () => false });
         expect(Math.max(...output.map(Math.abs))).toBeLessThan(1e-3);
