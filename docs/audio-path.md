@@ -218,7 +218,7 @@ readings with the machine off:
 | Speaker              | not documented    | 7.7 Ω DC, so an 8 Ω driver                                                                                                              |
 | Adapter              |                   | open circuit across its speaker side with a plug in; no dummy load                                                                      |
 
-The only rework visible is the speaker lead hand-soldered onto a connector body at PL9.
+The board is stock; nothing in the audio stage has been replaced or reworked.
 
 ### The open question, and the test for it
 
