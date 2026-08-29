@@ -11,7 +11,7 @@ The worklet (`src/web/audio-renderer.js`) then runs, at the chip rate, the stage
 output, and a `PolyphaseResampler` (`src/resampler.js`, a windowed sinc cut off at 0.4 of the output
 rate so the sample-playback carriers at 31 kHz and above fold nowhere, #919).
 
-The outputs, chosen in the configuration dialog or with `audioOutput=` in the URL, are defined in
+The outputs, chosen on the top bar, in the configuration dialog or with `audioOutput=` in the URL, are defined in
 `src/audio-output.js` and shared with `tools/audio-sweep.js` so a headless run replays the same path:
 
 - **board**: the board's output stage as measured at the speaker terminals. The Sallen-Key low-pass
@@ -26,6 +26,8 @@ The outputs, chosen in the configuration dialog or with `audioOutput=` in the UR
   unity, which leaves it about 10 dB quieter than the board output at 1 kHz. Replayed headlessly
   and compared with the four microphone takes, it is within 3 dB at every step from 173 Hz to
   7.8 kHz except the three interference dips on which the takes disagree among themselves.
+  `speakerAmount` (the slider beside the output on the top bar) scales the fit toward flat, 1
+  being as measured and 0 the board output alone.
 - **off**: the resampled chip output alone.
 
 ## The Master 128 output stage

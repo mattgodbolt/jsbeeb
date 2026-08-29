@@ -1,7 +1,13 @@
 /* global sampleRate, currentTime, registerProcessor, AudioWorkletProcessor */
 import { SoundChip, AtomSoundChip } from "../soundchip.js";
 import { PolyphaseResampler } from "../resampler.js";
-import { DefaultAudioOutput, ResamplerCutoffOfOutputRate, ResamplerTaps, outputStages } from "../audio-output.js";
+import {
+    AudioOutputs,
+    DefaultAudioOutput,
+    ResamplerCutoffOfOutputRate,
+    ResamplerTaps,
+    outputStages,
+} from "../audio-output.js";
 
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 const MaxTargetLatencyMs = 250;
@@ -54,6 +60,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.port.onmessage = (event) => {
             if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
             else if (event.data.command === "setAudioOutput") this.setAudioOutput(event.data.audioOutput);
+            else if (event.data.command === "setSpeakerAmount") this.setSpeakerAmount(event.data.speakerAmount);
             else this.onProduced(event.data.upTo, event.data.events);
         };
         this.nextStats = 0;
@@ -62,6 +69,12 @@ class SoundChipProcessor extends AudioWorkletProcessor {
     setAudioOutput(audioOutput) {
         this.audioOutput = audioOutput;
         this.outputFilters = outputStages(this.inputSampleRate, audioOutput, this.boardFilter);
+    }
+
+    setSpeakerAmount(speakerAmount) {
+        if (speakerAmount === this.boardFilter.speakerAmount) return;
+        this.boardFilter.speakerAmount = speakerAmount;
+        if (this.audioOutput === AudioOutputs.speaker) this.setAudioOutput(this.audioOutput);
     }
 
     setTargetLatency(ms) {
