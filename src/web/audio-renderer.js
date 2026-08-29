@@ -166,9 +166,8 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.stalled = false;
     }
 
-    // Holds the producer's current state, so changes it sends still apply:
-    // a stopped producer's mute cannot wait for a lead that never comes.
-    // A resync starts a new timeline and does wait.
+    // Holding the producer's state means following its changes; a resync
+    // starts a new timeline, so it waits for the restart.
     _stall(out, offset, length) {
         if (!this.stalled) {
             this.stalled = true;
