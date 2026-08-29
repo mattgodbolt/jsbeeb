@@ -6,7 +6,7 @@
  *   node tools/audio-sweep.js build [sweep.ssd]      write the test disc
  *   node tools/audio-sweep.js basic                  print the BASIC programme
  *   node tools/audio-sweep.js reference out.wav      run the disc headlessly, write jsbeeb's output
- *       [--model Master] [--rate 48000] [--output speaker|board|off]
+ *       [--model Master] [--rate 48000] [--unfiltered]
  *   node tools/audio-sweep.js analyse a.wav [b.wav]  per-step levels, and b relative to a
  *       [--channel left|right|mix|auto] [--start seconds] [--json out.json]
  *
@@ -599,18 +599,19 @@ function parseArgs(argv) {
             continue;
         }
         const name = arg.slice(2);
-        options[name] = argv[++i];
+        if (name === "unfiltered") options[name] = true;
+        else options[name] = argv[++i];
     }
     return { positional, options };
 }
 
-async function runReference(outFile, { model = "Master", rate = "48000", output = "board" }) {
+async function runReference(outFile, { model = "Master", rate = "48000", unfiltered = false }) {
     const { TestMachine } = await import("../tests/test-machine.js");
     const { SoundChip } = await import("../src/soundchip.js");
     const { PolyphaseResampler } = await import("../src/resampler.js");
-    const { ResamplerCutoffOfOutputRate, ResamplerTaps, isAudioOutput, outputStages } =
+    const { LowPassBiquad } = await import("../src/biquad.js");
+    const { OutputFilterHz, OutputFilterQ, ResamplerCutoffOfOutputRate, ResamplerTaps } =
         await import("../src/audio-output.js");
-    if (!isAudioOutput(output)) throw new Error(`Unknown output "${output}"`);
     const outputRate = Number(rate);
     const disc = await buildDisc();
     const schedule = buildSchedule();
@@ -640,7 +641,7 @@ async function runReference(outFile, { model = "Master", rate = "48000", output 
     };
     chip = new SoundChip(onBuffer);
     ratio = chip.soundchipFreq / outputRate;
-    filters = outputStages(chip.soundchipFreq, output);
+    filters = unfiltered ? [] : [new LowPassBiquad(chip.soundchipFreq, OutputFilterHz, OutputFilterQ)];
     resampler = new PolyphaseResampler(chip.soundchipFreq, ResamplerCutoffOfOutputRate * outputRate, {
         taps: ResamplerTaps,
     });
@@ -663,7 +664,7 @@ async function runReference(outFile, { model = "Master", rate = "48000", output 
     process.stderr.write("\n");
     writeWav(outFile, samples.subarray(0, outputLength), outputRate);
     console.log(
-        `wrote ${outFile}: ${(outputLength / outputRate).toFixed(1)} s at ${outputRate} Hz, ${model}, output ${output}`,
+        `wrote ${outFile}: ${(outputLength / outputRate).toFixed(1)} s at ${outputRate} Hz, ${model}${unfiltered ? ", board filter off" : ""}`,
     );
 }
 
