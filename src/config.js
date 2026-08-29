@@ -143,6 +143,15 @@ export class Config extends EventTarget {
             });
         }
 
+        for (const option of document.querySelectorAll(".audio-output-option")) {
+            option.addEventListener("click", (e) => {
+                const audioOutput = e.target.dataset.output;
+                this.changed.audioOutput = audioOutput;
+                this.setAudioOutput(audioOutput);
+                this.onChange({ audioOutput });
+            });
+        }
+
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
                 const mode = e.target.dataset.mode;
@@ -178,6 +187,10 @@ export class Config extends EventTarget {
         }
     }
 
+    setAudioOutput(audioOutput) {
+        const option = document.querySelector(`.audio-output-option[data-output="${audioOutput}"]`);
+        for (const el of document.querySelectorAll(".audio-output-text")) el.textContent = option.textContent;
+    }
     setMicrophoneChannel(channel) {
         const text = channel !== undefined ? `Channel ${channel}` : "Disabled";
         for (const el of document.querySelectorAll(".mic-channel-text")) el.textContent = text;

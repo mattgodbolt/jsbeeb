@@ -1060,6 +1060,39 @@
               </div>
             </div>
 
+            <div id="audioOutputSettings" style="margin-top: 15px">
+              <div class="row align-items-center">
+                <div class="col-sm-6">
+                  <label for="audioOutputDropdown" class="col-form-label">Sound output:</label>
+                </div>
+                <div class="col-sm-6 dropdown">
+                  <button
+                    type="button"
+                    class="btn btn-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown"
+                    id="audioOutputDropdown"
+                  >
+                    <span class="audio-output-text">Internal speaker</span>
+                  </button>
+                  <ul
+                    class="dropdown-menu dropdown-menu-dark audio-output-menu"
+                    role="menu"
+                    aria-labelledby="audioOutputDropdown"
+                  >
+                    <li>
+                      <a href="#" class="dropdown-item audio-output-option" data-output="speaker">Internal speaker</a>
+                    </li>
+                    <li>
+                      <a href="#" class="dropdown-item audio-output-option" data-output="board">Line out</a>
+                    </li>
+                    <li>
+                      <a href="#" class="dropdown-item audio-output-option" data-output="off">Unfiltered</a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
             <div id="analogueAudioSettings" style="margin-top: 15px">
               <div class="row align-items-center">
                 <div class="col-sm-6">

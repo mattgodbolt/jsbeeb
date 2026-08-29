@@ -146,9 +146,13 @@ function startedWithTone(proc, writes = ToneOn) {
     return producer;
 }
 
+// The speaker output is several dB down at the test tone, so the rendering
+// and timing tests, which only care about the tone being there, use the board's.
+const BoardOutput = { processorOptions: { audioOutput: "board" } };
+
 describe("SoundChipProcessor rendering", () => {
     it("should render the chip's tone from its register writes", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1 });
         expect(goertzelAmplitude(output, ToneHz, OutputRate)).toBeGreaterThan(0.1);
@@ -156,7 +160,7 @@ describe("SoundChipProcessor rendering", () => {
     });
 
     const spectralLine = (options, writes, hz) => {
-        const proc = new SoundChipProcessor({ processorOptions: options });
+        const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "board", ...options } });
         const producer = startedWithTone(proc, writes);
         const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1, nominalRate: true });
         return goertzelAmplitude(output, hz, OutputRate);
@@ -184,9 +188,25 @@ describe("SoundChipProcessor rendering", () => {
         expect(spectralLine({}, writes, harmonic)).toBeLessThan(unfiltered / 4);
     });
 
+    it("should switch outputs on request, and run the speaker's shaping on top of the board's", () => {
+        const writes = toneWrites(HighTonePeriod);
+        const harmonic = 3 * HighToneHz;
+        const off = spectralLine({ audioOutput: "off" }, writes, harmonic);
+        const board = spectralLine({ audioOutput: "board" }, writes, harmonic);
+        const speaker = spectralLine({ audioOutput: "speaker" }, writes, harmonic);
+        expect(board).toBeLessThan(off / 4);
+        expect(speaker).toBeLessThan(board / 4);
+
+        const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "off" } });
+        const producer = startedWithTone(proc, writes);
+        proc.port.onmessage({ data: { command: "setAudioOutput", audioOutput: "board" } });
+        const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1, nominalRate: true });
+        expect(goertzelAmplitude(output, harmonic, OutputRate)).toBeLessThan(off / 4);
+    });
+
     it("should fall back to the board's filter when the settings cannot be realised", () => {
         for (const options of [{ audioFilterQ: 0 }, { audioFilterQ: NaN }, { audioFilterFreq: 1e6 }]) {
-            const proc = new SoundChipProcessor({ processorOptions: options });
+            const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "board", ...options } });
             const producer = startedWithTone(proc);
             const { output } = simulate(proc, producer, 0.3, { collectAfter: 0.1 });
             expect(output.every(Number.isFinite)).toBe(true);
@@ -195,7 +215,7 @@ describe("SoundChipProcessor rendering", () => {
     });
 
     it("should apply a write at its cycle, part way through a quantum", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         const rendered = new Float32Array(1000);
         // The tone goes quiet at a cycle in the middle of the samples rendered.
@@ -212,7 +232,7 @@ describe("SoundChipProcessor rendering", () => {
     });
 
     it("should keep sounding the current state when the producer stalls, then skip the stalled time", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         // The producer stops for 100ms of the consumer's time, then resumes at
         // real-time rate: the lead drains, time stands still, and once the
@@ -224,7 +244,7 @@ describe("SoundChipProcessor rendering", () => {
     });
 
     it("should skip the missed time when the producer catches up in one burst", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         for (let i = 0; i < 200; ++i) quantum(proc);
         expect(proc.stalled).toBe(true);
@@ -236,7 +256,7 @@ describe("SoundChipProcessor rendering", () => {
     });
 
     it("should carry on with the tone, not silence, while stalled", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         startedWithTone(proc);
         // No more production: the lead drains, then the chip is held.
         const output = [];
@@ -247,7 +267,7 @@ describe("SoundChipProcessor rendering", () => {
     });
 
     it("should be in the producer's state after skipping, having applied the writes it skipped", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         for (let i = 0; i < 200; ++i) quantum(proc);
         expect(proc.stalled).toBe(true);
@@ -265,7 +285,7 @@ describe("SoundChipProcessor rendering", () => {
     });
 
     it("should jump to a restored state's timeline and discard what came before it", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         const state = producer.chip.snapshotState();
         producer.poke(...ToneOff);
@@ -285,7 +305,7 @@ describe("SoundChipProcessor rendering", () => {
 
 describe("SoundChipProcessor rate control", () => {
     it("should not modulate the playback rate at the producer's tick rate", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         const { rates } = simulate(proc, producer, 3, { collectAfter: 2 });
         const mean = rates.reduce((a, b) => a + b, 0) / rates.length;
@@ -300,28 +320,28 @@ describe("SoundChipProcessor rate control", () => {
     });
 
     it("should speed up when the lead is over target and slow down when under", () => {
-        const over = new SoundChipProcessor();
+        const over = new SoundChipProcessor(BoardOutput);
         const overProducer = startedWithTone(over);
         overProducer.advance(3 * over.targetLatencyMs);
         overProducer.flush();
         for (let i = 0; i < 20; ++i) quantum(over);
         expect(over._effectiveSampleRate(0)).toBeGreaterThan(over.inputSampleRate);
 
-        const under = new SoundChipProcessor();
+        const under = new SoundChipProcessor(BoardOutput);
         startedWithTone(under);
         for (let i = 0; i < 3; ++i) quantum(under);
         expect(under._effectiveSampleRate(0)).toBeLessThan(under.inputSampleRate);
     });
 
     it("should never bend pitch audibly, however far the lead is from target", () => {
-        const over = new SoundChipProcessor();
+        const over = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(over);
         producer.advance(20 * over.targetLatencyMs);
         producer.flush();
         for (let i = 0; i < 400; ++i) quantum(over);
         expect(over._effectiveSampleRate(0)).toBeLessThanOrEqual(over.inputSampleRate + over.inputSampleRate * 0.0005);
 
-        const under = new SoundChipProcessor();
+        const under = new SoundChipProcessor(BoardOutput);
         startedWithTone(under);
         for (let i = 0; i < 400; ++i) quantum(under);
         expect(under._effectiveSampleRate(0)).toBeGreaterThanOrEqual(
@@ -330,7 +350,7 @@ describe("SoundChipProcessor rate control", () => {
     });
 
     it("should converge the lead to the target without stalling", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         simulate(proc, producer, 20);
         expect(Math.abs(proc.smoothedLeadError)).toBeLessThan(proc.targetLeadCycles * 0.1);
@@ -340,7 +360,7 @@ describe("SoundChipProcessor rate control", () => {
 
 describe("SoundChipProcessor target latency", () => {
     it("should fall back to the default for a missing, zero or non-numeric target", () => {
-        const fallback = new SoundChipProcessor().targetLatencyMs;
+        const fallback = new SoundChipProcessor(BoardOutput).targetLatencyMs;
         for (const targetLatencyMs of [undefined, 0, -5, NaN, Infinity, "abc"]) {
             const proc = new SoundChipProcessor({ processorOptions: { targetLatencyMs } });
             expect(proc.targetLatencyMs).toBe(fallback);
@@ -349,7 +369,7 @@ describe("SoundChipProcessor target latency", () => {
     });
 
     it("should cap the target and keep playing through a change of it", () => {
-        const proc = new SoundChipProcessor();
+        const proc = new SoundChipProcessor(BoardOutput);
         const producer = startedWithTone(proc);
         proc.setTargetLatency(100000);
         expect(proc.targetLatencyMs).toBeLessThanOrEqual(250);
