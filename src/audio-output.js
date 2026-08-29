@@ -56,10 +56,40 @@ function chainMagnitude(stages, sampleRate, hz) {
     return stages.reduce((gain, stage) => gain * stage.magnitudeAt(sampleRate, hz), 1);
 }
 
+const FlatQ = Math.SQRT1_2;
+const FlatHighPassHz = 20;
+const FlatLowPassHz = 20000;
+const lerp = (from, to, t) => from + (to - from) * t;
+const lerpLog = (from, to, t) => from * (to / from) ** t;
+
+// The fit scaled toward flat: gains shrink, the resonant Q falls to
+// Butterworth, and the band edges move out of the way.
+function scaledStage(stage, amount) {
+    switch (stage.type) {
+        case "peaking":
+        case "highShelf":
+            return { ...stage, gainDb: stage.gainDb * amount };
+        case "highPass":
+            return {
+                ...stage,
+                frequency: lerpLog(FlatHighPassHz, stage.frequency, amount),
+                q: lerp(FlatQ, stage.q, amount),
+            };
+        case "lowPass":
+            return {
+                ...stage,
+                frequency: lerpLog(FlatLowPassHz, stage.frequency, amount),
+                q: lerp(FlatQ, stage.q, amount),
+            };
+        default:
+            throw new Error(`Unknown stage type ${stage.type}`);
+    }
+}
+
 // The speaker's presence bump would push loud chords past full scale, so the
 // chain is scaled to peak at unity across the band.
-function speakerStages(sampleRate) {
-    const stages = SpeakerStages.map((stage) => stageFactories[stage.type](sampleRate, stage));
+function speakerStages(sampleRate, amount) {
+    const stages = SpeakerStages.map((stage) => stageFactories[stage.type](sampleRate, scaledStage(stage, amount)));
     const peak = Math.max(...GainProbeHz.map((hz) => chainMagnitude(stages, sampleRate, hz)));
     return [...stages, Biquad.gain(1 / peak)];
 }
@@ -78,15 +108,17 @@ function boardFilter(sampleRate, frequency = OutputFilterHz, q = OutputFilterQ) 
  *
  * @param {number} sampleRate the chip's rate
  * @param {string} output one of AudioOutputs
- * @param {{filterHz?: number, filterQ?: number}} board overrides for the board's low-pass
+ * @param {{filterHz?: number, filterQ?: number, speakerAmount?: number}} options overrides for the
+ *     board's low-pass, and how much of the speaker fit to apply (1 is the fit, 0 is flat)
  * @returns {Biquad[]}
  */
-export function outputStages(sampleRate, output, { filterHz, filterQ } = {}) {
+export function outputStages(sampleRate, output, { filterHz, filterQ, speakerAmount = 1 } = {}) {
     if (output === AudioOutputs.off || filterHz <= 0) return [];
     const board = [
         boardFilter(sampleRate, filterHz, filterQ),
         ...BoardHighPassHz.map((hz) => Biquad.firstOrderHighPass(sampleRate, hz)),
     ];
     if (output === AudioOutputs.board) return board;
-    return [...board, ...speakerStages(sampleRate)];
+    const amount = Number.isFinite(speakerAmount) ? Math.min(Math.max(speakerAmount, 0), 1) : 1;
+    return [...board, ...speakerStages(sampleRate, amount)];
 }

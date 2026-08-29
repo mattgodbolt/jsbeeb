@@ -28,11 +28,12 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             audioOutput = DefaultAudioOutput,
             audioFilterFreq,
             audioFilterQ,
+            speakerAmount,
         } = options?.processorOptions ?? {};
         this.chip = isAtom ? new AtomSoundChip(null, { cpuSpeed }) : new SoundChip(null);
         this.inputSampleRate = this.chip.soundchipFreq;
         this.samplesPerCycle = this.chip.samplesPerCycle;
-        this.boardFilter = { filterHz: audioFilterFreq, filterQ: audioFilterQ };
+        this.boardFilter = { filterHz: audioFilterFreq, filterQ: audioFilterQ, speakerAmount };
         this.setAudioOutput(audioOutput);
         this.resampler = new PolyphaseResampler(this.inputSampleRate, ResamplerCutoffOfOutputRate * sampleRate, {
             taps: ResamplerTaps,
