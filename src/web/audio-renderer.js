@@ -61,6 +61,7 @@ class SoundChipProcessor extends AudioWorkletProcessor {
             if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
             else if (event.data.command === "setAudioOutput") this.setAudioOutput(event.data.audioOutput);
             else if (event.data.command === "setSpeakerAmount") this.setSpeakerAmount(event.data.speakerAmount);
+            else if (event.data.command === "setEnabled") this.chip.enabled = event.data.enabled;
             else this.onProduced(event.data.upTo, event.data.events);
         };
         this.nextStats = 0;
