@@ -204,6 +204,19 @@ describe("SoundChipProcessor rendering", () => {
         expect(goertzelAmplitude(output, harmonic, OutputRate)).toBeLessThan(off / 4);
     });
 
+    it("should only rebuild the chain for an amount that matters", () => {
+        const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "board" } });
+        const before = proc.outputFilters;
+        proc.port.onmessage({ data: { command: "setSpeakerAmount", speakerAmount: 0.5 } });
+        expect(proc.outputFilters).toBe(before);
+        proc.port.onmessage({ data: { command: "setAudioOutput", audioOutput: "speaker" } });
+        const speaker = proc.outputFilters;
+        proc.port.onmessage({ data: { command: "setSpeakerAmount", speakerAmount: 0.5 } });
+        expect(proc.outputFilters).toBe(speaker);
+        proc.port.onmessage({ data: { command: "setSpeakerAmount", speakerAmount: 0.25 } });
+        expect(proc.outputFilters).not.toBe(speaker);
+    });
+
     it("should fall back to the board's filter when the settings cannot be realised", () => {
         for (const options of [{ audioFilterQ: 0 }, { audioFilterQ: NaN }, { audioFilterFreq: 1e6 }]) {
             const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "board", ...options } });

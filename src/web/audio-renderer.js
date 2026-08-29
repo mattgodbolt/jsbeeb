@@ -1,7 +1,13 @@
 /* global sampleRate, currentTime, registerProcessor, AudioWorkletProcessor */
 import { SoundChip, AtomSoundChip } from "../soundchip.js";
 import { PolyphaseResampler } from "../resampler.js";
-import { DefaultAudioOutput, ResamplerCutoffOfOutputRate, ResamplerTaps, outputStages } from "../audio-output.js";
+import {
+    AudioOutputs,
+    DefaultAudioOutput,
+    ResamplerCutoffOfOutputRate,
+    ResamplerTaps,
+    outputStages,
+} from "../audio-output.js";
 
 const DefaultTargetLatencyMs = 1000 * (1 / 50); // One frame
 const MaxTargetLatencyMs = 250;
@@ -65,9 +71,12 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.outputFilters = outputStages(this.inputSampleRate, audioOutput, this.boardFilter);
     }
 
+    // Rebuilding the chain probes the speaker fit across the band, so only do
+    // it when the amount is in use and has changed.
     setSpeakerAmount(speakerAmount) {
+        if (speakerAmount === this.boardFilter.speakerAmount) return;
         this.boardFilter.speakerAmount = speakerAmount;
-        this.setAudioOutput(this.audioOutput);
+        if (this.audioOutput === AudioOutputs.speaker) this.setAudioOutput(this.audioOutput);
     }
 
     setTargetLatency(ms) {
