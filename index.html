@@ -226,6 +226,32 @@
             Edit BBC BASIC interactively with Owlet at
             <a href="https://bbcmic.ro/" target="_blank">bbcmic.ro</a>!
           </span>
+          <form class="d-flex align-items-center me-3" id="quick-settings">
+            <span class="me-1" aria-hidden="true">&#x1f50a;</span>
+            <select id="audio-output" class="form-select form-select-sm w-auto" aria-label="Sound output">
+              <option value="speaker">Speaker</option>
+              <option value="board">Line out</option>
+              <option value="off">Unfiltered</option>
+            </select>
+            <input
+              id="speaker-amount"
+              type="range"
+              class="form-range ms-2"
+              style="width: 5rem"
+              min="0"
+              max="1"
+              step="0.05"
+              value="1"
+              title="How much of the speaker's character to apply"
+              aria-label="Speaker amount"
+            />
+            <span class="ms-3 me-1" aria-hidden="true">&#x1f4fa;</span>
+            <select id="display-mode" class="form-select form-select-sm w-auto" aria-label="Display mode">
+              <option value="rgb">RGB Monitor</option>
+              <option value="pal">PAL TV</option>
+              <option value="xbr">Smoothed (xBR)</option>
+            </select>
+          </form>
           <form class="form-inline">
             <button
               id="debug-play"
@@ -1056,39 +1082,6 @@
                     <input class="form-check-input" type="checkbox" id="hasEconet" name="hasEconet" />
                     <label class="form-check-label" for="hasEconet">Econet with file server</label>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <div id="audioOutputSettings" style="margin-top: 15px">
-              <div class="row align-items-center">
-                <div class="col-sm-6">
-                  <label for="audioOutputDropdown" class="col-form-label">Sound output:</label>
-                </div>
-                <div class="col-sm-6 dropdown">
-                  <button
-                    type="button"
-                    class="btn btn-secondary dropdown-toggle"
-                    data-bs-toggle="dropdown"
-                    id="audioOutputDropdown"
-                  >
-                    <span class="audio-output-text">Internal speaker</span>
-                  </button>
-                  <ul
-                    class="dropdown-menu dropdown-menu-dark audio-output-menu"
-                    role="menu"
-                    aria-labelledby="audioOutputDropdown"
-                  >
-                    <li>
-                      <a href="#" class="dropdown-item audio-output-option" data-output="speaker">Internal speaker</a>
-                    </li>
-                    <li>
-                      <a href="#" class="dropdown-item audio-output-option" data-output="board">Line out</a>
-                    </li>
-                    <li>
-                      <a href="#" class="dropdown-item audio-output-option" data-output="off">Unfiltered</a>
-                    </li>
-                  </ul>
                 </div>
               </div>
             </div>

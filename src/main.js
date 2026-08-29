@@ -24,6 +24,7 @@ import { DefaultModel, findModel, tubeModelFor } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { DefaultAudioOutput, isAudioOutput } from "./audio-output.js";
+import { QuickSettings } from "./web/quick-settings.js";
 import { Econet } from "./econet.js";
 import { DiscLayout, toSsdOrDsd } from "./disc.js";
 import { toHfe } from "./disc-hfe.js";
@@ -251,19 +252,10 @@ setSpeechOutput(!!parsedQuery.speechOutput);
 
 const config = new Config(
     function onChange(changed) {
-        if (changed.audioOutput) audioHandler.setAudioOutput(changed.audioOutput);
-        if (changed.displayMode) {
-            // swapCanvas settles displayModeFilter on whatever was really
-            // built, so take the picture from that rather than the request.
-            swapCanvas(getFilterForMode(changed.displayMode));
-            setCrtPic(displayModeFilter);
-            // Trigger window resize to recalculate layout with new dimensions
-            window.dispatchEvent(new Event("resize"));
-        }
+        if (changed.displayMode) applyDisplayMode(changed.displayMode);
     },
     function onClose(changed) {
         parsedQuery = Object.assign(parsedQuery, changed);
-        if (changed.audioOutput) window.localStorage.audioOutput = changed.audioOutput;
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
@@ -319,11 +311,24 @@ config.setCheckboxes({
     mouseJoystickEnabled: !!parsedQuery.mouseJoystickEnabled,
     speechOutput: speechOutput.enabled,
 });
-let displayMode = parsedQuery.displayMode || "rgb";
+const displayMode = parsedQuery.displayMode || window.localStorage.displayMode || "rgb";
 config.setDisplayMode(displayMode);
 const audioOutput =
     [parsedQuery.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
-config.setAudioOutput(audioOutput);
+const speakerAmount =
+    [parsedQuery.speakerAmount, parseFloat(window.localStorage.speakerAmount)].find(Number.isFinite) ?? 1;
+
+function applyDisplayMode(mode) {
+    // swapCanvas settles displayModeFilter on whatever was really
+    // built, so take the picture from that rather than the request.
+    swapCanvas(getFilterForMode(mode));
+    setCrtPic(displayModeFilter);
+    // Trigger window resize to recalculate layout with new dimensions
+    window.dispatchEvent(new Event("resize"));
+    config.setDisplayMode(mode);
+    quickSettings?.showDisplayMode(mode);
+    window.localStorage.displayMode = mode;
+}
 
 model = config.model;
 
@@ -543,7 +548,7 @@ function createCanvasForFilter(filterClass) {
     return newCanvas;
 }
 
-let displayModeFilter = canvasLib.getFilterForMode(parsedQuery.displayMode || "rgb");
+let displayModeFilter = canvasLib.getFilterForMode(displayMode);
 function swapCanvas(newFilterClass) {
     // Everything but the filter is the same whatever the mode: the framebuffer
     // texture, the vertex buffers and fb32 all carry over untouched.
@@ -627,7 +632,7 @@ const audioHandler = new AudioHandler({
     audioOutput,
     audioFilterFreq: parsedQuery.audiofilterfreq,
     audioFilterQ: parsedQuery.audiofilterq,
-    speakerAmount: parsedQuery.speakerAmount,
+    speakerAmount,
     audioLatencyMs: parsedQuery.audioLatencyMs,
     noSeek,
     cpuSpeed,
@@ -638,6 +643,10 @@ const audioHandler = new AudioHandler({
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
+const quickSettings = new QuickSettings(
+    { audioHandler, onDisplayMode: applyDisplayMode, storage: window.localStorage },
+    { audioOutput, speakerAmount, displayMode },
+);
 
 for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
 
