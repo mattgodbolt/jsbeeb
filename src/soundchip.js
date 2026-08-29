@@ -101,30 +101,34 @@ export class SoundChip {
             mute: () => {
                 this.catchUp();
                 this.sineOn = false;
-                this._emit({ sine: 0 });
+                this._emit("sine", 0);
             },
             tone: (freq) => {
                 this.catchUp();
                 this.sineOn = true;
                 this.sineStep = (freq / sampleRate) * this.sineTable.length;
-                this._emit({ sine: freq });
+                this._emit("sine", freq);
             },
+        };
+
+        this.eventHandlers = {
+            progress: () => {},
+            poke: (value) => this.poke(value),
+            sine: (freq) => (freq ? this.toneGenerator.tone(freq) : this.toneGenerator.mute()),
+            state: (state) => this.restoreState(state),
+            reset: (hard) => this.reset(hard),
         };
     }
 
-    _emit(event) {
-        if (this._onEvent) this._onEvent({ cycle: this.scheduler.epoch, ...event });
+    _emit(kind, value) {
+        if (this._onEvent) this._onEvent({ cycle: this.scheduler.epoch, kind, value });
     }
 
     /** Applies an event from another chip's onEvent, at the cycle this chip is rendering. */
     applyEvent(event) {
-        if (event.poke !== undefined) this.poke(event.poke);
-        else if (event.sine !== undefined) {
-            if (event.sine) this.toneGenerator.tone(event.sine);
-            else this.toneGenerator.mute();
-        } else if (event.enabled !== undefined) this.enabled = event.enabled;
-        else if (event.state !== undefined) this.restoreState(event.state);
-        else if (event.reset !== undefined) this.reset(event.reset);
+        const handler = this.eventHandlers[event.kind];
+        if (!handler) throw new Error(`Unknown sound event ${event.kind}`);
+        handler(event.value, event);
     }
 
     /** Renders `length` samples of output from `cycle`, for a chip that is driven by events. */
@@ -214,7 +218,7 @@ export class SoundChip {
         this.volume[2] = volumeTable[v2];
         this.volume[3] = volumeTable[v3];
         this.noisePoked();
-        this._emit({ state: this.snapshotState() });
+        this._emit("state", this.snapshotState());
     }
 
     generate(out, offset, length) {
@@ -255,7 +259,7 @@ export class SoundChip {
         });
         if (this._onEvent) {
             this.progressTask = this.scheduler.newTask(() => {
-                this._emit({ progress: true });
+                this._emit("progress", true);
                 this.progressTask.schedule(EventProgressCycles);
             });
             this.progressTask.schedule(EventProgressCycles);
@@ -312,7 +316,7 @@ export class SoundChip {
 
     poke(value) {
         this.catchUp();
-        this._emit({ poke: value });
+        this._emit("poke", value);
 
         let command;
         if (value & 0x80) {
@@ -394,12 +398,12 @@ export class SoundChip {
         this.dcPrevIn = state.dcPrevIn ?? 0;
         this.dcPrevOut = state.dcPrevOut ?? 0;
         this.progressTask?.ensureScheduled(true, EventProgressCycles);
-        this._emit({ state: this.snapshotState() });
+        this._emit("state", this.snapshotState());
     }
 
     reset(hard) {
         if (!hard) return;
-        this._emit({ reset: true });
+        this._emit("reset", true);
         for (let i = 0; i < 4; ++i) {
             this.counter[i] = 0;
             this.registers[i] = 0;
@@ -412,7 +416,6 @@ export class SoundChip {
 
     enable(e) {
         this.enabled = e;
-        this._emit({ enabled: e });
     }
 
     mute() {
@@ -457,6 +460,11 @@ export class AtomSoundChip extends SoundChip {
         this._speakerPrevIn = 0;
         this._speakerPrevOut = 0;
         this._speakerCycleOffset = 0;
+
+        Object.assign(this.eventHandlers, {
+            bit: (bit, { cycle }) => this.bitChange.push({ bit, cycles: cycle }),
+            speakerReset: () => this.speakerReset(),
+        });
     }
 
     reset(hard) {
@@ -470,19 +478,13 @@ export class AtomSoundChip extends SoundChip {
         this._speakerCycleOffset = 0;
     }
 
-    applyEvent(event) {
-        if (event.bit !== undefined) this.bitChange.push({ bit: event.bit, cycles: event.cycle });
-        else if (event.speakerReset !== undefined) this.speakerReset();
-        else super.applyEvent(event);
-    }
-
     renderAt(cycle, out, offset, length) {
         this._speakerCycleOffset = 0;
         super.renderAt(cycle, out, offset, length);
     }
 
     speakerReset() {
-        this._emit({ speakerReset: true });
+        this._emit("speakerReset", true);
         this.bitChange = [];
         this.currentSpeakerBit = 0.0;
         this._speakerPrevIn = 0;
@@ -521,7 +523,7 @@ export class AtomSoundChip extends SoundChip {
     updateSpeaker(value, microCycle, seconds) {
         const cycles = microCycle + seconds / this.secondsPerCycle;
         const bit = value ? 1.0 : 0.0;
-        if (this._onEvent) this._onEvent({ cycle: cycles, bit });
+        if (this._onEvent) this._onEvent({ cycle: cycles, kind: "bit", value: bit });
         else this.bitChange.push({ bit, cycles });
     }
 }

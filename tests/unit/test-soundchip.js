@@ -434,12 +434,12 @@ describe("SoundChip events", () => {
         scheduler.polltime(10);
         chip.poke(0x07);
         expect(events).toEqual([
-            { cycle: 1234, poke: 0x8d },
-            { cycle: 1244, poke: 0x07 },
+            { cycle: 1234, kind: "poke", value: 0x8d },
+            { cycle: 1244, kind: "poke", value: 0x07 },
         ]);
     });
 
-    it("should report tape tones, muting, resets and restores as events", () => {
+    it("should report tape tones, resets and restores as events, but not muting, which is not chip state", () => {
         const { chip, events } = makeEventChip();
         chip.toneGenerator.tone(1200);
         chip.toneGenerator.mute();
@@ -447,30 +447,24 @@ describe("SoundChip events", () => {
         chip.reset(false);
         chip.reset(true);
         chip.restoreState(chip.snapshotState());
-        expect(events.map((event) => Object.keys(event).find((key) => key !== "cycle"))).toEqual([
-            "sine",
-            "sine",
-            "enabled",
-            "reset",
-            "state",
-        ]);
-        expect(events[0].sine).toBe(1200);
-        expect(events[1].sine).toBe(0);
-        expect(events[2].enabled).toBe(false);
+        expect(events.map((event) => event.kind)).toEqual(["sine", "sine", "reset", "state"]);
+        expect(events[0].value).toBe(1200);
+        expect(events[1].value).toBe(0);
+        expect(chip.enabled).toBe(false);
     });
 
     it("should report progress every few emulated milliseconds, and keep doing so after a restore", () => {
         const { chip, scheduler, events } = makeEventChip();
         scheduler.polltime(10000);
         expect(events).toEqual([
-            { cycle: 4000, progress: true },
-            { cycle: 8000, progress: true },
+            { cycle: 4000, kind: "progress", value: true },
+            { cycle: 8000, kind: "progress", value: true },
         ]);
         scheduler.restoreState({ epoch: 20000 });
         chip.restoreState(chip.snapshotState());
         events.length = 0;
         scheduler.polltime(4000);
-        expect(events).toEqual([{ cycle: 24000, progress: true }]);
+        expect(events).toEqual([{ cycle: 24000, kind: "progress", value: true }]);
     });
 
     it("should not render when it has an event sink", () => {
@@ -509,7 +503,7 @@ describe("SoundChip events", () => {
         const chip = new AtomSoundChip(() => {}, { onEvent: (event) => events.push(event) });
         chip.setScheduler(scheduler);
         chip.updateSpeaker(true, 10, 0.5);
-        expect(events).toEqual([{ cycle: 10 + 0.5 * 1000000, bit: 1 }]);
+        expect(events).toEqual([{ cycle: 10 + 0.5 * 1000000, kind: "bit", value: 1 }]);
         expect(chip.bitChange).toEqual([]);
 
         const { chip: renderer } = makeAtomSoundChip();

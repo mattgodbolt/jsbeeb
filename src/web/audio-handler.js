@@ -53,8 +53,7 @@ export class AudioHandler {
         if (this.audioContext && this.audioContext.audioWorklet) {
             this.audioContext.onstatechange = () => this.checkStatus();
             const onEvent = (event) => {
-                if (event.progress) this.flushChipEvents();
-                else if (event.enabled !== undefined) this._setEnabled(event.enabled);
+                if (event.kind === "progress") this.flushChipEvents();
                 else this._chipEvents.push(event);
             };
             this.soundChip = this.isAtom
@@ -217,7 +216,11 @@ export class AudioHandler {
     // emulator has got, so the worklet knows its lead even when nothing changed.
     flushChipEvents() {
         if (!this._jsAudioNode) return;
-        this._jsAudioNode.port.postMessage({ upTo: this.soundChip.scheduler.epoch, events: this._chipEvents });
+        this._jsAudioNode.port.postMessage({
+            command: "produced",
+            upTo: this.soundChip.scheduler.epoch,
+            events: this._chipEvents,
+        });
         this._chipEvents = [];
     }
 
@@ -251,15 +254,17 @@ export class AudioHandler {
         await this.relayNoise.initialise();
     }
 
-    // The emulator is stopping, so no tick will ship the change; send it now.
+    // The emulator is stopping, so no tick will ship its last writes; send them now.
     mute() {
         this.soundChip.mute();
+        this._setEnabled(false);
         this.flushChipEvents();
         if (this.masterGain) this.masterGain.gain.value = 0;
     }
 
     unmute() {
         this.soundChip.unmute();
+        this._setEnabled(true);
         this.flushChipEvents();
         if (this.masterGain) this.masterGain.gain.value = 1;
     }

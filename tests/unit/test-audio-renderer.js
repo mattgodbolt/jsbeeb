@@ -199,7 +199,7 @@ describe("SoundChipProcessor rendering", () => {
 
         const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "off" } });
         const producer = startedWithTone(proc, writes);
-        proc.port.onmessage({ data: { command: "setAudioOutput", audioOutput: "board" } });
+        proc.onMessage({ command: "setAudioOutput", audioOutput: "board" });
         const { output } = simulate(proc, producer, 0.5, { collectAfter: 0.1, nominalRate: true });
         expect(goertzelAmplitude(output, harmonic, OutputRate)).toBeLessThan(off / 4);
     });
@@ -207,13 +207,13 @@ describe("SoundChipProcessor rendering", () => {
     it("should only rebuild the chain for an amount that matters", () => {
         const proc = new SoundChipProcessor({ processorOptions: { audioOutput: "board" } });
         const before = proc.outputFilters;
-        proc.port.onmessage({ data: { command: "setSpeakerAmount", speakerAmount: 0.5 } });
+        proc.onMessage({ command: "setSpeakerAmount", speakerAmount: 0.5 });
         expect(proc.outputFilters).toBe(before);
-        proc.port.onmessage({ data: { command: "setAudioOutput", audioOutput: "speaker" } });
+        proc.onMessage({ command: "setAudioOutput", audioOutput: "speaker" });
         const speaker = proc.outputFilters;
-        proc.port.onmessage({ data: { command: "setSpeakerAmount", speakerAmount: 0.5 } });
+        proc.onMessage({ command: "setSpeakerAmount", speakerAmount: 0.5 });
         expect(proc.outputFilters).toBe(speaker);
-        proc.port.onmessage({ data: { command: "setSpeakerAmount", speakerAmount: 0.25 } });
+        proc.onMessage({ command: "setSpeakerAmount", speakerAmount: 0.25 });
         expect(proc.outputFilters).not.toBe(speaker);
     });
 
@@ -268,7 +268,12 @@ describe("SoundChipProcessor rendering", () => {
         expect(proc.skippedMs).toBeCloseTo(100 - proc.targetLatencyMs, 0);
     });
 
-    const mute = (proc) => proc.port.onmessage({ data: { command: "setEnabled", enabled: false } });
+    const mute = (proc) => proc.onMessage({ command: "setEnabled", enabled: false });
+
+    it("should reject a message it does not know", () => {
+        const proc = new SoundChipProcessor(BoardOutput);
+        expect(() => proc.onMessage({ upTo: 0, events: [] })).toThrow(/Unknown sound command/);
+    });
 
     it("should go silent when muted as the producer stops", () => {
         const proc = new SoundChipProcessor(BoardOutput);

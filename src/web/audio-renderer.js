@@ -19,7 +19,8 @@ const LeadSmoothingTau = 0.5;
 const ProportionalGain = 0.2;
 const MaxAdjustFraction = 0.0005;
 
-const isResync = (event) => event.state !== undefined || event.reset !== undefined;
+const ResyncKinds = new Set(["state", "reset"]);
+const isResync = (event) => ResyncKinds.has(event.kind);
 
 // Renders the chip from its timestamped state changes, so a producer that
 // falls behind leaves the chip sounding its current state (a stall) rather
@@ -57,14 +58,21 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this._phase = 0;
         this.smoothedLeadError = 0;
         this.setTargetLatency(targetLatencyMs);
-        this.port.onmessage = (event) => {
-            if (event.data.command === "setTargetLatency") this.setTargetLatency(event.data.targetLatencyMs);
-            else if (event.data.command === "setAudioOutput") this.setAudioOutput(event.data.audioOutput);
-            else if (event.data.command === "setSpeakerAmount") this.setSpeakerAmount(event.data.speakerAmount);
-            else if (event.data.command === "setEnabled") this.chip.enabled = event.data.enabled;
-            else this.onProduced(event.data.upTo, event.data.events);
+        this.commands = {
+            produced: (m) => this.onProduced(m.upTo, m.events),
+            setEnabled: (m) => (this.chip.enabled = m.enabled),
+            setTargetLatency: (m) => this.setTargetLatency(m.targetLatencyMs),
+            setAudioOutput: (m) => this.setAudioOutput(m.audioOutput),
+            setSpeakerAmount: (m) => this.setSpeakerAmount(m.speakerAmount),
         };
+        this.port.onmessage = (event) => this.onMessage(event.data);
         this.nextStats = 0;
+    }
+
+    onMessage(message) {
+        const command = this.commands[message.command];
+        if (!command) throw new Error(`Unknown sound command ${message.command}`);
+        command(message);
     }
 
     setAudioOutput(audioOutput) {
