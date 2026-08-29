@@ -1,35 +1,40 @@
 import { AudioOutputs } from "../audio-output.js";
 
-/** The sound output, speaker amount and display mode controls on the top bar. */
+/**
+ * The sound output, speaker amount and display mode controls on the top bar.
+ * Choices go to the callbacks; what is shown follows the show methods, so the
+ * bar can be kept in step with the same settings elsewhere.
+ */
 export class QuickSettings {
-    constructor({ audioHandler, onDisplayMode, storage }, { audioOutput, speakerAmount, displayMode }) {
+    constructor({ onAudioOutput, onSpeakerAmount, onDisplayMode }, { audioOutput, speakerAmount, displayMode }) {
         this.output = document.getElementById("audio-output");
         this.amount = document.getElementById("speaker-amount");
         this.display = document.getElementById("display-mode");
         if (!this.output || !this.amount || !this.display) return;
 
-        this.amount.value = speakerAmount;
-        this._showOutput(audioOutput);
+        this.showAudioOutput(audioOutput);
+        this.showSpeakerAmount(speakerAmount);
         this.showDisplayMode(displayMode);
 
         this.output.addEventListener("click", (e) => {
             const value = e.target.closest("[data-output]")?.dataset.output;
-            if (!value) return;
-            audioHandler.setAudioOutput(value);
-            storage.audioOutput = value;
-            this._showOutput(value);
+            if (value) onAudioOutput(value);
         });
-        this.amount.addEventListener("input", () => audioHandler.setSpeakerAmount(parseFloat(this.amount.value)));
-        this.amount.addEventListener("change", () => (storage.speakerAmount = this.amount.value));
+        this.amount.addEventListener("input", () => onSpeakerAmount(parseFloat(this.amount.value)));
         this.display.addEventListener("click", (e) => {
             const mode = e.target.closest("[data-mode]")?.dataset.mode;
             if (mode) onDisplayMode(mode);
         });
     }
 
-    _showOutput(audioOutput) {
+    showAudioOutput(audioOutput) {
+        if (!this.output) return;
         select(this.output.querySelectorAll("[data-output]"), (b) => b.dataset.output === audioOutput);
         this.amount.disabled = audioOutput !== AudioOutputs.speaker;
+    }
+
+    showSpeakerAmount(speakerAmount) {
+        if (this.amount) this.amount.value = speakerAmount;
     }
 
     showDisplayMode(mode) {

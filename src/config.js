@@ -1,6 +1,7 @@
 "use strict";
 import { allModels, findModel, tubeModelFor } from "./models.js";
 import { getFilterForMode } from "./canvas.js";
+import { AudioOutputs } from "./audio-output.js";
 
 const round = (value) => Number(value.toFixed(2));
 
@@ -145,6 +146,19 @@ export class Config extends EventTarget {
             });
         }
 
+        for (const option of document.querySelectorAll(".audio-output-option")) {
+            option.addEventListener("click", (e) => {
+                e.preventDefault();
+                const audioOutput = e.currentTarget.dataset.output;
+                this.changed.audioOutput = audioOutput;
+                this.onChange({ audioOutput });
+            });
+        }
+
+        document.getElementById("speakerAmountSetting").addEventListener("input", (e) => {
+            this.onChange({ speakerAmount: parseFloat(e.currentTarget.value) });
+        });
+
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
                 e.preventDefault();
@@ -181,6 +195,14 @@ export class Config extends EventTarget {
         }
     }
 
+    setAudioOutput(audioOutput) {
+        const option = document.querySelector(`.audio-output-option[data-output="${audioOutput}"]`);
+        for (const el of document.querySelectorAll(".audio-output-text")) el.textContent = option.textContent;
+        document.getElementById("speakerAmountSetting").disabled = audioOutput !== AudioOutputs.speaker;
+    }
+    setSpeakerAmount(speakerAmount) {
+        document.getElementById("speakerAmountSetting").value = speakerAmount;
+    }
     setMicrophoneChannel(channel) {
         const text = channel !== undefined ? `Channel ${channel}` : "Disabled";
         for (const el of document.querySelectorAll(".mic-channel-text")) el.textContent = text;

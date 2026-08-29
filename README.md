@@ -291,11 +291,12 @@ sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
 - `audioLatencyMs` - how far the sound runs behind the emulator, in milliseconds (default 20). Raising it lets the sound ride out longer stalls of the emulator, at the cost of lagging the picture by that much.
 - `audioOutput` - what the sound chip is heard through: `speaker` (the default: the board's output stage and the
   internal speaker and case, fitted to recordings of a Master 128), `board` (the board's output stage alone, as at
-  its line-level socket) or `off` (the chip resampled and nothing else). The top bar has the same choice, and
-  remembers it. See [docs/audio-path.md](docs/audio-path.md) for the path, the Master's circuit and what a real
+  its line-level socket) or `off` (the chip resampled and nothing else). The top bar and the configuration dialog
+  have the same choice, and remember it. See [docs/audio-path.md](docs/audio-path.md) for the path, the Master's circuit and what a real
   machine measures.
 - `speakerAmount` - how much of the speaker's character to apply, from 0 (the same as `board`) to 1 (as measured,
-  the default). The slider next to the sound output on the top bar sets it live, and remembers it.
+  the default). The slider next to the sound output, on the top bar and in the configuration dialog, sets it live
+  and remembers it.
 - `audiofilterfreq` / `audiofilterq` - the corner frequency in Hz and the Q of the lowpass modelling the board's output
   filter, applied to the sound chip before it is resampled. The defaults, 7234 and 0.696, are the Beeb's own.
   `audiofilterfreq=0` turns the whole output path off.

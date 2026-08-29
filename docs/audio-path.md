@@ -11,7 +11,7 @@ The worklet (`src/web/audio-renderer.js`) then runs, at the chip rate, the stage
 output, and a `PolyphaseResampler` (`src/resampler.js`, a windowed sinc cut off at 0.4 of the output
 rate so the sample-playback carriers at 31 kHz and above fold nowhere, #919).
 
-The outputs, chosen on the top bar or with `audioOutput=` in the URL, are defined in
+The outputs, chosen on the top bar, in the configuration dialog or with `audioOutput=` in the URL, are defined in
 `src/audio-output.js` and shared with `tools/audio-sweep.js` so a headless run replays the same path:
 
 - **board**: the board's output stage as measured at the speaker terminals. The Sallen-Key low-pass

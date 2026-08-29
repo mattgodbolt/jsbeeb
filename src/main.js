@@ -252,6 +252,8 @@ setSpeechOutput(!!parsedQuery.speechOutput);
 
 const config = new Config(
     function onChange(changed) {
+        if (changed.audioOutput) applyAudioOutput(changed.audioOutput);
+        if (changed.speakerAmount !== undefined) applySpeakerAmount(changed.speakerAmount);
         if (changed.displayMode) applyDisplayMode(changed.displayMode);
     },
     function onClose(changed) {
@@ -317,6 +319,23 @@ const audioOutput =
     [parsedQuery.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
 const speakerAmount =
     [parsedQuery.speakerAmount, parseFloat(window.localStorage.speakerAmount)].find(Number.isFinite) ?? 1;
+
+config.setAudioOutput(audioOutput);
+config.setSpeakerAmount(speakerAmount);
+
+function applyAudioOutput(output) {
+    audioHandler.setAudioOutput(output);
+    config.setAudioOutput(output);
+    quickSettings?.showAudioOutput(output);
+    window.localStorage.audioOutput = output;
+}
+
+function applySpeakerAmount(amount) {
+    audioHandler.setSpeakerAmount(amount);
+    config.setSpeakerAmount(amount);
+    quickSettings?.showSpeakerAmount(amount);
+    window.localStorage.speakerAmount = amount;
+}
 
 function applyDisplayMode(mode) {
     // swapCanvas settles displayModeFilter on whatever was really
@@ -644,7 +663,7 @@ const audioHandler = new AudioHandler({
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
 const quickSettings = new QuickSettings(
-    { audioHandler, onDisplayMode: applyDisplayMode, storage: window.localStorage },
+    { onAudioOutput: applyAudioOutput, onSpeakerAmount: applySpeakerAmount, onDisplayMode: applyDisplayMode },
     { audioOutput, speakerAmount, displayMode },
 );
 

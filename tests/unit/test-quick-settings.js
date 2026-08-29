@@ -13,15 +13,11 @@ const Markup = `
 </div>`;
 
 describe("QuickSettings", () => {
-    let audioHandler;
-    let onDisplayMode;
-    let storage;
+    let callbacks;
 
     beforeEach(() => {
         document.body.innerHTML = Markup;
-        audioHandler = { setAudioOutput: vi.fn(), setSpeakerAmount: vi.fn() };
-        onDisplayMode = vi.fn();
-        storage = {};
+        callbacks = { onAudioOutput: vi.fn(), onSpeakerAmount: vi.fn(), onDisplayMode: vi.fn() };
     });
 
     afterEach(() => {
@@ -29,7 +25,7 @@ describe("QuickSettings", () => {
     });
 
     const make = (initial = { audioOutput: "speaker", speakerAmount: 1, displayMode: "rgb" }) =>
-        new QuickSettings({ audioHandler, onDisplayMode, storage }, initial);
+        new QuickSettings(callbacks, initial);
     const pressed = (selector) =>
         Array.from(document.querySelectorAll(selector))
             .filter((b) => b.classList.contains("active"))
@@ -45,32 +41,37 @@ describe("QuickSettings", () => {
         expect(document.querySelector('[data-output="board"]').getAttribute("aria-pressed")).toBe("true");
     });
 
-    it("applies and remembers a new sound output, from a click anywhere on its button", () => {
+    it("reports a chosen sound output, from a click anywhere on its button, without showing it itself", () => {
         make();
-        document.querySelector('[data-output="off"]').click();
-        expect(audioHandler.setAudioOutput).toHaveBeenCalledWith("off");
-        expect(storage.audioOutput).toBe("off");
+        document.querySelector('[data-output="off"] ').click();
+        expect(callbacks.onAudioOutput).toHaveBeenCalledWith("off");
+        document.querySelector('[data-output="speaker"] span').click();
+        expect(callbacks.onAudioOutput).toHaveBeenLastCalledWith("speaker");
+        expect(pressed("[data-output]")).toEqual(["speaker"]);
+    });
+
+    it("follows the sound output it is shown", () => {
+        const settings = make();
+        settings.showAudioOutput("off");
         expect(pressed("[data-output]")).toEqual(["off"]);
         expect(amount().disabled).toBe(true);
-        document.querySelector('[data-output="speaker"] span').click();
-        expect(audioHandler.setAudioOutput).toHaveBeenLastCalledWith("speaker");
+        settings.showAudioOutput("speaker");
         expect(amount().disabled).toBe(false);
     });
 
-    it("applies the amount as it moves and remembers it when released", () => {
-        make();
+    it("reports the amount as it moves and follows the amount it is shown", () => {
+        const settings = make();
         amount().value = "0.5";
         amount().dispatchEvent(new Event("input"));
-        expect(audioHandler.setSpeakerAmount).toHaveBeenCalledWith(0.5);
-        expect(storage.speakerAmount).toBeUndefined();
-        amount().dispatchEvent(new Event("change"));
-        expect(storage.speakerAmount).toBe("0.5");
+        expect(callbacks.onSpeakerAmount).toHaveBeenCalledWith(0.5);
+        settings.showSpeakerAmount(0.25);
+        expect(amount().value).toBe("0.25");
     });
 
-    it("hands the display mode to its callback and follows changes made elsewhere", () => {
+    it("reports the display mode and follows the one it is shown", () => {
         const settings = make();
         document.querySelector('[data-mode="xbr"]').click();
-        expect(onDisplayMode).toHaveBeenCalledWith("xbr");
+        expect(callbacks.onDisplayMode).toHaveBeenCalledWith("xbr");
         expect(pressed("[data-mode]")).toEqual(["rgb"]);
         settings.showDisplayMode("pal");
         expect(pressed("[data-mode]")).toEqual(["pal"]);
@@ -79,6 +80,10 @@ describe("QuickSettings", () => {
     it("does nothing on a page without the controls", () => {
         document.body.innerHTML = "";
         const settings = make();
-        expect(() => settings.showDisplayMode("pal")).not.toThrow();
+        expect(() => {
+            settings.showAudioOutput("off");
+            settings.showSpeakerAmount(0.5);
+            settings.showDisplayMode("pal");
+        }).not.toThrow();
     });
 });

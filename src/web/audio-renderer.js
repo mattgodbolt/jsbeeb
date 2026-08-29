@@ -71,8 +71,6 @@ class SoundChipProcessor extends AudioWorkletProcessor {
         this.outputFilters = outputStages(this.inputSampleRate, audioOutput, this.boardFilter);
     }
 
-    // Rebuilding the chain probes the speaker fit across the band, so only do
-    // it when the amount is in use and has changed.
     setSpeakerAmount(speakerAmount) {
         if (speakerAmount === this.boardFilter.speakerAmount) return;
         this.boardFilter.speakerAmount = speakerAmount;
