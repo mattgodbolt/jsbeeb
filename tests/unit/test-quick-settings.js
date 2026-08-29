@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickSettings } from "../../src/web/quick-settings.js";
 
 const Markup = `
-<select id="audio-output"><option value="speaker">S</option><option value="board">B</option><option value="off">O</option></select>
+<div id="audio-output">
+  <button data-output="speaker"><span>S</span></button><button data-output="board">B</button><button data-output="off">O</button>
+</div>
 <input id="speaker-amount" type="range" min="0" max="1" step="0.05" value="1" />
-<select id="display-mode"><option value="rgb">R</option><option value="pal">P</option><option value="xbr">X</option></select>`;
+<div id="display-mode">
+  <button data-mode="rgb">R</button><button data-mode="pal">P</button><button data-mode="xbr">X</button>
+</div>`;
 
 describe("QuickSettings", () => {
     let audioHandler;
@@ -26,48 +30,50 @@ describe("QuickSettings", () => {
 
     const make = (initial = { audioOutput: "speaker", speakerAmount: 1, displayMode: "rgb" }) =>
         new QuickSettings({ audioHandler, onDisplayMode, storage }, initial);
-
-    const change = (id, value) => {
-        const el = document.getElementById(id);
-        el.value = value;
-        el.dispatchEvent(new Event("change"));
-    };
+    const pressed = (selector) =>
+        Array.from(document.querySelectorAll(selector))
+            .filter((b) => b.classList.contains("active"))
+            .map((b) => b.dataset.output ?? b.dataset.mode);
+    const amount = () => document.getElementById("speaker-amount");
 
     it("shows the initial settings and only enables the amount for the speaker", () => {
         make({ audioOutput: "board", speakerAmount: 0.4, displayMode: "pal" });
-        expect(document.getElementById("audio-output").value).toBe("board");
-        expect(document.getElementById("speaker-amount").value).toBe("0.4");
-        expect(document.getElementById("speaker-amount").disabled).toBe(true);
-        expect(document.getElementById("display-mode").value).toBe("pal");
+        expect(pressed("[data-output]")).toEqual(["board"]);
+        expect(amount().value).toBe("0.4");
+        expect(amount().disabled).toBe(true);
+        expect(pressed("[data-mode]")).toEqual(["pal"]);
+        expect(document.querySelector('[data-output="board"]').getAttribute("aria-pressed")).toBe("true");
     });
 
-    it("applies and remembers a new sound output", () => {
+    it("applies and remembers a new sound output, from a click anywhere on its button", () => {
         make();
-        change("audio-output", "off");
+        document.querySelector('[data-output="off"]').click();
         expect(audioHandler.setAudioOutput).toHaveBeenCalledWith("off");
         expect(storage.audioOutput).toBe("off");
-        expect(document.getElementById("speaker-amount").disabled).toBe(true);
-        change("audio-output", "speaker");
-        expect(document.getElementById("speaker-amount").disabled).toBe(false);
+        expect(pressed("[data-output]")).toEqual(["off"]);
+        expect(amount().disabled).toBe(true);
+        document.querySelector('[data-output="speaker"] span').click();
+        expect(audioHandler.setAudioOutput).toHaveBeenLastCalledWith("speaker");
+        expect(amount().disabled).toBe(false);
     });
 
     it("applies the amount as it moves and remembers it when released", () => {
         make();
-        const amount = document.getElementById("speaker-amount");
-        amount.value = "0.5";
-        amount.dispatchEvent(new Event("input"));
+        amount().value = "0.5";
+        amount().dispatchEvent(new Event("input"));
         expect(audioHandler.setSpeakerAmount).toHaveBeenCalledWith(0.5);
         expect(storage.speakerAmount).toBeUndefined();
-        amount.dispatchEvent(new Event("change"));
+        amount().dispatchEvent(new Event("change"));
         expect(storage.speakerAmount).toBe("0.5");
     });
 
     it("hands the display mode to its callback and follows changes made elsewhere", () => {
         const settings = make();
-        change("display-mode", "xbr");
+        document.querySelector('[data-mode="xbr"]').click();
         expect(onDisplayMode).toHaveBeenCalledWith("xbr");
+        expect(pressed("[data-mode]")).toEqual(["rgb"]);
         settings.showDisplayMode("pal");
-        expect(document.getElementById("display-mode").value).toBe("pal");
+        expect(pressed("[data-mode]")).toEqual(["pal"]);
     });
 
     it("does nothing on a page without the controls", () => {

@@ -8,27 +8,39 @@ export class QuickSettings {
         this.display = document.getElementById("display-mode");
         if (!this.output || !this.amount || !this.display) return;
 
-        this.output.value = audioOutput;
         this.amount.value = speakerAmount;
-        this.display.value = displayMode;
-        this._showAmountFor(audioOutput);
+        this._showOutput(audioOutput);
+        this.showDisplayMode(displayMode);
 
-        this.output.addEventListener("change", () => {
-            const value = this.output.value;
+        this.output.addEventListener("click", (e) => {
+            const value = e.target.closest("[data-output]")?.dataset.output;
+            if (!value) return;
             audioHandler.setAudioOutput(value);
             storage.audioOutput = value;
-            this._showAmountFor(value);
+            this._showOutput(value);
         });
         this.amount.addEventListener("input", () => audioHandler.setSpeakerAmount(parseFloat(this.amount.value)));
         this.amount.addEventListener("change", () => (storage.speakerAmount = this.amount.value));
-        this.display.addEventListener("change", () => onDisplayMode(this.display.value));
+        this.display.addEventListener("click", (e) => {
+            const mode = e.target.closest("[data-mode]")?.dataset.mode;
+            if (mode) onDisplayMode(mode);
+        });
     }
 
-    _showAmountFor(audioOutput) {
+    _showOutput(audioOutput) {
+        select(this.output.querySelectorAll("[data-output]"), (b) => b.dataset.output === audioOutput);
         this.amount.disabled = audioOutput !== AudioOutputs.speaker;
     }
 
     showDisplayMode(mode) {
-        if (this.display) this.display.value = mode;
+        if (this.display) select(this.display.querySelectorAll("[data-mode]"), (b) => b.dataset.mode === mode);
+    }
+}
+
+function select(buttons, isChosen) {
+    for (const button of buttons) {
+        const chosen = isChosen(button);
+        button.classList.toggle("active", chosen);
+        button.setAttribute("aria-pressed", chosen);
     }
 }

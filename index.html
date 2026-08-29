@@ -226,18 +226,38 @@
             Edit BBC BASIC interactively with Owlet at
             <a href="https://bbcmic.ro/" target="_blank">bbcmic.ro</a>!
           </span>
-          <form class="d-flex align-items-center me-3" id="quick-settings">
-            <span class="me-1" aria-hidden="true">&#x1f50a;</span>
-            <select id="audio-output" class="form-select form-select-sm w-auto" aria-label="Sound output">
-              <option value="speaker">Speaker</option>
-              <option value="board">Line out</option>
-              <option value="off">Unfiltered</option>
-            </select>
+          <div class="d-flex align-items-center me-3" id="quick-settings">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Sound output" id="audio-output">
+              <button
+                type="button"
+                class="btn btn-outline-light"
+                data-output="speaker"
+                title="Internal speaker: the board's output stage and the Beeb's own speaker and case"
+              >
+                &#x1f508;
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-light"
+                data-output="board"
+                title="Line out: the board's output stage alone, as at its audio socket"
+              >
+                &#x1f3a7;
+              </button>
+              <button
+                type="button"
+                class="btn btn-outline-light"
+                data-output="off"
+                title="Unfiltered: the sound chip alone"
+              >
+                &#x223f;
+              </button>
+            </div>
             <input
               id="speaker-amount"
               type="range"
               class="form-range ms-2"
-              style="width: 5rem"
+              style="width: 4rem"
               min="0"
               max="1"
               step="0.05"
@@ -245,13 +265,21 @@
               title="How much of the speaker's character to apply"
               aria-label="Speaker amount"
             />
-            <span class="ms-3 me-1" aria-hidden="true">&#x1f4fa;</span>
-            <select id="display-mode" class="form-select form-select-sm w-auto" aria-label="Display mode">
-              <option value="rgb">RGB Monitor</option>
-              <option value="pal">PAL TV</option>
-              <option value="xbr">Smoothed (xBR)</option>
-            </select>
-          </form>
+            <div class="btn-group btn-group-sm ms-3" role="group" aria-label="Display mode" id="display-mode">
+              <button type="button" class="btn btn-outline-light" data-mode="rgb" title="RGB monitor">&#x1f5a5;</button>
+              <button
+                type="button"
+                class="btn btn-outline-light"
+                data-mode="pal"
+                title="PAL TV, fed by the Beeb's UHF modulator"
+              >
+                &#x1f4fa;
+              </button>
+              <button type="button" class="btn btn-outline-light" data-mode="xbr" title="Smoothed (xBR upscaler)">
+                &#x2728;
+              </button>
+            </div>
+          </div>
           <form class="form-inline">
             <button
               id="debug-play"
