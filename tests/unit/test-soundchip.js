@@ -439,7 +439,7 @@ describe("SoundChip events", () => {
         ]);
     });
 
-    it("should report tape tones, muting, resets and restores as events", () => {
+    it("should report tape tones, resets and restores as events, but not muting, which is not chip state", () => {
         const { chip, events } = makeEventChip();
         chip.toneGenerator.tone(1200);
         chip.toneGenerator.mute();
@@ -450,13 +450,12 @@ describe("SoundChip events", () => {
         expect(events.map((event) => Object.keys(event).find((key) => key !== "cycle"))).toEqual([
             "sine",
             "sine",
-            "enabled",
             "reset",
             "state",
         ]);
         expect(events[0].sine).toBe(1200);
         expect(events[1].sine).toBe(0);
-        expect(events[2].enabled).toBe(false);
+        expect(chip.enabled).toBe(false);
     });
 
     it("should report progress every few emulated milliseconds, and keep doing so after a restore", () => {

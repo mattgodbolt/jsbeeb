@@ -122,8 +122,7 @@ export class SoundChip {
         else if (event.sine !== undefined) {
             if (event.sine) this.toneGenerator.tone(event.sine);
             else this.toneGenerator.mute();
-        } else if (event.enabled !== undefined) this.enabled = event.enabled;
-        else if (event.state !== undefined) this.restoreState(event.state);
+        } else if (event.state !== undefined) this.restoreState(event.state);
         else if (event.reset !== undefined) this.reset(event.reset);
     }
 
@@ -412,7 +411,6 @@ export class SoundChip {
 
     enable(e) {
         this.enabled = e;
-        this._emit({ enabled: e });
     }
 
     mute() {
