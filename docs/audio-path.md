@@ -1,8 +1,7 @@
 # The audio path, and what a real Master 128 measures
 
-**Status:** working notes for issue #921. The board model below is what ships; the measurements
-are the first set, taken with a microphone, and the "as heard" filter and the output selection
-UI they point at are not built yet.
+**Status:** working notes for issue #921. The outputs below are what ships, fitted to a first set
+of measurements from one Master 128; the open questions are at the end.
 
 ## What jsbeeb models
 
@@ -67,7 +66,7 @@ confirms them.
   one again at -8 and -16 dB, a 16-step volume staircase at 1250 Hz, the eight noise modes,
   the four sample-playback carriers with a slow volume ramp, and a closing marker. The event
   count ticks up on screen and it prints "Done".
-- `reference out.wav [--model Master] [--rate 48000] [--unfiltered]` boots the disc headlessly
+- `reference out.wav [--model Master] [--rate 48000] [--output speaker|board|off]` boots the disc headlessly
   through the real `SoundChip`, board filter and resampler and writes what jsbeeb would play.
 - `analyse a.wav [b.wav]` aligns each capture on its markers, measures the clock difference
   between the machine and the recorder from the marker spacing, and prints per step the
