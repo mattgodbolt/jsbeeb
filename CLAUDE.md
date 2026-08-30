@@ -14,6 +14,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test:unit` - Run unit tests
 - `npm run test:integration` - Run integration tests
 - `npm run test:cpu` - Run CPU compatibility tests
+- `npm run smoke` - Build, then boot the built page in headless Chrome and check the things unit tests cannot see
+  (construction order, element ids, Bootstrap, the console surface). Run it before opening any PR that touches
+  `main.js`; `node tests/browser/smoke.js --url http://localhost:5173/` runs it against a server that is already up
 - `npm run ci-checks` - Run linting checks for CI
 - `vitest run tests/unit/test-gzip.js` - Run a single test file
 
