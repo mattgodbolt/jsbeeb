@@ -1,6 +1,6 @@
 "use strict";
 
-import { renderThumbnails, executeUntilFrame } from "./rewind-thumbnail.js";
+import { renderThumbnails, executeUntilFrame } from "../rewind-thumbnail.js";
 
 /**
  * Rewind scrubber UI — a filmstrip overlay showing thumbnails of recent

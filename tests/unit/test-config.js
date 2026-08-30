@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fittedRoms, needsRestart, restartPending, tubeCpuSpeedLabel } from "../../src/config.js";
+import { fittedRoms, needsRestart, restartPending, tubeCpuSpeedLabel } from "../../src/web/config.js";
 import { findModel } from "../../src/models.js";
 
 describe("fittedRoms", () => {

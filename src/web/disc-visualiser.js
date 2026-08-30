@@ -1,6 +1,6 @@
 "use strict";
 
-import { IbmDiscFormat } from "./disc.js";
+import { IbmDiscFormat } from "../disc.js";
 import {
     DensityPalette,
     DensityRampHex,
@@ -15,7 +15,7 @@ import {
     renderTracks,
     trackPulseDensity,
     trackRegions,
-} from "./disc-surface.js";
+} from "../disc-surface.js";
 
 /** 300 rpm. */
 const RevolutionMs = 200;

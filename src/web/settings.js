@@ -1,5 +1,5 @@
 import * as utils from "../utils.js";
-import { Config } from "../config.js";
+import { Config } from "./config.js";
 import { DefaultModel, findModel } from "../models.js";
 import { DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { SpeechOutput } from "../speech-output.js";
