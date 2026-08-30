@@ -129,8 +129,8 @@ describe("HfePicker", () => {
 
     describe("picking a disc", () => {
         it("does not let the row's anchor navigate", () => {
-            deps.media.loadDiscImage.mockResolvedValue({});
             const picker = make();
+            vi.spyOn(picker, "pick").mockResolvedValue();
             vi.spyOn(picker.modal, "hide").mockImplementation(() => {});
             picker.renderCatalogue([entry("A.hfe", "Elite")]);
             const click = new MouseEvent("click", { bubbles: true, cancelable: true });
