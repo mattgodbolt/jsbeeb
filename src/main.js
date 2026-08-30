@@ -11,7 +11,6 @@ import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos, localStoragePersistence } from "./cmos.js";
 import { GamePad } from "./gamepads.js";
-import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
 import { DefaultModel, findModel, tubeModelFor } from "./models.js";
@@ -29,6 +28,7 @@ import { SthPicker } from "./web/sth-picker.js";
 import { HfePicker } from "./web/hfe-picker.js";
 import { GoogleDrivePicker } from "./web/google-drive-picker.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
+import { Autoboot } from "./web/autoboot.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -60,11 +60,6 @@ let frameSkip = 0;
 let syncLights;
 let running;
 let model;
-
-// Convert text to machine-appropriate key sequences (BBC or Atom)
-function stringToMachineKeys(text) {
-    return model.isAtom ? utils_atom.stringToATOMKeys(text) : utils.stringToBBCKeys(text);
-}
 
 const gamepad = new GamePad();
 if (!window.isSecureContext)
@@ -488,7 +483,7 @@ const pastetext = document.getElementById("paste-text");
 pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
 pastetext.addEventListener("paste", function (event) {
     const text = event.clipboardData.getData("text/plain");
-    sendRawKeyboard(stringToMachineKeys(text), true);
+    sendRawKeyboard(autoBoot.stringToMachineKeys(text), true);
 });
 const cubMonitor = document.getElementById("cub-monitor");
 function onCubMouseEvent(evt) {
@@ -658,9 +653,24 @@ const media = new MediaLoader({
         drive: (cat, layout) => drivePicker.load(cat, layout),
     },
 });
+const autoBoot = new Autoboot({ model, processor, sendKeys: sendRawKeyboard });
 const autobootTicks = new AutobootTicks({ urlState });
-const sthPicker = new SthPicker({ media, drives, modals, urlState, processor, autoboot });
-const hfePicker = new HfePicker({ media, drives, modals, urlState, processor, autoboot });
+const sthPicker = new SthPicker({
+    media,
+    drives,
+    modals,
+    urlState,
+    processor,
+    autoboot: (image) => autoBoot.boot(image),
+});
+const hfePicker = new HfePicker({
+    media,
+    drives,
+    modals,
+    urlState,
+    processor,
+    autoboot: (image) => autoBoot.boot(image),
+});
 const drivePicker = new GoogleDrivePicker({ media, drives, modals, processor });
 const snapshots = new SnapshotUI({
     processor,
@@ -908,48 +918,6 @@ function sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
     }
 }
 
-function autoboot(image) {
-    const BBC = utils.BBC;
-
-    console.log("Autobooting disc");
-    utils.noteEvent("init", "autoboot", image);
-
-    // Shift-break simulation, hold SHIFT for 1000ms.
-    sendRawKeyboard([BBC.SHIFT, 1000], false);
-}
-
-function autoBootType(keys) {
-    console.log("Auto typing '" + keys + "'");
-    utils.noteEvent("init", "autochain");
-
-    const bbcKeys = stringToMachineKeys(keys);
-    sendRawKeyboard([1000].concat(bbcKeys), false);
-}
-
-function autoChainTape() {
-    console.log("Auto Chaining Tape");
-    utils.noteEvent("init", "autochain");
-
-    const bbcKeys = stringToMachineKeys('*TAPE\nCH.""\n');
-    sendRawKeyboard([1000].concat(bbcKeys), false);
-}
-
-function autoRunTape() {
-    console.log("Auto Running Tape");
-    utils.noteEvent("init", "autorun");
-
-    const bbcKeys = stringToMachineKeys("*TAPE\n*/\n");
-    sendRawKeyboard([1000].concat(bbcKeys), false);
-}
-
-function autoRunBasic() {
-    console.log("Auto Running basic");
-    utils.noteEvent("init", "autorunbasic");
-
-    const bbcKeys = stringToMachineKeys("RUN\n");
-    sendRawKeyboard([1000].concat(bbcKeys), false);
-}
-
 document.getElementById("download-filestore-link").addEventListener("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
@@ -1107,39 +1075,12 @@ const startPromise = (async () => {
         startImageLoad(`MMC image ${mmcImage}`, async () => processor.atommc.SetMMCData(await LoadSD(mmcImage)));
     }
 
-    async function insertBasic(getBasicPromise, needsRun) {
-        const prog = await getBasicPromise;
-        const t = await tokeniser.create();
-        const tokenised = await t.tokenise(prog);
-
-        const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
-        const hook = processor.debugInstruction.add(function (addr) {
-            if (addr !== idleAddr) return;
-            const page = processor.readmem(0x18) << 8;
-            for (let i = 0; i < tokenised.length; ++i) {
-                processor.writemem(page + i, tokenised.charCodeAt(i));
-            }
-            // Set VARTOP (0x12/3) and TOP(0x02/3)
-            const end = page + tokenised.length;
-            const endLow = end & 0xff;
-            const endHigh = (end >>> 8) & 0xff;
-            processor.writemem(0x02, endLow);
-            processor.writemem(0x03, endHigh);
-            processor.writemem(0x12, endLow);
-            processor.writemem(0x13, endHigh);
-            hook.remove();
-            if (needsRun) {
-                autoRunBasic();
-            }
-        });
-    }
-
     if (parsedQuery.loadBasic) {
         const needsRun = needsAutoboot === "run";
         needsAutoboot = "";
 
         await startImageLoad(`BASIC program ${parsedQuery.loadBasic}`, () =>
-            insertBasic(
+            autoBoot.insertBasic(
                 (async () => {
                     const data = await utils.loadData(parsedQuery.loadBasic);
                     return String.fromCharCode.apply(null, data);
@@ -1151,7 +1092,7 @@ const startPromise = (async () => {
 
     if (parsedQuery.embedBasic) {
         await startImageLoad("the BASIC program from the URL", () =>
-            insertBasic(Promise.resolve(parsedQuery.embedBasic), true),
+            autoBoot.insertBasic(Promise.resolve(parsedQuery.embedBasic), true),
         );
     }
 
@@ -1165,16 +1106,16 @@ const startPromise = (async () => {
         switch (needsAutoboot) {
             case "boot":
                 autobootTicks.show(true);
-                autoboot(discImage);
+                autoBoot.boot(discImage);
                 break;
             case "type":
-                autoBootType(autoType);
+                autoBoot.type(autoType);
                 break;
             case "chain":
-                autoChainTape();
+                autoBoot.chainTape();
                 break;
             case "run":
-                autoRunTape();
+                autoBoot.runTape();
                 break;
             default:
                 autobootTicks.show(false);

@@ -1,3 +1,4 @@
+import { installBasic } from "../src/basic-loader.js";
 import * as fdc from "../src/fdc.js";
 import { fake6502 } from "../src/fake6502.js";
 import { findModel } from "../src/models.js";
@@ -250,19 +251,10 @@ export class TestMachine {
     async loadBasic(source) {
         const tokeniser = await Tokeniser.create();
         const tokenised = tokeniser.tokenise(source);
-        // TODO: dedupe from main.js
-        const page = this.readbyte(0x18) << 8;
-        for (let i = 0; i < tokenised.length; ++i) {
-            this.writebyte(page + i, tokenised.charCodeAt(i));
-        }
-        // Set VARTOP (0x12/3) and TOP(0x02/3)
-        const end = page + tokenised.length;
-        const endLow = end & 0xff;
-        const endHigh = (end >>> 8) & 0xff;
-        this.writebyte(0x02, endLow);
-        this.writebyte(0x03, endHigh);
-        this.writebyte(0x12, endLow);
-        this.writebyte(0x13, endHigh);
+        installBasic(tokenised, {
+            readByte: (addr) => this.readbyte(addr),
+            writeByte: (addr, value) => this.writebyte(addr, value),
+        });
     }
 
     /**
