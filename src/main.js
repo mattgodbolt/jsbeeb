@@ -11,7 +11,6 @@ import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos, localStoragePersistence } from "./cmos.js";
-import { BbcDiscArchive, Provenance, describe as describeHfe, matches, provenancesIn } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
 import { GoogleDriveLoader } from "./google-drive.js";
@@ -29,8 +28,9 @@ import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
-import { AutobootTicks, clearArchiveList, showArchiveMessage } from "./web/archive-list.js";
+import { AutobootTicks } from "./web/archive-list.js";
 import { SthPicker } from "./web/sth-picker.js";
+import { HfePicker } from "./web/hfe-picker.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -70,7 +70,6 @@ const dbgr = new Debugger();
 let frames = 0;
 let frameSkip = 0;
 let syncLights;
-let hfeArchive;
 let running;
 let model;
 
@@ -677,12 +676,13 @@ const media = new MediaLoader({
     sources: {
         sth: (name) => sthPicker.discs.fetch(name),
         tapeSth: (name) => sthPicker.tapes.fetch(name),
-        hfe: (path) => hfeArchive.fetch(path),
+        hfe: (path) => hfePicker.archive.fetch(path),
         drive: (cat, layout) => gdLoad(cat, layout),
     },
 });
 const autobootTicks = new AutobootTicks({ urlState });
 const sthPicker = new SthPicker({ media, drives, modals, urlState, processor, autoboot });
+const hfePicker = new HfePicker({ media, drives, modals, urlState, processor, autoboot });
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
@@ -908,140 +908,6 @@ document.addEventListener("keydown", (evt) => {
 });
 document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
 document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
-
-hfeArchive = new BbcDiscArchive(hfeStartLoad, hfeOnCat, hfeOnError);
-
-// Rendering is spread over several turns of the event loop, so a list that has
-// been emptied may still have a chain of appends heading for it. Anything that
-// clears the list takes a new ticket; a chain whose ticket is stale gives up.
-let hfeRender = 0;
-
-function hfeStartLoad() {
-    hfeRender++;
-    showArchiveMessage("hfe", "hfe-list", "Loading catalogue from HFE archive");
-}
-
-function hfeOnError() {
-    hfeRender++;
-    showArchiveMessage("hfe", "hfe-list", "There was an error accessing the HFE archive");
-}
-
-async function hfeClick(file) {
-    utils.noteEvent("hfe", "click", file.path);
-    media.setDisc1Image("hfe:" + file.path);
-    const needsAutoboot = parsedQuery.autoboot !== undefined;
-    if (needsAutoboot) processor.reset(true);
-
-    const name = describeHfe(file).title;
-    modals.popupLoading("Loading " + name);
-    try {
-        const loaded = await media.loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
-        drives.putDiscIn(0, loaded);
-        modals.loadingFinished();
-        if (needsAutoboot) autoboot(name);
-    } catch (err) {
-        console.error("Error loading disc image:", err);
-        modals.loadingFinished(`Unable to load ${name} from the HFE archive: ${errorText(err)}`);
-    }
-}
-
-function hfeOnCat(catalogue) {
-    const ticket = ++hfeRender;
-    clearArchiveList("hfe-list");
-    const list = document.getElementById("hfe-list");
-    document.querySelector("#hfe .loading").style.display = "none";
-    const template = list.querySelector(".template");
-    showProvenanceChoices(catalogue, onHfeFilter);
-
-    const addSome = (remaining) => {
-        if (ticket !== hfeRender) return;
-        const MaxAtATime = 100;
-        const Delay = 30;
-        // Read per batch: both can be changed while this is still going.
-        const filter = document.getElementById("hfe-filter").value.toLowerCase();
-        const shown = shownProvenances();
-        for (const file of remaining.slice(0, MaxAtATime)) {
-            const { title, publisher, detail } = describeHfe(file);
-            const row = template.cloneNode(true);
-            row.classList.remove("template");
-            row.querySelector(".name").textContent = title;
-            row.querySelector(".publisher").textContent = publisher;
-            row.querySelector(".detail").textContent = detail;
-            row.querySelector(".provenance").textContent =
-                file.provenance === Provenance.Reconstructed ? "reconstructed" : "";
-            if (file.notes) row.title = file.notes;
-            // The row is an anchor, and letting it navigate to "#" would push a
-            // history entry of its own on top of the one updateUrl pushes.
-            row.addEventListener("click", (event) => {
-                event.preventDefault();
-                hfeClick(file);
-                $hfeModal.hide();
-            });
-            row.hfeFile = file;
-            list.appendChild(row);
-            showHfeRow(row, file, filter, shown);
-        }
-        if (remaining.length > MaxAtATime) setTimeout(() => addSome(remaining.slice(MaxAtATime)), Delay);
-    };
-    addSome(catalogue);
-}
-
-const $hfeModal = new bootstrap.Modal(document.getElementById("hfe"));
-document.getElementById("hfe").addEventListener("shown.bs.modal", () => {
-    document.getElementById("hfe-filter").focus();
-});
-document.getElementById("hfe").addEventListener("show.bs.modal", () => hfeArchive.populate());
-
-const hfeFilter = document.getElementById("hfe-filter");
-const hfeProvenance = document.getElementById("hfe-provenance");
-
-const HfeProvenanceLabels = {
-    [Provenance.Captured]: ["Captured", "Direct from disc"],
-    [Provenance.Reconstructed]: ["Reconstructed", "Rebuilt from a sector dump"],
-};
-
-/** Which provenances the picker is showing, or null when it is not offering the choice. */
-const shownProvenances = () => {
-    const boxes = [...hfeProvenance.querySelectorAll("input")];
-    return boxes.length ? new Set(boxes.filter((box) => box.checked).map((box) => box.value)) : null;
-};
-
-// Offer one tick per provenance the archive actually holds, rather than naming
-// them here: a source added later should appear without this having to change.
-function showProvenanceChoices(catalogue, onChange) {
-    const present = provenancesIn(catalogue);
-    // Nothing to choose between: no ticks, and shownProvenances says "all".
-    if (present.length < 2) {
-        hfeProvenance.replaceChildren();
-        return;
-    }
-    const wasShown = shownProvenances();
-    hfeProvenance.replaceChildren(
-        ...present.map((provenance) => {
-            const [text, why] = HfeProvenanceLabels[provenance] ?? [provenance, ""];
-            const label = document.createElement("label");
-            label.title = why;
-            const box = document.createElement("input");
-            box.type = "checkbox";
-            box.value = provenance;
-            box.checked = !wasShown || wasShown.has(provenance);
-            box.addEventListener("change", onChange);
-            label.append(box, text);
-            return label;
-        }),
-    );
-}
-
-const showHfeRow = (row, file, filter, shown) => (row.style.display = matches(file, filter, shown) ? "" : "none");
-
-const onHfeFilter = () => {
-    const filter = hfeFilter.value.toLowerCase();
-    const shown = shownProvenances();
-    for (const row of document.querySelectorAll("#hfe-list li:not(.template)"))
-        showHfeRow(row, row.hfeFile, filter, shown);
-};
-hfeFilter.addEventListener("change", onHfeFilter);
-hfeFilter.addEventListener("keyup", onHfeFilter);
 
 function sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
     if (keyboard) {
