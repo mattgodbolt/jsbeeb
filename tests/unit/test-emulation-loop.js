@@ -25,8 +25,8 @@ describe("EmulationLoop", () => {
             },
             display: {
                 video: { frameSkipCount: 0, polltime: vi.fn() },
-                takePaintMs: () => 0,
-                takePresentMs: () => 0,
+                takePaintMs: vi.fn(() => 0),
+                takePresentMs: vi.fn(() => 0),
                 frameSkip: 0,
             },
             audioHandler: {
@@ -87,6 +87,8 @@ describe("EmulationLoop", () => {
         expect(deps.audioHandler.flushChipEvents).toHaveBeenCalled();
         expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.sysvia);
         expect(deps.syncLights).toHaveBeenCalled();
+        // The paint timer drains every tick, audio debug or not.
+        expect(deps.display.takePaintMs).toHaveBeenCalled();
     });
 
     it("never emulates more than a tenth of a second in one tick", () => {
