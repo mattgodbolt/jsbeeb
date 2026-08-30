@@ -93,7 +93,8 @@ describe("EmulationLoop", () => {
         const loop = started();
         vi.advanceTimersByTime(10);
         // The page stalls for a second before the next tick gets to run.
-        vi.spyOn(performance, "now").mockReturnValue(performance.now() + 1000);
+        const afterTheStall = performance.now() + 1000;
+        vi.spyOn(performance, "now").mockReturnValue(afterTheStall);
         loop.tick();
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 10);
     });
