@@ -15,6 +15,9 @@ import { isUefSnapshot, parseUefSnapshot } from "../uef-snapshot.js";
 
 const PendingStateKey = "jsbeeb-pending-state";
 
+/** Enough for the restored OS to settle before the user sees the screen. */
+const PostRestoreCycles = 40000;
+
 async function compressBlob(blob) {
     const stream = blob.stream().pipeThrough(new CompressionStream("gzip"));
     return new Response(stream).blob();
@@ -153,7 +156,7 @@ export class SnapshotUI {
         sessionStorage.removeItem(PendingStateKey);
         try {
             await this.restore(snapshotFromJSON(pendingState));
-            this.processor.execute(40000);
+            this.processor.execute(PostRestoreCycles);
         } catch (e) {
             this.modals.showError("restoring saved state", e);
         }
