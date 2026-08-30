@@ -28,6 +28,7 @@ import { GoogleDrivePicker } from "./web/google-drive-picker.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
+import { Layout } from "./web/layout.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -283,27 +284,6 @@ const emulationConfig = {
     },
 };
 
-function sbBind(div, url, onload) {
-    const img = div.querySelector("img");
-    img.style.display = "none";
-    if (!url) return;
-    img.addEventListener("load", function () {
-        onload(div, img);
-        img.style.display = "";
-    });
-    img.src = url;
-}
-
-sbBind(document.querySelector(".sidebar.left"), parsedQuery.sbLeft, function (div, img) {
-    div.style.left = -img.naturalWidth - 5 + "px";
-});
-sbBind(document.querySelector(".sidebar.right"), parsedQuery.sbRight, function (div, img) {
-    div.style.right = -img.naturalWidth - 5 + "px";
-});
-sbBind(document.querySelector(".sidebar.bottom"), parsedQuery.sbBottom, function (div, img) {
-    div.style.bottom = -img.naturalHeight + "px";
-});
-
 if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
@@ -411,20 +391,6 @@ window.addEventListener("blur", function () {
     setEmulationLead(audioHandler.setWindowFocused(false));
 });
 window.addEventListener("focus", () => setEmulationLead(audioHandler.setWindowFocused(true)));
-
-const fullscreenItem = document.getElementById("fs");
-if (document.fullscreenEnabled) {
-    fullscreenItem.addEventListener("click", async (event) => {
-        event.preventDefault();
-        try {
-            await screenCanvas.requestFullscreen();
-        } catch (error) {
-            toast(`Could not go fullscreen: ${errorText(error)}`, { title: "Fullscreen" });
-        }
-    });
-} else {
-    fullscreenItem.closest("li").hidden = true;
-}
 
 let keyboard; // This will be initialised after the processor is created
 
@@ -1298,90 +1264,12 @@ function stop(debug) {
     updateDebugButtons();
 }
 
-/** Steps the drawing buffer grows in, as a multiple of the base canvas size. */
-const CanvasScaleStep = 0.25;
-
-(function () {
-    const resizeCubMonitor = document.getElementById("cub-monitor");
-    const resizeCubMonitorPic = document.getElementById("cub-monitor-pic");
-    const borderReservedSize = parsedQuery.embed !== undefined ? 0 : 100;
-    const bottomReservedSize = parsedQuery.embed !== undefined ? 0 : 68;
-
-    function resizeTv() {
-        // Get current display config (may change when display mode switches)
-        const displayConfig = display.filterClass.getDisplayConfig();
-
-        const imageOrigHeight = displayConfig.imageHeight;
-        const imageOrigWidth = displayConfig.imageWidth;
-        const canvasOrigLeft = displayConfig.canvasLeft;
-        const canvasOrigTop = displayConfig.canvasTop;
-        const visibleWidth = displayConfig.visibleWidth;
-        const visibleHeight = displayConfig.visibleHeight;
-
-        const canvasNativeWidth = screenCanvas.getAttribute("width");
-        const canvasNativeHeight = screenCanvas.getAttribute("height");
-        const desiredAspectRatio = imageOrigWidth / imageOrigHeight;
-        const minWidth = imageOrigWidth / 4;
-        const minHeight = imageOrigHeight / 4;
-
-        let navbarHeight = document.getElementById("header-bar")?.offsetHeight || 0;
-        let width = Math.max(minWidth, window.innerWidth - borderReservedSize * 2);
-        let height = Math.max(minHeight, window.innerHeight - navbarHeight - bottomReservedSize);
-        if (width / height <= desiredAspectRatio) {
-            height = width / desiredAspectRatio;
-        } else {
-            width = height * desiredAspectRatio;
-        }
-
-        const containerScale = width / imageOrigWidth;
-        const scaledVisibleWidth = visibleWidth * containerScale;
-        const scaledVisibleHeight = visibleHeight * containerScale;
-
-        const canvasAspect = canvasNativeWidth / canvasNativeHeight;
-        const visibleAspect = scaledVisibleWidth / scaledVisibleHeight;
-
-        let finalCanvasWidth, finalCanvasHeight;
-        if (canvasAspect > visibleAspect) {
-            finalCanvasWidth = scaledVisibleWidth;
-            finalCanvasHeight = scaledVisibleWidth / canvasAspect;
-        } else {
-            finalCanvasHeight = scaledVisibleHeight;
-            finalCanvasWidth = scaledVisibleHeight * canvasAspect;
-        }
-
-        resizeCubMonitor.style.height = height + "px";
-        resizeCubMonitor.style.width = width + "px";
-        resizeCubMonitorPic.style.height = height + "px";
-        resizeCubMonitorPic.style.width = width + "px";
-        // A mode that reconstructs detail wants to draw at the size it will be
-        // seen at, up to the limit it asks for. Drawing more than the display
-        // can show costs fragments and buys nothing, and for an expensive
-        // shader that is the difference between comfortable and not.
-        if (displayConfig.maxCanvasScale) {
-            const wanted = (finalCanvasWidth * (window.devicePixelRatio || 1)) / displayConfig.canvasWidth;
-            // Quantised, because resize fires continuously while a window is
-            // dragged and every distinct value reallocates the drawing buffer.
-            const quantised = Math.round(wanted / CanvasScaleStep) * CanvasScaleStep;
-            const scale = Math.min(displayConfig.maxCanvasScale, Math.max(1, quantised));
-            const backingWidth = Math.round(displayConfig.canvasWidth * scale);
-            if (screenCanvas.width !== backingWidth) {
-                screenCanvas.width = backingWidth;
-                screenCanvas.height = Math.round(displayConfig.canvasHeight * scale);
-                // Resizing threw the drawing buffer away.
-                video.paint();
-            }
-        }
-
-        screenCanvas.style.width = finalCanvasWidth + "px";
-        screenCanvas.style.height = finalCanvasHeight + "px";
-        screenCanvas.style.left = canvasOrigLeft * containerScale + "px";
-        screenCanvas.style.top = canvasOrigTop * containerScale + "px";
-    }
-
-    window.addEventListener("resize", resizeTv);
-    window.setTimeout(resizeTv, 1);
-    window.setTimeout(resizeTv, 500);
-})();
+new Layout({
+    screenCanvas,
+    display,
+    embed: parsedQuery.embed !== undefined,
+    sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
+});
 
 if (Object.hasOwn(parsedQuery, "about")) modals.show("info");
 if (Object.hasOwn(parsedQuery, "pp-tos")) modals.show("pp-tos");
