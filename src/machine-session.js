@@ -41,9 +41,9 @@ export class MachineSession {
         this.modelName = modelName;
         this._opts = opts;
 
-        // Raw RGBA framebuffer — the Video chip renders into _fb32 (cleared each frame).
+        // Raw RGBA framebuffer. The Video chip renders into _fb32 (cleared each frame).
         // _completeFb8 is a snapshot taken at paint time (the equivalent of the browser canvas)
-        // and is what screenshot() reads from — always a complete frame, never mid-render.
+        // and is what screenshot() reads from, always a complete frame, never mid-render.
         this._fb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
         this._fb32 = new Uint32Array(this._fb8.buffer);
         this._completeFb8 = new Uint8Array(FB_WIDTH * FB_HEIGHT * 4);
@@ -84,16 +84,16 @@ export class MachineSession {
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
         });
 
-        // Accumulated VDU text output — drained by callers
+        // Accumulated VDU text output, drained by callers
         this._pendingOutput = [];
         this._flushCapture = () => {};
 
-        // Breakpoint management — persistent hooks that survive across run calls
+        // Breakpoint management, with persistent hooks that survive across run calls
         this._breakpoints = new Map(); // id → { hook, type, address, hit }
         this._nextBreakpointId = 1;
     }
 
-    /** Load ROMs and hardware — call once before anything else */
+    /** Load ROMs and hardware; call once before anything else */
     async initialise() {
         setNodeBasePath(_jsbeebRoot);
         await this._machine.initialise();
@@ -117,12 +117,12 @@ export class MachineSession {
      *
      * WRCHV discovery: RAM at the OS write-character vector (0x20E on BBC,
      * 0x208 on Atom) initialises to 0x0000 before the OS runs.  We read
-     * directly from cpu.ramRomOs (two array lookups — no
-     * readmem() dispatch overhead) on every instruction, waiting for the
-     * value to change from its initial 0xFFFF.  Once the OS installs a real
-     * handler we use that address for the lifetime of the session.  Programs
-     * that later install a custom VDU driver are handled seamlessly because
-     * we always re-read from the live memory.
+     * directly from cpu.ramRomOs (two array lookups, no readmem() dispatch
+     * overhead) on every instruction, waiting for the value to change from
+     * its initial 0xFFFF.  Once the OS installs a real handler we use that
+     * address for the lifetime of the session.  Programs that later install
+     * a custom VDU driver are handled seamlessly because we always re-read
+     * from the live memory.
      *
      * Text elements: { x, y, text, foreground, background, mode }
      * Screenshots (via the real Video chip) are the right tool for anything
@@ -130,7 +130,7 @@ export class MachineSession {
      */
     _installCaptureHook() {
         const cpu = this._machine.processor;
-        const ram = cpu.ramRomOs; // direct Uint8Array — no dispatch overhead
+        const ram = cpu.ramRomOs; // direct Uint8Array, no dispatch overhead
         // WRCHV vector: BBC at $020E, Atom at $0208.
         const wrchvAddr = this._isAtom ? 0x208 : 0x20e;
         const initialWrchv = ram[wrchvAddr] | (ram[wrchvAddr + 1] << 8); // 0xFFFF pre-boot
@@ -264,7 +264,7 @@ export class MachineSession {
         }
 
         cpu.debugInstruction.add((addr) => {
-            // Two direct array reads — no function-call dispatch overhead.
+            // Two direct array reads, no function-call dispatch overhead.
             // Once the OS sets WRCHV (it changes from 0xFFFF), we start
             // capturing.  Programs that install a custom VDU driver mid-run
             // are handled transparently because we re-read on every call.
@@ -525,7 +525,7 @@ export class MachineSession {
      *
      * @param {Object} [opts]
      * @param {boolean} [opts.clear=true] - If true (default), clear the buffer
-     *   after returning it.  Pass false to peek without consuming — the same
+     *   after returning it.  Pass false to peek without consuming; the same
      *   elements will be returned again on the next call.
      *
      * Each element: { x, y, text, foreground, background, mode }
@@ -576,14 +576,14 @@ export class MachineSession {
     /**
      * Capture the current screen as a PNG.
      * Returns a Buffer containing a 1024×625 PNG (the full emulated display,
-     * including borders — matches what the browser renders).
+     * including borders, matching what the browser renders).
      *
      * The active display area is roughly:
      *   x: leftBorder .. 1024-rightBorder
      *   y: topBorder  .. 625-bottomBorder
      */
     async screenshot() {
-        // Read from _completeFb8 — the last fully-painted frame snapshotted in paint_ext.
+        // Read from _completeFb8, the last fully-painted frame snapshotted in paint_ext.
         // _fb8/_fb32 is the live render buffer (cleared and partially refilled each frame).
         return sharp(Buffer.from(this._completeFb8.buffer), {
             raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
