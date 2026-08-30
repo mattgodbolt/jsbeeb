@@ -31,6 +31,7 @@ import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
 import { Drives } from "./web/drives.js";
+import { errorText, reportIgnoredFiles, reportLoadFailure, showNotice, unzipAndReport } from "./web/reporting.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
@@ -322,11 +323,17 @@ const speakerAmount =
 config.setAudioOutput(audioOutput);
 config.setSpeakerAmount(speakerAmount);
 
+// A slider fires for every pixel of a drag, and each URL update is a history entry.
+const UrlSettleMs = 300;
+const updateUrlOnceSettled = utils.debounce(updateUrl, UrlSettleMs);
+
 function applyAudioOutput(output) {
     audioHandler.setAudioOutput(output);
     config.setAudioOutput(output);
     quickSettings?.showAudioOutput(output);
     window.localStorage.audioOutput = output;
+    parsedQuery.audioOutput = output;
+    updateUrl();
 }
 
 function applySpeakerAmount(amount) {
@@ -334,6 +341,8 @@ function applySpeakerAmount(amount) {
     config.setSpeakerAmount(amount);
     quickSettings?.showSpeakerAmount(amount);
     window.localStorage.speakerAmount = amount;
+    parsedQuery.speakerAmount = amount;
+    updateUrlOnceSettled();
 }
 
 function applyDisplayMode(mode) {
@@ -346,6 +355,8 @@ function applyDisplayMode(mode) {
     config.setDisplayMode(mode);
     quickSettings?.showDisplayMode(mode);
     window.localStorage.displayMode = mode;
+    parsedQuery.displayMode = mode;
+    updateUrl();
 }
 
 model = config.model;
@@ -436,31 +447,6 @@ function showError(context, error) {
     errorDialog.querySelector(".context").textContent = context;
     errorDialog.querySelector(".error").textContent = error;
     errorDialogModal.show();
-}
-
-const errorText = (error) => error?.message ?? `${error}`;
-
-function reportLoadFailure(description, error) {
-    console.error(`Error loading ${description}:`, error);
-    toast(`Could not load ${description}: ${errorText(error)}`, { title: "Loading" });
-}
-
-function reportIgnoredFiles(name, ignored) {
-    if (!ignored.length) return;
-    toast(`Loaded ${name}. The archive also holds ${ignored.join(", ")}, and only one file is loaded from it.`, {
-        title: "Archive",
-    });
-}
-
-async function unzipAndReport(data) {
-    const unzipped = await utils.unzipDiscImage(data);
-    reportIgnoredFiles(unzipped.name, unzipped.ignored);
-    return unzipped;
-}
-
-function showNotice(event) {
-    const { message, title, quietKey } = event.detail;
-    toast(message, { title, quietKey });
 }
 
 if (keyMappingWarnings.length) {

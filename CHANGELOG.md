@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.22.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.21.0...v1.22.0) (2026-08-30)
+
+
+### Features
+
+* let a MachineSession snapshot and restore itself ([#940](https://github.com/mattgodbolt/jsbeeb/issues/940)) ([8a3c6d6](https://github.com/mattgodbolt/jsbeeb/commit/8a3c6d65a93182ea6c7597b663b0d29acbfa6fbf))
+
+## [1.21.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.20.2...v1.21.0) (2026-08-29)
+
+
+### Features
+
+* model the speaker and the board's coupling capacitors, with a selectable sound output ([#927](https://github.com/mattgodbolt/jsbeeb/issues/927)) ([b2fc888](https://github.com/mattgodbolt/jsbeeb/commit/b2fc8883bfdb879731d253626b4b2bbdec7c024e))
+* put the sound output, speaker amount and display mode on the top bar ([#928](https://github.com/mattgodbolt/jsbeeb/issues/928)) ([5ed9b0b](https://github.com/mattgodbolt/jsbeeb/commit/5ed9b0b954f41a8e46090fe540153b7934fb92e1))
+
+
+### Bug Fixes
+
+* mute the sound when the debugger is entered while the audio is stalled ([#932](https://github.com/mattgodbolt/jsbeeb/issues/932)) ([9752089](https://github.com/mattgodbolt/jsbeeb/commit/9752089c24ce1e7d1c7c8eb358289aa4c96a67e7))
+
 ## [1.20.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.20.1...v1.20.2) (2026-08-28)
 
 
