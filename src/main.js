@@ -31,6 +31,7 @@ import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
+import { errorText, reportIgnoredFiles, reportLoadFailure, showNotice, unzipAndReport } from "./web/reporting.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
@@ -437,31 +438,6 @@ function showError(context, error) {
     errorDialog.querySelector(".context").textContent = context;
     errorDialog.querySelector(".error").textContent = error;
     errorDialogModal.show();
-}
-
-const errorText = (error) => error?.message ?? `${error}`;
-
-function reportLoadFailure(description, error) {
-    console.error(`Error loading ${description}:`, error);
-    toast(`Could not load ${description}: ${errorText(error)}`, { title: "Loading" });
-}
-
-function reportIgnoredFiles(name, ignored) {
-    if (!ignored.length) return;
-    toast(`Loaded ${name}. The archive also holds ${ignored.join(", ")}, and only one file is loaded from it.`, {
-        title: "Archive",
-    });
-}
-
-async function unzipAndReport(data) {
-    const unzipped = await utils.unzipDiscImage(data);
-    reportIgnoredFiles(unzipped.name, unzipped.ignored);
-    return unzipped;
-}
-
-function showNotice(event) {
-    const { message, title, quietKey } = event.detail;
-    toast(message, { title, quietKey });
 }
 
 if (keyMappingWarnings.length) {
