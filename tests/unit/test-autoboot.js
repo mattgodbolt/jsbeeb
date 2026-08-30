@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Autoboot } from "../../src/web/autoboot.js";
 import * as utils from "../../src/utils.js";
@@ -25,6 +25,10 @@ describe("Autoboot", () => {
                 },
             },
         };
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     const make = (isAtom = false) => new Autoboot({ model: { isAtom }, processor, sendKeys });
@@ -56,7 +60,6 @@ describe("Autoboot", () => {
         expect(spelled).toHaveBeenCalledWith('*TAPE\nCH.""\n');
         make().runTape();
         expect(spelled).toHaveBeenCalledWith("*TAPE\n*/\n");
-        vi.restoreAllMocks();
     });
 
     describe("insertBasic", () => {
