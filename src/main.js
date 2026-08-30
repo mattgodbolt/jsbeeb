@@ -5,18 +5,14 @@ import "./jsbeeb.css";
 
 import * as utils from "./utils.js";
 import { Debugger } from "./web/debug.js";
-import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
-import { LoadSD } from "./mmc.js";
-import { Cmos, localStoragePersistence } from "./cmos.js";
 import { GamePad } from "./gamepads.js";
 import { Config } from "./config.js";
-import { DefaultModel, findModel, tubeModelFor } from "./models.js";
+import { DefaultModel, findModel } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { DefaultAudioOutput, isAudioOutput } from "./audio-output.js";
 import { QuickSettings } from "./web/quick-settings.js";
-import { Econet } from "./econet.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
 import { AutobootTicks } from "./web/archive-list.js";
@@ -31,10 +27,10 @@ import { EmulationLoop, RewindCaptureInterval } from "./web/emulation-loop.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
 import { FrontPanel } from "./web/front-panel.js";
+import { Machine } from "./web/machine.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
-import { errorText, reportLoadFailure, showNotice } from "./web/reporting.js";
 import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
 import { RewindBuffer } from "./rewind.js";
@@ -76,7 +72,6 @@ const keyCodes = utils.keyCodes;
 const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 let noSeek;
 let stationId = 101;
-let econet = null;
 
 // Parse disc and tape images from query parameters
 const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
@@ -152,7 +147,7 @@ const config = new Config(
         Object.assign(parsedQuery, changed);
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
-            emulationConfig.keyLayout = changed.keyLayout;
+            machine.emulationConfig.keyLayout = changed.keyLayout;
             keys.setKeyLayout(changed.keyLayout);
         }
         if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
@@ -164,7 +159,7 @@ const config = new Config(
         }
         if (changed.speechOutput !== undefined) setSpeechOutput(!!changed.speechOutput);
         if (changed.tubeCpuMultiplier !== undefined) {
-            emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
+            machine.emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
             config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
             if (processor.hasTube) {
                 processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
@@ -256,30 +251,6 @@ const keyMappingWarnings = processInputParams(
     utils.userKeymap,
     gamepad,
 );
-
-// Depends on the config.setX calls above having applied the URL parameters.
-const emulationConfig = {
-    keyLayout,
-    cpuMultiplier,
-    tubeCpuMultiplier: config.tubeCpuMultiplier,
-    videoCyclesBatch: parsedQuery.videoCyclesBatch,
-    tube: config.coProcessor ? tubeModelFor(config.model) : null,
-    hasMusic5000: config.hasMusic5000,
-    hasTeletextAdaptor: config.hasTeletextAdaptor,
-    // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
-    // before any the user asked for with ?rom=.
-    extraRoms: [...config.extraRoms, ...extraRoms],
-    userPort: keys.userPort,
-    printerPort: printer,
-    getGamepads: function () {
-        // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
-        return navigator.getGamepads ? navigator.getGamepads() : [];
-    },
-    debugFlags: {
-        logFdcCommands: parsedQuery.logFdcCommands !== undefined,
-        logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
-    },
-};
 
 if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
@@ -399,39 +370,23 @@ window.addEventListener("beforeunload", function (event) {
     }
 });
 
-if (config.hasEconet) {
-    econet = new Econet(stationId, model.cyclesPerSecond);
-} else {
-    document.getElementById("fsmenuitem").style.display = "none";
-}
-
-const cmos = new Cmos(
-    localStoragePersistence(
-        () => window.localStorage,
-        (error) =>
-            toast(
-                `Settings changed with *CONFIGURE will not be kept (${errorText(error)}). Check that this site is allowed to store data, and that its storage is not full.`,
-                { title: "Settings", quietKey: "quietCmosSave" },
-            ),
-    ),
-    model.cmosOverride,
-    econet,
-);
-
-const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
-processor = new CpuClass(model, {
-    dbgr,
+// Depends on the config.setX calls having applied the URL parameters.
+const machine = new Machine({
+    model,
+    config,
+    parsedQuery,
+    keyLayout,
+    cpuMultiplier,
+    extraRoms,
+    stationId,
+    userPort: keys.userPort,
+    printer,
+    speechOutput,
     video,
-    soundChip: audioHandler.soundChip,
-    ddNoise: audioHandler.ddNoise,
-    relayNoise: audioHandler.relayNoise,
-    music5000: config.hasMusic5000 ? audioHandler.music5000 : null,
-    cmos,
-    config: emulationConfig,
-    econet,
+    audioHandler,
+    dbgr,
 });
-
-printer.attach(processor.uservia);
+processor = machine.processor;
 const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure: modals.areYouSure.bind(modals) });
 const media = new MediaLoader({
     processor,
@@ -486,35 +441,15 @@ const snapshots = new SnapshotUI({
     go: () => loop.go(),
 });
 
-processor.teletextAdaptor?.addEventListener("notice", showNotice);
-processor.acia.addEventListener("notice", showNotice);
-
 // Create input sources
 const inputs = new AnalogueInputs({
     processor,
     screenCanvas,
-    getGamepads: emulationConfig.getGamepads,
+    getGamepads: machine.emulationConfig.getGamepads,
     urlState,
     config,
     audioHandler,
 });
-
-/**
- * Attach an RS-423 composite handler to the ACIA that combines the touchscreen
- * (which sends position data to the BBC) with the speech output (which speaks
- * text the BBC sends out).
- */
-function setupRs423Handler() {
-    processor.acia.setRs423Handler({
-        onTransmit(val) {
-            processor.touchScreen.onTransmit(val);
-            speechOutput.onTransmit(val);
-        },
-        tryReceive(rts) {
-            return processor.touchScreen.tryReceive(rts);
-        },
-    });
-}
 
 if (parsedQuery.microphoneChannel !== undefined) {
     // We need to use setTimeout to make sure this runs after the page has loaded
@@ -554,72 +489,20 @@ document.getElementById("soft-reset").addEventListener("click", function (event)
 
 const frontPanel = new FrontPanel({ processor, model, printer });
 
-const startPromise = (async () => {
-    await Promise.all([audioHandler.initialise(), processor.initialise()]);
-
-    // Wire up the composite RS-423 handler now that the touchscreen exists.
-    setupRs423Handler();
-
-    // Ideally would start the loads first. But their completion needs the FDC from the processor
-    const imageLoads = [];
-
-    function startImageLoad(description, load) {
-        const loading = (async () => {
-            try {
-                await load();
-            } catch (error) {
-                reportLoadFailure(description, error);
-            }
-        })();
-        imageLoads.push(loading);
-        return loading;
-    }
-
-    if (discImage) {
-        startImageLoad(`disc ${discImage}`, async () =>
-            drives.putDiscIn(0, await media.loadDiscImage(discImage, drives.layoutForDrive(0))),
-        );
-    }
-
-    if (secondDiscImage) {
-        startImageLoad(`disc ${secondDiscImage}`, async () =>
-            drives.putDiscIn(1, await media.loadDiscImage(secondDiscImage, drives.layoutForDrive(1))),
-        );
-    }
-
-    if (parsedQuery.tape) {
-        startImageLoad(`tape ${parsedQuery.tape}`, async () =>
-            media.setProcessorTape(await media.loadTapeImage(parsedQuery.tape)),
-        );
-    }
-
-    if (mmcImage && model.isAtom) {
-        startImageLoad(`MMC image ${mmcImage}`, async () => processor.atommc.SetMMCData(await LoadSD(mmcImage)));
-    }
-
-    if (parsedQuery.loadBasic) {
-        const needsRun = needsAutoboot === "run";
-        needsAutoboot = "";
-
-        await startImageLoad(`BASIC program ${parsedQuery.loadBasic}`, () =>
-            autoBoot.insertBasic(
-                (async () => {
-                    const data = await utils.loadData(parsedQuery.loadBasic);
-                    return String.fromCharCode.apply(null, data);
-                })(),
-                needsRun,
-            ),
-        );
-    }
-
-    if (parsedQuery.embedBasic) {
-        await startImageLoad("the BASIC program from the URL", () =>
-            autoBoot.insertBasic(Promise.resolve(parsedQuery.embedBasic), true),
-        );
-    }
-
-    return Promise.all(imageLoads);
-})();
+const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
+if (parsedQuery.loadBasic) needsAutoboot = "";
+const startPromise = machine.start({
+    media,
+    drives,
+    autoBoot,
+    discImage,
+    secondDiscImage,
+    tape: parsedQuery.tape,
+    mmcImage,
+    loadBasic: parsedQuery.loadBasic,
+    embedBasic: parsedQuery.embedBasic,
+    basicNeedsRun,
+});
 
 (async () => {
     try {
