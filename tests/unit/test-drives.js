@@ -155,7 +155,10 @@ describe("Drives", () => {
             make();
             expect(() => download("download-drive-link")).not.toThrow();
             expect(() => download("download-drive-hfe-link")).not.toThrow();
-            expect(toasts()).toHaveLength(2);
+            expect(toasts()).toEqual([
+                expect.stringContaining("no disc in drive 0"),
+                expect.stringContaining("no disc in drive 0"),
+            ]);
         });
     });
 

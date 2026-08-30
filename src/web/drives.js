@@ -54,7 +54,7 @@ export class Drives {
         });
     }
 
-    /** @returns {object|null} the disc in drive 0, saying so when there is nothing to download */
+    /** @returns {import("../disc.js").Disc|null} the disc in drive 0, saying so when there is nothing to download */
     discToDownload() {
         const disc = this.fdc?.drives[0].disc;
         if (!disc) toast("There is no disc in drive 0 to download.", { title: "Disc" });
