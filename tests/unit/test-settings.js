@@ -107,6 +107,7 @@ describe("Settings", () => {
             expect(targets.quickSettings.showAudioOutput).toHaveBeenCalledWith("board");
             expect(window.localStorage.audioOutput).toBe("board");
             expect(urlState.params.audioOutput).toBe("board");
+            expect(settings.audioOutput).toBe("board");
             expect(urlState.updateUrl).toHaveBeenCalled();
         });
 
@@ -114,6 +115,7 @@ describe("Settings", () => {
             const settings = make();
             settings.applyDisplayMode("pal");
             expect(targets.display.setMode).toHaveBeenCalledWith("pal");
+            expect(settings.displayMode).toBe("pal");
             expect(urlState.params.displayMode).toBe("pal");
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
         });
@@ -125,6 +127,7 @@ describe("Settings", () => {
             settings.applySpeakerAmount(0.3);
             expect(targets.audioHandler.setSpeakerAmount).toHaveBeenCalledTimes(3);
             expect(urlState.params.speakerAmount).toBe(0.3);
+            expect(settings.speakerAmount).toBe(0.3);
             expect(urlState.updateUrl).not.toHaveBeenCalled();
             vi.advanceTimersByTime(300);
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
