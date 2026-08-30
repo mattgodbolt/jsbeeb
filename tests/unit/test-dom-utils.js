@@ -44,6 +44,7 @@ describe("dom-utils", () => {
         let clicked;
 
         beforeEach(() => {
+            vi.useFakeTimers();
             clicked = [];
             vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
                 clicked.push({ download: this.download, href: this.href });
@@ -52,6 +53,8 @@ describe("dom-utils", () => {
         });
 
         afterEach(() => {
+            vi.runAllTimers();
+            vi.useRealTimers();
             vi.restoreAllMocks();
             vi.unstubAllGlobals();
         });
