@@ -221,8 +221,8 @@ class Page {
         })()`);
     }
 
-    async pressKey(key, code, keyCode) {
-        const common = { key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode };
+    async pressKey(key, code, keyCode, modifiers = 0) {
+        const common = { key, code, windowsVirtualKeyCode: keyCode, nativeVirtualKeyCode: keyCode, modifiers };
         await this.send("Input.dispatchKeyEvent", { type: "keyDown", ...common });
         // Held long enough for the OS to scan the matrix and see it down.
         await sleep(KeyHoldMs);
@@ -323,6 +323,39 @@ check("every display mode and sound output on the bar can be picked", async (pag
         if (active !== output) throw new Error(`Picked sound output ${output} but ${active} is active`);
     }
     await page.waitForScreenText(">", StepTimeoutMs);
+});
+
+check("the pause and play buttons stop and start the emulator", async (page, base) => {
+    await page.goto(base);
+    await page.waitForScreenText(">");
+    await page.click("#debug-pause");
+    await waitUntil(
+        "the play button to wake",
+        () => page.evaluate(`!document.getElementById("debug-play").disabled`),
+        StepTimeoutMs,
+    );
+    const stopped = await page.cycles();
+    await sleep(300);
+    if ((await page.cycles()) !== stopped) throw new Error("The emulator ran while paused");
+    await page.click("#debug-play");
+    await waitUntil("the emulator to run again", async () => (await page.cycles()) > stopped, StepTimeoutMs);
+});
+
+check("Ctrl-Home stops into the debugger", async (page, base) => {
+    await page.goto(base);
+    await page.waitForScreenText(">");
+    const CtrlModifier = 2;
+    await page.pressKey("Home", "Home", 36, CtrlModifier);
+    await waitUntil(
+        "the emulator to stop",
+        () => page.evaluate(`document.getElementById("debug-pause").disabled`),
+        StepTimeoutMs,
+    );
+    const stopped = await page.cycles();
+    await sleep(200);
+    if ((await page.cycles()) !== stopped) throw new Error("The emulator ran in the debugger");
+    await page.click("#debug-play");
+    await waitUntil("the emulator to resume", async () => (await page.cycles()) > stopped, StepTimeoutMs);
 });
 
 check("a disc from the built-in list goes into drive 0", async (page, base) => {
