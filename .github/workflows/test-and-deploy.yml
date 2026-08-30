@@ -18,8 +18,9 @@ jobs:
         run: npm install
       - name: checks
         run: npm run ci-checks
-      # Vitest's job summary has a fixed "Vitest Test Report" heading, so each
-      # run gets a heading of its own first to tell the three apart.
+      # Vitest 4's job summary has a fixed "Vitest Test Report" heading, so each
+      # run gets a heading of its own first to tell the three apart. Vitest 5
+      # names them itself; the echoes go when we move to it (#947).
       - name: Unit tests
         run: |
           echo "# Unit tests" >> "$GITHUB_STEP_SUMMARY"
