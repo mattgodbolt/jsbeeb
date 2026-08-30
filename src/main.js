@@ -4,14 +4,12 @@ import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
 
 import * as utils from "./utils.js";
-import { FakeVideo, Video } from "./video.js";
 import { Debugger } from "./web/debug.js";
 import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos, localStoragePersistence } from "./cmos.js";
 import { GamePad } from "./gamepads.js";
-import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
 import { DefaultModel, findModel, tubeModelFor } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
@@ -29,6 +27,7 @@ import { HfePicker } from "./web/hfe-picker.js";
 import { GoogleDrivePicker } from "./web/google-drive-picker.js";
 import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
+import { Display } from "./web/display.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -38,7 +37,6 @@ import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "./mouse-coordinates.js";
-import { getFilterForMode } from "./canvas.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
 import { DiscVisualiser } from "./disc-visualiser.js";
@@ -55,8 +53,6 @@ let processor;
 let video;
 let rewindUI;
 const dbgr = new Debugger();
-let frames = 0;
-let frameSkip = 0;
 let syncLights;
 let running;
 let model;
@@ -112,7 +108,6 @@ fastTape = !!parsedQuery.fasttape;
 noSeek = !!parsedQuery.noseek;
 
 if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
-if (parsedQuery.frameSkip !== undefined) frameSkip = parsedQuery.frameSkip;
 
 const printer = new Printer({
     onOutput: (char) => {
@@ -245,12 +240,7 @@ function applySpeakerAmount(amount) {
 }
 
 function applyDisplayMode(mode) {
-    // swapCanvas settles displayModeFilter on whatever was really
-    // built, so take the picture from that rather than the request.
-    swapCanvas(getFilterForMode(mode));
-    setCrtPic(displayModeFilter);
-    // Trigger window resize to recalculate layout with new dimensions
-    window.dispatchEvent(new Event("resize"));
+    display.setMode(mode);
     config.setDisplayMode(mode);
     quickSettings?.showDisplayMode(mode);
     window.localStorage.displayMode = mode;
@@ -343,114 +333,16 @@ if (driveTrackWarnings.length) {
     });
 }
 
-// Test which filter is actually in use, not merely whether we got WebGL: a
-// filter can decline a context that works perfectly well for other modes, in
-// which case we are quietly left with an unfiltered display.
-function reportAnyFallback(displayCanvas, filterClass) {
-    if (displayCanvas.filterClass === filterClass) return;
-    const reason = displayCanvas.fallbackReason ? ` (${displayCanvas.fallbackReason})` : "";
-    const { name } = filterClass.getDisplayConfig();
-    toast(`${name} is not available on this device, so the standard display is in use${reason}.`, {
-        title: "Display",
-        quietKey: "quietDisplayFallback",
-    });
-}
-
-function sizeCanvasFor(filterClass) {
-    // Not `config`: that is the emulator's live configuration object, declared
-    // at module scope and used throughout this file.
-    const displayConfig = filterClass.getDisplayConfig();
-    if (screenCanvas.width === displayConfig.canvasWidth && screenCanvas.height === displayConfig.canvasHeight) return;
-    screenCanvas.width = displayConfig.canvasWidth;
-    screenCanvas.height = displayConfig.canvasHeight;
-}
-
-function createCanvasForFilter(filterClass) {
-    // Each mode says how many pixels it wants to draw into. Set this before
-    // creating the context, which fixes its initial viewport.
-    sizeCanvasFor(filterClass);
-
-    const newCanvas = tryGl
-        ? canvasLib.bestCanvas(screenCanvas, filterClass, lowLatency)
-        : new canvasLib.Canvas(screenCanvas, lowLatency);
-    reportAnyFallback(newCanvas, filterClass);
-    return newCanvas;
-}
-
-let displayModeFilter = canvasLib.getFilterForMode(displayMode);
-function swapCanvas(newFilterClass) {
-    // Everything but the filter is the same whatever the mode: the framebuffer
-    // texture, the vertex buffers and fb32 all carry over untouched.
-    canvasLib.useBestFilter(canvas, newFilterClass);
-    reportAnyFallback(canvas, newFilterClass);
-    // Follow the filter we ended up with, not the one we asked for: everything
-    // downstream (the monitor picture, the canvas geometry, how large a drawing
-    // buffer to ask for) comes from its display config.
-    displayModeFilter = canvas.filterClass;
-    // Back to the mode's own size, undoing any scaling the last one asked for.
-    sizeCanvasFor(displayModeFilter);
-    // Nothing else will redraw: the mode is changed from a modal, which stops
-    // the emulator.
-    video.paint();
-    window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
-}
-
-const canvas = createCanvasForFilter(displayModeFilter);
-displayModeFilter = canvas.filterClass;
-
-// The emulator paints into its own framebuffer; flyback copies the finished
-// frame into the canvas and an animation frame presents it, so a stalled
-// display holds up the picture and not the emulation (issue #885).
-const videoFb32 = new Uint32Array(canvas.fb32.length);
-const pendingFrame = {
-    minx: 0,
-    miny: 0,
-    maxx: 0,
-    maxy: 0,
-    lineBaseEven: 0,
-    lineBaseOdd: 0,
-    lineGrid: new Uint8Array(0),
-};
-let presentScheduled = false;
-let paintMsThisTick = 0;
-let presentMsMax = 0;
-
-function present() {
-    presentScheduled = false;
-    const start = performance.now();
-    canvas.paint(pendingFrame.minx, pendingFrame.miny, pendingFrame.maxx, pendingFrame.maxy, pendingFrame);
-    presentMsMax = Math.max(presentMsMax, performance.now() - start);
-}
-
-video = new Video(
-    model.isMaster,
-    videoFb32,
-    function paint(minx, miny, maxx, maxy) {
-        frames++;
-        if (frames < frameSkip) return;
-        frames = 0;
-        const start = performance.now();
-        canvas.fb32.set(videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
-        if (pendingFrame.lineGrid.length !== this.lineGrid.length)
-            pendingFrame.lineGrid = new Uint8Array(this.lineGrid.length);
-        pendingFrame.lineGrid.set(this.lineGrid);
-        Object.assign(pendingFrame, {
-            minx,
-            miny,
-            maxx,
-            maxy,
-            lineBaseEven: this.lineBaseEven,
-            lineBaseOdd: this.lineBaseOdd,
-        });
-        paintMsThisTick += performance.now() - start;
-        if (!presentScheduled) {
-            presentScheduled = true;
-            window.requestAnimationFrame(present);
-        }
-    },
-    { isAtom: model.isAtom },
-);
-if (parsedQuery.fakeVideo !== undefined) video = new FakeVideo();
+const display = new Display({
+    screenCanvas,
+    model,
+    mode: displayMode,
+    tryGl,
+    lowLatency,
+    fakeVideo: parsedQuery.fakeVideo !== undefined,
+    frameSkip: parsedQuery.frameSkip ?? 0,
+});
+video = display.video;
 
 const audioStatsEl = document.getElementById("audio-stats");
 if (audioStatsEl) audioStatsEl.hidden = !parsedQuery.audioDebug;
@@ -513,16 +405,6 @@ function onCubMouseEvent(evt) {
 for (const eventType of ["mousemove", "mousedown", "mouseup"]) {
     cubMonitor.addEventListener(eventType, onCubMouseEvent);
 }
-
-function setCrtPic(filterMode) {
-    const config = filterMode.getDisplayConfig();
-    const monitorPic = document.getElementById("cub-monitor-pic");
-    monitorPic.src = config.image;
-    monitorPic.alt = config.imageAlt;
-    monitorPic.width = config.imageWidth;
-    monitorPic.height = config.imageHeight;
-}
-setCrtPic(displayModeFilter);
 
 window.addEventListener("blur", function () {
     keyboard.clearKeys();
@@ -1138,12 +1020,12 @@ const startPromise = (async () => {
 
 function benchmarkCpu(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;
-    const oldFS = frameSkip;
-    frameSkip = 1000000;
+    const oldFS = display.frameSkip;
+    display.frameSkip = 1000000;
     const startTime = performance.now();
     processor.execute(numCycles);
     const endTime = performance.now();
-    frameSkip = oldFS;
+    display.frameSkip = oldFS;
     const msTaken = endTime - startTime;
     const virtualMhz = numCycles / msTaken / 1000;
     console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
@@ -1152,12 +1034,12 @@ function benchmarkCpu(numCycles) {
 
 function benchmarkVideo(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;
-    const oldFS = frameSkip;
-    frameSkip = 1000000;
+    const oldFS = display.frameSkip;
+    display.frameSkip = 1000000;
     const startTime = performance.now();
     video.polltime(numCycles);
     const endTime = performance.now();
-    frameSkip = oldFS;
+    display.frameSkip = oldFS;
     const msTaken = endTime - startTime;
     const virtualMhz = numCycles / msTaken / 1000;
     console.log("Took " + msTaken + "ms to execute " + numCycles + " video cycles");
@@ -1235,8 +1117,7 @@ function logAudioDebugTick(now, cycles, idleMs, executeMs, paintMs, snapshotMs) 
     log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
     if (now - log.start < AudioDebugLogIntervalMs) return;
     const audio = audioHandler.takeEventCounts();
-    const present = presentMsMax;
-    presentMsMax = 0;
+    const present = display.takePresentMs();
     const leadMin = Number.isFinite(audio.leadMinMs) ? `${audio.leadMinMs.toFixed(1)}ms` : "(no stats)";
     if (
         log.maxIdle > AudioDebugSlowTickMs ||
@@ -1334,8 +1215,14 @@ function tick() {
                 snapshotMs = performance.now() - end;
             }
             if (audioStatsNode)
-                logAudioDebugTick(now, cycles, speedy ? 0 : now - lastEnd, end - now, paintMsThisTick, snapshotMs);
-            paintMsThisTick = 0;
+                logAudioDebugTick(
+                    now,
+                    cycles,
+                    speedy ? 0 : now - lastEnd,
+                    end - now,
+                    display.takePaintMs(),
+                    snapshotMs,
+                );
         } catch (e) {
             running = false;
             utils.noteEvent("exception", "thrown", e.stack);
@@ -1422,7 +1309,7 @@ const CanvasScaleStep = 0.25;
 
     function resizeTv() {
         // Get current display config (may change when display mode switches)
-        const displayConfig = displayModeFilter.getDisplayConfig();
+        const displayConfig = display.filterClass.getDisplayConfig();
 
         const imageOrigHeight = displayConfig.imageHeight;
         const imageOrigWidth = displayConfig.imageWidth;
