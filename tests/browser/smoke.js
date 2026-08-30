@@ -325,6 +325,68 @@ check("every display mode and sound output on the bar can be picked", async (pag
     await page.waitForScreenText(">", StepTimeoutMs);
 });
 
+check("a disc from the built-in list goes into drive 0", async (page, base) => {
+    await page.goto(base + "?disc=");
+    await page.waitForScreenText(">");
+    await page.evaluate(`document.querySelector("#disc-list li:not(.template) .name").textContent`).then((name) => {
+        if (name !== "Elite") throw new Error(`Expected the list to start with Elite, not ${name}`);
+    });
+    await page.click("#disc-list li:not(.template)");
+    await waitUntil(
+        "the disc to be in drive 0",
+        () => page.evaluate(`processor.fdc.drives[0].disc?.name === "elite.ssd"`),
+        StepTimeoutMs,
+    );
+    await waitUntil(
+        "the URL to name the disc",
+        () => page.evaluate(`location.search.includes("disc1=elite.ssd")`),
+        StepTimeoutMs,
+    );
+});
+
+check("a local disc file goes into drive 0 and out of the URL", async (page, base) => {
+    await page.goto(base + "?disc=elite.ssd");
+    await page.waitForScreenText(">");
+    const { root } = await page.send("DOM.getDocument");
+    const { nodeId } = await page.send("DOM.querySelector", { nodeId: root.nodeId, selector: "#disc_load" });
+    await page.send("DOM.setFileInputFiles", { nodeId, files: [path.resolve("dist/discs/Welcome.ssd")] });
+    await waitUntil(
+        "the local disc to be in drive 0",
+        () => page.evaluate(`processor.fdc.drives[0].disc?.name === "Welcome.ssd"`),
+        StepTimeoutMs,
+    );
+    const search = await page.evaluate("location.search");
+    if (search.includes("disc")) throw new Error(`A local disc cannot be named in the URL, yet: ${search}`);
+});
+
+check("a local tape file reaches the cassette interface", async (page, base) => {
+    await page.goto(base);
+    await page.waitForScreenText(">");
+    const { root } = await page.send("DOM.getDocument");
+    const { nodeId } = await page.send("DOM.querySelector", { nodeId: root.nodeId, selector: "#tape_load" });
+    await page.send("DOM.setFileInputFiles", { nodeId, files: [path.resolve("dist/tapes/Welcome.uef")] });
+    await waitUntil("the tape to be loaded", () => page.evaluate("!!processor.acia.tape"), StepTimeoutMs);
+});
+
+check("a disc dropped on the paste box goes into drive 0", async (page, base) => {
+    await page.goto(base);
+    await page.waitForScreenText(">");
+    // A DataTransfer with files cannot be built from page script, so hand the
+    // handler the event it would have been given.
+    await page.evaluate(`(async () => {
+        const bytes = await (await fetch("discs/Welcome.ssd")).arrayBuffer();
+        const file = new File([bytes], "dropped.ssd");
+        const event = new Event("drop", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "dataTransfer", { value: { files: [file] } });
+        document.getElementById("paste-text").dispatchEvent(event);
+    })()`);
+    await waitUntil(
+        "the dropped disc to be in drive 0",
+        () => page.evaluate(`processor.fdc.drives[0].disc?.name === "dropped.ssd"`),
+        StepTimeoutMs,
+    );
+});
+
 check("a saved state can be loaded back", async (page, base) => {
     const downloads = fs.mkdtempSync(path.join(os.tmpdir(), "jsbeeb-smoke-"));
     try {
