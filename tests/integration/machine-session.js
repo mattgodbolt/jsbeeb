@@ -132,3 +132,108 @@ describe("MachineSession frame stepping with interlace off", () => {
         expectCyclesNear(await cyclesOverFrames(session, 5), 5 * CyclesPerNonInterlacedFrame);
     });
 });
+
+describe("MachineSession snapshots", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+        await session.runUntilPrompt(30);
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    async function runAndDrain(command) {
+        await session.type(`${command}\r`);
+        return (await session.runUntilPrompt(30)).screenText;
+    }
+
+    it("rewinds memory the machine has written since", async () => {
+        await runAndDrain("A%=42");
+        const state = session.snapshot();
+        await runAndDrain("A%=99");
+
+        expect(await runAndDrain("PRINT A%")).toContain("99");
+        session.restore(state);
+
+        expect(await runAndDrain("PRINT A%")).toContain("42");
+    });
+
+    it("rewinds the cycle count", async () => {
+        const state = session.snapshot();
+        const cyclesAtSnapshot = session.elapsedCycles;
+        await session.runFrames(5);
+        expect(session.elapsedCycles).toBeGreaterThan(cyclesAtSnapshot);
+
+        session.restore(state);
+
+        expect(session.elapsedCycles).toBe(cyclesAtSnapshot);
+    });
+
+    it("keeps counting frames, as a hard reset does", async () => {
+        const state = session.snapshot();
+        await session.runFrames(3);
+        const framesBefore = session.frameCount;
+
+        session.restore(state);
+        await session.runFrames(2);
+
+        expect(session.frameCount).toBe(framesBefore + 2);
+    });
+
+    it("puts back text captured but not yet drained", async () => {
+        await session.type("PRINT 6*7\r");
+        await session.runUntilPrompt(30, { clear: false });
+        const state = session.snapshot();
+
+        expect(session.drainOutput().screenText).toContain("42");
+        expect(session.drainOutput().screenText).not.toContain("42");
+
+        session.restore(state);
+
+        expect(session.drainOutput().screenText).toContain("42");
+    });
+
+    it("rewinds the text cursor along with the machine", async () => {
+        await runAndDrain("CLS");
+        const state = session.snapshot();
+        const rowOfHere = (out) => out.elements.find((element) => element.text.includes("HERE")).y;
+
+        await session.type('PRINT "HERE"\r');
+        const withoutDetour = rowOfHere(await session.runUntilPrompt(30));
+
+        session.restore(state);
+        await runAndDrain("FOR I%=1 TO 5:PRINT:NEXT");
+        session.restore(state);
+        await session.type('PRINT "HERE"\r');
+
+        expect(rowOfHere(await session.runUntilPrompt(30))).toBe(withoutDetour);
+    });
+
+    it("goes on painting after a restore", async () => {
+        const state = session.snapshot();
+        await runAndDrain("MODE 1");
+
+        session.restore(state);
+        await session.runFrames(2);
+
+        expect(await session.screenshot()).toBeInstanceOf(Buffer);
+    });
+
+    it(
+        "restores into a different session of the same model",
+        async () => {
+            await runAndDrain("A%=1234");
+            const state = session.snapshot();
+
+            const other = new MachineSession("B-DFS1.2");
+            await other.initialise();
+            other.restore(state);
+            await other.type("PRINT A%\r");
+
+            expect((await other.runUntilPrompt(30)).screenText).toContain("1234");
+            other.destroy();
+        },
+        BootTimeout,
+    );
+});
