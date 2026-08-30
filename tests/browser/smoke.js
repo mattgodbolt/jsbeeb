@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 
 const Args = parseArgs(process.argv.slice(2));
+const PreviewHost = "127.0.0.1";
 const PreviewPort = 5199;
 const DebugPort = 9229 + Math.floor(Math.random() * 1000);
 const ChromeCandidates = [
@@ -25,6 +26,7 @@ const ScreenBase = 0x7c00;
 const ScreenBytes = 1000;
 const BootTimeoutMs = 30000;
 const StepTimeoutMs = 10000;
+const ServerTimeoutMs = 30000;
 const KeyHoldMs = 120;
 const ConsoleSurface = [
     "processor",
@@ -71,10 +73,13 @@ async function waitUntil(description, probe, timeoutMs) {
 async function startPreview() {
     // vite's own entry point, not npx: a kill has to reach the server itself.
     const vite = path.join(process.cwd(), "node_modules", "vite", "bin", "vite.js");
-    const child = spawn(process.execPath, [vite, "preview", "--port", `${PreviewPort}`, "--strictPort"], {
-        stdio: "ignore",
-    });
-    const url = `http://127.0.0.1:${PreviewPort}/`;
+    // Bound by address, not "localhost": on a runner that resolves to ::1 first.
+    const child = spawn(
+        process.execPath,
+        [vite, "preview", "--host", PreviewHost, "--port", `${PreviewPort}`, "--strictPort"],
+        { stdio: "ignore" },
+    );
+    const url = `http://${PreviewHost}:${PreviewPort}/`;
     await waitUntil(
         "the preview server",
         () =>
@@ -82,7 +87,7 @@ async function startPreview() {
                 (response) => response.ok,
                 () => false,
             ),
-        StepTimeoutMs,
+        ServerTimeoutMs,
     );
     return { url, stop: () => child.kill() };
 }
