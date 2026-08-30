@@ -24,6 +24,8 @@ jobs:
         run: npm run test:integration
       - name: Shader tests
         run: npm run test:shader
+      - name: Smoke test
+        run: npm run test:smoke
 
   cpu-test:
     runs-on: ubuntu-24.04

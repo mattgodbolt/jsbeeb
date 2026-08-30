@@ -2,7 +2,7 @@
 // cannot see: construction order, element ids, Bootstrap, the console surface.
 // Talks to Chrome over the DevTools protocol with Node's own WebSocket.
 //
-//   npm run smoke            build, serve dist/ and run every check
+//   npm run test:smoke       build, serve dist/ and run every check
 //   node tests/browser/smoke.js --url http://localhost:5173/   against a running server
 //   node tests/browser/smoke.js --only modal                    checks whose name matches
 
@@ -14,7 +14,13 @@ import path from "node:path";
 const Args = parseArgs(process.argv.slice(2));
 const PreviewPort = 5199;
 const DebugPort = 9229 + Math.floor(Math.random() * 1000);
-const ChromeCandidates = [process.env.CHROME, "google-chrome", "google-chrome-stable", "chromium", "chromium-browser"];
+const ChromeCandidates = [
+    process.env.CHROME_PATH,
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium",
+    "chromium-browser",
+];
 const ScreenBase = 0x7c00;
 const ScreenBytes = 1000;
 const BootTimeoutMs = 30000;
