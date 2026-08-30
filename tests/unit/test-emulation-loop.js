@@ -87,7 +87,6 @@ describe("EmulationLoop", () => {
         expect(deps.audioHandler.flushChipEvents).toHaveBeenCalled();
         expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.sysvia);
         expect(deps.syncLights).toHaveBeenCalled();
-        // The paint timer drains every tick, audio debug or not.
         expect(deps.display.takePaintMs).toHaveBeenCalled();
     });
 
