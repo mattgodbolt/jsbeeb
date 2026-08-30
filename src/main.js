@@ -1,4 +1,3 @@
-import * as bootstrap from "bootstrap";
 import { version } from "../package.json";
 
 import "bootswatch/dist/darkly/bootstrap.min.css";
@@ -13,7 +12,6 @@ import { LoadSD } from "./mmc.js";
 import { Cmos, localStoragePersistence } from "./cmos.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
-import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
@@ -31,6 +29,7 @@ import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
 import { AutobootTicks } from "./web/archive-list.js";
 import { SthPicker } from "./web/sth-picker.js";
 import { HfePicker } from "./web/hfe-picker.js";
+import { GoogleDrivePicker } from "./web/google-drive-picker.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -677,12 +676,13 @@ const media = new MediaLoader({
         sth: (name) => sthPicker.discs.fetch(name),
         tapeSth: (name) => sthPicker.tapes.fetch(name),
         hfe: (path) => hfePicker.archive.fetch(path),
-        drive: (cat, layout) => gdLoad(cat, layout),
+        drive: (cat, layout) => drivePicker.load(cat, layout),
     },
 });
 const autobootTicks = new AutobootTicks({ urlState });
 const sthPicker = new SthPicker({ media, drives, modals, urlState, processor, autoboot });
 const hfePicker = new HfePicker({ media, drives, modals, urlState, processor, autoboot });
+const drivePicker = new GoogleDrivePicker({ media, drives, modals, processor });
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
@@ -1006,154 +1006,6 @@ async function reloadSnapshotMedia(savedMedia) {
         }
     }
 }
-
-const googleDriveAuth = document.getElementById("google-drive-auth");
-
-const googleDrive = new GoogleDriveLoader();
-const googleDriveEl = document.getElementById("google-drive");
-
-async function gdAuth(imm) {
-    try {
-        return await googleDrive.authorize(imm);
-    } catch (err) {
-        console.log("Error handling google auth: " + err);
-        googleDriveEl.querySelector(".loading").textContent =
-            "There was an error accessing your Google Drive account: " + err;
-    }
-}
-
-let googleDriveLoadingResolve, googleDriveLoadingReject;
-document.querySelector("#google-drive-auth form").addEventListener("submit", async function (e) {
-    googleDriveAuth.style.display = "none";
-    e.preventDefault();
-    const authed = await gdAuth(false);
-    if (authed) googleDriveLoadingResolve();
-    else googleDriveLoadingReject(new Error("Unable to authorize Google Drive"));
-});
-
-async function gdLoad(cat, layout) {
-    modals.popupLoading("Loading '" + cat.name + "' from Google Drive");
-    try {
-        const available = await googleDrive.initialise();
-        console.log("Google Drive available =", available);
-        if (!available) throw new Error("Google Drive is not available");
-
-        const authed = await gdAuth(true);
-        console.log("Google Drive authed=", authed);
-
-        if (!authed) {
-            await new Promise(function (resolve, reject) {
-                googleDriveLoadingResolve = resolve;
-                googleDriveLoadingReject = reject;
-                googleDriveAuth.style.display = "";
-            });
-        }
-
-        const ssd = await googleDrive.load(processor.fdc, cat.id, layout);
-        console.log("Google Drive loading finished");
-        modals.loadingFinished();
-        if (!ssd.savesChanges) {
-            toast(`${cat.name} is read only on Google Drive, so changes to it are not written back.`, {
-                title: "Google Drive",
-                quietKey: "quietDriveReadOnly",
-            });
-        }
-        return ssd;
-    } catch (error) {
-        console.error("Google Drive loading error:", error);
-        modals.loadingFinished(`Unable to load ${cat.name} from Google Drive: ${errorText(error)}`);
-    }
-}
-
-const googleDriveModal = new bootstrap.Modal(googleDriveEl);
-// Loading the Google client holds the main thread for ~100ms, so it waits for
-// someone to ask for Drive.
-document.getElementById("open-drive-link").addEventListener("click", async function () {
-    try {
-        await googleDrive.initialise();
-    } catch (error) {
-        toast(`Google Drive is unavailable: ${errorText(error)}`, { title: "Google Drive" });
-        return false;
-    }
-    const authed = await gdAuth(false);
-    if (authed) {
-        googleDriveModal.show();
-    }
-    return false;
-});
-googleDriveEl.addEventListener("show.bs.modal", async function () {
-    const gdLoading = googleDriveEl.querySelector(".loading");
-    gdLoading.textContent = "Loading...";
-    gdLoading.style.display = "";
-    for (const el of googleDriveEl.querySelectorAll("li:not(.template)")) el.remove();
-    let cat;
-    try {
-        cat = await googleDrive.listFiles();
-    } catch (error) {
-        console.error("Error listing Google Drive files:", error);
-        gdLoading.textContent = `Unable to list your Google Drive files: ${errorText(error)}`;
-        return;
-    }
-    const dbList = googleDriveEl.querySelector(".list");
-    gdLoading.style.display = "none";
-    const template = dbList.querySelector(".template");
-    for (const item of cat) {
-        const row = template.cloneNode(true);
-        row.classList.remove("template");
-        dbList.appendChild(row);
-        row.querySelector(".name").textContent = item.name;
-        row.addEventListener("click", async function () {
-            utils.noteEvent("google-drive", "click", item.name);
-            media.setDisc1Image(`gd:${item.id}/${item.name}`);
-            googleDriveModal.hide();
-            const ssd = await gdLoad(item, drives.layoutForDrive(0));
-            if (ssd) drives.putDiscIn(0, ssd);
-        });
-    }
-});
-document.querySelector("#google-drive form").addEventListener("submit", async function (e) {
-    e.preventDefault();
-    let name = document.querySelector("#google-drive .disc-name").value;
-    if (!name) return;
-
-    modals.popupLoading("Connecting to Google Drive");
-    googleDriveModal.hide();
-    modals.popupLoading("Creating '" + name + "' on Google Drive");
-
-    let data;
-    if (document.querySelector("#google-drive .create-from-existing").checked) {
-        const discType = disc.guessDiscTypeFromName(name);
-        try {
-            data = discType.saver(processor.fdc.drives[0].disc);
-        } catch (e) {
-            modals.loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(e)}`);
-            return;
-        }
-        name = utils.replaceOrAddExtension(name, discType.extension);
-        console.log(`Saving existing disc: ${name}`);
-    } else {
-        // TODO support HFE, I guess?
-        const discType = disc.guessDiscTypeFromName(name);
-        if (!discType.byteSize) {
-            throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
-        }
-        data = new Uint8Array(discType.byteSize);
-        if (discType.supportsCatalogue) {
-            discType.setDiscName(data, name);
-        }
-        console.log(`Creating blank: ${name}`);
-    }
-
-    try {
-        const result = await googleDrive.create(processor.fdc, name, data);
-        media.setDisc1Image("gd:" + result.fileId + "/" + name);
-        drives.putDiscIn(0, result.disc);
-        modals.loadingFinished();
-    } catch (error) {
-        console.error(`Error creating Google Drive disc: ${error}`, error);
-        modals.loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(error)}`);
-    }
-});
 
 document.getElementById("download-filestore-link").addEventListener("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
