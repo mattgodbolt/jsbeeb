@@ -30,6 +30,7 @@ import { Layout } from "./web/layout.js";
 import { EmulationLoop, RewindCaptureInterval } from "./web/emulation-loop.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
+import { FrontPanel } from "./web/front-panel.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -52,7 +53,6 @@ let processor;
 let video;
 let rewindUI;
 const dbgr = new Debugger();
-let syncLights;
 let model;
 
 const gamepad = new GamePad();
@@ -105,9 +105,7 @@ noSeek = !!parsedQuery.noseek;
 if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
 
 const printer = new Printer({
-    onOutput: (char) => {
-        if (printerTextArea) printerTextArea.value += char;
-    },
+    onOutput: (char) => frontPanel.printChar(char),
     onFirstOutput: () =>
         toast("Printer output is being kept. Press Ctrl-B to open the printer window.", {
             title: "Printer",
@@ -122,7 +120,7 @@ const keys = new KeyboardSetup({
     openRewind: () => {
         if (rewindUI) rewindUI.open();
     },
-    openPrinter: () => checkPrinterWindow(),
+    openPrinter: () => frontPanel.checkPrinterWindow(),
     pause: () => loop.stop(false),
     resume: () => loop.go(),
     onAnyKeyDown: () => {
@@ -420,26 +418,6 @@ const cmos = new Cmos(
     econet,
 );
 
-let printerWindow = null;
-let printerTextArea = null;
-
-function checkPrinterWindow() {
-    if (printerWindow && !printerWindow.closed) return;
-
-    printerWindow = window.open("", "_blank", "height=300,width=400");
-    if (!printerWindow) {
-        toast("The printer output window was blocked. Allow pop-up windows for this site, then press Ctrl-B again.", {
-            title: "Printer",
-        });
-        return;
-    }
-    printerWindow.document.write(
-        '<textarea id="text" rows="15" cols="40" placeholder="Printer outputs here..."></textarea>',
-    );
-    printerTextArea = printerWindow.document.getElementById("text");
-    printerTextArea.value = printer.text;
-}
-
 const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
 processor = new CpuClass(model, {
     dbgr,
@@ -574,96 +552,7 @@ document.getElementById("soft-reset").addEventListener("click", function (event)
     event.preventDefault();
 });
 
-for (const link of document.querySelectorAll("#tape-menu a")) {
-    link.addEventListener("click", function (e) {
-        const type = e.target.dataset.id;
-        if (type === undefined) return;
-
-        if (type === "rewind") {
-            console.log("Rewinding tape to the start");
-            if (model.isAtom) {
-                processor.atomppia.stopTape();
-                processor.atomppia.rewindTape();
-                updateTapeButton();
-            } else {
-                processor.acia.rewindTape();
-            }
-        } else {
-            console.log("unknown type", type);
-        }
-    });
-}
-
-const tapePlayStopBtn = document.getElementById("tape-play-stop");
-const tapeControlHeader = document.getElementById("tape-control-header");
-const tapeControlCell = document.getElementById("tape-control-cell");
-
-function updateTapeButton() {
-    if (!model.isAtom) return;
-    const playing = processor.atomppia.motorOn;
-    const label = playing ? "Stop cassette" : "Play cassette";
-    tapePlayStopBtn.textContent = playing ? "\u25A0" : "\u25B6";
-    tapePlayStopBtn.title = label;
-    tapePlayStopBtn.setAttribute("aria-label", label);
-    tapePlayStopBtn.classList.toggle("playing", playing);
-}
-
-function showTapeControl(visible) {
-    const display = visible ? "" : "none";
-    tapeControlHeader.style.display = display;
-    tapeControlCell.style.display = display;
-}
-
-function updateLedVisibility() {
-    const bbcDisplay = model.isAtom ? "none" : "";
-    for (const el of document.querySelectorAll(".bbc-only")) {
-        el.style.display = bbcDisplay;
-    }
-    showTapeControl(model.isAtom);
-}
-
-updateLedVisibility();
-
-tapePlayStopBtn.addEventListener("click", () => {
-    if (processor.atomppia.motorOn) {
-        processor.atomppia.stopTape();
-    } else {
-        processor.atomppia.playTape();
-    }
-    updateTapeButton();
-});
-
-function Light(name) {
-    const dom = document.getElementById(name);
-    let on = false;
-    this.update = function (val) {
-        if (val === on) return;
-        on = val;
-        dom.classList.toggle("on", on);
-    };
-}
-
-const cassette = new Light("motorlight");
-const caps = new Light("capslight");
-const shift = new Light("shiftlight");
-const drive0 = new Light("drive0");
-const drive1 = new Light("drive1");
-const network = new Light("networklight");
-
-syncLights = function () {
-    if (model.isAtom) {
-        cassette.update(processor.atomppia.motorOn);
-    } else {
-        caps.update(processor.sysvia.capsLockLight);
-        shift.update(processor.sysvia.shiftLockLight);
-        drive0.update(processor.fdc.motorOn[0]);
-        drive1.update(processor.fdc.motorOn[1]);
-        cassette.update(processor.acia.motorOn);
-        if (processor.econet) {
-            network.update(processor.econet.activityLight());
-        }
-    }
-};
+const frontPanel = new FrontPanel({ processor, model, printer });
 
 const startPromise = (async () => {
     await Promise.all([audioHandler.initialise(), processor.initialise()]);
@@ -778,7 +667,7 @@ const loop = new EmulationLoop({
     dbgr,
     gamepad,
     keyboard: keys,
-    syncLights: () => syncLights(),
+    syncLights: () => frontPanel.syncLights(),
     rewindBuffer,
     onRewindCaptured: () => rewindUI.updateButtonState(),
     clocksPerSecond,
