@@ -924,6 +924,14 @@ export function getKeyMap(keyLayout) {
     return keys2;
 }
 
+export function replaceOrAddExtension(name, newExt) {
+    const lastDot = name.lastIndexOf(".");
+    if (lastDot === -1) {
+        return name + newExt;
+    }
+    return name.substring(0, lastDot) + newExt;
+}
+
 export function hexbyte(value) {
     return ((value >>> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
 }

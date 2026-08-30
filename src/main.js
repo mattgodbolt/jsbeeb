@@ -26,11 +26,11 @@ import { AudioHandler } from "./web/audio-handler.js";
 import { DefaultAudioOutput, isAudioOutput } from "./audio-output.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { Econet } from "./econet.js";
-import { DiscLayout, toSsdOrDsd } from "./disc.js";
-import { toHfe } from "./disc-hfe.js";
+import { DiscLayout } from "./disc.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
+import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure, showNotice, unzipAndReport } from "./web/reporting.js";
@@ -53,9 +53,8 @@ import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
 import { DiscVisualiser } from "./disc-visualiser.js";
-import { downloadBlob } from "./dom-utils.js";
+import { downloadBlob, downloadDriveData } from "./dom-utils.js";
 import {
-    DriveTracks,
     guessModelFromHostname,
     parseMediaParams,
     processAutobootParams,
@@ -399,63 +398,6 @@ if (driveTrackWarnings.length) {
     });
 }
 
-/** @returns {string} the DiscLayout to load an image for this drive with */
-function layoutForDrive(driveIndex) {
-    return driveTracks[driveIndex] === DriveTracks.eighty ? DiscLayout.contiguous : DiscLayout.auto;
-}
-
-/** @returns {Number|undefined} the tracksPerStep the user fixed this drive at, if they fixed one */
-function tracksPerStepForDrive(driveIndex) {
-    if (driveTracks[driveIndex] === DriveTracks.auto) return undefined;
-    return driveTracks[driveIndex] === DriveTracks.forty ? 2 : 1;
-}
-
-function putDiscIn(driveIndex, loadedDisc) {
-    const drive = processor.fdc.drives[driveIndex];
-    const fixed = tracksPerStepForDrive(driveIndex);
-    const was = drive.tracksPerStep;
-    processor.fdc.loadDisc(driveIndex, loadedDisc, fixed);
-    showDriveTracks(driveIndex);
-    noteUnsavedWrites(loadedDisc);
-    // A switch the user fixed does not move, so anything it does is not news.
-    if (fixed === undefined && drive.tracksPerStep !== was) noteDriveTracks(driveIndex, loadedDisc.name);
-}
-
-let saidWritesAreNotKept = false;
-
-function noteUnsavedWrites(loadedDisc) {
-    if (loadedDisc.savesChanges || saidWritesAreNotKept) return;
-    loadedDisc.notifyOnFirstTrackWrite(() => {
-        if (saidWritesAreNotKept) return;
-        saidWritesAreNotKept = true;
-        toast(`Changes to ${loadedDisc.name} are not saved. Use Discs, Download to keep a copy.`, {
-            title: "Disc",
-            quietKey: "quietDiscNotSaved",
-        });
-    });
-}
-
-const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
-
-function showDriveTracks(driveIndex) {
-    const drive = processor.fdc?.drives[driveIndex];
-    if (!drive) return;
-    for (const button of driveTracksButtons(driveIndex))
-        button.classList.toggle("active", tracksPerStepFor(button.dataset.tracks) === drive.tracksPerStep);
-}
-
-function driveTracksButtons(driveIndex) {
-    return document.querySelectorAll(`.drive-tracks[data-drive="${driveIndex}"] [data-tracks]`);
-}
-
-function noteDriveTracks(driveIndex, discName) {
-    const tracks = processor.fdc.drives[driveIndex].tracksPerStep === 2 ? "40" : "80";
-    toast(`Drive ${driveIndex} switched to ${tracks} track for ${discName}.`, {
-        title: "Disc drive",
-        quietKey: "quietDriveTracks",
-    });
-}
-
 // Test which filter is actually in use, not merely whether we got WebGL: a
 // filter can decline a context that works perfectly well for other modes, in
 // which case we are quietly left with an unfiltered display.
@@ -614,31 +556,12 @@ function readFileAsBinaryString(file) {
     });
 }
 
-function replaceOrAddExtension(name, newExt) {
-    const lastDot = name.lastIndexOf(".");
-    if (lastDot === -1) {
-        return name + newExt;
-    }
-    return name.substring(0, lastDot) + newExt;
-}
-
-/**
- * Helper function to download drive data in the specified format
- * @param {Uint8Array} data - The binary data to download
- * @param {string} name - The file name
- * @param {string} extension - The file extension to use
- */
-function downloadDriveData(data, name, extension) {
-    const blob = new Blob([data], { type: "application/octet-stream" });
-    downloadBlob(blob, replaceOrAddExtension(name, extension));
-}
-
 async function loadHTMLFile(file) {
     const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
-    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData, undefined, layoutForDrive(0));
+    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData, undefined, drives.layoutForDrive(0));
     // Local file: retain the image bytes for embedding in save-to-file snapshots.
     loadedDisc.setOriginalImage(imageData);
-    putDiscIn(0, loadedDisc);
+    drives.putDiscIn(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
     urlState.updateUrl();
@@ -843,6 +766,7 @@ processor = new CpuClass(model, {
 });
 
 printer.attach(processor.uservia);
+const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure: modals.areYouSure.bind(modals) });
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
@@ -1120,8 +1044,8 @@ async function discSthClick(item) {
 
     modals.popupLoading("Loading " + item);
     try {
-        const loaded = await loadDiscImage(parsedQuery.disc1, layoutForDrive(0));
-        putDiscIn(0, loaded);
+        const loaded = await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
+        drives.putDiscIn(0, loaded);
         modals.loadingFinished();
 
         if (needsAutoboot) {
@@ -1255,8 +1179,8 @@ async function hfeClick(file) {
     const name = describeHfe(file).title;
     modals.popupLoading("Loading " + name);
     try {
-        const loaded = await loadDiscImage(parsedQuery.disc1, layoutForDrive(0));
-        putDiscIn(0, loaded);
+        const loaded = await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
+        drives.putDiscIn(0, loaded);
         modals.loadingFinished();
         if (needsAutoboot) autoboot(name);
     } catch (err) {
@@ -1457,7 +1381,7 @@ async function reloadSnapshotMedia(media) {
             }
         }
 
-        putDiscIn(driveIndex, loadedDisc);
+        drives.putDiscIn(driveIndex, loadedDisc);
         // Only update the URL/query for URL-sourced discs. For embedded
         // (local-file) discs, setting parsedQuery would put a bogus source
         // in the URL and break subsequent saves/reloads.
@@ -1729,8 +1653,8 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
             utils.noteEvent("google-drive", "click", item.name);
             setDisc1Image(`gd:${item.id}/${item.name}`);
             googleDriveModal.hide();
-            const ssd = await gdLoad(item, layoutForDrive(0));
-            if (ssd) putDiscIn(0, ssd);
+            const ssd = await gdLoad(item, drives.layoutForDrive(0));
+            if (ssd) drives.putDiscIn(0, ssd);
         });
     }
 });
@@ -1747,7 +1671,7 @@ for (const image of availableImages) {
         setDisc1Image(image.file);
         $discsModal.hide();
         try {
-            putDiscIn(0, await loadDiscImage(parsedQuery.disc1, layoutForDrive(0)));
+            drives.putDiscIn(0, await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0)));
         } catch (error) {
             reportLoadFailure(`${image.name} (${image.file})`, error);
         }
@@ -1772,7 +1696,7 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
             modals.loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(e)}`);
             return;
         }
-        name = replaceOrAddExtension(name, discType.extension);
+        name = utils.replaceOrAddExtension(name, discType.extension);
         console.log(`Saving existing disc: ${name}`);
     } else {
         // TODO support HFE, I guess?
@@ -1790,33 +1714,12 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
     try {
         const result = await googleDrive.create(processor.fdc, name, data);
         setDisc1Image("gd:" + result.fileId + "/" + name);
-        putDiscIn(0, result.disc);
+        drives.putDiscIn(0, result.disc);
         modals.loadingFinished();
     } catch (error) {
         console.error(`Error creating Google Drive disc: ${error}`, error);
         modals.loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(error)}`);
     }
-});
-
-document.getElementById("download-drive-link").addEventListener("click", function () {
-    const disc = processor.fdc.drives[0].disc;
-    const save = (options) =>
-        downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
-    try {
-        save();
-    } catch (e) {
-        modals.areYouSure(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel", () =>
-            save({ force: true }),
-        );
-    }
-});
-
-document.getElementById("download-drive-hfe-link").addEventListener("click", function () {
-    const disc = processor.fdc.drives[0].disc;
-    const data = toHfe(disc);
-    const name = disc.name;
-
-    downloadDriveData(data, name, ".hfe");
 });
 
 document.getElementById("download-filestore-link").addEventListener("click", function () {
@@ -2050,13 +1953,13 @@ const startPromise = (async () => {
 
     if (discImage) {
         startImageLoad(`disc ${discImage}`, async () =>
-            putDiscIn(0, await loadDiscImage(discImage, layoutForDrive(0))),
+            drives.putDiscIn(0, await loadDiscImage(discImage, drives.layoutForDrive(0))),
         );
     }
 
     if (secondDiscImage) {
         startImageLoad(`disc ${secondDiscImage}`, async () =>
-            putDiscIn(1, await loadDiscImage(secondDiscImage, layoutForDrive(1))),
+            drives.putDiscIn(1, await loadDiscImage(secondDiscImage, drives.layoutForDrive(1))),
         );
     }
 
@@ -2303,23 +2206,6 @@ rewindUI.updateButtonState();
 
 if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
 else document.getElementById("disc-visualiser-open").classList.add("disabled");
-
-for (const item of document.querySelectorAll(".drive-tracks")) {
-    const driveIndex = Number(item.dataset.drive);
-    const drive = processor.fdc?.drives[driveIndex];
-    const fixed = drive ? tracksPerStepForDrive(driveIndex) : undefined;
-    if (fixed !== undefined) drive.tracksPerStep = fixed;
-    for (const button of driveTracksButtons(driveIndex)) {
-        button.disabled = !drive;
-        button.addEventListener("click", (event) => {
-            // Setting a switch is not picking from a menu, so leave the menu where it is.
-            event.stopPropagation();
-            drive.tracksPerStep = tracksPerStepFor(button.dataset.tracks);
-            showDriveTracks(driveIndex);
-        });
-    }
-    if (drive) showDriveTracks(driveIndex);
-}
 
 // A timer, not requestAnimationFrame: a display presentation stall withholds
 // animation frames, and with them the sound chip's samples (issue #885).
