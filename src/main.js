@@ -31,6 +31,8 @@ import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
 import { Drives } from "./web/drives.js";
+import { UrlState } from "./web/url-state.js";
+import { Modals } from "./web/modals.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure, showNotice, unzipAndReport } from "./web/reporting.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
@@ -53,11 +55,8 @@ import { RewindUI } from "./rewind-ui.js";
 import { DiscVisualiser } from "./disc-visualiser.js";
 import { downloadBlob, downloadDriveData } from "./dom-utils.js";
 import {
-    buildUrlFromParams,
     guessModelFromHostname,
-    ParamTypes,
     parseMediaParams,
-    parseQueryString,
     processAutobootParams,
     processDriveTrackParams,
     processInputParams,
@@ -116,65 +115,10 @@ const availableImages = [
 let discImage = availableImages[0].file;
 const extraRoms = [];
 
-// Build the query string from the URL
-const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
 
-// Define parameter types
-const paramTypes = {
-    // Array parameters
-    rom: ParamTypes.ARRAY,
-
-    // Boolean parameters
-    embed: ParamTypes.BOOL,
-    fasttape: ParamTypes.BOOL,
-    noseek: ParamTypes.BOOL,
-    debug: ParamTypes.BOOL,
-    verbose: ParamTypes.BOOL,
-    autoboot: ParamTypes.BOOL,
-    autochain: ParamTypes.BOOL,
-    autorun: ParamTypes.BOOL,
-    hasMusic5000: ParamTypes.BOOL,
-    hasTeletextAdaptor: ParamTypes.BOOL,
-    hasEconet: ParamTypes.BOOL,
-    glEnabled: ParamTypes.BOOL,
-    fakeVideo: ParamTypes.BOOL,
-    logFdcCommands: ParamTypes.BOOL,
-    logFdcStateChanges: ParamTypes.BOOL,
-    coProcessor: ParamTypes.BOOL,
-    mouseJoystickEnabled: ParamTypes.BOOL,
-    speechOutput: ParamTypes.BOOL,
-    audioDebug: ParamTypes.BOOL,
-    audioOutput: ParamTypes.STRING,
-
-    // Numeric parameters
-    speed: ParamTypes.INT,
-    stationId: ParamTypes.INT,
-    frameSkip: ParamTypes.INT,
-    audiofilterfreq: ParamTypes.FLOAT,
-    audiofilterq: ParamTypes.FLOAT,
-    speakerAmount: ParamTypes.FLOAT,
-    audioLatencyMs: ParamTypes.FLOAT,
-    cpuMultiplier: ParamTypes.FLOAT,
-    tubeCpuMultiplier: ParamTypes.FLOAT,
-    microphoneChannel: ParamTypes.INT,
-
-    // String parameters (these are the default but listed for clarity)
-    model: ParamTypes.STRING,
-    disc: ParamTypes.STRING,
-    disc1: ParamTypes.STRING,
-    disc2: ParamTypes.STRING,
-    tape: ParamTypes.STRING,
-    mmc: ParamTypes.STRING,
-    keyLayout: ParamTypes.STRING,
-    autotype: ParamTypes.STRING,
-    displayMode: ParamTypes.STRING,
-    drive0Tracks: ParamTypes.STRING,
-    drive1Tracks: ParamTypes.STRING,
-};
-
-// Parse the query string with parameter types
-let parsedQuery = parseQueryString(queryString, paramTypes);
+const urlState = new UrlState(window.location, window.history);
+const parsedQuery = urlState.params;
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
@@ -257,7 +201,7 @@ const config = new Config(
         if (changed.displayMode) applyDisplayMode(changed.displayMode);
     },
     function onClose(changed) {
-        parsedQuery = Object.assign(parsedQuery, changed);
+        Object.assign(parsedQuery, changed);
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
@@ -278,10 +222,10 @@ const config = new Config(
                 processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
             }
         }
-        updateUrl();
+        urlState.updateUrl();
     },
     function onRestartRequired() {
-        areYouSure(
+        modals.areYouSure(
             "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
             "Restart now",
             "Later",
@@ -325,7 +269,7 @@ config.setSpeakerAmount(speakerAmount);
 
 // A slider fires for every pixel of a drag, and each URL update is a history entry.
 const UrlSettleMs = 300;
-const updateUrlOnceSettled = utils.debounce(updateUrl, UrlSettleMs);
+const updateUrlOnceSettled = utils.debounce(() => urlState.updateUrl(), UrlSettleMs);
 
 function applyAudioOutput(output) {
     audioHandler.setAudioOutput(output);
@@ -333,7 +277,7 @@ function applyAudioOutput(output) {
     quickSettings?.showAudioOutput(output);
     window.localStorage.audioOutput = output;
     parsedQuery.audioOutput = output;
-    updateUrl();
+    urlState.updateUrl();
 }
 
 function applySpeakerAmount(amount) {
@@ -356,7 +300,7 @@ function applyDisplayMode(mode) {
     quickSettings?.showDisplayMode(mode);
     window.localStorage.displayMode = mode;
     parsedQuery.displayMode = mode;
-    updateUrl();
+    urlState.updateUrl();
 }
 
 model = config.model;
@@ -430,8 +374,7 @@ if (parsedQuery.lowLatency !== undefined) {
 }
 const screenCanvas = document.getElementById("screen");
 
-const errorDialog = document.getElementById("error-dialog");
-const errorDialogModal = new bootstrap.Modal(errorDialog);
+const modals = new Modals({ isRunning: () => running, stop, go });
 
 async function compressBlob(blob) {
     const stream = blob.stream().pipeThrough(new CompressionStream("gzip"));
@@ -441,12 +384,6 @@ async function compressBlob(blob) {
 async function decompressBlob(blob) {
     const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
     return new Response(stream).blob();
-}
-
-function showError(context, error) {
-    errorDialog.querySelector(".context").textContent = context;
-    errorDialog.querySelector(".error").textContent = error;
-    errorDialogModal.show();
 }
 
 if (keyMappingWarnings.length) {
@@ -627,7 +564,7 @@ async function loadHTMLFile(file) {
     drives.putDiscIn(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
-    updateUrl();
+    urlState.updateUrl();
     $discsModal.hide();
 }
 
@@ -829,7 +766,7 @@ processor = new CpuClass(model, {
 });
 
 printer.attach(processor.uservia);
-const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure });
+const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure: modals.areYouSure.bind(modals) });
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
@@ -918,7 +855,7 @@ async function setupMicrophone() {
         config.setMicrophoneChannel(undefined);
         // Update URL to remove the parameter
         delete parsedQuery.microphoneChannel;
-        updateUrl();
+        urlState.updateUrl();
     }
 }
 
@@ -1059,19 +996,19 @@ document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
 function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
-    updateUrl();
+    urlState.updateUrl();
     config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
 }
 
 function setDisc2Image(name) {
     parsedQuery.disc2 = name;
-    updateUrl();
+    urlState.updateUrl();
     config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
 }
 
 function setTapeImage(name) {
     parsedQuery.tape = name;
-    updateUrl();
+    urlState.updateUrl();
     config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
 }
 
@@ -1105,18 +1042,18 @@ async function discSthClick(item) {
         processor.reset(true);
     }
 
-    popupLoading("Loading " + item);
+    modals.popupLoading("Loading " + item);
     try {
         const loaded = await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
         drives.putDiscIn(0, loaded);
-        loadingFinished();
+        modals.loadingFinished();
 
         if (needsAutoboot) {
             autoboot(item);
         }
     } catch (err) {
         console.error("Error loading disc image:", err);
-        loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
+        modals.loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
     }
 }
 
@@ -1124,14 +1061,14 @@ async function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
     setTapeImage("sth:" + item);
 
-    popupLoading("Loading " + item);
+    modals.popupLoading("Loading " + item);
     try {
         const tape = await loadTapeImage(parsedQuery.tape);
         setProcessorTape(tape);
-        loadingFinished();
+        modals.loadingFinished();
     } catch (err) {
         console.error("Error loading tape image:", err);
-        loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
+        modals.loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
     }
 }
 
@@ -1193,7 +1130,7 @@ for (const check of autobootChecks) {
         } else {
             delete parsedQuery.autoboot;
         }
-        updateUrl();
+        urlState.updateUrl();
     });
 }
 
@@ -1240,15 +1177,15 @@ async function hfeClick(file) {
     if (needsAutoboot) processor.reset(true);
 
     const name = describeHfe(file).title;
-    popupLoading("Loading " + name);
+    modals.popupLoading("Loading " + name);
     try {
         const loaded = await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
         drives.putDiscIn(0, loaded);
-        loadingFinished();
+        modals.loadingFinished();
         if (needsAutoboot) autoboot(name);
     } catch (err) {
         console.error("Error loading disc image:", err);
-        loadingFinished(`Unable to load ${name} from the HFE archive: ${errorText(err)}`);
+        modals.loadingFinished(`Unable to load ${name} from the HFE archive: ${errorText(err)}`);
     }
 }
 
@@ -1398,12 +1335,6 @@ function autoRunBasic() {
 
     const bbcKeys = stringToMachineKeys("RUN\n");
     sendRawKeyboard([1000].concat(bbcKeys), false);
-}
-
-function updateUrl() {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const url = buildUrlFromParams(baseUrl, parsedQuery, paramTypes);
-    window.history.pushState(null, null, url);
 }
 
 function splitImage(image) {
@@ -1614,7 +1545,7 @@ document.getElementById("tape_load").addEventListener("change", async function (
         }
         setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
         delete parsedQuery.tape;
-        updateUrl();
+        urlState.updateUrl();
         bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
     } catch (error) {
         reportLoadFailure(file.name, error);
@@ -1623,36 +1554,7 @@ document.getElementById("tape_load").addEventListener("change", async function (
     evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
 });
 
-function anyModalsVisible() {
-    return document.querySelectorAll(".modal.show").length !== 0;
-}
-
-let modalSavedRunning = false;
-document.addEventListener("show.bs.modal", function () {
-    if (!anyModalsVisible()) modalSavedRunning = running;
-    if (running) stop(false);
-});
-document.addEventListener("hidden.bs.modal", function () {
-    if (!anyModalsVisible() && modalSavedRunning) {
-        go();
-    }
-});
-
-const loadingDialog = document.getElementById("loading-dialog");
-const loadingDialogModal = new bootstrap.Modal(loadingDialog);
 const googleDriveAuth = document.getElementById("google-drive-auth");
-
-function popupLoading(msg) {
-    loadingDialog.querySelector(".loading").textContent = msg;
-    googleDriveAuth.style.display = "none";
-    loadingDialogModal.show();
-}
-
-function loadingFinished(message) {
-    googleDriveAuth.style.display = "none";
-    loadingDialogModal.hide();
-    if (message) toast(message);
-}
 
 const googleDrive = new GoogleDriveLoader();
 const googleDriveEl = document.getElementById("google-drive");
@@ -1677,7 +1579,7 @@ document.querySelector("#google-drive-auth form").addEventListener("submit", asy
 });
 
 async function gdLoad(cat, layout) {
-    popupLoading("Loading '" + cat.name + "' from Google Drive");
+    modals.popupLoading("Loading '" + cat.name + "' from Google Drive");
     try {
         const available = await googleDrive.initialise();
         console.log("Google Drive available =", available);
@@ -1696,7 +1598,7 @@ async function gdLoad(cat, layout) {
 
         const ssd = await googleDrive.load(processor.fdc, cat.id, layout);
         console.log("Google Drive loading finished");
-        loadingFinished();
+        modals.loadingFinished();
         if (!ssd.savesChanges) {
             toast(`${cat.name} is read only on Google Drive, so changes to it are not written back.`, {
                 title: "Google Drive",
@@ -1706,7 +1608,7 @@ async function gdLoad(cat, layout) {
         return ssd;
     } catch (error) {
         console.error("Google Drive loading error:", error);
-        loadingFinished(`Unable to load ${cat.name} from Google Drive: ${errorText(error)}`);
+        modals.loadingFinished(`Unable to load ${cat.name} from Google Drive: ${errorText(error)}`);
     }
 }
 
@@ -1781,9 +1683,9 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
     let name = document.querySelector("#google-drive .disc-name").value;
     if (!name) return;
 
-    popupLoading("Connecting to Google Drive");
+    modals.popupLoading("Connecting to Google Drive");
     googleDriveModal.hide();
-    popupLoading("Creating '" + name + "' on Google Drive");
+    modals.popupLoading("Creating '" + name + "' on Google Drive");
 
     let data;
     if (document.querySelector("#google-drive .create-from-existing").checked) {
@@ -1791,7 +1693,7 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
         try {
             data = discType.saver(processor.fdc.drives[0].disc);
         } catch (e) {
-            loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(e)}`);
+            modals.loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(e)}`);
             return;
         }
         name = utils.replaceOrAddExtension(name, discType.extension);
@@ -1813,10 +1715,10 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
         const result = await googleDrive.create(processor.fdc, name, data);
         setDisc1Image("gd:" + result.fileId + "/" + name);
         drives.putDiscIn(0, result.disc);
-        loadingFinished();
+        modals.loadingFinished();
     } catch (error) {
         console.error(`Error creating Google Drive disc: ${error}`, error);
-        loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(error)}`);
+        modals.loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(error)}`);
     }
 });
 
@@ -1876,7 +1778,7 @@ document.getElementById("save-state").addEventListener("click", async function (
         const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
         downloadBlob(blob, `jsbeeb-${model.name}-${timestamp}.json.gz`);
     } catch (e) {
-        showError("saving state", e);
+        modals.showError("saving state", e);
     }
     if (wasRunning) go();
 });
@@ -1906,9 +1808,7 @@ async function loadStateFromFile(file, preReadBuffer) {
         if (!isSameModel(snapshot.model, model.name) || hasCoProcessor(snapshot) !== processor.hasTube) {
             // Model or co-processor mismatch: stash state and reload with a matching machine
             sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
-            const newQuery = { ...parsedQuery, model: snapshot.model, coProcessor: hasCoProcessor(snapshot) };
-            const baseUrl = window.location.origin + window.location.pathname;
-            window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
+            window.location.href = urlState.urlWith({ model: snapshot.model, coProcessor: hasCoProcessor(snapshot) });
             return;
         }
         // Order matters: reload disc media first so the base disc is in the
@@ -1918,7 +1818,7 @@ async function loadStateFromFile(file, preReadBuffer) {
         // Force a repaint so the display updates even while paused
         video.paint();
     } catch (e) {
-        showError("loading state", e);
+        modals.showError("loading state", e);
     }
     if (wasRunning) go();
 }
@@ -2161,42 +2061,16 @@ const startPromise = (async () => {
                 restoreSnapshot(processor, model, snapshot);
                 processor.execute(40000);
             } catch (e) {
-                showError("restoring saved state", e);
+                modals.showError("restoring saved state", e);
             }
         }
 
         go();
     } catch (error) {
         console.error("Error initialising emulator:", error);
-        showError("initialising", error);
+        modals.showError("initialising", error);
     }
 })();
-
-const aysEl = document.getElementById("are-you-sure");
-const aysModal = new bootstrap.Modal(aysEl);
-
-function areYouSure(message, yesText, noText, yesFunc) {
-    const yesButton = aysEl.querySelector(".ays-yes");
-    aysEl.querySelector(".context").textContent = message;
-    aysEl.querySelector(".ays-no").textContent = noText;
-    yesButton.textContent = yesText;
-    let confirmed = false;
-    const onYes = () => {
-        confirmed = true;
-        aysModal.hide();
-    };
-    yesButton.addEventListener("click", onYes, { once: true });
-    // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
-    aysEl.addEventListener(
-        "hidden.bs.modal",
-        () => {
-            yesButton.removeEventListener("click", onYes);
-            if (confirmed) yesFunc();
-        },
-        { once: true },
-    );
-    aysModal.show();
-}
 
 function benchmarkCpu(numCycles) {
     numCycles = numCycles || 10 * 1000 * 1000;
@@ -2558,15 +2432,8 @@ const CanvasScaleStep = 0.25;
     window.setTimeout(resizeTv, 500);
 })();
 
-const $infoModal = new bootstrap.Modal(document.getElementById("info"));
-const $ppTosModal = new bootstrap.Modal(document.getElementById("pp-tos"));
-
-if (Object.hasOwn(parsedQuery, "about")) {
-    $infoModal.show();
-}
-if (Object.hasOwn(parsedQuery, "pp-tos")) {
-    $ppTosModal.show();
-}
+if (Object.hasOwn(parsedQuery, "about")) modals.show("info");
+if (Object.hasOwn(parsedQuery, "pp-tos")) modals.show("pp-tos");
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
@@ -2615,11 +2482,7 @@ electron({
                 if (sthType === "discs") discSth.populate();
                 else if (sthType === "tapes") tapeSth.populate();
             }
-            const modalEl = document.getElementById(modalId);
-            if (modalEl) {
-                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-                modal.show();
-            }
+            modals.show(modalId);
         },
     },
     loadStateFile: loadStateFromFile,
