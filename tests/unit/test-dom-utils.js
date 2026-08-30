@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { downloadBlob } from "../../src/dom-utils.js";
+import { downloadBlob, downloadDriveData } from "../../src/dom-utils.js";
 
 describe("dom-utils", () => {
     describe("downloadBlob", () => {
@@ -37,6 +37,28 @@ describe("dom-utils", () => {
         it("leaves no anchor behind", () => {
             downloadBlob(new Blob(["data"]), "disc.ssd");
             expect(document.querySelector("a")).toBeNull();
+        });
+    });
+
+    describe("downloadDriveData", () => {
+        let clicked;
+
+        beforeEach(() => {
+            clicked = [];
+            vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+                clicked.push({ download: this.download, href: this.href });
+            });
+            vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:disc", revokeObjectURL: () => {} });
+        });
+
+        afterEach(() => {
+            vi.restoreAllMocks();
+            vi.unstubAllGlobals();
+        });
+
+        it("names the file for the format it is in", () => {
+            downloadDriveData(new Uint8Array([1, 2, 3]), "elite.ssd", ".hfe");
+            expect(clicked).toEqual([{ download: "elite.hfe", href: "blob:disc" }]);
         });
     });
 });

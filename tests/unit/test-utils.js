@@ -1,21 +1,22 @@
 import { describe, it, beforeAll, expect, vi, afterEach } from "vitest";
 
 import {
-    parseAddr,
-    hexbyte,
-    hexword,
-    signExtend,
-    readInt16,
-    readInt32,
-    stringToUint8Array,
-    uint8ArrayToString,
-    debounce,
+    BBC,
     crc32,
     createZipBlob,
-    unzip,
-    BBC,
-    keyCodes,
+    debounce,
     getKeyMap,
+    hexbyte,
+    hexword,
+    keyCodes,
+    parseAddr,
+    readInt16,
+    readInt32,
+    replaceOrAddExtension,
+    signExtend,
+    stringToUint8Array,
+    uint8ArrayToString,
+    unzip,
     userKeymap,
 } from "../../src/utils.js";
 import { ATOM, getKeyMapAtom } from "../../src/utils_atom.js";
@@ -438,5 +439,19 @@ describe("createZipBlob and unzip round-trip", () => {
         const blob = createZipBlob([{ name: "empty", data: new Uint8Array(0) }]);
         const files = await unzip(new Uint8Array(await blob.arrayBuffer()));
         expect(files["empty"]).toEqual(new Uint8Array(0));
+    });
+
+    describe("replaceOrAddExtension", function () {
+        it("swaps the extension a name has", function () {
+            expect(replaceOrAddExtension("elite.ssd", ".hfe")).toBe("elite.hfe");
+        });
+
+        it("adds one to a name without any", function () {
+            expect(replaceOrAddExtension("scsi", ".dat")).toBe("scsi.dat");
+        });
+
+        it("only touches the last extension", function () {
+            expect(replaceOrAddExtension("game.disc.ssd", ".dsd")).toBe("game.disc.dsd");
+        });
     });
 });

@@ -1,5 +1,7 @@
 "use strict";
 
+import { replaceOrAddExtension } from "./utils.js";
+
 // Minimal DOM helpers to replace jQuery usage.
 
 export function show(el) {
@@ -45,4 +47,10 @@ export function downloadBlob(blob, fileName) {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), BlobUrlLifetimeMs);
+}
+
+/** Save raw image bytes under the disc's name with the extension of the format they are in. */
+export function downloadDriveData(data, name, extension) {
+    const blob = new Blob([data], { type: "application/octet-stream" });
+    downloadBlob(blob, replaceOrAddExtension(name, extension));
 }
