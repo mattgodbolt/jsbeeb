@@ -156,9 +156,9 @@ export class MachineSession {
         // that hasn't been terminated by a control character.
         this._flushCapture = flush;
 
-        // Expose the decoder's cursor so snapshot()/restore() can rewind it along
-        // with the machine; without it, text captured after a restore carries the
-        // coordinates and colours the abandoned run had reached.
+        // Expose the decoder's cursor so snapshot()/restore() can rewind it too:
+        // text captured after a restore would otherwise carry the coordinates
+        // and colours the abandoned run had reached.
         this._snapshotCapture = () => ({
             attributes: { ...attributes },
             currentText,
@@ -170,9 +170,9 @@ export class MachineSession {
             currentText = state.currentText;
             params = [...state.params];
             nextN = state.nextN;
-            // vduProc is a closure and does not survive into the snapshot, so one
-            // taken between a VDU command and its last parameter resumes with
-            // nextN still swallowing them: the sequence is dropped, not printed.
+            // vduProc is a closure and does not survive, so a snapshot taken
+            // mid-sequence resumes with nextN still swallowing the parameters:
+            // the sequence is dropped rather than printed as text.
             vduProc = null;
         };
 
@@ -301,12 +301,8 @@ export class MachineSession {
     }
 
     /**
-     * Capture the whole session — machine state and captured text alike — as an
-     * opaque object for restore().  Booting is the expensive part of a session,
-     * so snapshotting a booted machine and restoring it between runs is much
-     * cheaper than building a new session for each one.
-     *
-     * Taking a snapshot does not disturb the running machine.
+     * Capture machine state and captured text as an opaque object for restore().
+     * Leaves the running session undisturbed.
      *
      * @param {Object} [opts]
      * @param {boolean} [opts.includeRoms=true] - carry the ROM contents too.
@@ -322,14 +318,10 @@ export class MachineSession {
     }
 
     /**
-     * Put back a state from snapshot().  The machine, and the text captured but
-     * not yet drained, return to exactly what they were; `elapsedCycles` rewinds
-     * with the machine.
-     *
-     * Breakpoints are the session's rather than the machine's and are left
-     * alone, hit flags included.  `frameCount` also keeps counting, so that it
-     * stays a monotonic record of what the session has painted — the same way it
-     * survives a hard reset.
+     * Put back a state from snapshot().  `elapsedCycles` rewinds with the
+     * machine; breakpoints belong to the session, not the machine, so they and
+     * their hit flags are left alone, and `frameCount` keeps counting the way it
+     * does across a hard reset.
      */
     restore(state) {
         this._machine.restore(state.machine);
