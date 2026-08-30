@@ -31,6 +31,7 @@ import { toHfe } from "./disc-hfe.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
+import { UrlState } from "./web/url-state.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
@@ -52,12 +53,9 @@ import { RewindUI } from "./rewind-ui.js";
 import { DiscVisualiser } from "./disc-visualiser.js";
 import { downloadBlob } from "./dom-utils.js";
 import {
-    buildUrlFromParams,
     DriveTracks,
     guessModelFromHostname,
-    ParamTypes,
     parseMediaParams,
-    parseQueryString,
     processAutobootParams,
     processDriveTrackParams,
     processInputParams,
@@ -116,65 +114,10 @@ const availableImages = [
 let discImage = availableImages[0].file;
 const extraRoms = [];
 
-// Build the query string from the URL
-const queryString = document.location.search.substring(1) + "&" + window.location.hash.substring(1);
 let secondDiscImage = null;
 
-// Define parameter types
-const paramTypes = {
-    // Array parameters
-    rom: ParamTypes.ARRAY,
-
-    // Boolean parameters
-    embed: ParamTypes.BOOL,
-    fasttape: ParamTypes.BOOL,
-    noseek: ParamTypes.BOOL,
-    debug: ParamTypes.BOOL,
-    verbose: ParamTypes.BOOL,
-    autoboot: ParamTypes.BOOL,
-    autochain: ParamTypes.BOOL,
-    autorun: ParamTypes.BOOL,
-    hasMusic5000: ParamTypes.BOOL,
-    hasTeletextAdaptor: ParamTypes.BOOL,
-    hasEconet: ParamTypes.BOOL,
-    glEnabled: ParamTypes.BOOL,
-    fakeVideo: ParamTypes.BOOL,
-    logFdcCommands: ParamTypes.BOOL,
-    logFdcStateChanges: ParamTypes.BOOL,
-    coProcessor: ParamTypes.BOOL,
-    mouseJoystickEnabled: ParamTypes.BOOL,
-    speechOutput: ParamTypes.BOOL,
-    audioDebug: ParamTypes.BOOL,
-    audioOutput: ParamTypes.STRING,
-
-    // Numeric parameters
-    speed: ParamTypes.INT,
-    stationId: ParamTypes.INT,
-    frameSkip: ParamTypes.INT,
-    audiofilterfreq: ParamTypes.FLOAT,
-    audiofilterq: ParamTypes.FLOAT,
-    speakerAmount: ParamTypes.FLOAT,
-    audioLatencyMs: ParamTypes.FLOAT,
-    cpuMultiplier: ParamTypes.FLOAT,
-    tubeCpuMultiplier: ParamTypes.FLOAT,
-    microphoneChannel: ParamTypes.INT,
-
-    // String parameters (these are the default but listed for clarity)
-    model: ParamTypes.STRING,
-    disc: ParamTypes.STRING,
-    disc1: ParamTypes.STRING,
-    disc2: ParamTypes.STRING,
-    tape: ParamTypes.STRING,
-    mmc: ParamTypes.STRING,
-    keyLayout: ParamTypes.STRING,
-    autotype: ParamTypes.STRING,
-    displayMode: ParamTypes.STRING,
-    drive0Tracks: ParamTypes.STRING,
-    drive1Tracks: ParamTypes.STRING,
-};
-
-// Parse the query string with parameter types
-let parsedQuery = parseQueryString(queryString, paramTypes);
+const urlState = new UrlState(window.location, window.history);
+const parsedQuery = urlState.params;
 let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
 let keyLayout = window.localStorage.keyLayout || "physical";
 
@@ -257,7 +200,7 @@ const config = new Config(
         if (changed.displayMode) applyDisplayMode(changed.displayMode);
     },
     function onClose(changed) {
-        parsedQuery = Object.assign(parsedQuery, changed);
+        Object.assign(parsedQuery, changed);
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
@@ -278,7 +221,7 @@ const config = new Config(
                 processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
             }
         }
-        updateUrl();
+        urlState.updateUrl();
     },
     function onRestartRequired() {
         areYouSure(
@@ -718,7 +661,7 @@ async function loadHTMLFile(file) {
     putDiscIn(0, loadedDisc);
     delete parsedQuery.disc;
     delete parsedQuery.disc1;
-    updateUrl();
+    urlState.updateUrl();
     $discsModal.hide();
 }
 
@@ -1008,7 +951,7 @@ async function setupMicrophone() {
         config.setMicrophoneChannel(undefined);
         // Update URL to remove the parameter
         delete parsedQuery.microphoneChannel;
-        updateUrl();
+        urlState.updateUrl();
     }
 }
 
@@ -1149,19 +1092,19 @@ document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
 function setDisc1Image(name) {
     delete parsedQuery.disc;
     parsedQuery.disc1 = name;
-    updateUrl();
+    urlState.updateUrl();
     config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
 }
 
 function setDisc2Image(name) {
     parsedQuery.disc2 = name;
-    updateUrl();
+    urlState.updateUrl();
     config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
 }
 
 function setTapeImage(name) {
     parsedQuery.tape = name;
-    updateUrl();
+    urlState.updateUrl();
     config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
 }
 
@@ -1283,7 +1226,7 @@ for (const check of autobootChecks) {
         } else {
             delete parsedQuery.autoboot;
         }
-        updateUrl();
+        urlState.updateUrl();
     });
 }
 
@@ -1488,12 +1431,6 @@ function autoRunBasic() {
 
     const bbcKeys = stringToMachineKeys("RUN\n");
     sendRawKeyboard([1000].concat(bbcKeys), false);
-}
-
-function updateUrl() {
-    const baseUrl = window.location.origin + window.location.pathname;
-    const url = buildUrlFromParams(baseUrl, parsedQuery, paramTypes);
-    window.history.pushState(null, null, url);
 }
 
 function splitImage(image) {
@@ -1704,7 +1641,7 @@ document.getElementById("tape_load").addEventListener("change", async function (
         }
         setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
         delete parsedQuery.tape;
-        updateUrl();
+        urlState.updateUrl();
         bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
     } catch (error) {
         reportLoadFailure(file.name, error);
@@ -2017,9 +1954,7 @@ async function loadStateFromFile(file, preReadBuffer) {
         if (!isSameModel(snapshot.model, model.name) || hasCoProcessor(snapshot) !== processor.hasTube) {
             // Model or co-processor mismatch: stash state and reload with a matching machine
             sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
-            const newQuery = { ...parsedQuery, model: snapshot.model, coProcessor: hasCoProcessor(snapshot) };
-            const baseUrl = window.location.origin + window.location.pathname;
-            window.location.href = buildUrlFromParams(baseUrl, newQuery, paramTypes);
+            window.location.href = urlState.urlWith({ model: snapshot.model, coProcessor: hasCoProcessor(snapshot) });
             return;
         }
         // Order matters: reload disc media first so the base disc is in the
