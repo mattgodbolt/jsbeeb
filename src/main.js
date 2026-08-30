@@ -15,7 +15,6 @@ import { StairwayToHell } from "./sth.js";
 import { BbcDiscArchive, Provenance, describe as describeHfe, matches, provenancesIn } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
-import { loadTapeFromData } from "./tapes.js";
 import { GoogleDriveLoader } from "./google-drive.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
@@ -30,10 +29,11 @@ import { DiscLayout } from "./disc.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
+import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
-import { errorText, reportIgnoredFiles, reportLoadFailure, showNotice, unzipAndReport } from "./web/reporting.js";
+import { errorText, reportLoadFailure, showNotice } from "./web/reporting.js";
 import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
@@ -75,15 +75,6 @@ let hfeArchive;
 let running;
 let model;
 
-// Route tape to the correct interface (ACIA for BBC, PPIA for Atom)
-function setProcessorTape(tape) {
-    if (model.isAtom) {
-        processor.atomppia.setTape(tape);
-    } else {
-        processor.acia.setTape(tape);
-    }
-}
-
 // Convert text to machine-appropriate key sequences (BBC or Atom)
 function stringToMachineKeys(text) {
     return model.isAtom ? utils_atom.stringToATOMKeys(text) : utils.stringToBBCKeys(text);
@@ -95,24 +86,7 @@ if (!window.isSecureContext)
         title: "Gamepads",
         quietKey: "quietInsecureGamepads",
     });
-const availableImages = [
-    {
-        name: "Elite",
-        desc: "An 8-bit classic. Hit F10 to launch from the space station, then use <, >, S, X and A to fly around.",
-        file: "elite.ssd",
-    },
-    {
-        name: "Welcome",
-        desc: "The disc supplied with BBC Disc systems to demonstrate some of the features of the system.",
-        file: "Welcome.ssd",
-    },
-    {
-        name: "Music 5000",
-        desc: "The Music 5000 system disk and demo songs.",
-        file: "5000mstr36008.ssd",
-    },
-];
-let discImage = availableImages[0].file;
+let discImage = BuiltInImages[0].file;
 const extraRoms = [];
 
 let secondDiscImage = null;
@@ -534,88 +508,12 @@ const quickSettings = new QuickSettings(
 
 for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
 
-const $discsModal = new bootstrap.Modal(document.getElementById("discs"));
-const $fsModal = new bootstrap.Modal(document.getElementById("econetfs"));
-
-/**
- * Helper function to read a file as binary string
- * @param {File} file - The file to read
- * @returns {Promise<string>} - Promise that resolves with the binary string content of the file, or rejects on error
- */
-function readFileAsBinaryString(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            resolve(e.target.result);
-        };
-        reader.onerror = (e) => {
-            console.error(`Error reading file ${file.name}:`, e);
-            reject(new Error(`Failed to read file ${file.name}`));
-        };
-        reader.readAsBinaryString(file);
-    });
-}
-
-async function loadHTMLFile(file) {
-    const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
-    const loadedDisc = disc.discFor(processor.fdc, file.name, imageData, undefined, drives.layoutForDrive(0));
-    // Local file: retain the image bytes for embedding in save-to-file snapshots.
-    loadedDisc.setOriginalImage(imageData);
-    drives.putDiscIn(0, loadedDisc);
-    delete parsedQuery.disc;
-    delete parsedQuery.disc1;
-    urlState.updateUrl();
-    $discsModal.hide();
-}
-
-async function loadSCSIFile(file) {
-    const binaryData = await readFileAsBinaryString(file);
-    processor.filestore.scsi = utils.stringToUint8Array(binaryData);
-
-    processor.filestore.PC = 0x400;
-    processor.filestore.SP = 0xff;
-    processor.filestore.A = 1;
-    processor.filestore.emulationSpeed = 0;
-
-    // Reset any open receive blocks
-    processor.econet.receiveBlocks = [];
-    processor.econet.nextReceiveBlockNumber = 1;
-
-    $fsModal.hide();
-}
-
 const pastetext = document.getElementById("paste-text");
 pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
 pastetext.addEventListener("paste", function (event) {
     const text = event.clipboardData.getData("text/plain");
     sendRawKeyboard(stringToMachineKeys(text), true);
 });
-pastetext.addEventListener("dragover", function (event) {
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "copy";
-});
-pastetext.addEventListener("drop", async function (event) {
-    utils.noteEvent("local", "drop");
-    const file = event.dataTransfer.files[0];
-    if (!file) return;
-    try {
-        const arrayBuffer = await file.arrayBuffer();
-        if (isSnapshotFile(file.name, arrayBuffer)) {
-            await loadStateFromFile(file, arrayBuffer);
-        } else if (file.name.toLowerCase().endsWith(".uef")) {
-            // Regular UEF tape image (not a BeebEm save state)
-            setProcessorTape(await loadTapeFromData(file.name, new Uint8Array(arrayBuffer), model));
-            toast(`Loaded ${file.name} as the tape.`, { title: "Dropped" });
-        } else {
-            await loadHTMLFile(file);
-            toast(`Loaded ${file.name} into drive 0.`, { title: "Dropped" });
-        }
-    } catch (error) {
-        reportLoadFailure(file.name, error);
-    }
-});
-
 const cubMonitor = document.getElementById("cub-monitor");
 function onCubMouseEvent(evt) {
     audioHandler.tryResume();
@@ -767,6 +665,23 @@ processor = new CpuClass(model, {
 
 printer.attach(processor.uservia);
 const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure: modals.areYouSure.bind(modals) });
+const media = new MediaLoader({
+    processor,
+    model,
+    drives,
+    urlState,
+    config,
+    modals,
+    isSnapshotFile,
+    loadSnapshot: (file, buffer) => loadStateFromFile(file, buffer),
+    // The archives are created further down; each source resolves when used.
+    sources: {
+        sth: (name) => discSth.fetch(name),
+        tapeSth: (name) => tapeSth.fetch(name),
+        hfe: (path) => hfeArchive.fetch(path),
+        drive: (cat, layout) => gdLoad(cat, layout),
+    },
+});
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
@@ -993,25 +908,6 @@ document.addEventListener("keydown", (evt) => {
 document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
 document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
 
-function setDisc1Image(name) {
-    delete parsedQuery.disc;
-    parsedQuery.disc1 = name;
-    urlState.updateUrl();
-    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
-}
-
-function setDisc2Image(name) {
-    parsedQuery.disc2 = name;
-    urlState.updateUrl();
-    config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
-}
-
-function setTapeImage(name) {
-    parsedQuery.tape = name;
-    urlState.updateUrl();
-    config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
-}
-
 function clearArchiveList(listId) {
     for (const el of document.querySelectorAll(`#${listId} li:not(.template)`)) el.remove();
 }
@@ -1036,7 +932,7 @@ function sthStartLoad() {
 
 async function discSthClick(item) {
     utils.noteEvent("sth", "click", item);
-    setDisc1Image("sth:" + item);
+    media.setDisc1Image("sth:" + item);
     const needsAutoboot = parsedQuery.autoboot !== undefined;
     if (needsAutoboot) {
         processor.reset(true);
@@ -1044,7 +940,7 @@ async function discSthClick(item) {
 
     modals.popupLoading("Loading " + item);
     try {
-        const loaded = await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
+        const loaded = await media.loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
         drives.putDiscIn(0, loaded);
         modals.loadingFinished();
 
@@ -1059,12 +955,12 @@ async function discSthClick(item) {
 
 async function tapeSthClick(item) {
     utils.noteEvent("sth", "clickTape", item);
-    setTapeImage("sth:" + item);
+    media.setTapeImage("sth:" + item);
 
     modals.popupLoading("Loading " + item);
     try {
-        const tape = await loadTapeImage(parsedQuery.tape);
-        setProcessorTape(tape);
+        const tape = await media.loadTapeImage(parsedQuery.tape);
+        media.setProcessorTape(tape);
         modals.loadingFinished();
     } catch (err) {
         console.error("Error loading tape image:", err);
@@ -1172,14 +1068,14 @@ function hfeOnError() {
 
 async function hfeClick(file) {
     utils.noteEvent("hfe", "click", file.path);
-    setDisc1Image("hfe:" + file.path);
+    media.setDisc1Image("hfe:" + file.path);
     const needsAutoboot = parsedQuery.autoboot !== undefined;
     if (needsAutoboot) processor.reset(true);
 
     const name = describeHfe(file).title;
     modals.popupLoading("Loading " + name);
     try {
-        const loaded = await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
+        const loaded = await media.loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
         drives.putDiscIn(0, loaded);
         modals.loadingFinished();
         if (needsAutoboot) autoboot(name);
@@ -1337,34 +1233,27 @@ function autoRunBasic() {
     sendRawKeyboard([1000].concat(bbcKeys), false);
 }
 
-function splitImage(image) {
-    const match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
-    const schema = match[2] || match[1] || "";
-    image = match[3];
-    return { image: image, schema: schema };
-}
-
-async function reloadSnapshotMedia(media) {
-    if (!media) return;
+async function reloadSnapshotMedia(savedMedia) {
+    if (!savedMedia) return;
     for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
         const discKey = driveIndex === 0 ? "disc1" : "disc2";
         const imageDataKey = discKey + "ImageData";
         const crcKey = discKey + "Crc32";
 
         // A snapshot from before layout detection has no field, and was contiguous.
-        const layout = media[discKey + "Layout"] ?? DiscLayout.contiguous;
+        const layout = savedMedia[discKey + "Layout"] ?? DiscLayout.contiguous;
 
         let loadedDisc = null;
-        if (media[discKey]) {
+        if (savedMedia[discKey]) {
             // URL-based disc — reload from source
-            loadedDisc = await loadDiscImage(media[discKey], layout);
-        } else if (media[imageDataKey]) {
+            loadedDisc = await media.loadDiscImage(savedMedia[discKey], layout);
+        } else if (savedMedia[imageDataKey]) {
             // Locally-loaded disc — reconstruct from embedded image data
             const imageData =
-                media[imageDataKey] instanceof Uint8Array
-                    ? media[imageDataKey]
-                    : new Uint8Array(Object.values(media[imageDataKey]));
-            const discName = media[discKey + "Name"] || "snapshot.ssd";
+                savedMedia[imageDataKey] instanceof Uint8Array
+                    ? savedMedia[imageDataKey]
+                    : new Uint8Array(Object.values(savedMedia[imageDataKey]));
+            const discName = savedMedia[discKey + "Name"] || "snapshot.ssd";
             loadedDisc = disc.discFor(processor.fdc, discName, imageData, undefined, layout);
             // Retain the image bytes so subsequent saves can re-embed them.
             loadedDisc.setOriginalImage(imageData);
@@ -1372,8 +1261,8 @@ async function reloadSnapshotMedia(media) {
         if (!loadedDisc) continue;
 
         // Verify CRC32 if present
-        if (media[crcKey] != null && loadedDisc.originalImageCrc32 != null) {
-            if (loadedDisc.originalImageCrc32 !== media[crcKey]) {
+        if (savedMedia[crcKey] != null && loadedDisc.originalImageCrc32 != null) {
+            if (loadedDisc.originalImageCrc32 !== savedMedia[crcKey]) {
                 toast(
                     `${loadedDisc.name} has changed since this state was saved. The state has been restored anyway and may not run correctly.`,
                     { title: "Restoring state" },
@@ -1385,174 +1274,12 @@ async function reloadSnapshotMedia(media) {
         // Only update the URL/query for URL-sourced discs. For embedded
         // (local-file) discs, setting parsedQuery would put a bogus source
         // in the URL and break subsequent saves/reloads.
-        if (media[discKey]) {
-            if (driveIndex === 0) setDisc1Image(media[discKey]);
-            else setDisc2Image(media[discKey]);
+        if (savedMedia[discKey]) {
+            if (driveIndex === 0) media.setDisc1Image(savedMedia[discKey]);
+            else media.setDisc2Image(savedMedia[discKey]);
         }
     }
 }
-
-async function loadDiscImage(discImage, layout = DiscLayout.auto) {
-    if (!discImage) return null;
-    const split = splitImage(discImage);
-    discImage = split.image;
-    const schema = split.schema;
-    if (schema[0] === "!" || schema === "local") {
-        return disc.localDisc(processor.fdc, discImage, layout, (error) =>
-            toast(
-                `Browser storage would not take changes to ${discImage} (${errorText(error)}). Use Discs, Download to keep a copy.`,
-                { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },
-            ),
-        );
-    }
-    // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
-    // Consider:
-    // * hashing contents and making a local disc image named by original disc hash, save by that, and offer
-    //   to load the modified disc on load.
-    // * popping up a message that notes the disc has changed, and offers a way to make a local image
-    // * Dialog box (ugh) saying "is this ok?"
-    switch (schema) {
-        case "|":
-        case "sth": {
-            const { name, data, ignored } = await discSth.fetch(discImage);
-            reportIgnoredFiles(name, ignored);
-            return disc.discFor(processor.fdc, name, data, undefined, layout);
-        }
-
-        case "hfe":
-            return disc.discFor(processor.fdc, discImage, await hfeArchive.fetch(discImage), undefined, layout);
-
-        case "gd": {
-            const splat = discImage.match(/([^/]+)\/?(.*)/);
-            let name = "(unknown)";
-            if (splat) {
-                discImage = splat[1];
-                name = splat[2];
-            }
-            return gdLoad({ name, id: discImage }, layout);
-        }
-        case "b64data":
-            return disc.discFor(processor.fdc, "disk.ssd", atob(discImage), undefined, layout);
-
-        case "data": {
-            const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-            const { name, data } = await unzipAndReport(arr);
-            return disc.discFor(processor.fdc, name, data, undefined, layout);
-        }
-        case "http":
-        case "https":
-        case "file": {
-            const asUrl = `${schema}://${discImage}`;
-            // url may end in query params etc, which can upset the DSD/SSD etc detection on the extension.
-            discImage = new URL(asUrl).pathname;
-            let discData = await utils.loadData(asUrl);
-            if (/\.zip/i.test(discImage)) {
-                const unzipped = await unzipAndReport(discData);
-                discData = unzipped.data;
-                discImage = unzipped.name;
-            }
-            return disc.discFor(processor.fdc, discImage, discData, undefined, layout);
-        }
-        default:
-            return disc.discFor(processor.fdc, discImage, await disc.load("discs/" + discImage), undefined, layout);
-    }
-}
-
-async function loadTapeImage(tapeImage) {
-    const split = splitImage(tapeImage);
-    tapeImage = split.image;
-    const schema = split.schema;
-
-    switch (schema) {
-        case "|":
-        case "sth": {
-            const { name, data, ignored } = await tapeSth.fetch(tapeImage);
-            reportIgnoredFiles(name, ignored);
-            return await loadTapeFromData(name, data, model);
-        }
-
-        case "data": {
-            const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-            const { name, data } = await unzipAndReport(arr);
-            return await loadTapeFromData(name, data, model);
-        }
-
-        case "http":
-        case "https":
-        case "file": {
-            const asUrl = `${schema}://${tapeImage}`;
-            // url may end in query params etc, which can upset file handling
-            tapeImage = new URL(asUrl).pathname;
-            let tapeData = await utils.loadData(asUrl);
-            if (/\.zip/i.test(tapeImage)) {
-                const unzipped = await unzipAndReport(tapeData);
-                tapeData = unzipped.data;
-                tapeImage = unzipped.name;
-            }
-            return await loadTapeFromData(tapeImage, tapeData, model);
-        }
-
-        default: {
-            const tapePath = "tapes/" + tapeImage;
-            let tapeData = await utils.loadData(tapePath);
-            let tapeName = tapeImage;
-            if (/\.zip/i.test(tapeName)) {
-                const unzipped = await unzipAndReport(tapeData);
-                tapeData = unzipped.data;
-                tapeName = unzipped.name;
-            }
-            return await loadTapeFromData(tapeName, tapeData, model);
-        }
-    }
-}
-
-document.getElementById("disc_load").addEventListener("change", async function (evt) {
-    if (evt.target.files.length === 0) return;
-    utils.noteEvent("local", "click"); // NB no filename here
-    const file = evt.target.files[0];
-    try {
-        await loadHTMLFile(file);
-    } catch (error) {
-        reportLoadFailure(file.name, error);
-    }
-    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
-});
-
-document.getElementById("fs_load").addEventListener("change", async function (evt) {
-    if (evt.target.files.length === 0) return;
-    utils.noteEvent("local", "click"); // NB no filename here
-    const file = evt.target.files[0];
-    try {
-        await loadSCSIFile(file);
-    } catch (error) {
-        reportLoadFailure(file.name, error);
-    }
-    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
-});
-
-document.getElementById("tape_load").addEventListener("change", async function (evt) {
-    if (evt.target.files.length === 0) return;
-    const file = evt.target.files[0];
-    utils.noteEvent("local", "clickTape"); // NB no filename here
-
-    try {
-        let tapeData = await readFileAsBinaryString(file);
-        let tapeName = file.name;
-        if (/\.zip/i.test(tapeName)) {
-            const unzipped = await unzipAndReport(utils.stringToUint8Array(tapeData));
-            tapeData = unzipped.data;
-            tapeName = unzipped.name;
-        }
-        setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
-        delete parsedQuery.tape;
-        urlState.updateUrl();
-        bootstrap.Modal.getInstance(document.getElementById("tapes"))?.hide();
-    } catch (error) {
-        reportLoadFailure(file.name, error);
-    }
-
-    evt.target.value = ""; // clear so if the user picks the same file again after a reset we get a "change"
-});
 
 const googleDriveAuth = document.getElementById("google-drive-auth");
 
@@ -1651,33 +1378,13 @@ googleDriveEl.addEventListener("show.bs.modal", async function () {
         row.querySelector(".name").textContent = item.name;
         row.addEventListener("click", async function () {
             utils.noteEvent("google-drive", "click", item.name);
-            setDisc1Image(`gd:${item.id}/${item.name}`);
+            media.setDisc1Image(`gd:${item.id}/${item.name}`);
             googleDriveModal.hide();
             const ssd = await gdLoad(item, drives.layoutForDrive(0));
             if (ssd) drives.putDiscIn(0, ssd);
         });
     }
 });
-const discList = document.getElementById("disc-list");
-const discTemplate = discList.querySelector(".template");
-for (const image of availableImages) {
-    const elem = discTemplate.cloneNode(true);
-    elem.classList.remove("template");
-    discList.appendChild(elem);
-    elem.querySelector(".name").textContent = image.name;
-    elem.querySelector(".description").textContent = image.desc;
-    elem.addEventListener("click", async function () {
-        utils.noteEvent("images", "click", image.file);
-        setDisc1Image(image.file);
-        $discsModal.hide();
-        try {
-            drives.putDiscIn(0, await loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0)));
-        } catch (error) {
-            reportLoadFailure(`${image.name} (${image.file})`, error);
-        }
-    });
-}
-
 document.querySelector("#google-drive form").addEventListener("submit", async function (e) {
     e.preventDefault();
     let name = document.querySelector("#google-drive .disc-name").value;
@@ -1713,7 +1420,7 @@ document.querySelector("#google-drive form").addEventListener("submit", async fu
 
     try {
         const result = await googleDrive.create(processor.fdc, name, data);
-        setDisc1Image("gd:" + result.fileId + "/" + name);
+        media.setDisc1Image("gd:" + result.fileId + "/" + name);
         drives.putDiscIn(0, result.disc);
         modals.loadingFinished();
     } catch (error) {
@@ -1953,18 +1660,20 @@ const startPromise = (async () => {
 
     if (discImage) {
         startImageLoad(`disc ${discImage}`, async () =>
-            drives.putDiscIn(0, await loadDiscImage(discImage, drives.layoutForDrive(0))),
+            drives.putDiscIn(0, await media.loadDiscImage(discImage, drives.layoutForDrive(0))),
         );
     }
 
     if (secondDiscImage) {
         startImageLoad(`disc ${secondDiscImage}`, async () =>
-            drives.putDiscIn(1, await loadDiscImage(secondDiscImage, drives.layoutForDrive(1))),
+            drives.putDiscIn(1, await media.loadDiscImage(secondDiscImage, drives.layoutForDrive(1))),
         );
     }
 
     if (parsedQuery.tape) {
-        startImageLoad(`tape ${parsedQuery.tape}`, async () => setProcessorTape(await loadTapeImage(parsedQuery.tape)));
+        startImageLoad(`tape ${parsedQuery.tape}`, async () =>
+            media.setProcessorTape(await media.loadTapeImage(parsedQuery.tape)),
+        );
     }
 
     if (mmcImage && model.isAtom) {
@@ -2472,8 +2181,8 @@ window.m7dump = function () {
 
 // Hooks for electron.
 electron({
-    loadDiscImage,
-    loadTapeImage,
+    loadDiscImage: media.loadDiscImage.bind(media),
+    loadTapeImage: media.loadTapeImage.bind(media),
     processor,
     config,
     modals: {
