@@ -101,6 +101,7 @@ export class Settings {
     }
 
     applyAudioOutput(output) {
+        this.audioOutput = output;
         this.targets.audioHandler.setAudioOutput(output);
         this.config.setAudioOutput(output);
         this.targets.quickSettings?.showAudioOutput(output);
@@ -110,6 +111,7 @@ export class Settings {
     }
 
     applySpeakerAmount(amount) {
+        this.speakerAmount = amount;
         this.targets.audioHandler.setSpeakerAmount(amount);
         this.config.setSpeakerAmount(amount);
         this.targets.quickSettings?.showSpeakerAmount(amount);
@@ -119,6 +121,7 @@ export class Settings {
     }
 
     applyDisplayMode(mode) {
+        this.displayMode = mode;
         this.targets.display.setMode(mode);
         this.config.setDisplayMode(mode);
         this.targets.quickSettings?.showDisplayMode(mode);
