@@ -1,0 +1,89 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { AutobootTicks, clearArchiveList, filterArchiveList, showArchiveMessage } from "../../src/web/archive-list.js";
+
+const Markup = `
+<div id="sth" class="modal"><span class="loading" style="display: none"></span>
+  <ul id="sth-list"><li class="template"><span class="name"></span></li></ul>
+  <label><input type="checkbox" class="autoboot" /></label>
+</div>
+<div id="hfe" class="modal"><span class="loading"></span>
+  <ul id="hfe-list"><li class="template"><span class="name"></span></li></ul>
+  <label><input type="checkbox" class="autoboot" /></label>
+</div>`;
+
+const addRow = (listId, text) => {
+    const row = document.createElement("li");
+    row.textContent = text;
+    document.getElementById(listId).appendChild(row);
+    return row;
+};
+
+describe("archive lists", () => {
+    beforeEach(() => {
+        document.body.innerHTML = Markup;
+    });
+
+    afterEach(() => {
+        document.body.innerHTML = "";
+    });
+
+    it("clears every row but the template", () => {
+        addRow("sth-list", "Elite");
+        addRow("sth-list", "Chuckie Egg");
+        clearArchiveList("sth-list");
+        expect(document.querySelectorAll("#sth-list li")).toHaveLength(1);
+        expect(document.querySelector("#sth-list .template")).toBeTruthy();
+    });
+
+    it("shows a message and empties the list it talks about", () => {
+        addRow("sth-list", "Elite");
+        showArchiveMessage("sth", "sth-list", "Loading catalog from STH archive");
+        const loading = document.querySelector("#sth .loading");
+        expect(loading.textContent).toBe("Loading catalog from STH archive");
+        expect(loading.style.display).toBe("");
+        expect(document.querySelectorAll("#sth-list li:not(.template)")).toHaveLength(0);
+    });
+
+    it("filters rows by their text, without regard to case", () => {
+        const elite = addRow("sth-list", "Elite");
+        const chuckie = addRow("sth-list", "Chuckie Egg");
+        filterArchiveList("sth-list", "ELITE");
+        expect(elite.style.display).toBe("");
+        expect(chuckie.style.display).toBe("none");
+        filterArchiveList("sth-list", "");
+        expect(chuckie.style.display).toBe("");
+    });
+
+    describe("AutobootTicks", () => {
+        let urlState;
+        const boxes = () => [...document.querySelectorAll(".autoboot")];
+
+        beforeEach(() => {
+            urlState = { params: {}, updateUrl: vi.fn() };
+            new AutobootTicks({ urlState });
+        });
+
+        it("mirrors a tick into every picker and the URL", () => {
+            boxes()[0].click();
+            expect(boxes().map((box) => box.checked)).toEqual([true, true]);
+            expect(urlState.params.autoboot).toBe("");
+            expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
+        });
+
+        it("clears the URL when unticked from the other picker", () => {
+            boxes()[0].click();
+            boxes()[1].click();
+            expect(boxes().map((box) => box.checked)).toEqual([false, false]);
+            expect(urlState.params.autoboot).toBeUndefined();
+        });
+
+        it("can be shown a state without touching the URL", () => {
+            const ticks = new AutobootTicks({ urlState });
+            ticks.show(true);
+            expect(boxes().every((box) => box.checked)).toBe(true);
+            expect(urlState.updateUrl).not.toHaveBeenCalled();
+        });
+    });
+});
