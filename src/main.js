@@ -11,7 +11,6 @@ import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos, localStoragePersistence } from "./cmos.js";
 import { GamePad } from "./gamepads.js";
-import * as disc from "./fdc.js";
 import * as tokeniser from "./basic-tokenise.js";
 import * as canvasLib from "./canvas.js";
 import { Config } from "./config.js";
@@ -21,7 +20,6 @@ import { AudioHandler } from "./web/audio-handler.js";
 import { DefaultAudioOutput, isAudioOutput } from "./audio-output.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { Econet } from "./econet.js";
-import { DiscLayout } from "./disc.js";
 import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
@@ -30,6 +28,7 @@ import { AutobootTicks } from "./web/archive-list.js";
 import { SthPicker } from "./web/sth-picker.js";
 import { HfePicker } from "./web/hfe-picker.js";
 import { GoogleDrivePicker } from "./web/google-drive-picker.js";
+import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -40,20 +39,10 @@ import { Printer } from "./printer.js";
 import { MouseJoystickSource } from "./mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { getFilterForMode } from "./canvas.js";
-import {
-    createSnapshot,
-    restoreSnapshot,
-    snapshotToJSON,
-    snapshotFromJSON,
-    isSameModel,
-    hasCoProcessor,
-} from "./snapshot.js";
-import { isBemSnapshot, parseBemSnapshot } from "./bem-snapshot.js";
-import { isUefSnapshot, parseUefSnapshot } from "./uef-snapshot.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
 import { DiscVisualiser } from "./disc-visualiser.js";
-import { downloadBlob, downloadDriveData } from "./dom-utils.js";
+import { downloadDriveData } from "./dom-utils.js";
 import {
     guessModelFromHostname,
     parseMediaParams,
@@ -346,16 +335,6 @@ if (parsedQuery.lowLatency !== undefined) {
 const screenCanvas = document.getElementById("screen");
 
 const modals = new Modals({ isRunning: () => running, stop, go });
-
-async function compressBlob(blob) {
-    const stream = blob.stream().pipeThrough(new CompressionStream("gzip"));
-    return new Response(stream).blob();
-}
-
-async function decompressBlob(blob) {
-    const stream = blob.stream().pipeThrough(new DecompressionStream("gzip"));
-    return new Response(stream).blob();
-}
 
 if (keyMappingWarnings.length) {
     toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
@@ -670,7 +649,7 @@ const media = new MediaLoader({
     config,
     modals,
     isSnapshotFile,
-    loadSnapshot: (file, buffer) => loadStateFromFile(file, buffer),
+    loadSnapshot: (file, buffer) => snapshots.loadStateFromFile(file, buffer),
     // The archives are created further down; each source resolves when used.
     sources: {
         sth: (name) => sthPicker.discs.fetch(name),
@@ -683,6 +662,18 @@ const autobootTicks = new AutobootTicks({ urlState });
 const sthPicker = new SthPicker({ media, drives, modals, urlState, processor, autoboot });
 const hfePicker = new HfePicker({ media, drives, modals, urlState, processor, autoboot });
 const drivePicker = new GoogleDrivePicker({ media, drives, modals, processor });
+const snapshots = new SnapshotUI({
+    processor,
+    model,
+    video,
+    media,
+    drives,
+    urlState,
+    modals,
+    isRunning: () => running,
+    stop,
+    go,
+});
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
@@ -959,54 +950,6 @@ function autoRunBasic() {
     sendRawKeyboard([1000].concat(bbcKeys), false);
 }
 
-async function reloadSnapshotMedia(savedMedia) {
-    if (!savedMedia) return;
-    for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
-        const discKey = driveIndex === 0 ? "disc1" : "disc2";
-        const imageDataKey = discKey + "ImageData";
-        const crcKey = discKey + "Crc32";
-
-        // A snapshot from before layout detection has no field, and was contiguous.
-        const layout = savedMedia[discKey + "Layout"] ?? DiscLayout.contiguous;
-
-        let loadedDisc = null;
-        if (savedMedia[discKey]) {
-            // URL-based disc — reload from source
-            loadedDisc = await media.loadDiscImage(savedMedia[discKey], layout);
-        } else if (savedMedia[imageDataKey]) {
-            // Locally-loaded disc — reconstruct from embedded image data
-            const imageData =
-                savedMedia[imageDataKey] instanceof Uint8Array
-                    ? savedMedia[imageDataKey]
-                    : new Uint8Array(Object.values(savedMedia[imageDataKey]));
-            const discName = savedMedia[discKey + "Name"] || "snapshot.ssd";
-            loadedDisc = disc.discFor(processor.fdc, discName, imageData, undefined, layout);
-            // Retain the image bytes so subsequent saves can re-embed them.
-            loadedDisc.setOriginalImage(imageData);
-        }
-        if (!loadedDisc) continue;
-
-        // Verify CRC32 if present
-        if (savedMedia[crcKey] != null && loadedDisc.originalImageCrc32 != null) {
-            if (loadedDisc.originalImageCrc32 !== savedMedia[crcKey]) {
-                toast(
-                    `${loadedDisc.name} has changed since this state was saved. The state has been restored anyway and may not run correctly.`,
-                    { title: "Restoring state" },
-                );
-            }
-        }
-
-        drives.putDiscIn(driveIndex, loadedDisc);
-        // Only update the URL/query for URL-sourced discs. For embedded
-        // (local-file) discs, setting parsedQuery would put a bogus source
-        // in the URL and break subsequent saves/reloads.
-        if (savedMedia[discKey]) {
-            if (driveIndex === 0) media.setDisc1Image(savedMedia[discKey]);
-            else media.setDisc2Image(savedMedia[discKey]);
-        }
-    }
-}
-
 document.getElementById("download-filestore-link").addEventListener("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
@@ -1028,100 +971,6 @@ document.getElementById("hard-reset").addEventListener("click", function (event)
 document.getElementById("soft-reset").addEventListener("click", function (event) {
     processor.reset(false);
     event.preventDefault();
-});
-
-document.getElementById("save-state").addEventListener("click", async function (event) {
-    event.preventDefault();
-    const wasRunning = running;
-    if (running) stop(false);
-    try {
-        const media = {};
-        if (parsedQuery.disc1 || parsedQuery.disc) media.disc1 = parsedQuery.disc1 || parsedQuery.disc;
-        if (parsedQuery.disc2) media.disc2 = parsedQuery.disc2;
-
-        // For each drive with a disc loaded, include CRC32 for verification
-        // and embed original image data if no URL source exists (local file).
-        const drives = processor.fdc.drives;
-        for (let driveIndex = 0; driveIndex < 2; driveIndex++) {
-            const driveDisc = drives[driveIndex].disc;
-            if (!driveDisc || driveDisc.originalImageCrc32 == null) continue;
-            const discKey = driveIndex === 0 ? "disc1" : "disc2";
-            const crcKey = discKey + "Crc32";
-            media[crcKey] = driveDisc.originalImageCrc32;
-            // The snapshot's dirty tracks are indexed by physical track, so restoring has to lay
-            // the disc out the way this one was rather than work it out again.
-            media[discKey + "Layout"] = driveDisc.is40Track ? DiscLayout.expanded40 : DiscLayout.contiguous;
-            if (!media[discKey] && driveDisc.originalImageData) {
-                media[discKey + "ImageData"] = driveDisc.originalImageData;
-                media[discKey + "Name"] = driveDisc.name;
-            }
-        }
-
-        const snapshot = createSnapshot(processor, model, Object.keys(media).length > 0 ? media : undefined);
-        const json = snapshotToJSON(snapshot);
-        const blob = await compressBlob(new Blob([json]));
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        downloadBlob(blob, `jsbeeb-${model.name}-${timestamp}.json.gz`);
-    } catch (e) {
-        modals.showError("saving state", e);
-    }
-    if (wasRunning) go();
-});
-
-async function loadStateFromFile(file, preReadBuffer) {
-    const wasRunning = running;
-    if (running) stop(false);
-    try {
-        const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
-        let snapshot;
-        if (isBemSnapshot(arrayBuffer)) {
-            snapshot = await parseBemSnapshot(arrayBuffer);
-        } else if (isUefSnapshot(arrayBuffer)) {
-            snapshot = parseUefSnapshot(arrayBuffer);
-        } else {
-            // Detect gzip (magic bytes 0x1f 0x8b) or plain JSON
-            const bytes = new Uint8Array(arrayBuffer);
-            let text;
-            if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
-                const decompressed = await decompressBlob(new Blob([arrayBuffer]));
-                text = await decompressed.text();
-            } else {
-                text = new TextDecoder().decode(arrayBuffer);
-            }
-            snapshot = snapshotFromJSON(text);
-        }
-        if (!isSameModel(snapshot.model, model.name) || hasCoProcessor(snapshot) !== processor.hasTube) {
-            // Model or co-processor mismatch: stash state and reload with a matching machine
-            sessionStorage.setItem("jsbeeb-pending-state", snapshotToJSON(snapshot));
-            window.location.href = urlState.urlWith({ model: snapshot.model, coProcessor: hasCoProcessor(snapshot) });
-            return;
-        }
-        // Order matters: reload disc media first so the base disc is in the
-        // drive before restoreSnapshot applies dirty track overlays on top.
-        await reloadSnapshotMedia(snapshot.media);
-        restoreSnapshot(processor, model, snapshot);
-        // Force a repaint so the display updates even while paused
-        video.paint();
-    } catch (e) {
-        modals.showError("loading state", e);
-    }
-    if (wasRunning) go();
-}
-
-function isSnapshotFile(filename, arrayBuffer) {
-    const lower = filename.toLowerCase();
-    if (lower.endsWith(".snp") || lower.endsWith(".json") || lower.endsWith(".json.gz") || lower.endsWith(".gz"))
-        return true;
-    // .uef can be either a BeebEm save state or a regular tape image - check content
-    if (lower.endsWith(".uef") && arrayBuffer) return isUefSnapshot(arrayBuffer);
-    return false;
-}
-
-document.getElementById("load-state").addEventListener("change", async function (event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    event.target.value = "";
-    await loadStateFromFile(file);
 });
 
 for (const link of document.querySelectorAll("#tape-menu a")) {
@@ -1336,21 +1185,8 @@ const startPromise = (async () => {
             dbgr.setPatch(parsedQuery.patch);
         }
 
-        // Restore pending state from a cross-model load (sessionStorage)
-        const pendingState = sessionStorage.getItem("jsbeeb-pending-state");
-        if (pendingState) {
-            sessionStorage.removeItem("jsbeeb-pending-state");
-            try {
-                const snapshot = snapshotFromJSON(pendingState);
-                // Order matters: reload disc media first so the base disc is in the
-                // drive before restoreSnapshot applies dirty track overlays on top.
-                await reloadSnapshotMedia(snapshot.media);
-                restoreSnapshot(processor, model, snapshot);
-                processor.execute(40000);
-            } catch (e) {
-                modals.showError("restoring saved state", e);
-            }
-        }
+        // Restore the state a cross-model reload stashed, if there is one.
+        await snapshots.restorePendingState();
 
         go();
     } catch (error) {
@@ -1772,7 +1608,7 @@ electron({
             modals.show(modalId);
         },
     },
-    loadStateFile: loadStateFromFile,
+    loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
     actions: {
         "soft-reset": () => processor.reset(false),
         "hard-reset": hardReset,
