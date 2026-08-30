@@ -18,12 +18,25 @@ jobs:
         run: npm install
       - name: checks
         run: npm run ci-checks
+      # Vitest 4's job summary has a fixed "Vitest Test Report" heading, so each
+      # run gets a heading of its own first to tell the three apart. Vitest 5
+      # names them itself; the echoes go when we move to it (#947).
       - name: Unit tests
-        run: npm run test:unit
+        run: |
+          echo "# Unit tests" >> "$GITHUB_STEP_SUMMARY"
+          npm run test:unit
       - name: Integration tests
-        run: npm run test:integration
+        run: |
+          echo "# Integration tests" >> "$GITHUB_STEP_SUMMARY"
+          npm run test:integration
       - name: Shader tests
-        run: npm run test:shader
+        run: |
+          echo "# Shader tests" >> "$GITHUB_STEP_SUMMARY"
+          npm run test:shader
+      - name: Smoke test
+        run: |
+          echo "# Smoke test" >> "$GITHUB_STEP_SUMMARY"
+          npm run test:smoke | tee >(sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY")
 
   cpu-test:
     runs-on: ubuntu-24.04
