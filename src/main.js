@@ -323,11 +323,17 @@ const speakerAmount =
 config.setAudioOutput(audioOutput);
 config.setSpeakerAmount(speakerAmount);
 
+// A slider fires for every pixel of a drag, and each URL update is a history entry.
+const UrlSettleMs = 300;
+const updateUrlOnceSettled = utils.debounce(updateUrl, UrlSettleMs);
+
 function applyAudioOutput(output) {
     audioHandler.setAudioOutput(output);
     config.setAudioOutput(output);
     quickSettings?.showAudioOutput(output);
     window.localStorage.audioOutput = output;
+    parsedQuery.audioOutput = output;
+    updateUrl();
 }
 
 function applySpeakerAmount(amount) {
@@ -335,6 +341,8 @@ function applySpeakerAmount(amount) {
     config.setSpeakerAmount(amount);
     quickSettings?.showSpeakerAmount(amount);
     window.localStorage.speakerAmount = amount;
+    parsedQuery.speakerAmount = amount;
+    updateUrlOnceSettled();
 }
 
 function applyDisplayMode(mode) {
@@ -347,6 +355,8 @@ function applyDisplayMode(mode) {
     config.setDisplayMode(mode);
     quickSettings?.showDisplayMode(mode);
     window.localStorage.displayMode = mode;
+    parsedQuery.displayMode = mode;
+    updateUrl();
 }
 
 model = config.model;
