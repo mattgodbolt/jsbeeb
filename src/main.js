@@ -62,10 +62,7 @@ const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
 const noSeek = !!parsedQuery.noseek;
 const stationId = parsedQuery.stationId !== undefined ? parsedQuery.stationId : 101;
 
-let tryGl = true;
-if (parsedQuery.glEnabled !== undefined) {
-    tryGl = parsedQuery.glEnabled === "true";
-}
+const tryGl = parsedQuery.glEnabled ?? true;
 let lowLatency = true;
 if (parsedQuery.lowLatency !== undefined) {
     lowLatency = parsedQuery.lowLatency === "true";
