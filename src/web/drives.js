@@ -34,7 +34,8 @@ export class Drives {
         }
 
         document.getElementById("download-drive-link").addEventListener("click", () => {
-            const disc = fdc.drives[0].disc;
+            const disc = this.discToDownload();
+            if (!disc) return;
             const save = (options) =>
                 downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
             try {
@@ -47,9 +48,17 @@ export class Drives {
         });
 
         document.getElementById("download-drive-hfe-link").addEventListener("click", () => {
-            const disc = fdc.drives[0].disc;
+            const disc = this.discToDownload();
+            if (!disc) return;
             downloadDriveData(toHfe(disc), disc.name, ".hfe");
         });
+    }
+
+    /** @returns {object|null} the disc in drive 0, saying so when there is nothing to download */
+    discToDownload() {
+        const disc = this.fdc?.drives[0].disc;
+        if (!disc) toast("There is no disc in drive 0 to download.", { title: "Disc" });
+        return disc ?? null;
     }
 
     /** @returns {string} the DiscLayout to load an image for this drive with */

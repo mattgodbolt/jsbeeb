@@ -136,6 +136,29 @@ describe("Drives", () => {
         });
     });
 
+    describe("the drive 0 downloads", () => {
+        const download = (id) => document.getElementById(id).click();
+
+        it("say so instead of saving when drive 0 is empty", () => {
+            make();
+            download("download-drive-link");
+            download("download-drive-hfe-link");
+            expect(toasts()).toEqual([
+                expect.stringContaining("no disc in drive 0"),
+                expect.stringContaining("no disc in drive 0"),
+            ]);
+            expect(areYouSure).not.toHaveBeenCalled();
+        });
+
+        it("say so instead of throwing on a machine with no drives", () => {
+            fdc = undefined;
+            make();
+            expect(() => download("download-drive-link")).not.toThrow();
+            expect(() => download("download-drive-hfe-link")).not.toThrow();
+            expect(toasts()).toHaveLength(2);
+        });
+    });
+
     describe("the switches on the menu", () => {
         it("set the drive and show what was picked", () => {
             make();
