@@ -31,8 +31,8 @@ import { Modals } from "./web/modals.js";
 import { Settings } from "./web/settings.js";
 import { Printer } from "./printer.js";
 import { RewindBuffer } from "./rewind.js";
-import { RewindUI } from "./rewind-ui.js";
-import { DiscVisualiser } from "./disc-visualiser.js";
+import { RewindUI } from "./web/rewind-ui.js";
+import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { downloadDriveData } from "./dom-utils.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 

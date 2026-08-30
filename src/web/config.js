@@ -1,7 +1,7 @@
 "use strict";
-import { allModels, findModel, tubeModelFor } from "./models.js";
-import { getFilterForMode } from "./canvas.js";
-import { AudioOutputs } from "./audio-output.js";
+import { allModels, findModel, tubeModelFor } from "../models.js";
+import { getFilterForMode } from "../canvas.js";
+import { AudioOutputs } from "../audio-output.js";
 
 const round = (value) => Number(value.toFixed(2));
 
