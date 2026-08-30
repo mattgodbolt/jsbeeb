@@ -7,11 +7,8 @@ import * as utils from "./utils.js";
 import { Debugger } from "./web/debug.js";
 import * as utils_atom from "./utils_atom.js";
 import { GamePad } from "./gamepads.js";
-import { Config } from "./config.js";
-import { DefaultModel, findModel } from "./models.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
-import { DefaultAudioOutput, isAudioOutput } from "./audio-output.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
@@ -31,25 +28,59 @@ import { Machine } from "./web/machine.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
-import { SpeechOutput } from "./speech-output.js";
+import { Settings } from "./web/settings.js";
 import { Printer } from "./printer.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
 import { DiscVisualiser } from "./disc-visualiser.js";
 import { downloadDriveData } from "./dom-utils.js";
-import {
-    guessModelFromHostname,
-    parseMediaParams,
-    processAutobootParams,
-    processDriveTrackParams,
-    processInputParams,
-} from "./url-params.js";
+import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 
-let processor;
-let video;
-let rewindUI;
+// ------------------------------------------------------------------------
+// What the URL asked for.
+// ------------------------------------------------------------------------
+
+const urlState = new UrlState(window.location, window.history);
+const parsedQuery = urlState.params;
+let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
+
+let discImage = BuiltInImages[0].file;
+let secondDiscImage = null;
+const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
+if (queryDiscImage) discImage = queryDiscImage;
+if (querySecondDisc) secondDiscImage = querySecondDisc;
+const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
+
+const extraRoms = [];
+if (Array.isArray(parsedQuery.rom)) {
+    parsedQuery.rom.forEach((romPath) => {
+        if (romPath) extraRoms.push(romPath);
+    });
+}
+
+const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
+const noSeek = !!parsedQuery.noseek;
+const stationId = parsedQuery.stationId !== undefined ? parsedQuery.stationId : 101;
+
+let tryGl = true;
+if (parsedQuery.glEnabled !== undefined) {
+    tryGl = parsedQuery.glEnabled === "true";
+}
+let lowLatency = true;
+if (parsedQuery.lowLatency !== undefined) {
+    lowLatency = parsedQuery.lowLatency === "true";
+}
+
+if (parsedQuery.embed) {
+    for (const el of document.querySelectorAll(".embed-hide")) el.style.display = "none";
+    document.body.style.backgroundColor = "transparent";
+}
+
+// ------------------------------------------------------------------------
+// The pieces that exist before the machine: settings, screen, sound.
+// ------------------------------------------------------------------------
+
 const dbgr = new Debugger();
-let model;
 
 const gamepad = new GamePad();
 if (!window.isSecureContext)
@@ -57,47 +88,6 @@ if (!window.isSecureContext)
         title: "Gamepads",
         quietKey: "quietInsecureGamepads",
     });
-let discImage = BuiltInImages[0].file;
-const extraRoms = [];
-
-let secondDiscImage = null;
-
-const urlState = new UrlState(window.location, window.history);
-const parsedQuery = urlState.params;
-let { needsAutoboot, autoType } = processAutobootParams(parsedQuery);
-let keyLayout = window.localStorage.keyLayout || "physical";
-
-const BBC = utils.BBC;
-const keyCodes = utils.keyCodes;
-const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
-let noSeek;
-let stationId = 101;
-
-// Parse disc and tape images from query parameters
-const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
-const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
-
-// Only assign if values are provided
-if (queryDiscImage) discImage = queryDiscImage;
-if (querySecondDisc) secondDiscImage = querySecondDisc;
-
-// Handle specific query parameters
-if (Array.isArray(parsedQuery.rom)) {
-    parsedQuery.rom.forEach((romPath) => {
-        if (romPath) extraRoms.push(romPath);
-    });
-}
-if (parsedQuery.keyLayout) {
-    keyLayout = (parsedQuery.keyLayout + "").toLowerCase();
-}
-if (parsedQuery.embed) {
-    for (const el of document.querySelectorAll(".embed-hide")) el.style.display = "none";
-    document.body.style.backgroundColor = "transparent";
-}
-
-noSeek = !!parsedQuery.noseek;
-
-if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
 
 const printer = new Printer({
     onOutput: (char) => frontPanel.printChar(char),
@@ -124,147 +114,32 @@ const keys = new KeyboardSetup({
     },
 });
 
-// Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
-// Must be created before Config so the onClose callback and the initial checkbox state can reference it.
-const speechOutput = new SpeechOutput();
-
-function setSpeechOutput(enabled) {
-    speechOutput.enabled = enabled;
-    if (enabled && typeof speechSynthesis === "undefined")
-        toast("This browser has no speech synthesis, so speech output has nothing to speak with.", {
-            title: "Speech",
-        });
-}
-setSpeechOutput(!!parsedQuery.speechOutput);
-
-const config = new Config(
-    function onChange(changed) {
-        if (changed.audioOutput) applyAudioOutput(changed.audioOutput);
-        if (changed.speakerAmount !== undefined) applySpeakerAmount(changed.speakerAmount);
-        if (changed.displayMode) applyDisplayMode(changed.displayMode);
-    },
-    function onClose(changed) {
-        Object.assign(parsedQuery, changed);
-        if (changed.keyLayout) {
-            window.localStorage.keyLayout = changed.keyLayout;
-            machine.emulationConfig.keyLayout = changed.keyLayout;
-            keys.setKeyLayout(changed.keyLayout);
-        }
-        if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
-            inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
-
-            if (changed.microphoneChannel !== undefined) {
-                inputs.setupMicrophone();
-            }
-        }
-        if (changed.speechOutput !== undefined) setSpeechOutput(!!changed.speechOutput);
-        if (changed.tubeCpuMultiplier !== undefined) {
-            machine.emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
-            config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
-            if (processor.hasTube) {
-                processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
-            }
-        }
-        urlState.updateUrl();
-    },
-    function onRestartRequired() {
-        modals.areYouSure(
-            "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
-            "Restart now",
-            "Later",
-            function () {
-                window.location.reload();
-            },
-        );
-    },
-);
-
-// Perform mapping of legacy models to the new format
-config.mapLegacyModels(parsedQuery);
-
-const requestedModelName = parsedQuery.model || guessModelFromHostname(window.location.hostname);
-const requestedModel = findModel(requestedModelName);
-if (!requestedModel)
-    toast(`There is no model called "${requestedModelName}". Using ${DefaultModel.name} instead.`, {
-        title: "Model",
-    });
-config.setModel((requestedModel ?? DefaultModel).name);
-config.setKeyLayout(keyLayout);
-config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 1);
-config.setMicrophoneChannel(parsedQuery.microphoneChannel);
-config.setCheckboxes({
-    coProcessor: !!parsedQuery.coProcessor,
-    hasEconet: !!parsedQuery.hasEconet,
-    hasMusic5000: !!parsedQuery.hasMusic5000,
-    hasTeletextAdaptor: !!parsedQuery.hasTeletextAdaptor,
-    mouseJoystickEnabled: !!parsedQuery.mouseJoystickEnabled,
-    speechOutput: speechOutput.enabled,
-});
-const displayMode = parsedQuery.displayMode || window.localStorage.displayMode || "rgb";
-config.setDisplayMode(displayMode);
-const audioOutput =
-    [parsedQuery.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
-const speakerAmount =
-    [parsedQuery.speakerAmount, parseFloat(window.localStorage.speakerAmount)].find(Number.isFinite) ?? 1;
-
-config.setAudioOutput(audioOutput);
-config.setSpeakerAmount(speakerAmount);
-
-// A slider fires for every pixel of a drag, and each URL update is a history entry.
-const UrlSettleMs = 300;
-const updateUrlOnceSettled = utils.debounce(() => urlState.updateUrl(), UrlSettleMs);
-
-function applyAudioOutput(output) {
-    audioHandler.setAudioOutput(output);
-    config.setAudioOutput(output);
-    quickSettings?.showAudioOutput(output);
-    window.localStorage.audioOutput = output;
-    parsedQuery.audioOutput = output;
-    urlState.updateUrl();
-}
-
-function applySpeakerAmount(amount) {
-    audioHandler.setSpeakerAmount(amount);
-    config.setSpeakerAmount(amount);
-    quickSettings?.showSpeakerAmount(amount);
-    window.localStorage.speakerAmount = amount;
-    parsedQuery.speakerAmount = amount;
-    updateUrlOnceSettled();
-}
-
-function applyDisplayMode(mode) {
-    display.setMode(mode);
-    config.setDisplayMode(mode);
-    quickSettings?.showDisplayMode(mode);
-    window.localStorage.displayMode = mode;
-    parsedQuery.displayMode = mode;
-    urlState.updateUrl();
-}
-
-model = config.model;
+const settings = new Settings({ urlState });
+const { config, speechOutput, keyLayout, displayMode, audioOutput, speakerAmount } = settings;
+const model = settings.model;
 
 // Must come after we know the model, to validate names against those of the hardware.
 const keyMappingWarnings = processInputParams(
     parsedQuery,
-    model.isAtom ? utils_atom.ATOM : BBC,
-    keyCodes,
+    model.isAtom ? utils_atom.ATOM : utils.BBC,
+    utils.keyCodes,
     utils.userKeymap,
     gamepad,
 );
+if (keyMappingWarnings.length) {
+    toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
+        title: "Mappings in the URL",
+    });
+}
+if (driveTrackWarnings.length) {
+    toast(`${driveTrackWarnings.join(" ")} Auto is in use instead; pick 40 or 80 from the Discs menu.`, {
+        title: "Disc drives",
+    });
+}
 
 if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
-
-let tryGl = true;
-if (parsedQuery.glEnabled !== undefined) {
-    tryGl = parsedQuery.glEnabled === "true";
-}
-let lowLatency = true;
-if (parsedQuery.lowLatency !== undefined) {
-    lowLatency = parsedQuery.lowLatency === "true";
-}
-const screenCanvas = document.getElementById("screen");
 
 const modals = new Modals({
     isRunning: () => loop.isRunning(),
@@ -272,18 +147,7 @@ const modals = new Modals({
     go: () => loop.go(),
 });
 
-if (keyMappingWarnings.length) {
-    toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
-        title: "Mappings in the URL",
-    });
-}
-
-if (driveTrackWarnings.length) {
-    toast(`${driveTrackWarnings.join(" ")} Auto is in use instead; pick 40 or 80 from the Discs menu.`, {
-        title: "Disc drives",
-    });
-}
-
+const screenCanvas = document.getElementById("screen");
 const display = new Display({
     screenCanvas,
     model,
@@ -293,7 +157,7 @@ const display = new Display({
     fakeVideo: parsedQuery.fakeVideo !== undefined,
     frameSkip: parsedQuery.frameSkip ?? 0,
 });
-video = display.video;
+const video = display.video;
 
 const audioStatsEl = document.getElementById("audio-stats");
 if (audioStatsEl) audioStatsEl.hidden = !parsedQuery.audioDebug;
@@ -315,62 +179,21 @@ const audioHandler = new AudioHandler({
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
+
 const quickSettings = new QuickSettings(
-    { onAudioOutput: applyAudioOutput, onSpeakerAmount: applySpeakerAmount, onDisplayMode: applyDisplayMode },
+    {
+        onAudioOutput: (output) => settings.applyAudioOutput(output),
+        onSpeakerAmount: (amount) => settings.applySpeakerAmount(amount),
+        onDisplayMode: (mode) => settings.applyDisplayMode(mode),
+    },
     { audioOutput, speakerAmount, displayMode },
 );
 
-for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
+// ------------------------------------------------------------------------
+// The machine, and everything that feeds it.
+// ------------------------------------------------------------------------
 
-const pastetext = document.getElementById("paste-text");
-pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
-pastetext.addEventListener("paste", function (event) {
-    const text = event.clipboardData.getData("text/plain");
-    keys.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true);
-});
-window.addEventListener("blur", function () {
-    keys.clearKeys();
-    loop.setEmulationLead(audioHandler.setWindowFocused(false));
-});
-window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));
-
-const debugPause = document.getElementById("debug-pause");
-const debugPlay = document.getElementById("debug-play");
-
-function pauseIntoDebugger() {
-    loop.stop(true);
-}
-
-function resumeFromDebugger() {
-    dbgr.hide();
-    keys.resumeEmulation();
-}
-
-debugPause.addEventListener("click", pauseIntoDebugger);
-debugPlay.addEventListener("click", resumeFromDebugger);
-
-// To lower chance of data loss, only accept drop events in the drop
-// zone in the menu bar.
-document.addEventListener("dragover", function (event) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "none";
-});
-document.addEventListener("drop", function (event) {
-    event.preventDefault();
-});
-
-window.addEventListener("beforeunload", function (event) {
-    if (loop.isRunning() && processor.sysvia.hasAnyKeyDown()) {
-        const message =
-            "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
-        event.preventDefault();
-        event.returnValue = message;
-        return message;
-    }
-});
-
-// Depends on the config.setX calls having applied the URL parameters.
+// Depends on the settings having applied the URL parameters.
 const machine = new Machine({
     model,
     config,
@@ -386,7 +209,8 @@ const machine = new Machine({
     audioHandler,
     dbgr,
 });
-processor = machine.processor;
+const processor = machine.processor;
+
 const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure: modals.areYouSure.bind(modals) });
 const media = new MediaLoader({
     processor,
@@ -441,7 +265,6 @@ const snapshots = new SnapshotUI({
     go: () => loop.go(),
 });
 
-// Create input sources
 const inputs = new AnalogueInputs({
     processor,
     screenCanvas,
@@ -450,7 +273,6 @@ const inputs = new AnalogueInputs({
     config,
     audioHandler,
 });
-
 if (parsedQuery.microphoneChannel !== undefined) {
     // We need to use setTimeout to make sure this runs after the page has loaded
     // This is needed because some browsers require user interaction for audio context
@@ -458,14 +280,117 @@ if (parsedQuery.microphoneChannel !== undefined) {
         await inputs.setupMicrophone();
     }, 1000);
 }
-
 // Apply ADC source settings from URL parameters
 inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
 
 keys.attach({ processor, dbgr, keyLayout });
 
-document.getElementById("download-filestore-link").addEventListener("click", function () {
-    downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
+const frontPanel = new FrontPanel({ processor, model, printer });
+
+// ------------------------------------------------------------------------
+// Running it: the loop, rewind and the visualiser.
+// ------------------------------------------------------------------------
+
+const rewindBuffer = new RewindBuffer(30);
+const loop = new EmulationLoop({
+    processor,
+    display,
+    audioHandler,
+    dbgr,
+    gamepad,
+    keyboard: keys,
+    syncLights: () => frontPanel.syncLights(),
+    rewindBuffer,
+    onRewindCaptured: () => rewindUI.updateButtonState(),
+    clocksPerSecond,
+    cpuSpeed,
+    fastTape: !!parsedQuery.fasttape,
+    audioStatsNode,
+});
+
+const debugPause = document.getElementById("debug-pause");
+const debugPlay = document.getElementById("debug-play");
+loop.addEventListener("running", () => {
+    const running = loop.isRunning();
+    keys.setRunning(running);
+    debugPlay.disabled = running;
+    debugPause.disabled = !running;
+});
+
+const rewindUI = new RewindUI({
+    rewindBuffer,
+    processor,
+    video,
+    captureInterval: RewindCaptureInterval,
+    stop: (debug) => loop.stop(debug),
+    go: () => loop.go(),
+    isRunning: () => loop.isRunning(),
+});
+rewindUI.updateButtonState();
+
+if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
+else document.getElementById("disc-visualiser-open").classList.add("disabled");
+
+new Layout({
+    screenCanvas,
+    display,
+    embed: parsedQuery.embed !== undefined,
+    sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
+});
+
+// Everything a setting can reach now exists.
+settings.wire({ audioHandler, display, quickSettings, machine, keys, inputs, modals });
+
+// ------------------------------------------------------------------------
+// The page's own handlers.
+// ------------------------------------------------------------------------
+
+for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
+
+const pastetext = document.getElementById("paste-text");
+pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
+pastetext.addEventListener("paste", function (event) {
+    const text = event.clipboardData.getData("text/plain");
+    keys.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true);
+});
+
+window.addEventListener("blur", function () {
+    keys.clearKeys();
+    loop.setEmulationLead(audioHandler.setWindowFocused(false));
+});
+window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));
+
+function pauseIntoDebugger() {
+    loop.stop(true);
+}
+
+function resumeFromDebugger() {
+    dbgr.hide();
+    keys.resumeEmulation();
+}
+
+debugPause.addEventListener("click", pauseIntoDebugger);
+debugPlay.addEventListener("click", resumeFromDebugger);
+
+// To lower chance of data loss, only accept drop events in the drop
+// zone in the menu bar.
+document.addEventListener("dragover", function (event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "none";
+});
+document.addEventListener("drop", function (event) {
+    event.preventDefault();
+});
+
+window.addEventListener("beforeunload", function (event) {
+    if (loop.isRunning() && processor.sysvia.hasAnyKeyDown()) {
+        const message =
+            "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
+            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+        event.preventDefault();
+        event.returnValue = message;
+        return message;
+    }
 });
 
 function hardReset() {
@@ -487,7 +412,16 @@ document.getElementById("soft-reset").addEventListener("click", function (event)
     event.preventDefault();
 });
 
-const frontPanel = new FrontPanel({ processor, model, printer });
+document.getElementById("download-filestore-link").addEventListener("click", function () {
+    downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
+});
+
+if (Object.hasOwn(parsedQuery, "about")) modals.show("info");
+if (Object.hasOwn(parsedQuery, "pp-tos")) modals.show("pp-tos");
+
+// ------------------------------------------------------------------------
+// Start it up.
+// ------------------------------------------------------------------------
 
 const basicNeedsRun = parsedQuery.loadBasic !== undefined && needsAutoboot === "run";
 if (parsedQuery.loadBasic) needsAutoboot = "";
@@ -541,53 +475,9 @@ const startPromise = machine.start({
     }
 })();
 
-const rewindBuffer = new RewindBuffer(30);
-
-const loop = new EmulationLoop({
-    processor,
-    display,
-    audioHandler,
-    dbgr,
-    gamepad,
-    keyboard: keys,
-    syncLights: () => frontPanel.syncLights(),
-    rewindBuffer,
-    onRewindCaptured: () => rewindUI.updateButtonState(),
-    clocksPerSecond,
-    cpuSpeed,
-    fastTape: !!parsedQuery.fasttape,
-    audioStatsNode,
-});
-loop.addEventListener("running", () => {
-    const running = loop.isRunning();
-    keys.setRunning(running);
-    debugPlay.disabled = running;
-    debugPause.disabled = !running;
-});
-
-rewindUI = new RewindUI({
-    rewindBuffer,
-    processor,
-    video,
-    captureInterval: RewindCaptureInterval,
-    stop: (debug) => loop.stop(debug),
-    go: () => loop.go(),
-    isRunning: () => loop.isRunning(),
-});
-rewindUI.updateButtonState();
-
-if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
-else document.getElementById("disc-visualiser-open").classList.add("disabled");
-
-new Layout({
-    screenCanvas,
-    display,
-    embed: parsedQuery.embed !== undefined,
-    sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
-});
-
-if (Object.hasOwn(parsedQuery, "about")) modals.show("info");
-if (Object.hasOwn(parsedQuery, "pp-tos")) modals.show("pp-tos");
+// ------------------------------------------------------------------------
+// The console surface the wiki documents, and the desktop app's hooks.
+// ------------------------------------------------------------------------
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
