@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.21.0...v1.22.0) (2026-08-30)
+
+
+### Features
+
+* let a MachineSession snapshot and restore itself ([#940](https://github.com/mattgodbolt/jsbeeb/issues/940)) ([8a3c6d6](https://github.com/mattgodbolt/jsbeeb/commit/8a3c6d65a93182ea6c7597b663b0d29acbfa6fbf))
+
 ## [1.21.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.20.2...v1.21.0) (2026-08-29)
 
 
