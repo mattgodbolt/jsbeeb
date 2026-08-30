@@ -25,7 +25,6 @@ export const UrlParamTypes = {
     mouseJoystickEnabled: ParamTypes.BOOL,
     speechOutput: ParamTypes.BOOL,
     audioDebug: ParamTypes.BOOL,
-    audioOutput: ParamTypes.STRING,
 
     // Numeric parameters
     speed: ParamTypes.INT,
@@ -49,6 +48,7 @@ export const UrlParamTypes = {
     keyLayout: ParamTypes.STRING,
     autotype: ParamTypes.STRING,
     displayMode: ParamTypes.STRING,
+    audioOutput: ParamTypes.STRING,
     drive0Tracks: ParamTypes.STRING,
     drive1Tracks: ParamTypes.STRING,
 };
