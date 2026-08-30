@@ -115,7 +115,7 @@
     "mirror-bbcdiscs:upload:index": "aws s3 cp .bbcdiscs-mirror/hfe/manifest.json s3://bbc.xania.org/archive/bbcdiscs/hfe/manifest.json --cache-control 'public, max-age=300' && aws s3 cp .bbcdiscs-mirror/manifest.json s3://bbc.xania.org/archive/bbcdiscs/manifest.json --cache-control 'public, max-age=300'",
     "electron": "npm run build && ELECTRON_DISABLE_SANDBOX=1 electron .",
     "electron:build": "electron-builder",
-    "smoke": "vite build && node tests/browser/smoke.js"
+    "smoke": "npm run build && node tests/browser/smoke.js"
   },
   "lint-staged": {
     "*.js": [

@@ -36,9 +36,13 @@ const ConsoleSurface = [
 
 function parseArgs(argv) {
     const args = { url: null, only: null, keep: false };
+    const value = (i) => {
+        if (i + 1 >= argv.length) throw new Error(`${argv[i]} needs a value`);
+        return argv[i + 1];
+    };
     for (let i = 0; i < argv.length; ++i) {
-        if (argv[i] === "--url") args.url = argv[++i];
-        else if (argv[i] === "--only") args.only = argv[++i];
+        if (argv[i] === "--url") args.url = value(i++);
+        else if (argv[i] === "--only") args.only = value(i++);
         else if (argv[i] === "--keep") args.keep = true;
         else throw new Error(`Unknown argument ${argv[i]}`);
     }
@@ -88,15 +92,35 @@ async function startChrome(width) {
         `--window-size=${width},900`,
         "about:blank",
     ];
-    for (const candidate of ChromeCandidates.filter(Boolean)) {
+    const candidates = ChromeCandidates.filter(Boolean);
+    for (const candidate of candidates) {
         const child = spawn(candidate, args, { stdio: "ignore" });
-        const failed = await new Promise((resolve) => {
+        // A candidate that is not there fails to spawn; one that is there but
+        // cannot run exits straight away. Either way, try the next.
+        const gone = new Promise((resolve) => {
             child.once("error", () => resolve(true));
-            child.once("spawn", () => resolve(false));
+            child.once("exit", () => resolve(true));
         });
-        if (!failed) return child;
+        const target = await Promise.race([gone, debugTarget()]);
+        if (target !== true) return { child, target };
     }
-    throw new Error(`No Chrome found; tried ${ChromeCandidates.filter(Boolean).join(", ")}`);
+    throw new Error(`No Chrome would start; tried ${candidates.join(", ")}`);
+}
+
+/** The page target of the Chrome listening on the debug port, once it is. */
+function debugTarget() {
+    return waitUntil(
+        "Chrome's debugging port",
+        async () => {
+            try {
+                const list = await (await fetch(`http://127.0.0.1:${DebugPort}/json/list`)).json();
+                return list.find((t) => t.type === "page");
+            } catch (_e) {
+                return null;
+            }
+        },
+        StepTimeoutMs,
+    );
 }
 
 class Page {
@@ -108,19 +132,7 @@ class Page {
         ws.onmessage = (message) => this.onMessage(JSON.parse(message.data));
     }
 
-    static async connect() {
-        const target = await waitUntil(
-            "Chrome's debugging port",
-            async () => {
-                try {
-                    const list = await (await fetch(`http://127.0.0.1:${DebugPort}/json/list`)).json();
-                    return list.find((t) => t.type === "page");
-                } catch (_e) {
-                    return null;
-                }
-            },
-            StepTimeoutMs,
-        );
+    static async connect(target) {
         const ws = new WebSocket(target.webSocketDebuggerUrl);
         await new Promise((resolve, reject) => {
             ws.onopen = resolve;
@@ -355,10 +367,12 @@ check("a saved state can be loaded back", async (page, base) => {
 async function main() {
     const server = Args.url ? null : await startPreview();
     const base = Args.url ?? server.url;
-    const chrome = await startChrome(1400);
+    let chrome = null;
     let failures = 0;
     try {
-        const page = await Page.connect();
+        const started = await startChrome(1400);
+        chrome = started.child;
+        const page = await Page.connect(started.target);
         const selected = checks.filter((c) => !Args.only || c.name.includes(Args.only));
         for (const { name, run } of selected) {
             try {
@@ -378,7 +392,7 @@ async function main() {
             await new Promise(() => {});
         }
     } finally {
-        chrome.kill();
+        chrome?.kill();
         server?.stop();
     }
     process.exit(failures ? 1 : 0);
