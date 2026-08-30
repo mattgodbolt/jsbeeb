@@ -390,7 +390,8 @@ check("a disc dropped on the paste box goes into drive 0", async (page, base) =>
 check("a saved state can be loaded back", async (page, base) => {
     const downloads = fs.mkdtempSync(path.join(os.tmpdir(), "jsbeeb-smoke-"));
     try {
-        await page.goto(base);
+        // A URL-named disc, so restoring goes back through the media loader.
+        await page.goto(base + "?disc=elite.ssd");
         await page.waitForScreenText(">");
         await page.pressKey("a", "KeyA", 65);
         await page.waitForScreenText(">A", StepTimeoutMs);
