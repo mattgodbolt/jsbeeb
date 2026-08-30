@@ -11,7 +11,6 @@ import { Cpu6502, AtomCpu6502 } from "./6502.js";
 import * as utils_atom from "./utils_atom.js";
 import { LoadSD } from "./mmc.js";
 import { Cmos, localStoragePersistence } from "./cmos.js";
-import { StairwayToHell } from "./sth.js";
 import { BbcDiscArchive, Provenance, describe as describeHfe, matches, provenancesIn } from "./bbcdiscs.js";
 import { GamePad } from "./gamepads.js";
 import * as disc from "./fdc.js";
@@ -30,6 +29,8 @@ import { Keyboard } from "./keyboard.js";
 import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
+import { AutobootTicks, clearArchiveList, showArchiveMessage } from "./web/archive-list.js";
+import { SthPicker } from "./web/sth-picker.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -69,8 +70,6 @@ const dbgr = new Debugger();
 let frames = 0;
 let frameSkip = 0;
 let syncLights;
-let discSth;
-let tapeSth;
 let hfeArchive;
 let running;
 let model;
@@ -676,12 +675,14 @@ const media = new MediaLoader({
     loadSnapshot: (file, buffer) => loadStateFromFile(file, buffer),
     // The archives are created further down; each source resolves when used.
     sources: {
-        sth: (name) => discSth.fetch(name),
-        tapeSth: (name) => tapeSth.fetch(name),
+        sth: (name) => sthPicker.discs.fetch(name),
+        tapeSth: (name) => sthPicker.tapes.fetch(name),
         hfe: (path) => hfeArchive.fetch(path),
         drive: (cat, layout) => gdLoad(cat, layout),
     },
 });
+const autobootTicks = new AutobootTicks({ urlState });
+const sthPicker = new SthPicker({ media, drives, modals, urlState, processor, autoboot });
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
@@ -908,148 +909,7 @@ document.addEventListener("keydown", (evt) => {
 document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
 document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
 
-function clearArchiveList(listId) {
-    for (const el of document.querySelectorAll(`#${listId} li:not(.template)`)) el.remove();
-}
-
-function showArchiveMessage(modalId, listId, message) {
-    const loading = document.querySelector(`#${modalId} .loading`);
-    loading.textContent = message;
-    loading.style.display = "";
-    clearArchiveList(listId);
-}
-
-function filterArchiveList(listId, filter) {
-    filter = filter.toLowerCase();
-    for (const el of document.querySelectorAll(`#${listId} li:not(.template)`)) {
-        el.style.display = el.textContent.toLowerCase().includes(filter) ? "" : "none";
-    }
-}
-
-function sthStartLoad() {
-    showArchiveMessage("sth", "sth-list", "Loading catalog from STH archive");
-}
-
-async function discSthClick(item) {
-    utils.noteEvent("sth", "click", item);
-    media.setDisc1Image("sth:" + item);
-    const needsAutoboot = parsedQuery.autoboot !== undefined;
-    if (needsAutoboot) {
-        processor.reset(true);
-    }
-
-    modals.popupLoading("Loading " + item);
-    try {
-        const loaded = await media.loadDiscImage(parsedQuery.disc1, drives.layoutForDrive(0));
-        drives.putDiscIn(0, loaded);
-        modals.loadingFinished();
-
-        if (needsAutoboot) {
-            autoboot(item);
-        }
-    } catch (err) {
-        console.error("Error loading disc image:", err);
-        modals.loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
-    }
-}
-
-async function tapeSthClick(item) {
-    utils.noteEvent("sth", "clickTape", item);
-    media.setTapeImage("sth:" + item);
-
-    modals.popupLoading("Loading " + item);
-    try {
-        const tape = await media.loadTapeImage(parsedQuery.tape);
-        media.setProcessorTape(tape);
-        modals.loadingFinished();
-    } catch (err) {
-        console.error("Error loading tape image:", err);
-        modals.loadingFinished(`Unable to load ${item} from the STH archive: ${errorText(err)}`);
-    }
-}
-
-const $sthModal = new bootstrap.Modal(document.getElementById("sth"));
-document.getElementById("sth").addEventListener("shown.bs.modal", () => {
-    document.getElementById("sth-filter").focus();
-});
-
-function makeOnCat(onClick) {
-    return function (cat) {
-        clearArchiveList("sth-list");
-        const sthList = document.getElementById("sth-list");
-        document.querySelector("#sth .loading").style.display = "none";
-        const template = sthList.querySelector(".template");
-
-        function doSome(all) {
-            const MaxAtATime = 100;
-            const Delay = 30;
-            const batch = all.slice(0, MaxAtATime);
-            const remaining = all.slice(MaxAtATime);
-            const filter = document.getElementById("sth-filter").value;
-            for (const name of batch) {
-                const row = template.cloneNode(true);
-                row.classList.remove("template");
-                sthList.appendChild(row);
-                row.querySelector(".name").textContent = name;
-                row.addEventListener("click", function () {
-                    onClick(name);
-                    $sthModal.hide();
-                });
-                row.style.display = name.toLowerCase().indexOf(filter) >= 0 ? "" : "none";
-            }
-            if (all.length) setTimeout(() => doSome(remaining), Delay);
-        }
-
-        doSome(cat);
-    };
-}
-
-function sthOnError() {
-    showArchiveMessage("sth", "sth-list", "There was an error accessing the STH archive");
-}
-
-discSth = new StairwayToHell(sthStartLoad, makeOnCat(discSthClick), sthOnError, false);
-tapeSth = new StairwayToHell(sthStartLoad, makeOnCat(tapeSthClick), sthOnError, true);
 hfeArchive = new BbcDiscArchive(hfeStartLoad, hfeOnCat, hfeOnError);
-
-// Every archive picker offers the same autoboot choice, and it is one setting,
-// so ticking it in either has to show in both.
-const autobootChecks = document.querySelectorAll("#sth .autoboot, #hfe .autoboot");
-function showAutoboot(checked) {
-    for (const check of autobootChecks) check.checked = checked;
-}
-for (const check of autobootChecks) {
-    check.addEventListener("click", function () {
-        showAutoboot(check.checked);
-        if (check.checked) {
-            parsedQuery.autoboot = "";
-        } else {
-            delete parsedQuery.autoboot;
-        }
-        urlState.updateUrl();
-    });
-}
-
-document.addEventListener("click", function (e) {
-    const target = e.target.closest("a.sth");
-    if (!target) return;
-    const type = target.dataset.id;
-    if (type === "discs") {
-        discSth.populate();
-    } else if (type === "tapes") {
-        tapeSth.populate();
-    } else {
-        console.log("unknown id", type);
-    }
-});
-
-function setSthFilter(filter) {
-    filterArchiveList("sth-list", filter);
-}
-
-const sthFilter = document.getElementById("sth-filter");
-sthFilter.addEventListener("change", () => setSthFilter(sthFilter.value));
-sthFilter.addEventListener("keyup", () => setSthFilter(sthFilter.value));
 
 // Rendering is spread over several turns of the event loop, so a list that has
 // been emptied may still have a chain of appends heading for it. Anything that
@@ -1737,7 +1597,7 @@ const startPromise = (async () => {
 
         switch (needsAutoboot) {
             case "boot":
-                showAutoboot(true);
+                autobootTicks.show(true);
                 autoboot(discImage);
                 break;
             case "type":
@@ -1750,7 +1610,7 @@ const startPromise = (async () => {
                 autoRunTape();
                 break;
             default:
-                showAutoboot(false);
+                autobootTicks.show(false);
                 break;
         }
 
@@ -2188,8 +2048,8 @@ electron({
     modals: {
         show: (modalId, sthType) => {
             if (modalId === "sth" && sthType) {
-                if (sthType === "discs") discSth.populate();
-                else if (sthType === "tapes") tapeSth.populate();
+                if (sthType === "discs") sthPicker.discs.populate();
+                else if (sthType === "tapes") sthPicker.tapes.populate();
             }
             modals.show(modalId);
         },
