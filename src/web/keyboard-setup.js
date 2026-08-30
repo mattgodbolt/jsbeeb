@@ -17,7 +17,7 @@ export class KeyboardSetup {
         this.actions = actions;
         this.keyboard = null;
 
-        // Accessibility switch state — bits 0-7 correspond to switches 1-8.
+        // Accessibility switch state: bits 0-7 correspond to switches 1-8.
         // Active low: 0xff = no switches pressed; clearing a bit = that switch is pressed.
         this.switchState = 0xff;
         const setup = this;
@@ -67,11 +67,11 @@ export class KeyboardSetup {
         keyboard.registerKeyHandler(utils.keyCodes.B, onDown(null, actions.openPrinter), ctrl);
 
         // Register accessibility switch key handlers.
-        // Keys 1–8 (K1–K8) and function keys F1–F8 both map to user port bits 0–7
+        // Keys 1-8 (K1-K8) and function keys F1-F8 both map to user port bits 0-7
         // (active low: pressing the key clears the corresponding bit in &FE60).
         //
         // On real hardware, the Brilliant Computing switch interface box and special-ed
-        // joystick connect to the User Port only — they do not touch the analogue port
+        // joystick connect to the User Port only; they do not touch the analogue port
         // or the System VIA fire buttons (PB4/PB5), which belong to the standard
         // analogue joystick connector.  So we only update switchState here.
         const handleSwitch = (bit) => (down) => {
@@ -79,7 +79,7 @@ export class KeyboardSetup {
             else this.switchState |= 1 << bit;
         };
 
-        // Alt+1–8 and Alt+F1–F8 trigger the switches.  Using Alt means the underlying
+        // Alt+1-8 and Alt+F1-F8 trigger the switches.  Using Alt means the underlying
         // key is never forwarded to the BBC Micro (keyboard.js bails out early when a
         // handler fires), so typing numbers or using function keys works normally.
         for (let i = 0; i < 8; i++) {
