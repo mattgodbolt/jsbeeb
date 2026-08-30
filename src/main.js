@@ -17,8 +17,6 @@ import { AudioHandler } from "./web/audio-handler.js";
 import { DefaultAudioOutput, isAudioOutput } from "./audio-output.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { Econet } from "./econet.js";
-import { Keyboard } from "./keyboard.js";
-import { GamepadSource } from "./gamepad-source.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
 import { AutobootTicks } from "./web/archive-list.js";
@@ -30,15 +28,14 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { Layout } from "./web/layout.js";
 import { EmulationLoop, RewindCaptureInterval } from "./web/emulation-loop.js";
+import { KeyboardSetup } from "./web/keyboard-setup.js";
+import { AnalogueInputs } from "./web/analogue-inputs.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
 import { errorText, reportLoadFailure, showNotice } from "./web/reporting.js";
-import { MicrophoneInput } from "./microphone-input.js";
 import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
-import { MouseJoystickSource } from "./mouse-joystick-source.js";
-import { calculateMouseCoordinates } from "./mouse-coordinates.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./rewind-ui.js";
 import { DiscVisualiser } from "./disc-visualiser.js";
@@ -118,16 +115,21 @@ const printer = new Printer({
         }),
 });
 
-// Accessibility switch state — bits 0-7 correspond to switches 1-8.
-// Active low: 0xff = no switches pressed; clearing a bit = that switch is pressed.
-let switchState = 0xff;
-
-const userPort = {
-    write() {},
-    read() {
-        return switchState;
+const keys = new KeyboardSetup({
+    enterDebugger: () => loop.stop(true),
+    reload: () => window.location.reload(),
+    toggleFast: () => loop.toggleFastAsPossible(),
+    openRewind: () => {
+        if (rewindUI) rewindUI.open();
     },
-};
+    openPrinter: () => checkPrinterWindow(),
+    pause: () => loop.stop(false),
+    resume: () => loop.go(),
+    onAnyKeyDown: () => {
+        audioHandler.tryResume();
+        inputs.ensureMicrophoneRunning();
+    },
+});
 
 // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
 // Must be created before Config so the onClose callback and the initial checkbox state can reference it.
@@ -153,13 +155,13 @@ const config = new Config(
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             emulationConfig.keyLayout = changed.keyLayout;
-            keyboard.setKeyLayout(changed.keyLayout);
+            keys.setKeyLayout(changed.keyLayout);
         }
         if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
-            updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
+            inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
 
             if (changed.microphoneChannel !== undefined) {
-                setupMicrophone();
+                inputs.setupMicrophone();
             }
         }
         if (changed.speechOutput !== undefined) setSpeechOutput(!!changed.speechOutput);
@@ -269,7 +271,7 @@ const emulationConfig = {
     // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
     // before any the user asked for with ?rom=.
     extraRoms: [...config.extraRoms, ...extraRoms],
-    userPort,
+    userPort: keys.userPort,
     printerPort: printer,
     getGamepads: function () {
         // Gamepads are only available in secure contexts. If e.g. loading from http:// urls they aren't there.
@@ -355,44 +357,13 @@ const pastetext = document.getElementById("paste-text");
 pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
 pastetext.addEventListener("paste", function (event) {
     const text = event.clipboardData.getData("text/plain");
-    sendRawKeyboard(autoBoot.stringToMachineKeys(text), true);
+    keys.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true);
 });
-const cubMonitor = document.getElementById("cub-monitor");
-function onCubMouseEvent(evt) {
-    audioHandler.tryResume();
-    if (document.activeElement !== document.body) document.activeElement.blur();
-    const screenRect = screenCanvas.getBoundingClientRect();
-    const { x, y } = calculateMouseCoordinates(evt, screenRect);
-
-    // Handle touchscreen
-    if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
-
-    // Handle mouse joystick if enabled
-    if (parsedQuery.mouseJoystickEnabled && mouseJoystickSource.isEnabled()) {
-        // Use the API methods instead of direct manipulation
-        mouseJoystickSource.onMouseMove(x, y);
-
-        // Handle button events
-        if (evt.type === "mousedown" && evt.button === 0) {
-            mouseJoystickSource.onMouseDown(0);
-        } else if (evt.type === "mouseup" && evt.button === 0) {
-            mouseJoystickSource.onMouseUp(0);
-        }
-    }
-
-    evt.preventDefault();
-}
-for (const eventType of ["mousemove", "mousedown", "mouseup"]) {
-    cubMonitor.addEventListener(eventType, onCubMouseEvent);
-}
-
 window.addEventListener("blur", function () {
-    keyboard.clearKeys();
+    keys.clearKeys();
     loop.setEmulationLead(audioHandler.setWindowFocused(false));
 });
 window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));
-
-let keyboard; // This will be initialised after the processor is created
 
 const debugPause = document.getElementById("debug-pause");
 const debugPlay = document.getElementById("debug-play");
@@ -403,7 +374,7 @@ function pauseIntoDebugger() {
 
 function resumeFromDebugger() {
     dbgr.hide();
-    keyboard.resumeEmulation();
+    keys.resumeEmulation();
 }
 
 debugPause.addEventListener("click", pauseIntoDebugger);
@@ -501,7 +472,11 @@ const media = new MediaLoader({
         drive: (cat, layout) => drivePicker.load(cat, layout),
     },
 });
-const autoBoot = new Autoboot({ model, processor, sendKeys: sendRawKeyboard });
+const autoBoot = new Autoboot({
+    model,
+    processor,
+    sendKeys: (keysToSend, check) => keys.sendRawKeyboard(keysToSend, check),
+});
 const autobootTicks = new AutobootTicks({ urlState });
 const sthPicker = new SthPicker({
     media,
@@ -537,15 +512,14 @@ processor.teletextAdaptor?.addEventListener("notice", showNotice);
 processor.acia.addEventListener("notice", showNotice);
 
 // Create input sources
-const gamepadSource = new GamepadSource(emulationConfig.getGamepads);
-// Create MicrophoneInput but don't enable by default
-const microphoneInput = new MicrophoneInput();
-microphoneInput.setErrorCallback((message) => {
-    toast(`${message} The microphone channel has been turned off.`, { title: "Microphone" });
+const inputs = new AnalogueInputs({
+    processor,
+    screenCanvas,
+    getGamepads: emulationConfig.getGamepads,
+    urlState,
+    config,
+    audioHandler,
 });
-
-// Create MouseJoystickSource but don't enable by default
-const mouseJoystickSource = new MouseJoystickSource(screenCanvas);
 
 /**
  * Attach an RS-423 composite handler to the ACIA that combines the touchscreen
@@ -564,207 +538,18 @@ function setupRs423Handler() {
     });
 }
 
-// Helper to manage ADC source configuration
-function updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
-    // Default all channels to the gamepad source.
-    for (let ch = 0; ch < 4; ch++) {
-        processor.adconverter.setChannelSource(ch, gamepadSource);
-    }
-
-    // Apply mouse joystick if enabled (takes priority on channels 0 & 1)
-    if (mouseJoystickEnabled) {
-        processor.adconverter.setChannelSource(0, mouseJoystickSource);
-        processor.adconverter.setChannelSource(1, mouseJoystickSource);
-        mouseJoystickSource.setVia(processor.sysvia);
-    } else {
-        mouseJoystickSource.setVia(null);
-    }
-
-    // Apply microphone if configured (can override any channel)
-    if (microphoneChannel !== undefined) {
-        processor.adconverter.setChannelSource(microphoneChannel, microphoneInput);
-    }
-}
-
-async function ensureMicrophoneRunning() {
-    if (microphoneInput.audioContext && microphoneInput.audioContext.state !== "running") {
-        try {
-            await microphoneInput.audioContext.resume();
-            console.log("Microphone: Audio context resumed, new state:", microphoneInput.audioContext.state);
-        } catch (err) {
-            console.error("Microphone: Error resuming audio context:", err);
-            return false;
-        }
-    }
-    return true;
-}
-
-async function setupMicrophone() {
-    const micPermissionStatus = document.getElementById("micPermissionStatus");
-    micPermissionStatus.textContent = "Requesting microphone access...";
-
-    // Try to initialise the microphone
-    const success = await microphoneInput.initialise();
-    if (success) {
-        // Note: Channel assignment is handled by updateAdcSources()
-        micPermissionStatus.textContent = "Microphone connected successfully";
-        await ensureMicrophoneRunning();
-
-        // Try starting audio context from user gesture
-        const tryAgain = async () => {
-            if (await ensureMicrophoneRunning()) document.removeEventListener("click", tryAgain);
-        };
-        document.addEventListener("click", tryAgain);
-    } else {
-        micPermissionStatus.textContent = `Error: ${microphoneInput.getErrorMessage() || "Unknown error"}`;
-        config.setMicrophoneChannel(undefined);
-        // Update URL to remove the parameter
-        delete parsedQuery.microphoneChannel;
-        urlState.updateUrl();
-    }
-}
-
 if (parsedQuery.microphoneChannel !== undefined) {
     // We need to use setTimeout to make sure this runs after the page has loaded
     // This is needed because some browsers require user interaction for audio context
     setTimeout(async () => {
-        await setupMicrophone();
+        await inputs.setupMicrophone();
     }, 1000);
 }
 
 // Apply ADC source settings from URL parameters
-updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
+inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
 
-// Initialise keyboard now that processor exists
-keyboard = new Keyboard({
-    processor,
-    inputEnabledFunction: () => document.activeElement && document.activeElement.id === "paste-text",
-    keyLayout,
-    dbgr,
-});
-keyboard.addEventListener("notice", showNotice);
-keyboard.addEventListener("pause", () => loop.stop(false));
-keyboard.addEventListener("resume", () => loop.go());
-keyboard.addEventListener("break", (e) => {
-    // F12/Break: Reset processor
-    if (e.detail) utils.noteEvent("keyboard", "press", "break");
-});
-
-// Register default key handlers
-keyboard.registerKeyHandler(
-    utils.keyCodes.S,
-    (down) => {
-        if (down) {
-            utils.noteEvent("keyboard", "press", "S");
-            loop.stop(true);
-        }
-    },
-    { alt: true, ctrl: false },
-);
-
-keyboard.registerKeyHandler(
-    utils.keyCodes.R,
-    (down) => {
-        if (down) window.location.reload();
-    },
-    { alt: true, ctrl: false },
-);
-
-// Register Ctrl key handlers
-keyboard.registerKeyHandler(
-    utils.keyCodes.HOME,
-    (down) => {
-        if (down) {
-            utils.noteEvent("keyboard", "press", "home");
-            loop.stop(true);
-        }
-    },
-    { alt: false, ctrl: true },
-);
-
-keyboard.registerKeyHandler(
-    utils.keyCodes.INSERT,
-    (down) => {
-        if (down) {
-            utils.noteEvent("keyboard", "press", "insert");
-            loop.toggleFastAsPossible();
-        }
-    },
-    { alt: false, ctrl: true },
-);
-
-keyboard.registerKeyHandler(
-    utils.keyCodes.END,
-    (down) => {
-        if (down) {
-            utils.noteEvent("keyboard", "press", "end");
-            keyboard.pauseEmulation();
-        }
-    },
-    { alt: false, ctrl: true },
-);
-
-keyboard.registerKeyHandler(
-    utils.keyCodes.PAGEDOWN,
-    (down) => {
-        if (down) {
-            utils.noteEvent("keyboard", "press", "pagedown");
-            if (rewindUI) rewindUI.open();
-        }
-    },
-    { alt: true, ctrl: false },
-);
-
-keyboard.registerKeyHandler(
-    utils.keyCodes.B,
-    (down) => {
-        if (down) {
-            checkPrinterWindow();
-        }
-    },
-    { alt: false, ctrl: true },
-);
-
-// Register accessibility switch key handlers.
-// Keys 1–8 (K1–K8) and function keys F1–F8 both map to user port bits 0–7
-// (active low: pressing the key clears the corresponding bit in &FE60).
-//
-// On real hardware, the Brilliant Computing switch interface box and special-ed
-// joystick connect to the User Port only — they do not touch the analogue port
-// or the System VIA fire buttons (PB4/PB5), which belong to the standard
-// analogue joystick connector.  So we only update switchState here.
-{
-    const handleSwitch = (bit) => (down) => {
-        if (down) switchState &= ~(1 << bit);
-        else switchState |= 1 << bit;
-    };
-
-    // Alt+1–8 and Alt+F1–F8 trigger the switches.  Using Alt means the underlying
-    // key is never forwarded to the BBC Micro (keyboard.js bails out early when a
-    // handler fires), so typing numbers or using function keys works normally.
-    const altMod = { alt: true, ctrl: false };
-    for (let i = 0; i < 8; i++) {
-        keyboard.registerKeyHandler(utils.keyCodes.K1 + i, handleSwitch(i), altMod);
-        keyboard.registerKeyHandler(utils.keyCodes.F1 + i, handleSwitch(i), altMod);
-    }
-}
-
-// Setup key handlers
-document.addEventListener("keydown", (evt) => {
-    audioHandler.tryResume();
-    ensureMicrophoneRunning();
-    keyboard.keyDown(evt);
-});
-document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
-document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
-
-function sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
-    if (keyboard) {
-        keyboard.sendRawKeyboard(keysToSend, checkCapsAndShiftLocks);
-    } else {
-        console.warn("Tried to send keys before keyboard was initialised");
-    }
-}
+keys.attach({ processor, dbgr, keyLayout });
 
 document.getElementById("download-filestore-link").addEventListener("click", function () {
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
@@ -992,7 +777,7 @@ const loop = new EmulationLoop({
     audioHandler,
     dbgr,
     gamepad,
-    keyboard,
+    keyboard: keys,
     syncLights: () => syncLights(),
     rewindBuffer,
     onRewindCaptured: () => rewindUI.updateButtonState(),
@@ -1003,7 +788,7 @@ const loop = new EmulationLoop({
 });
 loop.addEventListener("running", () => {
     const running = loop.isRunning();
-    keyboard.setRunning(running);
+    keys.setRunning(running);
     debugPlay.disabled = running;
     debugPause.disabled = !running;
 });
