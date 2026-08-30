@@ -36,7 +36,8 @@ export class Modals {
     }
 
     hide(id) {
-        bootstrap.Modal.getInstance(document.getElementById(id))?.hide();
+        const el = document.getElementById(id);
+        if (el) bootstrap.Modal.getInstance(el)?.hide();
     }
 
     showError(context, error) {
