@@ -29,6 +29,7 @@ import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { Layout } from "./web/layout.js";
+import { EmulationLoop, RewindCaptureInterval } from "./web/emulation-loop.js";
 import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
@@ -55,7 +56,6 @@ let video;
 let rewindUI;
 const dbgr = new Debugger();
 let syncLights;
-let running;
 let model;
 
 const gamepad = new GamePad();
@@ -77,8 +77,6 @@ let keyLayout = window.localStorage.keyLayout || "physical";
 const BBC = utils.BBC;
 const keyCodes = utils.keyCodes;
 const cpuMultiplier = parsedQuery.cpuMultiplier ?? 1;
-let fastAsPossible = false;
-let fastTape = false;
 let noSeek;
 let stationId = 101;
 let econet = null;
@@ -105,7 +103,6 @@ if (parsedQuery.embed) {
     document.body.style.backgroundColor = "transparent";
 }
 
-fastTape = !!parsedQuery.fasttape;
 noSeek = !!parsedQuery.noseek;
 
 if (parsedQuery.stationId !== undefined) stationId = parsedQuery.stationId;
@@ -287,7 +284,6 @@ const emulationConfig = {
 if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
-const MaxCyclesPerTick = clocksPerSecond / 10;
 
 let tryGl = true;
 if (parsedQuery.glEnabled !== undefined) {
@@ -299,7 +295,11 @@ if (parsedQuery.lowLatency !== undefined) {
 }
 const screenCanvas = document.getElementById("screen");
 
-const modals = new Modals({ isRunning: () => running, stop, go });
+const modals = new Modals({
+    isRunning: () => loop.isRunning(),
+    stop: (debug) => loop.stop(debug),
+    go: () => loop.go(),
+});
 
 if (keyMappingWarnings.length) {
     toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
@@ -388,9 +388,9 @@ for (const eventType of ["mousemove", "mousedown", "mouseup"]) {
 
 window.addEventListener("blur", function () {
     keyboard.clearKeys();
-    setEmulationLead(audioHandler.setWindowFocused(false));
+    loop.setEmulationLead(audioHandler.setWindowFocused(false));
 });
-window.addEventListener("focus", () => setEmulationLead(audioHandler.setWindowFocused(true)));
+window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));
 
 let keyboard; // This will be initialised after the processor is created
 
@@ -398,7 +398,7 @@ const debugPause = document.getElementById("debug-pause");
 const debugPlay = document.getElementById("debug-play");
 
 function pauseIntoDebugger() {
-    stop(true);
+    loop.stop(true);
 }
 
 function resumeFromDebugger() {
@@ -420,7 +420,7 @@ document.addEventListener("drop", function (event) {
 });
 
 window.addEventListener("beforeunload", function (event) {
-    if (running && processor.sysvia.hasAnyKeyDown()) {
+    if (loop.isRunning() && processor.sysvia.hasAnyKeyDown()) {
         const message =
             "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
             "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
@@ -528,9 +528,9 @@ const snapshots = new SnapshotUI({
     drives,
     urlState,
     modals,
-    isRunning: () => running,
-    stop,
-    go,
+    isRunning: () => loop.isRunning(),
+    stop: (debug) => loop.stop(debug),
+    go: () => loop.go(),
 });
 
 processor.teletextAdaptor?.addEventListener("notice", showNotice);
@@ -643,8 +643,8 @@ keyboard = new Keyboard({
     dbgr,
 });
 keyboard.addEventListener("notice", showNotice);
-keyboard.addEventListener("pause", () => stop(false));
-keyboard.addEventListener("resume", () => go());
+keyboard.addEventListener("pause", () => loop.stop(false));
+keyboard.addEventListener("resume", () => loop.go());
 keyboard.addEventListener("break", (e) => {
     // F12/Break: Reset processor
     if (e.detail) utils.noteEvent("keyboard", "press", "break");
@@ -656,7 +656,7 @@ keyboard.registerKeyHandler(
     (down) => {
         if (down) {
             utils.noteEvent("keyboard", "press", "S");
-            stop(true);
+            loop.stop(true);
         }
     },
     { alt: true, ctrl: false },
@@ -676,7 +676,7 @@ keyboard.registerKeyHandler(
     (down) => {
         if (down) {
             utils.noteEvent("keyboard", "press", "home");
-            stop(true);
+            loop.stop(true);
         }
     },
     { alt: false, ctrl: true },
@@ -687,7 +687,7 @@ keyboard.registerKeyHandler(
     (down) => {
         if (down) {
             utils.noteEvent("keyboard", "press", "insert");
-            fastAsPossible = !fastAsPossible;
+            loop.toggleFastAsPossible();
         }
     },
     { alt: false, ctrl: true },
@@ -977,292 +977,50 @@ const startPromise = (async () => {
         // Restore the state a cross-model reload stashed, if there is one.
         await snapshots.restorePendingState();
 
-        go();
+        loop.go();
     } catch (error) {
         console.error("Error initialising emulator:", error);
         modals.showError("initialising", error);
     }
 })();
 
-function benchmarkCpu(numCycles) {
-    numCycles = numCycles || 10 * 1000 * 1000;
-    const oldFS = display.frameSkip;
-    display.frameSkip = 1000000;
-    const startTime = performance.now();
-    processor.execute(numCycles);
-    const endTime = performance.now();
-    display.frameSkip = oldFS;
-    const msTaken = endTime - startTime;
-    const virtualMhz = numCycles / msTaken / 1000;
-    console.log("Took " + msTaken + "ms to execute " + numCycles + " cycles");
-    console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
-}
-
-function benchmarkVideo(numCycles) {
-    numCycles = numCycles || 10 * 1000 * 1000;
-    const oldFS = display.frameSkip;
-    display.frameSkip = 1000000;
-    const startTime = performance.now();
-    video.polltime(numCycles);
-    const endTime = performance.now();
-    display.frameSkip = oldFS;
-    const msTaken = endTime - startTime;
-    const virtualMhz = numCycles / msTaken / 1000;
-    console.log("Took " + msTaken + "ms to execute " + numCycles + " video cycles");
-    console.log("Virtual " + virtualMhz.toFixed(2) + "MHz");
-}
-
-function profileCpu(arg) {
-    console.profile("CPU");
-    benchmarkCpu(arg);
-    console.profileEnd();
-}
-
-function profileVideo(arg) {
-    console.profile("Video");
-    benchmarkVideo(arg);
-    console.profileEnd();
-}
-
-let last = 0;
-let lastEnd = 0;
-
-function VirtualSpeedUpdater() {
-    this.cycles = 0;
-    this.time = 0;
-    this.v = document.querySelector(".virtualMHz");
-    this.header = document.getElementById("virtual-mhz-header");
-    this.speedy = false;
-
-    this.update = function (cycles, time, speedy) {
-        this.cycles += cycles;
-        this.time += time;
-        this.speedy = speedy;
-    };
-
-    this.display = function () {
-        // MRG would be nice to graph instantaneous speed to get some idea where the time goes.
-        if (this.cycles) {
-            const thisMHz = this.cycles / this.time / 1000;
-            this.v.textContent = thisMHz.toFixed(1);
-            if (this.cycles >= 10 * cpuSpeed) {
-                this.cycles = this.time = 0;
-            }
-            this.header.style.color = this.speedy ? "red" : "white";
-        }
-        setTimeout(this.display.bind(this), 3333);
-    };
-
-    this.display();
-}
-
-const virtualSpeedUpdater = new VirtualSpeedUpdater();
-
 const rewindBuffer = new RewindBuffer(30);
-let rewindCycleCounter = 0;
-const RewindCaptureInterval = 50; // emulated frames, ~1 second
-const RewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
 
-// Under ?audioDebug, one console line per second in which the emulator sat
-// idle between ticks or a tick ran long, or the audio queue underran or
-// dropped, so a click can be matched to a cause. The sound chip posts samples
-// throughout execute(), so only the idle time starves the audio queue.
-const AudioDebugLogIntervalMs = 1000;
-const AudioDebugSlowTickMs = 30;
-const audioDebugLog = { start: 0, ticks: 0, cycles: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
-const AudioDebugSlowPresentMs = 30;
-
-function logAudioDebugTick(now, cycles, idleMs, executeMs, paintMs, snapshotMs) {
-    const log = audioDebugLog;
-    if (log.start === 0) log.start = now;
-    log.ticks++;
-    log.cycles += cycles;
-    log.maxIdle = Math.max(log.maxIdle, idleMs);
-    log.maxExecute = Math.max(log.maxExecute, executeMs);
-    log.maxPaint = Math.max(log.maxPaint, paintMs);
-    log.maxSnapshot = Math.max(log.maxSnapshot, snapshotMs);
-    if (now - log.start < AudioDebugLogIntervalMs) return;
-    const audio = audioHandler.takeEventCounts();
-    const present = display.takePresentMs();
-    const leadMin = Number.isFinite(audio.leadMinMs) ? `${audio.leadMinMs.toFixed(1)}ms` : "(no stats)";
-    if (
-        log.maxIdle > AudioDebugSlowTickMs ||
-        log.maxExecute > AudioDebugSlowTickMs ||
-        present > AudioDebugSlowPresentMs ||
-        audio.stall ||
-        audio.skip
-    ) {
-        console.log(
-            `${(now / 1000).toFixed(0)}s: ${log.ticks} ticks emulating ${((1000 * log.cycles) / clocksPerSecond).toFixed(0)}ms, ` +
-                `idle max ${log.maxIdle.toFixed(0)}ms, ` +
-                `execute max ${log.maxExecute.toFixed(0)}ms (paint ${log.maxPaint.toFixed(1)}ms), ` +
-                `present max ${present.toFixed(0)}ms, snapshot ${log.maxSnapshot.toFixed(1)}ms; ` +
-                `audio lead min ${leadMin}, stalls ${audio.stall}, skipped ${audio.skip.toFixed(0)}ms`,
-        );
-    }
-    log.start = now;
-    log.ticks = log.cycles = log.maxIdle = log.maxExecute = log.maxPaint = log.maxSnapshot = 0;
-}
+const loop = new EmulationLoop({
+    processor,
+    display,
+    audioHandler,
+    dbgr,
+    gamepad,
+    keyboard,
+    syncLights: () => syncLights(),
+    rewindBuffer,
+    onRewindCaptured: () => rewindUI.updateButtonState(),
+    clocksPerSecond,
+    cpuSpeed,
+    fastTape: !!parsedQuery.fasttape,
+    audioStatsNode,
+});
+loop.addEventListener("running", () => {
+    const running = loop.isRunning();
+    keyboard.setRunning(running);
+    debugPlay.disabled = running;
+    debugPause.disabled = !running;
+});
 
 rewindUI = new RewindUI({
     rewindBuffer,
     processor,
     video,
     captureInterval: RewindCaptureInterval,
-    stop,
-    go,
-    isRunning: () => running,
+    stop: (debug) => loop.stop(debug),
+    go: () => loop.go(),
+    isRunning: () => loop.isRunning(),
 });
 rewindUI.updateButtonState();
 
 if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
 else document.getElementById("disc-visualiser-open").classList.add("disabled");
-
-// A timer, not requestAnimationFrame: a display presentation stall withholds
-// animation frames, and with them the sound chip's samples (issue #885).
-const TickMs = 10;
-let tickToken = null;
-
-// A user-blocking task runs ahead of rendering and ordinary timers, so a stuck
-// compositor does not hold the tick off too.
-function scheduleTick(delayMs) {
-    const token = (tickToken = {});
-    const fire = () => {
-        if (tickToken === token) tick();
-    };
-    if (window.scheduler?.postTask) window.scheduler.postTask(fire, { delay: delayMs, priority: "user-blocking" });
-    else window.setTimeout(fire, delayMs);
-}
-
-function tick() {
-    if (!running) {
-        last = 0;
-        return;
-    }
-    const now = performance.now();
-
-    const motorOn = processor.acia.motorOn;
-    const speedy = fastAsPossible || (fastTape && motorOn);
-
-    // In speedy mode, we still run all the state machines accurately
-    // but we paint less often because painting is the most expensive
-    // part of jsbeeb at this time.
-    // We need need to paint per odd number of frames so that interlace
-    // modes, i.e. MODE 7, still look ok.
-    video.frameSkipCount = speedy ? 9 : 0;
-
-    scheduleTick(speedy ? 0 : TickMs);
-
-    gamepad.update(processor.sysvia);
-    syncLights();
-    if (last !== 0) {
-        let cycles;
-        if (!speedy) {
-            const sinceLast = Math.max(0, now - last);
-            cycles = (sinceLast * clocksPerSecond) / 1000;
-            cycles = Math.min(cycles, MaxCyclesPerTick);
-        } else {
-            cycles = clocksPerSecond / 50;
-        }
-        cycles |= 0;
-        try {
-            if (!processor.execute(cycles)) {
-                stop(true);
-            }
-            audioHandler.flushChipEvents();
-            const end = performance.now();
-            virtualSpeedUpdater.update(cycles, end - now, speedy);
-            let snapshotMs = 0;
-            rewindCycleCounter += cycles;
-            if (rewindCycleCounter >= RewindCaptureCycles) {
-                rewindCycleCounter -= RewindCaptureCycles;
-                rewindBuffer.push(processor.snapshotState());
-                rewindUI.updateButtonState();
-                snapshotMs = performance.now() - end;
-            }
-            if (audioStatsNode)
-                logAudioDebugTick(
-                    now,
-                    cycles,
-                    speedy ? 0 : now - lastEnd,
-                    end - now,
-                    display.takePaintMs(),
-                    snapshotMs,
-                );
-        } catch (e) {
-            running = false;
-            utils.noteEvent("exception", "thrown", e.stack);
-            dbgr.debug(processor.pc);
-            throw e;
-        }
-        if (keyboard.postFrameShouldPause()) {
-            stop(false);
-        }
-    }
-    last = Math.max(last, now);
-    lastEnd = performance.now();
-}
-
-function run() {
-    scheduleTick(0);
-}
-
-// A change of audio buffer depth is taken by the picture, not the sound:
-// gaining lead emulates ahead at once; losing it moves `last` forward so the
-// ticks emulate nothing until the queue has drained by that much.
-let emulationLeadMs = 0;
-
-function setEmulationLead(leadMs) {
-    if (!running) return;
-    const aheadMs = leadMs - emulationLeadMs;
-    emulationLeadMs = leadMs;
-    if (aheadMs > 0) {
-        if (!processor.execute((aheadMs * clocksPerSecond) / 1000)) stop(true);
-        audioHandler.flushChipEvents();
-    } else {
-        last -= aheadMs;
-    }
-}
-
-let wasPreviouslyRunning = false;
-
-function handleVisibilityChange() {
-    if (document.visibilityState === "hidden") {
-        wasPreviouslyRunning = running;
-        const keepRunningWhenHidden = processor.acia.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
-        if (running && !keepRunningWhenHidden) {
-            stop(false);
-        }
-    } else {
-        if (wasPreviouslyRunning) {
-            go();
-        }
-    }
-}
-
-document.addEventListener("visibilitychange", handleVisibilityChange, false);
-
-function updateDebugButtons() {
-    debugPlay.disabled = running;
-    debugPause.disabled = !running;
-}
-
-function go() {
-    audioHandler.unmute();
-    running = true;
-    keyboard.setRunning(true);
-    updateDebugButtons();
-    run();
-}
-
-function stop(debug) {
-    running = false;
-    keyboard.setRunning(false);
-    processor.stop();
-    if (debug) dbgr.debug(processor.pc);
-    audioHandler.mute();
-    updateDebugButtons();
-}
 
 new Layout({
     screenCanvas,
@@ -1276,12 +1034,12 @@ if (Object.hasOwn(parsedQuery, "pp-tos")) modals.show("pp-tos");
 
 // Handy shortcuts. bench/profile stuff is delayed so that they can be
 // safely run from the JS console in firefox.
-window.benchmarkCpu = utils.debounce(benchmarkCpu, 1);
-window.profileCpu = utils.debounce(profileCpu, 1);
-window.benchmarkVideo = utils.debounce(benchmarkVideo, 1);
-window.profileVideo = utils.debounce(profileVideo, 1);
-window.go = go;
-window.stop = stop;
+window.benchmarkCpu = utils.debounce((numCycles) => loop.benchmarkCpu(numCycles), 1);
+window.profileCpu = utils.debounce((arg) => loop.profileCpu(arg), 1);
+window.benchmarkVideo = utils.debounce((numCycles) => loop.benchmarkVideo(numCycles), 1);
+window.profileVideo = utils.debounce((arg) => loop.profileVideo(arg), 1);
+window.go = () => loop.go();
+window.stop = (debug) => loop.stop(debug);
 window.soundChip = audioHandler.soundChip;
 window.processor = processor;
 window.video = video;
