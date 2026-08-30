@@ -177,6 +177,7 @@ export class EmulationLoop extends EventTarget {
                 audioHandler.flushChipEvents();
                 const end = performance.now();
                 this.virtualSpeedUpdater.update(cycles, end - now, speedy);
+                const paintMs = display.takePaintMs();
                 let snapshotMs = 0;
                 this.rewindCycleCounter += cycles;
                 if (this.rewindCycleCounter >= this.rewindCaptureCycles) {
@@ -191,7 +192,7 @@ export class EmulationLoop extends EventTarget {
                         cycles,
                         speedy ? 0 : now - this.lastEnd,
                         end - now,
-                        display.takePaintMs(),
+                        paintMs,
                         snapshotMs,
                     );
             } catch (e) {
