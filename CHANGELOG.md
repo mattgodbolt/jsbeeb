@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.22.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.1...v1.22.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* five smallnesses from the fresh-eyes sweep ([#982](https://github.com/mattgodbolt/jsbeeb/issues/982)) ([9b34ca5](https://github.com/mattgodbolt/jsbeeb/commit/9b34ca5d430f0fe05586b235aca027e2497094e6))
+* guard loadTapeImage against an empty reference and quieten the tape menu ([#974](https://github.com/mattgodbolt/jsbeeb/issues/974)) ([5660c33](https://github.com/mattgodbolt/jsbeeb/commit/5660c330b7c4d677b762e9f176c0a4b90147ce7c))
+* report Google Drive picker errors instead of failing silently ([#975](https://github.com/mattgodbolt/jsbeeb/issues/975)) ([b58f1df](https://github.com/mattgodbolt/jsbeeb/commit/b58f1dfebdf06ee800b950c93cfd16b24ee227b8))
+* route the ADC when the microphone is disabled and reject invalid channels ([#976](https://github.com/mattgodbolt/jsbeeb/issues/976)) ([1224d8b](https://github.com/mattgodbolt/jsbeeb/commit/1224d8b49e0ad463b421363e808e581a6255f08b))
+* stop STH catalogue renders interleaving disc and tape lists ([#973](https://github.com/mattgodbolt/jsbeeb/issues/973)) ([6b5dc0e](https://github.com/mattgodbolt/jsbeeb/commit/6b5dc0e0e30e5641e1621b1d869544cdc9eff92b))
+
 ## [1.22.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.0...v1.22.1) (2026-08-30)
 
 
