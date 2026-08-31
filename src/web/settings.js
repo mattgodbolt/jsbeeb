@@ -106,8 +106,7 @@ export class Settings {
         this.config.setAudioOutput(output);
         this.targets.quickSettings?.showAudioOutput(output);
         window.localStorage.audioOutput = output;
-        this.urlState.params.audioOutput = output;
-        this.urlState.updateUrl();
+        this.urlState.set({ audioOutput: output });
     }
 
     applySpeakerAmount(amount) {
@@ -126,15 +125,14 @@ export class Settings {
         this.config.setDisplayMode(mode);
         this.targets.quickSettings?.showDisplayMode(mode);
         window.localStorage.displayMode = mode;
-        this.urlState.params.displayMode = mode;
-        this.urlState.updateUrl();
+        this.urlState.set({ displayMode: mode });
     }
 
     onDialogClosed(changed) {
         const { urlState } = this;
         const { machine, keys, inputs } = this.targets;
         const parsedQuery = urlState.params;
-        Object.assign(parsedQuery, changed);
+        urlState.set(changed);
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             machine.emulationConfig.keyLayout = changed.keyLayout;
@@ -155,6 +153,5 @@ export class Settings {
                 machine.processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
             }
         }
-        urlState.updateUrl();
     }
 }

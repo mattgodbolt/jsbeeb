@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AutobootTicks, clearArchiveList, filterArchiveList, showArchiveMessage } from "../../src/web/archive-list.js";
+import { UrlState } from "../../src/web/url-state.js";
 
 const Markup = `
 <div id="sth" class="modal"><span class="loading" style="display: none"></span>
@@ -61,7 +62,13 @@ describe("archive lists", () => {
         const boxes = () => [...document.querySelectorAll(".autoboot")];
 
         beforeEach(() => {
-            urlState = { params: {}, updateUrl: vi.fn() };
+            urlState = new UrlState(
+                { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
+                {
+                    pushState: () => {},
+                },
+            );
+            vi.spyOn(urlState, "updateUrl");
             new AutobootTicks({ urlState });
         });
 

@@ -90,8 +90,7 @@ export class AnalogueInputs {
 
     clearMicrophoneChannel() {
         this.config.setMicrophoneChannel(undefined);
-        delete this.urlState.params.microphoneChannel;
-        this.urlState.updateUrl();
+        this.urlState.set({ microphoneChannel: undefined });
     }
 
     async ensureMicrophoneRunning() {

@@ -56,7 +56,8 @@ export const UrlParamTypes = {
 
 /**
  * The page's settings as carried in its URL. `params` is the one parsed
- * object: whoever changes a setting edits it in place and calls updateUrl.
+ * object: whoever changes a setting hands the change to set(), which edits
+ * it in place and writes the URL in one step.
  */
 export class UrlState {
     constructor(location, history, paramTypes = UrlParamTypes) {
@@ -76,6 +77,15 @@ export class UrlState {
     /** The page's URL with some parameters changed, leaving `params` as it is. */
     urlWith(overrides) {
         return buildUrlFromParams(this.baseUrl, { ...this.params, ...overrides }, this.paramTypes);
+    }
+
+    /** Apply `changes` to the parameters (undefined deletes a key) and push the new URL. */
+    set(changes) {
+        for (const [key, value] of Object.entries(changes)) {
+            if (value === undefined) delete this.params[key];
+            else this.params[key] = value;
+        }
+        this.updateUrl();
     }
 
     updateUrl() {

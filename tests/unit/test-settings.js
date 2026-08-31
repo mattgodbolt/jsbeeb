@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Settings } from "../../src/web/settings.js";
+import { UrlState } from "../../src/web/url-state.js";
 import { DefaultModel, findModel } from "../../src/models.js";
 
 /** Stands in for the Config dialog: remembers what it was told and hands back the callbacks. */
@@ -31,7 +32,13 @@ describe("Settings", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        urlState = { params: {}, updateUrl: vi.fn() };
+        urlState = new UrlState(
+            { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
+            {
+                pushState: () => {},
+            },
+        );
+        vi.spyOn(urlState, "updateUrl");
         targets = {
             audioHandler: { setAudioOutput: vi.fn(), setSpeakerAmount: vi.fn() },
             display: { setMode: vi.fn() },
