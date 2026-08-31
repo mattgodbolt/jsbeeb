@@ -405,7 +405,7 @@ and posted the [video up on YouTube](https://www.youtube.com/watch?v=37jyHQT7fXQ
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 (or later); see the [COPYING](COPYING) file for
+This project is licensed under the GNU General Public License v3.0 (or later); see the [LICENSE](LICENSE) file for
 details.
 
 ## Contact
