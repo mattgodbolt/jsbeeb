@@ -26,7 +26,7 @@ describe("GoogleDrivePicker", () => {
             create: vi.fn(),
         };
         deps = {
-            media: { setDisc1Image: vi.fn() },
+            media: { addSource: vi.fn(), setDisc1Image: vi.fn() },
             drives: { layoutForDrive: () => "auto", putDiscIn: vi.fn() },
             modals: { popupLoading: vi.fn(), loadingFinished: vi.fn() },
             processor: { fdc: { drives: [{ disc: null }, {}] } },
@@ -182,6 +182,18 @@ describe("GoogleDrivePicker", () => {
             make();
             submit();
             expect(deps.modals.popupLoading).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("registering media sources", () => {
+        it("hands the loader its own load as the drive fetcher", async () => {
+            const picker = make();
+            const registered = Object.fromEntries(deps.media.addSource.mock.calls);
+            expect(Object.keys(registered)).toEqual(["drive"]);
+            const ssd = {};
+            vi.spyOn(picker, "load").mockResolvedValue(ssd);
+            await expect(registered.drive({ id: "abc", name: "mine.ssd" }, "auto")).resolves.toBe(ssd);
+            expect(picker.load).toHaveBeenCalledWith({ id: "abc", name: "mine.ssd" }, "auto");
         });
     });
 });

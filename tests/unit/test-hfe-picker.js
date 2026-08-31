@@ -31,7 +31,7 @@ describe("HfePicker", () => {
         vi.useFakeTimers();
         document.body.innerHTML = Markup;
         deps = {
-            media: { setDisc1Image: vi.fn(), loadDiscImage: vi.fn() },
+            media: { addSource: vi.fn(), setDisc1Image: vi.fn(), loadDiscImage: vi.fn() },
             drives: { layoutForDrive: () => "auto", putDiscIn: vi.fn() },
             modals: { popupLoading: vi.fn(), loadingFinished: vi.fn() },
             urlState: { params: {}, updateUrl: vi.fn() },
@@ -165,6 +165,17 @@ describe("HfePicker", () => {
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
                 expect.stringContaining("Unable to load Elite from the HFE archive: 404"),
             );
+        });
+    });
+
+    describe("registering media sources", () => {
+        it("hands the loader a fetcher for the archive", async () => {
+            const picker = make();
+            const registered = Object.fromEntries(deps.media.addSource.mock.calls);
+            expect(Object.keys(registered)).toEqual(["hfe"]);
+            vi.spyOn(picker.archive, "fetch").mockResolvedValue("hfe bytes");
+            await expect(registered.hfe("Games/ELITE.hfe")).resolves.toBe("hfe bytes");
+            expect(picker.archive.fetch).toHaveBeenCalledWith("Games/ELITE.hfe");
         });
     });
 });
