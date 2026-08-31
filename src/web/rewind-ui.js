@@ -41,6 +41,13 @@ export class RewindUI {
         });
     }
 
+    /** Forget everything captured, as on a hard reset. */
+    reset() {
+        this.close();
+        this.rewindBuffer.clear();
+        this.updateButtonState();
+    }
+
     /** Open the rewind scrubber panel. */
     open() {
         if (this.isOpen) return;
