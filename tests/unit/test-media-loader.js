@@ -34,6 +34,7 @@ async function pickFile(inputId, file) {
 
 describe("MediaLoader", () => {
     let deps;
+    let sources;
 
     beforeEach(() => {
         document.body.innerHTML = Markup;
@@ -53,13 +54,12 @@ describe("MediaLoader", () => {
                     pushState: () => {},
                 },
             ),
-            config: new EventTarget(),
             modals: { hide: vi.fn() },
-            sources: { sth: vi.fn(), tapeSth: vi.fn(), hfe: vi.fn(), drive: vi.fn() },
             isSnapshotFile: (name) => name.endsWith(".snp"),
             loadSnapshot: vi.fn(),
         };
         vi.spyOn(deps.urlState, "updateUrl");
+        sources = { sth: vi.fn(), tapeSth: vi.fn(), hfe: vi.fn(), drive: vi.fn() };
     });
 
     afterEach(() => {
@@ -68,7 +68,11 @@ describe("MediaLoader", () => {
         window.localStorage.clear();
     });
 
-    const make = () => new MediaLoader(deps);
+    const make = () => {
+        const media = new MediaLoader(deps);
+        for (const [schema, fetcher] of Object.entries(sources)) media.addSource(schema, fetcher);
+        return media;
+    };
     const toasts = () =>
         [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
@@ -93,33 +97,30 @@ describe("MediaLoader", () => {
         });
 
         it("fetches an sth: reference and names the disc after what was in the archive", async () => {
-            deps.sources.sth.mockResolvedValue({ name: "ELITE.ssd", data: ssdImage(), ignored: [] });
+            sources.sth.mockResolvedValue({ name: "ELITE.ssd", data: ssdImage(), ignored: [] });
             const loaded = await make().loadDiscImage("sth:ELITE.zip");
-            expect(deps.sources.sth).toHaveBeenCalledWith("ELITE.zip");
+            expect(sources.sth).toHaveBeenCalledWith("ELITE.zip");
             expect(loaded.name).toBe("ELITE.ssd");
         });
 
         it("reports what an archive held besides the file it loaded", async () => {
-            deps.sources.sth.mockResolvedValue({ name: "side1.ssd", data: ssdImage(), ignored: ["side2.ssd"] });
+            sources.sth.mockResolvedValue({ name: "side1.ssd", data: ssdImage(), ignored: ["side2.ssd"] });
             await make().loadDiscImage("sth:Game.zip");
             expect(toasts()).toEqual([expect.stringContaining("side2.ssd")]);
         });
 
         it("fetches an hfe: reference from the archive", async () => {
-            deps.sources.hfe.mockResolvedValue(toHfe(discFor(null, "x.ssd", ssdImage())));
+            sources.hfe.mockResolvedValue(toHfe(discFor(null, "x.ssd", ssdImage())));
             const loaded = await make().loadDiscImage("hfe:3A1DAB83.hfe");
-            expect(deps.sources.hfe).toHaveBeenCalledWith("3A1DAB83.hfe");
+            expect(sources.hfe).toHaveBeenCalledWith("3A1DAB83.hfe");
             expect(loaded.name).toBe("3A1DAB83.hfe");
         });
 
         it("splits a gd: reference into the file id and name for the Drive source", async () => {
             const fromDrive = {};
-            deps.sources.drive.mockResolvedValue(fromDrive);
+            sources.drive.mockResolvedValue(fromDrive);
             const loaded = await make().loadDiscImage("gd:abc123/mydisc.ssd", DiscLayout.contiguous);
-            expect(deps.sources.drive).toHaveBeenCalledWith(
-                { id: "abc123", name: "mydisc.ssd" },
-                DiscLayout.contiguous,
-            );
+            expect(sources.drive).toHaveBeenCalledWith({ id: "abc123", name: "mydisc.ssd" }, DiscLayout.contiguous);
             expect(loaded).toBe(fromDrive);
         });
 
@@ -142,19 +143,23 @@ describe("MediaLoader", () => {
         const mediaEvents = [];
         beforeEach(() => {
             mediaEvents.length = 0;
-            deps.config.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
         });
+        const makeWatched = () => {
+            const media = make();
+            media.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
+            return media;
+        };
 
         it("names drive 0's disc, displacing any bare disc parameter", () => {
             deps.urlState.params.disc = "old.ssd";
-            make().setDisc1Image("sth:ELITE.zip");
+            makeWatched().setDisc1Image("sth:ELITE.zip");
             expect(deps.urlState.params).toEqual({ disc1: "sth:ELITE.zip" });
             expect(deps.urlState.updateUrl).toHaveBeenCalledTimes(1);
             expect(mediaEvents).toEqual([{ disc1: "sth:ELITE.zip" }]);
         });
 
         it("names drive 1's disc and the tape", () => {
-            const media = make();
+            const media = makeWatched();
             media.setDisc2Image("b.ssd");
             media.setTapeImage("sth:Chuckie.zip");
             expect(deps.urlState.params).toEqual({ disc2: "b.ssd", tape: "sth:Chuckie.zip" });

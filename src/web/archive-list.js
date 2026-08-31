@@ -28,7 +28,7 @@ export class AutobootTicks {
         for (const check of this.checks) {
             check.addEventListener("click", () => {
                 this.show(check.checked);
-                urlState.set({ autoboot: check.checked ? "" : undefined });
+                urlState.set({ autoboot: check.checked ? true : undefined });
             });
         }
     }
