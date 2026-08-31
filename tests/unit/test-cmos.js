@@ -85,6 +85,23 @@ describe("CMOS", () => {
             expect(customCmos.read()).toBe(0x42);
         });
 
+        it("should not let a mutating override change the defaults for later machines", () => {
+            const untouchedDefault = defaultCmos[19];
+            const mutatingOverride = (cmos) => {
+                cmos[19] = (cmos[19] & 0xf0) | 13;
+                return cmos;
+            };
+            new Cmos(mockPersistence, mutatingOverride);
+            expect(defaultCmos[19]).toBe(untouchedDefault);
+
+            const plainCmos = new Cmos(mockPersistence);
+            plainCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 19, 0);
+            plainCmos.writeControl(PORT_B_ENABLE, 19, 0);
+            plainCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
+
+            expect(plainCmos.read()).toBe(untouchedDefault);
+        });
+
         it("should apply econet settings when provided", () => {
             const econet = { stationId: 0x42 };
             const customCmos = new Cmos(mockPersistence, null, econet);
