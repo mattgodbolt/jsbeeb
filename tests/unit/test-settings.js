@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Settings } from "../../src/web/settings.js";
-import { UrlState } from "../../src/web/url-state.js";
 import { DefaultModel, findModel } from "../../src/models.js";
+import { fakeUrlState, teardownDom } from "./helpers.js";
 
 /** Stands in for the Config dialog: remembers what it was told and hands back the callbacks. */
 function fakeConfig(onChange, onClose, onRestartRequired) {
@@ -32,12 +32,7 @@ describe("Settings", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        urlState = new UrlState(
-            { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
-            {
-                pushState: () => {},
-            },
-        );
+        urlState = fakeUrlState();
         vi.spyOn(urlState, "updateUrl");
         targets = {
             audioHandler: { setAudioOutput: vi.fn(), setSpeakerAmount: vi.fn() },
@@ -51,13 +46,7 @@ describe("Settings", () => {
         };
     });
 
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = () => {
         const settings = new Settings({ urlState, makeConfig: (...handlers) => fakeConfig(...handlers) });

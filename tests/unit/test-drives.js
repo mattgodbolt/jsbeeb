@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Drives } from "../../src/web/drives.js";
 import { DiscLayout } from "../../src/disc.js";
 import { DriveTracks } from "../../src/url-params.js";
+import { teardownDom, toasts } from "./helpers.js";
 
 const Markup = `
 <div class="drive-tracks" data-drive="0"><button data-tracks="40">40</button><button data-tracks="80">80</button></div>
@@ -43,16 +44,9 @@ describe("Drives", () => {
         confirm = vi.fn().mockResolvedValue(false);
     });
 
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) => new Drives({ fdc, driveTracks, confirm });
-    const toasts = () =>
-        [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
     const activeTracks = (driveIndex) =>
         [...document.querySelectorAll(`.drive-tracks[data-drive="${driveIndex}"] .active`)].map(
             (b) => b.dataset.tracks,

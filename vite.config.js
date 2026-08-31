@@ -15,7 +15,7 @@ export default defineConfig({
     test: {
         include: [
             ...configDefaults.include,
-            "tests/unit/**/*.js",
+            "tests/unit/**/test-*.js",
             "tests/integration/**/*.js",
             "tests/shader/test-*.js",
         ],

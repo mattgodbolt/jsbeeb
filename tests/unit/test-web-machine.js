@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Machine, buildEmulationConfig } from "../../src/web/machine.js";
+import { teardownDom, toasts } from "./helpers.js";
 
 const config = (overrides = {}) => ({
     tubeCpuMultiplier: 1,
@@ -75,15 +76,9 @@ describe("Machine", () => {
         };
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = () => new Machine(deps);
-    const toasts = () =>
-        [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
     it("builds the processor with everything bolted on and attaches the printer", () => {
         const machine = make();

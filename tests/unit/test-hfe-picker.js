@@ -3,16 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HfePicker } from "../../src/web/hfe-picker.js";
 import { Provenance } from "../../src/bbcdiscs.js";
+import { makeWebDeps, modalMarkup, teardownDom } from "./helpers.js";
 
-const Markup = `
-<div id="hfe" class="modal"><div class="modal-dialog"><div class="modal-content"><div class="modal-body">
+const Markup = modalMarkup(
+    "hfe",
+    `
   <span class="loading"></span>
   <input id="hfe-filter" value="" />
   <div id="hfe-provenance"></div>
   <ul id="hfe-list"><li class="template"><a href="#">
     <span class="name"></span><span class="publisher"></span><span class="detail"></span><span class="provenance"></span>
-  </a></li></ul>
-</div></div></div></div>`;
+  </a></li></ul>`,
+);
 
 const entry = (path, title, provenance = Provenance.Captured, extra = {}) => ({
     path,
@@ -30,23 +32,10 @@ describe("HfePicker", () => {
     beforeEach(() => {
         vi.useFakeTimers();
         document.body.innerHTML = Markup;
-        deps = {
-            media: { addSource: vi.fn(), setDisc1Image: vi.fn(), loadDiscImage: vi.fn() },
-            drives: { layoutForDrive: () => "auto", putDiscIn: vi.fn() },
-            modals: { popupLoading: vi.fn(), loadingFinished: vi.fn() },
-            urlState: { params: {}, updateUrl: vi.fn() },
-            processor: { reset: vi.fn() },
-            autoboot: vi.fn(),
-        };
+        deps = makeWebDeps();
     });
 
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = () => new HfePicker(deps);
     const rows = () => [...document.querySelectorAll("#hfe-list li:not(.template)")];

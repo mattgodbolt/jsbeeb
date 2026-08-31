@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AutobootTicks, clearArchiveList, filterArchiveList, showArchiveMessage } from "../../src/web/archive-list.js";
-import { UrlState } from "../../src/web/url-state.js";
+import { fakeUrlState, teardownDom } from "./helpers.js";
 
 const Markup = `
 <div id="sth" class="modal"><span class="loading" style="display: none"></span>
@@ -26,9 +26,7 @@ describe("archive lists", () => {
         document.body.innerHTML = Markup;
     });
 
-    afterEach(() => {
-        document.body.innerHTML = "";
-    });
+    afterEach(teardownDom);
 
     it("clears every row but the template", () => {
         addRow("sth-list", "Elite");
@@ -62,10 +60,7 @@ describe("archive lists", () => {
         const boxes = () => [...document.querySelectorAll(".autoboot")];
 
         beforeEach(() => {
-            urlState = new UrlState(
-                { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
-                { pushState: vi.fn() },
-            );
+            urlState = fakeUrlState();
             new AutobootTicks({ urlState });
         });
 

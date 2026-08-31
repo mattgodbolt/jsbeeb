@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalogueInputs } from "../../src/web/analogue-inputs.js";
-import { UrlState } from "../../src/web/url-state.js";
+import { fakeUrlState, teardownDom } from "./helpers.js";
 
 const Markup = `<div id="cub-monitor"><canvas id="screen"></canvas></div><span id="micPermissionStatus"></span>`;
 
@@ -22,24 +22,14 @@ describe("AnalogueInputs", () => {
             },
             screenCanvas: document.getElementById("screen"),
             getGamepads: () => [],
-            urlState: new UrlState(
-                { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
-                {
-                    pushState: () => {},
-                },
-            ),
+            urlState: fakeUrlState(),
             config: { setMicrophoneChannel: vi.fn() },
             audioHandler: { tryResume: vi.fn() },
         };
         vi.spyOn(deps.urlState, "updateUrl");
     });
 
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-    });
+    afterEach(teardownDom);
 
     const make = () => new AnalogueInputs(deps);
 

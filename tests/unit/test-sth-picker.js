@@ -2,13 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SthPicker } from "../../src/web/sth-picker.js";
+import { makeWebDeps, modalMarkup, teardownDom } from "./helpers.js";
 
-const Markup = `
-<div id="sth" class="modal"><div class="modal-dialog"><div class="modal-content"><div class="modal-body">
+const Markup = modalMarkup(
+    "sth",
+    `
   <span class="loading"></span>
   <input id="sth-filter" value="" />
-  <ul id="sth-list"><li class="template"><span class="name"></span></li></ul>
-</div></div></div></div>`;
+  <ul id="sth-list"><li class="template"><span class="name"></span></li></ul>`,
+);
 
 describe("SthPicker", () => {
     let deps;
@@ -16,30 +18,10 @@ describe("SthPicker", () => {
     beforeEach(() => {
         vi.useFakeTimers();
         document.body.innerHTML = Markup;
-        deps = {
-            media: {
-                addSource: vi.fn(),
-                setDisc1Image: vi.fn(),
-                setTapeImage: vi.fn(),
-                loadDiscImage: vi.fn(),
-                loadTapeImage: vi.fn(),
-                setProcessorTape: vi.fn(),
-            },
-            drives: { layoutForDrive: () => "auto", putDiscIn: vi.fn() },
-            modals: { popupLoading: vi.fn(), loadingFinished: vi.fn() },
-            urlState: { params: {}, updateUrl: vi.fn() },
-            processor: { reset: vi.fn() },
-            autoboot: vi.fn(),
-        };
+        deps = makeWebDeps();
     });
 
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = () => new SthPicker(deps);
     const rows = () => [...document.querySelectorAll("#sth-list li:not(.template)")];

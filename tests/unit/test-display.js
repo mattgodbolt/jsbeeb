@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
+import { teardownDom } from "./helpers.js";
 
 const FbWidth = 1024;
 
@@ -15,11 +16,7 @@ describe("Display", () => {
         vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => rafCallbacks.push(callback));
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = (options = {}) => {
         const screenCanvas = document.getElementById("screen");
