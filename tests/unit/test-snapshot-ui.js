@@ -200,6 +200,13 @@ describe("SnapshotUI", () => {
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
         });
 
+        it("rejects a sourceless state when the matching disc is laid out differently", async () => {
+            deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageCrc32: 0x1234, is40Track: true };
+            await expect(
+                make().reloadSnapshotMedia({ disc1Crc32: 0x1234, disc1Layout: DiscLayout.contiguous }),
+            ).rejects.toThrow("does not hold a matching disc");
+        });
+
         it("round-trips the media of a default-boot session", async () => {
             const bootDisc = { name: "elite.ssd", originalImageCrc32: 0x1234, is40Track: false };
             deps.processor.fdc.drives[0].disc = bootDisc;

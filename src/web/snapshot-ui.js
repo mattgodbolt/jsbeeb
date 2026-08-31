@@ -200,12 +200,22 @@ export class SnapshotUI {
             if (!loadedDisc) {
                 if (savedMedia[crcKey] != null) {
                     // A state may name no source (older default-boot saves); the disc
-                    // already in the drive can still satisfy the CRC.
+                    // already in the drive can still satisfy the CRC, but only laid out
+                    // the way the state's dirty tracks expect.
                     const currentDisc = this.processor.fdc.drives[driveIndex].disc;
-                    if (currentDisc && currentDisc.originalImageCrc32 === savedMedia[crcKey]) continue;
+                    const currentLayout = currentDisc?.is40Track ? DiscLayout.expanded40 : DiscLayout.contiguous;
+                    if (
+                        currentDisc &&
+                        currentDisc.originalImageCrc32 === savedMedia[crcKey] &&
+                        currentLayout === layout
+                    )
+                        continue;
+                    const problem = savedMedia[discKey]
+                        ? `The disc for drive ${driveIndex} (${savedMedia[discKey]}) could not be reloaded`
+                        : `This state does not record where the disc in drive ${driveIndex} came from`;
                     throw new Error(
-                        `This state does not record where the disc in drive ${driveIndex} came from, and the ` +
-                            `drive does not hold a matching disc. Load the right disc, then load the state again.`,
+                        `${problem}, and the drive does not hold a matching disc. ` +
+                            `Load the right disc, then load the state again.`,
                     );
                 }
                 continue;
