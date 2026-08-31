@@ -18,6 +18,7 @@ describe("SthPicker", () => {
         document.body.innerHTML = Markup;
         deps = {
             media: {
+                addSource: vi.fn(),
                 setDisc1Image: vi.fn(),
                 setTapeImage: vi.fn(),
                 loadDiscImage: vi.fn(),
@@ -156,6 +157,20 @@ describe("SthPicker", () => {
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
                 expect.stringContaining("Unable to load CHUCKIE.zip from the STH archive: 410"),
             );
+        });
+    });
+
+    describe("registering media sources", () => {
+        it("hands the loader a fetcher for each catalogue", async () => {
+            const picker = make();
+            const registered = Object.fromEntries(deps.media.addSource.mock.calls);
+            expect(Object.keys(registered).sort()).toEqual(["sth", "tapeSth"]);
+            vi.spyOn(picker.discs, "fetch").mockResolvedValue("disc bytes");
+            vi.spyOn(picker.tapes, "fetch").mockResolvedValue("tape bytes");
+            await expect(registered.sth("ELITE.zip")).resolves.toBe("disc bytes");
+            expect(picker.discs.fetch).toHaveBeenCalledWith("ELITE.zip");
+            await expect(registered.tapeSth("CHUCKIE.zip")).resolves.toBe("tape bytes");
+            expect(picker.tapes.fetch).toHaveBeenCalledWith("CHUCKIE.zip");
         });
     });
 });

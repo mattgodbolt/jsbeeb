@@ -243,13 +243,6 @@ const media = new MediaLoader({
     modals,
     isSnapshotFile,
     loadSnapshot: (file, buffer) => snapshots.loadStateFromFile(file, buffer),
-    // The archives are created further down; each source resolves when used.
-    sources: {
-        sth: (name) => sthPicker.discs.fetch(name),
-        tapeSth: (name) => sthPicker.tapes.fetch(name),
-        hfe: (path) => hfePicker.archive.fetch(path),
-        drive: (cat, layout) => drivePicker.load(cat, layout),
-    },
 });
 const autoBoot = new Autoboot({
     model,
@@ -265,7 +258,7 @@ const sthPicker = new SthPicker({
     processor,
     autoboot: (image) => autoBoot.boot(image),
 });
-const hfePicker = new HfePicker({
+new HfePicker({
     media,
     drives,
     modals,
@@ -273,7 +266,7 @@ const hfePicker = new HfePicker({
     processor,
     autoboot: (image) => autoBoot.boot(image),
 });
-const drivePicker = new GoogleDrivePicker({ media, drives, modals, processor });
+new GoogleDrivePicker({ media, drives, modals, processor });
 const snapshots = new SnapshotUI({
     processor,
     model,

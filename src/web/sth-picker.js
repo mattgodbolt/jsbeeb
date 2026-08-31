@@ -46,6 +46,8 @@ export class SthPicker {
             onError,
             true,
         );
+        media.addSource("sth", (name) => this.discs.fetch(name));
+        media.addSource("tapeSth", (name) => this.tapes.fetch(name));
 
         document.addEventListener("click", (e) => {
             const target = e.target.closest("a.sth");

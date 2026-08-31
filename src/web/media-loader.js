@@ -53,19 +53,17 @@ function readFileAsBinaryString(file) {
 export class MediaLoader extends EventTarget {
     /**
      * @param {object} deps
-     * @param {object} deps.sources fetchers keyed by schema: sth, tapeSth and hfe
-     *   resolve an archive name to image data; drive loads a Google Drive file
      * @param {Function} deps.isSnapshotFile says whether a dropped file is a save state
      * @param {Function} deps.loadSnapshot restores a dropped save state
      */
-    constructor({ processor, model, drives, urlState, modals, sources, isSnapshotFile, loadSnapshot }) {
+    constructor({ processor, model, drives, urlState, modals, isSnapshotFile, loadSnapshot }) {
         super();
         this.processor = processor;
         this.model = model;
         this.drives = drives;
         this.urlState = urlState;
         this.modals = modals;
-        this.sources = sources;
+        this.sources = {};
 
         document.getElementById("disc_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
@@ -165,6 +163,11 @@ export class MediaLoader extends EventTarget {
 
     get params() {
         return this.urlState.params;
+    }
+
+    /** Register the fetcher behind an image schema; each picker calls this as it is constructed. */
+    addSource(schema, fetcher) {
+        this.sources[schema] = fetcher;
     }
 
     /** Route tape to the correct interface (ACIA for BBC, PPIA for Atom) */
