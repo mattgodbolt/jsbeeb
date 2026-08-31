@@ -47,7 +47,7 @@ describe("Settings", () => {
             machine: { emulationConfig: {}, processor: { hasTube: false, tube: {} } },
             keys: { setKeyLayout: vi.fn() },
             inputs: { updateAdcSources: vi.fn(), setupMicrophone: vi.fn() },
-            modals: { areYouSure: vi.fn() },
+            modals: { confirm: vi.fn().mockResolvedValue(false) },
         };
     });
 
@@ -200,11 +200,10 @@ describe("Settings", () => {
         it("asks before reloading", () => {
             const settings = make();
             settings.config.onRestartRequired();
-            expect(targets.modals.areYouSure).toHaveBeenCalledWith(
+            expect(targets.modals.confirm).toHaveBeenCalledWith(
                 expect.stringContaining("Restart now?"),
                 "Restart now",
                 "Later",
-                expect.any(Function),
             );
         });
     });

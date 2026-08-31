@@ -39,13 +39,13 @@ export class Settings {
                 if (changed.displayMode) this.applyDisplayMode(changed.displayMode);
             },
             (changed) => this.onDialogClosed(changed),
-            () => {
-                this.targets.modals.areYouSure(
+            async () => {
+                const restart = await this.targets.modals.confirm(
                     "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
                     "Restart now",
                     "Later",
-                    () => window.location.reload(),
                 );
+                if (restart) window.location.reload();
             },
         );
 

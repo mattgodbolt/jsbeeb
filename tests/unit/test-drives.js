@@ -34,13 +34,13 @@ function fakeDisc({ name = "game.ssd", savesChanges = false, is40Track = false }
 
 describe("Drives", () => {
     let fdc;
-    let areYouSure;
+    let confirm;
 
     beforeEach(() => {
         vi.useFakeTimers();
         document.body.innerHTML = Markup;
         fdc = fakeFdc();
-        areYouSure = vi.fn();
+        confirm = vi.fn().mockResolvedValue(false);
     });
 
     afterEach(() => {
@@ -50,7 +50,7 @@ describe("Drives", () => {
         window.localStorage.clear();
     });
 
-    const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) => new Drives({ fdc, driveTracks, areYouSure });
+    const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) => new Drives({ fdc, driveTracks, confirm });
     const toasts = () =>
         [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
     const activeTracks = (driveIndex) =>
@@ -147,7 +147,7 @@ describe("Drives", () => {
                 expect.stringContaining("no disc in drive 0"),
                 expect.stringContaining("no disc in drive 0"),
             ]);
-            expect(areYouSure).not.toHaveBeenCalled();
+            expect(confirm).not.toHaveBeenCalled();
         });
 
         it("say so instead of throwing on a machine with no drives", () => {

@@ -134,32 +134,30 @@ describe("Modals", () => {
         });
     });
 
-    describe("areYouSure", () => {
+    describe("confirm", () => {
         const dialog = () => document.getElementById("are-you-sure");
 
         it("shows the question with the two answers", () => {
-            modals.areYouSure("Restart now?", "Restart", "Later", () => {});
+            modals.confirm("Restart now?", "Restart", "Later");
             expect(dialog().querySelector(".context").textContent).toBe("Restart now?");
             expect(dialog().querySelector(".ays-yes").textContent).toBe("Restart");
             expect(dialog().querySelector(".ays-no").textContent).toBe("Later");
         });
 
-        it("runs the action once the dialog has gone after yes", () => {
-            const yes = vi.fn();
-            modals.areYouSure("Restart now?", "Restart", "Later", yes);
+        it("resolves true once the dialog has gone after yes", async () => {
+            const answer = modals.confirm("Restart now?", "Restart", "Later");
             dialog().querySelector(".ays-yes").click();
-            expect(yes).toHaveBeenCalledTimes(1);
+            await expect(answer).resolves.toBe(true);
             expect(dialog().classList.contains("show")).toBe(false);
         });
 
-        it("does nothing when the dialog is dismissed any other way", () => {
-            const yes = vi.fn();
-            modals.areYouSure("Restart now?", "Restart", "Later", yes);
+        it("resolves false when the dialog is dismissed any other way", async () => {
+            const answer = modals.confirm("Restart now?", "Restart", "Later");
             lower("are-you-sure");
-            expect(yes).not.toHaveBeenCalled();
+            await expect(answer).resolves.toBe(false);
             // A yes from an earlier question must not answer a later one.
             dialog().querySelector(".ays-yes").click();
-            expect(yes).not.toHaveBeenCalled();
+            await expect(answer).resolves.toBe(false);
         });
     });
 
