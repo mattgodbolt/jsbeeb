@@ -1,5 +1,7 @@
 // Boots the built page in headless Chrome and exercises the things unit tests
-// cannot see: construction order, element ids, Bootstrap, the console surface.
+// cannot see: construction order, Bootstrap, the console surface, and the ids
+// each check below reaches (the toolbar, the settings bar, the loaders, the
+// STH picker); an id nothing here touches is not covered.
 // Talks to Chrome over the DevTools protocol with Node's own WebSocket.
 //
 //   npm run test:smoke       build, serve dist/ and run every check
@@ -373,6 +375,46 @@ check("a disc from the built-in list goes into drive 0", async (page, base) => {
     await waitUntil(
         "the URL to name the disc",
         () => page.evaluate(`location.search.includes("disc1=elite.ssd")`),
+        StepTimeoutMs,
+    );
+});
+
+check("the STH disc picker opens, shows its list and closes again", async (page, base) => {
+    await page.goto(base);
+    await page.waitForScreenText(">");
+    // Bootstrap ignores a hide until the show transition is over, which is
+    // when it fires shown.bs.modal.
+    await page.evaluate(
+        `(() => { window.smokeSthShown = false; document.getElementById("sth").addEventListener("shown.bs.modal", () => { window.smokeSthShown = true; }, { once: true }); })()`,
+    );
+    await page.click('a.sth[data-id="discs"]');
+    await waitUntil("the STH modal to finish appearing", () => page.evaluate("window.smokeSthShown"), StepTimeoutMs);
+    if (!(await page.evaluate(`!!document.querySelector("#sth-list .template")`)))
+        throw new Error("The STH modal has no list to fill");
+    // The catalogue is fetched from the archive mirror, so a run cut off from
+    // it still has to open the modal and report the failure inside it.
+    const outcome = await waitUntil(
+        "the catalogue, or word that it could not be fetched",
+        () =>
+            page.evaluate(`(() => {
+                if (document.querySelector("#sth-list li:not(.template)")) return "catalogue";
+                const loading = document.querySelector("#sth .loading");
+                if (loading.style.display !== "none" && loading.textContent.includes("error")) return "failure";
+                return null;
+            })()`),
+        BootTimeoutMs,
+    );
+    if (outcome === "failure") {
+        const kept = page.takeProblems().filter((p) => !/catalog|manifest|Failed to load resource/.test(p));
+        page.problems.push(...kept);
+    }
+    await page.click("#sth .btn-close");
+    await waitUntil(
+        "the modal to close and the emulator to resume",
+        () =>
+            page.evaluate(
+                `!document.getElementById("sth").classList.contains("show") && !document.getElementById("debug-pause").disabled`,
+            ),
         StepTimeoutMs,
     );
 });
