@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import fs from "fs";
+import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { fake6502 } from "../../src/fake6502.js";
@@ -34,10 +34,13 @@ describe("AtomCpu6502 loadRom", () => {
     });
 
     it("unzips zipped ROM images", async () => {
-        const zipped = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-atom-rom.zip")));
-        vi.spyOn(utils, "loadData").mockResolvedValue(zipped);
+        const zipped = new Uint8Array(readFileSync(join(__dirname, "zip", "test-atom-rom.zip")));
+        const loadData = vi.spyOn(utils, "loadData").mockResolvedValue(zipped);
+        const unzip = vi.spyOn(utils, "unzipRomImage");
         const cpu = makeAtom();
         await expect(cpu.loadRom("extra.zip", cpu.romOffset)).resolves.toBeUndefined();
+        expect(loadData).toHaveBeenCalledWith("roms/extra.zip");
+        expect(unzip).toHaveBeenCalledOnce();
     });
 
     it("rejects ROMs of the wrong size", async () => {
