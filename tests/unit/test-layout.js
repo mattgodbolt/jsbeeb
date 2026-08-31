@@ -232,9 +232,9 @@ describe("Layout", () => {
                 screenCanvas().requestFullscreen = vi.fn().mockRejectedValue(new Error("denied"));
                 make();
                 document.getElementById("fs").click();
-                await null;
-                await null;
-                expect(toasts()).toEqual([expect.stringContaining("Could not go fullscreen: denied")]);
+                await vi.waitFor(() =>
+                    expect(toasts()).toEqual([expect.stringContaining("Could not go fullscreen: denied")]),
+                );
             });
         });
     });
