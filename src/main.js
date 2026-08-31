@@ -225,7 +225,7 @@ loop.addEventListener("running", () => {
 
 const modals = new Modals({ loop });
 
-const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure: modals.areYouSure.bind(modals) });
+const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals) });
 const media = new MediaLoader({
     processor,
     model,

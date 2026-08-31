@@ -11,7 +11,7 @@ const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
  * switches on the Discs menu, and downloading what is in drive 0.
  */
 export class Drives {
-    constructor({ fdc, driveTracks, areYouSure }) {
+    constructor({ fdc, driveTracks, confirm }) {
         this.fdc = fdc;
         this.driveTracks = driveTracks;
         this.saidWritesAreNotKept = false;
@@ -33,7 +33,7 @@ export class Drives {
             if (drive) this.showDriveTracks(driveIndex);
         }
 
-        document.getElementById("download-drive-link").addEventListener("click", () => {
+        document.getElementById("download-drive-link").addEventListener("click", async () => {
             const disc = this.discToDownload();
             if (!disc) return;
             const save = (options) =>
@@ -41,9 +41,8 @@ export class Drives {
             try {
                 save();
             } catch (e) {
-                areYouSure(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel", () =>
-                    save({ force: true }),
-                );
+                if (await confirm(`${e.message} Save anyway, losing what will not fit?`, "Save anyway", "Cancel"))
+                    save({ force: true });
             }
         });
 

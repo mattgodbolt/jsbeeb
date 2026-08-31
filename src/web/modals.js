@@ -58,26 +58,29 @@ export class Modals {
         if (message) toast(message);
     }
 
-    areYouSure(message, yesText, noText, yesFunc) {
+    /** @returns {Promise<boolean>} true for the yes button; false for any other way out of the dialog */
+    confirm(message, yesText, noText) {
         const yesButton = this.aysEl.querySelector(".ays-yes");
         this.aysEl.querySelector(".context").textContent = message;
         this.aysEl.querySelector(".ays-no").textContent = noText;
         yesButton.textContent = yesText;
-        let confirmed = false;
-        const onYes = () => {
-            confirmed = true;
-            this.aysModal.hide();
-        };
-        yesButton.addEventListener("click", onYes, { once: true });
-        // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
-        this.aysEl.addEventListener(
-            "hidden.bs.modal",
-            () => {
-                yesButton.removeEventListener("click", onYes);
-                if (confirmed) yesFunc();
-            },
-            { once: true },
-        );
-        this.aysModal.show();
+        return new Promise((resolve) => {
+            let confirmed = false;
+            const onYes = () => {
+                confirmed = true;
+                this.aysModal.hide();
+            };
+            yesButton.addEventListener("click", onYes, { once: true });
+            // The "no" button, Escape and a click outside raise no event of their own: they only hide the modal.
+            this.aysEl.addEventListener(
+                "hidden.bs.modal",
+                () => {
+                    yesButton.removeEventListener("click", onYes);
+                    resolve(confirmed);
+                },
+                { once: true },
+            );
+            this.aysModal.show();
+        });
     }
 }
