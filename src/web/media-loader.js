@@ -103,8 +103,7 @@ export class MediaLoader extends EventTarget {
                     tapeName = unzipped.name;
                 }
                 this.setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
-                delete this.params.tape;
-                urlState.updateUrl();
+                urlState.set({ tape: undefined });
                 modals.hide("tapes");
             } catch (error) {
                 reportLoadFailure(file.name, error);
@@ -180,21 +179,17 @@ export class MediaLoader extends EventTarget {
     }
 
     setDisc1Image(name) {
-        delete this.params.disc;
-        this.params.disc1 = name;
-        this.urlState.updateUrl();
+        this.urlState.set({ disc: undefined, disc1: name });
         this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
     }
 
     setDisc2Image(name) {
-        this.params.disc2 = name;
-        this.urlState.updateUrl();
+        this.urlState.set({ disc2: name });
         this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
     }
 
     setTapeImage(name) {
-        this.params.tape = name;
-        this.urlState.updateUrl();
+        this.urlState.set({ tape: name });
         this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
     }
 
@@ -210,9 +205,7 @@ export class MediaLoader extends EventTarget {
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(imageData);
         this.drives.putDiscIn(0, loadedDisc);
-        delete this.params.disc;
-        delete this.params.disc1;
-        this.urlState.updateUrl();
+        this.urlState.set({ disc: undefined, disc1: undefined });
         this.modals.hide("discs");
     }
 

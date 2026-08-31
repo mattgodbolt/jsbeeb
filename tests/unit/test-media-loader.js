@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuiltInImages, MediaLoader, splitImage } from "../../src/web/media-loader.js";
+import { UrlState } from "../../src/web/url-state.js";
 import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
@@ -47,11 +48,17 @@ describe("MediaLoader", () => {
             },
             model: { isAtom: false },
             drives: { layoutForDrive: () => DiscLayout.auto, putDiscIn: vi.fn() },
-            urlState: { params: {}, updateUrl: vi.fn() },
+            urlState: new UrlState(
+                { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
+                {
+                    pushState: () => {},
+                },
+            ),
             modals: { hide: vi.fn() },
             isSnapshotFile: (name) => name.endsWith(".snp"),
             loadSnapshot: vi.fn(),
         };
+        vi.spyOn(deps.urlState, "updateUrl");
         sources = { sth: vi.fn(), tapeSth: vi.fn(), hfe: vi.fn(), drive: vi.fn() };
     });
 

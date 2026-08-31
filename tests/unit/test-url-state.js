@@ -34,6 +34,25 @@ describe("UrlState", () => {
         expect(history.pushState).toHaveBeenCalledWith(null, null, "https://bbc.example/play?disc1=sth:Elite.zip");
     });
 
+    it("applies changes and pushes the new URL in one step", () => {
+        const state = new UrlState(location("?model=B"), history);
+        state.set({ model: "Master", disc1: "sth:Elite.zip" });
+        expect(state.params).toEqual({ model: "Master", disc1: "sth:Elite.zip" });
+        expect(history.pushState).toHaveBeenCalledTimes(1);
+        expect(history.pushState).toHaveBeenCalledWith(
+            null,
+            null,
+            "https://bbc.example/play?model=Master&disc1=sth:Elite.zip",
+        );
+    });
+
+    it("deletes a parameter set to undefined", () => {
+        const state = new UrlState(location("?model=B&disc=elite.ssd"), history);
+        state.set({ disc: undefined });
+        expect(state.params).toEqual({ model: "B" });
+        expect(history.pushState).toHaveBeenCalledWith(null, null, "https://bbc.example/play?model=B");
+    });
+
     it("builds a URL with overrides without changing the parameters it holds", () => {
         const state = new UrlState(location("?model=B&disc=elite.ssd"), history);
         const url = state.urlWith({ model: "Master", coProcessor: true });
