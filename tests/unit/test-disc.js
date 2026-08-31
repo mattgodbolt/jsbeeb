@@ -336,7 +336,8 @@ describe("40 track SSD images", () => {
         for (const physical of [1, 3, 77]) expect(disc.getTrack(false, physical).findSectors()).toEqual([]);
     });
 
-    it("saves back to the image it was loaded from", () => {
+    // Whole-image round trips are slow under coverage instrumentation on CI.
+    it("saves back to the image it was loaded from", { timeout: 60000 }, () => {
         for (const numSides of [1, 2]) {
             const image = numberedImage(40, numSides);
             expect(toSsdOrDsd(fortyTrackDisc(image, numSides === 2))).toEqual(image);
