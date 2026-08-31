@@ -125,6 +125,12 @@ describe("MediaLoader", () => {
         });
     });
 
+    describe("loadTapeImage", () => {
+        it("returns nothing for no reference", async () => {
+            expect(await make().loadTapeImage(undefined)).toBeNull();
+        });
+    });
+
     describe("the URL and the media-changed events", () => {
         const mediaEvents = [];
         beforeEach(() => {

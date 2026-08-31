@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FrontPanel } from "../../src/web/front-panel.js";
 
 const Markup = `
-<div id="tape-menu"><a data-id="rewind">Rewind</a></div>
+<div id="tape-menu"><a data-id="rewind">Rewind</a><a data-id="archive">Archive</a></div>
 <table><tbody><tr><th id="tape-control-header"></th><td id="tape-control-cell"></td></tr></tbody></table>
 <button id="tape-play-stop"></button>
 <span id="motorlight"></span><span id="capslight" class="bbc-only"></span><span id="shiftlight" class="bbc-only"></span>
@@ -100,6 +100,13 @@ describe("FrontPanel", () => {
             document.querySelector('#tape-menu a[data-id="rewind"]').click();
             expect(processor.atomppia.stopTape).toHaveBeenCalled();
             expect(processor.atomppia.rewindTape).toHaveBeenCalled();
+        });
+
+        it("ignores menu links it does not handle", () => {
+            make(false);
+            document.querySelector('#tape-menu a[data-id="archive"]').click();
+            expect(processor.acia.rewindTape).not.toHaveBeenCalled();
+            expect(console.log).not.toHaveBeenCalledWith("unknown type", "archive");
         });
     });
 
