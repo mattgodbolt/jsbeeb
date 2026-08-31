@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.22.3](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.2...v1.22.3) (2026-08-31)
+
+
+### Bug Fixes
+
+* persist the picker autoboot tick into the URL ([#993](https://github.com/mattgodbolt/jsbeeb/issues/993)) ([1b165f8](https://github.com/mattgodbolt/jsbeeb/commit/1b165f854aa1d76cc04248e8ae8eaa2544b0c124))
+* shift-N in the debugger stepped the CPU then threw ([#999](https://github.com/mattgodbolt/jsbeeb/issues/999)) ([aa6ba3f](https://github.com/mattgodbolt/jsbeeb/commit/aa6ba3f420ac374ba4e8f04afedbb2b3a3bb1e00))
+
 ## [1.22.2](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.1...v1.22.2) (2026-08-31)
 
 
