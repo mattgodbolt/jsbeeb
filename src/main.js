@@ -22,6 +22,7 @@ import { Display } from "./web/display.js";
 import { Layout } from "./web/layout.js";
 import { EmulationLoop, RewindCaptureInterval } from "./web/emulation-loop.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
+import { AccessibilitySwitches } from "./web/accessibility-switches.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
 import { FrontPanel } from "./web/front-panel.js";
 import { Machine } from "./web/machine.js";
@@ -92,19 +93,7 @@ const printer = new Printer({
         }),
 });
 
-const keys = new KeyboardSetup({
-    enterDebugger: () => loop.stop(true),
-    reload: () => window.location.reload(),
-    toggleFast: () => loop.toggleFastAsPossible(),
-    openRewind: () => rewindUI.open(),
-    openPrinter: () => frontPanel.checkPrinterWindow(),
-    pause: () => loop.stop(false),
-    resume: () => loop.go(),
-    onAnyKeyDown: () => {
-        audioHandler.tryResume();
-        inputs.ensureMicrophoneRunning();
-    },
-});
+const accessibilitySwitches = new AccessibilitySwitches();
 
 const settings = new Settings({ urlState });
 const { config, speechOutput, keyLayout, displayMode, audioOutput, speakerAmount } = settings;
@@ -188,7 +177,7 @@ const machine = new Machine({
     cpuMultiplier,
     extraRoms,
     stationId,
-    userPort: keys.userPort,
+    userPort: accessibilitySwitches.userPort,
     printer,
     speechOutput,
     video,
@@ -196,6 +185,26 @@ const machine = new Machine({
     dbgr,
 });
 const processor = machine.processor;
+
+const keys = new KeyboardSetup({
+    actions: {
+        enterDebugger: () => loop.stop(true),
+        reload: () => window.location.reload(),
+        toggleFast: () => loop.toggleFastAsPossible(),
+        openRewind: () => rewindUI.open(),
+        openPrinter: () => frontPanel.checkPrinterWindow(),
+        pause: () => loop.stop(false),
+        resume: () => loop.go(),
+        onAnyKeyDown: () => {
+            audioHandler.tryResume();
+            inputs.ensureMicrophoneRunning();
+        },
+    },
+    accessibilitySwitches,
+    processor,
+    dbgr,
+    keyLayout,
+});
 
 const rewindBuffer = new RewindBuffer(30);
 const loop = new EmulationLoop({
@@ -294,8 +303,6 @@ if (parsedQuery.microphoneChannel !== undefined) {
 }
 // Apply ADC source settings from URL parameters
 inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
-
-keys.attach({ processor, dbgr, keyLayout });
 
 const frontPanel = new FrontPanel({ processor, model, printer });
 
