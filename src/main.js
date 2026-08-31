@@ -184,7 +184,7 @@ const quickSettings = new QuickSettings(
 );
 
 // ------------------------------------------------------------------------
-// The machine, and everything that feeds it.
+// The machine, the loop that runs it, and everything that feeds it.
 // ------------------------------------------------------------------------
 
 // Depends on the settings having applied the URL parameters.
@@ -308,7 +308,7 @@ keys.attach({ processor, dbgr, keyLayout });
 const frontPanel = new FrontPanel({ processor, model, printer });
 
 // ------------------------------------------------------------------------
-// Running it: the loop, rewind and the visualiser.
+// Rewind, the visualiser and the layout.
 // ------------------------------------------------------------------------
 
 const rewindUI = new RewindUI({
