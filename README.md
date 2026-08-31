@@ -363,9 +363,10 @@ For timing correctness, we have:
   correctness-sensitive when it comes to the timers and interrupts of the BBC.
 - Some 65C12-specific read-modify-write tests written by Ed Spittles.
 
-Tests run under [vitest](https://vitest.dev/): `npm test` runs the whole suite, and `npm run test:unit`,
-`npm run test:integration` and `npm run test:cpu` run the individual parts (the shader and smoke tests also need
-Chrome installed). Please note it can take a while to run the whole test suite.
+Tests are run via npm scripts: `npm test` runs the whole suite. The vitest suites are `npm run test:unit`,
+`npm run test:integration` and `npm run test:shader`; CPU tests are `npm run test:cpu`, and the smoke test is
+`npm run test:smoke` (the shader and smoke tests need Chrome installed). Please note it can take a while to run the
+whole test suite.
 
 ## Thanks
 
