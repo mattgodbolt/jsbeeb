@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { fitMonitor } from "../../src/web/layout.js";
+import { Layout, fitMonitor } from "../../src/web/layout.js";
+import { teardownDom, toasts } from "./helpers.js";
 
 const Config = {
     imageWidth: 800,
@@ -94,5 +95,147 @@ describe("fitMonitor", () => {
         );
         expect(fitted.monitor.width).toBe(800);
         expect(fitted.monitor.height).toBe(600);
+    });
+});
+
+const LayoutMarkup = `
+<nav id="header-bar"></nav>
+<div id="cub-monitor">
+  <img id="cub-monitor-pic" />
+  <div class="sidebar left"><img /></div>
+  <canvas id="screen" width="800" height="600"></canvas>
+  <div class="sidebar right"><img /></div>
+  <div class="sidebar bottom"><img /></div>
+</div>
+<ul><li><a href="#" id="fs"></a></li></ul>`;
+
+describe("Layout", () => {
+    let display;
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        document.body.innerHTML = LayoutMarkup;
+        display = { filterClass: { getDisplayConfig: vi.fn(() => Config) }, video: { paint: vi.fn() } };
+    });
+
+    afterEach(teardownDom);
+
+    const screenCanvas = () => document.getElementById("screen");
+    const make = (overrides = {}) => new Layout({ screenCanvas: screenCanvas(), display, embed: true, ...overrides });
+    const resize = () => window.dispatchEvent(new Event("resize"));
+
+    describe("fitting the window", () => {
+        it("places the monitor and canvas on a window resize", () => {
+            make();
+            resize();
+            const monitor = document.getElementById("cub-monitor");
+            expect(monitor.style.width).toBe("1024px");
+            expect(monitor.style.height).toBe("768px");
+            expect(document.getElementById("cub-monitor-pic").style.width).toBe("1024px");
+            const canvas = screenCanvas();
+            expect(canvas.style.width).toBe("768px");
+            expect(canvas.style.height).toBe("576px");
+            expect(canvas.style.left).toBe("128px");
+            expect(canvas.style.top).toBe("64px");
+        });
+
+        it("reserves room for the page furniture when not embedded", () => {
+            make({ embed: false });
+            resize();
+            const monitor = document.getElementById("cub-monitor");
+            expect(monitor.style.width).toBe("824px");
+            expect(monitor.style.height).toBe("618px");
+        });
+
+        it("takes two more looks shortly after load, when the page has settled", () => {
+            make();
+            expect(display.filterClass.getDisplayConfig).not.toHaveBeenCalled();
+            vi.advanceTimersByTime(1);
+            expect(display.filterClass.getDisplayConfig).toHaveBeenCalledTimes(1);
+            vi.advanceTimersByTime(499);
+            expect(display.filterClass.getDisplayConfig).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe("the drawing buffer", () => {
+        beforeEach(() => {
+            display.filterClass.getDisplayConfig = () => ({ ...Config, maxCanvasScale: 3 });
+            Object.defineProperty(window, "devicePixelRatio", { value: 2, configurable: true });
+        });
+
+        afterEach(() => {
+            delete window.devicePixelRatio;
+        });
+
+        it("is reallocated and repainted when a mode asks for a new size", () => {
+            make();
+            resize();
+            expect(screenCanvas().width).toBe(1600);
+            expect(screenCanvas().height).toBe(1200);
+            expect(display.video.paint).toHaveBeenCalledTimes(1);
+        });
+
+        it("is left alone when the fitted size has not changed", () => {
+            make();
+            resize();
+            resize();
+            expect(display.video.paint).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("the sidebars", () => {
+        it("keeps the art hidden when there is none to show", () => {
+            make();
+            for (const img of document.querySelectorAll(".sidebar img")) expect(img.style.display).toBe("none");
+        });
+
+        it("hangs a loaded image off its edge of the monitor", () => {
+            make({ sidebars: { left: "left.png", bottom: "strip.png" } });
+            const left = document.querySelector(".sidebar.left img");
+            expect(left.src).toContain("left.png");
+            Object.defineProperty(left, "naturalWidth", { value: 60 });
+            left.dispatchEvent(new Event("load"));
+            expect(left.parentElement.style.left).toBe("-65px");
+            expect(left.style.display).toBe("");
+
+            const bottom = document.querySelector(".sidebar.bottom img");
+            Object.defineProperty(bottom, "naturalHeight", { value: 40 });
+            bottom.dispatchEvent(new Event("load"));
+            expect(bottom.parentElement.style.bottom).toBe("-40px");
+            expect(document.querySelector(".sidebar.right img").style.display).toBe("none");
+        });
+    });
+
+    describe("the fullscreen menu item", () => {
+        it("is hidden where the API is missing", () => {
+            make();
+            expect(document.getElementById("fs").closest("li").hidden).toBe(true);
+        });
+
+        describe("with the API present", () => {
+            beforeEach(() => {
+                Object.defineProperty(document, "fullscreenEnabled", { value: true, configurable: true });
+            });
+
+            afterEach(() => {
+                delete document.fullscreenEnabled;
+            });
+
+            it("asks for fullscreen on the canvas", () => {
+                screenCanvas().requestFullscreen = vi.fn().mockResolvedValue();
+                make();
+                document.getElementById("fs").click();
+                expect(screenCanvas().requestFullscreen).toHaveBeenCalledTimes(1);
+            });
+
+            it("toasts when the browser refuses", async () => {
+                screenCanvas().requestFullscreen = vi.fn().mockRejectedValue(new Error("denied"));
+                make();
+                document.getElementById("fs").click();
+                await vi.waitFor(() =>
+                    expect(toasts()).toEqual([expect.stringContaining("Could not go fullscreen: denied")]),
+                );
+            });
+        });
     });
 });
