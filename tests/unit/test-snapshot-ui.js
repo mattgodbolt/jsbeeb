@@ -97,6 +97,39 @@ describe("SnapshotUI", () => {
             expect(deps.loop.stop).not.toHaveBeenCalled();
             expect(deps.loop.go).not.toHaveBeenCalled();
         });
+
+        const snapshotBuffer = (snapshot) =>
+            new TextEncoder().encode(JSON.stringify({ format: "jsbeeb-snapshot", version: 3, state: {}, ...snapshot }))
+                .buffer;
+
+        it("stashes a state for another model and navigates to a matching machine", async () => {
+            deps.urlState.urlWith.mockReturnValue(`${window.location.href}#stashed`);
+            await make().loadStateFromFile(null, snapshotBuffer({ model: "Master", coProcessor: false }));
+            expect(deps.urlState.urlWith).toHaveBeenCalledWith({ model: "Master", coProcessor: false });
+            expect(window.location.hash).toBe("#stashed");
+            expect(JSON.parse(sessionStorage.getItem("jsbeeb-pending-state")).model).toBe("Master");
+            expect(deps.video.paint).not.toHaveBeenCalled();
+            expect(deps.loop.go).not.toHaveBeenCalled();
+            window.location.hash = "";
+        });
+
+        it("treats a co-processor mismatch as a machine change too", async () => {
+            deps.urlState.urlWith.mockReturnValue(`${window.location.href}#stashed`);
+            await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: true }));
+            expect(deps.urlState.urlWith).toHaveBeenCalledWith({ model: "B-DFS1.2", coProcessor: true });
+            expect(sessionStorage.getItem("jsbeeb-pending-state")).not.toBeNull();
+            window.location.hash = "";
+        });
+
+        it("restores a matching state in place and repaints", async () => {
+            deps.processor.restoreState = vi.fn();
+            await make().loadStateFromFile(null, snapshotBuffer({ model: "B-DFS1.2", coProcessor: false }));
+            expect(deps.processor.restoreState).toHaveBeenCalledWith({});
+            expect(deps.video.paint).toHaveBeenCalledTimes(1);
+            expect(deps.modals.showError).not.toHaveBeenCalled();
+            expect(sessionStorage.getItem("jsbeeb-pending-state")).toBeNull();
+            expect(deps.loop.go).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe("reloading a snapshot's media", () => {
@@ -159,6 +192,25 @@ describe("SnapshotUI", () => {
             await make().restorePendingState();
             expect(deps.modals.showError).not.toHaveBeenCalled();
             expect(deps.processor.execute).not.toHaveBeenCalled();
+        });
+
+        it("picks up a stashed state, settles the machine, and forgets the stash", async () => {
+            deps.processor.restoreState = vi.fn();
+            sessionStorage.setItem(
+                "jsbeeb-pending-state",
+                JSON.stringify({
+                    format: "jsbeeb-snapshot",
+                    version: 3,
+                    model: "B-DFS1.2",
+                    coProcessor: false,
+                    state: { stashed: true },
+                }),
+            );
+            await make().restorePendingState();
+            expect(deps.processor.restoreState).toHaveBeenCalledWith({ stashed: true });
+            expect(deps.processor.execute).toHaveBeenCalledWith(40000);
+            expect(deps.modals.showError).not.toHaveBeenCalled();
+            expect(sessionStorage.getItem("jsbeeb-pending-state")).toBeNull();
         });
 
         it("consumes a stashed state even when it cannot be restored", async () => {
