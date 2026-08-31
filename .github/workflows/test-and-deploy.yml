@@ -58,6 +58,9 @@ jobs:
           echo "# Shader tests" >> "$GITHUB_STEP_SUMMARY"
           npm run test:shader
       - name: Smoke test
+        # An explicit shell makes Actions add -o pipefail, so the step fails on
+        # the smoke test's exit code rather than tee's.
+        shell: bash
         run: |
           echo "# Smoke test" >> "$GITHUB_STEP_SUMMARY"
           npm run test:smoke | tee >(sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY")
