@@ -13,18 +13,14 @@ export class RewindUI {
      * @param {object} options.processor - Cpu6502 instance
      * @param {object} options.video - Video instance
      * @param {number} options.captureInterval - rewind capture interval in frames
-     * @param {function} options.stop - function to pause the emulator
-     * @param {function} options.go - function to resume the emulator
-     * @param {function} options.isRunning - function returning current running state
+     * @param {object} options.loop - the emulation loop, for pausing and resuming
      */
-    constructor({ rewindBuffer, processor, video, captureInterval, stop, go, isRunning }) {
+    constructor({ rewindBuffer, processor, video, captureInterval, loop }) {
         this.rewindBuffer = rewindBuffer;
         this.processor = processor;
         this.video = video;
         this.captureInterval = captureInterval;
-        this.stop = stop;
-        this.go = go;
-        this.isRunning = isRunning;
+        this.loop = loop;
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -52,8 +48,8 @@ export class RewindUI {
         this.snapshots = this.rewindBuffer.getAll();
         if (this.snapshots.length === 0) return;
 
-        this.wasRunning = this.isRunning();
-        if (this.wasRunning) this.stop(false);
+        this.wasRunning = this.loop.isRunning();
+        if (this.wasRunning) this.loop.stop(false);
 
         this.isOpen = true;
         this.savedState = this.processor.snapshotState();
@@ -70,7 +66,7 @@ export class RewindUI {
         } catch (e) {
             this.processor.restoreState(this.savedState);
             this._closePanel();
-            if (this.wasRunning) this.go();
+            if (this.wasRunning) this.loop.go();
             throw e;
         }
 
@@ -97,7 +93,7 @@ export class RewindUI {
             this.processor.restoreState(this.snapshots[this.selectedIndex]);
         }
         this._closePanel();
-        if (this.wasRunning) this.go();
+        if (this.wasRunning) this.loop.go();
     }
 
     /**
@@ -107,7 +103,7 @@ export class RewindUI {
         if (!this.isOpen) return;
         this._renderState(this.savedState);
         this._closePanel();
-        if (this.wasRunning) this.go();
+        if (this.wasRunning) this.loop.go();
     }
 
     /** Alias for cancel — closing the panel without explicit commit cancels. */

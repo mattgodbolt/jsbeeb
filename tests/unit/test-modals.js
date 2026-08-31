@@ -26,14 +26,16 @@ describe("Modals", () => {
         document.body.innerHTML = Markup;
         emulator = { running: true, stop: vi.fn(), go: vi.fn() };
         modals = new Modals({
-            isRunning: () => emulator.running,
-            stop: (debug) => {
-                emulator.running = false;
-                emulator.stop(debug);
-            },
-            go: () => {
-                emulator.running = true;
-                emulator.go();
+            loop: {
+                isRunning: () => emulator.running,
+                stop: (debug) => {
+                    emulator.running = false;
+                    emulator.stop(debug);
+                },
+                go: () => {
+                    emulator.running = true;
+                    emulator.go();
+                },
             },
         });
     });
