@@ -315,7 +315,7 @@ rewindUI.updateButtonState();
 if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
 else document.getElementById("disc-visualiser-open").classList.add("disabled");
 
-new Layout({
+const layout = new Layout({
     screenCanvas,
     display,
     embed: parsedQuery.embed !== undefined,
@@ -323,7 +323,7 @@ new Layout({
 });
 
 // Everything a setting can reach now exists.
-settings.wire({ audioHandler, display, quickSettings, machine, keys, inputs, modals });
+settings.wire({ audioHandler, display, layout, quickSettings, machine, keys, inputs, modals });
 
 // ------------------------------------------------------------------------
 // The page's own handlers.

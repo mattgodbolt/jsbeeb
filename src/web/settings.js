@@ -123,6 +123,8 @@ export class Settings {
     applyDisplayMode(mode) {
         this.displayMode = mode;
         this.targets.display.setMode(mode);
+        // The monitor picture may have changed shape.
+        this.targets.layout.resize();
         this.config.setDisplayMode(mode);
         this.targets.quickSettings?.showDisplayMode(mode);
         window.localStorage.displayMode = mode;

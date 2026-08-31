@@ -111,9 +111,6 @@ export class Display {
         this.sizeCanvasFor(this.filterClass);
         this.video.paint();
         this.setCrtPic();
-        window.setTimeout(() => window.dispatchEvent(new Event("resize")), 1);
-        // Relayout now as well: the monitor picture may have changed shape.
-        window.dispatchEvent(new Event("resize"));
     }
 
     sizeCanvasFor(filterClass) {
