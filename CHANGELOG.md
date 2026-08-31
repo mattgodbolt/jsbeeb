@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.22.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.0...v1.22.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* let glEnabled=true mean what it says ([#969](https://github.com/mattgodbolt/jsbeeb/issues/969)) ([629f5c3](https://github.com/mattgodbolt/jsbeeb/commit/629f5c34b240535398ba7dfddf9539ddfab633e5))
+* restore two details the main.js split dropped ([#970](https://github.com/mattgodbolt/jsbeeb/issues/970)) ([32dffd8](https://github.com/mattgodbolt/jsbeeb/commit/32dffd852609228a7c77b84524738804967451d6))
+* say there is nothing to download instead of throwing when drive 0 is empty ([#948](https://github.com/mattgodbolt/jsbeeb/issues/948)) ([8555fa4](https://github.com/mattgodbolt/jsbeeb/commit/8555fa4596baa03e0bde29340846e7629b931cc3))
+* write the sound output, speaker amount and display mode into the URL wherever they are picked ([#943](https://github.com/mattgodbolt/jsbeeb/issues/943)) ([1d8505a](https://github.com/mattgodbolt/jsbeeb/commit/1d8505aa87e8712e772d8664493ae980ed2c1b56)), closes [#942](https://github.com/mattgodbolt/jsbeeb/issues/942)
+
 ## [1.22.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.21.0...v1.22.0) (2026-08-30)
 
 
