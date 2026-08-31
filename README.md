@@ -16,6 +16,7 @@ different peripherals.
 - [Emulator Shortcuts](#emulator-shortcuts)
 - [Printer Output](#printer-output)
 - [Save State and Rewind](#save-state-and-rewind)
+- [Joystick Support](#joystick-support)
 - [Getting Set Up to Run Locally](#getting-set-up-to-run-locally)
 - [Running as a Desktop Application](#running-as-a-desktop-application)
 - [URL Parameters](#url-parameters)
@@ -120,10 +121,10 @@ Save and load full emulator state snapshots from the **State** menu (or `Ctrl+S`
 
 The emulator continuously captures snapshots into a 30-slot rewind buffer (~1 per second). Open the rewind scrubber from **State > Rewind** or press **Alt+PageDown** to browse recent states as a visual filmstrip:
 
-- **Left/Right arrows** — navigate between snapshots (the main screen updates live)
+- **Left/Right arrows**: navigate between snapshots (the main screen updates live)
 - **Click** a thumbnail to jump to that point
-- **Enter** — commit selection and close the panel
-- **Escape** — cancel and restore the original state
+- **Enter**: commit selection and close the panel
+- **Escape**: cancel and restore the original state
 
 ### Joystick Support
 
@@ -146,13 +147,13 @@ presses `SPACE`. To play Superior's Space Invaders on a pad, where `COPY` fires:
 
 The gamepad control names are:
 
-- `FIRE` — every button at once, which is usually what you want for a one-button game
-- `UP` `DOWN` `LEFT` `RIGHT` — both analogue sticks at once, plus one face button each (`UP` is also `A`, `DOWN` is
+- `FIRE`: every button at once, which is usually what you want for a one-button game
+- `UP` `DOWN` `LEFT` `RIGHT`: both analogue sticks at once, plus one face button each (`UP` is also `A`, `DOWN` is
   `X`, `LEFT` is `Y`, `RIGHT` is `B`)
-- `UP1` `DOWN1` `LEFT1` `RIGHT1` — the left stick only; `UP2` `DOWN2` … — the right stick only; `UP3` `DOWN3` … — the
-  face buttons only
-- `A` `B` `X` `Y` `START` `BACK` `LB` `RB` `LT` `RT` — individual buttons, by their Xbox 360 names
-- `FIRE1` `FIRE2` — clicking the left and right sticks
+- `UP1` `DOWN1` `LEFT1` `RIGHT1`: the left stick only; `UP2` `DOWN2` and so on: the right stick only; `UP3` `DOWN3`
+  and so on: the face buttons only
+- `A` `B` `X` `Y` `START` `BACK` `LB` `RB` `LT` `RT`: individual buttons, by their Xbox 360 names
+- `FIRE1` `FIRE2`: clicking the left and right sticks
 
 The BBC key names are the same as for the keyboard, and digits may be written either way round: `GP.A=1` and `GP.A=K1`
 both press `1`. Unlike `KEY.`, gamepad mappings are BBC-only: there's no Atom equivalent. The D-pad's default mapping
@@ -191,7 +192,9 @@ site to make it smaller and faster to load when it's deployed to [https://bbc.xa
 
 ## Running as a Desktop Application
 
-jsbeeb can also run as a standalone desktop application using Electron:
+jsbeeb can also run as a standalone desktop application using Electron. Prebuilt packages (Debian/Ubuntu `.deb`,
+Fedora/RHEL `.rpm` and a Windows installer) are attached to each
+[GitHub release](https://github.com/mattgodbolt/jsbeeb/releases), or you can build your own:
 
 ### Running in Development
 
@@ -235,16 +238,14 @@ USE_SYSTEM_FPM=true npm run electron:build
 **Debian/Ubuntu:**
 
 ```sh
-sudo apt install ./out/dist/jsbeeb_1.0.1_amd64.deb
+sudo apt install ./out/dist/jsbeeb_<version>_amd64.deb
 ```
 
 **Fedora/RHEL/CentOS:**
 
 ```sh
-sudo rpm -i out/dist/jsbeeb-1.0.1.x86_64.rpm
+sudo rpm -i out/dist/jsbeeb-<version>.x86_64.rpm
 ```
-
-**Note:** Electron support was re-enabled in November 2024 after being disabled during the ESM migration in 2021. It now works with Electron 28+ which added full ES Modules support.
 
 ## URL Parameters
 
@@ -335,19 +336,11 @@ Note that every update you make means you need to make a new raw link.
 
 If you're looking to help:
 
-- Testing
-  - Play lots of games and report issues either on [GitHub](https://github.com/mattgodbolt/jsbeeb/issues) or by email (
-    matt@godbolt.org).
-- Core
-  - Get the "boo" of the boot "boo-beep" working (disabled currently as the JavaScript startup makes the sound
-    dreadfully choppy on Chrome at least).
-- Save disc support
-  - Local discs need to be made more workable and need an "export" feature
-  - Multiple discs need a UI
-- `git grep -i todo`
-- Optimisation
-  - While every attempt to make things fast has been made, I'm sure there's some more clever things that can be done
-    without compromising emulation accuracy
+- Play lots of games and report anything that doesn't behave like the real machine, either on
+  [GitHub](https://github.com/mattgodbolt/jsbeeb/issues) or by email (matt@godbolt.org).
+- Pick something from the [issue tracker](https://github.com/mattgodbolt/jsbeeb/issues): there's a mix of emulation
+  accuracy work, missing hardware and peripherals, user interface improvements and performance ideas in there, at all
+  levels of difficulty.
 
 ## Tests
 
@@ -370,12 +363,13 @@ For timing correctness, we have:
   correctness-sensitive when it comes to the timers and interrupts of the BBC.
 - Some 65C12-specific read-modify-write tests written by Ed Spittles.
 
-Tests can be run automatically if you have `node` installed - just run `make` and it'll ensure the relevant libraries
-are installed, then it'll run the tests. Please note it can take a while to run the whole test suite.
+Tests run under [vitest](https://vitest.dev/): `npm test` runs the whole suite, and `npm run test:unit`,
+`npm run test:integration` and `npm run test:cpu` run the individual parts (the shader and smoke tests also need
+Chrome installed). Please note it can take a while to run the whole test suite.
 
 ## Thanks
 
-jsbeeb was heavily based on Sarah Walker's C [B-Em emulator](https://github.com/stardot/b-em) -- thanks to her for her
+jsbeeb was heavily based on Sarah Walker's C [B-Em emulator](https://github.com/stardot/b-em); thanks to her for her
 hard work and for open sourcing her code. B-em is now being maintained by a group of enthusiasts - thanks to them too!
 
 Huge thanks to Richard Talbot-Watkins for his advice and help along the way in fathoming out the instruction timings,
@@ -410,7 +404,8 @@ and posted the [video up on YouTube](https://www.youtube.com/watch?v=37jyHQT7fXQ
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 (or later); see the [COPYING](COPYING) file for
+details.
 
 ## Contact
 
