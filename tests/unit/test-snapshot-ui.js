@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SnapshotUI, isSnapshotFile, snapshotMedia } from "../../src/web/snapshot-ui.js";
+import { Modals } from "../../src/web/modals.js";
 import { DiscLayout } from "../../src/disc.js";
 import { domFromIndexHtml, ssdImage, teardownDom, toasts } from "./helpers.js";
 
@@ -127,6 +128,70 @@ describe("SnapshotUI", () => {
             expect(deps.modals.showError).not.toHaveBeenCalled();
             expect(sessionStorage.getItem("jsbeeb-pending-state")).toBeNull();
             expect(deps.loop.go).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("failure with the real error dialog", () => {
+        let loop;
+        let modals;
+
+        const makeWithModals = () => {
+            domFromIndexHtml("error-dialog", "loading-dialog", "are-you-sure");
+            vi.useFakeTimers();
+            loop = {
+                running: true,
+                isRunning() {
+                    return this.running;
+                },
+                stop() {
+                    this.running = false;
+                },
+                go() {
+                    this.running = true;
+                },
+            };
+            modals = new Modals({ loop });
+            deps.loop = loop;
+            deps.modals = modals;
+            return new SnapshotUI(deps);
+        };
+
+        const expectPausedBehindDialogThenResumedOnClose = async () => {
+            expect(loop.isRunning()).toBe(false);
+            await vi.runAllTimersAsync();
+            expect(modals.anyVisible()).toBe(true);
+            expect(loop.isRunning()).toBe(false);
+            modals.hide("error-dialog");
+            await vi.runAllTimersAsync();
+            expect(modals.anyVisible()).toBe(false);
+            expect(loop.isRunning()).toBe(true);
+        };
+
+        it("keeps the emulator paused while the save error shows, resuming on close", async () => {
+            const ui = makeWithModals();
+            deps.processor.snapshotState = vi.fn(() => {
+                throw new Error("saving went wrong");
+            });
+            await ui.saveState();
+            await expectPausedBehindDialogThenResumedOnClose();
+        });
+
+        it("keeps the emulator paused while the load error shows, resuming on close", async () => {
+            const ui = makeWithModals();
+            await ui.loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
+            await expectPausedBehindDialogThenResumedOnClose();
+        });
+
+        it("leaves a stopped emulator stopped after the error dialog closes", async () => {
+            const ui = makeWithModals();
+            loop.running = false;
+            await ui.loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
+            await vi.runAllTimersAsync();
+            expect(modals.anyVisible()).toBe(true);
+            expect(loop.isRunning()).toBe(false);
+            modals.hide("error-dialog");
+            await vi.runAllTimersAsync();
+            expect(loop.isRunning()).toBe(false);
         });
     });
 
