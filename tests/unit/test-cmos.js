@@ -23,6 +23,7 @@ describe("CMOS", () => {
         // Non-RTC addresses for testing
         CONFIG_1: 12,
         CONFIG_2: 13,
+        FILING_SYSTEM: 19,
     };
 
     // Constants from the hardware implementation
@@ -86,17 +87,18 @@ describe("CMOS", () => {
         });
 
         it("should not let a mutating override change the defaults for later machines", () => {
-            const untouchedDefault = defaultCmos[19];
+            const ADFS_FS_ID = 13;
+            const untouchedDefault = defaultCmos[CMOS_ADDR.FILING_SYSTEM];
             const mutatingOverride = (cmos) => {
-                cmos[19] = (cmos[19] & 0xf0) | 13;
+                cmos[CMOS_ADDR.FILING_SYSTEM] = (cmos[CMOS_ADDR.FILING_SYSTEM] & 0xf0) | ADFS_FS_ID;
                 return cmos;
             };
             new Cmos(mockPersistence, mutatingOverride);
-            expect(defaultCmos[19]).toBe(untouchedDefault);
+            expect(defaultCmos[CMOS_ADDR.FILING_SYSTEM]).toBe(untouchedDefault);
 
             const plainCmos = new Cmos(mockPersistence);
-            plainCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, 19, 0);
-            plainCmos.writeControl(PORT_B_ENABLE, 19, 0);
+            plainCmos.writeControl(PORT_B_ENABLE | PORT_B_ADDR_SEL, CMOS_ADDR.FILING_SYSTEM, 0);
+            plainCmos.writeControl(PORT_B_ENABLE, CMOS_ADDR.FILING_SYSTEM, 0);
             plainCmos.writeControl(PORT_B_ENABLE, 0, IC32_READ | IC32_DATA_SEL);
 
             expect(plainCmos.read()).toBe(untouchedDefault);
