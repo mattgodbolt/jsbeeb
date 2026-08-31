@@ -41,13 +41,13 @@ jsbeeb saves emulator state as gzip-compressed JSON files with the extension `.j
 | `disc1Layout`    | string     | _(Optional)_ Track layout drive 0's disc was loaded with         |
 | `disc2Layout`    | string     | _(Optional)_ Track layout drive 1's disc was loaded with         |
 
-On restore, discs are reloaded from these source references before the FDC state is applied. The source string uses the same schema as URL query parameters (`sth:`, `http://`, `gd:`, etc.).
+On restore, discs are reloaded from these source references before the FDC state is applied. The source string uses the same schema as URL query parameters (`sth:`, `http://`, `gd:`, etc.); a bare filename names a built-in disc served from `discs/`, which is how a state saved from a default boot records its disc.
 
 `discNLayout` is `"contiguous"` (logical track N on physical track N) or `"expanded40"` (logical track N on physical track 2N, as a 40-track drive writes). It is recorded because the dirty track overlays below are indexed by physical track: reloading the disc pins it to the layout saved here rather than working the layout out again from the image. Absent means `"contiguous"`, which is what every snapshot written before layout detection existed holds.
 
 For locally-loaded files (via file input), the original disc image bytes are embedded in `discNImageData` so the disc can be reconstructed on restore without requiring the user to reload the file manually.
 
-When `discNCrc32` is present, it is compared against the CRC32 of the reloaded disc image. A mismatch shows an error dialog warning that the disc image may have changed since the snapshot was saved.
+When `discNCrc32` is present, it is compared against the CRC32 of the reloaded disc image. The restore fails with an error if the reloaded image does not match, or if the state carries a CRC but no source and the disc already in the drive does not match; the dirty track overlays below would otherwise be laid over the wrong disc.
 
 ### Version history
 

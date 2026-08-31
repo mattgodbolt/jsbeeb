@@ -50,6 +50,7 @@ let secondDiscImage = null;
 const { discImage: queryDiscImage, secondDiscImage: querySecondDisc, mmcImage } = parseMediaParams(parsedQuery);
 if (queryDiscImage) discImage = queryDiscImage;
 if (querySecondDisc) secondDiscImage = querySecondDisc;
+const defaultBootDisc = queryDiscImage ? undefined : discImage;
 const { settings: driveTracks, warnings: driveTrackWarnings } = processDriveTrackParams(parsedQuery);
 
 const extraRoms = [];
@@ -276,6 +277,7 @@ const snapshots = new SnapshotUI({
     urlState,
     modals,
     loop,
+    defaultBootDisc,
 });
 
 const inputs = new AnalogueInputs({
