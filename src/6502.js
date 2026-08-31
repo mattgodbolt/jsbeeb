@@ -1823,7 +1823,11 @@ export class AtomCpu6502 extends Cpu6502 {
 
     // Override loadRom to accept 4KB ROMs
     async loadRom(name, offset) {
-        const data = await utils.loadData("roms/" + name);
+        if (name.indexOf("http") !== 0) name = "roms/" + name;
+        let data = await utils.loadData(name);
+        if (/\.zip/i.test(name)) {
+            data = (await utils.unzipRomImage(data)).data;
+        }
         const len = data.length;
         if (len !== 16384 && len !== 8192 && len !== 4096) {
             throw new Error(`Broken ROM file ${name} (length=${len})`);
