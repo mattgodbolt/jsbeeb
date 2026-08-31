@@ -4,7 +4,7 @@
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
 function init(args) {
-    const { loadDiscImage, loadTapeImage, loadStateFile, processor, modals, actions, config } = args;
+    const { loadDiscImage, loadTapeImage, loadStateFile, processor, modals, actions, config, media } = args;
     const api = window.electronAPI;
 
     api.onLoadDisc(async (message) => {
@@ -58,7 +58,9 @@ function init(args) {
         config.addEventListener("settings-changed", (e) => {
             api.saveSettings(e.detail);
         });
-        config.addEventListener("media-changed", (e) => {
+    }
+    if (media) {
+        media.addEventListener("media-changed", (e) => {
             api.saveSettings(e.detail);
         });
     }

@@ -47,7 +47,6 @@ describe("MediaLoader", () => {
             model: { isAtom: false },
             drives: { layoutForDrive: () => DiscLayout.auto, putDiscIn: vi.fn() },
             urlState: { params: {}, updateUrl: vi.fn() },
-            config: new EventTarget(),
             modals: { hide: vi.fn() },
             sources: { sth: vi.fn(), tapeSth: vi.fn(), hfe: vi.fn(), drive: vi.fn() },
             isSnapshotFile: (name) => name.endsWith(".snp"),
@@ -135,19 +134,23 @@ describe("MediaLoader", () => {
         const mediaEvents = [];
         beforeEach(() => {
             mediaEvents.length = 0;
-            deps.config.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
         });
+        const makeWatched = () => {
+            const media = make();
+            media.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
+            return media;
+        };
 
         it("names drive 0's disc, displacing any bare disc parameter", () => {
             deps.urlState.params.disc = "old.ssd";
-            make().setDisc1Image("sth:ELITE.zip");
+            makeWatched().setDisc1Image("sth:ELITE.zip");
             expect(deps.urlState.params).toEqual({ disc1: "sth:ELITE.zip" });
             expect(deps.urlState.updateUrl).toHaveBeenCalledTimes(1);
             expect(mediaEvents).toEqual([{ disc1: "sth:ELITE.zip" }]);
         });
 
         it("names drive 1's disc and the tape", () => {
-            const media = make();
+            const media = makeWatched();
             media.setDisc2Image("b.ssd");
             media.setTapeImage("sth:Chuckie.zip");
             expect(deps.urlState.params).toEqual({ disc2: "b.ssd", tape: "sth:Chuckie.zip" });

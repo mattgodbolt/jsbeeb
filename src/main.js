@@ -231,7 +231,6 @@ const media = new MediaLoader({
     model,
     drives,
     urlState,
-    config,
     modals,
     isSnapshotFile,
     loadSnapshot: (file, buffer) => snapshots.loadStateFromFile(file, buffer),
@@ -500,6 +499,7 @@ electron({
     loadTapeImage: media.loadTapeImage.bind(media),
     processor,
     config,
+    media,
     modals: {
         show: (modalId, sthType) => {
             if (modalId === "sth" && sthType) {
