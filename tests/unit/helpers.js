@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { vi } from "vitest";
+import { dirname, resolve } from "node:path";
+import { expect, vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
 
@@ -10,7 +11,10 @@ let indexHtmlDoc = null;
  * rename or restructure there fails the unit tests instead of only the page.
  */
 export function domFromIndexHtml(...ids) {
-    if (!indexHtmlDoc) indexHtmlDoc = new DOMParser().parseFromString(readFileSync("index.html", "utf8"), "text/html");
+    if (!indexHtmlDoc) {
+        const indexHtml = resolve(dirname(expect.getState().testPath), "../../index.html");
+        indexHtmlDoc = new DOMParser().parseFromString(readFileSync(indexHtml, "utf8"), "text/html");
+    }
     for (const id of ids) {
         const el = indexHtmlDoc.getElementById(id);
         if (!el) throw new Error(`index.html has no #${id}`);
