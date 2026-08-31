@@ -1195,6 +1195,7 @@ export class Cpu6502 extends Base6502 {
             while (this.model.swram[romIndex]) {
                 romIndex--;
             }
+            if (romIndex < 0) throw new Error("Too many extra ROMs (no free sideways ROM banks)");
 
             awaiting.push(this.loadRom(extraRoms[i_2], this.romOffset + romIndex * 16384));
         }
