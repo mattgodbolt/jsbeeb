@@ -2,19 +2,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Modals } from "../../src/web/modals.js";
-
-const modal = (id, body) =>
-    `<div id="${id}" class="modal"><div class="modal-dialog"><div class="modal-content"><div class="modal-body">${body}</div></div></div></div>`;
+import { modalMarkup, teardownDom } from "./helpers.js";
 
 const Markup = [
-    modal("error-dialog", '<span class="context"></span><span class="error"></span>'),
-    modal("loading-dialog", '<span class="loading"></span><div id="google-drive-auth"></div>'),
-    modal(
+    modalMarkup("error-dialog", '<span class="context"></span><span class="error"></span>'),
+    modalMarkup("loading-dialog", '<span class="loading"></span><div id="google-drive-auth"></div>'),
+    modalMarkup(
         "are-you-sure",
         '<span class="context"></span><button class="ays-yes"></button><button class="ays-no"></button>',
     ),
-    modal("info", ""),
-    modal("discs", ""),
+    modalMarkup("info", ""),
+    modalMarkup("discs", ""),
 ].join("");
 
 describe("Modals", () => {
@@ -40,12 +38,7 @@ describe("Modals", () => {
         });
     });
 
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     // What Bootstrap does around a modal: the events bubble up to the
     // document, and the element carries "show" while it is up.

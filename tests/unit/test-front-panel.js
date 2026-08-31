@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontPanel } from "../../src/web/front-panel.js";
+import { teardownDom } from "./helpers.js";
 
 const Markup = `
 <div id="tape-menu"><a data-id="rewind">Rewind</a><a data-id="archive">Archive</a></div>
@@ -25,11 +26,7 @@ describe("FrontPanel", () => {
         };
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = (isAtom = false, printer = { text: "" }) => new FrontPanel({ processor, model: { isAtom }, printer });
     const lit = (id) => document.getElementById(id).classList.contains("on");

@@ -2,10 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuiltInImages, MediaLoader, splitImage } from "../../src/web/media-loader.js";
-import { UrlState } from "../../src/web/url-state.js";
 import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
+import { fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 const Markup = `
 <input type="file" id="disc_load" />
@@ -13,14 +13,6 @@ const Markup = `
 <input type="file" id="tape_load" />
 <form><textarea id="paste-text"></textarea></form>
 <ul id="disc-list"><li class="template"><span class="name"></span><span class="description"></span></li></ul>`;
-
-/** A catalogued single-density image, the smallest thing discFor accepts. */
-function ssdImage(sectors = 800) {
-    const data = new Uint8Array(80 * 10 * 256);
-    data[0x106] = (sectors >>> 8) & 3;
-    data[0x107] = sectors & 0xff;
-    return data;
-}
 
 const fileFor = (name, bytes) => new File([bytes], name);
 
@@ -48,12 +40,7 @@ describe("MediaLoader", () => {
             },
             model: { isAtom: false },
             drives: { layoutForDrive: () => DiscLayout.auto, putDiscIn: vi.fn() },
-            urlState: new UrlState(
-                { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
-                {
-                    pushState: () => {},
-                },
-            ),
+            urlState: fakeUrlState(),
             modals: { hide: vi.fn() },
             isSnapshotFile: (name) => name.endsWith(".snp"),
             loadSnapshot: vi.fn(),
@@ -62,19 +49,13 @@ describe("MediaLoader", () => {
         sources = { sth: vi.fn(), tapeSth: vi.fn(), hfe: vi.fn(), drive: vi.fn() };
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = () => {
         const media = new MediaLoader(deps);
         for (const [schema, fetcher] of Object.entries(sources)) media.addSource(schema, fetcher);
         return media;
     };
-    const toasts = () =>
-        [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
     describe("splitImage", () => {
         it.each([

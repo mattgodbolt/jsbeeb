@@ -4,20 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as bootstrap from "bootstrap";
 
 import { toast } from "../../src/web/toast.js";
+import { teardownDom } from "./helpers.js";
 
 describe("toast", () => {
     beforeEach(() => {
         vi.useFakeTimers();
     });
 
-    // A toast's timers left on the real clock outlive this file's jsdom
-    // window, and fail the run from outside any test when they fire.
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const toasts = () => [...document.querySelectorAll(".toast")];
 

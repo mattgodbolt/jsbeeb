@@ -11,6 +11,7 @@ import {
     showNotice,
     unzipAndReport,
 } from "../../src/web/reporting.js";
+import { teardownDom, toasts } from "./helpers.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const readZip = (name) => new Uint8Array(fs.readFileSync(join(__dirname, "zip", name)));
@@ -21,16 +22,7 @@ describe("reporting", () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
-    afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
-
-    const toasts = () =>
-        [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
+    afterEach(teardownDom);
 
     describe("errorText", () => {
         it("uses an error's message", () => {

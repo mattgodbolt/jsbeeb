@@ -2,14 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleDriveLoader } from "../../src/google-drive.js";
+import { teardownDom } from "./helpers.js";
 
 describe("GoogleDriveLoader", () => {
     beforeEach(() => vi.spyOn(console, "log").mockImplementation(() => {}));
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-    });
+    afterEach(teardownDom);
 
     it("gives up when the Google script cannot be fetched", async () => {
         const loader = new GoogleDriveLoader();

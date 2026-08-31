@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuickSettings } from "../../src/web/quick-settings.js";
+import { teardownDom } from "./helpers.js";
 
 const Markup = `
 <div id="audio-output">
@@ -20,9 +21,7 @@ describe("QuickSettings", () => {
         callbacks = { onAudioOutput: vi.fn(), onSpeakerAmount: vi.fn(), onDisplayMode: vi.fn() };
     });
 
-    afterEach(() => {
-        document.body.innerHTML = "";
-    });
+    afterEach(teardownDom);
 
     const make = (initial = { audioOutput: "speaker", speakerAmount: 1, displayMode: "rgb" }) =>
         new QuickSettings(callbacks, initial);

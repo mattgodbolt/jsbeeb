@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
 import * as utils from "../../src/utils.js";
+import { teardownDom } from "./helpers.js";
 
 const keyEvent = (type, which, { alt = false, ctrl = false } = {}) => {
     const event = new KeyboardEvent(type, { altKey: alt, ctrlKey: ctrl, cancelable: true });
@@ -54,10 +55,7 @@ describe("KeyboardSetup", () => {
         setup.setRunning(true);
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-    });
+    afterEach(teardownDom);
 
     describe("the accessibility switches", () => {
         it("clears a bit while its switch is held, keys and function keys alike", () => {

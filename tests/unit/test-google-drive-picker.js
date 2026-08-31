@@ -2,15 +2,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleDrivePicker } from "../../src/web/google-drive-picker.js";
+import { modalMarkup, teardownDom, toasts } from "./helpers.js";
 
-const Markup = `
+const Markup =
+    `
 <a id="open-drive-link"></a>
-<div id="google-drive-auth" style="display: none"><form></form></div>
-<div id="google-drive" class="modal"><div class="modal-dialog"><div class="modal-content"><div class="modal-body">
+<div id="google-drive-auth" style="display: none"><form></form></div>` +
+    modalMarkup(
+        "google-drive",
+        `
   <span class="loading"></span>
   <ul class="list"><li class="template"><span class="name"></span></li></ul>
-  <form><input class="disc-name" value="" /><input type="checkbox" class="create-from-existing" /></form>
-</div></div></div></div>`;
+  <form><input class="disc-name" value="" /><input type="checkbox" class="create-from-existing" /></form>`,
+    );
 
 describe("GoogleDrivePicker", () => {
     let deps;
@@ -36,15 +40,9 @@ describe("GoogleDrivePicker", () => {
         vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = () => new GoogleDrivePicker(deps);
-    const toasts = () =>
-        [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
     describe("load", () => {
         it("loads a file once signed in, through the loading dialog", async () => {

@@ -3,16 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SnapshotUI, isSnapshotFile, snapshotMedia } from "../../src/web/snapshot-ui.js";
 import { DiscLayout } from "../../src/disc.js";
+import { ssdImage, teardownDom, toasts } from "./helpers.js";
 
 const Markup = `<a id="save-state"></a><input type="file" id="load-state" />`;
-
-/** A catalogued single-density image, the smallest thing discFor accepts. */
-function ssdImage(sectors = 800) {
-    const data = new Uint8Array(80 * 10 * 256);
-    data[0x106] = (sectors >>> 8) & 3;
-    data[0x107] = sectors & 0xff;
-    return data;
-}
 
 describe("snapshot media manifest", () => {
     const urlDisc = { originalImageCrc32: 0x1234, is40Track: false, originalImageData: null };
@@ -86,16 +79,9 @@ describe("SnapshotUI", () => {
         };
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-        window.localStorage.clear();
-        window.sessionStorage.clear();
-    });
+    afterEach(teardownDom);
 
     const make = () => new SnapshotUI(deps);
-    const toasts = () =>
-        [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
     describe("loading a state", () => {
         it("stops the emulator, reports a file it cannot read, and runs on", async () => {
