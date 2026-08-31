@@ -4,39 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Debugger } from "../../src/web/debug.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { FakeVideo } from "../../src/video.js";
-import { teardownDom } from "./helpers.js";
-
-const templateRow = '<tr class="template"><th><span class="register"></span>:</th><td class="value"></td></tr>';
-const Markup = `
-<div id="crtc_debug">
-  <div class="crtc_state"><table><tbody>${templateRow}</tbody></table></div>
-  <div class="crtc_regs"><table><tbody>${templateRow}</tbody></table></div>
-</div>
-<div id="debug">
-  <form id="goto-mem-addr-form"><input class="goto-addr" /></form>
-  <div id="memory">
-    <div class="template">
-      <span class="dis_addr"></span>
-      <span class="mem_bytes">${"<span></span>".repeat(8)}</span>
-      <span class="mem_asc">${"<span></span>".repeat(8)}</span>
-    </div>
-  </div>
-  <form id="goto-dis-addr-form"><input class="goto-addr" /></form>
-  <div id="disassembly">
-    <div class="template dis_elem">
-      <span class="bp_gutter"></span><span class="dis_addr"></span><span class="instr_bytes"></span
-      ><span class="instr_asc"></span><span class="disassembly"></span>
-    </div>
-  </div>
-  <span id="cpu6502_a"></span><span id="cpu6502_x"></span><span id="cpu6502_y"></span>
-  <span id="cpu6502_s"></span><span id="cpu6502_pc"></span>
-  <span id="cpu6502_flag_c"></span><span id="cpu6502_flag_z"></span><span id="cpu6502_flag_i"></span>
-  <span id="cpu6502_flag_d"></span><span id="cpu6502_flag_v"></span><span id="cpu6502_flag_n"></span>
-</div>
-<div id="hardware_debug">
-  <div id="sysvia"><table><tbody>${templateRow}</tbody></table></div>
-  <div id="uservia"><table><tbody>${templateRow}</tbody></table></div>
-</div>`;
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("Debugger", () => {
     let cpu;
@@ -45,7 +13,7 @@ describe("Debugger", () => {
 
     beforeEach(async () => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("crtc_debug", "debug", "hardware_debug");
         video = new FakeVideo();
         video.debugPaint = vi.fn();
         cpu = fake6502(null, { video });

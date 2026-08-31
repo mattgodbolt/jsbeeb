@@ -1,6 +1,22 @@
+import { readFileSync } from "node:fs";
 import { vi } from "vitest";
 
 import { UrlState } from "../../src/web/url-state.js";
+
+let indexHtmlDoc = null;
+
+/**
+ * Builds the test DOM from the named elements of the real index.html, so a
+ * rename or restructure there fails the unit tests instead of only the page.
+ */
+export function domFromIndexHtml(...ids) {
+    if (!indexHtmlDoc) indexHtmlDoc = new DOMParser().parseFromString(readFileSync("index.html", "utf8"), "text/html");
+    for (const id of ids) {
+        const el = indexHtmlDoc.getElementById(id);
+        if (!el) throw new Error(`index.html has no #${id}`);
+        document.body.appendChild(document.importNode(el, true));
+    }
+}
 
 /** The dependency bag the archive pickers take, every callback a mock. */
 export function makeWebDeps() {
