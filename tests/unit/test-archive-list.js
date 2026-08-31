@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AutobootTicks, clearArchiveList, filterArchiveList, showArchiveMessage } from "../../src/web/archive-list.js";
+import { UrlState } from "../../src/web/url-state.js";
 
 const Markup = `
 <div id="sth" class="modal"><span class="loading" style="display: none"></span>
@@ -61,29 +62,32 @@ describe("archive lists", () => {
         const boxes = () => [...document.querySelectorAll(".autoboot")];
 
         beforeEach(() => {
-            urlState = { params: {}, updateUrl: vi.fn() };
+            urlState = new UrlState(
+                { origin: "https://bbc.example", pathname: "/", search: "", hash: "" },
+                { pushState: vi.fn() },
+            );
             new AutobootTicks({ urlState });
         });
 
         it("mirrors a tick into every picker and the URL", () => {
             boxes()[0].click();
             expect(boxes().map((box) => box.checked)).toEqual([true, true]);
-            expect(urlState.params.autoboot).toBe("");
-            expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
+            expect(urlState.url()).toBe("https://bbc.example/?autoboot");
+            expect(urlState.history.pushState).toHaveBeenCalledTimes(1);
         });
 
         it("clears the URL when unticked from the other picker", () => {
             boxes()[0].click();
             boxes()[1].click();
             expect(boxes().map((box) => box.checked)).toEqual([false, false]);
-            expect(urlState.params.autoboot).toBeUndefined();
+            expect(urlState.url()).toBe("https://bbc.example/");
         });
 
         it("can be shown a state without touching the URL", () => {
             const ticks = new AutobootTicks({ urlState });
             ticks.show(true);
             expect(boxes().every((box) => box.checked)).toBe(true);
-            expect(urlState.updateUrl).not.toHaveBeenCalled();
+            expect(urlState.history.pushState).not.toHaveBeenCalled();
         });
     });
 });

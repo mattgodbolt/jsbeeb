@@ -29,7 +29,7 @@ export class AutobootTicks {
             check.addEventListener("click", () => {
                 this.show(check.checked);
                 if (check.checked) {
-                    urlState.params.autoboot = "";
+                    urlState.params.autoboot = true;
                 } else {
                     delete urlState.params.autoboot;
                 }
