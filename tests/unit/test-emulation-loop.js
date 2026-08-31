@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmulationLoop } from "../../src/web/emulation-loop.js";
+import { domFromIndexHtml } from "./helpers.js";
 
 const ClocksPerSecond = 2000000;
 
@@ -12,7 +13,7 @@ describe("EmulationLoop", () => {
         vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
         // Move off zero: the loop uses last === 0 to mean "first tick".
         vi.advanceTimersByTime(1000);
-        document.body.innerHTML = `<span class="virtualMHz"></span><span id="virtual-mhz-header"></span>`;
+        domFromIndexHtml("leds");
         deps = {
             processor: {
                 execute: vi.fn(() => true),

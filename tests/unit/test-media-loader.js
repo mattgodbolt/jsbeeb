@@ -5,14 +5,7 @@ import { BuiltInImages, MediaLoader, splitImage } from "../../src/web/media-load
 import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
-import { fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
-
-const Markup = `
-<input type="file" id="disc_load" />
-<input type="file" id="fs_load" />
-<input type="file" id="tape_load" />
-<form><textarea id="paste-text"></textarea></form>
-<ul id="disc-list"><li class="template"><span class="name"></span><span class="description"></span></li></ul>`;
+import { domFromIndexHtml, fakeUrlState, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 const fileFor = (name, bytes) => new File([bytes], name);
 
@@ -29,7 +22,7 @@ describe("MediaLoader", () => {
     let sources;
 
     beforeEach(() => {
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("discs", "econetfs", "tapes", "paste-text");
         deps = {
             processor: {
                 fdc: null,

@@ -5,25 +5,7 @@ import { DiscVisualiser } from "../../src/web/disc-visualiser.js";
 import { DiscGeometry } from "../../src/disc-surface.js";
 import { IbmDiscFormat } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
-import { ssdImage, teardownDom } from "./helpers.js";
-
-const Markup = `
-<a href="#" id="disc-visualiser-open"></a>
-<div id="disc-panel" hidden>
-  <div class="disc-header"><span class="disc-title">Disc surface</span><span id="disc-name"></span>
-    <button id="disc-close"></button></div>
-  <div class="disc-controls">
-    <button data-drive="0"></button><button data-drive="1"></button>
-    <div id="disc-side-controls" hidden><button data-side="0"></button><button data-side="1"></button></div>
-    <button data-view="density"></button><button data-view="format"></button>
-  </div>
-  <canvas id="disc-surface"></canvas>
-  <canvas id="disc-overlay"></canvas>
-  <div id="disc-legend"></div>
-  <div id="disc-status"></div>
-  <div id="disc-hover-where"></div>
-  <div id="disc-hover-what"></div>
-</div>`;
+import { domFromIndexHtml, ssdImage, teardownDom } from "./helpers.js";
 
 const CanvasSize = 100;
 
@@ -42,7 +24,7 @@ describe("DiscVisualiser", () => {
     let rafCallbacks;
 
     beforeEach(() => {
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("disc-visualiser-open", "disc-panel");
         const surface = document.getElementById("disc-surface");
         const overlay = document.getElementById("disc-overlay");
         Object.defineProperty(surface, "clientWidth", { value: CanvasSize });

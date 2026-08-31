@@ -5,6 +5,7 @@ import * as bootstrap from "bootstrap";
 
 import { Scheduler } from "../../src/scheduler.js";
 import { AudioHandler } from "../../src/web/audio-handler.js";
+import { domFromIndexHtml } from "./helpers.js";
 
 const SuspendedText = "Your browser has suspended audio";
 
@@ -69,7 +70,7 @@ describe("AudioHandler", () => {
 
     beforeEach(() => {
         contexts = [];
-        document.body.innerHTML = `<div id="audio-warning">${SuspendedText}</div>`;
+        domFromIndexHtml("audio-warning");
         vi.stubGlobal("AudioContext", undefined);
         vi.stubGlobal("webkitAudioContext", undefined);
     });

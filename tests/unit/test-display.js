@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
-import { teardownDom } from "./helpers.js";
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const FbWidth = 1024;
 
@@ -11,7 +11,7 @@ describe("Display", () => {
     let fakeCanvas;
 
     beforeEach(() => {
-        document.body.innerHTML = `<img id="cub-monitor-pic" /><canvas id="screen"></canvas>`;
+        domFromIndexHtml("cub-monitor");
         rafCallbacks = [];
         vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => rafCallbacks.push(callback));
     });

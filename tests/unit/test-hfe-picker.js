@@ -3,18 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HfePicker } from "../../src/web/hfe-picker.js";
 import { Provenance } from "../../src/bbcdiscs.js";
-import { makeWebDeps, modalMarkup, teardownDom } from "./helpers.js";
-
-const Markup = modalMarkup(
-    "hfe",
-    `
-  <span class="loading"></span>
-  <input id="hfe-filter" value="" />
-  <div id="hfe-provenance"></div>
-  <ul id="hfe-list"><li class="template"><a href="#">
-    <span class="name"></span><span class="publisher"></span><span class="detail"></span><span class="provenance"></span>
-  </a></li></ul>`,
-);
+import { domFromIndexHtml, makeWebDeps, teardownDom } from "./helpers.js";
 
 const entry = (path, title, provenance = Provenance.Captured, extra = {}) => ({
     path,
@@ -31,7 +20,7 @@ describe("HfePicker", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("hfe");
         deps = makeWebDeps();
     });
 

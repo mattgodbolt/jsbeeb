@@ -2,9 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalogueInputs } from "../../src/web/analogue-inputs.js";
-import { fakeUrlState, teardownDom } from "./helpers.js";
-
-const Markup = `<div id="cub-monitor"><canvas id="screen"></canvas></div><span id="micPermissionStatus"></span>`;
+import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
 
 describe("AnalogueInputs", () => {
     let deps;
@@ -12,7 +10,7 @@ describe("AnalogueInputs", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("cub-monitor", "micPermissionStatus");
         channels = {};
         deps = {
             processor: {

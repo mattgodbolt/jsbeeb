@@ -2,22 +2,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuickSettings } from "../../src/web/quick-settings.js";
-import { teardownDom } from "./helpers.js";
-
-const Markup = `
-<div id="audio-output">
-  <button data-output="speaker"><span>S</span></button><button data-output="board">B</button><button data-output="off">O</button>
-</div>
-<input id="speaker-amount" type="range" min="0" max="1" step="0.05" value="1" />
-<div id="display-mode">
-  <button data-mode="rgb">R</button><button data-mode="pal">P</button><button data-mode="xbr">X</button>
-</div>`;
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("QuickSettings", () => {
     let callbacks;
 
     beforeEach(() => {
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("quick-settings");
         callbacks = { onAudioOutput: vi.fn(), onSpeakerAmount: vi.fn(), onDisplayMode: vi.fn() };
     });
 
@@ -42,9 +33,10 @@ describe("QuickSettings", () => {
 
     it("reports a chosen sound output, from a click anywhere on its button, without showing it itself", () => {
         make();
-        document.querySelector('[data-output="off"] ').click();
+        document.querySelector('[data-output="off"]').click();
         expect(callbacks.onAudioOutput).toHaveBeenCalledWith("off");
-        document.querySelector('[data-output="speaker"] span').click();
+        const inner = document.querySelector('[data-output="speaker"]').appendChild(document.createElement("span"));
+        inner.click();
         expect(callbacks.onAudioOutput).toHaveBeenLastCalledWith("speaker");
         expect(pressed("[data-output]")).toEqual(["speaker"]);
     });

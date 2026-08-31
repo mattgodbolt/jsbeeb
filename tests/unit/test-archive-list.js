@@ -2,17 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AutobootTicks, clearArchiveList, filterArchiveList, showArchiveMessage } from "../../src/web/archive-list.js";
-import { fakeUrlState, teardownDom } from "./helpers.js";
-
-const Markup = `
-<div id="sth" class="modal"><span class="loading" style="display: none"></span>
-  <ul id="sth-list"><li class="template"><span class="name"></span></li></ul>
-  <label><input type="checkbox" class="autoboot" /></label>
-</div>
-<div id="hfe" class="modal"><span class="loading"></span>
-  <ul id="hfe-list"><li class="template"><span class="name"></span></li></ul>
-  <label><input type="checkbox" class="autoboot" /></label>
-</div>`;
+import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
 
 const addRow = (listId, text) => {
     const row = document.createElement("li");
@@ -23,7 +13,7 @@ const addRow = (listId, text) => {
 
 describe("archive lists", () => {
     beforeEach(() => {
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("sth", "hfe");
     });
 
     afterEach(teardownDom);

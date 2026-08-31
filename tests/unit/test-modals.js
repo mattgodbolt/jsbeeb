@@ -2,18 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Modals } from "../../src/web/modals.js";
-import { modalMarkup, teardownDom } from "./helpers.js";
-
-const Markup = [
-    modalMarkup("error-dialog", '<span class="context"></span><span class="error"></span>'),
-    modalMarkup("loading-dialog", '<span class="loading"></span><div id="google-drive-auth"></div>'),
-    modalMarkup(
-        "are-you-sure",
-        '<span class="context"></span><button class="ays-yes"></button><button class="ays-no"></button>',
-    ),
-    modalMarkup("info", ""),
-    modalMarkup("discs", ""),
-].join("");
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("Modals", () => {
     let emulator;
@@ -21,7 +10,7 @@ describe("Modals", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("error-dialog", "loading-dialog", "are-you-sure", "info", "discs");
         emulator = { running: true, stop: vi.fn(), go: vi.fn() };
         modals = new Modals({
             loop: {
@@ -139,7 +128,11 @@ describe("Modals", () => {
 
         it("resolves true once the dialog has gone after yes", async () => {
             const answer = modals.confirm("Restart now?", "Restart", "Later");
+            await vi.runAllTimersAsync();
             dialog().querySelector(".ays-yes").click();
+            // The real dialog fades, so the hidden event waits on bootstrap's
+            // transition timers.
+            await vi.runAllTimersAsync();
             await expect(answer).resolves.toBe(true);
             expect(dialog().classList.contains("show")).toBe(false);
         });
