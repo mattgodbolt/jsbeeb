@@ -10,6 +10,7 @@ describe("AnalogueInputs", () => {
     let channels;
 
     beforeEach(() => {
+        vi.useFakeTimers();
         document.body.innerHTML = Markup;
         channels = {};
         deps = {
@@ -27,6 +28,8 @@ describe("AnalogueInputs", () => {
     });
 
     afterEach(() => {
+        vi.runAllTimers();
+        vi.useRealTimers();
         vi.restoreAllMocks();
         document.body.innerHTML = "";
     });
@@ -54,6 +57,25 @@ describe("AnalogueInputs", () => {
             inputs.updateAdcSources(true, 1);
             expect(channels[0]).toBe(inputs.mouseJoystickSource);
             expect(channels[1]).toBe(inputs.microphoneInput);
+        });
+
+        it("lets the microphone take the first and last channels", () => {
+            const inputs = make();
+            inputs.updateAdcSources(false, 0);
+            expect(channels[0]).toBe(inputs.microphoneInput);
+            inputs.updateAdcSources(false, 3);
+            expect(channels[3]).toBe(inputs.microphoneInput);
+        });
+
+        it("refuses a channel that does not exist, says so, and clears the setting", () => {
+            deps.urlState.params.microphoneChannel = 5;
+            const inputs = make();
+            inputs.updateAdcSources(false, 5);
+            for (let ch = 0; ch < 4; ch++) expect(channels[ch]).toBe(inputs.gamepadSource);
+            expect(document.querySelector(".toast .message").textContent).toContain("no analogue channel 5");
+            expect(deps.config.setMicrophoneChannel).toHaveBeenCalledWith(undefined);
+            expect(deps.urlState.params.microphoneChannel).toBeUndefined();
+            expect(deps.urlState.updateUrl).toHaveBeenCalled();
         });
     });
 

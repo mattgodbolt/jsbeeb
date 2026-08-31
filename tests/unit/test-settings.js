@@ -167,6 +167,14 @@ describe("Settings", () => {
             expect(targets.inputs.setupMicrophone).toHaveBeenCalled();
         });
 
+        it("reroutes the analogue channels when the microphone is disabled, without starting it", () => {
+            urlState.params.microphoneChannel = 2;
+            const settings = make();
+            settings.config.onClose({ microphoneChannel: undefined });
+            expect(targets.inputs.updateAdcSources).toHaveBeenCalledWith(undefined, undefined);
+            expect(targets.inputs.setupMicrophone).not.toHaveBeenCalled();
+        });
+
         it("passes a tube multiplier to a fitted tube only", () => {
             const settings = make();
             settings.config.onClose({ tubeCpuMultiplier: 4 });
