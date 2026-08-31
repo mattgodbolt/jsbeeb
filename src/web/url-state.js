@@ -18,6 +18,7 @@ export const UrlParamTypes = {
     hasTeletextAdaptor: ParamTypes.BOOL,
     hasEconet: ParamTypes.BOOL,
     glEnabled: ParamTypes.BOOL,
+    lowLatency: ParamTypes.BOOL,
     fakeVideo: ParamTypes.BOOL,
     logFdcCommands: ParamTypes.BOOL,
     logFdcStateChanges: ParamTypes.BOOL,

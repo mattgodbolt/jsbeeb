@@ -63,10 +63,7 @@ const noSeek = !!parsedQuery.noseek;
 const stationId = parsedQuery.stationId !== undefined ? parsedQuery.stationId : 101;
 
 const tryGl = parsedQuery.glEnabled ?? true;
-let lowLatency = true;
-if (parsedQuery.lowLatency !== undefined) {
-    lowLatency = parsedQuery.lowLatency === "true";
-}
+const lowLatency = parsedQuery.lowLatency ?? true;
 
 if (parsedQuery.embed) {
     for (const el of document.querySelectorAll(".embed-hide")) el.style.display = "none";
@@ -99,9 +96,7 @@ const keys = new KeyboardSetup({
     enterDebugger: () => loop.stop(true),
     reload: () => window.location.reload(),
     toggleFast: () => loop.toggleFastAsPossible(),
-    openRewind: () => {
-        if (rewindUI) rewindUI.open();
-    },
+    openRewind: () => rewindUI.open(),
     openPrinter: () => frontPanel.checkPrinterWindow(),
     pause: () => loop.stop(false),
     resume: () => loop.go(),

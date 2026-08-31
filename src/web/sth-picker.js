@@ -117,7 +117,7 @@ export class SthPicker {
             const Delay = 30;
             const batch = all.slice(0, MaxAtATime);
             const remaining = all.slice(MaxAtATime);
-            const filter = document.getElementById("sth-filter").value;
+            const filter = document.getElementById("sth-filter").value.toLowerCase();
             for (const name of batch) {
                 const row = template.cloneNode(true);
                 row.classList.remove("template");

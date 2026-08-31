@@ -132,7 +132,6 @@ export class GoogleDrivePicker {
         let name = document.querySelector("#google-drive .disc-name").value;
         if (!name) return;
 
-        this.modals.popupLoading("Connecting to Google Drive");
         this.modal.hide();
         this.modals.popupLoading("Creating '" + name + "' on Google Drive");
 

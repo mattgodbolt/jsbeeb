@@ -25,7 +25,7 @@ export function fittedRoms({ model, hasEconet, hasMusic5000, hasTeletextAdaptor 
 }
 
 /** The settings the dialog presents as checkboxes. `enables` names a control only usable while ticked. */
-export const CheckboxSettings = [
+const CheckboxSettings = [
     { id: "65c02", field: "coProcessor", restartRequired: true, enables: "tubeCpuMultiplier" },
     { id: "hasTeletextAdaptor", field: "hasTeletextAdaptor", restartRequired: true },
     { id: "hasEconet", field: "hasEconet", restartRequired: true },

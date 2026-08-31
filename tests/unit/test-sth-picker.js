@@ -55,7 +55,7 @@ describe("SthPicker", () => {
         });
 
         it("renders every batch honouring the filter already typed", () => {
-            document.getElementById("sth-filter").value = "elite";
+            document.getElementById("sth-filter").value = "ELITE";
             const names = ["ELITE.zip", ...Array.from({ length: 150 }, (_, i) => `GAME${i}.zip`)];
             make().renderCatalogue(names, () => {});
             vi.runAllTimers();
