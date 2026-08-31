@@ -14,8 +14,8 @@ const StallSpikeHeight = 20;
 
 // Nobody is watching an unfocused window, so its sound can run far behind
 // the picture, deep enough to ride out the browser starving the tab.
-export const UnfocusedLatencyMs = 200;
-export const DefaultLatencyMs = 20;
+const UnfocusedLatencyMs = 200;
+const DefaultLatencyMs = 20;
 
 export class AudioHandler {
     constructor({

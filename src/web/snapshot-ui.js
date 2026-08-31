@@ -38,7 +38,7 @@ export function isSnapshotFile(filename, arrayBuffer) {
 }
 
 /** The saved snapshot in whichever of the formats we read the buffer holds. */
-export async function readSnapshot(arrayBuffer) {
+async function readSnapshot(arrayBuffer) {
     if (isBemSnapshot(arrayBuffer)) return await parseBemSnapshot(arrayBuffer);
     if (isUefSnapshot(arrayBuffer)) return parseUefSnapshot(arrayBuffer);
     // Detect gzip (magic bytes 0x1f 0x8b) or plain JSON
