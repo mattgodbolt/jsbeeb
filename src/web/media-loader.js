@@ -50,7 +50,7 @@ function readFileAsBinaryString(file) {
  * URL schema can name, the local file inputs, the drop zone and the built-in
  * list. Choosing what goes in a drive funnels through drives.putDiscIn.
  */
-export class MediaLoader {
+export class MediaLoader extends EventTarget {
     /**
      * @param {object} deps
      * @param {object} deps.sources fetchers keyed by schema: sth, tapeSth and hfe
@@ -58,12 +58,12 @@ export class MediaLoader {
      * @param {Function} deps.isSnapshotFile says whether a dropped file is a save state
      * @param {Function} deps.loadSnapshot restores a dropped save state
      */
-    constructor({ processor, model, drives, urlState, config, modals, sources, isSnapshotFile, loadSnapshot }) {
+    constructor({ processor, model, drives, urlState, modals, sources, isSnapshotFile, loadSnapshot }) {
+        super();
         this.processor = processor;
         this.model = model;
         this.drives = drives;
         this.urlState = urlState;
-        this.config = config;
         this.modals = modals;
         this.sources = sources;
 
@@ -180,19 +180,19 @@ export class MediaLoader {
         delete this.params.disc;
         this.params.disc1 = name;
         this.urlState.updateUrl();
-        this.config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
+        this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
     }
 
     setDisc2Image(name) {
         this.params.disc2 = name;
         this.urlState.updateUrl();
-        this.config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
+        this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
     }
 
     setTapeImage(name) {
         this.params.tape = name;
         this.urlState.updateUrl();
-        this.config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
+        this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
     }
 
     async loadHTMLFile(file) {
