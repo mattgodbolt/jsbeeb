@@ -1,5 +1,5 @@
 [![jsbeeb tests](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml/badge.svg)](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml)
-[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmattgodbolt%2Fjsbeeb%2Fbadges%2Fcoverage.json)](https://github.com/mattgodbolt/jsbeeb/actions/workflows/test-and-deploy.yml)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fbbc.xania.org%2Fcoverage%2Fbadge.json)](https://bbc.xania.org/coverage/index.html)
 
 # jsbeeb - JavaScript BBC Micro Emulator
 

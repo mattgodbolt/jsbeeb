@@ -6,7 +6,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
@@ -34,20 +34,22 @@ jobs:
         with:
           json-summary-path: coverage/coverage-summary.json
           json-final-path: coverage/coverage-final.json
-      # Vitest 5 may bring a first-party badge story; until then the badge JSON
-      # lives on the badges branch and shields.io renders it.
-      - name: Publish coverage badge
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # Vitest 5 may bring a first-party badge story; until then shields.io
+      # renders badge.json from the deployed report.
+      - name: Publish coverage report and badge
+        if: github.ref == 'refs/heads/main'
         env:
-          GH_TOKEN: ${{ github.token }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-east-1
         run: |
           PCT=$(node -p "require('./coverage/coverage-summary.json').total.lines.pct.toFixed(1)")
           COLOR=$(node -p "const p=$PCT; p>=90?'brightgreen':p>=75?'green':p>=60?'yellowgreen':p>=45?'yellow':'orange'")
-          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}' "$PCT" "$COLOR" > /tmp/badge.json
-          SHA=$(gh api "repos/${{ github.repository }}/contents/coverage.json?ref=badges" --jq .sha 2>/dev/null || true)
-          gh api -X PUT "repos/${{ github.repository }}/contents/coverage.json" \
-            -f branch=badges -f message="coverage badge: ${PCT}%" \
-            -f content="$(base64 -w0 /tmp/badge.json)" ${SHA:+-f sha=$SHA}
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}' "$PCT" "$COLOR" > coverage/badge.json
+          aws s3 sync coverage s3://bbc.xania.org/coverage \
+            --no-progress --delete \
+            --exclude "coverage-final.json" --exclude "lcov.info" --exclude "lcov-report/*" --exclude ".tmp/*" \
+            --cache-control max-age=30 --metadata-directive REPLACE
       - name: Integration tests
         run: |
           echo "# Integration tests" >> "$GITHUB_STEP_SUMMARY"
