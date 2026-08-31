@@ -140,7 +140,7 @@ export class Settings {
             machine.emulationConfig.keyLayout = changed.keyLayout;
             keys.setKeyLayout(changed.keyLayout);
         }
-        if (changed.mouseJoystickEnabled !== undefined || changed.microphoneChannel !== undefined) {
+        if (changed.mouseJoystickEnabled !== undefined || Object.hasOwn(changed, "microphoneChannel")) {
             inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
 
             if (changed.microphoneChannel !== undefined) {

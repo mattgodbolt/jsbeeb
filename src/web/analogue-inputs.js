@@ -4,6 +4,8 @@ import { MouseJoystickSource } from "../mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "../mouse-coordinates.js";
 import { toast } from "./toast.js";
 
+const AdcChannelCount = 4;
+
 /**
  * What feeds the analogue port and the touchscreen: the gamepad, the mouse
  * acting as a joystick, and the microphone, with the mouse on the monitor
@@ -59,7 +61,7 @@ export class AnalogueInputs {
     updateAdcSources(mouseJoystickEnabled, microphoneChannel) {
         const { processor } = this;
         // Default all channels to the gamepad source.
-        for (let ch = 0; ch < 4; ch++) {
+        for (let ch = 0; ch < AdcChannelCount; ch++) {
             processor.adconverter.setChannelSource(ch, this.gamepadSource);
         }
 
@@ -73,9 +75,23 @@ export class AnalogueInputs {
         }
 
         // Apply microphone if configured (can override any channel)
-        if (microphoneChannel !== undefined) {
+        if (microphoneChannel === undefined) return;
+        if (Number.isInteger(microphoneChannel) && microphoneChannel >= 0 && microphoneChannel < AdcChannelCount) {
             processor.adconverter.setChannelSource(microphoneChannel, this.microphoneInput);
+        } else {
+            toast(
+                `There is no analogue channel ${microphoneChannel}; channels are 0 to 3. ` +
+                    `The microphone channel has been turned off.`,
+                { title: "Microphone" },
+            );
+            this.clearMicrophoneChannel();
         }
+    }
+
+    clearMicrophoneChannel() {
+        this.config.setMicrophoneChannel(undefined);
+        delete this.urlState.params.microphoneChannel;
+        this.urlState.updateUrl();
     }
 
     async ensureMicrophoneRunning() {
@@ -93,6 +109,8 @@ export class AnalogueInputs {
     }
 
     async setupMicrophone() {
+        // The channel can have been turned off between the request and now.
+        if (this.urlState.params.microphoneChannel === undefined) return;
         const micPermissionStatus = document.getElementById("micPermissionStatus");
         micPermissionStatus.textContent = "Requesting microphone access...";
 
@@ -110,10 +128,7 @@ export class AnalogueInputs {
             document.addEventListener("click", tryAgain);
         } else {
             micPermissionStatus.textContent = `Error: ${this.microphoneInput.getErrorMessage() || "Unknown error"}`;
-            this.config.setMicrophoneChannel(undefined);
-            // Update URL to remove the parameter
-            delete this.urlState.params.microphoneChannel;
-            this.urlState.updateUrl();
+            this.clearMicrophoneChannel();
         }
     }
 }
