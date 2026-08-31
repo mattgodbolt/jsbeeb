@@ -45,9 +45,6 @@ export function makeWebDeps() {
 export const fakeUrlState = (search = "") =>
     new UrlState({ origin: "https://bbc.example", pathname: "/", search, hash: "" }, { pushState: vi.fn() });
 
-export const modalMarkup = (id, body) =>
-    `<div id="${id}" class="modal"><div class="modal-dialog"><div class="modal-content"><div class="modal-body">${body}</div></div></div></div>`;
-
 export const toasts = () =>
     [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 

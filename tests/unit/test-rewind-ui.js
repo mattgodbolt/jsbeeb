@@ -3,14 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RewindUI } from "../../src/web/rewind-ui.js";
 import { RewindBuffer } from "../../src/rewind.js";
-import { teardownDom } from "./helpers.js";
-
-const Markup = `
-<a href="#" id="rewind-open"></a>
-<div id="rewind-panel" hidden>
-  <button id="rewind-close"></button>
-  <div id="rewind-filmstrip"></div>
-</div>`;
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const FakeContext = {
     createImageData: () => ({ data: new Uint8Array(1024 * 625 * 4) }),
@@ -26,7 +19,7 @@ describe("RewindUI", () => {
     let loop;
 
     beforeEach(() => {
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("rewind-open", "rewind-panel");
         Element.prototype.scrollIntoView = vi.fn();
         const realCreateElement = document.createElement.bind(document);
         vi.spyOn(document, "createElement").mockImplementation((tag) => {

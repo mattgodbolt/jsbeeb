@@ -4,13 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Drives } from "../../src/web/drives.js";
 import { DiscLayout } from "../../src/disc.js";
 import { DriveTracks } from "../../src/url-params.js";
-import { teardownDom, toasts } from "./helpers.js";
-
-const Markup = `
-<div class="drive-tracks" data-drive="0"><button data-tracks="40">40</button><button data-tracks="80">80</button></div>
-<div class="drive-tracks" data-drive="1"><button data-tracks="40">40</button><button data-tracks="80">80</button></div>
-<a id="download-drive-link"></a>
-<a id="download-drive-hfe-link"></a>`;
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 /** Enough of an FDC for the page's side of putting a disc in. */
 function fakeFdc() {
@@ -39,7 +33,7 @@ describe("Drives", () => {
 
     beforeEach(() => {
         vi.useFakeTimers();
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("navbarSupportedContent");
         fdc = fakeFdc();
         confirm = vi.fn().mockResolvedValue(false);
     });

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Machine, buildEmulationConfig } from "../../src/web/machine.js";
-import { teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const config = (overrides = {}) => ({
     tubeCpuMultiplier: 1,
@@ -49,7 +49,7 @@ describe("Machine", () => {
     let fakeProcessor;
 
     beforeEach(() => {
-        document.body.innerHTML = `<span id="fsmenuitem"></span>`;
+        domFromIndexHtml("fsmenuitem");
         fakeProcessor = {
             uservia: {},
             acia: { addEventListener: vi.fn(), setRs423Handler: vi.fn() },

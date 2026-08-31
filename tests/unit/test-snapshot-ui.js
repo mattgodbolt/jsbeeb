@@ -3,9 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SnapshotUI, isSnapshotFile, snapshotMedia } from "../../src/web/snapshot-ui.js";
 import { DiscLayout } from "../../src/disc.js";
-import { ssdImage, teardownDom, toasts } from "./helpers.js";
-
-const Markup = `<a id="save-state"></a><input type="file" id="load-state" />`;
+import { domFromIndexHtml, ssdImage, teardownDom, toasts } from "./helpers.js";
 
 describe("snapshot media manifest", () => {
     const urlDisc = { originalImageCrc32: 0x1234, is40Track: false, originalImageData: null };
@@ -66,7 +64,7 @@ describe("SnapshotUI", () => {
     let deps;
 
     beforeEach(() => {
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("save-state", "load-state");
         deps = {
             processor: { fdc: { drives: [{ disc: null }, { disc: null }] }, hasTube: false, execute: vi.fn() },
             model: { name: "B-DFS1.2" },

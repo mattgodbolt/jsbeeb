@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Layout, fitMonitor } from "../../src/web/layout.js";
-import { teardownDom, toasts } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const Config = {
     imageWidth: 800,
@@ -98,23 +98,16 @@ describe("fitMonitor", () => {
     });
 });
 
-const LayoutMarkup = `
-<nav id="header-bar"></nav>
-<div id="cub-monitor">
-  <img id="cub-monitor-pic" />
-  <div class="sidebar left"><img /></div>
-  <canvas id="screen" width="800" height="600"></canvas>
-  <div class="sidebar right"><img /></div>
-  <div class="sidebar bottom"><img /></div>
-</div>
-<ul><li><a href="#" id="fs"></a></li></ul>`;
-
 describe("Layout", () => {
     let display;
 
     beforeEach(() => {
         vi.useFakeTimers();
-        document.body.innerHTML = LayoutMarkup;
+        domFromIndexHtml("header-bar", "cub-monitor");
+        // The drawing buffer is the display's to size; give it the mocked config's.
+        const canvas = document.getElementById("screen");
+        canvas.width = Config.canvasWidth;
+        canvas.height = Config.canvasHeight;
         display = { filterClass: { getDisplayConfig: vi.fn(() => Config) }, video: { paint: vi.fn() } };
     });
 

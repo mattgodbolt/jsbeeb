@@ -2,22 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SthPicker } from "../../src/web/sth-picker.js";
-import { makeWebDeps, modalMarkup, teardownDom } from "./helpers.js";
-
-const Markup = modalMarkup(
-    "sth",
-    `
-  <span class="loading"></span>
-  <input id="sth-filter" value="" />
-  <ul id="sth-list"><li class="template"><span class="name"></span></li></ul>`,
-);
+import { domFromIndexHtml, makeWebDeps, teardownDom } from "./helpers.js";
 
 describe("SthPicker", () => {
     let deps;
 
     beforeEach(() => {
         vi.useFakeTimers();
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("sth");
         deps = makeWebDeps();
     });
 
@@ -44,7 +36,7 @@ describe("SthPicker", () => {
             vi.runAllTimers();
             expect(rows()).toHaveLength(151);
             const shown = rows().filter((row) => row.style.display !== "none");
-            expect(shown.map((row) => row.textContent)).toEqual(["ELITE.zip"]);
+            expect(shown.map((row) => row.textContent.trim())).toEqual(["ELITE.zip"]);
         });
 
         it("re-filters what is already on screen as the user types", () => {
@@ -53,7 +45,7 @@ describe("SthPicker", () => {
             filter.value = "chuckie";
             filter.dispatchEvent(new Event("keyup"));
             const shown = rows().filter((row) => row.style.display !== "none");
-            expect(shown.map((row) => row.textContent)).toEqual(["CHUCKIE.zip"]);
+            expect(shown.map((row) => row.textContent.trim())).toEqual(["CHUCKIE.zip"]);
         });
 
         it("hides the loading text once the catalogue is up", () => {

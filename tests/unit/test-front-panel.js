@@ -2,21 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontPanel } from "../../src/web/front-panel.js";
-import { teardownDom } from "./helpers.js";
-
-const Markup = `
-<div id="tape-menu"><a data-id="rewind">Rewind</a><a data-id="archive">Archive</a></div>
-<table><tbody><tr><th id="tape-control-header"></th><td id="tape-control-cell"></td></tr></tbody></table>
-<button id="tape-play-stop"></button>
-<span id="motorlight"></span><span id="capslight" class="bbc-only"></span><span id="shiftlight" class="bbc-only"></span>
-<span id="drive0" class="bbc-only"></span><span id="drive1" class="bbc-only"></span><span id="networklight" class="bbc-only"></span>`;
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("FrontPanel", () => {
     let processor;
 
     beforeEach(() => {
         vi.spyOn(console, "log").mockImplementation(() => {});
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("tape-menu", "leds");
         processor = {
             sysvia: { capsLockLight: false, shiftLockLight: false },
             fdc: { motorOn: [false, false] },
@@ -62,13 +55,13 @@ describe("FrontPanel", () => {
     describe("what each machine shows", () => {
         it("hides the BBC lights and shows the tape control on an Atom", () => {
             make(true);
-            expect(document.getElementById("capslight").style.display).toBe("none");
+            expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("none");
             expect(document.getElementById("tape-control-header").style.display).toBe("");
         });
 
         it("shows the BBC lights and hides the tape control on a BBC", () => {
             make(false);
-            expect(document.getElementById("capslight").style.display).toBe("");
+            expect(document.getElementById("capslight").closest(".bbc-only").style.display).toBe("");
             expect(document.getElementById("tape-control-header").style.display).toBe("none");
         });
     });
@@ -100,10 +93,12 @@ describe("FrontPanel", () => {
         });
 
         it("ignores menu links it does not handle", () => {
+            const link = document.getElementById("tape-menu").appendChild(document.createElement("a"));
+            link.dataset.id = "archive";
             make(false);
-            document.querySelector('#tape-menu a[data-id="archive"]').click();
+            link.click();
             expect(processor.acia.rewindTape).not.toHaveBeenCalled();
-            expect(console.log).not.toHaveBeenCalledWith("unknown type", "archive");
+            expect(console.log).not.toHaveBeenCalled();
         });
     });
 

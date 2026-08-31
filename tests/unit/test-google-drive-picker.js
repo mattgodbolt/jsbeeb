@@ -2,26 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleDrivePicker } from "../../src/web/google-drive-picker.js";
-import { modalMarkup, teardownDom, toasts } from "./helpers.js";
-
-const Markup =
-    `
-<a id="open-drive-link"></a>
-<div id="google-drive-auth" style="display: none"><form></form></div>` +
-    modalMarkup(
-        "google-drive",
-        `
-  <span class="loading"></span>
-  <ul class="list"><li class="template"><span class="name"></span></li></ul>
-  <form><input class="disc-name" value="" /><input type="checkbox" class="create-from-existing" /></form>`,
-    );
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 describe("GoogleDrivePicker", () => {
     let deps;
     let loader;
 
     beforeEach(() => {
-        document.body.innerHTML = Markup;
+        domFromIndexHtml("open-drive-link", "google-drive", "loading-dialog");
         loader = {
             initialise: vi.fn().mockResolvedValue(true),
             authorize: vi.fn().mockResolvedValue(true),
