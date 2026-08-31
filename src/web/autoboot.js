@@ -1,7 +1,7 @@
 import * as utils from "../utils.js";
 import * as utils_atom from "../utils_atom.js";
 import * as tokeniser from "../basic-tokenise.js";
-import { installBasic } from "../basic-loader.js";
+import { basicIdleAddr, installBasic } from "../basic-loader.js";
 
 /** Booting and typing for the machine at startup: shift-break, *TAPE incantations and BASIC programs. */
 export class Autoboot {
@@ -69,7 +69,7 @@ export class Autoboot {
         const tokenised = await t.tokenise(prog);
 
         const { processor } = this;
-        const idleAddr = processor.model.isMaster ? 0xe7e6 : 0xe581;
+        const idleAddr = basicIdleAddr(processor.model);
         const hook = processor.debugInstruction.add((addr) => {
             if (addr !== idleAddr) return;
             installBasic(tokenised, {

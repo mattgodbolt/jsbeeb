@@ -383,11 +383,7 @@ window.addEventListener("beforeunload", function (event) {
 });
 
 function hardReset() {
-    if (rewindUI) {
-        rewindUI.close();
-        rewindBuffer.clear();
-        rewindUI.updateButtonState();
-    }
+    rewindUI.reset();
     processor.reset(true);
 }
 
@@ -522,7 +518,7 @@ electron({
     actions: {
         "soft-reset": () => processor.reset(false),
         "hard-reset": hardReset,
-        "save-state": () => document.getElementById("save-state").click(),
+        "save-state": () => snapshots.saveState(),
         rewind: () => rewindUI.open(),
         pause: pauseIntoDebugger,
         resume: resumeFromDebugger,

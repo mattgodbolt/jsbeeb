@@ -1,4 +1,4 @@
-import { installBasic } from "../src/basic-loader.js";
+import { basicIdleAddr, installBasic } from "../src/basic-loader.js";
 import * as fdc from "../src/fdc.js";
 import { fake6502 } from "../src/fake6502.js";
 import { findModel } from "../src/models.js";
@@ -182,7 +182,7 @@ export class TestMachine {
             assert(hit, "Atom did not reach keyboard input in time");
             return this.runFor(10 * 1000);
         }
-        const idleAddr = this.processor.model.isMaster ? 0xe7e6 : 0xe581;
+        const idleAddr = basicIdleAddr(this.processor.model);
         let hit = false;
         const hook = this.processor.debugInstruction.add((addr) => {
             if (addr === idleAddr) {

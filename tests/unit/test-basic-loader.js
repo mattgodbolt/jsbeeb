@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { installBasic } from "../../src/basic-loader.js";
+import { basicIdleAddr, installBasic } from "../../src/basic-loader.js";
 
 describe("installBasic", () => {
     const machine = (page = 0x19) => {
@@ -23,5 +23,12 @@ describe("installBasic", () => {
         const end = 0x0e00 + 0x105;
         expect(m.memory[0x02] | (m.memory[0x03] << 8)).toBe(end);
         expect(m.memory[0x12] | (m.memory[0x13] << 8)).toBe(end);
+    });
+});
+
+describe("basicIdleAddr", () => {
+    it("names each machine's idle loop", () => {
+        expect(basicIdleAddr({ isMaster: false })).toBe(0xe581);
+        expect(basicIdleAddr({ isMaster: true })).toBe(0xe7e6);
     });
 });
