@@ -55,9 +55,10 @@ export class GoogleDrivePicker {
         try {
             return await this.googleDrive.authorize(imm);
         } catch (err) {
-            console.log("Error handling google auth: " + err);
+            console.log("Error handling google auth: " + errorText(err));
             this.el.querySelector(".loading").textContent =
                 `There was an error accessing your Google Drive account: ${errorText(err)}`;
+            return false;
         }
     }
 
