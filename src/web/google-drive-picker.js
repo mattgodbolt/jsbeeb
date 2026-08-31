@@ -33,18 +33,18 @@ export class GoogleDrivePicker {
 
         // Loading the Google client holds the main thread for ~100ms, so it waits for
         // someone to ask for Drive.
-        document.getElementById("open-drive-link").addEventListener("click", async () => {
+        document.getElementById("open-drive-link").addEventListener("click", async (e) => {
+            e.preventDefault();
             try {
                 await this.googleDrive.initialise();
             } catch (error) {
                 toast(`Google Drive is unavailable: ${errorText(error)}`, { title: "Google Drive" });
-                return false;
+                return;
             }
             const authed = await this.auth(false);
             if (authed) {
                 this.modal.show();
             }
-            return false;
         });
 
         this.el.addEventListener("show.bs.modal", () => this.showList());
@@ -57,7 +57,7 @@ export class GoogleDrivePicker {
         } catch (err) {
             console.log("Error handling google auth: " + err);
             this.el.querySelector(".loading").textContent =
-                "There was an error accessing your Google Drive account: " + err;
+                `There was an error accessing your Google Drive account: ${errorText(err)}`;
         }
     }
 
@@ -150,7 +150,10 @@ export class GoogleDrivePicker {
             // TODO support HFE, I guess?
             const discType = disc.guessDiscTypeFromName(name);
             if (!discType.byteSize) {
-                throw new Error(`Cannot create blank disc of type ${discType.extension} - unknown size`);
+                this.modals.loadingFinished(
+                    `Unable to create ${name} on Google Drive: blank ${discType.extension} discs have no known size`,
+                );
+                return;
             }
             data = new Uint8Array(discType.byteSize);
             if (discType.supportsCatalogue) {

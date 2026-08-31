@@ -86,6 +86,27 @@ describe("GoogleDrivePicker", () => {
         });
     });
 
+    describe("signing in", () => {
+        it("shows the error's message when authorization fails", async () => {
+            loader.authorize.mockRejectedValue(new Error("denied"));
+            await make().auth(false);
+            expect(document.querySelector("#google-drive .loading").textContent).toContain(
+                "There was an error accessing your Google Drive account: denied",
+            );
+        });
+    });
+
+    describe("the drive link", () => {
+        it("keeps the link's hash out of the URL", async () => {
+            const picker = make();
+            const show = vi.spyOn(picker.modal, "show").mockImplementation(() => {});
+            const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+            document.getElementById("open-drive-link").dispatchEvent(click);
+            expect(click.defaultPrevented).toBe(true);
+            await vi.waitFor(() => expect(show).toHaveBeenCalled());
+        });
+    });
+
     describe("the file list", () => {
         it("lists the files and loads the one clicked", async () => {
             loader.listFiles.mockResolvedValue([{ id: "abc", name: "mine.ssd" }]);
@@ -139,6 +160,19 @@ describe("GoogleDrivePicker", () => {
             await vi.waitFor(() =>
                 expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
                     expect.stringContaining("Unable to create copy.ssd on Google Drive"),
+                ),
+            );
+            expect(loader.create).not.toHaveBeenCalled();
+        });
+
+        it("reports a blank disc name whose format has no known size", async () => {
+            const picker = make();
+            vi.spyOn(picker.modal, "hide").mockImplementation(() => {});
+            document.querySelector("#google-drive .disc-name").value = "fresh.hfe";
+            submit();
+            await vi.waitFor(() =>
+                expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
+                    expect.stringContaining("Unable to create fresh.hfe on Google Drive"),
                 ),
             );
             expect(loader.create).not.toHaveBeenCalled();
