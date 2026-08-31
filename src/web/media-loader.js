@@ -309,6 +309,7 @@ export class MediaLoader {
     }
 
     async loadTapeImage(tapeImage) {
+        if (!tapeImage) return null;
         const split = splitImage(tapeImage);
         tapeImage = split.image;
         const schema = split.schema;

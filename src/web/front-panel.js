@@ -39,8 +39,6 @@ export class FrontPanel {
                     } else {
                         processor.acia.rewindTape();
                     }
-                } else {
-                    console.log("unknown type", type);
                 }
             });
         }
