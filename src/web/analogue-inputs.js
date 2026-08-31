@@ -109,6 +109,8 @@ export class AnalogueInputs {
     }
 
     async setupMicrophone() {
+        // The channel can have been turned off between the request and now.
+        if (this.urlState.params.microphoneChannel === undefined) return;
         const micPermissionStatus = document.getElementById("micPermissionStatus");
         micPermissionStatus.textContent = "Requesting microphone access...";
 

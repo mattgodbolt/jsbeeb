@@ -107,6 +107,15 @@ describe("AnalogueInputs", () => {
         });
     });
 
+    describe("a microphone whose channel was turned off", () => {
+        it("never asks for microphone access", async () => {
+            const inputs = make();
+            const initialise = vi.spyOn(inputs.microphoneInput, "initialise");
+            await inputs.setupMicrophone();
+            expect(initialise).not.toHaveBeenCalled();
+        });
+    });
+
     describe("a microphone that cannot start", () => {
         it("reports, clears the setting and takes it out of the URL", async () => {
             deps.urlState.params.microphoneChannel = 2;
