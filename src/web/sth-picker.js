@@ -129,7 +129,7 @@ export class SthPicker {
                 });
                 row.style.display = name.toLowerCase().indexOf(filter) >= 0 ? "" : "none";
             }
-            if (all.length) setTimeout(() => doSome(remaining), Delay);
+            if (remaining.length) setTimeout(() => doSome(remaining), Delay);
         };
 
         doSome(cat);
