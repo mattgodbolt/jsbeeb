@@ -22,8 +22,18 @@ export class SthPicker {
             document.getElementById("sth-filter").focus();
         });
 
-        const startLoad = () => showArchiveMessage("sth", "sth-list", "Loading catalog from STH archive");
-        const onError = () => showArchiveMessage("sth", "sth-list", "There was an error accessing the STH archive");
+        // Anything that clears the list takes a new ticket; a chain whose ticket is
+        // stale gives up (the same scheme as hfe-picker.js).
+        this.renderTicket = 0;
+
+        const startLoad = () => {
+            this.renderTicket++;
+            showArchiveMessage("sth", "sth-list", "Loading catalog from STH archive");
+        };
+        const onError = () => {
+            this.renderTicket++;
+            showArchiveMessage("sth", "sth-list", "There was an error accessing the STH archive");
+        };
         this.discs = new StairwayToHell(
             startLoad,
             (cat) => this.renderCatalogue(cat, (item) => this.pickDisc(item)),
@@ -95,12 +105,14 @@ export class SthPicker {
     }
 
     renderCatalogue(cat, onClick) {
+        const ticket = ++this.renderTicket;
         clearArchiveList("sth-list");
         const sthList = document.getElementById("sth-list");
         document.querySelector("#sth .loading").style.display = "none";
         const template = sthList.querySelector(".template");
 
         const doSome = (all) => {
+            if (ticket !== this.renderTicket) return;
             const MaxAtATime = 100;
             const Delay = 30;
             const batch = all.slice(0, MaxAtATime);
@@ -117,7 +129,7 @@ export class SthPicker {
                 });
                 row.style.display = name.toLowerCase().indexOf(filter) >= 0 ? "" : "none";
             }
-            if (all.length) setTimeout(() => doSome(remaining), Delay);
+            if (remaining.length) setTimeout(() => doSome(remaining), Delay);
         };
 
         doSome(cat);

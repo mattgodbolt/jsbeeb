@@ -79,6 +79,20 @@ describe("SthPicker", () => {
             expect(document.querySelector("#sth .loading").style.display).toBe("none");
         });
 
+        it("gives up a stale render when the list is cleared under it", () => {
+            const picker = make();
+            picker.renderCatalogue(
+                Array.from({ length: 150 }, (_, i) => `GAME${i}.zip`),
+                () => {},
+            );
+            expect(rows()).toHaveLength(100);
+            picker.renderCatalogue(["ONLY.zip"], () => {});
+            vi.runAllTimers();
+            // The first chain's second batch must not append to the new list.
+            expect(rows()).toHaveLength(1);
+            expect(rows()[0].querySelector(".name").textContent).toBe("ONLY.zip");
+        });
+
         it("answers a click with the name and puts the modal away", () => {
             const onClick = vi.fn();
             const picker = make();
