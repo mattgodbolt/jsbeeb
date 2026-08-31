@@ -27,9 +27,9 @@ jobs:
       - name: Unit tests
         run: |
           echo "# Unit tests" >> "$GITHUB_STEP_SUMMARY"
-          npx vitest run --silent=true tests/unit --coverage
+          npm run coverage:unit -- --silent=true
       - name: Coverage report
-        if: always()
+        if: always() && hashFiles('coverage/coverage-summary.json') != ''
         uses: davelosert/vitest-coverage-report-action@v2
         with:
           json-summary-path: coverage/coverage-summary.json
