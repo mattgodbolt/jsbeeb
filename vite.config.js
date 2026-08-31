@@ -23,7 +23,7 @@ export default defineConfig({
         slowTestThreshold: 1000,
         coverage: {
             provider: "v8",
-            reporter: ["text", "html", "lcov"],
+            reporter: ["text", "html", "lcov", "json", "json-summary"],
             include: [
                 "src/**/*.js", // Only include project source files
             ],
