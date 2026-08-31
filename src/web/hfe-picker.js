@@ -41,6 +41,7 @@ export class HfePicker {
                 showArchiveMessage("hfe", "hfe-list", "There was an error accessing the HFE archive");
             },
         );
+        media.addSource("hfe", (path) => this.archive.fetch(path));
 
         this.modal = new bootstrap.Modal(document.getElementById("hfe"));
         document.getElementById("hfe").addEventListener("shown.bs.modal", () => {

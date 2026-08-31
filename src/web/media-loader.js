@@ -50,22 +50,20 @@ function readFileAsBinaryString(file) {
  * URL schema can name, the local file inputs, the drop zone and the built-in
  * list. Choosing what goes in a drive funnels through drives.putDiscIn.
  */
-export class MediaLoader {
+export class MediaLoader extends EventTarget {
     /**
      * @param {object} deps
-     * @param {object} deps.sources fetchers keyed by schema: sth, tapeSth and hfe
-     *   resolve an archive name to image data; drive loads a Google Drive file
      * @param {Function} deps.isSnapshotFile says whether a dropped file is a save state
      * @param {Function} deps.loadSnapshot restores a dropped save state
      */
-    constructor({ processor, model, drives, urlState, config, modals, sources, isSnapshotFile, loadSnapshot }) {
+    constructor({ processor, model, drives, urlState, modals, isSnapshotFile, loadSnapshot }) {
+        super();
         this.processor = processor;
         this.model = model;
         this.drives = drives;
         this.urlState = urlState;
-        this.config = config;
         this.modals = modals;
-        this.sources = sources;
+        this.sources = {};
 
         document.getElementById("disc_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
@@ -166,6 +164,11 @@ export class MediaLoader {
         return this.urlState.params;
     }
 
+    /** Register the fetcher behind an image schema; each picker calls this as it is constructed. */
+    addSource(schema, fetcher) {
+        this.sources[schema] = fetcher;
+    }
+
     /** Route tape to the correct interface (ACIA for BBC, PPIA for Atom) */
     setProcessorTape(tape) {
         if (this.model.isAtom) {
@@ -177,17 +180,17 @@ export class MediaLoader {
 
     setDisc1Image(name) {
         this.urlState.set({ disc: undefined, disc1: name });
-        this.config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
+        this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
     }
 
     setDisc2Image(name) {
         this.urlState.set({ disc2: name });
-        this.config.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
+        this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
     }
 
     setTapeImage(name) {
         this.urlState.set({ tape: name });
-        this.config.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
+        this.dispatchEvent(new CustomEvent("media-changed", { detail: { tape: name } }));
     }
 
     async loadHTMLFile(file) {

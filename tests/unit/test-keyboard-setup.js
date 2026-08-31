@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
 import * as utils from "../../src/utils.js";
 
@@ -12,10 +13,11 @@ const keyEvent = (type, which, { alt = false, ctrl = false } = {}) => {
 
 describe("KeyboardSetup", () => {
     let actions;
+    let accessibilitySwitches;
+    let processor;
     let setup;
 
     beforeEach(() => {
-        vi.spyOn(console, "warn").mockImplementation(() => {});
         document.body.innerHTML = "";
         actions = {
             enterDebugger: vi.fn(),
@@ -27,16 +29,8 @@ describe("KeyboardSetup", () => {
             resume: vi.fn(),
             onAnyKeyDown: vi.fn(),
         };
-        setup = new KeyboardSetup(actions);
-    });
-
-    afterEach(() => {
-        vi.restoreAllMocks();
-        document.body.innerHTML = "";
-    });
-
-    const attach = () => {
-        const processor = {
+        accessibilitySwitches = new AccessibilitySwitches();
+        processor = {
             model: { isAtom: false },
             scheduler: {
                 newTask: () => ({
@@ -56,25 +50,24 @@ describe("KeyboardSetup", () => {
                 keyboardEnabled: true,
             },
         };
-        setup.attach({ processor, dbgr: {}, keyLayout: "physical" });
+        setup = new KeyboardSetup({ actions, accessibilitySwitches, processor, dbgr: {}, keyLayout: "physical" });
         setup.setRunning(true);
-        return processor;
-    };
+    });
 
-    describe("the user port", () => {
-        it("reads as no switches pressed to begin with", () => {
-            expect(setup.userPort.read()).toBe(0xff);
-        });
+    afterEach(() => {
+        vi.restoreAllMocks();
+        document.body.innerHTML = "";
+    });
 
+    describe("the accessibility switches", () => {
         it("clears a bit while its switch is held, keys and function keys alike", () => {
-            attach();
             document.dispatchEvent(keyEvent("keydown", utils.keyCodes.K1, { alt: true }));
-            expect(setup.userPort.read()).toBe(0xfe);
+            expect(accessibilitySwitches.userPort.read()).toBe(0xfe);
             document.dispatchEvent(keyEvent("keyup", utils.keyCodes.K1, { alt: true }));
-            expect(setup.userPort.read()).toBe(0xff);
+            expect(accessibilitySwitches.userPort.read()).toBe(0xff);
 
             document.dispatchEvent(keyEvent("keydown", utils.keyCodes.F8, { alt: true }));
-            expect(setup.userPort.read()).toBe(0x7f);
+            expect(accessibilitySwitches.userPort.read()).toBe(0x7f);
         });
     });
 
@@ -87,7 +80,6 @@ describe("KeyboardSetup", () => {
             ["Alt-PageDown", utils.keyCodes.PAGEDOWN, { alt: true }, "openRewind"],
             ["Ctrl-B", utils.keyCodes.B, { ctrl: true }, "openPrinter"],
         ])("%s fires %s on the way down only", (name, which, modifiers, action) => {
-            attach();
             document.dispatchEvent(keyEvent("keydown", which, modifiers));
             expect(actions[action]).toHaveBeenCalledTimes(1);
             document.dispatchEvent(keyEvent("keyup", which, modifiers));
@@ -95,14 +87,12 @@ describe("KeyboardSetup", () => {
         });
 
         it("does nothing without the modifier", () => {
-            const processor = attach();
             document.dispatchEvent(keyEvent("keydown", utils.keyCodes.S));
             expect(actions.enterDebugger).not.toHaveBeenCalled();
             expect(processor.sysvia.keyDown).toHaveBeenCalled();
         });
 
         it("tells the page about every key on the way down", () => {
-            attach();
             document.dispatchEvent(keyEvent("keydown", utils.keyCodes.A));
             expect(actions.onAnyKeyDown).toHaveBeenCalledTimes(1);
         });
@@ -110,18 +100,10 @@ describe("KeyboardSetup", () => {
 
     describe("the keyboard's own events", () => {
         it("routes pause and resume to the loop's actions", () => {
-            attach();
             setup.keyboard.dispatchEvent(new CustomEvent("pause"));
             setup.keyboard.dispatchEvent(new CustomEvent("resume"));
             expect(actions.pause).toHaveBeenCalledTimes(1);
             expect(actions.resume).toHaveBeenCalledTimes(1);
-        });
-    });
-
-    describe("before the keyboard exists", () => {
-        it("swallows raw keys with a warning rather than throwing", () => {
-            expect(() => setup.sendRawKeyboard([1000], false)).not.toThrow();
-            expect(console.warn).toHaveBeenCalled();
         });
     });
 });

@@ -16,6 +16,7 @@ export class GoogleDrivePicker {
         this.modals = modals;
         this.processor = processor;
         this.googleDrive = loader;
+        media.addSource("drive", (cat, layout) => this.load(cat, layout));
 
         this.authEl = document.getElementById("google-drive-auth");
         this.el = document.getElementById("google-drive");
