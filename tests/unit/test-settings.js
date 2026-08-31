@@ -35,6 +35,7 @@ describe("Settings", () => {
         targets = {
             audioHandler: { setAudioOutput: vi.fn(), setSpeakerAmount: vi.fn() },
             display: { setMode: vi.fn() },
+            layout: { resize: vi.fn() },
             quickSettings: { showAudioOutput: vi.fn(), showSpeakerAmount: vi.fn(), showDisplayMode: vi.fn() },
             machine: { emulationConfig: {}, processor: { hasTube: false, tube: {} } },
             keys: { setKeyLayout: vi.fn() },
@@ -115,6 +116,7 @@ describe("Settings", () => {
             const settings = make();
             settings.applyDisplayMode("pal");
             expect(targets.display.setMode).toHaveBeenCalledWith("pal");
+            expect(targets.layout.resize).toHaveBeenCalledTimes(1);
             expect(settings.displayMode).toBe("pal");
             expect(urlState.params.displayMode).toBe("pal");
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
