@@ -84,7 +84,7 @@ export function snapshotMedia(fdcDrives, params) {
 
 /** Saving and restoring states: the menu item, the file input and the reload across a model change. */
 export class SnapshotUI {
-    constructor({ processor, model, video, media, drives, urlState, modals, isRunning, stop, go }) {
+    constructor({ processor, model, video, media, drives, urlState, modals, loop }) {
         this.processor = processor;
         this.model = model;
         this.video = video;
@@ -92,9 +92,7 @@ export class SnapshotUI {
         this.drives = drives;
         this.urlState = urlState;
         this.modals = modals;
-        this.isRunning = isRunning;
-        this.stop = stop;
-        this.go = go;
+        this.loop = loop;
 
         document.getElementById("save-state").addEventListener("click", async (event) => {
             event.preventDefault();
@@ -110,8 +108,8 @@ export class SnapshotUI {
     }
 
     async saveState() {
-        const wasRunning = this.isRunning();
-        if (wasRunning) this.stop(false);
+        const wasRunning = this.loop.isRunning();
+        if (wasRunning) this.loop.stop(false);
         try {
             const manifest = snapshotMedia(this.processor.fdc.drives, this.urlState.params);
             const snapshot = createSnapshot(this.processor, this.model, manifest);
@@ -122,12 +120,12 @@ export class SnapshotUI {
         } catch (e) {
             this.modals.showError("saving state", e);
         }
-        if (wasRunning) this.go();
+        if (wasRunning) this.loop.go();
     }
 
     async loadStateFromFile(file, preReadBuffer) {
-        const wasRunning = this.isRunning();
-        if (wasRunning) this.stop(false);
+        const wasRunning = this.loop.isRunning();
+        if (wasRunning) this.loop.stop(false);
         try {
             const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
             const snapshot = await readSnapshot(arrayBuffer);
@@ -146,7 +144,7 @@ export class SnapshotUI {
         } catch (e) {
             this.modals.showError("loading state", e);
         }
-        if (wasRunning) this.go();
+        if (wasRunning) this.loop.go();
     }
 
     /** Picks up the state a cross-model reload stashed, once the matching machine is up. */

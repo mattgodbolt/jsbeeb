@@ -7,7 +7,7 @@ import { toast } from "./toast.js";
  * if it was running before.
  */
 export class Modals {
-    constructor({ isRunning, stop, go }) {
+    constructor({ loop }) {
         this.errorDialog = document.getElementById("error-dialog");
         this.errorModal = new bootstrap.Modal(this.errorDialog);
         this.loadingDialog = document.getElementById("loading-dialog");
@@ -18,11 +18,11 @@ export class Modals {
 
         let savedRunning = false;
         document.addEventListener("show.bs.modal", () => {
-            if (!this.anyVisible()) savedRunning = isRunning();
-            if (isRunning()) stop(false);
+            if (!this.anyVisible()) savedRunning = loop.isRunning();
+            if (loop.isRunning()) loop.stop(false);
         });
         document.addEventListener("hidden.bs.modal", () => {
-            if (!this.anyVisible() && savedRunning) go();
+            if (!this.anyVisible() && savedRunning) loop.go();
         });
     }
 

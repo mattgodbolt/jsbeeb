@@ -82,9 +82,7 @@ describe("SnapshotUI", () => {
             drives: { putDiscIn: vi.fn() },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
-            isRunning: () => true,
-            stop: vi.fn(),
-            go: vi.fn(),
+            loop: { isRunning: () => true, stop: vi.fn(), go: vi.fn() },
         };
     });
 
@@ -102,16 +100,16 @@ describe("SnapshotUI", () => {
     describe("loading a state", () => {
         it("stops the emulator, reports a file it cannot read, and runs on", async () => {
             await make().loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
-            expect(deps.stop).toHaveBeenCalledWith(false);
+            expect(deps.loop.stop).toHaveBeenCalledWith(false);
             expect(deps.modals.showError).toHaveBeenCalledWith("loading state", expect.anything());
-            expect(deps.go).toHaveBeenCalledTimes(1);
+            expect(deps.loop.go).toHaveBeenCalledTimes(1);
         });
 
         it("leaves a stopped emulator stopped afterwards", async () => {
-            deps.isRunning = () => false;
+            deps.loop.isRunning = () => false;
             await make().loadStateFromFile(null, new Uint8Array([0]).buffer);
-            expect(deps.stop).not.toHaveBeenCalled();
-            expect(deps.go).not.toHaveBeenCalled();
+            expect(deps.loop.stop).not.toHaveBeenCalled();
+            expect(deps.loop.go).not.toHaveBeenCalled();
         });
     });
 

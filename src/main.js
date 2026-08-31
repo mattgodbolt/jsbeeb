@@ -138,12 +138,6 @@ if (cpuMultiplier !== 1) console.log(`CPU multiplier set to ${cpuMultiplier}`);
 const cpuSpeed = model.cyclesPerSecond;
 const clocksPerSecond = (cpuMultiplier * cpuSpeed) | 0;
 
-const modals = new Modals({
-    isRunning: () => loop.isRunning(),
-    stop: (debug) => loop.stop(debug),
-    go: () => loop.go(),
-});
-
 const screenCanvas = document.getElementById("screen");
 const display = new Display({
     screenCanvas,
@@ -187,7 +181,7 @@ const quickSettings = new QuickSettings(
 );
 
 // ------------------------------------------------------------------------
-// The machine, and everything that feeds it.
+// The machine, the loop that runs it, and everything that feeds it.
 // ------------------------------------------------------------------------
 
 // Depends on the settings having applied the URL parameters.
@@ -207,6 +201,34 @@ const machine = new Machine({
     dbgr,
 });
 const processor = machine.processor;
+
+const rewindBuffer = new RewindBuffer(30);
+const loop = new EmulationLoop({
+    processor,
+    display,
+    audioHandler,
+    dbgr,
+    gamepad,
+    keyboard: keys,
+    syncLights: () => frontPanel.syncLights(),
+    rewindBuffer,
+    onRewindCaptured: () => rewindUI.updateButtonState(),
+    clocksPerSecond,
+    cpuSpeed,
+    fastTape: !!parsedQuery.fasttape,
+    audioStatsNode,
+});
+
+const debugPause = document.getElementById("debug-pause");
+const debugPlay = document.getElementById("debug-play");
+loop.addEventListener("running", () => {
+    const running = loop.isRunning();
+    keys.setRunning(running);
+    debugPlay.disabled = running;
+    debugPause.disabled = !running;
+});
+
+const modals = new Modals({ loop });
 
 const drives = new Drives({ fdc: processor.fdc, driveTracks, areYouSure: modals.areYouSure.bind(modals) });
 const media = new MediaLoader({
@@ -257,9 +279,7 @@ const snapshots = new SnapshotUI({
     drives,
     urlState,
     modals,
-    isRunning: () => loop.isRunning(),
-    stop: (debug) => loop.stop(debug),
-    go: () => loop.go(),
+    loop,
 });
 
 const inputs = new AnalogueInputs({
@@ -285,43 +305,15 @@ keys.attach({ processor, dbgr, keyLayout });
 const frontPanel = new FrontPanel({ processor, model, printer });
 
 // ------------------------------------------------------------------------
-// Running it: the loop, rewind and the visualiser.
+// Rewind, the visualiser and the layout.
 // ------------------------------------------------------------------------
-
-const rewindBuffer = new RewindBuffer(30);
-const loop = new EmulationLoop({
-    processor,
-    display,
-    audioHandler,
-    dbgr,
-    gamepad,
-    keyboard: keys,
-    syncLights: () => frontPanel.syncLights(),
-    rewindBuffer,
-    onRewindCaptured: () => rewindUI.updateButtonState(),
-    clocksPerSecond,
-    cpuSpeed,
-    fastTape: !!parsedQuery.fasttape,
-    audioStatsNode,
-});
-
-const debugPause = document.getElementById("debug-pause");
-const debugPlay = document.getElementById("debug-play");
-loop.addEventListener("running", () => {
-    const running = loop.isRunning();
-    keys.setRunning(running);
-    debugPlay.disabled = running;
-    debugPause.disabled = !running;
-});
 
 const rewindUI = new RewindUI({
     rewindBuffer,
     processor,
     video,
     captureInterval: RewindCaptureInterval,
-    stop: (debug) => loop.stop(debug),
-    go: () => loop.go(),
-    isRunning: () => loop.isRunning(),
+    loop,
 });
 rewindUI.updateButtonState();
 
