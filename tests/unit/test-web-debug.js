@@ -85,6 +85,21 @@ describe("Debugger", () => {
             expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
         });
 
+        it("scrolls back to the instruction at the program counter despite an ambiguous prefix", () => {
+            // Five LDA $41 pairs then $ad give a misaligned parse whose LDA $41a9 swallows
+            // the real LDA #$41 at 2000; only the boost for a run through pc outscores it.
+            for (let i = 0; i < 5; i++) {
+                cpu.writemem(0x1ff5 + i * 2, 0xa5);
+                cpu.writemem(0x1ff6 + i * 2, 0x41);
+            }
+            cpu.writemem(0x1fff, 0xad);
+            dbgr.debug(cpu.pc);
+            keyPress("j");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2002");
+            keyPress("k");
+            expect(currentRow().querySelector(".dis_addr").textContent).toBe("2000");
+        });
+
         it("toggles a breakpoint from the gutter, keeping it across a re-render", () => {
             dbgr.debug(cpu.pc);
             const gutter = () => currentRow().querySelector(".bp_gutter");

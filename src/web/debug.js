@@ -403,7 +403,7 @@ export class Debugger {
             let addr = startingPoint & 0xffff;
             while (addr < address) {
                 const result = this.disassemble(addr);
-                if (result[0] === this.cpu.pc) score += 10; // huge boost if this instruction was executed
+                if (addr === this.cpu.pc) score += 10;
                 if (result[0].match(commonInstructions) && !result[0].match(uncommonInstrucions)) {
                     score++;
                 }
