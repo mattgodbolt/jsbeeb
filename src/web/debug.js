@@ -89,6 +89,48 @@ class MemoryView {
     }
 }
 
+/**
+ * Guesses the address of the instruction before the given one by scoring each
+ * possible run of instructions leading up to it: a point per "common"
+ * instruction (loads, stores, branches, compares, arithmetic and
+ * carry-set/clear that avoid unusual indexing modes) and a large boost for a
+ * run that passes through the current program counter. The highest-scoring
+ * run wins and its last instruction is the answer.
+ * Good test cases:
+ *   Repton 2 @ 2cbb
+ *   MOS @ cfc8
+ * also, just starting from the back of ROM and going up...
+ */
+export function prevInstruction(disassemble, pc, address) {
+    const commonInstructions =
+        /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORR|AND|INC|DEC).*/;
+    const uncommonInstrucions = /.*,\s*([XY]|X\))$/;
+
+    address &= 0xffff;
+    let bestAddr = address - 1;
+    let bestScore = 0;
+    for (let startingPoint = address - 20; startingPoint !== address; startingPoint++) {
+        let score = 0;
+        let addr = startingPoint & 0xffff;
+        while (addr < address) {
+            const result = disassemble(addr);
+            if (addr === pc) score += 10;
+            if (result[0].match(commonInstructions) && !result[0].match(uncommonInstrucions)) {
+                score++;
+            }
+            if (result[1] === address) {
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestAddr = addr;
+                    break;
+                }
+            }
+            addr = result[1];
+        }
+    }
+    return bestAddr;
+}
+
 export class Debugger {
     constructor() {
         this.patchInstructions = new Map();
@@ -382,42 +424,7 @@ export class Debugger {
     }
 
     prevInstruction(address) {
-        // Some attempt at making prevInstruction more accurate; score the sequence of instructions leading
-        // up to the target by counting all "common" instructions as a point. The highest-scoring run of
-        // instructions is picked as the most likely, and the previous from that is used. Common instructions
-        // here mean loads, stores, branches, compares, arithmetic and carry-set/clear that don't use "unusual"
-        // indexing modes like abs,X, abs,Y and (zp,X).
-        // Good test cases:
-        //   Repton 2 @ 2cbb
-        //   MOS @ cfc8
-        // also, just starting from the back of ROM and going up...
-        const commonInstructions =
-            /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORR|AND|INC|DEC).*/;
-        const uncommonInstrucions = /.*,\s*([XY]|X\))$/;
-
-        address &= 0xffff;
-        let bestAddr = address - 1;
-        let bestScore = 0;
-        for (let startingPoint = address - 20; startingPoint !== address; startingPoint++) {
-            let score = 0;
-            let addr = startingPoint & 0xffff;
-            while (addr < address) {
-                const result = this.disassemble(addr);
-                if (addr === this.cpu.pc) score += 10;
-                if (result[0].match(commonInstructions) && !result[0].match(uncommonInstrucions)) {
-                    score++;
-                }
-                if (result[1] === address) {
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestAddr = addr;
-                        break;
-                    }
-                }
-                addr = result[1];
-            }
-        }
-        return bestAddr;
+        return prevInstruction((addr) => this.disassemble(addr), this.cpu.pc, address);
     }
 
     updatePrevMem() {
