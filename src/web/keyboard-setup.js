@@ -2,19 +2,22 @@ import * as utils from "../utils.js";
 import { Keyboard } from "../keyboard.js";
 import { showNotice } from "./reporting.js";
 
+const PasteBoxId = "paste-text";
+const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
+
 /** The page's keyboard: the emulated one and the browser shortcuts around it. */
 export class KeyboardSetup {
     /**
      * @param {object} opts
      * @param {object} opts.actions what each shortcut does, supplied late-bound:
      *   enterDebugger, reload, toggleFast, openRewind, openPrinter,
-     *   pause, resume, onAnyKeyDown
+     *   pause, resume, paste, onAnyKeyDown
      * @param {import("./accessibility-switches.js").AccessibilitySwitches} opts.accessibilitySwitches
      */
     constructor({ actions, accessibilitySwitches, processor, dbgr, keyLayout }) {
         const keyboard = (this.keyboard = new Keyboard({
             processor,
-            inputEnabledFunction: () => document.activeElement && document.activeElement.id === "paste-text",
+            inputEnabledFunction: () => document.activeElement && document.activeElement.id === PasteBoxId,
             keyLayout,
             dbgr,
         }));
@@ -62,6 +65,11 @@ export class KeyboardSetup {
         });
         document.addEventListener("keypress", (evt) => keyboard.keyPress(evt));
         document.addEventListener("keyup", (evt) => keyboard.keyUp(evt));
+        document.addEventListener("paste", (evt) => {
+            const target = document.activeElement;
+            if (target && target.id !== PasteBoxId && target.matches(TypingTargets)) return;
+            actions.paste(evt.clipboardData.getData("text/plain"));
+        });
     }
 
     sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {

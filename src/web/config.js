@@ -216,6 +216,9 @@ export class Config extends EventTarget {
     setModel(modelName) {
         this.model = findModel(modelName);
         for (const el of document.querySelectorAll(".bbc-model")) el.textContent = this.model.name;
+        for (const el of document.querySelectorAll(".bbc-model-short")) el.textContent = this.model.shortName;
+        const settingsLink = document.getElementById("model-settings");
+        if (settingsLink) settingsLink.title = `${this.model.name}: emulation settings`;
     }
 
     setKeyLayout(keyLayout) {

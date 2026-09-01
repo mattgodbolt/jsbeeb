@@ -4,11 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
 import * as utils from "../../src/utils.js";
-import { teardownDom } from "./helpers.js";
+import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 const keyEvent = (type, which, { alt = false, ctrl = false } = {}) => {
     const event = new KeyboardEvent(type, { altKey: alt, ctrlKey: ctrl, cancelable: true });
     Object.defineProperty(event, "which", { value: which });
+    return event;
+};
+
+const pasteEvent = (text) => {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { getData: () => text } });
     return event;
 };
 
@@ -28,6 +34,7 @@ describe("KeyboardSetup", () => {
             openPrinter: vi.fn(),
             pause: vi.fn(),
             resume: vi.fn(),
+            paste: vi.fn(),
             onAnyKeyDown: vi.fn(),
         };
         accessibilitySwitches = new AccessibilitySwitches();
@@ -93,6 +100,29 @@ describe("KeyboardSetup", () => {
         it("tells the page about every key on the way down", () => {
             document.dispatchEvent(keyEvent("keydown", utils.keyCodes.A));
             expect(actions.onAnyKeyDown).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe("pasting", () => {
+        beforeEach(() => domFromIndexHtml("paste-form"));
+
+        it("goes to the machine when nothing on the page has focus", () => {
+            document.body.dispatchEvent(pasteEvent("PRINT 1\n"));
+            expect(actions.paste).toHaveBeenCalledWith("PRINT 1\n");
+        });
+
+        it("goes to the machine from the paste box", () => {
+            const box = document.getElementById("paste-text");
+            box.focus();
+            box.dispatchEvent(pasteEvent("*CAT"));
+            expect(actions.paste).toHaveBeenCalledWith("*CAT");
+        });
+
+        it("is left to any other field being typed into", () => {
+            const field = document.body.appendChild(document.createElement("input"));
+            field.focus();
+            field.dispatchEvent(pasteEvent("not for the Beeb"));
+            expect(actions.paste).not.toHaveBeenCalled();
         });
     });
 

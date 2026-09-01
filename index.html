@@ -40,7 +40,9 @@
   <body>
     <nav id="header-bar" class="navbar navbar-dark bg-dark navbar-expand-lg not-electron" role="navigation">
       <div class="container-fluid">
-        <a class="navbar-brand" href="https://bbc.xania.org/" target="_top">jsbeeb</a>
+        <a class="navbar-brand" href="https://bbc.xania.org/" target="_top" title="jsbeeb">
+          <img src="/jsbeeb-icon.png" alt="jsbeeb" width="28" height="28" />
+        </a>
         <button
           class="navbar-toggler"
           type="button"
@@ -55,8 +57,14 @@
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
           <ul class="navbar-nav nav mb-2 mb-lg-0">
             <li class="nav-item">
-              <a href="#configuration" class="nav-link" data-bs-toggle="modal" data-bs-target="#configuration">
-                <span class="bbc-model">BBC B</span></a
+              <a
+                href="#configuration"
+                class="nav-link"
+                id="model-settings"
+                data-bs-toggle="modal"
+                data-bs-target="#configuration"
+                title="Emulation settings"
+                >&#x2699;&#xfe0f; <span class="bbc-model-short">BBC B</span></a
               >
             </li>
             <li class="nav-item dropdown embed-hide">
@@ -204,6 +212,11 @@
                 <li><a href="#" id="fs" class="dropdown-item">Fullscreen</a></li>
                 <li><a href="#help" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#help">Help</a></li>
                 <li>
+                  <a href="https://bbcmic.ro/" class="dropdown-item" target="_blank" rel="noopener"
+                    >Edit BBC BASIC with Owlet (bbcmic.ro)</a
+                  >
+                </li>
+                <li>
                   <a href="#pp-tos" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#pp-tos"
                     >Privacy Policy &amp; ToS</a
                   >
@@ -222,11 +235,11 @@
               </ul>
             </li>
           </ul>
-          <span class="navbar-text m-auto">
+          <span class="navbar-text ms-auto px-3 d-none d-xxl-inline">
             Edit BBC BASIC interactively with Owlet at
             <a href="https://bbcmic.ro/" target="_blank">bbcmic.ro</a>!
           </span>
-          <div class="d-flex align-items-center me-3" id="quick-settings">
+          <div class="d-flex align-items-center ms-auto me-3" id="quick-settings">
             <div class="btn-group btn-group-sm" role="group" aria-label="Sound output" id="audio-output">
               <button
                 type="button"
@@ -298,14 +311,14 @@
               &#x23f8;
             </button>
           </div>
-          <form class="d-flex">
+          <form class="d-flex" id="paste-form">
             <input
               id="paste-text"
-              class="form-control me-2"
+              class="form-control"
               type="text"
               maxlength="0"
-              placeholder="Paste text or drop files here..."
-              aria-label="Search"
+              placeholder="Paste / drop here"
+              aria-label="Paste text or drop files here"
             />
           </form>
         </div>
@@ -975,7 +988,7 @@
       <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="configurationModalLabel">Emulation Configuration</h5>
+            <h5 class="modal-title" id="configurationModalLabel"><span class="bbc-model"></span> settings</h5>
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body">

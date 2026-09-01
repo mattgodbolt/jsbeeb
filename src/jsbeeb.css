@@ -560,6 +560,20 @@ small {
   flex: none;
 }
 
+#header-bar .navbar-brand img {
+  display: block;
+}
+
+#paste-form {
+  flex: 1 1 6rem;
+  min-width: 0;
+  max-width: 14rem;
+}
+
+#paste-text {
+  min-width: 0;
+}
+
 /* The only item in the header with no bound on its width, so it is the one that yields. */
 #disc-name {
   flex: 1;

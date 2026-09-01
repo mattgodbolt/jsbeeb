@@ -196,6 +196,7 @@ const keys = new KeyboardSetup({
         openPrinter: () => frontPanel.checkPrinterWindow(),
         pause: () => loop.stop(false),
         resume: () => loop.go(),
+        paste: (text) => keys.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
         onAnyKeyDown: () => {
             audioHandler.tryResume();
             inputs.ensureMicrophoneRunning();
@@ -332,12 +333,7 @@ settings.wire({ audioHandler, display, layout, quickSettings, machine, keys, inp
 
 for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
 
-const pastetext = document.getElementById("paste-text");
-pastetext.closest("form").addEventListener("submit", (event) => event.preventDefault());
-pastetext.addEventListener("paste", function (event) {
-    const text = event.clipboardData.getData("text/plain");
-    keys.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true);
-});
+document.getElementById("paste-form").addEventListener("submit", (event) => event.preventDefault());
 
 window.addEventListener("blur", function () {
     keys.clearKeys();

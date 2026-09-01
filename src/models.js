@@ -19,9 +19,23 @@ const CpuModel = Object.freeze({
  * to any number of machines without one session's settings leaking into the next.
  */
 class Model {
-    constructor({ name, synonyms, os, cpuModel, isMaster, isAtom, swram, fdc, cmosOverride, banks, clockMhz } = {}) {
+    constructor({
+        name,
+        shortName = name,
+        synonyms,
+        os,
+        cpuModel,
+        isMaster,
+        isAtom,
+        swram,
+        fdc,
+        cmosOverride,
+        banks,
+        clockMhz,
+    } = {}) {
         if (!(clockMhz > 0)) throw new Error(`Model ${name} has no clock speed`);
         this.name = name;
+        this.shortName = shortName;
         this.synonyms = synonyms;
         this.os = os;
         this.clockMhz = clockMhz;
@@ -79,6 +93,7 @@ function pickDfs(cmos) {
 function atomModel({ name, synonyms, os, banks }) {
     return new Model({
         name,
+        shortName: "Atom",
         synonyms,
         os,
         cpuModel: CpuModel.MOS6502,
@@ -132,6 +147,7 @@ const masterSwram = [
 export const allModels = [
     new Model({
         name: "BBC B with 8271 (DFS 1.2)",
+        shortName: "BBC B",
         synonyms: ["B-DFS1.2", "BBC B with DFS 1.2"],
         os: ["os.rom", "BASIC.ROM", "b/DFS-1.2.rom"],
         cpuModel: CpuModel.MOS6502,
@@ -142,6 +158,7 @@ export const allModels = [
     }),
     new Model({
         name: "BBC B with 8271 (DFS 0.9)",
+        shortName: "BBC B",
         synonyms: ["B-DFS0.9", "B", "BBC B with DFS 0.9"],
         os: ["os.rom", "BASIC.ROM", "b/DFS-0.9.rom"],
         cpuModel: CpuModel.MOS6502,
@@ -152,6 +169,7 @@ export const allModels = [
     }),
     new Model({
         name: "BBC B with 1770 (DFS)",
+        shortName: "BBC B",
         synonyms: ["B1770"],
         os: ["os.rom", "BASIC.ROM", "b1770/dfs1770.rom", "b1770/zADFS.ROM"],
         cpuModel: CpuModel.MOS6502,
@@ -163,6 +181,7 @@ export const allModels = [
     // putting ADFS in a higher ROM slot gives it priority
     new Model({
         name: "BBC B with 1770 (ADFS)",
+        shortName: "BBC B",
         synonyms: ["B1770A"],
         os: ["os.rom", "BASIC.ROM", "b1770/zADFS.ROM", "b1770/dfs1770.rom"],
         cpuModel: CpuModel.MOS6502,
@@ -173,6 +192,7 @@ export const allModels = [
     }),
     new Model({
         name: "BBC Master 128 (DFS)",
+        shortName: "Master 128",
         synonyms: ["Master"],
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
@@ -184,6 +204,7 @@ export const allModels = [
     }),
     new Model({
         name: "BBC Master 128 (ADFS)",
+        shortName: "Master 128",
         synonyms: ["MasterADFS"],
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
@@ -195,6 +216,7 @@ export const allModels = [
     }),
     new Model({
         name: "BBC Master 128 (ANFS)",
+        shortName: "Master 128",
         synonyms: ["MasterANFS"],
         os: ["master/mos3.20"],
         cpuModel: CpuModel.CMOS65C12,
