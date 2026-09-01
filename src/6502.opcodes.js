@@ -773,7 +773,7 @@ const { opcodes: opcodes6502, undocumented: undocumented6502 } = splitUndocument
     0xf0: "BEQ branch",
     0xf1: "SBC (),y",
     0xf3: "*ISB (),y",
-    0xf4: "*NOP zpx",
+    0xf4: "*NOP zp,x",
     0xf5: "SBC zp,x",
     0xf6: "INC zp,x",
     0xf7: "*ISB zp,x",
@@ -1034,7 +1034,7 @@ class Disassemble6502 {
         const [mnemonic, ...rest] = opcode.split(" ");
         const split = [(this.undocumented.has(opcodeByte) ? "*" : "") + mnemonic, ...rest];
         if (!split[1]) {
-            return [opcode, addr + 1];
+            return [split[0], addr + 1];
         }
         let param = split[1] || "";
         let suffix = "";
@@ -1059,6 +1059,14 @@ class Disassemble6502 {
             }
             case "zp":
                 return [`${split[0]} $${hexbyte(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
+            case "zp,branch": {
+                const destAddr = addr + signExtend(this.cpu.peekmem(addr + 2)) + 3;
+                return [
+                    `${split[0]} $${hexbyte(this.cpu.peekmem(addr + 1))}, $${formatJumpAddr(destAddr)}`,
+                    addr + 3,
+                    destAddr,
+                ];
+            }
             case "(,x)":
                 return [`${split[0]} ($${hexbyte(this.cpu.peekmem(addr + 1))}, X)${suffix}`, addr + 2];
             case "()": {
@@ -1081,7 +1089,7 @@ class Disassemble6502 {
                 return [`${split[0]} ($${formatJumpAddr(destAddr)},x)${suffix}`, addr + 3, indDest];
             }
         }
-        return [opcode, addr + 1];
+        return [split.join(" "), addr + 1];
     }
 
     nextInstruction(address) {
@@ -1171,7 +1179,6 @@ function makeCpuFunctions(cpu, opcodes, undocumented, is65c12, cycleAccurate = t
                 return ig.render();
 
             case "zp":
-            case "zpx": // Seems to be enough to keep tests happy, but needs investigation.
             case "zp,x":
             case "zp,y":
                 if (arg === "zp") {

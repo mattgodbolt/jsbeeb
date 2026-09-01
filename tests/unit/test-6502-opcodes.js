@@ -64,10 +64,22 @@ describe("Disassemble6502", () => {
             expect(disassembler.disassemble(0x2000)[0]).toMatch(/^SBC/);
         });
 
+        it("marks one-byte and zero-page,X undocumented NOPs and sizes them correctly", () => {
+            mem.set([0x1a, 0xf4, 0x41], 0x2000);
+            expect(disassembler.disassemble(0x2000)).toEqual(["*NOP", 0x2001]);
+            expect(disassembler.disassemble(0x2001, true)).toEqual(["*NOP $41,X", 0x2003]);
+        });
+
         it("knows the NMOS part has 151 documented opcodes", () => {
             expect(countDocumented(disassembler)).toBe(151);
             mem[0] = 0x02;
             expect(disassembler.isDocumented(0)).toBe(false);
+        });
+
+        it("disassembles the 65C02 bit branches as three bytes", () => {
+            const disassembler65c02 = cpu65c02Opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            mem.set([0x0f, 0x41, 0x10], 0x2000);
+            expect(disassembler65c02.disassemble(0x2000, true)).toEqual(["BBR0 $41, $2013", 0x2003, 0x2013]);
         });
 
         it("treats every listed 65C02 opcode as documented", () => {
