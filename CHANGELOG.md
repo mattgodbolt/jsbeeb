@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.22.4](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.3...v1.22.4) (2026-09-01)
+
+
+### Bug Fixes
+
+* guard filestore access when Econet is not fitted ([#1009](https://github.com/mattgodbolt/jsbeeb/issues/1009)) ([37528e9](https://github.com/mattgodbolt/jsbeeb/commit/37528e9018497b25104044d5f72fc3c5aa759966))
+* keep the emulator paused behind a save or load state error dialog ([#1006](https://github.com/mattgodbolt/jsbeeb/issues/1006)) ([d43437c](https://github.com/mattgodbolt/jsbeeb/commit/d43437c793989e35ed59668eb93def04b1ca35a2))
+* load http and zipped ROMs on the Atom ([#1011](https://github.com/mattgodbolt/jsbeeb/issues/1011)) ([1752202](https://github.com/mattgodbolt/jsbeeb/commit/1752202bb2c92efed40acdc2b2eb0af420f0dad1))
+* record the default boot disc in save states and verify discs on restore ([#1008](https://github.com/mattgodbolt/jsbeeb/issues/1008)) ([033dc8d](https://github.com/mattgodbolt/jsbeeb/commit/033dc8d50c81675d7ebd8d11d6ecfd898fbfd49a))
+* score the debugger's back-disassembly boost on the address, not the text ([#1005](https://github.com/mattgodbolt/jsbeeb/issues/1005)) ([fe1d685](https://github.com/mattgodbolt/jsbeeb/commit/fe1d685c97b2fb8f4c385cd9a9fc97a4fa853284))
+* stop a failed Google Drive load reaching the drive as undefined ([#1007](https://github.com/mattgodbolt/jsbeeb/issues/1007)) ([5a5c8eb](https://github.com/mattgodbolt/jsbeeb/commit/5a5c8eb9edb4fb82dee6b02431ebf56595c051d6))
+* stop machine construction mutating the shared CMOS defaults ([#1004](https://github.com/mattgodbolt/jsbeeb/issues/1004)) ([66ab645](https://github.com/mattgodbolt/jsbeeb/commit/66ab64544a5250d394783d06dfe869efbacc8ea0))
+* throw when extra ROMs exceed the free sideways banks ([#1010](https://github.com/mattgodbolt/jsbeeb/issues/1010)) ([02720c4](https://github.com/mattgodbolt/jsbeeb/commit/02720c446fe5a4df708426e2a7c47e352b8749a6))
+
 ## [1.22.3](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.2...v1.22.3) (2026-08-31)
 
 
