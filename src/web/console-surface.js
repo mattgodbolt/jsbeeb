@@ -1,6 +1,6 @@
 "use strict";
 
-import * as utils from "./../utils.js";
+import * as utils from "../utils.js";
 
 /**
  * The debugging surface the wiki documents, put on `target` (window in the
