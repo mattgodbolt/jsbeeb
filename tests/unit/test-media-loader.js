@@ -190,6 +190,32 @@ describe("MediaLoader", () => {
         });
     });
 
+    describe("the local tape input", () => {
+        // "UEF File!" header, then one data chunk, the least loadTapeFromData accepts.
+        const uefImage = () =>
+            new Uint8Array([
+                0x55, 0x45, 0x46, 0x20, 0x46, 0x69, 0x6c, 0x65, 0x21, 0x00, 0x06, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
+                0x00, 0x41,
+            ]);
+
+        it("routes the file to the cassette interface and takes the tape out of the URL", async () => {
+            deps.urlState.params.tape = "old.uef";
+            make();
+            await pickFile("tape_load", fileFor("mine.uef", uefImage()));
+            await vi.waitFor(() => expect(deps.processor.acia.setTape).toHaveBeenCalled());
+            expect(deps.processor.acia.setTape.mock.calls[0][0]).toBeTruthy();
+            expect(deps.urlState.params.tape).toBeUndefined();
+            expect(deps.modals.hide).toHaveBeenCalledWith("tapes");
+        });
+
+        it("reports a file the tape code cannot take", async () => {
+            make();
+            await pickFile("tape_load", fileFor("noise.uef", new Uint8Array(12)));
+            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Could not load noise.uef")]));
+            expect(deps.processor.acia.setTape).not.toHaveBeenCalled();
+        });
+    });
+
     describe("the drop zone", () => {
         const drop = (file) => {
             const event = new Event("drop", { bubbles: true, cancelable: true });
