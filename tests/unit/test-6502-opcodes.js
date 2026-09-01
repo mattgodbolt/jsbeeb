@@ -38,11 +38,46 @@ describe("Disassemble6502", () => {
         expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
     });
 
-    it("treats the 65C02's bit instructions as documented", () => {
+    it("keeps a run ending in a documented 65C02 instruction", () => {
         const disassembler65c02 = cpu65c02Opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
         mem.set([0x07, 0x41], 0x1ffe);
         expect(disassembler65c02.disassemble(0x1ffe)[0]).toMatch(/^RMB0/);
         expect(disassembler65c02.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
+    });
+
+    describe("documented and undocumented opcodes", () => {
+        const countDocumented = (dis) => {
+            let count = 0;
+            for (let op = 0; op < 256; op++) {
+                mem[0] = op;
+                if (dis.isDocumented(0)) count++;
+            }
+            return count;
+        };
+
+        it("marks the NMOS part's undocumented instructions in the listing", () => {
+            mem.set([0x03, 0x41], 0x2000);
+            expect(disassembler.disassemble(0x2000)[0]).toMatch(/^\*SLO/);
+            mem.set([0xeb, 0x41], 0x2000);
+            expect(disassembler.disassemble(0x2000)[0]).toMatch(/^\*SBC/);
+            mem.set([0xe9, 0x41], 0x2000);
+            expect(disassembler.disassemble(0x2000)[0]).toMatch(/^SBC/);
+        });
+
+        it("knows the NMOS part has 151 documented opcodes", () => {
+            expect(countDocumented(disassembler)).toBe(151);
+            mem[0] = 0x02;
+            expect(disassembler.isDocumented(0)).toBe(false);
+        });
+
+        it("treats every listed 65C02 opcode as documented", () => {
+            const disassembler65c02 = cpu65c02Opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+            for (let op = 0; op < 256; op++) {
+                mem[0] = op;
+                const text = disassembler65c02.disassemble(0)[0];
+                expect(disassembler65c02.isDocumented(0)).toBe(text !== "???");
+            }
+        });
     });
 
     it("returns the previous instruction in an unambiguous run", () => {
