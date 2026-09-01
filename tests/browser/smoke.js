@@ -230,8 +230,9 @@ class Page {
         return waitUntil(`"${text}" on the screen`, async () => (await this.screenText()).includes(text), timeoutMs);
     }
 
+    // currentCycles wraps every emulated second; the seconds term keeps this monotonic.
     async cycles() {
-        return this.evaluate("processor.currentCycles");
+        return this.evaluate("processor.cycleSeconds * processor.model.cyclesPerSecond + processor.currentCycles");
     }
 
     click(selector) {
