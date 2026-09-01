@@ -16,6 +16,18 @@ describe("Disassemble6502", () => {
         expect(disassembler.nextInstruction(0x2003)).toBe(0x2004);
     });
 
+    it("wraps round from the bottom of memory", () => {
+        expect(disassembler.prevInstruction(0x0000, 0x1000)).toBe(0xffff);
+    });
+
+    it("counts ORA as a common instruction", () => {
+        for (let i = 0; i < 5; i++) {
+            mem[0x1ff6 + i * 2] = 0x09;
+            mem[0x1ff7 + i * 2] = 0x41;
+        }
+        expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
+    });
+
     it("returns the previous instruction in an unambiguous run", () => {
         expect(disassembler.prevInstruction(0x2002, 0x1000)).toBe(0x2001);
     });

@@ -1077,8 +1077,8 @@ class Disassemble6502 {
      */
     prevInstruction(address, pc) {
         const commonInstructions =
-            /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORR|AND|INC|DEC).*/;
-        const uncommonInstrucions = /.*,\s*([XY]|X\))$/;
+            /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC).*/;
+        const uncommonInstructions = /.*,\s*([XY]|X\))$/;
 
         address &= 0xffff;
         let bestAddr = address - 1;
@@ -1089,7 +1089,7 @@ class Disassemble6502 {
             while (addr < address) {
                 const result = this.disassemble(addr);
                 if (addr === pc) score += 10;
-                if (result[0].match(commonInstructions) && !result[0].match(uncommonInstrucions)) {
+                if (result[0].match(commonInstructions) && !result[0].match(uncommonInstructions)) {
                     score++;
                 }
                 if (result[1] === address) {
@@ -1102,7 +1102,7 @@ class Disassemble6502 {
                 addr = result[1];
             }
         }
-        return bestAddr;
+        return bestAddr & 0xffff;
     }
 }
 
