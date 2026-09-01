@@ -1,7 +1,6 @@
 import * as disc from "../fdc.js";
 import { DiscLayout } from "../disc.js";
 import { downloadBlob } from "../dom-utils.js";
-import { toast } from "./toast.js";
 import {
     createSnapshot,
     restoreSnapshot,
@@ -58,9 +57,14 @@ async function readSnapshot(arrayBuffer) {
  * where they have one, the image bytes where they do not, and CRCs for
  * saying when a source has changed underneath a state.
  */
-export function snapshotMedia(fdcDrives, params) {
+export function snapshotMedia(fdcDrives, params, defaultBootDisc) {
     const manifest = {};
+    const drive0Disc = fdcDrives[0].disc;
     if (params.disc1 || params.disc) manifest.disc1 = params.disc1 || params.disc;
+    // A default boot loads the built-in disc without naming it in the URL; record it by
+    // name so the state can reload it, but only while that disc is still in the drive.
+    else if (defaultBootDisc && drive0Disc && drive0Disc.name === defaultBootDisc && !drive0Disc.originalImageData)
+        manifest.disc1 = defaultBootDisc;
     if (params.disc2) manifest.disc2 = params.disc2;
 
     // For each drive with a disc loaded, include CRC32 for verification
@@ -84,7 +88,7 @@ export function snapshotMedia(fdcDrives, params) {
 
 /** Saving and restoring states: the menu item, the file input and the reload across a model change. */
 export class SnapshotUI {
-    constructor({ processor, model, video, media, drives, urlState, modals, loop }) {
+    constructor({ processor, model, video, media, drives, urlState, modals, loop, defaultBootDisc }) {
         this.processor = processor;
         this.model = model;
         this.video = video;
@@ -93,6 +97,7 @@ export class SnapshotUI {
         this.urlState = urlState;
         this.modals = modals;
         this.loop = loop;
+        this.defaultBootDisc = defaultBootDisc;
 
         document.getElementById("save-state").addEventListener("click", async (event) => {
             event.preventDefault();
@@ -112,7 +117,7 @@ export class SnapshotUI {
         if (wasRunning) this.loop.stop(false);
         let failure = null;
         try {
-            const manifest = snapshotMedia(this.processor.fdc.drives, this.urlState.params);
+            const manifest = snapshotMedia(this.processor.fdc.drives, this.urlState.params, this.defaultBootDisc);
             const snapshot = createSnapshot(this.processor, this.model, manifest);
             const json = snapshotToJSON(snapshot);
             const blob = await compressBlob(new Blob([json]));
@@ -198,16 +203,38 @@ export class SnapshotUI {
                 // Retain the image bytes so subsequent saves can re-embed them.
                 loadedDisc.setOriginalImage(imageData);
             }
-            if (!loadedDisc) continue;
-
-            // Verify CRC32 if present
-            if (savedMedia[crcKey] != null && loadedDisc.originalImageCrc32 != null) {
-                if (loadedDisc.originalImageCrc32 !== savedMedia[crcKey]) {
-                    toast(
-                        `${loadedDisc.name} has changed since this state was saved. The state has been restored anyway and may not run correctly.`,
-                        { title: "Restoring state" },
+            if (!loadedDisc) {
+                if (savedMedia[crcKey] != null) {
+                    // A state may name no source (older default-boot saves); the disc
+                    // already in the drive can still satisfy the CRC, but only laid out
+                    // the way the state's dirty tracks expect.
+                    const currentDisc = this.processor.fdc.drives[driveIndex].disc;
+                    const currentLayout = currentDisc?.is40Track ? DiscLayout.expanded40 : DiscLayout.contiguous;
+                    if (
+                        currentDisc &&
+                        currentDisc.originalImageCrc32 === savedMedia[crcKey] &&
+                        currentLayout === layout
+                    )
+                        continue;
+                    const problem = savedMedia[discKey]
+                        ? `The disc for drive ${driveIndex} (${savedMedia[discKey]}) could not be reloaded`
+                        : `This state does not record where the disc in drive ${driveIndex} came from`;
+                    throw new Error(
+                        `${problem}, and the drive does not hold a matching disc. ` +
+                            `Load the right disc, then load the state again.`,
                     );
                 }
+                continue;
+            }
+
+            if (
+                savedMedia[crcKey] != null &&
+                loadedDisc.originalImageCrc32 != null &&
+                loadedDisc.originalImageCrc32 !== savedMedia[crcKey]
+            ) {
+                throw new Error(
+                    `${loadedDisc.name} has changed since this state was saved, so the state cannot be restored over it.`,
+                );
             }
 
             this.drives.putDiscIn(driveIndex, loadedDisc);

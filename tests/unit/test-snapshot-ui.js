@@ -46,6 +46,31 @@ describe("snapshot media manifest", () => {
         expect(manifest.disc2).toBe("b.ssd");
         expect(manifest.disc2Crc32).toBe(0x1234);
     });
+
+    const defaultBootDisc = { ...urlDisc, name: "elite.ssd" };
+
+    it("names the default built-in disc when the URL names none", () => {
+        const manifest = snapshotMedia([{ disc: defaultBootDisc }, { disc: null }], {}, "elite.ssd");
+        expect(manifest.disc1).toBe("elite.ssd");
+        expect(manifest.disc1Crc32).toBe(0x1234);
+    });
+
+    it("prefers the URL's disc over the default boot disc", () => {
+        const manifest = snapshotMedia([{ disc: urlDisc }, { disc: null }], { disc1: "sth:OTHER.zip" }, "elite.ssd");
+        expect(manifest.disc1).toBe("sth:OTHER.zip");
+    });
+
+    it("embeds a local disc rather than naming the default it replaced", () => {
+        const manifest = snapshotMedia([{ disc: localDisc }, { disc: null }], {}, "elite.ssd");
+        expect(manifest.disc1).toBeUndefined();
+        expect(manifest.disc1ImageData).toBe(localDisc.originalImageData);
+    });
+
+    it("does not name the default when the drive holds something else", () => {
+        const swappedIn = { ...urlDisc, name: "other.ssd" };
+        const manifest = snapshotMedia([{ disc: swappedIn }, { disc: null }], {}, "elite.ssd");
+        expect(manifest.disc1).toBeUndefined();
+    });
 });
 
 describe("isSnapshotFile", () => {
@@ -211,11 +236,52 @@ describe("SnapshotUI", () => {
             expect(toasts()).toEqual([]);
         });
 
-        it("warns when the source has changed under the state", async () => {
+        it("refuses to restore when the source has changed under the state", async () => {
             deps.media.loadDiscImage.mockResolvedValue({ name: "ELITE.ssd", originalImageCrc32: 0x9999 });
-            await make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 });
-            expect(toasts()).toEqual([expect.stringContaining("ELITE.ssd has changed since this state was saved")]);
-            expect(deps.drives.putDiscIn).toHaveBeenCalled();
+            await expect(make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 })).rejects.toThrow(
+                "ELITE.ssd has changed since this state was saved",
+            );
+            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+        });
+
+        it("refuses to restore over an empty drive when the state has a CRC but no source", async () => {
+            await expect(make().reloadSnapshotMedia({ disc1Crc32: 0x1234 })).rejects.toThrow(
+                "does not record where the disc in drive 0 came from",
+            );
+            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+        });
+
+        it("refuses to restore over a different disc when the state has a CRC but no source", async () => {
+            deps.processor.fdc.drives[0].disc = { name: "other.ssd", originalImageCrc32: 0x9999 };
+            await expect(make().reloadSnapshotMedia({ disc1Crc32: 0x1234 })).rejects.toThrow(
+                "does not hold a matching disc",
+            );
+            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+        });
+
+        it("accepts a sourceless state when the drive already holds the matching disc", async () => {
+            deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageCrc32: 0x1234 };
+            await make().reloadSnapshotMedia({ disc1Crc32: 0x1234 });
+            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+        });
+
+        it("rejects a sourceless state when the matching disc is laid out differently", async () => {
+            deps.processor.fdc.drives[0].disc = { name: "elite.ssd", originalImageCrc32: 0x1234, is40Track: true };
+            await expect(
+                make().reloadSnapshotMedia({ disc1Crc32: 0x1234, disc1Layout: DiscLayout.contiguous }),
+            ).rejects.toThrow("does not hold a matching disc");
+        });
+
+        it("round-trips the media of a default-boot session", async () => {
+            const bootDisc = { name: "elite.ssd", originalImageCrc32: 0x1234, is40Track: false };
+            deps.processor.fdc.drives[0].disc = bootDisc;
+            deps.defaultBootDisc = "elite.ssd";
+            const ui = make();
+            const manifest = snapshotMedia(deps.processor.fdc.drives, deps.urlState.params, deps.defaultBootDisc);
+            deps.media.loadDiscImage.mockResolvedValue(bootDisc);
+            await ui.reloadSnapshotMedia(manifest);
+            expect(deps.media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.contiguous);
+            expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, bootDisc);
         });
 
         it("rebuilds an embedded local disc and keeps it out of the URL", async () => {
