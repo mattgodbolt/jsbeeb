@@ -31,8 +31,8 @@ const BootTimeoutMs = 30000;
 const StepTimeoutMs = 10000;
 const ServerTimeoutMs = 30000;
 const KeyHoldMs = 120;
-const OneRowWidth = 2000;
-const LaptopWidths = [1280, 1440];
+const OneRowWidth = 4000;
+const LaptopWidths = [1024, 1280, 1400, 1440, 1512, 1536, 1600];
 const ConsoleSurface = [
     "processor",
     "video",
@@ -254,7 +254,18 @@ class Page {
         return this.evaluate(`(() => {
             const bar = document.getElementById("header-bar");
             const paste = document.getElementById("paste-text").getBoundingClientRect();
-            return { height: bar.offsetHeight, pasteFits: paste.width > 0 && paste.right <= innerWidth };
+            const promo = bar.querySelector(".navbar-text");
+            const promoState = () => {
+                if (getComputedStyle(promo).display === "none") return "hidden";
+                if (promo.getBoundingClientRect().right > promo.nextElementSibling.getBoundingClientRect().left)
+                    return "overflowing";
+                return promo.scrollWidth > promo.clientWidth ? "truncated" : "fits";
+            };
+            return {
+                height: bar.offsetHeight,
+                pasteFits: paste.width > 0 && paste.right <= innerWidth,
+                promo: promoState(),
+            };
         })()`);
     }
 }
@@ -279,11 +290,14 @@ check("the top bar is one row at laptop widths", async (page, base) => {
     await page.waitForScreenText(">");
     try {
         const oneRow = await page.headerBar(OneRowWidth);
+        if (oneRow.promo !== "fits") throw new Error(`At ${OneRowWidth}px the Owlet promo is ${oneRow.promo}`);
         for (const width of LaptopWidths) {
             const bar = await page.headerBar(width);
             if (bar.height !== oneRow.height)
                 throw new Error(`At ${width}px the bar is ${bar.height}px tall, not ${oneRow.height}px`);
             if (!bar.pasteFits) throw new Error(`At ${width}px the paste box is off the right edge`);
+            // A wider fallback font truncates the promo near 1400, which is allowed; spilling over the controls is not.
+            if (bar.promo === "overflowing") throw new Error(`At ${width}px the Owlet promo runs into the controls`);
         }
     } finally {
         await page.send("Emulation.clearDeviceMetricsOverride");
