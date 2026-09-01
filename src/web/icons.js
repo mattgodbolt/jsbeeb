@@ -33,11 +33,10 @@ const Icons = {
 
 export const IconNames = Object.freeze(Object.keys(Icons));
 
-/** Puts the named SVG inside every `[data-icon]` element under `root`. */
+/** Puts the named SVG inside every `[data-icon]` element under `root`; an unknown name leaves them all untouched. */
 export function installIcons(root = document) {
-    for (const el of root.querySelectorAll("[data-icon]")) {
-        const svg = Icons[el.dataset.icon];
-        if (!svg) throw new Error(`No icon named ${el.dataset.icon}`);
-        el.innerHTML = svg;
-    }
+    const placeholders = [...root.querySelectorAll("[data-icon]")];
+    const unknown = placeholders.find((el) => !(el.dataset.icon in Icons));
+    if (unknown) throw new Error(`No icon named ${unknown.dataset.icon}`);
+    for (const el of placeholders) el.innerHTML = Icons[el.dataset.icon];
 }

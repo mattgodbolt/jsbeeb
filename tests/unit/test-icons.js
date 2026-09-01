@@ -25,9 +25,10 @@ describe("installIcons", () => {
         expect(document.querySelector("#debug-play svg")).not.toBeNull();
     });
 
-    it("refuses a name outside the bundled set", () => {
+    it("refuses a name outside the bundled set and leaves the page as it was", () => {
         const el = document.body.appendChild(document.createElement("span"));
         el.dataset.icon = "unicorn";
         expect(() => installIcons()).toThrow("No icon named unicorn");
+        expect(document.querySelector("[data-icon] svg")).toBeNull();
     });
 });
