@@ -1,7 +1,8 @@
 // Boots the built page in headless Chrome and exercises the things unit tests
-// cannot see: construction order, Bootstrap, the console surface, and the ids
-// each check below reaches (the toolbar, the settings bar, the loaders, the
-// STH picker); an id nothing here touches is not covered.
+// cannot see: construction order, Bootstrap, the console surface, the top
+// bar's layout at laptop widths, and the ids each check below reaches (the
+// toolbar, the settings bar, the loaders, the STH picker); an id nothing here
+// touches is not covered.
 // Talks to Chrome over the DevTools protocol with Node's own WebSocket.
 //
 //   npm run test:smoke       build, serve dist/ and run every check
@@ -25,6 +26,8 @@ const StepTimeoutMs = 10000;
 const ServerTimeoutMs = 30000;
 const ChromeStartTimeoutMs = 30000;
 const KeyHoldMs = 120;
+const OneRowWidth = 4000;
+const LaptopWidths = [1024, 1280, 1400, 1440, 1512, 1536, 1600];
 const ConsoleSurface = [
     "processor",
     "video",
@@ -253,6 +256,35 @@ class Page {
         this.problems.length = 0;
         return problems;
     }
+
+    setViewportWidth(width) {
+        return this.send("Emulation.setDeviceMetricsOverride", {
+            width,
+            height: 900,
+            deviceScaleFactor: 1,
+            mobile: false,
+        });
+    }
+
+    async headerBar(width) {
+        await this.setViewportWidth(width);
+        return this.evaluate(`(() => {
+            const bar = document.getElementById("header-bar");
+            const paste = document.getElementById("paste-text").getBoundingClientRect();
+            const promo = bar.querySelector(".navbar-text");
+            const promoState = () => {
+                if (getComputedStyle(promo).display === "none") return "hidden";
+                if (promo.getBoundingClientRect().right > promo.nextElementSibling.getBoundingClientRect().left)
+                    return "overflowing";
+                return promo.scrollWidth > promo.clientWidth ? "truncated" : "fits";
+            };
+            return {
+                height: bar.offsetHeight,
+                pasteFits: paste.width > 0 && paste.right <= innerWidth,
+                promo: promoState(),
+            };
+        })()`);
+    }
 }
 
 const checks = [];
@@ -268,6 +300,25 @@ check("boots to the BASIC prompt with a working console surface", async (page, b
     }
     const byte = await page.evaluate("processor.readmem(0)");
     if (typeof byte !== "number") throw new Error(`processor.readmem(0) gave ${byte}`);
+});
+
+check("the top bar is one row at laptop widths", async (page, base) => {
+    await page.goto(base);
+    await page.waitForScreenText(">");
+    try {
+        const oneRow = await page.headerBar(OneRowWidth);
+        if (oneRow.promo !== "fits") throw new Error(`At ${OneRowWidth}px the Owlet promo is ${oneRow.promo}`);
+        for (const width of LaptopWidths) {
+            const bar = await page.headerBar(width);
+            if (bar.height !== oneRow.height)
+                throw new Error(`At ${width}px the bar is ${bar.height}px tall, not ${oneRow.height}px`);
+            if (!bar.pasteFits) throw new Error(`At ${width}px the paste box is off the right edge`);
+            // A wider fallback font truncates the promo near 1400, which is allowed; spilling over the controls is not.
+            if (bar.promo === "overflowing") throw new Error(`At ${width}px the Owlet promo runs into the controls`);
+        }
+    } finally {
+        await page.send("Emulation.clearDeviceMetricsOverride");
+    }
 });
 
 check("typing at the keyboard reaches the machine", async (page, base) => {

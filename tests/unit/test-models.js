@@ -23,6 +23,25 @@ describe("Model", () => {
         expect(findModel("Atom").cyclesPerSecond).toBe(1 * 1000 * 1000);
     });
 
+    it("has a short name for the top bar, and every selectable model has one", () => {
+        const shortNames = Object.fromEntries(allModels.map((model) => [model.name, model.shortName]));
+        expect(shortNames).toEqual({
+            "BBC B with 8271 (DFS 1.2)": "BBC B",
+            "BBC B with 8271 (DFS 0.9)": "BBC B",
+            "BBC B with 1770 (DFS)": "BBC B",
+            "BBC B with 1770 (ADFS)": "BBC B",
+            "BBC Master 128 (DFS)": "Master 128",
+            "BBC Master 128 (ADFS)": "Master 128",
+            "BBC Master 128 (ANFS)": "Master 128",
+            "Acorn Atom (MMC)": "Atom",
+            "Acorn Atom (Tape)": "Atom",
+            "Acorn Atom (Tape with FP)": "Atom",
+            "Acorn Atom (DOS)": "Atom",
+            Tube65C02: "Tube65C02",
+            Tube65C102: "Tube65C102",
+        });
+    });
+
     it("carries no per-session settings", () => {
         const master = findModel("Master");
 
