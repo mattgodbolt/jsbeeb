@@ -44,8 +44,12 @@ class Beeb {
             .not.toContain(text);
     }
 
+    // currentCycles wraps every emulated second; the seconds term keeps this monotonic.
     cycles() {
-        return this.page.evaluate(() => window.processor.currentCycles);
+        return this.page.evaluate(
+            () =>
+                window.processor.cycleSeconds * window.processor.model.cyclesPerSecond + window.processor.currentCycles,
+        );
     }
 
     /** Checks the emulator stays where it is for a while, and returns where that is. */
