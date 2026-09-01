@@ -232,7 +232,7 @@ class Page {
 
     // currentCycles wraps every emulated second; the seconds term keeps this monotonic.
     async cycles() {
-        return this.evaluate("processor.cycleSeconds * processor.cyclesPerSecond + processor.currentCycles");
+        return this.evaluate("processor.cycleSeconds * processor.model.cyclesPerSecond + processor.currentCycles");
     }
 
     click(selector) {
