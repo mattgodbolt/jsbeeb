@@ -22,6 +22,8 @@ import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { Layout } from "./web/layout.js";
 import { EmulationLoop, RewindCaptureInterval } from "./web/emulation-loop.js";
+import { RunControls } from "./web/run-controls.js";
+import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
 import { AccessibilitySwitches } from "./web/accessibility-switches.js";
 import { AnalogueInputs } from "./web/analogue-inputs.js";
@@ -228,14 +230,7 @@ const loop = new EmulationLoop({
     audioStatsNode,
 });
 
-const debugPause = document.getElementById("debug-pause");
-const debugPlay = document.getElementById("debug-play");
-loop.addEventListener("running", () => {
-    const running = loop.isRunning();
-    keys.setRunning(running);
-    debugPlay.disabled = running;
-    debugPause.disabled = !running;
-});
+const runControls = new RunControls({ loop, dbgr, keys });
 
 const modals = new Modals({ loop });
 
@@ -344,18 +339,6 @@ window.addEventListener("blur", function () {
 });
 window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));
 
-function pauseIntoDebugger() {
-    loop.stop(true);
-}
-
-function resumeFromDebugger() {
-    dbgr.hide();
-    keys.resumeEmulation();
-}
-
-debugPause.addEventListener("click", pauseIntoDebugger);
-debugPlay.addEventListener("click", resumeFromDebugger);
-
 // To lower chance of data loss, only accept drop events in the drop
 // zone in the menu bar.
 document.addEventListener("dragover", function (event) {
@@ -460,40 +443,7 @@ const startPromise = machine.start({
 // The console surface the wiki documents, and the desktop app's hooks.
 // ------------------------------------------------------------------------
 
-// Handy shortcuts. bench/profile stuff is delayed so that they can be
-// safely run from the JS console in firefox.
-window.benchmarkCpu = utils.debounce((numCycles) => loop.benchmarkCpu(numCycles), 1);
-window.profileCpu = utils.debounce((arg) => loop.profileCpu(arg), 1);
-window.benchmarkVideo = utils.debounce((numCycles) => loop.benchmarkVideo(numCycles), 1);
-window.profileVideo = utils.debounce((arg) => loop.profileVideo(arg), 1);
-window.go = () => loop.go();
-window.stop = (debug) => loop.stop(debug);
-window.soundChip = audioHandler.soundChip;
-window.processor = processor;
-window.video = video;
-window.hd = function (start, end) {
-    console.log(
-        utils.hd(
-            function (x) {
-                return processor.readmem(x);
-            },
-            start,
-            end,
-        ),
-    );
-};
-window.m7dump = function () {
-    console.log(
-        utils.hd(
-            function (x) {
-                return processor.readmem(x) & 0x7f;
-            },
-            0x7c00,
-            0x7fe8,
-            { width: 40, gap: false },
-        ),
-    );
-};
+exposeConsoleSurface(window, { loop, processor, video, audioHandler });
 
 // Hooks for electron.
 electron({
@@ -517,8 +467,8 @@ electron({
         "hard-reset": hardReset,
         "save-state": () => snapshots.saveState(),
         rewind: () => rewindUI.open(),
-        pause: pauseIntoDebugger,
-        resume: resumeFromDebugger,
+        pause: () => runControls.pause(),
+        resume: () => runControls.resume(),
     },
 });
 
