@@ -525,254 +525,269 @@ function getOp(op, arg) {
     throw new Error(`Unrecognised operation '${op}'`);
 }
 
-const opcodes6502 = {
+// Undocumented opcodes carry a leading "*", as 6502 listings conventionally show them.
+function splitUndocumented(markedOpcodes) {
+    const opcodes = {};
+    const undocumented = new Set();
+    for (const [op, text] of Object.entries(markedOpcodes)) {
+        if (text.startsWith("*")) {
+            undocumented.add(Number(op));
+            opcodes[op] = text.slice(1);
+        } else {
+            opcodes[op] = text;
+        }
+    }
+    return { opcodes, undocumented };
+}
+
+const { opcodes: opcodes6502, undocumented: undocumented6502 } = splitUndocumented({
     0x00: "BRK",
     0x01: "ORA (,x)",
-    0x03: "SLO (,x)",
-    0x04: "NOP zp",
+    0x03: "*SLO (,x)",
+    0x04: "*NOP zp",
     0x05: "ORA zp",
     0x06: "ASL zp",
-    0x07: "SLO zp",
+    0x07: "*SLO zp",
     0x08: "PHP",
     0x09: "ORA imm",
     0x0a: "ASL A",
-    0x0b: "ANC imm",
-    0x0c: "NOP abs",
+    0x0b: "*ANC imm",
+    0x0c: "*NOP abs",
     0x0d: "ORA abs",
     0x0e: "ASL abs",
-    0x0f: "SLO abs",
+    0x0f: "*SLO abs",
     0x10: "BPL branch",
     0x11: "ORA (),y",
-    0x13: "SLO (),y",
-    0x14: "NOP zp,x",
+    0x13: "*SLO (),y",
+    0x14: "*NOP zp,x",
     0x15: "ORA zp,x",
     0x16: "ASL zp,x",
-    0x17: "SLO zp,x",
+    0x17: "*SLO zp,x",
     0x18: "CLC",
     0x19: "ORA abs,y",
-    0x1a: "NOP",
-    0x1b: "SLO abs,y",
-    0x1c: "NOP abs,x",
+    0x1a: "*NOP",
+    0x1b: "*SLO abs,y",
+    0x1c: "*NOP abs,x",
     0x1d: "ORA abs,x",
     0x1e: "ASL abs,x",
-    0x1f: "SLO abs,x",
+    0x1f: "*SLO abs,x",
     0x20: "JSR abs",
     0x21: "AND (,x)",
-    0x23: "RLA (,x)",
+    0x23: "*RLA (,x)",
     0x24: "BIT zp",
     0x25: "AND zp",
     0x26: "ROL zp",
-    0x27: "RLA zp",
+    0x27: "*RLA zp",
     0x28: "PLP",
     0x29: "AND imm",
     0x2a: "ROL A",
-    0x2b: "ANC imm",
+    0x2b: "*ANC imm",
     0x2c: "BIT abs",
     0x2d: "AND abs",
     0x2e: "ROL abs",
-    0x2f: "RLA abs",
+    0x2f: "*RLA abs",
     0x30: "BMI branch",
     0x31: "AND (),y",
-    0x33: "RLA (),y",
-    0x34: "NOP zp,x",
+    0x33: "*RLA (),y",
+    0x34: "*NOP zp,x",
     0x35: "AND zp,x",
     0x36: "ROL zp,x",
-    0x37: "RLA zp,x",
+    0x37: "*RLA zp,x",
     0x38: "SEC",
     0x39: "AND abs,y",
-    0x3a: "NOP",
-    0x3b: "RLA abs,y",
-    0x3c: "NOP abs,x",
+    0x3a: "*NOP",
+    0x3b: "*RLA abs,y",
+    0x3c: "*NOP abs,x",
     0x3d: "AND abs,x",
     0x3e: "ROL abs,x",
-    0x3f: "RLA abs,x",
+    0x3f: "*RLA abs,x",
     0x40: "RTI",
     0x41: "EOR (,x)",
-    0x43: "SRE (,x)",
-    0x44: "NOP zp",
+    0x43: "*SRE (,x)",
+    0x44: "*NOP zp",
     0x45: "EOR zp",
     0x46: "LSR zp",
-    0x47: "SRE zp",
+    0x47: "*SRE zp",
     0x48: "PHA",
     0x49: "EOR imm",
     0x4a: "LSR A",
-    0x4b: "ASR imm",
+    0x4b: "*ASR imm",
     0x4c: "JMP abs",
     0x4d: "EOR abs",
     0x4e: "LSR abs",
-    0x4f: "SRE abs",
+    0x4f: "*SRE abs",
     0x50: "BVC branch",
     0x51: "EOR (),y",
-    0x53: "SRE (),y",
-    0x54: "NOP zp,x",
+    0x53: "*SRE (),y",
+    0x54: "*NOP zp,x",
     0x55: "EOR zp,x",
     0x56: "LSR zp,x",
-    0x57: "SRE zp,x",
+    0x57: "*SRE zp,x",
     0x58: "CLI",
     0x59: "EOR abs,y",
-    0x5a: "NOP",
-    0x5b: "SRE abs,y",
-    0x5c: "NOP abs,x",
+    0x5a: "*NOP",
+    0x5b: "*SRE abs,y",
+    0x5c: "*NOP abs,x",
     0x5d: "EOR abs,x",
     0x5e: "LSR abs,x",
-    0x5f: "SRE abs,x",
+    0x5f: "*SRE abs,x",
     0x60: "RTS",
     0x61: "ADC (,x)",
-    0x63: "RRA (,x)",
-    0x64: "NOP zp",
+    0x63: "*RRA (,x)",
+    0x64: "*NOP zp",
     0x65: "ADC zp",
     0x66: "ROR zp",
-    0x67: "RRA zp",
+    0x67: "*RRA zp",
     0x68: "PLA",
     0x69: "ADC imm",
     0x6a: "ROR A",
-    0x6b: "ARR imm",
+    0x6b: "*ARR imm",
     0x6c: "JMP (abs)",
     0x6d: "ADC abs",
     0x6e: "ROR abs",
-    0x6f: "RRA abs",
+    0x6f: "*RRA abs",
     0x70: "BVS branch",
     0x71: "ADC (),y",
-    0x73: "RRA (),y",
-    0x74: "NOP zp,x",
+    0x73: "*RRA (),y",
+    0x74: "*NOP zp,x",
     0x75: "ADC zp,x",
     0x76: "ROR zp,x",
-    0x77: "RRA zp,x",
+    0x77: "*RRA zp,x",
     0x78: "SEI",
     0x79: "ADC abs,y",
-    0x7a: "NOP",
-    0x7b: "RRA abs,y",
-    0x7c: "NOP abs,x",
+    0x7a: "*NOP",
+    0x7b: "*RRA abs,y",
+    0x7c: "*NOP abs,x",
     0x7d: "ADC abs,x",
     0x7e: "ROR abs,x",
-    0x7f: "RRA abs,x",
-    0x80: "NOP imm",
+    0x7f: "*RRA abs,x",
+    0x80: "*NOP imm",
     0x81: "STA (,x)",
-    0x82: "NOP imm",
-    0x83: "SAX (,x)",
+    0x82: "*NOP imm",
+    0x83: "*SAX (,x)",
     0x84: "STY zp",
     0x85: "STA zp",
     0x86: "STX zp",
-    0x87: "SAX zp",
+    0x87: "*SAX zp",
     0x88: "DEY",
-    0x89: "NOP imm",
+    0x89: "*NOP imm",
     0x8a: "TXA",
-    0x8b: "ANE imm",
+    0x8b: "*ANE imm",
     0x8c: "STY abs",
     0x8d: "STA abs",
     0x8e: "STX abs",
-    0x8f: "SAX abs",
+    0x8f: "*SAX abs",
     0x90: "BCC branch",
     0x91: "STA (),y",
-    0x93: "SHA (),y",
+    0x93: "*SHA (),y",
     0x94: "STY zp,x",
     0x95: "STA zp,x",
     0x96: "STX zp,y",
-    0x97: "SAX zp,y",
+    0x97: "*SAX zp,y",
     0x98: "TYA",
     0x99: "STA abs,y",
     0x9a: "TXS",
-    0x9b: "SHS abs,y",
-    0x9c: "SHY abs,x",
+    0x9b: "*SHS abs,y",
+    0x9c: "*SHY abs,x",
     0x9d: "STA abs,x",
-    0x9e: "SHX abs,y",
-    0x9f: "SHA abs,y",
+    0x9e: "*SHX abs,y",
+    0x9f: "*SHA abs,y",
     0xa0: "LDY imm",
     0xa1: "LDA (,x)",
     0xa2: "LDX imm",
-    0xa3: "LAX (,x)",
+    0xa3: "*LAX (,x)",
     0xa4: "LDY zp",
     0xa5: "LDA zp",
     0xa6: "LDX zp",
-    0xa7: "LAX zp",
+    0xa7: "*LAX zp",
     0xa8: "TAY",
     0xa9: "LDA imm",
     0xaa: "TAX",
-    0xab: "LXA imm",
+    0xab: "*LXA imm",
     0xac: "LDY abs",
     0xad: "LDA abs",
     0xae: "LDX abs",
-    0xaf: "LAX abs",
+    0xaf: "*LAX abs",
     0xb0: "BCS branch",
     0xb1: "LDA (),y",
-    0xb3: "LAX (),y",
+    0xb3: "*LAX (),y",
     0xb4: "LDY zp,x",
     0xb5: "LDA zp,x",
     0xb6: "LDX zp,y",
-    0xb7: "LAX zp,y",
+    0xb7: "*LAX zp,y",
     0xb8: "CLV",
     0xb9: "LDA abs,y",
     0xba: "TSX",
-    0xbb: "LAS abs,y",
+    0xbb: "*LAS abs,y",
     0xbc: "LDY abs,x",
     0xbd: "LDA abs,x",
     0xbe: "LDX abs,y",
-    0xbf: "LAX abs,y",
+    0xbf: "*LAX abs,y",
     0xc0: "CPY imm",
     0xc1: "CMP (,x)",
-    0xc2: "NOP imm",
-    0xc3: "DCP (,x)",
+    0xc2: "*NOP imm",
+    0xc3: "*DCP (,x)",
     0xc4: "CPY zp",
     0xc5: "CMP zp",
     0xc6: "DEC zp",
-    0xc7: "DCP zp",
+    0xc7: "*DCP zp",
     0xc8: "INY",
     0xc9: "CMP imm",
     0xca: "DEX",
-    0xcb: "SBX imm",
+    0xcb: "*SBX imm",
     0xcc: "CPY abs",
     0xcd: "CMP abs",
     0xce: "DEC abs",
-    0xcf: "DCP abs",
+    0xcf: "*DCP abs",
     0xd0: "BNE branch",
     0xd1: "CMP (),y",
-    0xd3: "DCP (),y",
-    0xd4: "NOP zp,x",
+    0xd3: "*DCP (),y",
+    0xd4: "*NOP zp,x",
     0xd5: "CMP zp,x",
     0xd6: "DEC zp,x",
-    0xd7: "DCP zp,x",
+    0xd7: "*DCP zp,x",
     0xd8: "CLD",
     0xd9: "CMP abs,y",
-    0xda: "NOP",
-    0xdb: "DCP abs,y",
-    0xdc: "NOP abs,x",
+    0xda: "*NOP",
+    0xdb: "*DCP abs,y",
+    0xdc: "*NOP abs,x",
     0xdd: "CMP abs,x",
     0xde: "DEC abs,x",
-    0xdf: "DCP abs,x",
+    0xdf: "*DCP abs,x",
     0xe0: "CPX imm",
     0xe1: "SBC (,x)",
-    0xe2: "NOP imm",
-    0xe3: "ISB (,x)",
+    0xe2: "*NOP imm",
+    0xe3: "*ISB (,x)",
     0xe4: "CPX zp",
     0xe5: "SBC zp",
     0xe6: "INC zp",
-    0xe7: "ISB zp",
+    0xe7: "*ISB zp",
     0xe8: "INX",
     0xe9: "SBC imm",
     0xea: "NOP",
-    0xeb: "SBC imm",
+    0xeb: "*SBC imm",
     0xec: "CPX abs",
     0xed: "SBC abs",
     0xee: "INC abs",
-    0xef: "ISB abs",
+    0xef: "*ISB abs",
     0xf0: "BEQ branch",
     0xf1: "SBC (),y",
-    0xf3: "ISB (),y",
-    0xf4: "NOP zpx",
+    0xf3: "*ISB (),y",
+    0xf4: "*NOP zp,x",
     0xf5: "SBC zp,x",
     0xf6: "INC zp,x",
-    0xf7: "ISB zp,x",
+    0xf7: "*ISB zp,x",
     0xf8: "SED",
     0xf9: "SBC abs,y",
-    0xfa: "NOP",
-    0xfb: "ISB abs,y",
-    0xfc: "NOP abs,x",
+    0xfa: "*NOP",
+    0xfb: "*ISB abs,y",
+    0xfc: "*NOP abs,x",
     0xfd: "SBC abs,x",
     0xfe: "INC abs,x",
-    0xff: "ISB abs,x",
-};
+    0xff: "*ISB abs,x",
+});
 
-const opcodes65c12 = {
+const { opcodes: opcodes65c12, undocumented: undocumented65c12 } = splitUndocumented({
     0x00: "BRK",
     0x01: "ORA (,x)",
     0x04: "TSB zp",
@@ -952,9 +967,9 @@ const opcodes65c12 = {
     0xfa: "PLX",
     0xfd: "SBC abs,x",
     0xfe: "INC abs,x",
-};
+});
 
-const opcodes65c02 = {
+const { opcodes: opcodes65c02, undocumented: undocumented65c02 } = splitUndocumented({
     ...opcodes65c12,
     0x07: "RMB0 zp",
     0x17: "RMB1 zp",
@@ -988,12 +1003,20 @@ const opcodes65c02 = {
     0xdf: "BBS5 zp,branch",
     0xef: "BBS6 zp,branch",
     0xff: "BBS7 zp,branch",
-};
+});
+
+const PrevInstructionWindow = 64;
 
 class Disassemble6502 {
-    constructor(cpu, opcodes) {
+    constructor(cpu, opcodes, undocumented) {
         this.cpu = cpu;
         this.opcodes = opcodes;
+        this.undocumented = undocumented;
+    }
+
+    isDocumented(addr) {
+        const op = this.cpu.peekmem(addr);
+        return op in this.opcodes && !this.undocumented.has(op);
     }
 
     disassemble(addr, plain) {
@@ -1003,13 +1026,15 @@ class Disassemble6502 {
             formatAddr = hexword;
             formatJumpAddr = hexword;
         }
-        const opcode = this.opcodes[this.cpu.peekmem(addr)];
+        const opcodeByte = this.cpu.peekmem(addr);
+        const opcode = this.opcodes[opcodeByte];
         if (!opcode) {
             return ["???", addr + 1];
         }
-        const split = opcode.split(" ");
+        const [mnemonic, ...rest] = opcode.split(" ");
+        const split = [(this.undocumented.has(opcodeByte) ? "*" : "") + mnemonic, ...rest];
         if (!split[1]) {
-            return [opcode, addr + 1];
+            return [split[0], addr + 1];
         }
         let param = split[1] || "";
         let suffix = "";
@@ -1034,6 +1059,14 @@ class Disassemble6502 {
             }
             case "zp":
                 return [`${split[0]} $${hexbyte(this.cpu.peekmem(addr + 1))}${suffix}`, addr + 2];
+            case "zp,branch": {
+                const destAddr = addr + signExtend(this.cpu.peekmem(addr + 2)) + 3;
+                return [
+                    `${split[0]} $${hexbyte(this.cpu.peekmem(addr + 1))}, $${formatJumpAddr(destAddr)}`,
+                    addr + 3,
+                    destAddr,
+                ];
+            }
             case "(,x)":
                 return [`${split[0]} ($${hexbyte(this.cpu.peekmem(addr + 1))}, X)${suffix}`, addr + 2];
             case "()": {
@@ -1056,7 +1089,7 @@ class Disassemble6502 {
                 return [`${split[0]} ($${formatJumpAddr(destAddr)},x)${suffix}`, addr + 3, indDest];
             }
         }
-        return [opcode, addr + 1];
+        return [split.join(" "), addr + 1];
     }
 
     nextInstruction(address) {
@@ -1065,14 +1098,16 @@ class Disassemble6502 {
 
     /**
      * Guesses the address of the instruction before the given one by scoring
-     * each possible run of instructions leading up to it: a point per "common"
-     * instruction (loads, stores, branches, compares, arithmetic and
-     * carry-set/clear that avoid unusual indexing modes) and a large boost for
-     * a run that passes through pc. The highest-scoring run wins and its last
-     * instruction is the answer.
+     * each run of instructions in the preceding window that lands exactly on
+     * it: a point per "common" instruction (loads, stores, branches, compares,
+     * arithmetic and carry-set/clear that avoid unusual indexing modes) and a
+     * large boost for a run that passes through pc. Runs through undocumented
+     * opcodes are discarded. The highest-scoring run's last instruction wins;
+     * any run beats none, since a wrong parse resynchronises within a few
+     * instructions and so nearly always shares the true stream's last one.
      * Good test cases:
      *   Repton 2 @ 2cbb
-     *   MOS @ cfc8
+     *   MOS @ cfc8, and the unrolled STA abs,X screen clear @ cc63
      * also, just starting from the back of ROM and going up...
      */
     prevInstruction(address, pc) {
@@ -1082,11 +1117,12 @@ class Disassemble6502 {
 
         address &= 0xffff;
         let bestAddr = address - 1;
-        let bestScore = 0;
-        for (let startingPoint = address - 20; startingPoint !== address; startingPoint++) {
+        let bestScore = -1;
+        for (let startingPoint = address - PrevInstructionWindow; startingPoint !== address; startingPoint++) {
             let score = 0;
             let addr = startingPoint & 0xffff;
             while (addr < address) {
+                if (!this.isDocumented(addr)) break;
                 const result = this.disassemble(addr);
                 if (addr === pc) score += 10;
                 if (result[0].match(commonInstructions) && !result[0].match(uncommonInstructions)) {
@@ -1096,8 +1132,8 @@ class Disassemble6502 {
                     if (score > bestScore) {
                         bestScore = score;
                         bestAddr = addr;
-                        break;
                     }
+                    break;
                 }
                 addr = result[1];
             }
@@ -1106,7 +1142,7 @@ class Disassemble6502 {
     }
 }
 
-function makeCpuFunctions(cpu, opcodes, is65c12, cycleAccurate = true) {
+function makeCpuFunctions(cpu, opcodes, undocumented, is65c12, cycleAccurate = true) {
     function getInstruction(opcodeString, needsReg) {
         const split = opcodeString.split(" ");
         const opcode = split[0];
@@ -1143,7 +1179,6 @@ function makeCpuFunctions(cpu, opcodes, is65c12, cycleAccurate = true) {
                 return ig.render();
 
             case "zp":
-            case "zpx": // Seems to be enough to keep tests happy, but needs investigation.
             case "zp,x":
             case "zp,y":
                 if (arg === "zp") {
@@ -1455,7 +1490,7 @@ ${indent}`)
     Runner.prototype.run = generate6502JumpTable();
 
     return {
-        disassembler: new Disassemble6502(cpu, opcodes),
+        disassembler: new Disassemble6502(cpu, opcodes, undocumented),
         runInstruction: new Runner(),
         opcodes: opcodes,
         getInstruction: getInstruction,
@@ -1463,13 +1498,13 @@ ${indent}`)
 }
 
 export function Cpu6502(cpu, { cycleAccurate = true } = {}) {
-    return makeCpuFunctions(cpu, opcodes6502, false, cycleAccurate);
+    return makeCpuFunctions(cpu, opcodes6502, undocumented6502, false, cycleAccurate);
 }
 
 export function Cpu65c12(cpu, { cycleAccurate = true } = {}) {
-    return makeCpuFunctions(cpu, opcodes65c12, true, cycleAccurate);
+    return makeCpuFunctions(cpu, opcodes65c12, undocumented65c12, true, cycleAccurate);
 }
 
 export function Cpu65c02(cpu, { cycleAccurate = true } = {}) {
-    return makeCpuFunctions(cpu, opcodes65c02, true, cycleAccurate);
+    return makeCpuFunctions(cpu, opcodes65c02, undocumented65c02, true, cycleAccurate);
 }
