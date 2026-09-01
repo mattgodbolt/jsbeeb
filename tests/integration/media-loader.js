@@ -11,7 +11,7 @@ import { domFromIndexHtml, fakeUrlState, teardownDom } from "../unit/helpers.js"
 // jsdom makes utils.loadData take the browser branch, so back XMLHttpRequest
 // with the files the dev server would serve.
 class FileBackedXhr {
-    open(method, url) {
+    open(_method, url) {
         this._url = url;
     }
 
@@ -63,8 +63,9 @@ describe("the built-in disc list", { timeout: 60000 }, () => {
         media.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
 
         const elite = [...document.querySelectorAll("#disc-list li:not(.template)")].find(
-            (li) => li.querySelector(".name").textContent === "Elite",
+            (li) => li.querySelector(".name")?.textContent === "Elite",
         );
+        expect(elite).toBeDefined();
         elite.click();
 
         await vi.waitFor(() => expect(machine.processor.fdc.drives[0].disc?.name).toBe("elite.ssd"));
