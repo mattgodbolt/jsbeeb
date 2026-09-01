@@ -64,6 +64,29 @@ jobs:
         run: |
           echo "# Smoke test" >> "$GITHUB_STEP_SUMMARY"
           npm run test:smoke | tee >(sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY")
+      # The Playwright spike: the same checks, once in the runner's Chrome and
+      # once in the browser Playwright pins, each timed as its own step.
+      - name: Playwright smoke (system Chrome)
+        run: npx playwright test --project chrome
+      - name: Playwright browser version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright's Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Playwright smoke (bundled Chromium)
+        run: npx playwright test --project chromium
+      - name: Keep the Playwright traces of any failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore
 
   cpu-test:
     runs-on: ubuntu-24.04
