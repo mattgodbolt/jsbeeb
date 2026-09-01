@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { Cpu6502 as cpu6502Opcodes } from "../../src/6502.opcodes.js";
+import { Cpu6502 as cpu6502Opcodes, Cpu65c02 as cpu65c02Opcodes } from "../../src/6502.opcodes.js";
 
 describe("Disassemble6502", () => {
     const mem = new Uint8Array(0x10000);
@@ -36,6 +36,13 @@ describe("Disassemble6502", () => {
     it("discards runs through undocumented opcodes", () => {
         mem.set([0xa5, 0x41, 0xa5, 0xa9, 0x0f, 0xa9, 0x41], 0x1ff9);
         expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
+    });
+
+    it("treats the 65C02's bit instructions as documented", () => {
+        const disassembler65c02 = cpu65c02Opcodes({ peekmem: (addr) => mem[addr & 0xffff] }).disassembler;
+        mem.set([0x07, 0x41], 0x1ffe);
+        expect(disassembler65c02.disassemble(0x1ffe)[0]).toMatch(/^RMB0/);
+        expect(disassembler65c02.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
     });
 
     it("returns the previous instruction in an unambiguous run", () => {

@@ -994,7 +994,7 @@ const LegalMnemonics = new Set(
     (
         "ADC AND ASL BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS CLC CLD CLI CLV CMP CPX CPY DEC DEX DEY EOR INC INX " +
         "INY JMP JSR LDA LDX LDY LSR NOP ORA PHA PHP PLA PLP ROL ROR RTI RTS SBC SEC SED SEI STA STX STY TAX TAY " +
-        "TSX TXA TXS TYA BRA PHX PHY PLX PLY STZ TRB TSB"
+        "TSX TXA TXS TYA BRA PHX PHY PLX PLY STZ TRB TSB BBR BBS RMB SMB"
     ).split(" "),
 );
 const PrevInstructionWindow = 64;
@@ -1007,7 +1007,7 @@ class Disassemble6502 {
         this.legalOpcodes = new Set(
             Object.entries(opcodes)
                 .filter(([op, text]) => {
-                    const mnemonic = text.split(" ")[0];
+                    const mnemonic = text.split(" ")[0].replace(/\d$/, "");
                     return LegalMnemonics.has(mnemonic) && (mnemonic !== "NOP" || Number(op) === 0xea);
                 })
                 .map(([op]) => Number(op)),
