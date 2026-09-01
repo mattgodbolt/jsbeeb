@@ -28,6 +28,16 @@ describe("Disassemble6502", () => {
         expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
     });
 
+    it("prefers any run that lands on the target over none, even one scoring nothing", () => {
+        for (let i = 0; i < 8; i++) mem.set([0x9d, 0x00, 0x30], 0x1fe8 + i * 3);
+        expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffd);
+    });
+
+    it("discards runs through undocumented opcodes", () => {
+        mem.set([0xa5, 0x41, 0xa5, 0xa9, 0x0f, 0xa9, 0x41], 0x1ff9);
+        expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
+    });
+
     it("returns the previous instruction in an unambiguous run", () => {
         expect(disassembler.prevInstruction(0x2002, 0x1000)).toBe(0x2001);
     });

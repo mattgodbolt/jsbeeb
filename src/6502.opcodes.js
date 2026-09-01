@@ -990,10 +990,28 @@ const opcodes65c02 = {
     0xff: "BBS7 zp,branch",
 };
 
+const LegalMnemonics = new Set(
+    (
+        "ADC AND ASL BCC BCS BEQ BIT BMI BNE BPL BRK BVC BVS CLC CLD CLI CLV CMP CPX CPY DEC DEX DEY EOR INC INX " +
+        "INY JMP JSR LDA LDX LDY LSR NOP ORA PHA PHP PLA PLP ROL ROR RTI RTS SBC SEC SED SEI STA STX STY TAX TAY " +
+        "TSX TXA TXS TYA BRA PHX PHY PLX PLY STZ TRB TSB"
+    ).split(" "),
+);
+const PrevInstructionWindow = 64;
+
 class Disassemble6502 {
     constructor(cpu, opcodes) {
         this.cpu = cpu;
         this.opcodes = opcodes;
+        // Only $EA is a documented NOP; the table's other NOPs are the undocumented slots.
+        this.legalOpcodes = new Set(
+            Object.entries(opcodes)
+                .filter(([op, text]) => {
+                    const mnemonic = text.split(" ")[0];
+                    return LegalMnemonics.has(mnemonic) && (mnemonic !== "NOP" || Number(op) === 0xea);
+                })
+                .map(([op]) => Number(op)),
+        );
     }
 
     disassemble(addr, plain) {
@@ -1065,14 +1083,16 @@ class Disassemble6502 {
 
     /**
      * Guesses the address of the instruction before the given one by scoring
-     * each possible run of instructions leading up to it: a point per "common"
-     * instruction (loads, stores, branches, compares, arithmetic and
-     * carry-set/clear that avoid unusual indexing modes) and a large boost for
-     * a run that passes through pc. The highest-scoring run wins and its last
-     * instruction is the answer.
+     * each run of instructions in the preceding window that lands exactly on
+     * it: a point per "common" instruction (loads, stores, branches, compares,
+     * arithmetic and carry-set/clear that avoid unusual indexing modes) and a
+     * large boost for a run that passes through pc. Runs through undocumented
+     * opcodes are discarded. The highest-scoring run's last instruction wins;
+     * any run beats none, since a wrong parse resynchronises within a few
+     * instructions and so nearly always shares the true stream's last one.
      * Good test cases:
      *   Repton 2 @ 2cbb
-     *   MOS @ cfc8
+     *   MOS @ cfc8, and the unrolled STA abs,X screen clear @ cc63
      * also, just starting from the back of ROM and going up...
      */
     prevInstruction(address, pc) {
@@ -1082,11 +1102,12 @@ class Disassemble6502 {
 
         address &= 0xffff;
         let bestAddr = address - 1;
-        let bestScore = 0;
-        for (let startingPoint = address - 20; startingPoint !== address; startingPoint++) {
+        let bestScore = -1;
+        for (let startingPoint = address - PrevInstructionWindow; startingPoint !== address; startingPoint++) {
             let score = 0;
             let addr = startingPoint & 0xffff;
             while (addr < address) {
+                if (!this.legalOpcodes.has(this.cpu.peekmem(addr))) break;
                 const result = this.disassemble(addr);
                 if (addr === pc) score += 10;
                 if (result[0].match(commonInstructions) && !result[0].match(uncommonInstructions)) {
@@ -1096,8 +1117,8 @@ class Disassemble6502 {
                     if (score > bestScore) {
                         bestScore = score;
                         bestAddr = addr;
-                        break;
                     }
+                    break;
                 }
                 addr = result[1];
             }
