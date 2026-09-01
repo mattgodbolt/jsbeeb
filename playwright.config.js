@@ -10,7 +10,10 @@ export default defineConfig({
     testDir: "tests/playwright",
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
-    workers: process.env.CI ? 2 : undefined,
+    // Each page runs the machine in real time, so the checks that watch it
+    // stop and start need CPU of their own: with one worker per core they
+    // starve each other and keys auto-repeat.
+    workers: process.env.CI ? 2 : 4,
     reporter: process.env.CI ? [["list"], ["github"]] : "list",
     timeout: 60000,
     expect: { timeout: 10000 },
