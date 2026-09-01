@@ -32,7 +32,7 @@ const StepTimeoutMs = 10000;
 const ServerTimeoutMs = 30000;
 const KeyHoldMs = 120;
 const OneRowWidth = 2000;
-const LaptopWidths = [1280, 1440];
+const LaptopWidths = [1024, 1280, 1400, 1440];
 const ConsoleSurface = [
     "processor",
     "video",
