@@ -10,8 +10,6 @@
 //
 // BASE_URL=http://localhost:5173/ points a run at a server that is already up.
 
-import path from "node:path";
-
 import { expect, test } from "./fixtures.js";
 
 // Mirrored by tests/unit/test-console-surface.js.
@@ -128,46 +126,4 @@ test("every display mode and sound output on the bar can be picked", async ({ be
         await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", output);
     }
     await beeb.expectScreenText(">");
-});
-
-// The three below have unit or integration homes coming in #1028; they stay
-// here until those land on main.
-
-test("a disc from the built-in list goes into drive 0", async ({ beeb, page }) => {
-    await beeb.open("?disc=");
-    await beeb.expectScreenText(">");
-    await beeb.armModalShown("discs");
-    await page.click("#navbarDiscs");
-    await page.click('a[data-bs-target="#discs"]');
-    await beeb.expectModalShown();
-    const first = page.locator("#disc-list li:not(.template)").first();
-    await expect(first.locator(".name")).toHaveText("Elite");
-    await first.click();
-    await beeb.expectDrive0("elite.ssd");
-    await expect(page).toHaveURL(/disc1=elite\.ssd/);
-});
-
-test("a local tape file reaches the cassette interface", async ({ beeb, page }) => {
-    await beeb.open();
-    await beeb.expectScreenText(">");
-    await page.setInputFiles("#tape_load", path.resolve("dist/tapes/Welcome.uef"));
-    await expect.poll(() => page.evaluate(() => !!window.processor.acia.tape), { message: "the tape" }).toBe(true);
-});
-
-test("a saved state can be loaded back", async ({ beeb, page }) => {
-    // A URL-named disc, so restoring goes back through the media loader.
-    // The OS auto-repeats a key held past 320ms of emulated time, which a
-    // starved renderer can reach, so the assertions tolerate repeats.
-    await beeb.open("?disc=elite.ssd");
-    await beeb.expectScreenText(">");
-    await beeb.pressKey("a");
-    await beeb.expectScreenText(">A");
-    const download = page.waitForEvent("download");
-    await page.click("#navbarState");
-    await page.click("#save-state");
-    const saved = await (await download).path();
-    await beeb.pressKey("b");
-    await expect.poll(() => beeb.screenText(), { message: "the second marker on the screen" }).toMatch(/>A+B/);
-    await page.setInputFiles("#load-state", saved);
-    await expect.poll(() => beeb.screenText(), { message: "the saved screen to come back" }).toMatch(/>A+ /);
 });
