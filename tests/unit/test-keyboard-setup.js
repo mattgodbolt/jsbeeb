@@ -118,6 +118,11 @@ describe("KeyboardSetup", () => {
             expect(actions.paste).toHaveBeenCalledWith("*CAT");
         });
 
+        it("ignores a paste event that carries no clipboard", () => {
+            document.body.dispatchEvent(new Event("paste", { bubbles: true, cancelable: true }));
+            expect(actions.paste).not.toHaveBeenCalled();
+        });
+
         it("is left to any other field being typed into", () => {
             const field = document.body.appendChild(document.createElement("input"));
             field.focus();
