@@ -17,7 +17,7 @@ class Beeb {
     }
 
     open(query = "") {
-        return this.page.goto(`/${query}`);
+        return this.page.goto(query || "./");
     }
 
     /** Mode 7 screen memory as text, which is what the machine shows at the prompt. */
