@@ -210,8 +210,9 @@ export class MediaLoader extends EventTarget {
     }
 
     async loadSCSIFile(file) {
-        const binaryData = await readFileAsBinaryString(file);
         const { processor } = this;
+        if (!processor.filestore) return;
+        const binaryData = await readFileAsBinaryString(file);
         processor.filestore.scsi = utils.stringToUint8Array(binaryData);
 
         processor.filestore.PC = 0x400;

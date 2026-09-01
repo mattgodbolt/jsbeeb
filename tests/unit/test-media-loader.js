@@ -182,6 +182,12 @@ describe("MediaLoader", () => {
             expect(deps.processor.filestore.PC).toBe(0x400);
             expect(deps.processor.econet.receiveBlocks).toEqual([]);
         });
+
+        it("quietly ignores a SCSI image when no filestore is fitted", async () => {
+            deps.processor.filestore = undefined;
+            await make().loadSCSIFile(fileFor("scsi.dat", new Uint8Array([1, 2, 3])));
+            expect(deps.modals.hide).not.toHaveBeenCalled();
+        });
     });
 
     describe("the drop zone", () => {

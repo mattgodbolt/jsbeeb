@@ -394,6 +394,7 @@ document.getElementById("soft-reset").addEventListener("click", function (event)
 });
 
 document.getElementById("download-filestore-link").addEventListener("click", function () {
+    if (!processor.filestore) return;
     downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
 });
 
