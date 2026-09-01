@@ -68,7 +68,8 @@ export class KeyboardSetup {
         document.addEventListener("paste", (evt) => {
             const target = document.activeElement;
             if (target && target.id !== PasteBoxId && target.matches(TypingTargets)) return;
-            actions.paste(evt.clipboardData.getData("text/plain"));
+            const text = evt.clipboardData?.getData("text/plain");
+            if (text) actions.paste(text);
         });
     }
 

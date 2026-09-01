@@ -564,8 +564,21 @@ small {
   display: block;
 }
 
+/* Shrunk, the menu list wraps onto a second row; the promo yields instead, by truncating. */
+#header-bar .navbar-nav {
+  flex-shrink: 0;
+}
+
+#header-bar .navbar-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #paste-form {
-  flex: 1 1 6rem;
+  flex: 1 0 6rem;
   min-width: 0;
   max-width: 14rem;
 }
