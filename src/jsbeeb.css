@@ -564,6 +564,12 @@ small {
   display: block;
 }
 
+#header-bar [data-icon] > svg {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+}
+
 #paste-form {
   flex: 1 1 6rem;
   min-width: 0;

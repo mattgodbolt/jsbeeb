@@ -9,6 +9,7 @@ import * as utils_atom from "./utils_atom.js";
 import { GamePad } from "./gamepads.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
+import { installIcons } from "./web/icons.js";
 import { QuickSettings } from "./web/quick-settings.js";
 import { toast } from "./web/toast.js";
 import { BuiltInImages, MediaLoader } from "./web/media-loader.js";
@@ -36,6 +37,8 @@ import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { downloadDriveData } from "./dom-utils.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
+
+installIcons();
 
 // ------------------------------------------------------------------------
 // What the URL asked for.
