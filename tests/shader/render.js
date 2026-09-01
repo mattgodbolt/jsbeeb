@@ -7,12 +7,9 @@
 // browser. Every pattern in a run is drawn by a single Chrome invocation:
 // launching one costs far more than drawing into it.
 
-import { execFileSync } from "child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import path from "path";
+import { readFileSync } from "fs";
 
-import { findChrome } from "../find-chrome.js";
+import { chromium } from "@playwright/test";
 
 /** Framebuffer stride, and the size of the square GL texture it is uploaded into. */
 export const TextureSize = 1024;
@@ -137,8 +134,8 @@ export function buildPattern({
 /**
  * Build a self-contained page that sets WebGL up as GlCanvas does, hands the
  * filter-specific part to the filter, draws every job, and reads the pixels
- * back. It has to be self-contained because it is loaded over file://: no
- * module imports, no dev server.
+ * back. It has to be self-contained because it is handed to the page as
+ * content: no module imports, no dev server.
  */
 function buildHarness(filter, jobs) {
     const vert = readFileSync(new URL(filter.vert, ShaderDir), "utf8");
@@ -192,10 +189,10 @@ function toBase64(bytes) {
 }
 
 function fail(message) {
-    document.title = "FAIL: " + message;
+    window.failure = message;
     throw new Error(message);
 }
-window.onerror = (message) => { document.title = "FAIL: " + message; };
+window.onerror = (message) => { window.failure = message; };
 
 const canvas = document.getElementById("c");
 // Unlike the app this does not set failIfMajorPerformanceCaveat: headless
@@ -281,12 +278,7 @@ for (const job of jobs) {
     results[job.name] = toBase64(pixels);
 }
 
-const out = document.createElement("script");
-out.type = "application/json";
-out.id = "results";
-out.textContent = JSON.stringify(results);
-document.body.appendChild(out);
-document.title = "OK";
+window.results = results;
 </script>
 </body>
 </html>`;
@@ -297,47 +289,23 @@ document.title = "OK";
  *
  * @param {FilterHarness} filter
  * @param {object[]} jobs from {@link buildPattern}
- * @returns {Object<string, {width: number, height: number, data: Uint8Array}>}
+ * @returns {Promise<Object<string, {width: number, height: number, data: Uint8Array}>>}
  *     RGBA rows, top row first
  */
-export function renderJobs(filter, jobs) {
-    const chrome = findChrome();
-    const dir = mkdtempSync(path.join(tmpdir(), "jsbeeb-shader-"));
-    const pageFile = path.join(dir, "harness.html");
-    writeFileSync(pageFile, buildHarness(filter, jobs));
+export async function renderJobs(filter, jobs) {
+    // The system Chrome, as the smoke test's "chrome" project drives.
+    const browser = await chromium.launch({
+        channel: "chrome",
+        // Software WebGL; newer Chrome hides it behind this flag.
+        args: ["--disable-gpu", "--enable-unsafe-swiftshader"],
+    });
     try {
-        // --dump-dom comes back on stdout, and the harness puts any WebGL
-        // failure in the title, so a shader that will not compile says so
-        // rather than quietly producing no pixels.
-        const dom = execFileSync(
-            chrome,
-            [
-                "--headless",
-                "--disable-gpu",
-                // Chrome cannot set up its sandbox in most CI containers.
-                "--no-sandbox",
-                // Software WebGL; newer Chrome hides it behind this flag.
-                "--enable-unsafe-swiftshader",
-                "--hide-scrollbars",
-                "--force-device-scale-factor=1",
-                "--dump-dom",
-                "--virtual-time-budget=10000",
-                pageFile,
-            ],
-            {
-                encoding: "utf8",
-                stdio: ["ignore", "pipe", "pipe"],
-                timeout: 120000,
-                // The page carries every pattern's pixels back in its DOM.
-                maxBuffer: 256 * 1024 * 1024,
-            },
-        );
-        const failure = /<title>FAIL: ([^<]*)<\/title>/.exec(dom);
-        if (failure) throw new Error(`WebGL harness failed: ${failure[1]}`);
-        const json = /<script type="application\/json" id="results">(.*?)<\/script>/s.exec(dom);
-        if (!json) throw new Error("WebGL harness did not finish; no results in the page");
+        const page = await browser.newPage();
+        await page.setContent(buildHarness(filter, jobs));
+        const { failure, raw } = await page.evaluate(() => ({ failure: window.failure, raw: window.results }));
+        if (failure) throw new Error(`WebGL harness failed: ${failure}`);
+        if (!raw) throw new Error("WebGL harness did not finish; no results in the page");
 
-        const raw = JSON.parse(json[1]);
         const images = {};
         for (const job of jobs) {
             if (!(job.name in raw)) throw new Error(`WebGL harness returned no pixels for "${job.name}"`);
@@ -346,7 +314,7 @@ export function renderJobs(filter, jobs) {
         }
         return images;
     } finally {
-        rmSync(dir, { recursive: true, force: true });
+        await browser.close();
     }
 }
 

@@ -298,10 +298,10 @@ describe("PAL composite shader", () => {
     let rendered;
     let renderedNearest;
 
-    beforeAll(() => {
+    beforeAll(async () => {
         jobs = buildJobs();
-        rendered = renderJobs(PalHarness, jobs);
-        renderedNearest = renderJobs({ ...PalHarness, nearestSampling: true }, buildNearestJobs());
+        rendered = await renderJobs(PalHarness, jobs);
+        renderedNearest = await renderJobs({ ...PalHarness, nearestSampling: true }, buildNearestJobs());
     }, 180000);
 
     it("renders every job at the size asked for", () => {

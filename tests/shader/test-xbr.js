@@ -143,8 +143,8 @@ const intermediates = (image, ...words) => [...eachPixel(image)].filter((p) => !
 describe("xBR shader", () => {
     let rendered;
 
-    beforeAll(() => {
-        rendered = renderJobs(XbrHarness, Patterns.map(xbrPattern));
+    beforeAll(async () => {
+        rendered = await renderJobs(XbrHarness, Patterns.map(xbrPattern));
     }, 180000);
 
     it("renders every pattern at the size asked for", () => {
