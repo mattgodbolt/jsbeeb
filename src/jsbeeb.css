@@ -564,6 +564,12 @@ small {
   display: block;
 }
 
+#header-bar [data-icon] > svg {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+}
+
 /* Shrunk, the menu list wraps onto a second row; the promo yields instead, by truncating. */
 #header-bar .navbar-nav {
   flex-shrink: 0;

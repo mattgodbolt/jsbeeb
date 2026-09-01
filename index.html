@@ -64,7 +64,7 @@
                 data-bs-toggle="modal"
                 data-bs-target="#configuration"
                 title="Emulation settings"
-                ><span class="nav-icon me-1" aria-hidden="true">&#x2699;&#xfe0f;</span
+                ><span class="nav-icon me-1" data-icon="gear" aria-hidden="true"></span
                 ><span class="nav-word bbc-model-short">BBC B</span></a
               >
             </li>
@@ -78,7 +78,7 @@
                 aria-expanded="false"
                 aria-label="Discs"
                 title="Discs"
-                ><span class="nav-icon d-xl-none me-1" aria-hidden="true">&#x1f4be;</span
+                ><span class="nav-icon d-xl-none me-1" data-icon="floppy" aria-hidden="true"></span
                 ><span class="nav-word">Discs</span></a
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarDiscs">
@@ -148,7 +148,7 @@
                 aria-expanded="false"
                 aria-label="Cassettes"
                 title="Cassettes"
-                ><span class="nav-icon d-xl-none me-1" aria-hidden="true">&#x1f4fc;</span
+                ><span class="nav-icon d-xl-none me-1" data-icon="cassette" aria-hidden="true"></span
                 ><span class="nav-word d-none d-xl-inline">Cassettes</span></a
               >
               <ul class="dropdown-menu dropdown-menu-dark" id="tape-menu" aria-labelledby="navbarCassettes">
@@ -175,7 +175,7 @@
                 aria-expanded="false"
                 aria-label="Reset"
                 title="Reset"
-                ><span class="nav-icon d-xl-none me-1" aria-hidden="true">&#x21bb;</span
+                ><span class="nav-icon d-xl-none me-1" data-icon="arrow-counterclockwise" aria-hidden="true"></span
                 ><span class="nav-word d-none d-xl-inline">Reset</span></a
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarReset">
@@ -193,7 +193,7 @@
                 aria-expanded="false"
                 aria-label="State"
                 title="State"
-                ><span class="nav-icon d-xl-none me-1" aria-hidden="true">&#x1f4f7;</span
+                ><span class="nav-icon d-xl-none me-1" data-icon="clock-history" aria-hidden="true"></span
                 ><span class="nav-word d-none d-xl-inline">State</span></a
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarState">
@@ -221,7 +221,7 @@
                 aria-expanded="false"
                 aria-label="More"
                 title="More"
-                ><span class="nav-icon d-xl-none me-1" aria-hidden="true">&#x22ef;</span
+                ><span class="nav-icon d-xl-none me-1" data-icon="three-dots" aria-hidden="true"></span
                 ><span class="nav-word d-none d-xl-inline">More</span></a
               >
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="navbarMore">
@@ -263,7 +263,7 @@
                 data-output="speaker"
                 title="Internal speaker: the board's output stage and the Beeb's own speaker and case"
               >
-                &#x1f508;
+                <span data-icon="volume-up" aria-hidden="true"></span>
               </button>
               <button
                 type="button"
@@ -271,7 +271,7 @@
                 data-output="board"
                 title="Line out: the board's output stage alone, as at its audio socket"
               >
-                &#x1f3a7;
+                <span data-icon="headphones" aria-hidden="true"></span>
               </button>
               <button
                 type="button"
@@ -279,7 +279,7 @@
                 data-output="off"
                 title="Unfiltered: the sound chip alone"
               >
-                &#x223f;
+                <span data-icon="soundwave" aria-hidden="true"></span>
               </button>
             </div>
             <input
@@ -295,17 +295,19 @@
               aria-label="Speaker amount"
             />
             <div class="btn-group btn-group-sm ms-3" role="group" aria-label="Display mode" id="display-mode">
-              <button type="button" class="btn btn-outline-light" data-mode="rgb" title="RGB monitor">&#x1f5a5;</button>
+              <button type="button" class="btn btn-outline-light" data-mode="rgb" title="RGB monitor">
+                <span data-icon="display" aria-hidden="true"></span>
+              </button>
               <button
                 type="button"
                 class="btn btn-outline-light"
                 data-mode="pal"
                 title="PAL TV, fed by the Beeb's UHF modulator"
               >
-                &#x1f4fa;
+                <span data-icon="tv" aria-hidden="true"></span>
               </button>
               <button type="button" class="btn btn-outline-light" data-mode="xbr" title="Smoothed (xBR upscaler)">
-                &#x2728;
+                <span data-icon="stars" aria-hidden="true"></span>
               </button>
             </div>
           </div>
@@ -316,7 +318,7 @@
               class="btn btn-outline-light"
               title="Start running the emulator (if not running already); hiding the debugger"
             >
-              &#x23f5;
+              <span data-icon="play-fill" aria-hidden="true"></span>
             </button>
             <button
               id="debug-pause"
@@ -324,7 +326,7 @@
               class="btn btn-outline-light"
               title="Pause the running emulator and show the debugger"
             >
-              &#x23f8;
+              <span data-icon="pause-fill" aria-hidden="true"></span>
             </button>
           </div>
           <form class="d-flex" id="paste-form">
@@ -583,7 +585,7 @@
             <div>
               <a href="https://github.com/mattgodbolt/jsbeeb">Source on GitHub</a>. For more on the BBC, and people to
               talk to about it, try the <a href="http://www.stardot.org.uk/forums/">StarDot forums</a>. Works best in
-              Chrome or Firefox.
+              Chrome or Firefox. Icons are from <a href="https://icons.getbootstrap.com/">Bootstrap Icons</a> (MIT).
             </div>
           </div>
           <div class="modal-footer">

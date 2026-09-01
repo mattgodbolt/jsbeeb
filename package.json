@@ -29,6 +29,7 @@
     "@popperjs/core": "^2.11.8",
     "argparse": "^3.0.0",
     "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
     "bootswatch": "^5.3.8",
     "pako": "^3.0.1",
     "sharp": "^0.35.3",
