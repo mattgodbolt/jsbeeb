@@ -13,22 +13,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { findChrome } from "../find-chrome.js";
+
 const Args = parseArgs(process.argv.slice(2));
 const PreviewHost = "127.0.0.1";
 const PreviewPort = 5199;
-const DebugPort = 9229 + Math.floor(Math.random() * 1000);
-const ChromeCandidates = [
-    process.env.CHROME_PATH,
-    "google-chrome",
-    "google-chrome-stable",
-    "chromium",
-    "chromium-browser",
-];
 const ScreenBase = 0x7c00;
 const ScreenBytes = 1000;
 const BootTimeoutMs = 30000;
 const StepTimeoutMs = 10000;
 const ServerTimeoutMs = 30000;
+const ChromeStartTimeoutMs = 30000;
 const KeyHoldMs = 120;
 const ConsoleSurface = [
     "processor",
@@ -95,45 +90,67 @@ async function startPreview() {
 }
 
 async function startChrome(width) {
+    const chrome = findChrome();
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), "jsbeeb-smoke-profile-"));
     const args = [
         "--headless=new",
         "--no-sandbox",
+        // Chrome puts its shared memory in /dev/shm, which containers make tiny.
+        "--disable-dev-shm-usage",
+        "--no-first-run",
+        `--user-data-dir=${profile}`,
         "--use-gl=angle",
         "--use-angle=swiftshader",
         "--autoplay-policy=no-user-gesture-required",
-        `--remote-debugging-port=${DebugPort}`,
+        "--remote-debugging-port=0",
         `--window-size=${width},900`,
         "about:blank",
     ];
-    const candidates = ChromeCandidates.filter(Boolean);
-    for (const candidate of candidates) {
-        const child = spawn(candidate, args, { stdio: "ignore" });
-        // A candidate that is not there fails to spawn; one that is there but
-        // cannot run exits straight away. Either way, try the next.
-        const gone = new Promise((resolve) => {
-            child.once("error", () => resolve(true));
-            child.once("exit", () => resolve(true));
+    const child = spawn(chrome, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    const exited = new Promise((resolve) => {
+        child.once("exit", resolve);
+        child.once("error", resolve);
+    });
+    const stop = async () => {
+        if (child.pid && child.exitCode === null && child.signalCode === null) {
+            child.kill();
+            await exited;
+        }
+        fs.rmSync(profile, { recursive: true, force: true });
+    };
+    const failure = (what) => new Error(`${chrome} ${what}${stderr ? `; it said:\n${stderr.trim()}` : ""}`);
+    // With port 0 Chrome picks a free port and the only way to learn it is the
+    // line it prints to stderr.
+    const devtoolsHost = new Promise((resolve, reject) => {
+        const timer = setTimeout(
+            () => reject(failure(`did not announce its DevTools port within ${ChromeStartTimeoutMs}ms`)),
+            ChromeStartTimeoutMs,
+        );
+        child.stderr.on("data", () => {
+            const host = /DevTools listening on ws:\/\/([^/\s]+)/.exec(stderr)?.[1];
+            if (!host) return;
+            clearTimeout(timer);
+            resolve(host);
         });
-        const target = await Promise.race([gone, debugTarget()]);
-        if (target !== true) return { child, target };
+        child.once("error", (error) => reject(failure(`could not be started: ${error.message}`)));
+        child.once("exit", (code, signal) =>
+            reject(failure(`exited (${signal ?? `code ${code}`}) before announcing its DevTools port`)),
+        );
+    });
+    try {
+        const host = await devtoolsHost;
+        const target = await waitUntil(
+            "Chrome's page target",
+            async () => (await (await fetch(`http://${host}/json/list`)).json()).find((t) => t.type === "page"),
+            StepTimeoutMs,
+        );
+        return { host, target, stop };
+    } catch (error) {
+        await stop();
+        throw error;
     }
-    throw new Error(`No Chrome would start; tried ${candidates.join(", ")}`);
-}
-
-/** The page target of the Chrome listening on the debug port, once it is. */
-function debugTarget() {
-    return waitUntil(
-        "Chrome's debugging port",
-        async () => {
-            try {
-                const list = await (await fetch(`http://127.0.0.1:${DebugPort}/json/list`)).json();
-                return list.find((t) => t.type === "page");
-            } catch (_e) {
-                return null;
-            }
-        },
-        StepTimeoutMs,
-    );
 }
 
 class Page {
@@ -519,9 +536,8 @@ async function main() {
     let chrome = null;
     let failures = 0;
     try {
-        const started = await startChrome(1400);
-        chrome = started.child;
-        const page = await Page.connect(started.target);
+        chrome = await startChrome(1400);
+        const page = await Page.connect(chrome.target);
         const selected = checks.filter((c) => !Args.only || c.name.includes(Args.only));
         for (const { name, run } of selected) {
             try {
@@ -537,11 +553,11 @@ async function main() {
             }
         }
         if (Args.keep) {
-            console.log(`Chrome left running on port ${DebugPort}; base ${base}`);
+            console.log(`Chrome left running with DevTools at ${chrome.host}; base ${base}`);
             await new Promise(() => {});
         }
     } finally {
-        chrome?.kill();
+        await chrome?.stop();
         server?.stop();
     }
     process.exit(failures ? 1 : 0);
