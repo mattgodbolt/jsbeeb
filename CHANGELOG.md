@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.23.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.4...v1.23.0) (2026-09-01)
+
+
+### Features
+
+* draw the top bar's icons from Bootstrap Icons ([#1020](https://github.com/mattgodbolt/jsbeeb/issues/1020)) ([b48bff6](https://github.com/mattgodbolt/jsbeeb/commit/b48bff6b4246a33caa60eb96810e78e53658eade))
+* give the top bar's menus an icon tier below xl ([#1019](https://github.com/mattgodbolt/jsbeeb/issues/1019)) ([e3a3ee5](https://github.com/mattgodbolt/jsbeeb/commit/e3a3ee5bda7cac77bc133aeb297e1833aed0948d))
+* trim the top bar so it fits one row on laptop screens ([#1018](https://github.com/mattgodbolt/jsbeeb/issues/1018)) ([17f4438](https://github.com/mattgodbolt/jsbeeb/commit/17f443841122eb7cddebd7972966ceff2dcac1c9))
+
+
+### Bug Fixes
+
+* count ORA in the back-disassembly heuristic, and move it onto the disassembler ([#1013](https://github.com/mattgodbolt/jsbeeb/issues/1013)) ([2fd3e8c](https://github.com/mattgodbolt/jsbeeb/commit/2fd3e8cfff6db98de2aba57db6f38f603ec6c72f))
+* let the back-disassembly heuristic accept a run scoring nothing ([#1017](https://github.com/mattgodbolt/jsbeeb/issues/1017)) ([4592277](https://github.com/mattgodbolt/jsbeeb/commit/4592277eb0bc7e4257c84c393610e9742668096e))
+
 ## [1.22.4](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.3...v1.22.4) (2026-09-01)
 
 
