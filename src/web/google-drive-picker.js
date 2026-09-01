@@ -28,9 +28,12 @@ export class GoogleDrivePicker {
             this.authEl.style.display = "none";
             e.preventDefault();
             const authed = await this.auth(false);
-            if (authed) this.authResolve();
-            else this.authReject(new Error("Unable to authorize Google Drive"));
+            if (authed) this.authResolve?.(true);
+            else this.authReject?.(new Error("Unable to authorize Google Drive"));
         });
+
+        // Closing the loading dialog while the auth panel waits is a cancellation, not an error.
+        document.getElementById("loading-dialog").addEventListener("hidden.bs.modal", () => this.authResolve?.(false));
 
         // Loading the Google client holds the main thread for ~100ms, so it waits for
         // someone to ask for Drive.
@@ -74,11 +77,21 @@ export class GoogleDrivePicker {
             console.log("Google Drive authed=", authed);
 
             if (!authed) {
-                await new Promise((resolve, reject) => {
-                    this.authResolve = resolve;
-                    this.authReject = reject;
-                    this.authEl.style.display = "";
-                });
+                let granted;
+                try {
+                    granted = await new Promise((resolve, reject) => {
+                        this.authResolve = resolve;
+                        this.authReject = reject;
+                        this.authEl.style.display = "";
+                    });
+                } finally {
+                    this.authResolve = this.authReject = null;
+                }
+                if (!granted) {
+                    console.log("Google Drive authorization dismissed");
+                    this.modals.loadingFinished();
+                    return null;
+                }
             }
 
             const ssd = await this.googleDrive.load(this.processor.fdc, cat.id, layout);
@@ -93,7 +106,8 @@ export class GoogleDrivePicker {
             return ssd;
         } catch (error) {
             console.error("Google Drive loading error:", error);
-            this.modals.loadingFinished(`Unable to load ${cat.name} from Google Drive: ${errorText(error)}`);
+            this.modals.loadingFinished();
+            throw error;
         }
     }
 
@@ -122,8 +136,14 @@ export class GoogleDrivePicker {
                 utils.noteEvent("google-drive", "click", item.name);
                 this.media.setDisc1Image(`gd:${item.id}/${item.name}`);
                 this.modal.hide();
-                const ssd = await this.load(item, this.drives.layoutForDrive(0));
-                if (ssd) this.drives.putDiscIn(0, ssd);
+                try {
+                    const ssd = await this.load(item, this.drives.layoutForDrive(0));
+                    if (ssd) this.drives.putDiscIn(0, ssd);
+                } catch (error) {
+                    toast(`Unable to load ${item.name} from Google Drive: ${errorText(error)}`, {
+                        title: "Google Drive",
+                    });
+                }
             });
         }
     }

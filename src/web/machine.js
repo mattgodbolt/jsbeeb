@@ -162,15 +162,17 @@ export class Machine {
         }
 
         if (discImage) {
-            startImageLoad(`disc ${discImage}`, async () =>
-                drives.putDiscIn(0, await media.loadDiscImage(discImage, drives.layoutForDrive(0))),
-            );
+            startImageLoad(`disc ${discImage}`, async () => {
+                const loadedDisc = await media.loadDiscImage(discImage, drives.layoutForDrive(0));
+                if (loadedDisc) drives.putDiscIn(0, loadedDisc);
+            });
         }
 
         if (secondDiscImage) {
-            startImageLoad(`disc ${secondDiscImage}`, async () =>
-                drives.putDiscIn(1, await media.loadDiscImage(secondDiscImage, drives.layoutForDrive(1))),
-            );
+            startImageLoad(`disc ${secondDiscImage}`, async () => {
+                const loadedDisc = await media.loadDiscImage(secondDiscImage, drives.layoutForDrive(1));
+                if (loadedDisc) drives.putDiscIn(1, loadedDisc);
+            });
         }
 
         if (tape) {

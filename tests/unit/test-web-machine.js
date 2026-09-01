@@ -151,6 +151,15 @@ describe("Machine", () => {
             expect(started.media.setProcessorTape).toHaveBeenCalled();
         });
 
+        it("skips a drive whose image load resolves to nothing", async () => {
+            const machine = make();
+            const started = startDeps();
+            started.media.loadDiscImage.mockResolvedValue(null);
+            await machine.start({ ...started, discImage: "gd:abc/mine.ssd" });
+            expect(started.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(toasts()).toEqual([]);
+        });
+
         it("only loads an MMC image on an Atom", async () => {
             const machine = make();
             await machine.start({ ...startDeps(), mmcImage: "sd.img" });

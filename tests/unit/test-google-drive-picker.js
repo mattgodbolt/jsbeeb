@@ -50,13 +50,25 @@ describe("GoogleDrivePicker", () => {
             expect(toasts()).toEqual([expect.stringContaining("mine.ssd is read only on Google Drive")]);
         });
 
-        it("reports Drive being unavailable through the loading dialog", async () => {
+        it("rejects when Drive is unavailable, closing the loading dialog without a report of its own", async () => {
             loader.initialise.mockResolvedValue(false);
-            const got = await make().load({ id: "abc", name: "mine.ssd" }, "auto");
-            expect(got).toBeUndefined();
-            expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
-                expect.stringContaining("Unable to load mine.ssd from Google Drive"),
+            await expect(make().load({ id: "abc", name: "mine.ssd" }, "auto")).rejects.toThrow(
+                "Google Drive is not available",
             );
+            expect(deps.modals.loadingFinished).toHaveBeenCalledWith();
+            expect(toasts()).toEqual([]);
+        });
+
+        it("cancels quietly when the loading dialog is dismissed at the sign-in", async () => {
+            loader.authorize.mockResolvedValue(false);
+            const picker = make();
+            const loading = picker.load({ id: "abc", name: "mine.ssd" }, "auto");
+            await vi.waitFor(() => expect(document.getElementById("google-drive-auth").style.display).toBe(""));
+            document.getElementById("loading-dialog").dispatchEvent(new Event("hidden.bs.modal"));
+            await expect(loading).resolves.toBeNull();
+            expect(deps.modals.loadingFinished).toHaveBeenCalledWith();
+            expect(loader.load).not.toHaveBeenCalled();
+            expect(toasts()).toEqual([]);
         });
 
         it("shows the sign-in and carries on once the form is submitted", async () => {
@@ -107,6 +119,22 @@ describe("GoogleDrivePicker", () => {
             document.querySelector("#google-drive li:not(.template)").click();
             await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, ssd));
             expect(deps.media.setDisc1Image).toHaveBeenCalledWith("gd:abc/mine.ssd");
+        });
+
+        it("reports a failed load once and leaves the drive alone", async () => {
+            loader.listFiles.mockResolvedValue([{ id: "abc", name: "mine.ssd" }]);
+            loader.load.mockRejectedValue(new Error("boom"));
+            const picker = make();
+            vi.spyOn(picker.modal, "hide").mockImplementation(() => {});
+            document.getElementById("google-drive").dispatchEvent(new Event("show.bs.modal"));
+            await vi.waitFor(() =>
+                expect(document.querySelectorAll("#google-drive li:not(.template)")).toHaveLength(1),
+            );
+            document.querySelector("#google-drive li:not(.template)").click();
+            await vi.waitFor(() =>
+                expect(toasts()).toEqual([expect.stringContaining("Unable to load mine.ssd from Google Drive: boom")]),
+            );
+            expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
         });
 
         it("says when the list cannot be fetched", async () => {
