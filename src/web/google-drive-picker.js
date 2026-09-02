@@ -98,7 +98,7 @@ export class GoogleDrivePicker {
                 }
             }
 
-            const ssd = await this.googleDrive.load(this.processor.fdc, cat.id, layout);
+            const ssd = await this.googleDrive.load(cat.id, layout);
             console.log("Google Drive loading finished");
             this.modals.loadingFinished();
             if (!ssd.savesChanges) {
@@ -188,7 +188,7 @@ export class GoogleDrivePicker {
         }
 
         try {
-            const result = await this.googleDrive.create(this.processor.fdc, name, data);
+            const result = await this.googleDrive.create(name, data);
             this.media.setDisc1Image("gd:" + result.fileId + "/" + name);
             this.drives.putDiscIn(0, result.disc);
             this.modals.loadingFinished();

@@ -4,25 +4,10 @@ import * as fs from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { StairwayToHell } from "../../src/sth.js";
+import { bytesResponse, manifestResponse } from "./helpers.js";
 
 const ARCHIVE_BASE = "https://bbc.xania.org/archive/sth";
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function makeManifestResponse(files) {
-    return {
-        ok: true,
-        status: 200,
-        json: async () => ({ schemaVersion: 1, files }),
-    };
-}
-
-function makeOk(body = new Uint8Array()) {
-    return {
-        ok: true,
-        status: 200,
-        arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
-    };
-}
 
 describe("StairwayToHell", () => {
     afterEach(() => {
@@ -32,7 +17,7 @@ describe("StairwayToHell", () => {
     it("populates the disc catalog from the disk manifest", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
             expect(url).toBe(`${ARCHIVE_BASE}/diskimages/manifest.json`);
-            return makeManifestResponse([
+            return manifestResponse([
                 { path: "Acornsoft/Elite.zip", size: 12345, mtime: null },
                 { path: "Cheats/CHT_ChuckieEgg-ExtraColours.zip", size: 9992, mtime: null },
             ]);
@@ -54,7 +39,7 @@ describe("StairwayToHell", () => {
         const seen = [];
         vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
             seen.push(url);
-            return makeManifestResponse([]);
+            return manifestResponse([]);
         });
 
         const sth = new StairwayToHell(
@@ -106,7 +91,7 @@ describe("StairwayToHell", () => {
         const seen = [];
         vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
             seen.push(url);
-            return makeOk(new Uint8Array());
+            return bytesResponse(new Uint8Array());
         });
         vi.spyOn(console, "log").mockImplementation(() => {});
         vi.spyOn(console, "error").mockImplementation(() => {});
@@ -124,7 +109,7 @@ describe("StairwayToHell", () => {
 
     it("returns the name of the file found inside the zip, not the zip's own path", async () => {
         const zip = new Uint8Array(fs.readFileSync(join(__dirname, "zip", "test-ssd.zip")));
-        vi.spyOn(globalThis, "fetch").mockResolvedValue(makeOk(zip));
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(bytesResponse(zip));
         vi.spyOn(console, "log").mockImplementation(() => {});
 
         const sth = new StairwayToHell(

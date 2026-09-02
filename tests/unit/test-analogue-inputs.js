@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalogueInputs } from "../../src/web/analogue-inputs.js";
-import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
 describe("AnalogueInputs", () => {
     let deps;
@@ -67,7 +67,7 @@ describe("AnalogueInputs", () => {
             const inputs = make();
             inputs.updateAdcSources(false, 5);
             for (let ch = 0; ch < 4; ch++) expect(channels[ch]).toBe(inputs.gamepadSource);
-            expect(document.querySelector(".toast .message").textContent).toContain("no analogue channel 5");
+            expect(toasts()).toEqual([expect.stringContaining("no analogue channel 5")]);
             expect(deps.config.setMicrophoneChannel).toHaveBeenCalledWith(undefined);
             expect(deps.urlState.params.microphoneChannel).toBeUndefined();
             expect(deps.urlState.updateUrl).toHaveBeenCalled();

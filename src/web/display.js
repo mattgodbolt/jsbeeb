@@ -2,6 +2,11 @@ import * as canvasLib from "../canvas.js";
 import { FakeVideo, Video } from "../video.js";
 import { toast } from "./toast.js";
 
+// While running fast the state machines still run accurately, but painting is
+// the most expensive part of jsbeeb, so most frames are skipped. Odd, so that
+// interlaced modes (MODE 7) alternate fields across the frames that do paint.
+const SpeedyFrameSkip = 9;
+
 /**
  * The picture: the canvas and its filter, the video chip that paints into a
  * framebuffer of our own, and the animation frame that presents it. A stalled
@@ -64,10 +69,22 @@ export class Display {
         this.setCrtPic();
     }
 
+    /**
+     * While running fast the skip moves into the video chip, which skips the
+     * render as well as the present; the deeper of the chip's skip and any
+     * configured frameSkip wins, so the two never multiply together.
+     */
+    setSpeedy(speedy) {
+        const skip = Math.max(SpeedyFrameSkip, this.frameSkip);
+        this.video.frameSkipCount = speedy ? (skip % 2 ? skip : skip + 1) : 0;
+    }
+
     onPaint(video, minx, miny, maxx, maxy) {
-        this.frames++;
-        if (this.frames < this.frameSkip) return;
-        this.frames = 0;
+        if (!video.frameSkipCount) {
+            this.frames++;
+            if (this.frames < this.frameSkip) return;
+            this.frames = 0;
+        }
         const start = performance.now();
         this.canvas.fb32.set(this.videoFb32.subarray(miny * 1024, maxy * 1024), miny * 1024);
         if (this.pendingFrame.lineGrid.length !== video.lineGrid.length)

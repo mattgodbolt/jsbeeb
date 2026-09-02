@@ -25,7 +25,8 @@ describe("EmulationLoop", () => {
                 snapshotState: vi.fn(() => ({})),
             },
             display: {
-                video: { frameSkipCount: 0, polltime: vi.fn() },
+                video: { polltime: vi.fn() },
+                setSpeedy: vi.fn(),
                 takePaintMs: vi.fn(() => 0),
                 takePresentMs: vi.fn(() => 0),
                 frameSkip: 0,
@@ -89,6 +90,7 @@ describe("EmulationLoop", () => {
         expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.sysvia);
         expect(deps.syncLights).toHaveBeenCalled();
         expect(deps.display.takePaintMs).toHaveBeenCalled();
+        expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
     });
 
     it("never emulates more than a tenth of a second in one tick", () => {
@@ -106,7 +108,7 @@ describe("EmulationLoop", () => {
         loop.toggleFastAsPossible();
         vi.advanceTimersByTime(10);
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 50);
-        expect(deps.display.video.frameSkipCount).toBe(9);
+        expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(true);
     });
 
     it("speeds up for a tape motor only when told fast tape", () => {

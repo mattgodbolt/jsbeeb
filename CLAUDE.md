@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm start` - Start development server (IMPORTANT: Never run this command directly; ask the user to start the server
   as needed)
 - `npm run build` - Build production version
-- `npm run lint` - Run ESLint
+- `npm run lint` - Run ESLint (check only)
 - `npm run lint-fix` - Run ESLint with auto-fix
-- `npm run format` - Run Prettier
+- `npm run format` - Run Prettier (writes changes; `npm run format:check` checks only)
 - `npm run test` - Run all tests
 - `npm run test:unit` - Run unit tests
 - `npm run test:integration` - Run integration tests
@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   `BASE_URL=http://localhost:5173/ npx playwright test --project chrome` runs it against a server that is already up.
   Chrome uses the machine's GPU when it has one and the software renderer otherwise, which is what CI runs;
   `E2E_GL=software` or `E2E_GL=hardware` forces one
-- `npm run ci-checks` - Run linting checks for CI
+- `npm run ci-checks` - Run ESLint, Prettier and the check that every `test:*` script has a CI workflow step
 - `vitest run tests/unit/test-gzip.js` - Run a single test file
 
 ### Code Coverage
@@ -29,6 +29,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run coverage:all-tests` - Run all tests with coverage
 - Coverage reports are generated in the `coverage` directory
 - HTML report includes line-by-line coverage visualization
+- The published coverage badge reports the unit suite only; the CPU-bound integration tests time out
+  under v8 instrumentation, so they run uninstrumented
 
 ## Code Style Guidelines
 

@@ -8,20 +8,9 @@ import {
     Provenance,
     provenancesIn,
 } from "../../src/bbcdiscs.js";
+import { bytesResponse, manifestResponse } from "./helpers.js";
 
 const ArchiveBase = "https://bbc.xania.org/archive/bbcdiscs";
-
-const manifestResponse = (files) => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ schemaVersion: 1, files }),
-});
-
-const bytesResponse = (body) => ({
-    ok: true,
-    status: 200,
-    arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
-});
 
 const entry = (overrides = {}) => ({
     path: "B88911B2-BF6048A8.hfe",

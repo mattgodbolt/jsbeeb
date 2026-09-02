@@ -3,35 +3,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Settings } from "../../src/web/settings.js";
 import { DefaultModel, findModel } from "../../src/models.js";
-import { fakeUrlState, teardownDom } from "./helpers.js";
-
-/** Stands in for the Config dialog: remembers what it was told and hands back the callbacks. */
-function fakeConfig(onChange, onClose, onRestartRequired) {
-    return {
-        onChange,
-        onClose,
-        onRestartRequired,
-        model: undefined,
-        mapLegacyModels: vi.fn(),
-        setModel: vi.fn(function (name) {
-            this.model = findModel(name);
-        }),
-        setKeyLayout: vi.fn(),
-        setTubeCpuMultiplier: vi.fn(),
-        setMicrophoneChannel: vi.fn(),
-        setCheckboxes: vi.fn(),
-        setDisplayMode: vi.fn(),
-        setAudioOutput: vi.fn(),
-        setSpeakerAmount: vi.fn(),
-    };
-}
+import { domFromIndexHtml, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
 describe("Settings", () => {
     let urlState;
     let targets;
 
+    const dialog = () => document.getElementById("configuration");
+    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
+    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
+    const dragTubeSlider = (value) => {
+        const slider = document.getElementById("tubeCpuMultiplier");
+        slider.value = value;
+        slider.dispatchEvent(new Event("input"));
+    };
+
     beforeEach(() => {
         vi.useFakeTimers();
+        domFromIndexHtml("configuration");
         urlState = fakeUrlState();
         vi.spyOn(urlState, "updateUrl");
         targets = {
@@ -49,7 +38,7 @@ describe("Settings", () => {
     afterEach(teardownDom);
 
     const make = () => {
-        const settings = new Settings({ urlState, makeConfig: (...handlers) => fakeConfig(...handlers) });
+        const settings = new Settings({ urlState });
         settings.wire(targets);
         return settings;
     };
@@ -83,15 +72,17 @@ describe("Settings", () => {
             urlState.params.model = "PDP-11";
             const settings = make();
             expect(settings.model.name).toBe(DefaultModel.name);
-            expect(document.querySelector(".toast").textContent).toContain('no model called "PDP-11"');
+            expect(toasts()).toEqual([expect.stringContaining('no model called "PDP-11"')]);
         });
 
-        it("tells the dialog everything it resolved", () => {
+        it("shows the dialog everything it resolved", () => {
             urlState.params.model = "Master";
+            urlState.params.hasMusic5000 = true;
             const settings = make();
-            expect(settings.config.setModel).toHaveBeenCalledWith(findModel("Master").name);
-            expect(settings.config.setCheckboxes).toHaveBeenCalled();
-            expect(settings.config.setAudioOutput).toHaveBeenCalledWith("speaker");
+            expect(settings.model).toBe(findModel("Master"));
+            expect(document.querySelector("#bbc-model-dropdown .bbc-model").textContent).toBe(findModel("Master").name);
+            expect(document.getElementById("hasMusic5000").checked).toBe(true);
+            expect(document.querySelector(".audio-output-text").textContent).toBe("Internal speaker");
         });
     });
 
@@ -100,7 +91,7 @@ describe("Settings", () => {
             const settings = make();
             settings.applyAudioOutput("board");
             expect(targets.audioHandler.setAudioOutput).toHaveBeenCalledWith("board");
-            expect(settings.config.setAudioOutput).toHaveBeenCalledWith("board");
+            expect(document.querySelector(".audio-output-text").textContent).toBe("Line out");
             expect(targets.quickSettings.showAudioOutput).toHaveBeenCalledWith("board");
             expect(window.localStorage.audioOutput).toBe("board");
             expect(urlState.params.audioOutput).toBe("board");
@@ -132,63 +123,81 @@ describe("Settings", () => {
         });
 
         it("routes the dialog's live changes through the same appliers", () => {
-            const settings = make();
-            settings.config.onChange({ displayMode: "rgb" });
+            make();
+            document.querySelector('.display-mode-option[data-mode="rgb"]').click();
             expect(targets.display.setMode).toHaveBeenCalledWith("rgb");
-            settings.config.onChange({ speakerAmount: 0.7 });
+            const slider = document.getElementById("speakerAmountSetting");
+            slider.value = 0.7;
+            slider.dispatchEvent(new Event("input"));
             expect(targets.audioHandler.setSpeakerAmount).toHaveBeenCalledWith(0.7);
         });
     });
 
     describe("closing the dialog", () => {
         it("merges the changes into the URL parameters and updates the URL", () => {
-            const settings = make();
-            settings.config.onClose({ hasMusic5000: true });
+            make();
+            openDialog();
+            document.getElementById("hasMusic5000").click();
+            closeDialog();
             expect(urlState.params.hasMusic5000).toBe(true);
             expect(urlState.updateUrl).toHaveBeenCalledTimes(1);
         });
 
         it("fans a key layout out to storage, the machine and the keyboard", () => {
-            const settings = make();
-            settings.config.onClose({ keyLayout: "natural" });
+            make();
+            openDialog();
+            document.querySelector('.keyboard-menu a[data-target="natural"]').click();
+            closeDialog();
             expect(window.localStorage.keyLayout).toBe("natural");
             expect(targets.machine.emulationConfig.keyLayout).toBe("natural");
             expect(targets.keyboard.setKeyLayout).toHaveBeenCalledWith("natural");
         });
 
         it("reroutes the analogue channels when the mouse joystick or microphone change", () => {
-            const settings = make();
-            settings.config.onClose({ mouseJoystickEnabled: true });
+            make();
+            openDialog();
+            document.getElementById("mouseJoystickEnabled").click();
+            closeDialog();
             expect(targets.inputs.updateAdcSources).toHaveBeenCalledWith(true, undefined);
             expect(targets.inputs.setupMicrophone).not.toHaveBeenCalled();
-            settings.config.onClose({ microphoneChannel: 2 });
+            openDialog();
+            document.querySelector('.mic-channel-option[data-channel="2"]').click();
+            closeDialog();
             expect(targets.inputs.setupMicrophone).toHaveBeenCalled();
         });
 
         it("reroutes the analogue channels when the microphone is disabled, without starting it", () => {
             urlState.params.microphoneChannel = 2;
-            const settings = make();
-            settings.config.onClose({ microphoneChannel: undefined });
+            make();
+            openDialog();
+            document.querySelector('.mic-channel-option[data-channel=""]').click();
+            closeDialog();
             expect(targets.inputs.updateAdcSources).toHaveBeenCalledWith(undefined, undefined);
             expect(targets.inputs.setupMicrophone).not.toHaveBeenCalled();
         });
 
         it("passes a tube multiplier to a fitted tube only", () => {
-            const settings = make();
-            settings.config.onClose({ tubeCpuMultiplier: 4 });
+            make();
+            openDialog();
+            dragTubeSlider(4);
+            closeDialog();
             expect(targets.machine.emulationConfig.tubeCpuMultiplier).toBe(4);
             expect(targets.machine.processor.tube.cpuMultiplier).toBeUndefined();
 
             targets.machine.processor.hasTube = true;
-            settings.config.onClose({ tubeCpuMultiplier: 8 });
+            openDialog();
+            dragTubeSlider(8);
+            closeDialog();
             expect(targets.machine.processor.tube.cpuMultiplier).toBe(8);
         });
     });
 
     describe("a change that needs a restart", () => {
         it("asks before reloading", () => {
-            const settings = make();
-            settings.config.onRestartRequired();
+            make();
+            openDialog();
+            document.getElementById("hasEconet").click();
+            closeDialog();
             expect(targets.modals.confirm).toHaveBeenCalledWith(
                 expect.stringContaining("Restart now?"),
                 "Restart now",
@@ -202,7 +211,10 @@ describe("Settings", () => {
             urlState.params.speechOutput = true;
             const settings = make();
             expect(settings.speechOutput.enabled).toBe(true);
-            settings.config.onClose({ speechOutput: false });
+            openDialog();
+            expect(document.getElementById("speechOutput").checked).toBe(true);
+            document.getElementById("speechOutput").click();
+            closeDialog();
             expect(settings.speechOutput.enabled).toBe(false);
         });
     });
