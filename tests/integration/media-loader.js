@@ -94,7 +94,10 @@ describe("the built-in disc list", () => {
 
     it("rejects a disc that is not there and leaves the drive empty", async () => {
         const { machine, drives, media } = await setUp();
-        await expect(media.loadDiscImage("nosuch.ssd", drives.layoutForDrive(0))).rejects.toThrow(/404/);
+        expect(machine.processor.fdc.drives[0].disc).toBeUndefined();
+        await expect(media.loadDiscImage("nosuch.ssd", drives.layoutForDrive(0))).rejects.toThrow(
+            "Unable to load discs/nosuch.ssd, http code 404",
+        );
         expect(machine.processor.fdc.drives[0].disc).toBeUndefined();
         await machine.runUntilInput();
     });
