@@ -62,4 +62,18 @@ describe("Tokeniser", function () {
     it("gives error for overlong input", async function () {
         await checkThrows("10" + "ENVELOPE".repeat(252), "Line 10 tokenised length 252 > 251 bytes");
     });
+
+    describe("reuse", function () {
+        it("hands every caller the same instance", async function () {
+            expect(await Tokeniser.create()).toBe(await Tokeniser.create());
+        });
+
+        it("matches a fresh tokeniser's output after other programs have been through it", async function () {
+            const t = await tokeniser;
+            t.tokenise("30" + "ENVELOPE".repeat(100));
+            expect(t.tokenise('10 PRINT "hello"\n20 GOTO 10\n')).toBe(
+                '\r\x00\x0a\x0e \xf1 "hello"\r\x00\x14\x0b \xe5 \x8d\x54\x4a\x40\r\xff',
+            );
+        });
+    });
 });
