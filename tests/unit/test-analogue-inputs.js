@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AnalogueInputs } from "../../src/web/analogue-inputs.js";
+import { Settings } from "../../src/web/settings.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
 describe("AnalogueInputs", () => {
@@ -20,11 +21,10 @@ describe("AnalogueInputs", () => {
             },
             screenCanvas: document.getElementById("screen"),
             getGamepads: () => [],
-            urlState: fakeUrlState(),
-            config: { setMicrophoneChannel: vi.fn() },
+            settings: new Settings({ urlState: fakeUrlState() }),
             audioHandler: { tryResume: vi.fn() },
         };
-        vi.spyOn(deps.urlState, "updateUrl");
+        vi.spyOn(deps.settings.urlState, "updateUrl");
     });
 
     afterEach(teardownDom);
@@ -63,14 +63,14 @@ describe("AnalogueInputs", () => {
         });
 
         it("refuses a channel that does not exist, says so, and clears the setting", () => {
-            deps.urlState.params.microphoneChannel = 5;
+            deps.settings.microphoneChannel = 5;
             const inputs = make();
             inputs.updateAdcSources(false, 5);
             for (let ch = 0; ch < 4; ch++) expect(channels[ch]).toBe(inputs.gamepadSource);
             expect(toasts()).toEqual([expect.stringContaining("no analogue channel 5")]);
-            expect(deps.config.setMicrophoneChannel).toHaveBeenCalledWith(undefined);
-            expect(deps.urlState.params.microphoneChannel).toBeUndefined();
-            expect(deps.urlState.updateUrl).toHaveBeenCalled();
+            expect(deps.settings.microphoneChannel).toBeUndefined();
+            expect(deps.settings.urlState.params.microphoneChannel).toBeUndefined();
+            expect(deps.settings.urlState.updateUrl).toHaveBeenCalled();
         });
     });
 
@@ -95,7 +95,7 @@ describe("AnalogueInputs", () => {
             mouse("mousedown");
             expect(down).not.toHaveBeenCalled();
 
-            deps.urlState.params.mouseJoystickEnabled = true;
+            deps.settings.mouseJoystickEnabled = true;
             vi.spyOn(inputs.mouseJoystickSource, "isEnabled").mockReturnValue(true);
             mouse("mousedown");
             expect(down).toHaveBeenCalledWith(0);
@@ -113,15 +113,15 @@ describe("AnalogueInputs", () => {
 
     describe("a microphone that cannot start", () => {
         it("reports, clears the setting and takes it out of the URL", async () => {
-            deps.urlState.params.microphoneChannel = 2;
+            deps.settings.microphoneChannel = 2;
             const inputs = make();
             vi.spyOn(inputs.microphoneInput, "initialise").mockResolvedValue(false);
             vi.spyOn(inputs.microphoneInput, "getErrorMessage").mockReturnValue("denied");
             await inputs.setupMicrophone();
             expect(document.getElementById("micPermissionStatus").textContent).toBe("Error: denied");
-            expect(deps.config.setMicrophoneChannel).toHaveBeenCalledWith(undefined);
-            expect(deps.urlState.params.microphoneChannel).toBeUndefined();
-            expect(deps.urlState.updateUrl).toHaveBeenCalled();
+            expect(deps.settings.microphoneChannel).toBeUndefined();
+            expect(deps.settings.urlState.params.microphoneChannel).toBeUndefined();
+            expect(deps.settings.urlState.updateUrl).toHaveBeenCalled();
         });
     });
 });

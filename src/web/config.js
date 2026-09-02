@@ -49,45 +49,45 @@ export function restartPending(settings, running) {
     return RestartRequiredFields.some((field) => settings[field] !== running[field]);
 }
 
+/**
+ * The Settings dialog: shows the settings, applies the ones the machine can
+ * follow live as they are picked, and saves the rest when it closes. Dispatches
+ * "restart-required" after saving a change the running machine cannot follow.
+ */
 export class Config extends EventTarget {
-    /**
-     * @param {function(object)} onChange called as soon as a setting the emulator can follow live changes
-     * @param {function(object)} onClose called with the settings to apply and persist
-     * @param {function()} onRestartRequired called after the settings have been saved, when some of them
-     *     will only take effect once the machine is rebuilt
-     */
-    constructor(onChange, onClose, onRestartRequired) {
+    constructor(settings) {
         super();
-        this.onChange = onChange;
-        this.onClose = onClose;
-        this.onRestartRequired = onRestartRequired;
+        this.settings = settings;
         this.changed = {};
-        this.model = null;
-        for (const { field } of CheckboxSettings) this[field] = false;
-        this.runningSettings = null;
+        // Built before anything can change, so this is what the running machine was built with.
+        this.runningSettings = this.proposedSettings();
+        this.setModel(settings.model);
+        this.setKeyLayout(settings.keyLayout);
+        this.setMicrophoneChannel(settings.microphoneChannel);
+        this.setDisplayMode(settings.displayMode);
+        this.setAudioOutput(settings.audioOutput);
+        this.setSpeakerAmount(settings.speakerAmount);
+        settings.on("audioOutput", (audioOutput) => this.setAudioOutput(audioOutput));
+        settings.on("speakerAmount", (speakerAmount) => this.setSpeakerAmount(speakerAmount));
+        settings.on("displayMode", (displayMode) => this.setDisplayMode(displayMode));
+
         const configuration = document.getElementById("configuration");
         configuration.addEventListener("show.bs.modal", () => {
             this.changed = {};
-            // The startup settings are pushed in after construction, so what the running machine was
-            // built with is only knowable from the first time the dialog is opened.
-            if (!this.runningSettings) this.runningSettings = this.proposedSettings();
-            this.setDropdownText(this.model.name);
-            this.setTubeCpuMultiplier(this.tubeCpuMultiplier);
-            this.setCheckboxes(this);
+            this.setDropdownText(settings.model.name);
+            this.setTubeCpuMultiplier(settings.tubeCpuMultiplier);
+            this.setCheckboxes(settings);
             this.showRestartPending();
         });
 
         configuration.addEventListener("hide.bs.modal", () => {
             const changed = this.changed;
-            // Not setModel: that also renames the machine in the title bar, which has not changed yet.
-            if (changed.model !== undefined) this.model = findModel(changed.model);
-            this.setCheckboxes(changed);
-            this.onClose(changed);
+            this.changed = {};
             if (Object.keys(changed).length === 0) return;
-            this.dispatchEvent(new CustomEvent("settings-changed", { detail: changed }));
+            settings.set(changed);
             // changed records which controls were touched, so a value in it can be what is already running.
             if (needsRestart(changed) && restartPending(this.proposedSettings(), this.runningSettings))
-                this.onRestartRequired();
+                this.dispatchEvent(new Event("restart-required"));
         });
 
         const modelMenu = document.querySelector(".model-menu");
@@ -107,7 +107,10 @@ export class Config extends EventTarget {
             if (!link) return;
             this.changed.model = link.dataset.target;
             this.setDropdownText(link.textContent);
-            this.showTubeCpuMultiplier(this.tubeCpuMultiplier, findModel(link.dataset.target));
+            this.showTubeCpuMultiplier(
+                this.changed.tubeCpuMultiplier ?? this.settings.tubeCpuMultiplier,
+                findModel(link.dataset.target),
+            );
             this.showRestartPending();
         });
 
@@ -148,23 +151,18 @@ export class Config extends EventTarget {
         for (const option of document.querySelectorAll(".audio-output-option")) {
             option.addEventListener("click", (e) => {
                 e.preventDefault();
-                const audioOutput = e.currentTarget.dataset.output;
-                this.changed.audioOutput = audioOutput;
-                this.onChange({ audioOutput });
+                settings.set({ audioOutput: e.currentTarget.dataset.output });
             });
         }
 
         document.getElementById("speakerAmountSetting").addEventListener("input", (e) => {
-            this.onChange({ speakerAmount: parseFloat(e.currentTarget.value) });
+            settings.set({ speakerAmount: parseFloat(e.currentTarget.value) });
         });
 
         for (const option of document.querySelectorAll(".display-mode-option")) {
             option.addEventListener("click", (e) => {
                 e.preventDefault();
-                const mode = e.currentTarget.dataset.mode;
-                this.changed.displayMode = mode;
-                this.setDisplayMode(mode);
-                this.onChange({ displayMode: mode });
+                settings.set({ displayMode: e.currentTarget.dataset.mode });
             });
         }
     }
@@ -174,7 +172,7 @@ export class Config extends EventTarget {
      * menu and the URL use: the model by synonym rather than resolved, the fittings as booleans.
      */
     proposedSettings() {
-        const saved = (field) => (field === "model" ? this.model.synonyms[0] : this[field]);
+        const saved = (field) => (field === "model" ? this.settings.model.synonyms[0] : this.settings[field]);
         return Object.fromEntries(RestartRequiredFields.map((field) => [field, this.changed[field] ?? saved(field)]));
     }
 
@@ -183,13 +181,12 @@ export class Config extends EventTarget {
         document.getElementById("restart-pending").classList.toggle("d-none", !pending);
     }
 
-    /** Ticks the boxes named in `values` and adopts them, leaving any the object does not mention alone. */
+    /** Ticks the boxes named in `values`, leaving any the object does not mention alone. */
     setCheckboxes(values) {
         for (const { id, field, enables } of CheckboxSettings) {
             if (values[field] === undefined) continue;
             const checked = !!values[field];
             document.getElementById(id).checked = checked;
-            this[field] = checked;
             if (enables) document.getElementById(enables).disabled = !checked;
         }
     }
@@ -212,12 +209,12 @@ export class Config extends EventTarget {
         for (const el of document.querySelectorAll(".display-mode-text")) el.textContent = config.name;
     }
 
-    setModel(modelName) {
-        this.model = findModel(modelName);
-        for (const el of document.querySelectorAll(".bbc-model")) el.textContent = this.model.name;
-        for (const el of document.querySelectorAll(".bbc-model-short")) el.textContent = this.model.shortName;
+    /** Names the running machine everywhere the page shows it. */
+    setModel(model) {
+        for (const el of document.querySelectorAll(".bbc-model")) el.textContent = model.name;
+        for (const el of document.querySelectorAll(".bbc-model-short")) el.textContent = model.shortName;
         const settingsLink = document.getElementById("model-settings");
-        if (settingsLink) settingsLink.title = `${this.model.name}: emulation settings`;
+        if (settingsLink) settingsLink.title = `${model.name}: emulation settings`;
     }
 
     setKeyLayout(keyLayout) {
@@ -226,45 +223,16 @@ export class Config extends EventTarget {
     }
 
     setTubeCpuMultiplier(value) {
-        this.tubeCpuMultiplier = value;
         document.getElementById("tubeCpuMultiplier").value = value;
         this.showTubeCpuMultiplier(value);
     }
 
-    showTubeCpuMultiplier(value, model = this.model) {
+    showTubeCpuMultiplier(value, model = this.settings.model) {
         document.getElementById("tubeCpuMultiplierValue").textContent = tubeCpuSpeedLabel(value, model);
     }
 
     setDropdownText(modelName) {
         const el = document.querySelector("#bbc-model-dropdown .bbc-model");
         if (el) el.textContent = modelName;
-    }
-
-    get extraRoms() {
-        return fittedRoms(this);
-    }
-
-    mapLegacyModels(parsedQuery) {
-        if (!parsedQuery.model) {
-            return;
-        }
-
-        // "MasterTurbo" = Master + 6502 second processor
-        if (parsedQuery.model.toLowerCase() === "masterturbo") {
-            parsedQuery.model = "Master";
-            parsedQuery.coProcessor = true;
-        }
-
-        // "BMusic5000" = BBC DFS 1.2 + Music 5000
-        if (parsedQuery.model.toLowerCase() === "bmusic5000") {
-            parsedQuery.model = "B-DFS1.2";
-            parsedQuery.hasMusic5000 = true;
-        }
-
-        // "BTeletext" = BBC DFS 1.2 + Teletext adaptor
-        if (parsedQuery.model.toLowerCase() === "bteletext") {
-            parsedQuery.model = "B-DFS1.2";
-            parsedQuery.hasTeletextAdaptor = true;
-        }
     }
 }

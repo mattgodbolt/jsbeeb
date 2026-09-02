@@ -1,152 +1,88 @@
-import { Config } from "./config.js";
 import { DefaultModel, findModel } from "../models.js";
 import { DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
-import { SpeechOutput } from "../speech-output.js";
 import { guessModelFromHostname } from "../url-params.js";
+import { fittedRoms } from "./config.js";
 import { toast } from "./toast.js";
 
+// Kept in browser storage for next time, as well as in the URL.
+const StoredSettings = ["keyLayout", "displayMode", "audioOutput", "speakerAmount"];
+
+/** The URL spellings of a model plus a fitting, from before fittings had settings of their own. */
+export function mapLegacyModels(parsedQuery) {
+    if (!parsedQuery.model) return;
+    switch (parsedQuery.model.toLowerCase()) {
+        case "masterturbo":
+            parsedQuery.model = "Master";
+            parsedQuery.coProcessor = true;
+            break;
+        case "bmusic5000":
+            parsedQuery.model = "B-DFS1.2";
+            parsedQuery.hasMusic5000 = true;
+            break;
+        case "bteletext":
+            parsedQuery.model = "B-DFS1.2";
+            parsedQuery.hasTeletextAdaptor = true;
+            break;
+    }
+}
+
 /**
- * The user's settings: resolved from the URL, browser storage and the
- * defaults, kept in step across the Settings dialog, the top bar, storage and
- * the URL, and applied to the machine. Built before anything it applies to;
- * wire() hands it the targets once they exist, which is before any setting
- * can change hands.
+ * The user's settings, resolved from the URL, browser storage and the
+ * defaults. set() adopts a change, persists it and dispatches an event named
+ * for each changed setting carrying its new value, then one "change" event
+ * carrying them all; whatever a setting reaches subscribes with on().
  */
-export class Settings {
-    constructor({ urlState, makeConfig = (...handlers) => new Config(...handlers) }) {
+export class Settings extends EventTarget {
+    constructor({ urlState }) {
+        super();
         this.urlState = urlState;
-        this.targets = null;
-        const parsedQuery = urlState.params;
+        const params = urlState.params;
+        mapLegacyModels(params);
 
-        // Speech output: initialised from URL param; can be toggled at runtime via the Settings panel.
-        // Must be created before Config so the onClose callback and the initial checkbox state can reference it.
-        this.speechOutput = new SpeechOutput();
-        this.setSpeechOutput(!!parsedQuery.speechOutput);
-
-        this.keyLayout = window.localStorage.keyLayout || "physical";
-        if (parsedQuery.keyLayout) {
-            this.keyLayout = (parsedQuery.keyLayout + "").toLowerCase();
-        }
-
-        this.config = makeConfig(
-            (changed) => {
-                if (changed.audioOutput) this.applyAudioOutput(changed.audioOutput);
-                if (changed.speakerAmount !== undefined) this.applySpeakerAmount(changed.speakerAmount);
-                if (changed.displayMode) this.applyDisplayMode(changed.displayMode);
-            },
-            (changed) => this.onDialogClosed(changed),
-            async () => {
-                const restart = await this.targets.modals.confirm(
-                    "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
-                    "Restart now",
-                    "Later",
-                );
-                if (restart) window.location.reload();
-            },
-        );
-
-        // Perform mapping of legacy models to the new format
-        this.config.mapLegacyModels(parsedQuery);
-
-        const requestedModelName = parsedQuery.model || guessModelFromHostname(window.location.hostname);
-        const requestedModel = findModel(requestedModelName);
-        if (!requestedModel)
+        const requestedModelName = params.model || guessModelFromHostname(window.location.hostname);
+        this.model = findModel(requestedModelName);
+        if (!this.model) {
             toast(`There is no model called "${requestedModelName}". Using ${DefaultModel.name} instead.`, {
                 title: "Model",
             });
-        this.config.setModel((requestedModel ?? DefaultModel).name);
-        this.config.setKeyLayout(this.keyLayout);
-        this.config.setTubeCpuMultiplier(parsedQuery.tubeCpuMultiplier || 1);
-        this.config.setMicrophoneChannel(parsedQuery.microphoneChannel);
-        this.config.setCheckboxes({
-            coProcessor: !!parsedQuery.coProcessor,
-            hasEconet: !!parsedQuery.hasEconet,
-            hasMusic5000: !!parsedQuery.hasMusic5000,
-            hasTeletextAdaptor: !!parsedQuery.hasTeletextAdaptor,
-            mouseJoystickEnabled: !!parsedQuery.mouseJoystickEnabled,
-            speechOutput: this.speechOutput.enabled,
-        });
-
-        this.displayMode = parsedQuery.displayMode || window.localStorage.displayMode || "rgb";
-        this.config.setDisplayMode(this.displayMode);
+            this.model = DefaultModel;
+        }
+        this.keyLayout =
+            (params.keyLayout && `${params.keyLayout}`.toLowerCase()) || window.localStorage.keyLayout || "physical";
+        this.tubeCpuMultiplier = params.tubeCpuMultiplier || 1;
+        this.microphoneChannel = params.microphoneChannel;
+        this.coProcessor = !!params.coProcessor;
+        this.hasEconet = !!params.hasEconet;
+        this.hasMusic5000 = !!params.hasMusic5000;
+        this.hasTeletextAdaptor = !!params.hasTeletextAdaptor;
+        this.mouseJoystickEnabled = !!params.mouseJoystickEnabled;
+        this.speechOutput = !!params.speechOutput;
+        this.displayMode = params.displayMode || window.localStorage.displayMode || "rgb";
         this.audioOutput =
-            [parsedQuery.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
+            [params.audioOutput, window.localStorage.audioOutput].find(isAudioOutput) ?? DefaultAudioOutput;
         this.speakerAmount =
-            [parsedQuery.speakerAmount, parseFloat(window.localStorage.speakerAmount)].find(Number.isFinite) ?? 1;
-        this.config.setAudioOutput(this.audioOutput);
-        this.config.setSpeakerAmount(this.speakerAmount);
+            [params.speakerAmount, parseFloat(window.localStorage.speakerAmount)].find(Number.isFinite) ?? 1;
     }
 
-    get model() {
-        return this.config.model;
+    get extraRoms() {
+        return fittedRoms(this);
     }
 
-    /** What applying a setting reaches: everything here exists before a setting can change. */
-    wire(targets) {
-        this.targets = targets;
+    /** Calls `listener` with the new value whenever the setting `name` is set. */
+    on(name, listener) {
+        this.addEventListener(name, () => listener(this[name]));
     }
 
-    setSpeechOutput(enabled) {
-        this.speechOutput.enabled = enabled;
-        if (enabled && typeof speechSynthesis === "undefined")
-            toast("This browser has no speech synthesis, so speech output has nothing to speak with.", {
-                title: "Speech",
-            });
-    }
-
-    applyAudioOutput(output) {
-        this.audioOutput = output;
-        this.targets.audioHandler.setAudioOutput(output);
-        this.config.setAudioOutput(output);
-        this.targets.quickSettings?.showAudioOutput(output);
-        window.localStorage.audioOutput = output;
-        this.urlState.set({ audioOutput: output });
-    }
-
-    applySpeakerAmount(amount) {
-        this.speakerAmount = amount;
-        this.targets.audioHandler.setSpeakerAmount(amount);
-        this.config.setSpeakerAmount(amount);
-        this.targets.quickSettings?.showSpeakerAmount(amount);
-        window.localStorage.speakerAmount = amount;
-        this.urlState.set({ speakerAmount: amount }, { settle: true });
-    }
-
-    applyDisplayMode(mode) {
-        this.displayMode = mode;
-        this.targets.display.setMode(mode);
-        // The monitor picture may have changed shape.
-        this.targets.layout.resize();
-        this.config.setDisplayMode(mode);
-        this.targets.quickSettings?.showDisplayMode(mode);
-        window.localStorage.displayMode = mode;
-        this.urlState.set({ displayMode: mode });
-    }
-
-    onDialogClosed(changed) {
-        const { urlState } = this;
-        const { machine, keyboard, inputs } = this.targets;
-        const parsedQuery = urlState.params;
-        urlState.set(changed);
-        if (changed.keyLayout) {
-            window.localStorage.keyLayout = changed.keyLayout;
-            machine.emulationConfig.keyLayout = changed.keyLayout;
-            keyboard.setKeyLayout(changed.keyLayout);
+    /** Adopts `changes` (an undefined value clears a setting), persists them and tells the subscribers. */
+    set(changes) {
+        for (const [name, value] of Object.entries(changes)) {
+            this[name] = name === "model" ? (findModel(value) ?? this.model) : value;
+            if (!StoredSettings.includes(name)) continue;
+            if (value === undefined) window.localStorage.removeItem(name);
+            else window.localStorage[name] = value;
         }
-        if (changed.mouseJoystickEnabled !== undefined || Object.hasOwn(changed, "microphoneChannel")) {
-            inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
-
-            if (changed.microphoneChannel !== undefined) {
-                inputs.setupMicrophone();
-            }
-        }
-        if (changed.speechOutput !== undefined) this.setSpeechOutput(!!changed.speechOutput);
-        if (changed.tubeCpuMultiplier !== undefined) {
-            machine.emulationConfig.tubeCpuMultiplier = changed.tubeCpuMultiplier;
-            this.config.setTubeCpuMultiplier(changed.tubeCpuMultiplier);
-            if (machine.processor.hasTube) {
-                machine.processor.tube.cpuMultiplier = changed.tubeCpuMultiplier;
-            }
-        }
+        this.urlState.set(changes, { settle: "speakerAmount" in changes });
+        for (const name of Object.keys(changes)) this.dispatchEvent(new Event(name));
+        this.dispatchEvent(new CustomEvent("change", { detail: changes }));
     }
 }

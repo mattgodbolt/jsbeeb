@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Machine, buildEmulationConfig } from "../../src/web/machine.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
-const config = (overrides = {}) => ({
+const settings = (overrides = {}) => ({
     tubeCpuMultiplier: 1,
     coProcessor: false,
     model: { name: "B-DFS1.2" },
@@ -18,7 +18,7 @@ const config = (overrides = {}) => ({
 describe("buildEmulationConfig", () => {
     const build = (overrides = {}) =>
         buildEmulationConfig({
-            config: config(),
+            settings: settings(),
             parsedQuery: {},
             keyLayout: "physical",
             cpuMultiplier: 1,
@@ -29,13 +29,13 @@ describe("buildEmulationConfig", () => {
         });
 
     it("lets the fittings' ROMs claim banks before the URL's", () => {
-        const built = build({ config: config({ extraRoms: ["fitted.rom"] }), extraRoms: ["user.rom"] });
+        const built = build({ settings: settings({ extraRoms: ["fitted.rom"] }), extraRoms: ["user.rom"] });
         expect(built.extraRoms).toEqual(["fitted.rom", "user.rom"]);
     });
 
     it("fits a tube only when a co-processor was asked for", () => {
         expect(build().tube).toBeNull();
-        expect(build({ config: config({ coProcessor: true }) }).tube).toBeTruthy();
+        expect(build({ settings: settings({ coProcessor: true }) }).tube).toBeTruthy();
     });
 
     it("turns the FDC logging flags on by their presence alone", () => {
@@ -60,7 +60,7 @@ describe("Machine", () => {
         };
         deps = {
             model: { isAtom: false, cyclesPerSecond: 2000000, cmosOverride: undefined },
-            config: config(),
+            settings: settings(),
             parsedQuery: {},
             keyLayout: "physical",
             cpuMultiplier: 1,
@@ -98,7 +98,7 @@ describe("Machine", () => {
     });
 
     it("fits an Econet when asked, sharing it with the CMOS", () => {
-        deps.config = config({ hasEconet: true });
+        deps.settings = settings({ hasEconet: true });
         const machine = make();
         expect(machine.econet).toBeTruthy();
         expect(document.getElementById("fsmenuitem").style.display).toBe("");

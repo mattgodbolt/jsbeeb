@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { Config, fittedRoms, needsRestart, restartPending, tubeCpuSpeedLabel } from "../../src/web/config.js";
 import { allModels, findModel } from "../../src/models.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { Settings } from "../../src/web/settings.js";
+import { domFromIndexHtml, fakeUrlState, teardownDom } from "./helpers.js";
 
 describe("fittedRoms", () => {
     const master = findModel("Master");
@@ -109,9 +110,9 @@ describe("tubeCpuSpeedLabel", () => {
 });
 
 describe("Config", () => {
-    let onChange;
-    let onClose;
-    let onRestartRequired;
+    let settings;
+    let changed;
+    let restartRequired;
     let config;
 
     const dialog = () => document.getElementById("configuration");
@@ -125,30 +126,16 @@ describe("Config", () => {
         tubeSlider().value = value;
         tubeSlider().dispatchEvent(new Event("input"));
     };
-    const lastClosedWith = () => onClose.mock.calls.at(-1)[0];
+    const lastSaved = () => changed.mock.calls.at(-1)[0];
 
     beforeEach(() => {
         domFromIndexHtml("configuration");
-        onChange = vi.fn();
-        onClose = vi.fn();
-        onRestartRequired = vi.fn();
-        config = new Config(onChange, onClose, onRestartRequired);
-        // What Settings pushes in after construction, resolved from the URL and storage.
-        config.setModel("B-DFS1.2");
-        config.setKeyLayout("physical");
-        config.setTubeCpuMultiplier(1);
-        config.setMicrophoneChannel(undefined);
-        config.setCheckboxes({
-            coProcessor: false,
-            hasEconet: false,
-            hasMusic5000: false,
-            hasTeletextAdaptor: false,
-            mouseJoystickEnabled: false,
-            speechOutput: false,
-        });
-        config.setDisplayMode("rgb");
-        config.setAudioOutput("speaker");
-        config.setSpeakerAmount(1);
+        settings = new Settings({ urlState: fakeUrlState("?model=B-DFS1.2") });
+        changed = vi.fn();
+        settings.addEventListener("change", (event) => changed(event.detail));
+        restartRequired = vi.fn();
+        config = new Config(settings);
+        config.addEventListener("restart-required", restartRequired);
     });
 
     afterEach(teardownDom);
@@ -165,14 +152,14 @@ describe("Config", () => {
             openDialog();
             clickModel("Master");
             expect(modelDropdownText()).toBe(findModel("Master").name);
-            expect(config.model).toBe(findModel("B-DFS1.2"));
+            expect(settings.model).toBe(findModel("B-DFS1.2"));
             closeDialog();
-            expect(config.model).toBe(findModel("Master"));
+            expect(settings.model).toBe(findModel("Master"));
         });
     });
 
     describe("opening the dialog", () => {
-        it("shows the settings it was handed", () => {
+        it("shows the settings as they are", () => {
             openDialog();
             expect(modelDropdownText()).toBe(findModel("B-DFS1.2").name);
             expect(document.getElementById("hasMusic5000").checked).toBe(false);
@@ -184,33 +171,29 @@ describe("Config", () => {
             openDialog();
             clickModel("Master");
             closeDialog();
-            onClose.mockClear();
+            changed.mockClear();
             openDialog();
             closeDialog();
-            expect(onClose).toHaveBeenCalledWith({});
+            expect(changed).not.toHaveBeenCalled();
         });
     });
 
     describe("closing the dialog", () => {
-        it("reports an untouched dialog as no changes at all", () => {
-            const settingsChanged = vi.fn();
-            config.addEventListener("settings-changed", settingsChanged);
+        it("saves nothing from an untouched dialog", () => {
             openDialog();
             closeDialog();
-            expect(onClose).toHaveBeenCalledWith({});
-            expect(settingsChanged).not.toHaveBeenCalled();
-            expect(onRestartRequired).not.toHaveBeenCalled();
+            expect(changed).not.toHaveBeenCalled();
+            expect(restartRequired).not.toHaveBeenCalled();
         });
 
-        it("hands the changes to the close callback and the settings-changed event alike", () => {
-            const settingsChanged = vi.fn();
-            config.addEventListener("settings-changed", settingsChanged);
+        it("saves the touched settings together", () => {
             openDialog();
             clickModel("Master");
             document.getElementById("hasMusic5000").click();
             closeDialog();
-            expect(onClose).toHaveBeenCalledWith({ model: "Master", hasMusic5000: true });
-            expect(settingsChanged.mock.calls[0][0].detail).toEqual({ model: "Master", hasMusic5000: true });
+            expect(changed).toHaveBeenCalledWith({ model: "Master", hasMusic5000: true });
+            expect(settings.hasMusic5000).toBe(true);
+            expect(settings.urlState.params.hasMusic5000).toBe(true);
         });
     });
 
@@ -221,20 +204,20 @@ describe("Config", () => {
             clickModel("Master");
             expect(restartPendingShown()).toBe(true);
             closeDialog();
-            expect(onRestartRequired).toHaveBeenCalledTimes(1);
+            expect(restartRequired).toHaveBeenCalledTimes(1);
         });
 
         it("stops asking once the setting is put back", () => {
             openDialog();
             document.getElementById("hasMusic5000").click();
             closeDialog();
-            expect(onRestartRequired).toHaveBeenCalledTimes(1);
+            expect(restartRequired).toHaveBeenCalledTimes(1);
             openDialog();
             document.getElementById("hasMusic5000").click();
             expect(restartPendingShown()).toBe(false);
             closeDialog();
-            expect(lastClosedWith()).toEqual({ hasMusic5000: false });
-            expect(onRestartRequired).toHaveBeenCalledTimes(1);
+            expect(lastSaved()).toEqual({ hasMusic5000: false });
+            expect(restartRequired).toHaveBeenCalledTimes(1);
         });
 
         it("does not ask when a touched control is back where the machine already is", () => {
@@ -242,8 +225,8 @@ describe("Config", () => {
             document.getElementById("hasMusic5000").click();
             document.getElementById("hasMusic5000").click();
             closeDialog();
-            expect(lastClosedWith()).toEqual({ hasMusic5000: false });
-            expect(onRestartRequired).not.toHaveBeenCalled();
+            expect(lastSaved()).toEqual({ hasMusic5000: false });
+            expect(restartRequired).not.toHaveBeenCalled();
         });
     });
 
@@ -261,7 +244,7 @@ describe("Config", () => {
             dragTubeSlider(2);
             expect(document.getElementById("tubeCpuMultiplierValue").textContent).toBe("2x (6MHz)");
             closeDialog();
-            expect(lastClosedWith()).toEqual({ tubeCpuMultiplier: 2 });
+            expect(settings.tubeCpuMultiplier).toBe(2);
         });
 
         it("labels the tube speed for a newly picked model's own second processor", () => {
@@ -277,7 +260,7 @@ describe("Config", () => {
             document.querySelector('.keyboard-menu a[data-target="natural"]').click();
             expect(document.querySelector(".keyboard-layout").textContent).toBe("Natural");
             closeDialog();
-            expect(lastClosedWith()).toEqual({ keyLayout: "natural" });
+            expect(settings.keyLayout).toBe("natural");
         });
 
         it("saves a microphone channel", () => {
@@ -285,7 +268,7 @@ describe("Config", () => {
             document.querySelector('.mic-channel-option[data-channel="2"]').click();
             expect(document.querySelector(".mic-channel-text").textContent).toBe("Channel 2");
             closeDialog();
-            expect(lastClosedWith()).toEqual({ microphoneChannel: 2 });
+            expect(settings.microphoneChannel).toBe(2);
         });
 
         it("saves disabling the microphone as a change, not an omission", () => {
@@ -293,75 +276,56 @@ describe("Config", () => {
             document.querySelector('.mic-channel-option[data-channel=""]').click();
             expect(document.querySelector(".mic-channel-text").textContent).toBe("Disabled");
             closeDialog();
-            expect(lastClosedWith()).toStrictEqual({ microphoneChannel: undefined });
+            expect(lastSaved()).toStrictEqual({ microphoneChannel: undefined });
         });
     });
 
     describe("the live settings", () => {
-        it("applies a sound output at once as well as saving it", () => {
+        it("sets a sound output at once, without waiting for the dialog to close", () => {
             openDialog();
             document.querySelector('.audio-output-option[data-output="board"]').click();
-            expect(onChange).toHaveBeenCalledWith({ audioOutput: "board" });
+            expect(settings.audioOutput).toBe("board");
+            expect(document.querySelector(".audio-output-text").textContent).toBe("Line out");
+            expect(document.getElementById("speakerAmountSetting").disabled).toBe(true);
             closeDialog();
-            expect(lastClosedWith()).toEqual({ audioOutput: "board" });
+            expect(changed).toHaveBeenCalledTimes(1);
         });
 
-        it("applies a display mode at once and shows its name", () => {
+        it("sets a display mode at once and shows its name", () => {
             openDialog();
             document.querySelector('.display-mode-option[data-mode="pal"]').click();
-            expect(onChange).toHaveBeenCalledWith({ displayMode: "pal" });
+            expect(settings.displayMode).toBe("pal");
             expect(document.querySelector(".display-mode-text").textContent).toBe("PAL TV");
         });
 
-        it("applies a dragged speaker amount at once", () => {
+        it("sets a dragged speaker amount at once", () => {
             const slider = document.getElementById("speakerAmountSetting");
             slider.value = 0.5;
             slider.dispatchEvent(new Event("input"));
-            expect(onChange).toHaveBeenCalledWith({ speakerAmount: 0.5 });
+            expect(settings.speakerAmount).toBe(0.5);
+        });
+
+        it("follows a live setting changed elsewhere", () => {
+            settings.set({ audioOutput: "off", displayMode: "xbr", speakerAmount: 0.25 });
+            expect(document.querySelector(".audio-output-text").textContent).toBe("Unfiltered");
+            expect(document.querySelector(".display-mode-text").textContent).toBe("Smoothed (xBR)");
+            expect(document.getElementById("speakerAmountSetting").value).toBe("0.25");
         });
     });
 
-    describe("being told the applied settings", () => {
-        it("names the model everywhere the page shows it", () => {
-            config.setModel("Master");
-            expect(document.querySelector(".modal-title .bbc-model").textContent).toBe(findModel("Master").name);
+    describe("naming the machine", () => {
+        it("names the running model everywhere the page shows it", () => {
+            expect(document.querySelector(".modal-title .bbc-model").textContent).toBe(findModel("B-DFS1.2").name);
+            expect(modelDropdownText()).toBe(findModel("B-DFS1.2").name);
+        });
+
+        it("keeps naming the running model after another is saved for the next start", () => {
+            openDialog();
+            clickModel("Master");
+            closeDialog();
+            expect(document.querySelector(".modal-title .bbc-model").textContent).toBe(findModel("B-DFS1.2").name);
+            openDialog();
             expect(modelDropdownText()).toBe(findModel("Master").name);
-        });
-
-        it("shows a sound output and gates the speaker slider on it", () => {
-            config.setAudioOutput("board");
-            expect(document.querySelector(".audio-output-text").textContent).toBe("Line out");
-            expect(document.getElementById("speakerAmountSetting").disabled).toBe(true);
-            config.setAudioOutput("speaker");
-            expect(document.getElementById("speakerAmountSetting").disabled).toBe(false);
-        });
-
-        it("offers the ROMs for the fittings that are ticked", () => {
-            config.setModel("Master");
-            config.setCheckboxes({ hasEconet: true, hasMusic5000: true });
-            expect(config.extraRoms).toEqual(["master/anfs-4.25.rom", "ample.rom"]);
-        });
-    });
-
-    describe("mapLegacyModels", () => {
-        it("splits the combination models into a model and its fitting", () => {
-            const turbo = { model: "MasterTurbo" };
-            config.mapLegacyModels(turbo);
-            expect(turbo).toEqual({ model: "Master", coProcessor: true });
-
-            const music = { model: "BMusic5000" };
-            config.mapLegacyModels(music);
-            expect(music).toEqual({ model: "B-DFS1.2", hasMusic5000: true });
-
-            const teletext = { model: "BTeletext" };
-            config.mapLegacyModels(teletext);
-            expect(teletext).toEqual({ model: "B-DFS1.2", hasTeletextAdaptor: true });
-        });
-
-        it("leaves a query with no model alone", () => {
-            const query = { autoboot: true };
-            config.mapLegacyModels(query);
-            expect(query).toEqual({ autoboot: true });
         });
     });
 });

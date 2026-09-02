@@ -33,6 +33,8 @@ import { Drives } from "./web/drives.js";
 import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
 import { Settings } from "./web/settings.js";
+import { Config } from "./web/config.js";
+import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./web/rewind-ui.js";
@@ -102,8 +104,18 @@ const printer = new Printer({
 const accessibilitySwitches = new AccessibilitySwitches();
 
 const settings = new Settings({ urlState });
-const { config, speechOutput, keyLayout, displayMode, audioOutput, speakerAmount } = settings;
+const { keyLayout, displayMode, audioOutput, speakerAmount } = settings;
 const model = settings.model;
+const config = new Config(settings);
+
+const speechOutput = new SpeechOutput();
+const speak = (enabled) => {
+    speechOutput.enabled = enabled;
+    if (enabled && typeof speechSynthesis === "undefined")
+        toast("This browser has no speech synthesis, so speech output has nothing to speak with.", { title: "Speech" });
+};
+speak(settings.speechOutput);
+settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
 const keyMappingWarnings = processInputParams(
@@ -154,21 +166,14 @@ const audioHandler = new AudioHandler({
     noSeek,
     cpuSpeed,
     isAtom: model.isAtom,
-    hasMusic5000: config.hasMusic5000,
+    hasMusic5000: settings.hasMusic5000,
 });
 // Firefox will report that audio is suspended even when it will
 // start playing without user interaction, so we need to delay a
 // little to get a reliable indication.
 window.setTimeout(() => audioHandler.checkStatus(), 1000);
 
-const quickSettings = new QuickSettings(
-    {
-        onAudioOutput: (output) => settings.applyAudioOutput(output),
-        onSpeakerAmount: (amount) => settings.applySpeakerAmount(amount),
-        onDisplayMode: (mode) => settings.applyDisplayMode(mode),
-    },
-    { audioOutput, speakerAmount, displayMode },
-);
+new QuickSettings(settings);
 
 // ------------------------------------------------------------------------
 // The machine, the loop that runs it, and everything that feeds it.
@@ -177,7 +182,7 @@ const quickSettings = new QuickSettings(
 // Depends on the settings having applied the URL parameters.
 const machine = new Machine({
     model,
-    config,
+    settings,
     parsedQuery,
     keyLayout,
     cpuMultiplier,
@@ -283,11 +288,10 @@ const inputs = new AnalogueInputs({
     processor,
     screenCanvas,
     getGamepads: machine.emulationConfig.getGamepads,
-    urlState,
-    config,
+    settings,
     audioHandler,
 });
-if (parsedQuery.microphoneChannel !== undefined) {
+if (settings.microphoneChannel !== undefined) {
     // We need to use setTimeout to make sure this runs after the page has loaded
     // This is needed because some browsers require user interaction for audio context
     setTimeout(async () => {
@@ -295,7 +299,7 @@ if (parsedQuery.microphoneChannel !== undefined) {
     }, 1000);
 }
 // Apply ADC source settings from URL parameters
-inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);
+inputs.updateAdcSources(settings.mouseJoystickEnabled, settings.microphoneChannel);
 
 const frontPanel = new FrontPanel({ processor, model, printer });
 
@@ -322,7 +326,35 @@ const layout = new Layout({
 });
 
 // Everything a setting can reach now exists.
-settings.wire({ audioHandler, display, layout, quickSettings, machine, keyboard, inputs, modals });
+settings.on("audioOutput", (output) => audioHandler.setAudioOutput(output));
+settings.on("speakerAmount", (amount) => audioHandler.setSpeakerAmount(amount));
+settings.on("displayMode", (mode) => {
+    display.setMode(mode);
+    // The monitor picture may have changed shape.
+    layout.resize();
+});
+settings.on("keyLayout", (chosen) => {
+    keyboard.setKeyLayout(chosen);
+    // A reset reads the layout from the machine's config again.
+    machine.emulationConfig.keyLayout = chosen;
+});
+settings.on("tubeCpuMultiplier", (multiplier) => {
+    if (processor.hasTube) processor.tube.cpuMultiplier = multiplier;
+});
+const rerouteAnalogue = () => inputs.updateAdcSources(settings.mouseJoystickEnabled, settings.microphoneChannel);
+settings.on("mouseJoystickEnabled", rerouteAnalogue);
+settings.on("microphoneChannel", (channel) => {
+    rerouteAnalogue();
+    if (channel !== undefined) inputs.setupMicrophone();
+});
+config.addEventListener("restart-required", async () => {
+    const restart = await modals.confirm(
+        "Your change is saved, but only takes effect when the emulator restarts. Restart now?",
+        "Restart now",
+        "Later",
+    );
+    if (restart) window.location.reload();
+});
 
 // ------------------------------------------------------------------------
 // The page's own handlers.
@@ -449,7 +481,7 @@ electron({
     loadDiscImage: media.loadDiscImage.bind(media),
     loadTapeImage: media.loadTapeImage.bind(media),
     processor,
-    config,
+    settings,
     media,
     modals: {
         show: (modalId, sthType) => {

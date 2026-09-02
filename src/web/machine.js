@@ -11,18 +11,26 @@ import { errorText, reportLoadFailure, showNotice } from "./reporting.js";
  * The machine's fittings as the CPU wants them handed over. Pure, so the bank
  * and flag decisions are testable on their own.
  */
-export function buildEmulationConfig({ config, parsedQuery, keyLayout, cpuMultiplier, extraRoms, userPort, printer }) {
+export function buildEmulationConfig({
+    settings,
+    parsedQuery,
+    keyLayout,
+    cpuMultiplier,
+    extraRoms,
+    userPort,
+    printer,
+}) {
     return {
         keyLayout,
         cpuMultiplier,
-        tubeCpuMultiplier: config.tubeCpuMultiplier,
+        tubeCpuMultiplier: settings.tubeCpuMultiplier,
         videoCyclesBatch: parsedQuery.videoCyclesBatch,
-        tube: config.coProcessor ? tubeModelFor(config.model) : null,
-        hasMusic5000: config.hasMusic5000,
-        hasTeletextAdaptor: config.hasTeletextAdaptor,
+        tube: settings.coProcessor ? tubeModelFor(settings.model) : null,
+        hasMusic5000: settings.hasMusic5000,
+        hasTeletextAdaptor: settings.hasTeletextAdaptor,
         // ROM order determines sideways bank allocation, and the fittings' ROMs claim banks
         // before any the user asked for with ?rom=.
-        extraRoms: [...config.extraRoms, ...extraRoms],
+        extraRoms: [...settings.extraRoms, ...extraRoms],
         userPort,
         printerPort: printer,
         getGamepads: function () {
@@ -40,7 +48,7 @@ export function buildEmulationConfig({ config, parsedQuery, keyLayout, cpuMultip
 export class Machine {
     constructor({
         model,
-        config,
+        settings,
         parsedQuery,
         keyLayout,
         cpuMultiplier,
@@ -59,7 +67,7 @@ export class Machine {
         this.speechOutput = speechOutput;
 
         this.econet = null;
-        if (config.hasEconet) {
+        if (settings.hasEconet) {
             this.econet = new Econet(stationId, model.cyclesPerSecond);
         } else {
             document.getElementById("fsmenuitem").style.display = "none";
@@ -79,7 +87,7 @@ export class Machine {
         );
 
         this.emulationConfig = buildEmulationConfig({
-            config,
+            settings,
             parsedQuery,
             keyLayout,
             cpuMultiplier,
@@ -95,7 +103,7 @@ export class Machine {
             soundChip: audioHandler.soundChip,
             ddNoise: audioHandler.ddNoise,
             relayNoise: audioHandler.relayNoise,
-            music5000: config.hasMusic5000 ? audioHandler.music5000 : null,
+            music5000: settings.hasMusic5000 ? audioHandler.music5000 : null,
             cmos: this.cmos,
             config: this.emulationConfig,
             econet: this.econet,
