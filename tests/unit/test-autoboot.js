@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Autoboot } from "../../src/web/autoboot.js";
-import * as utils from "../../src/utils.js";
+import * as keymap from "../../src/keymap.js";
+import { BBC } from "../../src/keymap.js";
 
 describe("Autoboot", () => {
     let sendKeys;
@@ -35,7 +36,7 @@ describe("Autoboot", () => {
 
     it("boots a disc by holding SHIFT through a break", () => {
         make().boot("elite.ssd");
-        expect(sendKeys).toHaveBeenCalledWith([utils.BBC.SHIFT, 1000], false);
+        expect(sendKeys).toHaveBeenCalledWith([BBC.SHIFT, 1000], false);
     });
 
     it("types the requested keys after a pause", () => {
@@ -55,7 +56,7 @@ describe("Autoboot", () => {
     });
 
     it("chains and runs tapes with the right incantations", () => {
-        const spelled = vi.spyOn(utils, "stringToBBCKeys");
+        const spelled = vi.spyOn(keymap, "stringToBBCKeys");
         make().chainTape();
         expect(spelled).toHaveBeenCalledWith('*TAPE\nCH.""\n');
         make().runTape();

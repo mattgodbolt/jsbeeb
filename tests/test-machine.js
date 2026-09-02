@@ -5,10 +5,10 @@ import { findModel } from "../src/models.js";
 import assert from "assert";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as utils from "../src/utils.js";
-import * as utils_atom from "../src/utils_atom.js";
+import * as utils_atom from "../src/keymap-atom.js";
 import * as Tokeniser from "../src/basic-tokenise.js";
 import { setNodeBasePath } from "../src/loader.js";
+import { keyCodes } from "../src/keymap.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -271,63 +271,63 @@ export class TestMachine {
             case "\r":
                 return { code: 13, shift: false };
             case '"':
-                return { code: utils.keyCodes.K2, shift: true };
+                return { code: keyCodes.K2, shift: true };
             case "*":
-                return { code: utils.keyCodes.APOSTROPHE, shift: true };
+                return { code: keyCodes.APOSTROPHE, shift: true };
             case "!":
-                return { code: utils.keyCodes.K1, shift: true };
+                return { code: keyCodes.K1, shift: true };
             case ".":
-                return { code: utils.keyCodes.PERIOD, shift: false };
+                return { code: keyCodes.PERIOD, shift: false };
             case ";":
-                return { code: utils.keyCodes.SEMICOLON, shift: false };
+                return { code: keyCodes.SEMICOLON, shift: false };
             case ":":
-                return { code: utils.keyCodes.APOSTROPHE, shift: false };
+                return { code: keyCodes.APOSTROPHE, shift: false };
             case ",":
-                return { code: utils.keyCodes.COMMA, shift: false };
+                return { code: keyCodes.COMMA, shift: false };
             case "&":
-                return { code: utils.keyCodes.K6, shift: true };
+                return { code: keyCodes.K6, shift: true };
             case " ":
-                return { code: utils.keyCodes.SPACE, shift: false };
+                return { code: keyCodes.SPACE, shift: false };
             case "-":
-                return { code: utils.keyCodes.MINUS, shift: false };
+                return { code: keyCodes.MINUS, shift: false };
             case "=":
-                return { code: utils.keyCodes.MINUS, shift: true };
+                return { code: keyCodes.MINUS, shift: true };
             case "+":
-                return { code: utils.keyCodes.SEMICOLON, shift: true };
+                return { code: keyCodes.SEMICOLON, shift: true };
             case "^":
-                return { code: utils.keyCodes.EQUALS, shift: false };
+                return { code: keyCodes.EQUALS, shift: false };
             case "~":
-                return { code: utils.keyCodes.EQUALS, shift: true };
+                return { code: keyCodes.EQUALS, shift: true };
             case "[":
-                return { code: utils.keyCodes.LEFT_SQUARE_BRACKET, shift: false };
+                return { code: keyCodes.LEFT_SQUARE_BRACKET, shift: false };
             case "]":
-                return { code: utils.keyCodes.RIGHT_SQUARE_BRACKET, shift: false };
+                return { code: keyCodes.RIGHT_SQUARE_BRACKET, shift: false };
             case "{":
-                return { code: utils.keyCodes.LEFT_SQUARE_BRACKET, shift: true };
+                return { code: keyCodes.LEFT_SQUARE_BRACKET, shift: true };
             case "}":
-                return { code: utils.keyCodes.HASH, shift: true };
+                return { code: keyCodes.HASH, shift: true };
             case "\\":
-                return { code: utils.keyCodes.BACKSLASH, shift: false };
+                return { code: keyCodes.BACKSLASH, shift: false };
             case "/":
-                return { code: utils.keyCodes.SLASH, shift: false };
+                return { code: keyCodes.SLASH, shift: false };
             case "?":
-                return { code: utils.keyCodes.SLASH, shift: true };
+                return { code: keyCodes.SLASH, shift: true };
             case "<":
-                return { code: utils.keyCodes.COMMA, shift: true };
+                return { code: keyCodes.COMMA, shift: true };
             case ">":
-                return { code: utils.keyCodes.PERIOD, shift: true };
+                return { code: keyCodes.PERIOD, shift: true };
             case "(":
-                return { code: utils.keyCodes.K8, shift: true };
+                return { code: keyCodes.K8, shift: true };
             case ")":
-                return { code: utils.keyCodes.K9, shift: true };
+                return { code: keyCodes.K9, shift: true };
             case "@":
-                return { code: utils.keyCodes.BACK_QUOTE, shift: false };
+                return { code: keyCodes.BACK_QUOTE, shift: false };
             case "#":
-                return { code: utils.keyCodes.K3, shift: true };
+                return { code: keyCodes.K3, shift: true };
             case "$":
-                return { code: utils.keyCodes.K4, shift: true };
+                return { code: keyCodes.K4, shift: true };
             case "%":
-                return { code: utils.keyCodes.K5, shift: true };
+                return { code: keyCodes.K5, shift: true };
             default: {
                 const upper = ch.toUpperCase();
                 const isLetter = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");

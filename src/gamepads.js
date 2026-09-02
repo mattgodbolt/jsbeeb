@@ -1,6 +1,4 @@
-import * as utils from "./utils.js";
-
-const BBC = utils.BBC;
+import { BBC, isFirefox } from "./keymap.js";
 
 export class GamePad {
     constructor() {
@@ -200,7 +198,7 @@ export class GamePad {
         // process gamepad buttons
         if (this.gamepad0) {
             // these two lines needed in Chrome to update state, not Firefox
-            if (!utils.isFirefox()) {
+            if (!isFirefox()) {
                 this.gamepad0 = navigator.getGamepads()[0];
             }
 

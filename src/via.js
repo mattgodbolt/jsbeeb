@@ -1,4 +1,4 @@
-import * as utils from "./utils.js";
+import { BBC, getKeyMap } from "./keymap.js";
 
 const ORB = 0x0,
     ORA = 0x1,
@@ -601,7 +601,7 @@ export class SysVia extends Via {
     }
 
     setKeyLayout(map) {
-        this.keycodeToRowCol = utils.getKeyMap(map);
+        this.keycodeToRowCol = getKeyMap(map);
     }
 
     setVBlankInt(level) {
@@ -636,7 +636,7 @@ export class SysVia extends Via {
         if (!mapping) return;
 
         const [col, row, bbcShiftOverride] = mapping;
-        const [shiftCol, shiftRow] = utils.BBC.SHIFT;
+        const [shiftCol, shiftRow] = BBC.SHIFT;
 
         this.keys[col][row] = val;
 

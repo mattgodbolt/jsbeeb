@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { SysVia, UserVia } from "../../src/via.js";
 import { Scheduler } from "../../src/scheduler.js";
-import * as utils from "../../src/utils.js";
+import { BBC, keyCodes } from "../../src/keymap.js";
 
 function makeFakeCpu() {
     return { interrupt: 0 };
@@ -409,8 +409,6 @@ describe("SysVia getJoysticks", () => {
 
 describe("SysVia natural keyboard shift override", () => {
     let scheduler, cpu, via;
-    const keyCodes = utils.keyCodes;
-    const BBC = utils.BBC;
 
     beforeEach(() => {
         scheduler = new Scheduler();

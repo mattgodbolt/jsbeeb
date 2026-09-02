@@ -1,21 +1,4 @@
-import { keyCodes, userKeymap } from "./utils.js";
-
-// Detect keyboard layout locally — mirrors the logic in utils.js but avoids
-// importing the non-exported isUKlayout. Should be replaced with an import
-// if utils.js ever exports it.
-function detectKeyboardLayout() {
-    if (typeof navigator === "undefined") return "UK";
-    if (typeof localStorage !== "undefined" && localStorage.keyboardLayout) {
-        return localStorage.keyboardLayout === "US" ? "US" : "UK";
-    }
-    if (navigator.language) {
-        if (navigator.language.toLowerCase() === "en-gb") return "UK";
-        if (navigator.language.toLowerCase() === "en-us") return "US";
-    }
-    return "UK";
-}
-
-const isUKlayout = detectKeyboardLayout() === "UK";
+import { detectKeyboardLayout, keyCodes, userKeymap } from "./keymap.js";
 
 // ATOM
 
@@ -228,6 +211,7 @@ export function stringToATOMKeys(str) {
 }
 
 export function getKeyMapAtom(keyLayout) {
+    const isUKlayout = detectKeyboardLayout() === "UK";
     const keys2 = [];
 
     // shift pressed

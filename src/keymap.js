@@ -257,6 +257,13 @@ export function stringToBBCKeys(str) {
  */
 export const keyCodes = {
     UNDEFINED: 0,
+    SEMICOLON: 186,
+    HASH: 222,
+    APOSTROPHE: 192,
+    MUTE: 173,
+    MINUS: 189,
+    EQUALS: 187,
+    BACK_QUOTE: 223,
     BACKSPACE: 8,
     TAB: 9,
     CLEAR: 12,
@@ -370,7 +377,7 @@ export const keyCodes = {
     CTRL_RIGHT: 261, // hack, jsbeeb only
 };
 
-function detectKeyboardLayout() {
+export function detectKeyboardLayout() {
     if (runningInNode) {
         return "UK";
     }
@@ -384,41 +391,47 @@ function detectKeyboardLayout() {
     return "UK"; // Default guess of UK
 }
 
-const isUKlayout = detectKeyboardLayout() === "UK";
+/**
+ * Adjusts keyCodes for the browser this runs in. The table starts as Chrome on a
+ * UK keyboard, which is also what node sees, so only the differences are applied.
+ */
+export function adaptKeyCodesToBrowser() {
+    const isUKlayout = detectKeyboardLayout() === "UK";
+    if (isFirefox()) {
+        keyCodes.SEMICOLON = 59;
+        // #~ key (not on US keyboard)
+        keyCodes.HASH = 163;
+        keyCodes.APOSTROPHE = 222;
+        keyCodes.BACK_QUOTE = 192;
+        // Firefox doesn't return a keycode for this
+        keyCodes.MUTE = -1;
+        keyCodes.MINUS = 173;
+        keyCodes.EQUALS = 61;
+    } else {
+        // Chrome
+        // TODO(#1065) check other browsers
+        // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
+        keyCodes.SEMICOLON = 186;
+        // #~ key (not on US keyboard)
+        keyCodes.HASH = isUKlayout ? 222 : 223;
+        keyCodes.APOSTROPHE = isUKlayout ? 192 : 222;
+        keyCodes.MUTE = 173;
+        keyCodes.MINUS = 189;
+        keyCodes.EQUALS = 187;
+        keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
+    }
 
-if (isFirefox()) {
-    keyCodes.SEMICOLON = 59;
-    // #~ key (not on US keyboard)
-    keyCodes.HASH = 163;
-    keyCodes.APOSTROPHE = 222;
-    keyCodes.BACK_QUOTE = 192;
-    // Firefox doesn't return a keycode for this
-    keyCodes.MUTE = -1;
-    keyCodes.MINUS = 173;
-    keyCodes.EQUALS = 61;
-} else {
-    // Chrome
-    // TODO(#1065) check other browsers
-    // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
-    keyCodes.SEMICOLON = 186;
-    // #~ key (not on US keyboard)
-    keyCodes.HASH = isUKlayout ? 222 : 223;
-    keyCodes.APOSTROPHE = isUKlayout ? 192 : 222;
-    keyCodes.MUTE = 173;
-    keyCodes.MINUS = 189;
-    keyCodes.EQUALS = 187;
-    keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
-}
-
-// Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
-// Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
-if (!runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
-    keyCodes.BACK_QUOTE = 192;
-    keyCodes.APOSTROPHE = 222;
-    keyCodes.HASH = 223;
+    // Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
+    // Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
+    if (!runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
+        keyCodes.BACK_QUOTE = 192;
+        keyCodes.APOSTROPHE = 222;
+        keyCodes.HASH = 223;
+    }
 }
 
 export function getKeyMap(keyLayout) {
+    const isUKlayout = detectKeyboardLayout() === "UK";
     const keys2 = [];
 
     // shift pressed
@@ -740,5 +753,3 @@ export function getKeyMap(keyLayout) {
 
     return keys2;
 }
-
-export function noop() {}

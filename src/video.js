@@ -1,9 +1,10 @@
 import { Teletext } from "./teletext.js";
-import * as utils from "./utils.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
 import { encodeLineGrid, texelsPerPixel, LineGridRows } from "./video-filters/pixel-grid.js";
 import { makeFast32 } from "./binary.js";
+
+const noop = () => {};
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -1228,14 +1229,14 @@ export class FakeVideo {
             read: function () {
                 return 0xff;
             },
-            write: utils.noop,
+            write: noop,
         };
         this.ula = {
             read: function () {
                 return 0xff;
             },
-            write: utils.noop,
-            reset: utils.noop,
+            write: noop,
+            reset: noop,
             disabled: false,
         };
         this.regs = new Uint8Array(32);

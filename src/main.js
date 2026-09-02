@@ -3,9 +3,8 @@ import { version } from "../package.json";
 import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
 
-import * as utils from "./utils.js";
 import { Debugger } from "./web/debug.js";
-import * as utils_atom from "./utils_atom.js";
+import * as atomKeymap from "./keymap-atom.js";
 import { GamePad } from "./gamepads.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
@@ -40,8 +39,10 @@ import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
+import { BBC, adaptKeyCodesToBrowser, keyCodes, userKeymap } from "./keymap.js";
 
 installIcons();
+adaptKeyCodesToBrowser();
 
 // ------------------------------------------------------------------------
 // What the URL asked for.
@@ -107,9 +108,9 @@ settings.on("speechOutput", speak);
 // Must come after we know the model, to validate names against those of the hardware.
 const keyMappingWarnings = processInputParams(
     parsedQuery,
-    model.isAtom ? utils_atom.ATOM : utils.BBC,
-    utils.keyCodes,
-    utils.userKeymap,
+    model.isAtom ? atomKeymap.ATOM : BBC,
+    keyCodes,
+    userKeymap,
     gamepad,
 );
 if (keyMappingWarnings.length) {

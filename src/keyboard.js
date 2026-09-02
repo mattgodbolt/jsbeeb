@@ -1,5 +1,5 @@
-import * as utils from "./utils.js";
-import { ATOM } from "./utils_atom.js";
+import { ATOM } from "./keymap-atom.js";
+import { BBC, keyCodes } from "./keymap.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 
@@ -34,7 +34,7 @@ export class Keyboard extends EventTarget {
         this.keyInterface = processor.model.isAtom ? processor.atomppia : processor.sysvia;
         // The SHIFT key constant used by stringToMachineKeys in the paste key array.
         // Compared by reference in _deliverPasteKey to avoid toggling shift off.
-        this._shiftKey = processor.model.isAtom ? ATOM.SHIFT : utils.BBC.SHIFT;
+        this._shiftKey = processor.model.isAtom ? ATOM.SHIFT : BBC.SHIFT;
 
         // State
         this.emuKeyHandlers = {};
@@ -64,7 +64,6 @@ export class Keyboard extends EventTarget {
      */
     keyCode(evt) {
         const ret = evt.which || evt.charCode || evt.keyCode;
-        const keyCodes = utils.keyCodes;
 
         switch (evt.location) {
             default:
@@ -107,9 +106,9 @@ export class Keyboard extends EventTarget {
             case 3: // numpad
                 switch (ret) {
                     case keyCodes.ENTER:
-                        return utils.keyCodes.NUMPADENTER;
+                        return keyCodes.NUMPADENTER;
                     case keyCodes.DELETE:
-                        return utils.keyCodes.NUMPAD_DECIMAL_POINT;
+                        return keyCodes.NUMPAD_DECIMAL_POINT;
                 }
                 break;
         }
@@ -225,7 +224,7 @@ export class Keyboard extends EventTarget {
         const code = this.keyCode(evt);
         evt.preventDefault();
 
-        if (this.isPasting && code === utils.keyCodes.ESCAPE) {
+        if (this.isPasting && code === keyCodes.ESCAPE) {
             this.cancelPaste();
             return;
         }
@@ -254,11 +253,11 @@ export class Keyboard extends EventTarget {
      * @private
      */
     _handleSpecialKeys(code) {
-        if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
+        if (code === keyCodes.F12 || code === keyCodes.BREAK) {
             this.dispatchEvent(new CustomEvent("break", { detail: true }));
             this.processor.setReset(true);
             return true;
-        } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+        } else if (isMac && code === keyCodes.CAPSLOCK) {
             // Special CapsLock handling for Mac
             this.handleMacCapsLock();
             return true;
@@ -285,11 +284,11 @@ export class Keyboard extends EventTarget {
         evt.preventDefault();
 
         // Handle special key cases
-        if (code === utils.keyCodes.F12 || code === utils.keyCodes.BREAK) {
+        if (code === keyCodes.F12 || code === keyCodes.BREAK) {
             this.dispatchEvent(new CustomEvent("break", { detail: false }));
             this.processor.setReset(false);
             return;
-        } else if (isMac && code === utils.keyCodes.CAPSLOCK) {
+        } else if (isMac && code === keyCodes.CAPSLOCK) {
             // Special CapsLock handling for Mac
             this.handleMacCapsLock();
             return;
@@ -310,10 +309,10 @@ export class Keyboard extends EventTarget {
 
         // Mac browsers seem to model caps lock as a physical key that's down when capslock is on, and up when it's off.
         // No event is generated when it is physically released on the keyboard. So, we simulate a "tap" here.
-        this.keyInterface.keyDown(utils.keyCodes.CAPSLOCK);
+        this.keyInterface.keyDown(keyCodes.CAPSLOCK);
 
         // Simulate a key release after a short delay
-        setTimeout(() => this.keyInterface.keyUp(utils.keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
+        setTimeout(() => this.keyInterface.keyUp(keyCodes.CAPSLOCK), CAPS_LOCK_DELAY);
 
         if (this.saidCapsLockIsTapped) return;
         this.saidCapsLockIsTapped = true;
@@ -345,8 +344,8 @@ export class Keyboard extends EventTarget {
 
         if (checkCapsAndShiftLocks) {
             let toggleKey = null;
-            if (!this.keyInterface.capsLockLight) toggleKey = utils.BBC.CAPSLOCK;
-            else if (this.keyInterface.shiftLockLight) toggleKey = utils.BBC.SHIFTLOCK;
+            if (!this.keyInterface.capsLockLight) toggleKey = BBC.CAPSLOCK;
+            else if (this.keyInterface.shiftLockLight) toggleKey = BBC.SHIFTLOCK;
             if (toggleKey) {
                 keysToSend.unshift(toggleKey);
                 keysToSend.push(toggleKey);

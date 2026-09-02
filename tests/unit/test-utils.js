@@ -1,12 +1,12 @@
 import { describe, it, beforeAll, expect, vi, afterEach } from "vitest";
 
-import { BBC, getKeyMap, keyCodes, userKeymap } from "../../src/utils.js";
-import { ATOM, getKeyMapAtom } from "../../src/utils_atom.js";
+import { ATOM, getKeyMapAtom } from "../../src/keymap-atom.js";
 import { processInputParams } from "../../src/url-params.js";
 import { crc32, createZipBlob, replaceOrAddExtension, unzip } from "../../src/archive.js";
 import { readInt16, readInt32, signExtend, stringToUint8Array, uint8ArrayToString } from "../../src/binary.js";
 import { hexbyte, hexword, parseAddr } from "../../src/hex.js";
 import { debounce } from "../../src/debounce.js";
+import { BBC, getKeyMap, keyCodes, userKeymap } from "../../src/keymap.js";
 
 describe("Utils tests", function () {
     describe("parseAddr", function () {
@@ -318,7 +318,7 @@ describe("Utils tests", function () {
 
     describe("Keyboard mapping", function () {
         it("maps simple strings to BBC keys correctly", async function () {
-            const { stringToBBCKeys, BBC } = await import("../../src/utils.js");
+            const { stringToBBCKeys, BBC } = await import("../../src/keymap.js");
 
             // Test special characters
             const keys1 = stringToBBCKeys("\n\t ");
