@@ -18,12 +18,20 @@ class Light {
  * controls, and the pop-up window the printer prints into.
  */
 export class FrontPanel {
-    constructor({ processor, model, printer }) {
+    constructor({ processor, model, printer, loop }) {
         this.processor = processor;
         this.model = model;
         this.printer = printer;
         this.printerWindow = null;
         this.printerTextArea = null;
+        loop.addEventListener("tick", () => this.syncLights());
+        printer.addEventListener("output", (event) => this.printChar(event.detail));
+        printer.addEventListener("first-output", () =>
+            toast("Printer output is being kept. Press Ctrl-B to open the printer window.", {
+                title: "Printer",
+                quietKey: "quietPrinterOutput",
+            }),
+        );
 
         for (const link of document.querySelectorAll("#tape-menu a")) {
             link.addEventListener("click", (e) => {

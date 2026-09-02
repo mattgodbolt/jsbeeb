@@ -40,9 +40,6 @@ describe("EmulationLoop", () => {
             dbgr: { debug: vi.fn() },
             gamepad: { update: vi.fn() },
             keyboard: { postFrameShouldPause: vi.fn(() => false) },
-            syncLights: vi.fn(),
-            rewindBuffer: { push: vi.fn() },
-            onRewindCaptured: vi.fn(),
             clocksPerSecond: ClocksPerSecond,
             cpuSpeed: ClocksPerSecond,
             fastTape: false,
@@ -88,7 +85,6 @@ describe("EmulationLoop", () => {
         expect(cyclesExecuted()).toEqual([(10 * ClocksPerSecond) / 1000]);
         expect(deps.audioHandler.flushChipEvents).toHaveBeenCalled();
         expect(deps.gamepad.update).toHaveBeenCalledWith(deps.processor.sysvia);
-        expect(deps.syncLights).toHaveBeenCalled();
         expect(deps.display.takePaintMs).toHaveBeenCalled();
         expect(deps.display.setSpeedy).toHaveBeenLastCalledWith(false);
     });
@@ -163,14 +159,24 @@ describe("EmulationLoop", () => {
         expect(deps.processor.execute).not.toHaveBeenCalled();
     });
 
-    it("captures a rewind snapshot every interval", () => {
-        started();
+    it("announces every tick it runs the machine on", () => {
+        const loop = started();
+        const ticks = vi.fn();
+        loop.addEventListener("tick", ticks);
+        vi.advanceTimersByTime(100);
+        // A tick every 10ms.
+        expect(ticks).toHaveBeenCalledTimes(10);
+    });
+
+    it("asks for a rewind capture every interval", () => {
+        const loop = started();
+        const captures = vi.fn();
+        loop.addEventListener("rewind-capture", captures);
         // The capture interval is one emulated second.
         vi.advanceTimersByTime(1500);
-        expect(deps.rewindBuffer.push).toHaveBeenCalledTimes(1);
-        expect(deps.onRewindCaptured).toHaveBeenCalledTimes(1);
+        expect(captures).toHaveBeenCalledTimes(1);
         vi.advanceTimersByTime(1000);
-        expect(deps.rewindBuffer.push).toHaveBeenCalledTimes(2);
+        expect(captures).toHaveBeenCalledTimes(2);
     });
 
     it("starts once however often it is asked to go", () => {
