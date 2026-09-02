@@ -135,6 +135,7 @@ export class EmulationLoop extends EventTarget {
     }
 
     start() {
+        if (this.running) return;
         this.audioHandler.unmute();
         this.running = true;
         this.dispatchEvent(new Event("running"));

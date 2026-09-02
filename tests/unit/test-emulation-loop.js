@@ -173,6 +173,12 @@ describe("EmulationLoop", () => {
         expect(deps.rewindBuffer.push).toHaveBeenCalledTimes(2);
     });
 
+    it("starts once however often it is asked to go", () => {
+        const loop = started();
+        loop.go();
+        expect(deps.audioHandler.unmute).toHaveBeenCalledTimes(1);
+    });
+
     describe("being held", () => {
         it("stops while held and runs again once let go", () => {
             const loop = started();
