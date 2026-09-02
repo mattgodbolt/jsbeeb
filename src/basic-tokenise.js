@@ -1,9 +1,8 @@
-"use strict";
 import * as utils from "./utils.js";
 import * as models from "./models.js";
 import { fake6502 } from "./fake6502.js";
 
-export async function create() {
+async function makeTokeniser() {
     const cpu = fake6502(models.basicOnly);
     const callTokeniser = function (line) {
         // Address of the tokenisation subroutine in the Master's BASIC ROM.
@@ -101,4 +100,20 @@ export async function create() {
     };
     await cpu.initialise();
     return { tokenise };
+}
+
+let tokeniser = null;
+
+/**
+ * Building the tokeniser stands up a whole Master CPU and loads its ROMs, so
+ * the one instance is shared by every caller; each call to the tokeniser
+ * resets all the machine state it uses.
+ */
+export function create() {
+    if (!tokeniser)
+        tokeniser = makeTokeniser().catch((error) => {
+            tokeniser = null;
+            throw error;
+        });
+    return tokeniser;
 }

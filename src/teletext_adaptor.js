@@ -1,5 +1,3 @@
-"use strict";
-
 import * as utils from "./utils.js";
 
 // Code ported from Beebem (C to .js) by Jason Robson

@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Compile and link a shader program, throwing with the driver's own message if
  * either step fails.

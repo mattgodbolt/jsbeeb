@@ -40,7 +40,7 @@ describe("Settings", () => {
             layout: { resize: vi.fn() },
             quickSettings: { showAudioOutput: vi.fn(), showSpeakerAmount: vi.fn(), showDisplayMode: vi.fn() },
             machine: { emulationConfig: {}, processor: { hasTube: false, tube: {} } },
-            keys: { setKeyLayout: vi.fn() },
+            keyboard: { setKeyLayout: vi.fn() },
             inputs: { updateAdcSources: vi.fn(), setupMicrophone: vi.fn() },
             modals: { confirm: vi.fn().mockResolvedValue(false) },
         };
@@ -153,7 +153,7 @@ describe("Settings", () => {
             settings.config.onClose({ keyLayout: "natural" });
             expect(window.localStorage.keyLayout).toBe("natural");
             expect(targets.machine.emulationConfig.keyLayout).toBe("natural");
-            expect(targets.keys.setKeyLayout).toHaveBeenCalledWith("natural");
+            expect(targets.keyboard.setKeyLayout).toHaveBeenCalledWith("natural");
         });
 
         it("reroutes the analogue channels when the mouse joystick or microphone change", () => {

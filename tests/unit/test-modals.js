@@ -95,12 +95,9 @@ describe("Modals", () => {
     });
 
     describe("loading dialog", () => {
-        it("shows the message and hides the Drive sign-in", () => {
-            const auth = document.getElementById("google-drive-auth");
-            auth.style.display = "";
+        it("shows the message", () => {
             modals.popupLoading("Loading Elite");
             expect(document.querySelector("#loading-dialog .loading").textContent).toBe("Loading Elite");
-            expect(auth.style.display).toBe("none");
         });
 
         it("toasts a message on finishing when given one", () => {

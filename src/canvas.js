@@ -1,4 +1,3 @@
-"use strict";
 import webglDebug from "./lib/webgl-debug.js";
 import { PALCompositeFilter } from "./video-filters/pal-composite.js";
 import { PassthroughFilter } from "./video-filters/passthrough-filter.js";

@@ -1,5 +1,4 @@
 // Fakes out various 6502s for testing purposes.
-"use strict";
 
 import { FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";

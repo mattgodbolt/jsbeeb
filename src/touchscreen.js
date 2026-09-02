@@ -1,5 +1,3 @@
-"use strict";
-
 import * as utils from "./utils.js";
 
 const PollHz = 8; // Made up

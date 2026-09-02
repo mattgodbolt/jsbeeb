@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * The play and pause buttons on the top bar, kept in step with the loop's
  * running state. pause() and resume() are also the desktop app's menu actions.
@@ -9,18 +7,18 @@ export class RunControls {
      * @param {object} options
      * @param {object} options.loop - the emulation loop
      * @param {object} options.dbgr - the debugger, hidden on resume
-     * @param {object} options.keys - the keyboard setup, told the running state
+     * @param {object} options.keyboard - the machine keyboard, told the running state
      */
-    constructor({ loop, dbgr, keys }) {
+    constructor({ loop, dbgr, keyboard }) {
         this.loop = loop;
         this.dbgr = dbgr;
-        this.keys = keys;
+        this.keyboard = keyboard;
         this.playButton = document.getElementById("debug-play");
         this.pauseButton = document.getElementById("debug-pause");
 
         loop.addEventListener("running", () => {
             const running = loop.isRunning();
-            keys.setRunning(running);
+            keyboard.setRunning(running);
             this.playButton.disabled = running;
             this.pauseButton.disabled = !running;
         });
@@ -36,6 +34,6 @@ export class RunControls {
     /** Hide the debugger; the keyboard's resume event restarts the loop. */
     resume() {
         this.dbgr.hide();
-        this.keys.resumeEmulation();
+        this.keyboard.resumeEmulation();
     }
 }

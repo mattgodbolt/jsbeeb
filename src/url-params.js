@@ -295,17 +295,16 @@ export function guessModelFromHostname(hostname) {
 }
 
 /**
- * Parse disc or tape images from the query parameters
+ * Parse disc images from the query parameters
  * @param {Object} parsedQuery - The query parameters
- * @returns {Object} Object containing disc and tape information
+ * @returns {Object} Object containing disc information
  *   - discImage: disc image URL (?disc= or ?disc1=)
  *   - secondDiscImage: second disc URL (?disc2=)
- *   - tapeImage: tape image URL (?tape=)
  *   - mmcImage: MMC/SD card image URL (?mmc=, Atom only)
  */
 export function parseMediaParams(parsedQuery) {
-    const { disc, disc1, disc2, tape, mmc } = parsedQuery;
+    const { disc, disc1, disc2, mmc } = parsedQuery;
     const discImage = disc || disc1;
 
-    return { discImage, secondDiscImage: disc2, tapeImage: tape, mmcImage: mmc };
+    return { discImage, secondDiscImage: disc2, mmcImage: mmc };
 }

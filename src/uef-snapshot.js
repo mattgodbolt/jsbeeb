@@ -1,5 +1,3 @@
-"use strict";
-
 // BeebEm UEF save state parser.
 // Converts a BeebEm UEF save state file into a jsbeeb snapshot object, in the same way
 // that bem-snapshot.js converts B-em snapshots.

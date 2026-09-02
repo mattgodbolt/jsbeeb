@@ -199,7 +199,7 @@ export class SnapshotUI {
                         ? savedMedia[imageDataKey]
                         : new Uint8Array(Object.values(savedMedia[imageDataKey]));
                 const discName = savedMedia[discKey + "Name"] || "snapshot.ssd";
-                loadedDisc = disc.discFor(this.processor.fdc, discName, imageData, undefined, layout);
+                loadedDisc = disc.discFor(discName, imageData, undefined, layout);
                 // Retain the image bytes so subsequent saves can re-embed them.
                 loadedDisc.setOriginalImage(imageData);
             }

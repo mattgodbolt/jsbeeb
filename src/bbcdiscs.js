@@ -1,5 +1,3 @@
-"use strict";
-
 const mirrorBase = "https://bbc.xania.org/archive/bbcdiscs";
 
 /** How a disc came to be an image, which is the difference between the archives it came from. */

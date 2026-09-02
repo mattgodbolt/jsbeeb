@@ -1,5 +1,3 @@
-"use strict";
-
 const ThumbnailWidth = 160;
 const ThumbnailHeight = 128;
 const FramebufferWidth = 1024;

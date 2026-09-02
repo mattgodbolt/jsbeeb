@@ -1,4 +1,3 @@
-"use strict";
 import { Teletext } from "./teletext.js";
 import * as utils from "./utils.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
