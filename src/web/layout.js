@@ -78,6 +78,10 @@ export class Layout {
         this.cubMonitorPic = document.getElementById("cub-monitor-pic");
         this.borderReservedSize = embed ? 0 : 100;
         this.bottomReservedSize = embed ? 0 : 68;
+        if (embed) {
+            for (const el of document.querySelectorAll(".embed-hide")) el.style.display = "none";
+            document.body.style.backgroundColor = "transparent";
+        }
 
         window.addEventListener("resize", () => this.resize());
         window.setTimeout(() => this.resize(), 1);

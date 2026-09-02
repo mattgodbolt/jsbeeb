@@ -39,7 +39,7 @@ import { Printer } from "./printer.js";
 import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
-import { downloadDriveData } from "./dom-utils.js";
+import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
 
 installIcons();
@@ -73,11 +73,6 @@ const stationId = parsedQuery.stationId !== undefined ? parsedQuery.stationId : 
 
 const tryGl = parsedQuery.glEnabled ?? true;
 const lowLatency = parsedQuery.lowLatency ?? true;
-
-if (parsedQuery.embed) {
-    for (const el of document.querySelectorAll(".embed-hide")) el.style.display = "none";
-    document.body.style.backgroundColor = "transparent";
-}
 
 // ------------------------------------------------------------------------
 // The pieces that exist before the machine: settings, screen, sound.
@@ -321,7 +316,7 @@ new DiscVisualiser({ fdc: processor.fdc });
 const layout = new Layout({
     screenCanvas,
     display,
-    embed: parsedQuery.embed !== undefined,
+    embed: !!parsedQuery.embed,
     sidebars: { left: parsedQuery.sbLeft, right: parsedQuery.sbRight, bottom: parsedQuery.sbBottom },
 });
 
@@ -356,63 +351,7 @@ config.addEventListener("restart-required", async () => {
     if (restart) window.location.reload();
 });
 
-// ------------------------------------------------------------------------
-// The page's own handlers.
-// ------------------------------------------------------------------------
-
-for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
-
-document.getElementById("paste-form").addEventListener("submit", (event) => event.preventDefault());
-
-window.addEventListener("blur", function () {
-    keyboard.clearKeys();
-    loop.setEmulationLead(audioHandler.setWindowFocused(false));
-});
-window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));
-
-// To lower chance of data loss, only accept drop events in the drop
-// zone in the menu bar.
-document.addEventListener("dragover", function (event) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "none";
-});
-document.addEventListener("drop", function (event) {
-    event.preventDefault();
-});
-
-window.addEventListener("beforeunload", function (event) {
-    if (loop.isRunning() && processor.sysvia.hasAnyKeyDown()) {
-        const message =
-            "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-            "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
-        event.preventDefault();
-        event.returnValue = message;
-        return message;
-    }
-});
-
-function hardReset() {
-    rewindUI.reset();
-    processor.reset(true);
-}
-
-document.getElementById("hard-reset").addEventListener("click", function (event) {
-    hardReset();
-    event.preventDefault();
-});
-
-document.getElementById("soft-reset").addEventListener("click", function (event) {
-    processor.reset(false);
-    event.preventDefault();
-});
-
-document.getElementById("download-filestore-link").addEventListener("click", function () {
-    if (!processor.filestore) return;
-    downloadDriveData(processor.filestore.scsi, "scsi", ".dat");
-});
-
-if (Object.hasOwn(parsedQuery, "about")) modals.show("info");
-if (Object.hasOwn(parsedQuery, "pp-tos")) modals.show("pp-tos");
+const page = new PageActions({ loop, processor, keyboard, audioHandler, rewindUI, modals, parsedQuery, version });
 
 // ------------------------------------------------------------------------
 // Start it up.
@@ -494,17 +433,11 @@ electron({
     },
     loadStateFile: snapshots.loadStateFromFile.bind(snapshots),
     actions: {
-        "soft-reset": () => processor.reset(false),
-        "hard-reset": hardReset,
+        "soft-reset": () => page.softReset(),
+        "hard-reset": () => page.hardReset(),
         "save-state": () => snapshots.saveState(),
         rewind: () => rewindUI.open(),
         pause: () => runControls.pause(),
         resume: () => runControls.resume(),
     },
 });
-
-// Display version in About dialog
-const versionElement = document.getElementById("jsbeeb-version");
-if (versionElement) {
-    versionElement.textContent = `Version ${version}`;
-}
