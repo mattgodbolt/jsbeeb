@@ -49,9 +49,11 @@ class VirtualSpeedUpdater {
 
 /**
  * Runs the machine in real time: the tick that turns wall-clock time into
- * cycles, starting and stopping, the audio lead, fast-forward, rewind capture
- * and the speed readout. Owns `running`, and dispatches a "running" event
- * whenever it changes hands. Anything that needs the machine held still while
+ * cycles, starting and stopping, the audio lead, fast-forward and the speed
+ * readout. Owns `running`, and dispatches a "running" event whenever it
+ * changes hands, "tick" on every tick while running (the first only takes the
+ * time), and "rewind-capture" every RewindCaptureInterval frames for whoever
+ * keeps the rewind history. Anything that needs the machine held still while
  * it works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a
  * `pause()`; the loop runs again once every hold has let go, provided the user
  * still wants it running.
@@ -64,9 +66,6 @@ export class EmulationLoop extends EventTarget {
         dbgr,
         gamepad,
         keyboard,
-        syncLights,
-        rewindBuffer,
-        onRewindCaptured,
         clocksPerSecond,
         cpuSpeed,
         fastTape,
@@ -79,9 +78,6 @@ export class EmulationLoop extends EventTarget {
         this.dbgr = dbgr;
         this.gamepad = gamepad;
         this.keyboard = keyboard;
-        this.syncLights = syncLights;
-        this.rewindBuffer = rewindBuffer;
-        this.onRewindCaptured = onRewindCaptured;
         this.clocksPerSecond = clocksPerSecond;
         this.maxCyclesPerTick = clocksPerSecond / 10;
         this.rewindCaptureCycles = (RewindCaptureInterval * clocksPerSecond) / 50;
@@ -189,7 +185,7 @@ export class EmulationLoop extends EventTarget {
         this.scheduleTick(speedy ? 0 : TickMs);
 
         this.gamepad.update(processor.sysvia);
-        this.syncLights();
+        this.dispatchEvent(new Event("tick"));
         if (this.last !== 0) {
             let cycles;
             if (!speedy) {
@@ -212,8 +208,7 @@ export class EmulationLoop extends EventTarget {
                 this.rewindCycleCounter += cycles;
                 if (this.rewindCycleCounter >= this.rewindCaptureCycles) {
                     this.rewindCycleCounter -= this.rewindCaptureCycles;
-                    this.rewindBuffer.push(processor.snapshotState());
-                    this.onRewindCaptured();
+                    this.dispatchEvent(new Event("rewind-capture"));
                     snapshotMs = performance.now() - end;
                 }
                 if (this.audioStatsNode)

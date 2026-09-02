@@ -2,10 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontPanel } from "../../src/web/front-panel.js";
+import { Printer } from "../../src/printer.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 describe("FrontPanel", () => {
     let processor;
+    let loop;
 
     beforeEach(() => {
         vi.spyOn(console, "log").mockImplementation(() => {});
@@ -17,11 +19,13 @@ describe("FrontPanel", () => {
             atomppia: { motorOn: false, playTape: vi.fn(), stopTape: vi.fn(), rewindTape: vi.fn() },
             econet: null,
         };
+        loop = new EventTarget();
     });
 
     afterEach(teardownDom);
 
-    const make = (isAtom = false, printer = { text: "" }) => new FrontPanel({ processor, model: { isAtom }, printer });
+    const make = (isAtom = false, printer = new Printer()) =>
+        new FrontPanel({ processor, model: { isAtom }, printer, loop });
     const lit = (id) => document.getElementById(id).classList.contains("on");
 
     describe("the lights", () => {
@@ -103,6 +107,13 @@ describe("FrontPanel", () => {
     });
 
     describe("the printer window", () => {
+        it("says how to open it the first time anything prints", () => {
+            const printer = new Printer();
+            make(false, printer);
+            printer.dispatchEvent(new Event("first-output"));
+            expect(toasts()).toEqual([expect.stringContaining("Ctrl-B")]);
+        });
+
         it("says when the pop-up was blocked", () => {
             vi.spyOn(window, "open").mockReturnValue(null);
             make().checkPrinterWindow();
@@ -121,10 +132,11 @@ describe("FrontPanel", () => {
                 document: { write: vi.fn(), getElementById: () => fakeArea },
             };
             vi.spyOn(window, "open").mockReturnValue(fakeWindow);
-            const panel = make(false, { text: "so far" });
+            const printer = Object.assign(new EventTarget(), { text: "so far" });
+            const panel = make(false, printer);
             panel.checkPrinterWindow();
             expect(fakeArea.value).toBe("so far");
-            panel.printChar("!");
+            printer.dispatchEvent(new CustomEvent("output", { detail: "!" }));
             expect(fakeArea.value).toBe("so far!");
             // A second check leaves the open window alone.
             panel.checkPrinterWindow();

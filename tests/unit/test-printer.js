@@ -78,7 +78,8 @@ describe("Printer", () => {
     describe("live output", () => {
         it("reports each character as it is printed", () => {
             const seen = [];
-            attach(new Printer({ onOutput: (char) => seen.push(char) }));
+            const printer = attach(new Printer());
+            printer.addEventListener("output", (event) => seen.push(event.detail));
 
             print(uservia, "HI");
 
@@ -87,13 +88,10 @@ describe("Printer", () => {
 
         it("offers the buffered text to a window opened part way through", () => {
             let windowText = "";
-            const printer = attach(
-                new Printer({
-                    onOutput: (char) => {
-                        windowText += char;
-                    },
-                }),
-            );
+            const printer = attach(new Printer());
+            printer.addEventListener("output", (event) => {
+                windowText += event.detail;
+            });
 
             print(uservia, "BEFORE ");
             windowText = printer.text;
@@ -106,7 +104,7 @@ describe("Printer", () => {
     describe("first output notice", () => {
         it("reports only the first character printed", () => {
             let notices = 0;
-            attach(new Printer({ onFirstOutput: () => notices++ }));
+            attach(new Printer()).addEventListener("first-output", () => notices++);
 
             print(uservia, "HELLO");
 
@@ -115,7 +113,7 @@ describe("Printer", () => {
 
         it("says nothing until something is printed", () => {
             let notices = 0;
-            attach(new Printer({ onFirstOutput: () => notices++ }));
+            attach(new Printer()).addEventListener("first-output", () => notices++);
 
             expect(notices).toBe(0);
         });

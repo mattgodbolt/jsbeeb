@@ -21,7 +21,7 @@ import { isSnapshotFile, SnapshotUI } from "./web/snapshot-ui.js";
 import { Autoboot } from "./web/autoboot.js";
 import { Display } from "./web/display.js";
 import { Layout } from "./web/layout.js";
-import { EmulationLoop, RewindCaptureInterval } from "./web/emulation-loop.js";
+import { EmulationLoop } from "./web/emulation-loop.js";
 import { RunControls } from "./web/run-controls.js";
 import { exposeConsoleSurface } from "./web/console-surface.js";
 import { KeyboardSetup } from "./web/keyboard-setup.js";
@@ -36,7 +36,6 @@ import { Settings } from "./web/settings.js";
 import { Config } from "./web/config.js";
 import { SpeechOutput } from "./speech-output.js";
 import { Printer } from "./printer.js";
-import { RewindBuffer } from "./rewind.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { downloadDriveData } from "./dom-utils.js";
@@ -92,14 +91,7 @@ if (!window.isSecureContext)
         quietKey: "quietInsecureGamepads",
     });
 
-const printer = new Printer({
-    onOutput: (char) => frontPanel.printChar(char),
-    onFirstOutput: () =>
-        toast("Printer output is being kept. Press Ctrl-B to open the printer window.", {
-            title: "Printer",
-            quietKey: "quietPrinterOutput",
-        }),
-});
+const printer = new Printer();
 
 const accessibilitySwitches = new AccessibilitySwitches();
 
@@ -218,7 +210,6 @@ const { keyboard } = new KeyboardSetup({
     keyLayout,
 });
 
-const rewindBuffer = new RewindBuffer(30);
 const loop = new EmulationLoop({
     processor,
     display,
@@ -226,9 +217,6 @@ const loop = new EmulationLoop({
     dbgr,
     gamepad,
     keyboard,
-    syncLights: () => frontPanel.syncLights(),
-    rewindBuffer,
-    onRewindCaptured: () => rewindUI.updateButtonState(),
     clocksPerSecond,
     cpuSpeed,
     fastTape: !!parsedQuery.fasttape,
@@ -301,19 +289,13 @@ if (settings.microphoneChannel !== undefined) {
 // Apply ADC source settings from URL parameters
 inputs.updateAdcSources(settings.mouseJoystickEnabled, settings.microphoneChannel);
 
-const frontPanel = new FrontPanel({ processor, model, printer });
+const frontPanel = new FrontPanel({ processor, model, printer, loop });
 
 // ------------------------------------------------------------------------
 // Rewind, the visualiser and the layout.
 // ------------------------------------------------------------------------
 
-const rewindUI = new RewindUI({
-    rewindBuffer,
-    processor,
-    video,
-    captureInterval: RewindCaptureInterval,
-    loop,
-});
+const rewindUI = new RewindUI({ processor, video, loop });
 rewindUI.updateButtonState();
 
 new DiscVisualiser({ fdc: processor.fdc });

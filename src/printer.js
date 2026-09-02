@@ -1,19 +1,14 @@
 /**
  * Centronics printer attached to the user VIA: acknowledges each character and keeps the most
- * recent output so it can be shown whenever a printer window is opened.
+ * recent output so it can be shown whenever a printer window is opened. Dispatches "output" with
+ * each character as its detail, and "first-output" once, when the machine first prints.
  */
 
 export const MaxBufferedChars = 64 * 1024;
 
-export class Printer {
-    /**
-     * @param {object} [handlers]
-     * @param {function(string): void} [handlers.onOutput] called with each character as it is printed
-     * @param {function(): void} [handlers.onFirstOutput] called once, when the machine first prints
-     */
-    constructor({ onOutput = () => {}, onFirstOutput = () => {} } = {}) {
-        this._onOutput = onOutput;
-        this._onFirstOutput = onFirstOutput;
+export class Printer extends EventTarget {
+    constructor() {
+        super();
         this._uservia = null;
         this._olderText = "";
         this._newerText = "";
@@ -50,8 +45,8 @@ export class Printer {
         }
         if (!this._hasPrinted) {
             this._hasPrinted = true;
-            this._onFirstOutput();
+            this.dispatchEvent(new Event("first-output"));
         }
-        this._onOutput(char);
+        this.dispatchEvent(new CustomEvent("output", { detail: char }));
     }
 }

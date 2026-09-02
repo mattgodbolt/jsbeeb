@@ -1,4 +1,8 @@
 import { renderThumbnails, executeUntilFrame } from "../rewind-thumbnail.js";
+import { RewindBuffer } from "../rewind.js";
+import { RewindCaptureInterval } from "./emulation-loop.js";
+
+const RewindBufferSnapshots = 30;
 
 /**
  * Rewind scrubber UI — a filmstrip overlay showing thumbnails of recent
@@ -7,18 +11,16 @@ import { renderThumbnails, executeUntilFrame } from "../rewind-thumbnail.js";
 export class RewindUI {
     /**
      * @param {object} options
-     * @param {object} options.rewindBuffer - RewindBuffer instance
      * @param {object} options.processor - Cpu6502 instance
      * @param {object} options.video - Video instance
-     * @param {number} options.captureInterval - rewind capture interval in frames
-     * @param {object} options.loop - the emulation loop, for pausing and resuming
+     * @param {object} options.loop - the emulation loop: says when to capture, and is held while the panel is open
      */
-    constructor({ rewindBuffer, processor, video, captureInterval, loop }) {
-        this.rewindBuffer = rewindBuffer;
+    constructor({ processor, video, loop }) {
+        this.rewindBuffer = new RewindBuffer(RewindBufferSnapshots);
         this.processor = processor;
         this.video = video;
-        this.captureInterval = captureInterval;
         this.loop = loop;
+        loop.addEventListener("rewind-capture", () => this.capture());
 
         this.panel = document.getElementById("rewind-panel");
         this.filmstrip = document.getElementById("rewind-filmstrip");
@@ -37,6 +39,11 @@ export class RewindUI {
             e.preventDefault();
             this.open();
         });
+    }
+
+    capture() {
+        this.rewindBuffer.push(this.processor.snapshotState());
+        this.updateButtonState();
     }
 
     /** Forget everything captured, as on a hard reset. */
@@ -61,7 +68,7 @@ export class RewindUI {
                 this.processor,
                 this.snapshots,
                 this.video,
-                this.captureInterval,
+                RewindCaptureInterval,
                 this.savedState,
             );
             this._populateFilmstrip(thumbnails);
