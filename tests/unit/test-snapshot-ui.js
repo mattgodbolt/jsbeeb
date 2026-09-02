@@ -88,8 +88,10 @@ describe("isSnapshotFile", () => {
 
 describe("SnapshotUI", () => {
     let deps;
+    let resume;
 
     beforeEach(() => {
+        resume = vi.fn();
         domFromIndexHtml("save-state", "load-state");
         deps = {
             processor: { fdc: { drives: [{ disc: null }, { disc: null }] }, hasTube: false, execute: vi.fn() },
@@ -99,7 +101,7 @@ describe("SnapshotUI", () => {
             drives: { putDiscIn: vi.fn() },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
-            loop: { isRunning: () => true, stop: vi.fn(), go: vi.fn() },
+            loop: { pause: vi.fn(() => resume) },
         };
     });
 
@@ -108,18 +110,11 @@ describe("SnapshotUI", () => {
     const make = () => new SnapshotUI(deps);
 
     describe("loading a state", () => {
-        it("stops the emulator, reports a file it cannot read, and runs on", async () => {
+        it("holds the emulator, reports a file it cannot read, and lets go", async () => {
             await make().loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
-            expect(deps.loop.stop).toHaveBeenCalledWith(false);
+            expect(deps.loop.pause).toHaveBeenCalledWith("loading state");
             expect(deps.modals.showError).toHaveBeenCalledWith("loading state", expect.anything());
-            expect(deps.loop.go).toHaveBeenCalledTimes(1);
-        });
-
-        it("leaves a stopped emulator stopped afterwards", async () => {
-            deps.loop.isRunning = () => false;
-            await make().loadStateFromFile(null, new Uint8Array([0]).buffer);
-            expect(deps.loop.stop).not.toHaveBeenCalled();
-            expect(deps.loop.go).not.toHaveBeenCalled();
+            expect(resume).toHaveBeenCalledTimes(1);
         });
 
         const snapshotBuffer = (snapshot) =>
@@ -133,7 +128,7 @@ describe("SnapshotUI", () => {
             expect(window.location.hash).toBe("#stashed");
             expect(JSON.parse(sessionStorage.getItem("jsbeeb-pending-state")).model).toBe("Master");
             expect(deps.video.paint).not.toHaveBeenCalled();
-            expect(deps.loop.go).not.toHaveBeenCalled();
+            expect(resume).toHaveBeenCalledTimes(1);
             window.location.hash = "";
         });
 
@@ -152,7 +147,7 @@ describe("SnapshotUI", () => {
             expect(deps.video.paint).toHaveBeenCalledTimes(1);
             expect(deps.modals.showError).not.toHaveBeenCalled();
             expect(sessionStorage.getItem("jsbeeb-pending-state")).toBeNull();
-            expect(deps.loop.go).toHaveBeenCalledTimes(1);
+            expect(resume).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -164,15 +159,17 @@ describe("SnapshotUI", () => {
             domFromIndexHtml("error-dialog", "loading-dialog", "are-you-sure");
             vi.useFakeTimers();
             loop = {
-                running: true,
+                holds: 0,
                 isRunning() {
-                    return this.running;
+                    return this.holds === 0;
                 },
-                stop() {
-                    this.running = false;
-                },
-                go() {
-                    this.running = true;
+                pause() {
+                    this.holds++;
+                    let held = true;
+                    return () => {
+                        if (held) this.holds--;
+                        held = false;
+                    };
                 },
             };
             modals = new Modals({ loop });
@@ -205,18 +202,6 @@ describe("SnapshotUI", () => {
             const ui = makeWithModals();
             await ui.loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
             await expectPausedBehindDialogThenResumedOnClose();
-        });
-
-        it("leaves a stopped emulator stopped after the error dialog closes", async () => {
-            const ui = makeWithModals();
-            loop.running = false;
-            await ui.loadStateFromFile(null, new Uint8Array([0x00, 0x01, 0x02]).buffer);
-            await vi.runAllTimersAsync();
-            expect(modals.anyVisible()).toBe(true);
-            expect(loop.isRunning()).toBe(false);
-            modals.hide("error-dialog");
-            await vi.runAllTimersAsync();
-            expect(loop.isRunning()).toBe(false);
         });
     });
 

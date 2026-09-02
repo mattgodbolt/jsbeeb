@@ -26,7 +26,7 @@ export class RewindUI {
         this.openBtn = document.getElementById("rewind-open");
 
         this.isOpen = false;
-        this.wasRunning = false;
+        this.resumeLoop = null;
         this.selectedIndex = -1;
         this.snapshots = [];
         this.savedState = null;
@@ -53,13 +53,10 @@ export class RewindUI {
         this.snapshots = this.rewindBuffer.getAll();
         if (this.snapshots.length === 0) return;
 
-        this.wasRunning = this.loop.isRunning();
-        if (this.wasRunning) this.loop.stop(false);
-
+        this.resumeLoop = this.loop.pause("the rewind panel");
         this.isOpen = true;
-        this.savedState = this.processor.snapshotState();
-
         try {
+            this.savedState = this.processor.snapshotState();
             const thumbnails = renderThumbnails(
                 this.processor,
                 this.snapshots,
@@ -68,22 +65,20 @@ export class RewindUI {
                 this.savedState,
             );
             this._populateFilmstrip(thumbnails);
+            this.panel.hidden = false;
+            // Use capture phase so keys don't leak to the emulator's keyboard handler
+            document.addEventListener("keydown", this._onKeyDown, true);
+
+            // Select the newest snapshot ("now") and jump to it
+            this.selectedIndex = this.snapshots.length - 1;
+            this._restoreAndPaint(this.selectedIndex);
+            this._updateSelectionHighlight();
+            this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
         } catch (e) {
-            this.processor.restoreState(this.savedState);
+            if (this.savedState) this.processor.restoreState(this.savedState);
             this._closePanel();
-            if (this.wasRunning) this.loop.go();
             throw e;
         }
-
-        this.panel.hidden = false;
-        // Use capture phase so keys don't leak to the emulator's keyboard handler
-        document.addEventListener("keydown", this._onKeyDown, true);
-
-        // Select the newest snapshot ("now") and jump to it
-        this.selectedIndex = this.snapshots.length - 1;
-        this._restoreAndPaint(this.selectedIndex);
-        this._updateSelectionHighlight();
-        this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
     }
 
     /**
@@ -98,7 +93,6 @@ export class RewindUI {
             this.processor.restoreState(this.snapshots[this.selectedIndex]);
         }
         this._closePanel();
-        if (this.wasRunning) this.loop.go();
     }
 
     /**
@@ -108,7 +102,6 @@ export class RewindUI {
         if (!this.isOpen) return;
         this._renderState(this.savedState);
         this._closePanel();
-        if (this.wasRunning) this.loop.go();
     }
 
     /** Alias for cancel — closing the panel without explicit commit cancels. */
@@ -144,6 +137,8 @@ export class RewindUI {
         this.snapshots = [];
         this.savedState = null;
         document.removeEventListener("keydown", this._onKeyDown, true);
+        this.resumeLoop?.();
+        this.resumeLoop = null;
     }
 
     /**

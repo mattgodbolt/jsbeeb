@@ -51,7 +51,10 @@ class VirtualSpeedUpdater {
  * Runs the machine in real time: the tick that turns wall-clock time into
  * cycles, starting and stopping, the audio lead, fast-forward, rewind capture
  * and the speed readout. Owns `running`, and dispatches a "running" event
- * whenever it changes hands.
+ * whenever it changes hands. Anything that needs the machine held still while
+ * it works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a
+ * `pause()`; the loop runs again once every hold has let go, provided the user
+ * still wants it running.
  */
 export class EmulationLoop extends EventTarget {
     constructor({
@@ -92,7 +95,9 @@ export class EmulationLoop extends EventTarget {
         this.tickToken = null;
         this.emulationLeadMs = 0;
         this.rewindCycleCounter = 0;
-        this.wasPreviouslyRunning = false;
+        this.wanted = false;
+        this.holds = new Set();
+        this.resumeOnVisible = null;
 
         this.virtualSpeedUpdater = new VirtualSpeedUpdater(cpuSpeed);
         this.audioDebugLog = { start: 0, ticks: 0, cycles: 0, maxIdle: 0, maxExecute: 0, maxPaint: 0, maxSnapshot: 0 };
@@ -105,17 +110,47 @@ export class EmulationLoop extends EventTarget {
     }
 
     go() {
+        this.wanted = true;
+        if (this.holds.size === 0) this.start();
+        else
+            console.warn(
+                `Emulator held by ${[...this.holds].map((hold) => hold.reason).join(", ")}; it runs when they let go`,
+            );
+    }
+
+    stop(debug) {
+        this.wanted = false;
+        this.halt();
+        if (debug) this.dbgr.debug(this.processor.pc);
+    }
+
+    /**
+     * Holds the machine stopped until the returned function is called. Holds
+     * nest, and letting go twice counts once. `reason` names the holder when a
+     * go() has to wait, so a hold that is never released can be found.
+     */
+    pause(reason) {
+        if (this.holds.size === 0 && this.running) this.halt();
+        const hold = { reason };
+        this.holds.add(hold);
+        return () => {
+            if (!this.holds.delete(hold)) return;
+            if (this.holds.size === 0 && this.wanted) this.start();
+        };
+    }
+
+    start() {
+        if (this.running) return;
         this.audioHandler.unmute();
         this.running = true;
         this.dispatchEvent(new Event("running"));
         this.run();
     }
 
-    stop(debug) {
+    halt() {
         this.running = false;
         this.dispatchEvent(new Event("running"));
         this.processor.stop();
-        if (debug) this.dbgr.debug(this.processor.pc);
         this.audioHandler.mute();
     }
 
@@ -222,16 +257,12 @@ export class EmulationLoop extends EventTarget {
     handleVisibilityChange() {
         const { processor } = this;
         if (document.visibilityState === "hidden") {
-            this.wasPreviouslyRunning = this.running;
             const keepRunningWhenHidden =
                 processor.acia.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
-            if (this.running && !keepRunningWhenHidden) {
-                this.stop(false);
-            }
-        } else {
-            if (this.wasPreviouslyRunning) {
-                this.go();
-            }
+            if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.pause("the hidden tab");
+        } else if (this.resumeOnVisible) {
+            this.resumeOnVisible();
+            this.resumeOnVisible = null;
         }
     }
 

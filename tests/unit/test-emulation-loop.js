@@ -173,6 +173,71 @@ describe("EmulationLoop", () => {
         expect(deps.rewindBuffer.push).toHaveBeenCalledTimes(2);
     });
 
+    it("starts once however often it is asked to go", () => {
+        const loop = started();
+        loop.go();
+        expect(deps.audioHandler.unmute).toHaveBeenCalledTimes(1);
+    });
+
+    describe("being held", () => {
+        it("stops while held and runs again once let go", () => {
+            const loop = started();
+            const resume = loop.pause("the test");
+            expect(loop.isRunning()).toBe(false);
+            expect(deps.audioHandler.mute).toHaveBeenCalled();
+            resume();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("runs again only when the last hold has let go", () => {
+            const loop = started();
+            const first = loop.pause("the test");
+            const second = loop.pause("the test");
+            first();
+            expect(loop.isRunning()).toBe(false);
+            second();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("counts letting go twice as once", () => {
+            const loop = started();
+            const first = loop.pause("the test");
+            const second = loop.pause("the test");
+            first();
+            first();
+            expect(loop.isRunning()).toBe(false);
+            second();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("stays stopped if the user stopped it while held", () => {
+            const loop = started();
+            const resume = loop.pause("the test");
+            loop.stop(false);
+            resume();
+            expect(loop.isRunning()).toBe(false);
+        });
+
+        it("waits for the hold to end before honouring a go, and says who is holding", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const loop = make();
+            const resume = loop.pause("the test");
+            loop.pause("another test");
+            loop.go();
+            expect(loop.isRunning()).toBe(false);
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining("held by the test, another test"));
+            resume();
+            expect(loop.isRunning()).toBe(false);
+        });
+
+        it("leaves a stopped machine stopped when let go", () => {
+            const loop = make();
+            loop.pause("the test")();
+            expect(loop.isRunning()).toBe(false);
+            expect(deps.audioHandler.unmute).not.toHaveBeenCalled();
+        });
+    });
+
     describe("a hidden tab", () => {
         let visibility;
         beforeEach(() => {
@@ -209,6 +274,16 @@ describe("EmulationLoop", () => {
             hide();
             show();
             expect(loop.isRunning()).toBe(false);
+        });
+
+        it("stays held for whoever else is holding it when the tab comes back", () => {
+            const loop = started();
+            const resume = loop.pause("the test");
+            hide();
+            show();
+            expect(loop.isRunning()).toBe(false);
+            resume();
+            expect(loop.isRunning()).toBe(true);
         });
     });
 

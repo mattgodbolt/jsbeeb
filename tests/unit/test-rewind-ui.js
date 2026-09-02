@@ -15,7 +15,7 @@ describe("RewindUI", () => {
     let rewindBuffer;
     let video;
     let processor;
-    let running;
+    let resume;
     let loop;
 
     beforeEach(() => {
@@ -36,8 +36,8 @@ describe("RewindUI", () => {
                 video.frameCount++;
             }),
         };
-        running = true;
-        loop = { isRunning: () => running, stop: vi.fn(() => (running = false)), go: vi.fn(() => (running = true)) };
+        resume = vi.fn();
+        loop = { pause: vi.fn(() => resume) };
     });
 
     afterEach(teardownDom);
@@ -59,14 +59,14 @@ describe("RewindUI", () => {
         it("does nothing when nothing has been captured", () => {
             make().open();
             expect(panel().hidden).toBe(true);
-            expect(loop.stop).not.toHaveBeenCalled();
+            expect(loop.pause).not.toHaveBeenCalled();
         });
 
         it("pauses, fills the filmstrip with ages, and lands on now", () => {
             const snapshots = captured(3);
             make();
             document.getElementById("rewind-open").click();
-            expect(loop.stop).toHaveBeenCalledWith(false);
+            expect(loop.pause).toHaveBeenCalledWith("the rewind panel");
             expect(panel().hidden).toBe(false);
             expect(thumbs().map((thumb) => thumb.querySelector(".rewind-thumb-label").textContent)).toEqual([
                 "-2s",
@@ -78,12 +78,24 @@ describe("RewindUI", () => {
             expect(video.paint).toHaveBeenCalled();
         });
 
+        it("lets go and stays closed if the machine cannot be snapshotted", () => {
+            captured(1);
+            processor.snapshotState.mockImplementation(() => {
+                throw new Error("no snapshot");
+            });
+            const ui = make();
+            expect(() => ui.open()).toThrow("no snapshot");
+            expect(panel().hidden).toBe(true);
+            expect(resume).toHaveBeenCalledTimes(1);
+            expect(processor.restoreState).not.toHaveBeenCalled();
+        });
+
         it("opens once no matter how often it is asked", () => {
             captured(1);
             const ui = make();
             ui.open();
             ui.open();
-            expect(loop.stop).toHaveBeenCalledTimes(1);
+            expect(loop.pause).toHaveBeenCalledTimes(1);
             expect(thumbs()).toHaveLength(1);
         });
     });
@@ -129,7 +141,7 @@ describe("RewindUI", () => {
             expect(lastRestored()).toBe(snapshots[0]);
             expect(panel().hidden).toBe(true);
             expect(thumbs()).toHaveLength(0);
-            expect(loop.go).toHaveBeenCalledTimes(1);
+            expect(resume).toHaveBeenCalledTimes(1);
         });
 
         it("cancels back to the state from before it opened on Escape", () => {
@@ -139,7 +151,7 @@ describe("RewindUI", () => {
             key("Escape");
             expect(lastRestored()).toEqual({ live: true });
             expect(panel().hidden).toBe(true);
-            expect(loop.go).toHaveBeenCalledTimes(1);
+            expect(resume).toHaveBeenCalledTimes(1);
         });
 
         it("cancels from the close button", () => {
@@ -158,14 +170,12 @@ describe("RewindUI", () => {
             expect(processor.restoreState).not.toHaveBeenCalled();
         });
 
-        it("leaves a machine that was paused before opening paused", () => {
+        it("lets go of its hold when it is reset", () => {
             captured(1);
-            running = false;
             const ui = make();
             ui.open();
-            ui.commit();
-            expect(loop.stop).not.toHaveBeenCalled();
-            expect(loop.go).not.toHaveBeenCalled();
+            ui.reset();
+            expect(resume).toHaveBeenCalledTimes(1);
         });
     });
 
