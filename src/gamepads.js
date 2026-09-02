@@ -200,7 +200,6 @@ export class GamePad {
         // process gamepad buttons
         if (this.gamepad0) {
             // these two lines needed in Chrome to update state, not Firefox
-            // TODO: what about IE? (can't get Gamepads to work in IE11/IE12. Mike)
             if (!utils.isFirefox()) {
                 this.gamepad0 = navigator.getGamepads()[0];
             }

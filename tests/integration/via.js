@@ -711,7 +711,7 @@ RTS
 CALL MC%
 PRINT ?&FE6A
 ?R% = ?&FE6A`);
-        expectArray(testMachine, [12]); // TODO check this on a real BBC (opcode difference on master)
+        expectArray(testMachine, [12]); // TODO(#1069) check this on a real BBC (opcode difference on master)
     });
     it("VIA.I1 - does T1LH write clear int in on-shot", async function () {
         const testMachine = await runViaProgram(`
@@ -1058,7 +1058,7 @@ ENDPROC`);
     //  values after toggling ACR 0x20 because results will vary depending on what is attached and generating pulses
     //  from external.
     // @mattgodbolt notes; the "real BBC" values agree with my BBC Master, so seems good to fix.
-    // TODO: fix this eventually
+    // TODO(#1069) fix this eventually
     it.skip("VIA.T23 - what values do we get freezing and starting T2?", async function () {
         const testMachine = await runViaProgram(`
 DIM MC% 100
@@ -1151,5 +1151,5 @@ ENDPROC`);
         // T2=98 (&62)
         expectArray(testMachine, [100, 0, 100, 0, 99, 0, 99, 0, 99, 0, 99, 0, 98, 0, 98, 0]);
     });
-    // TODO: write more pb6 pulse tests, e.g. interrupt behaviour and underflow, and run on a real bbc.
+    // TODO(#1069) write more PB6 pulse tests, e.g. interrupt behaviour and underflow, and run on a real BBC.
 });

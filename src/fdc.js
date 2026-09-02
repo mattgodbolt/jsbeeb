@@ -13,7 +13,7 @@ import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import * as utils from "./utils.js";
 
 export function load(name) {
-    console.log("Loading disc from " + name); // todo support zip files
+    console.log("Loading disc from " + name);
     return utils.loadData(name);
 }
 
@@ -185,7 +185,7 @@ const hfeDiscType = new DiscType({
 const adlDiscType = new DiscType({
     extension: ".adl",
     loader: (disc, data, _onChange) => {
-        // TODO handle onChange
+        // TODO(#822) handle onChange
         return loadAdf(disc, data, true);
     },
     saver: (_data) => {
@@ -200,7 +200,7 @@ const adlDiscType = new DiscType({
 const adfDiscType = new DiscType({
     extension: ".adf",
     loader: (disc, data, _onChange) => {
-        // TODO handle onChange
+        // TODO(#822) handle onChange
         return loadAdf(disc, data, false);
     },
     saver: (_data) => {

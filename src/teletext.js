@@ -340,7 +340,7 @@ export class Teletext {
 
     // Flashing text starts off in sync with a slow cursor, extinguished together. Multiple MODE
     // changes gradually desynchronise the frame counters.
-    // TODO: setDEW is reached a MOS-dependent number of times before Video.frameCount rises, so
+    // TODO(#1057) setDEW is reached a MOS-dependent number of times before Video.frameCount rises, so
     // the initial sync here holds under MOS 1.20 only.
     get hideFlashing() {
         return this.flashTime < 16;

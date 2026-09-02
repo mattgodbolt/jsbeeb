@@ -104,7 +104,7 @@ function atomModel({ name, synonyms, os, banks }) {
     });
 }
 
-// TODO: semi-bplus-style to get swram for exile hardcoded here
+// TODO(#1066) semi-bplus-style to get swram for exile hardcoded here
 const beebSwram = [
     true,
     true,

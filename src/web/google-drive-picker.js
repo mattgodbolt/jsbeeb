@@ -172,7 +172,7 @@ export class GoogleDrivePicker {
             name = utils.replaceOrAddExtension(name, discType.extension);
             console.log(`Saving existing disc: ${name}`);
         } else {
-            // TODO support HFE, I guess?
+            // TODO(#1070) blank HFE images have no fixed byteSize, so only SSD and DSD blanks can be made here.
             const discType = disc.guessDiscTypeFromName(name);
             if (!discType.byteSize) {
                 this.modals.loadingFinished(

@@ -234,7 +234,7 @@ export class MediaLoader extends EventTarget {
                 ),
             );
         }
-        // TODO: come up with a decent UX for passing an 'onChange' parameter to each of these.
+        // TODO(#822) come up with a decent UX for passing an 'onChange' parameter to each of these.
         // Consider:
         // * hashing contents and making a local disc image named by original disc hash, save by that, and offer
         //   to load the modified disc on load.

@@ -147,8 +147,8 @@ export class WdFdc {
         else this._drives = [new DiscDrive(0, scheduler), new DiscDrive(1, scheduler)];
 
         this._isMaster = cpu.model.isMaster;
-        this._is1772 = false; // TODO - if we ever support Master Compact
-        this._isOpus = false; // TODO - if we ever support Opus
+        this._is1772 = false; // TODO(#1059) if we ever support Master Compact
+        this._isOpus = false; // TODO(#1059) if we ever support Opus
 
         this._controlRegister = 0;
         /** @type {Status|Number} */
@@ -219,7 +219,7 @@ export class WdFdc {
 
     _updateNmi() {
         const newLevel = this._isDrq | (this._isOpus ? false : this._isIntRq);
-        // TODO: the cpu handling of NMIs is bad here. Should update to handle multiple
+        // TODO(#1058) the cpu handling of NMIs is bad here. Should update to handle multiple
         // NMI/interrupt sources. And when we do go back and implement the checks in the beebjit
         // source here too.
         this._cpu.NMI(newLevel);
@@ -965,8 +965,8 @@ export class WdFdc {
                 this._deliverData = 0xa1;
                 return true;
             }
-            // TODO: sync to c2 (5224).
-            // Note than an early, naive attempt had it triggered in in the middle of the sector data,
+            // TODO(#1059) sync to c2 (5224).
+            // Note that an early, naive attempt had it triggered in the middle of the sector data,
             // so we'll need to study how it actually works in detail.
             // Tag the byte after 3 sync bytes as a marker.
             if ((this._markDetector & 0xffffffffffff0000n) === 0x4489448944890000n) {
@@ -980,8 +980,8 @@ export class WdFdc {
                     Number(this._markDetector & 0xffffffffn),
                 );
                 if (!iffyPulses && clocks === 0xc7) {
-                    // TODO: see http://info-coach.fr/atari/documents/_mydoc/WD1772-JLG.pdf
-                    // This suggests that a wider ranges of byte values will function as markers. It may also differ FM vs. MFM.
+                    // TODO(#1059) see http://info-coach.fr/atari/documents/_mydoc/WD1772-JLG.pdf
+                    // This suggests that a wider range of byte values will function as markers. It may also differ FM vs. MFM.
                     if (data === 0xf8 || data === 0xfb || data === 0xfe) {
                         // Resync to marker.
                         this._deliverData = data;
@@ -1221,7 +1221,7 @@ export class WdFdc {
             if (isCrcError) this._statusRegister |= Status.crcError;
             // Unlike the 8271, read address returns just a single record. It is also not synchronized
             // to the index pulse.
-            // EMU TODO: it's likely that timing is generally off for most states,
+            // EMU TODO(#1059) it's likely that timing is generally off for most states,
             // i.e. the 1770 takes various numbers of internal clock cycles before it
             // delivers the CRC error, before it goes not busy, etc.
             // EMU NOTE: must not clear busy flag right away. The 1770 delivers the
@@ -1435,7 +1435,7 @@ export class WdFdc {
 }
 
 export class NoiseAwareWdFdc extends WdFdc {
-    // TODO: consider deduplicating with the IntelFdc equivalent.
+    // TODO(#1061) consider deduplicating with the IntelFdc equivalent.
     constructor(cpu, ddNoise, scheduler, debugFlags) {
         super(cpu, scheduler, undefined, debugFlags);
         let nextSeekTime = 0;

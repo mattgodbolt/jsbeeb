@@ -617,7 +617,7 @@ class WFN {
         let fname = this.trimToFilename(this.globalData);
 
         if (this.filenum === 0) {
-            this.fildataIndex = 0; // FIXME : should be one for each fildata if going down this line!
+            this.fildataIndex = 0; // FIXME(#1068) should be one for each fildata if going down this line!
             // The scratch file is fixed, so we are backwards compatible with 2.9 firmware
             let fopen = this.f_open(fname, mode);
             if (fopen.error == FR_OK) this.fildata[0] = this.allfiles[fopen.fp];

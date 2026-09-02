@@ -85,7 +85,7 @@ describe("IBM disc format tests", function () {
         expect(IbmDiscFormat.fmTo2usPulses(0xc7, 0xfe)).toBe(0x55111554);
     });
     it("converts from FM pulses", () => {
-        // TODO either fix these or understand why beebjit doesn't use same bit posn for bits.
+        // TODO(#1061) either fix these or understand why beebjit doesn't use same bit posn for bits.
         const deliberateFudge = 1;
         expect(IbmDiscFormat._2usPulsesToFm(0x44444444 << deliberateFudge)).toEqual({
             clocks: 0xff,

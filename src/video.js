@@ -1019,8 +1019,8 @@ export class Video {
             // Without interlace, frames are 312 scanlines. With interlace,
             // both odd and even frames are 312.5 scanlines.
             const isInterlace = !!(this.regs[8] & 1);
-            // TODO: is this off-by-one? b2 uses regs[0]+1.
-            // TODO: does this only hit at the half-scanline or is it a
+            // TODO(#1056) is this off-by-one? b2 uses regs[0]+1.
+            // TODO(#1056) does this only hit at the half-scanline or is it a
             // half-scanline counter that starts when an R7 hit is noticed?
             const halfR0Hit = this.horizCounter === this.regs[0] >>> 1;
             const isVsyncPoint = !isInterlace || !this.doEvenFrameLogic || halfR0Hit;
@@ -1055,7 +1055,7 @@ export class Video {
                 this.teletext.setDEW(this.inVSync);
             }
 
-            // TODO: this will be cleaner if we rework skew to have fetch
+            // TODO(#1056) this will be cleaner if we rework skew to have fetch
             // independent from render.
             const insideBorder = (this.dispEnabled & (HDISPENABLE | VDISPENABLE)) === (HDISPENABLE | VDISPENABLE);
             if ((insideBorder || this.cursorDrawIndex) && this.dispEnabled & FRAMESKIPENABLE) {

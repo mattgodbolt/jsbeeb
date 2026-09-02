@@ -69,7 +69,7 @@ class TrackBuilder {
     }
 
     appendCrc(isMfm) {
-        // TODO consider remembering isMfM if nothing else needs to know/
+        // TODO(#1061) consider remembering isMfm if nothing else needs to know;
         // could then break this into MFM and FM builder
         const firstByte = (this._crc >>> 8) & 0xff;
         const secondByte = this._crc & 0xff;
@@ -304,7 +304,7 @@ class Sector {
      * @param {Sector|undefined} nextSector
      */
     read(nextSector) {
-        const pulsesPerByte = this.isMfm ? 16 : 32; // todo put in reader
+        const pulsesPerByte = this.isMfm ? 16 : 32; // TODO(#1061) put in reader
         if (this.dataPosBitOffset === null) {
             this._warn(`Sector header without data ${this.description}`);
             return;
@@ -536,7 +536,7 @@ export const DiscLayout = Object.freeze({
 
 export class DiscConfig {
     constructor() {
-        // TODO is this even useful?
+        // TODO(#1061) is this even useful?
         this.logProtection = false;
         this.logIffyPulses = false;
         this.expandTo80 = false;
@@ -707,8 +707,8 @@ export function loadSsd(disc, data, isDsd, onChange) {
     }
 
     if (onChange) {
-        // TODO, maybe construct the disc directly with this stuff?
-        // TODO maybe change this entirely and make it lazy; and have the onChange "pull" the disc as the format it wants
+        // TODO(#822) maybe construct the disc directly with this stuff?
+        // TODO(#822) maybe change this entirely and make it lazy; and have the onChange "pull" the disc as the format it wants
         // instead of doing this here. Most stuff doesn't care about changes and only needs the image on save.
         // Create a dataCopy large enough for all the sectors and tracks.
         const dataCopy = new Uint8Array(maxSize);
@@ -797,7 +797,7 @@ export function loadAdf(disc, data, isDsd) {
         }
     }
 
-    // TODO writeback
+    // TODO(#822) writeback
     return disc;
 }
 
@@ -1053,7 +1053,7 @@ export class Disc {
         this._snapshotDirtyTracks.add(dirtyKey);
         this._everDirtyTracks.add(dirtyKey);
         trackObj.pulses2Us[position] = pulses;
-        // TODO a debug log flag for this
+        // TODO(#1061) a debug log flag for this
         // console.log(`wrote to ${track}:${position * 32}`);
     }
 
@@ -1224,7 +1224,7 @@ export class Disc {
                     console.log(`"Unformatted track ${track.description}"`);
                 }
             }
-            // TODO add fingerprintings, catalog etcetc
+            // TODO(#1061) add fingerprinting, catalog etc
         }
     }
 }

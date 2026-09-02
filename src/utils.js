@@ -580,7 +580,7 @@ if (isFirefox()) {
     keyCodes.EQUALS = 61;
 } else {
     // Chrome
-    // TODO: check other browsers
+    // TODO(#1065) check other browsers
     // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
     keyCodes.SEMICOLON = 186;
     // #~ key (not on US keyboard)
@@ -910,7 +910,7 @@ export function getKeyMap(keyLayout) {
     // no keycode for NUMPADENTER, small hack in main.js/keyCode()
     map(keyCodes.NUMPADENTER, BBC.NUMPADENTER);
 
-    // TODO: "game" mapping
+    // TODO(#748) "game" mapping
     // eg Master Dunjunz needs # Del 3 , * Enter
     // https://web.archive.org/web/20080305042238/http://bbc.nvg.org/doc/games/Dunjunz-docs.txt
 

@@ -59,7 +59,7 @@ class MemoryView {
         }
     }
 
-    // todo extract memory part from view part and reuse in disassembler etc. also peekmem can go then
+    // TODO(#1062) extract memory part from view part and reuse in disassembler etc. also peekmem can go then
     dump(from, to) {
         const hex = [];
         const asc = [];
@@ -393,7 +393,7 @@ export class Debugger {
     }
 
     stepUntil(f) {
-        this.cpu.targetCycles = this.cpu.currentCycles; // TODO: this prevents the cpu from running any residual cycles. look into a better solution
+        this.cpu.targetCycles = this.cpu.currentCycles; // TODO(#1062) this prevents the cpu from running any residual cycles. look into a better solution
         for (let i = 0; i < 65536; i++) {
             this.cpu.execute(1);
             if (f()) break;
