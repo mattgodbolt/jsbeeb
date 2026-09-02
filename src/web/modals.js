@@ -15,13 +15,13 @@ export class Modals {
         this.aysEl = document.getElementById("are-you-sure");
         this.aysModal = new bootstrap.Modal(this.aysEl);
 
-        let savedRunning = false;
-        document.addEventListener("show.bs.modal", () => {
-            if (!this.anyVisible()) savedRunning = loop.isRunning();
-            if (loop.isRunning()) loop.stop(false);
+        const holds = new WeakMap();
+        document.addEventListener("show.bs.modal", (event) => {
+            if (!holds.has(event.target)) holds.set(event.target, loop.pause());
         });
-        document.addEventListener("hidden.bs.modal", () => {
-            if (!this.anyVisible() && savedRunning) loop.go();
+        document.addEventListener("hidden.bs.modal", (event) => {
+            holds.get(event.target)?.();
+            holds.delete(event.target);
         });
     }
 

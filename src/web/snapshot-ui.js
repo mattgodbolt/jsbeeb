@@ -113,8 +113,7 @@ export class SnapshotUI {
     }
 
     async saveState() {
-        const wasRunning = this.loop.isRunning();
-        if (wasRunning) this.loop.stop(false);
+        const resume = this.loop.pause();
         let failure = null;
         try {
             const manifest = snapshotMedia(this.processor.fdc.drives, this.urlState.params, this.defaultBootDisc);
@@ -125,16 +124,14 @@ export class SnapshotUI {
             downloadBlob(blob, `jsbeeb-${this.model.name}-${timestamp}.json.gz`);
         } catch (e) {
             failure = e;
+        } finally {
+            resume();
         }
-        // Resume before reporting failure: the error dialog pauses a running
-        // loop itself, and resumes it on close.
-        if (wasRunning) this.loop.go();
         if (failure) this.modals.showError("saving state", failure);
     }
 
     async loadStateFromFile(file, preReadBuffer) {
-        const wasRunning = this.loop.isRunning();
-        if (wasRunning) this.loop.stop(false);
+        const resume = this.loop.pause();
         let failure = null;
         try {
             const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
@@ -153,8 +150,9 @@ export class SnapshotUI {
             this.video.paint();
         } catch (e) {
             failure = e;
+        } finally {
+            resume();
         }
-        if (wasRunning) this.loop.go();
         if (failure) this.modals.showError("loading state", failure);
     }
 

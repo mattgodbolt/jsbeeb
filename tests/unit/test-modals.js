@@ -5,29 +5,21 @@ import { Modals } from "../../src/web/modals.js";
 import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 describe("Modals", () => {
-    let emulator;
+    let loop;
     let modals;
 
     beforeEach(() => {
         vi.useFakeTimers();
         domFromIndexHtml("error-dialog", "loading-dialog", "are-you-sure", "info", "discs");
-        emulator = { running: true, stop: vi.fn(), go: vi.fn() };
-        modals = new Modals({
-            loop: {
-                isRunning: () => emulator.running,
-                stop: (debug) => {
-                    emulator.running = false;
-                    emulator.stop(debug);
-                },
-                go: () => {
-                    emulator.running = true;
-                    emulator.go();
-                },
-            },
-        });
+        loop = { pause: vi.fn(() => vi.fn()) };
+        modals = new Modals({ loop });
     });
 
     afterEach(teardownDom);
+
+    // The resume handles this test's Modals took, in order. Earlier tests'
+    // instances still listen on the shared document, but call their own loop.
+    const resumes = () => loop.pause.mock.results.map((result) => result.value);
 
     // What Bootstrap does around a modal: the events bubble up to the
     // document, and the element carries "show" while it is up.
@@ -42,38 +34,30 @@ describe("Modals", () => {
         el.dispatchEvent(new Event("hidden.bs.modal", { bubbles: true }));
     };
 
-    describe("pausing the emulator", () => {
-        it("stops the emulator when a modal appears and starts it again when it goes", () => {
+    describe("holding the emulator", () => {
+        it("holds the emulator while a modal is up and lets go when it goes", () => {
             raise("info");
-            expect(emulator.stop).toHaveBeenCalledWith(false);
-            expect(emulator.go).not.toHaveBeenCalled();
+            expect(loop.pause).toHaveBeenCalledTimes(1);
+            expect(resumes()[0]).not.toHaveBeenCalled();
             lower("info");
-            expect(emulator.go).toHaveBeenCalledTimes(1);
+            expect(resumes()[0]).toHaveBeenCalledTimes(1);
         });
 
-        it("leaves a stopped emulator stopped", () => {
-            emulator.running = false;
-            raise("info");
-            lower("info");
-            expect(emulator.stop).not.toHaveBeenCalled();
-            expect(emulator.go).not.toHaveBeenCalled();
-        });
-
-        it("waits for the last of several modals before resuming", () => {
+        it("takes one hold per modal and lets each go with its own", () => {
             raise("info");
             raise("discs");
-            lower("discs");
-            expect(emulator.go).not.toHaveBeenCalled();
+            expect(loop.pause).toHaveBeenCalledTimes(2);
             lower("info");
-            expect(emulator.go).toHaveBeenCalledTimes(1);
+            expect(resumes()[0]).toHaveBeenCalledTimes(1);
+            expect(resumes()[1]).not.toHaveBeenCalled();
+            lower("discs");
+            expect(resumes()[1]).toHaveBeenCalledTimes(1);
         });
 
-        it("remembers the state from before the first modal, not the second", () => {
+        it("does not take a second hold when a modal is shown twice", () => {
             raise("info");
-            raise("discs");
-            lower("info");
-            lower("discs");
-            expect(emulator.go).toHaveBeenCalledTimes(1);
+            raise("info");
+            expect(loop.pause).toHaveBeenCalledTimes(1);
         });
 
         it("reports whether any modal is up", () => {

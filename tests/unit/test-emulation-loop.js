@@ -173,6 +173,62 @@ describe("EmulationLoop", () => {
         expect(deps.rewindBuffer.push).toHaveBeenCalledTimes(2);
     });
 
+    describe("being held", () => {
+        it("stops while held and runs again once let go", () => {
+            const loop = started();
+            const resume = loop.pause();
+            expect(loop.isRunning()).toBe(false);
+            expect(deps.audioHandler.mute).toHaveBeenCalled();
+            resume();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("runs again only when the last hold has let go", () => {
+            const loop = started();
+            const first = loop.pause();
+            const second = loop.pause();
+            first();
+            expect(loop.isRunning()).toBe(false);
+            second();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("counts letting go twice as once", () => {
+            const loop = started();
+            const first = loop.pause();
+            const second = loop.pause();
+            first();
+            first();
+            expect(loop.isRunning()).toBe(false);
+            second();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("stays stopped if the user stopped it while held", () => {
+            const loop = started();
+            const resume = loop.pause();
+            loop.stop(false);
+            resume();
+            expect(loop.isRunning()).toBe(false);
+        });
+
+        it("waits for the hold to end before honouring a go", () => {
+            const loop = make();
+            const resume = loop.pause();
+            loop.go();
+            expect(loop.isRunning()).toBe(false);
+            resume();
+            expect(loop.isRunning()).toBe(true);
+        });
+
+        it("leaves a stopped machine stopped when let go", () => {
+            const loop = make();
+            loop.pause()();
+            expect(loop.isRunning()).toBe(false);
+            expect(deps.audioHandler.unmute).not.toHaveBeenCalled();
+        });
+    });
+
     describe("a hidden tab", () => {
         let visibility;
         beforeEach(() => {
@@ -209,6 +265,16 @@ describe("EmulationLoop", () => {
             hide();
             show();
             expect(loop.isRunning()).toBe(false);
+        });
+
+        it("stays held for whoever else is holding it when the tab comes back", () => {
+            const loop = started();
+            const resume = loop.pause();
+            hide();
+            show();
+            expect(loop.isRunning()).toBe(false);
+            resume();
+            expect(loop.isRunning()).toBe(true);
         });
     });
 

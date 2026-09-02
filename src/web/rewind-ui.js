@@ -26,7 +26,7 @@ export class RewindUI {
         this.openBtn = document.getElementById("rewind-open");
 
         this.isOpen = false;
-        this.wasRunning = false;
+        this.resumeLoop = null;
         this.selectedIndex = -1;
         this.snapshots = [];
         this.savedState = null;
@@ -53,8 +53,7 @@ export class RewindUI {
         this.snapshots = this.rewindBuffer.getAll();
         if (this.snapshots.length === 0) return;
 
-        this.wasRunning = this.loop.isRunning();
-        if (this.wasRunning) this.loop.stop(false);
+        this.resumeLoop = this.loop.pause();
 
         this.isOpen = true;
         this.savedState = this.processor.snapshotState();
@@ -71,7 +70,6 @@ export class RewindUI {
         } catch (e) {
             this.processor.restoreState(this.savedState);
             this._closePanel();
-            if (this.wasRunning) this.loop.go();
             throw e;
         }
 
@@ -98,7 +96,6 @@ export class RewindUI {
             this.processor.restoreState(this.snapshots[this.selectedIndex]);
         }
         this._closePanel();
-        if (this.wasRunning) this.loop.go();
     }
 
     /**
@@ -108,7 +105,6 @@ export class RewindUI {
         if (!this.isOpen) return;
         this._renderState(this.savedState);
         this._closePanel();
-        if (this.wasRunning) this.loop.go();
     }
 
     /** Alias for cancel — closing the panel without explicit commit cancels. */
@@ -144,6 +140,8 @@ export class RewindUI {
         this.snapshots = [];
         this.savedState = null;
         document.removeEventListener("keydown", this._onKeyDown, true);
+        this.resumeLoop?.();
+        this.resumeLoop = null;
     }
 
     /**
