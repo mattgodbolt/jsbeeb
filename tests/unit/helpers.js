@@ -67,6 +67,7 @@ export function teardownDom() {
         vi.useRealTimers();
     }
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     document.body.innerHTML = "";
     window.localStorage.clear();
     window.sessionStorage.clear();
