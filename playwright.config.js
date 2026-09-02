@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { existsSync } from "node:fs";
 
 import { workersFor } from "./tools/test-workers.js";
 
@@ -9,6 +10,18 @@ const PreviewHost = "127.0.0.1";
 const PreviewPort = 5198;
 const PreviewUrl = `http://${PreviewHost}:${PreviewPort}/`;
 const BaseUrl = process.env.BASE_URL;
+
+// CI's runners have no GPU, so the software renderer is what CI tests. On a
+// machine with one, Chrome is pointed at it instead: a filter's shaders then
+// compile in an instant rather than the minute a paging laptop has taken.
+// E2E_GL=software or E2E_GL=hardware overrides the choice.
+const RenderNode = "/dev/dri/renderD128";
+const GlArgs = {
+    software: ["--use-gl=angle", "--use-angle=swiftshader"],
+    hardware: ["--use-gl=angle", "--use-angle=gl", "--ignore-gpu-blocklist"],
+};
+const Gl = process.env.E2E_GL ?? (process.env.CI || !existsSync(RenderNode) ? "software" : "hardware");
+if (!GlArgs[Gl]) throw new Error(`E2E_GL must be one of ${Object.keys(GlArgs).join(", ")}, not "${Gl}"`);
 
 export default defineConfig({
     testDir: "tests/playwright",
@@ -27,15 +40,16 @@ export default defineConfig({
     expect: { timeout: 10000 },
     use: {
         // Without this a click on a selector that matches nothing waits out
-        // the whole test timeout.
-        actionTimeout: 10000,
+        // the whole test timeout; a laptop that is paging has held an honest
+        // click for ten seconds.
+        actionTimeout: 30000,
         baseURL: BaseUrl ?? PreviewUrl,
         viewport: { width: 1400, height: 900 },
         trace: "retain-on-failure",
         launchOptions: {
             // Playwright's own headless switches already mute audio and keep
             // shared memory out of /dev/shm; these are what the app needs on top.
-            args: ["--use-gl=angle", "--use-angle=swiftshader", "--autoplay-policy=no-user-gesture-required"],
+            args: [...GlArgs[Gl], "--autoplay-policy=no-user-gesture-required"],
         },
     },
     projects: [
