@@ -56,18 +56,35 @@ export function ssdImage(sectors = 800) {
     return data;
 }
 
+// A toast left mid-show leaks timers past this file's jsdom window: bootstrap
+// fakes transitionend with an uncancellable short timer, which in turn arms
+// the five second autohide. Let the transition finish while this window is
+// still current, then dispose to cancel the autohide; either timer firing
+// later crashes the run from whichever test file is running at the time.
+async function disposeToasts() {
+    if (!document.querySelector(".toast")) return;
+    await vi.waitFor(() => {
+        for (const el of document.querySelectorAll(".toast")) expect(el.classList.contains("showing")).toBe(false);
+    });
+    // Imported lazily: bootstrap cannot load outside jsdom, and node-environment
+    // tests share this module for its other helpers.
+    const { Toast } = await import("bootstrap");
+    for (const el of document.querySelectorAll(".toast")) Toast.getInstance(el)?.dispose();
+}
+
 /**
  * For afterEach. Fake timers left running would outlive the file's jsdom
  * window and fail the run from outside any test when they fire, so they are
  * flushed before the clock goes back to real.
  */
-export function teardownDom() {
+export async function teardownDom() {
     if (vi.isFakeTimers()) {
         vi.runAllTimers();
         vi.useRealTimers();
     }
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    await disposeToasts();
     document.body.innerHTML = "";
     window.localStorage.clear();
     window.sessionStorage.clear();
