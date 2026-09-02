@@ -343,7 +343,7 @@ export class IntelFdc {
         // aka. late DMA, which will abort the command while NMI is asserted. We
         // therefore need to de-assert NMI so that the NMI for command completion
         // isn't lost.
-        // TODO(matt) - we don't model NMIs properly here, each device should have its own nmi line
+        // TODO(#1058) we don't model NMIs properly here, each device should have its own nmi line
         this._cpu.NMI(false);
     }
 
@@ -1058,7 +1058,7 @@ export class IntelFdc {
             status |= StatusFlag.resultReady;
         }
 
-        // TODO: "command register full", bit value 0x40, isn't understood. In
+        // TODO(#1060) "command register full", bit value 0x40, isn't understood. In
         // particular, the mode register (shared with the status register we
         // believe) is set to 0xC1 in typical operation. This would seem to raise
         // 0x40 after it has been lowered at command register acceptance. However,

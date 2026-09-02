@@ -254,7 +254,7 @@ class Base6502 {
                 this.polltime(3);
             } else {
                 this.polltime(2);
-                // TODO: check 65c12 BRK interrupt poll timing.
+                // TODO(#1063) check 65c12 BRK interrupt poll timing.
                 this.checkInt();
                 this.polltime(1);
             }
@@ -1002,7 +1002,7 @@ export class Cpu6502 extends Base6502 {
             const offset = this.memLook[statOffset];
             return this.ramRomOs[offset + addr];
         } else {
-            return 0xff; // TODO; peekDevice -- this.peekDevice(addr);
+            return 0xff; // TODO(#1062) peekDevice: this.peekDevice(addr);
         }
     }
 

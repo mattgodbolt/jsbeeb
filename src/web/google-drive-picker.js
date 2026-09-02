@@ -172,7 +172,7 @@ export class GoogleDrivePicker {
             name = utils.replaceOrAddExtension(name, discType.extension);
             console.log(`Saving existing disc: ${name}`);
         } else {
-            // TODO support HFE, I guess?
+            // TODO(#1070) support HFE, I guess?
             const discType = disc.guessDiscTypeFromName(name);
             if (!discType.byteSize) {
                 this.modals.loadingFinished(

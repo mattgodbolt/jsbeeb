@@ -347,7 +347,7 @@ export class SoundChip {
     updateSlowDataBus(slowDataBus, active) {
         this.slowDataBus = slowDataBus;
         this.active = active;
-        // TODO: this probably isn't modeled correctly. Currently the sound chip "notices" a new data bus value some
+        // TODO(#835) this probably isn't modeled correctly. Currently the sound chip "notices" a new data bus value some
         // fixed number of cycles after WE (write enable) is triggered. In reality, the sound chip likely pulls data off
         // the bus at a fixed point in its cycle, iff WE is active.
         if (active) {

@@ -51,7 +51,7 @@ export class Acia extends EventTarget {
     }
 
     reset() {
-        // TODO: testing on a real beeb seems to suggest that reset also
+        // TODO(#1064) testing on a real beeb seems to suggest that reset also
         // clears CR bits (i.e. things stop working until CR is rewritten
         // with sane value). This disagrees with the datasheet.
         // CTS and DTD are based on external inputs so leave them alone.
@@ -198,7 +198,7 @@ export class Acia extends EventTarget {
         byte |= 0;
         if (this.sr & 0x01) {
             // Overrun.
-            // TODO: this doesn't match the datasheet:
+            // TODO(#1064) this doesn't match the datasheet:
             // "The Overrun does not occur in the Status Register until the
             // valid character prior to Overrun has been read."
             this.sr |= 0xa0;

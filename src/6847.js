@@ -113,7 +113,7 @@ const MODE_AG = 0x10; // graphics mode
 
 // The MC6847 datasheet specifies 3.579545 MHz, but 3.638004 is used here as an
 // empirical correction to align VSync/interrupt timing with the CPU clock.
-// TODO: revisit once full integration is testable.
+// TODO(#1067) revisit once full integration is testable.
 const VdgClockMhz = 3.638004;
 
 export class Video6847 {
@@ -495,7 +495,7 @@ export class Video6847 {
                     // Render data depending on display enable state.
                     if (this.bitmapX >= 0 && this.bitmapX < 1024 && this.bitmapY < 625) {
                         {
-                            // TODO: Add in the INTEXT modifiers to mode (if necessary)
+                            // TODO(#1067) Add in the INTEXT modifiers to mode (if necessary)
                             // blit into the fb32 buffer which is painted by VIDEO
                             const textMode = (mode & MODE_AG) === 0; // 0x10 is the AG bit
                             this.recordLineGrid(textMode);
