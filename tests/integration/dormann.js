@@ -80,7 +80,7 @@ function logFailure(processor) {
     );
 }
 
-describe("dormann tests", { timeout: 30000 }, function () {
+describe("dormann tests", function () {
     it("should pass 6502 functional tests", async () => {
         const cpu = fake6502();
         await cpu.initialise();
@@ -98,7 +98,7 @@ describe("dormann tests", { timeout: 30000 }, function () {
     });
 });
 
-describe("dormann tests (non-cycle-accurate)", { timeout: 30000 }, function () {
+describe("dormann tests (non-cycle-accurate)", function () {
     it("should pass 6502 functional tests", async () => {
         const cpu = fake6502(undefined, { cycleAccurate: false });
         await cpu.initialise();

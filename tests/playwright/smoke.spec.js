@@ -28,6 +28,7 @@ const ConsoleSurface = [
 ];
 
 const OneRowWidth = 4000;
+const ShaderCompileBudgetMs = 30000;
 // The bar expands at Bootstrap's lg breakpoint, 992px.
 const LaptopWidths = [993, 1024, 1280, 1400, 1440, 1512, 1536, 1600];
 
@@ -140,9 +141,14 @@ test("every display mode and sound output on the bar can be picked", async ({ be
     expect(outputs).not.toEqual([]);
     for (const mode of modes) {
         // Picking a mode compiles its shaders under software GL, which blocks
-        // the page well past the action default on a slow machine.
-        await page.click(`#display-mode [data-mode="${mode}"]`, { timeout: 30000 });
-        await expect(page.locator("#display-mode .active")).toHaveAttribute("data-mode", mode);
+        // the page well past the action default on a slow machine; the next
+        // action would otherwise pay for it.
+        const before = await beeb.cycles();
+        await page.click(`#display-mode [data-mode="${mode}"]`, { timeout: ShaderCompileBudgetMs });
+        await expect(page.locator("#display-mode .active")).toHaveAttribute("data-mode", mode, {
+            timeout: ShaderCompileBudgetMs,
+        });
+        await beeb.expectRunningPast(before, ShaderCompileBudgetMs);
     }
     for (const output of outputs) {
         await page.click(`#audio-output [data-output="${output}"]`);

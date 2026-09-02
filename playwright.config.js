@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
-import os from "node:os";
+import { readdirSync } from "node:fs";
+
+import { workersFor } from "./tools/test-workers.js";
 
 // The preview of dist/ the tests drive, on a port of its own so a dev server
 // can run alongside. BASE_URL points the suite at a server that is already
@@ -9,17 +11,33 @@ const PreviewPort = 5198;
 const PreviewUrl = `http://${PreviewHost}:${PreviewPort}/`;
 const BaseUrl = process.env.BASE_URL;
 
+// CI's runners have no GPU, so the software renderer is what CI tests. On a
+// machine with one, Chrome is pointed at it instead, which takes a filter's
+// shader compile from tens of seconds to an instant.
+// E2E_GL=software or E2E_GL=hardware overrides the choice.
+const GlArgs = {
+    software: ["--use-gl=angle", "--use-angle=swiftshader"],
+    hardware: ["--use-gl=angle", "--use-angle=gl", "--ignore-gpu-blocklist"],
+};
+const hasGpu = () => {
+    try {
+        return readdirSync("/dev/dri").some((node) => /^(card|renderD)\d+$/.test(node));
+    } catch {
+        return false;
+    }
+};
+const Gl = process.env.E2E_GL ?? (process.env.CI || !hasGpu() ? "software" : "hardware");
+if (!GlArgs[Gl]) throw new Error(`E2E_GL must be one of ${Object.keys(GlArgs).join(", ")}, not "${Gl}"`);
+
 export default defineConfig({
     testDir: "tests/playwright",
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
     // Deliberately none, anywhere: a flake is a bug to root-cause.
     retries: 0,
-    // Each worker is a whole Chrome running the machine in real time, and
-    // starved emulators time out rather than slow down; a 15GB laptop showed
-    // four of them paging each other to death. One worker per eight hardware
-    // threads keeps small machines serial and big ones parallel.
-    workers: process.env.CI ? 2 : Math.max(1, Math.min(4, Math.floor(os.availableParallelism() / 8))),
+    // Each worker is a whole Chrome running the machine in real time. One worker
+    // per eight hardware threads keeps small machines serial and big ones parallel.
+    workers: process.env.CI ? 2 : workersFor(8, 4),
     reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never" }]] : "list",
     timeout: 60000,
     expect: { timeout: 10000 },
@@ -33,7 +51,7 @@ export default defineConfig({
         launchOptions: {
             // Playwright's own headless switches already mute audio and keep
             // shared memory out of /dev/shm; these are what the app needs on top.
-            args: ["--use-gl=angle", "--use-angle=swiftshader", "--autoplay-policy=no-user-gesture-required"],
+            args: [...GlArgs[Gl], "--autoplay-policy=no-user-gesture-required"],
         },
     },
     projects: [

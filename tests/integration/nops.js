@@ -3,7 +3,7 @@ import assert from "assert";
 import * as utils from "../../src/utils.js";
 import { TestMachine } from "../test-machine.js";
 
-describe("test various NOP timings", { timeout: 30000 }, function () {
+describe("test various NOP timings", function () {
     it("should match the nops.bas code", async () => {
         const testMachine = new TestMachine("Master");
         await testMachine.initialise();

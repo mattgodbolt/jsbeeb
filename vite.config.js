@@ -1,7 +1,6 @@
-import { configDefaults } from "vitest/config";
-
 import { defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
+import { workersFor } from "./tools/test-workers.js";
 
 /** @type {import("vite").UserConfig} */
 export default defineConfig({
@@ -13,15 +12,24 @@ export default defineConfig({
         assetsInlineLimit: 0,
     },
     test: {
-        include: [
-            ...configDefaults.include,
-            "tests/unit/**/test-*.js",
-            "tests/integration/**/*.js",
-            "tests/shader/test-*.js",
-        ],
-        // Playwright's runner owns these; vitest's default globs would take the spec files.
-        exclude: [...configDefaults.exclude, "tests/playwright/**"],
         testTimeout: 15000,
+        // Every worker runs CPU-bound JavaScript (an emulated machine, or jsdom),
+        // so a hyperthread sibling would only share its core: one worker per two
+        // threads.
+        maxWorkers: workersFor(2),
+        projects: [
+            { extends: true, test: { name: "unit", include: ["tests/unit/**/test-*.js"] } },
+            {
+                extends: true,
+                test: {
+                    name: "integration",
+                    include: ["tests/integration/**/*.js"],
+                    // A hang detector; the dearest test costs under ten seconds uncontended.
+                    testTimeout: 120000,
+                },
+            },
+            { extends: true, test: { name: "shader", include: ["tests/shader/test-*.js"] } },
+        ],
         slowTestThreshold: 1000,
         coverage: {
             provider: "v8",

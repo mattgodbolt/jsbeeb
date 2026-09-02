@@ -30,7 +30,7 @@ function fortyTrackImage(name, fileSector, fill) {
     return data;
 }
 
-describe("disc track layouts", { timeout: 60000 }, function () {
+describe("disc track layouts", function () {
     async function machineWith(image) {
         const testMachine = new TestMachine();
         await testMachine.initialise();

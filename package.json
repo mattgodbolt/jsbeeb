@@ -104,7 +104,7 @@
     "test:cpu": "node tests/test-suite.js",
     "test:shader": "vitest run --silent=true tests/shader",
     "coverage:unit": "vitest run tests/unit --coverage",
-    "dom-unit-tests": "vitest run --silent=true --exclude tests/integration --exclude tests/shader $(grep -rl domFromIndexHtml tests/unit)",
+    "dom-unit-tests": "vitest run --silent=true --project unit $(grep -rl domFromIndexHtml tests/unit)",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",
     "mirror-sth": "node tools/mirror-sth.js --out .sth-mirror",
@@ -125,7 +125,7 @@
   },
   "lint-staged": {
     "*.js": [
-      "vitest related --run --exclude tests/integration --exclude tests/shader --no-file-parallelism",
+      "vitest related --run --project unit --no-file-parallelism",
       "eslint --cache --fix",
       "prettier --write"
     ],

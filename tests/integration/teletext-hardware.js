@@ -36,7 +36,7 @@ async function compareToReference(page, actualPng) {
     );
 }
 
-describe("Teletext hardware test disc", { timeout: 120000 }, () => {
+describe("Teletext hardware test disc", () => {
     for (const page of Pages) {
         it(`should render ${page} as the hardware does`, async () => {
             await compareToReference(page, await renderPage(page));

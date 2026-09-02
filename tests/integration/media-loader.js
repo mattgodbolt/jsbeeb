@@ -29,7 +29,7 @@ class FileBackedXhr {
     }
 }
 
-describe("the built-in disc list", { timeout: 60000 }, () => {
+describe("the built-in disc list", () => {
     beforeEach(() => {
         domFromIndexHtml("header-bar", "discs", "econetfs", "tapes", "paste-text");
         vi.stubGlobal("XMLHttpRequest", FileBackedXhr);
