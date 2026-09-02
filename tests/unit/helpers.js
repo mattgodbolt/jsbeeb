@@ -48,11 +48,20 @@ export const fakeUrlState = (search = "") =>
 export const toasts = () =>
     [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
-/** A catalogued single-density image, the smallest thing discFor accepts. */
-export function ssdImage(sectors = 800) {
-    const data = new Uint8Array(80 * 10 * 256);
+/**
+ * A single-density image whose DFS catalogue claims `sectors` sectors and
+ * holds a file starting at each of `starts`, the smallest thing discFor accepts.
+ */
+export function ssdImage(sectors = 800, { starts = [], length = 80 * 10 * 256 } = {}) {
+    const data = new Uint8Array(length);
+    data[0x105] = starts.length * 8;
     data[0x106] = (sectors >>> 8) & 3;
     data[0x107] = sectors & 0xff;
+    starts.forEach((start, entry) => {
+        const offset = 0x108 + entry * 8;
+        data[offset + 6] = (start >>> 8) & 3;
+        data[offset + 7] = start & 0xff;
+    });
     return data;
 }
 
