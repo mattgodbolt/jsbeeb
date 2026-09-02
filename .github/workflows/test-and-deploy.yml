@@ -25,17 +25,6 @@ jobs:
           cache: npm
       - name: npm ci
         run: npm ci
-      - name: Check every test suite has a workflow step
-        run: |
-          node -e '
-            const steps = ["test:unit", "test:integration", "test:cpu", "test:shader", "test:e2e"];
-            const scripts = Object.keys(require("./package.json").scripts).filter((s) => s.startsWith("test:"));
-            const missing = scripts.filter((s) => !steps.includes(s));
-            const stale = steps.filter((s) => !scripts.includes(s));
-            if (missing.length) console.error(`No workflow step runs: ${missing}. Add a step and list it here.`);
-            if (stale.length) console.error(`Listed in the workflow but not package.json: ${stale}`);
-            if (missing.length || stale.length) process.exit(1);
-          '
       - name: checks
         run: npm run ci-checks
       # Vitest 4's job summary has a fixed "Vitest Test Report" heading, so each
@@ -44,7 +33,7 @@ jobs:
       - name: Unit tests
         run: |
           echo "# Unit tests" >> "$GITHUB_STEP_SUMMARY"
-          npm run coverage:unit -- --silent=true
+          npm run test:unit -- --coverage
       - name: Coverage report
         # The PR comment needs a write token, which fork pull_request events do not get.
         if: always() && github.event_name != 'pull_request' && hashFiles('coverage/coverage-summary.json') != ''

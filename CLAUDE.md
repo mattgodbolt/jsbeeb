@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   unit tests cannot see (main.js constructing everything against the built bundle, Bootstrap layout at real widths, a
   real keystroke, WebGL and WebAudio). Part of `npm test`, and needs Chrome like the shader tests;
   `BASE_URL=http://localhost:5173/ npx playwright test --project chrome` runs it against a server that is already up
-- `npm run ci-checks` - Run ESLint and Prettier checks for CI
+- `npm run ci-checks` - Run ESLint, Prettier and the check that every `test:*` script has a CI workflow step
 - `vitest run tests/unit/test-gzip.js` - Run a single test file
 
 ### Code Coverage
