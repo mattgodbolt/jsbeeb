@@ -1,10 +1,9 @@
-import { inflate } from "./utils.js";
-
 // B-em snapshot format parser (versions 1 and 3).
 // v1 (BEMSNAP1): Fixed-size 327,885 byte packed struct. Reference: beebjit state.c
 // v3 (BEMSNAP3): Section-based with key+size headers, zlib-compressed memory. Reference: b-em savestate.c
 
 import { volumeTable, buildVideoState, buildSnapshot } from "./snapshot-helpers.js";
+import { inflate } from "./archive.js";
 
 const BemV1Size = 327885;
 

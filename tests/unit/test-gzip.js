@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import * as fs from "fs";
-import * as utils from "../../src/utils.js";
 
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { ungzip } from "../../src/archive.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -40,7 +40,7 @@ function concat(parts) {
 async function testOneFile(file) {
     const compressed = new Uint8Array(fs.readFileSync(`${file}.gz`));
     const expected = new Uint8Array(fs.readFileSync(file));
-    expect(await utils.ungzip(compressed)).toEqual(expected);
+    expect(await ungzip(compressed)).toEqual(expected);
 }
 
 describe("gzip tests", function () {
@@ -51,46 +51,46 @@ describe("gzip tests", function () {
     }
 
     it("should handle single-member gzip", async () => {
-        const result = await utils.ungzip(helloWorldMember);
+        const result = await ungzip(helloWorldMember);
         expect(new TextDecoder().decode(result)).toBe("hello world");
     });
 
     it("should concatenate the members of a multi-member gzip", async () => {
-        const result = await utils.ungzip(repeatMember(3));
+        const result = await ungzip(repeatMember(3));
         expect(new TextDecoder().decode(result)).toBe("hello worldhello worldhello world");
     });
 
     it("should concatenate members of differing contents", async () => {
         const members = await Promise.all(["first ", "second ", "third"].map(gzipMember));
-        const result = await utils.ungzip(concat(members));
+        const result = await ungzip(concat(members));
         expect(new TextDecoder().decode(result)).toBe("first second third");
     });
 
     it("should reject a multi-member gzip with a truncated final member", async () => {
         const truncated = repeatMember(2).subarray(0, helloWorldMember.length + 20);
-        await expect(utils.ungzip(truncated)).rejects.toThrow();
+        await expect(ungzip(truncated)).rejects.toThrow();
     });
 
     it("should reject a corrupted payload", async () => {
         const corrupted = helloWorldMember.slice();
         corrupted[24] ^= 0x01;
-        await expect(utils.ungzip(corrupted)).rejects.toThrow(/Unable to ungzip: incorrect data check/);
+        await expect(ungzip(corrupted)).rejects.toThrow(/Unable to ungzip: incorrect data check/);
     });
 
     it("should reject a corrupted member in the middle of a multi-member gzip", async () => {
         const corrupted = repeatMember(3);
         corrupted[helloWorldMember.length + 24] ^= 0x01;
-        await expect(utils.ungzip(corrupted)).rejects.toThrow(/Unable to ungzip/);
+        await expect(ungzip(corrupted)).rejects.toThrow(/Unable to ungzip/);
     });
 
     it("should accept a member followed by trailing zeros", async () => {
         const padded = new Uint8Array(helloWorldMember.length + 8);
         padded.set(helloWorldMember);
-        expect(new TextDecoder().decode(await utils.ungzip(padded))).toBe("hello world");
+        expect(new TextDecoder().decode(await ungzip(padded))).toBe("hello world");
     });
 
     it("should reject non-gzip data", async () => {
         const notGzip = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
-        await expect(utils.ungzip(notGzip)).rejects.toThrow();
+        await expect(ungzip(notGzip)).rejects.toThrow();
     });
 });

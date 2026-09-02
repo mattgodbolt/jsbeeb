@@ -1,4 +1,5 @@
-import { loadData, unzip, createZipBlob } from "./utils.js";
+import { loadData } from "./utils.js";
+import { createZipBlob, unzip } from "./archive.js";
 
 /*
 highly adapted from:

@@ -1,4 +1,4 @@
-import * as utils from "./utils.js";
+import { unzipDiscImage } from "./archive.js";
 
 // Always https, whatever the page was loaded over: the mirror redirects plain
 // http, so following the page's protocol would cost a redirect on every request
@@ -53,7 +53,7 @@ export class StairwayToHell {
         const response = await fetch(url);
         if (!response.ok) throw new Error(`Unable to load ${url}, http code ${response.status}`);
         try {
-            return await utils.unzipDiscImage(new Uint8Array(await response.arrayBuffer()));
+            return await unzipDiscImage(new Uint8Array(await response.arrayBuffer()));
         } catch (error) {
             console.error("Failed to fetch file:", error);
             throw error;

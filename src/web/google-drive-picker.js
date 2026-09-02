@@ -4,6 +4,7 @@ import * as disc from "../fdc.js";
 import { GoogleDriveLoader } from "../google-drive.js";
 import { toast } from "./toast.js";
 import { errorText } from "./reporting.js";
+import { replaceOrAddExtension } from "../archive.js";
 
 /**
  * The Google Drive picker: signing in, listing the user's discs, loading one
@@ -169,7 +170,7 @@ export class GoogleDrivePicker {
                 this.modals.loadingFinished(`Unable to create ${name} on Google Drive: ${errorText(e)}`);
                 return;
             }
-            name = utils.replaceOrAddExtension(name, discType.extension);
+            name = replaceOrAddExtension(name, discType.extension);
             console.log(`Saving existing disc: ${name}`);
         } else {
             // TODO(#1070) blank HFE images have no fixed byteSize, so only SSD and DSD blanks can be made here.

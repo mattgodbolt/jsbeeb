@@ -2,8 +2,6 @@ import { describe, it, beforeAll, expect, vi, afterEach } from "vitest";
 
 import {
     BBC,
-    crc32,
-    createZipBlob,
     debounce,
     getKeyMap,
     hexbyte,
@@ -12,15 +10,14 @@ import {
     parseAddr,
     readInt16,
     readInt32,
-    replaceOrAddExtension,
     signExtend,
     stringToUint8Array,
     uint8ArrayToString,
-    unzip,
     userKeymap,
 } from "../../src/utils.js";
 import { ATOM, getKeyMapAtom } from "../../src/utils_atom.js";
 import { processInputParams } from "../../src/url-params.js";
+import { crc32, createZipBlob, replaceOrAddExtension, unzip } from "../../src/archive.js";
 
 describe("Utils tests", function () {
     describe("parseAddr", function () {

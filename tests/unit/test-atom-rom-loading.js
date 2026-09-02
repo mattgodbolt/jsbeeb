@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
 import * as utils from "../../src/utils.js";
+import * as archive from "../../src/archive.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -36,7 +37,7 @@ describe("AtomCpu6502 loadRom", () => {
     it("unzips zipped ROM images", async () => {
         const zipped = new Uint8Array(readFileSync(join(__dirname, "zip", "test-atom-rom.zip")));
         const loadData = vi.spyOn(utils, "loadData").mockResolvedValue(zipped);
-        const unzip = vi.spyOn(utils, "unzipRomImage");
+        const unzip = vi.spyOn(archive, "unzipRomImage");
         const cpu = makeAtom();
         await expect(cpu.loadRom("extra.zip", cpu.romOffset)).resolves.toBeUndefined();
         expect(loadData).toHaveBeenCalledWith("roms/extra.zip");

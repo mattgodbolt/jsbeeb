@@ -8,11 +8,11 @@ import { Cmos } from "../../src/cmos.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { TEST_6502, TubeModel } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
-import { crc32 } from "../../src/utils.js";
 import { discFor } from "../../src/fdc.js";
 import { DiscDrive } from "../../src/disc-drive.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { WdFdc } from "../../src/wd-fdc.js";
+import { crc32 } from "../../src/archive.js";
 
 function makeCpu(config = {}) {
     const fb32 = new Uint32Array(1024 * 768);

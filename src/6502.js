@@ -11,6 +11,7 @@ import { Filestore } from "./filestore.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
+import { unzipRomImage } from "./archive.js";
 
 const signExtend = utils.signExtend;
 
@@ -1166,7 +1167,7 @@ export class Cpu6502 extends Base6502 {
         const ramRomOs = this.ramRomOs;
         let data = await utils.loadData(name);
         if (/\.zip/i.test(name)) {
-            data = (await utils.unzipRomImage(data)).data;
+            data = (await unzipRomImage(data)).data;
         }
         ramRomOs.set(data, offset);
     }
@@ -1826,7 +1827,7 @@ export class AtomCpu6502 extends Cpu6502 {
         if (name.indexOf("http") !== 0) name = "roms/" + name;
         let data = await utils.loadData(name);
         if (/\.zip/i.test(name)) {
-            data = (await utils.unzipRomImage(data)).data;
+            data = (await unzipRomImage(data)).data;
         }
         const len = data.length;
         if (len !== 16384 && len !== 8192 && len !== 4096) {

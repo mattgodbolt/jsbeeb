@@ -1,5 +1,5 @@
-import * as utils from "../utils.js";
 import { toast } from "./toast.js";
+import { unzipDiscImage } from "../archive.js";
 
 export const errorText = (error) => error?.message ?? `${error}`;
 
@@ -16,7 +16,7 @@ export function reportIgnoredFiles(name, ignored) {
 }
 
 export async function unzipAndReport(data) {
-    const unzipped = await utils.unzipDiscImage(data);
+    const unzipped = await unzipDiscImage(data);
     reportIgnoredFiles(unzipped.name, unzipped.ignored);
     return unzipped;
 }
