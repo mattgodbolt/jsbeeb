@@ -80,8 +80,7 @@ export class Display {
     }
 
     onPaint(video, minx, miny, maxx, maxy) {
-        // The chip paints once from its own constructor, before this.video is set.
-        if (!this.video?.frameSkipCount) {
+        if (!video.frameSkipCount) {
             this.frames++;
             if (this.frames < this.frameSkip) return;
             this.frames = 0;

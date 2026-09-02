@@ -39,7 +39,12 @@ describe("Display", () => {
         return display;
     };
 
-    const paintedFrom = () => ({ lineGrid: new Uint8Array(4), lineBaseEven: 1, lineBaseOdd: 2 });
+    const paintedFrom = (frameSkipCount = 0) => ({
+        lineGrid: new Uint8Array(4),
+        lineBaseEven: 1,
+        lineBaseOdd: 2,
+        frameSkipCount,
+    });
     const presentAll = () => {
         for (const callback of rafCallbacks.splice(0)) callback();
     };
@@ -108,7 +113,7 @@ describe("Display", () => {
         it("presents every frame the chip paints rather than skipping twice", () => {
             const display = make({ frameSkip: 3 });
             display.setSpeedy(true);
-            display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+            display.onPaint(paintedFrom(display.video.frameSkipCount), 0, 0, FbWidth, 8);
             expect(rafCallbacks).toHaveLength(1);
         });
     });
