@@ -82,7 +82,6 @@ describe("SthPicker", () => {
     describe("picking a disc", () => {
         it("names it in the URL, loads it into drive 0 and closes the loading dialog", async () => {
             const loaded = {};
-            deps.media.setDisc1Image.mockImplementation((name) => (deps.urlState.params.disc1 = name));
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().pickDisc("ELITE.zip");
             expect(deps.media.setDisc1Image).toHaveBeenCalledWith("sth:ELITE.zip");

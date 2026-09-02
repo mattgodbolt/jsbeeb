@@ -118,7 +118,6 @@ describe("HfePicker", () => {
 
         it("names it in the URL, loads it and closes the loading dialog", async () => {
             const loaded = {};
-            deps.media.setDisc1Image.mockImplementation((name) => (deps.urlState.params.disc1 = name));
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().pick(entry("Games/ELITE.hfe", "Elite"));
             expect(deps.media.setDisc1Image).toHaveBeenCalledWith("hfe:Games/ELITE.hfe");

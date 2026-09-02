@@ -12,7 +12,6 @@ export class Modals {
         this.errorModal = new bootstrap.Modal(this.errorDialog);
         this.loadingDialog = document.getElementById("loading-dialog");
         this.loadingModal = new bootstrap.Modal(this.loadingDialog);
-        this.googleDriveAuth = document.getElementById("google-drive-auth");
         this.aysEl = document.getElementById("are-you-sure");
         this.aysModal = new bootstrap.Modal(this.aysEl);
 
@@ -48,12 +47,10 @@ export class Modals {
 
     popupLoading(msg) {
         this.loadingDialog.querySelector(".loading").textContent = msg;
-        this.googleDriveAuth.style.display = "none";
         this.loadingModal.show();
     }
 
     loadingFinished(message) {
-        this.googleDriveAuth.style.display = "none";
         this.loadingModal.hide();
         if (message) toast(message);
     }

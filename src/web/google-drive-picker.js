@@ -32,8 +32,12 @@ export class GoogleDrivePicker {
             else this.authReject?.(new Error("Unable to authorize Google Drive"));
         });
 
-        // Closing the loading dialog while the auth panel waits is a cancellation, not an error.
-        document.getElementById("loading-dialog").addEventListener("hidden.bs.modal", () => this.authResolve?.(false));
+        // Closing the loading dialog puts the auth panel away; while the panel
+        // waits, that close is a cancellation, not an error.
+        document.getElementById("loading-dialog").addEventListener("hidden.bs.modal", () => {
+            this.authEl.style.display = "none";
+            this.authResolve?.(false);
+        });
 
         // Loading the Google client holds the main thread for ~100ms, so it waits for
         // someone to ask for Drive.

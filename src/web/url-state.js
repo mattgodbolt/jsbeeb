@@ -1,4 +1,8 @@
 import { buildUrlFromParams, ParamTypes, parseQueryString } from "../url-params.js";
+import { debounce } from "../utils.js";
+
+// A slider fires for every pixel of a drag, and each URL update is a history entry.
+const UrlSettleMs = 300;
 
 /** How each parameter the page understands is parsed and written back. */
 export const UrlParamTypes = {
@@ -67,6 +71,7 @@ export class UrlState {
         // Parameters may be given after the hash as well as in the query.
         const queryString = location.search.substring(1) + "&" + location.hash.substring(1);
         this.params = parseQueryString(queryString, paramTypes);
+        this.updateUrlOnceSettled = debounce(() => this.updateUrl(), UrlSettleMs);
     }
 
     /** The page's URL with the parameters as they are now. */
@@ -79,13 +84,18 @@ export class UrlState {
         return buildUrlFromParams(this.baseUrl, { ...this.params, ...overrides }, this.paramTypes);
     }
 
-    /** Apply `changes` to the parameters (undefined deletes a key) and push the new URL. */
-    set(changes) {
+    /**
+     * Apply `changes` to the parameters (undefined deletes a key) and push the
+     * new URL; `settle: true` lets a burst of changes finish before pushing one
+     * history entry for the lot.
+     */
+    set(changes, { settle = false } = {}) {
         for (const [key, value] of Object.entries(changes)) {
             if (value === undefined) delete this.params[key];
             else this.params[key] = value;
         }
-        this.updateUrl();
+        if (settle) this.updateUrlOnceSettled();
+        else this.updateUrl();
     }
 
     updateUrl() {
