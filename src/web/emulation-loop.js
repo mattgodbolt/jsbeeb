@@ -51,8 +51,9 @@ class VirtualSpeedUpdater {
  * Runs the machine in real time: the tick that turns wall-clock time into
  * cycles, starting and stopping, the audio lead, fast-forward and the speed
  * readout. Owns `running`, and dispatches a "running" event whenever it
- * changes hands, "tick" each time it runs the machine, and "rewind-capture"
- * every RewindCaptureInterval frames for whoever keeps the rewind history. Anything that needs the machine held still while
+ * changes hands, "tick" on every tick while running (the first only takes the
+ * time), and "rewind-capture" every RewindCaptureInterval frames for whoever
+ * keeps the rewind history. Anything that needs the machine held still while
  * it works (a dialog, a snapshot, the rewind panel, a hidden tab) takes a
  * `pause()`; the loop runs again once every hold has let go, provided the user
  * still wants it running.
