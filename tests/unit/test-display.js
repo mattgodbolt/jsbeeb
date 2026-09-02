@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Display } from "../../src/web/display.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const FbWidth = 1024;
 
@@ -153,8 +153,7 @@ describe("Display", () => {
                 return fakeCanvas;
             },
         });
-        const toastText = document.querySelector(".toast")?.textContent ?? "";
-        expect(toastText).toContain("no WebGL");
+        expect(toasts()).toEqual([expect.stringContaining("no WebGL")]);
     });
 
     it("uses a fake video chip when asked", () => {

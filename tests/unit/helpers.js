@@ -48,12 +48,51 @@ export const fakeUrlState = (search = "") =>
 export const toasts = () =>
     [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
-/** A catalogued single-density image, the smallest thing discFor accepts. */
-export function ssdImage(sectors = 800) {
-    const data = new Uint8Array(80 * 10 * 256);
+/** A fetch response carrying an archive manifest of `files`. */
+export const manifestResponse = (files) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ schemaVersion: 1, files }),
+});
+
+/** A fetch response carrying `body` as its bytes. */
+export const bytesResponse = (body = new Uint8Array()) => ({
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+});
+
+/**
+ * A single-density image whose DFS catalogue claims `sectors` sectors and
+ * holds a file starting at each of `starts`, the smallest thing discFor accepts.
+ */
+export function ssdImage(sectors = 800, { starts = [], length = 80 * 10 * 256 } = {}) {
+    const data = new Uint8Array(length);
+    data[0x105] = starts.length * 8;
     data[0x106] = (sectors >>> 8) & 3;
     data[0x107] = sectors & 0xff;
+    starts.forEach((start, entry) => {
+        const offset = 0x108 + entry * 8;
+        data[offset + 6] = (start >>> 8) & 3;
+        data[offset + 7] = start & 0xff;
+    });
     return data;
+}
+
+// A toast left mid-show leaks timers past this file's jsdom window: bootstrap
+// fakes transitionend with an uncancellable short timer, which in turn arms
+// the five second autohide. Let the transition finish while this window is
+// still current, then dispose to cancel the autohide; either timer firing
+// later crashes the run from whichever test file is running at the time.
+async function disposeToasts() {
+    if (!document.querySelector(".toast")) return;
+    await vi.waitFor(() => {
+        for (const el of document.querySelectorAll(".toast")) expect(el.classList.contains("showing")).toBe(false);
+    });
+    // Imported lazily: bootstrap cannot load outside jsdom, and node-environment
+    // tests share this module for its other helpers.
+    const { Toast } = await import("bootstrap");
+    for (const el of document.querySelectorAll(".toast")) Toast.getInstance(el)?.dispose();
 }
 
 /**
@@ -61,12 +100,14 @@ export function ssdImage(sectors = 800) {
  * window and fail the run from outside any test when they fire, so they are
  * flushed before the clock goes back to real.
  */
-export function teardownDom() {
+export async function teardownDom() {
     if (vi.isFakeTimers()) {
         vi.runAllTimers();
         vi.useRealTimers();
     }
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    await disposeToasts();
     document.body.innerHTML = "";
     window.localStorage.clear();
     window.sessionStorage.clear();

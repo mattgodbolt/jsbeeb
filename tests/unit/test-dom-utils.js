@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { downloadBlob, downloadDriveData } from "../../src/dom-utils.js";
+import { teardownDom } from "./helpers.js";
 
 describe("dom-utils", () => {
     describe("downloadBlob", () => {
@@ -17,10 +18,7 @@ describe("dom-utils", () => {
             vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
         });
 
-        afterEach(() => {
-            vi.restoreAllMocks();
-            vi.useRealTimers();
-        });
+        afterEach(teardownDom);
 
         it("clicks an anchor in the document with the given file name", () => {
             downloadBlob(new Blob(["data"]), "disc.ssd");
@@ -52,12 +50,7 @@ describe("dom-utils", () => {
             vi.stubGlobal("URL", { ...URL, createObjectURL: () => "blob:disc", revokeObjectURL: () => {} });
         });
 
-        afterEach(() => {
-            vi.runAllTimers();
-            vi.useRealTimers();
-            vi.restoreAllMocks();
-            vi.unstubAllGlobals();
-        });
+        afterEach(teardownDom);
 
         it("names the file for the format it is in", () => {
             downloadDriveData(new Uint8Array([1, 2, 3]), "elite.ssd", ".hfe");

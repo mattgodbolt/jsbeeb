@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FrontPanel } from "../../src/web/front-panel.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 describe("FrontPanel", () => {
     let processor;
@@ -106,7 +106,7 @@ describe("FrontPanel", () => {
         it("says when the pop-up was blocked", () => {
             vi.spyOn(window, "open").mockReturnValue(null);
             make().checkPrinterWindow();
-            expect(document.querySelector(".toast").textContent).toContain("blocked");
+            expect(toasts()).toEqual([expect.stringContaining("blocked")]);
         });
 
         it("quietly keeps output until a window is open", () => {

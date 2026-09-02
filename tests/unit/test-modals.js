@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Modals } from "../../src/web/modals.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 describe("Modals", () => {
     let emulator;
@@ -103,13 +103,13 @@ describe("Modals", () => {
         it("toasts a message on finishing when given one", () => {
             modals.popupLoading("Loading Elite");
             modals.loadingFinished("Unable to load Elite");
-            expect(document.querySelector(".toast").textContent).toContain("Unable to load Elite");
+            expect(toasts()).toEqual([expect.stringContaining("Unable to load Elite")]);
         });
 
         it("says nothing on finishing quietly", () => {
             modals.popupLoading("Loading Elite");
             modals.loadingFinished();
-            expect(document.querySelector(".toast")).toBeNull();
+            expect(toasts()).toEqual([]);
         });
     });
 
