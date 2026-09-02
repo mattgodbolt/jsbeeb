@@ -1,9 +1,15 @@
 name: jsbeeb tests
 
-on: [push]
+# push covers same-repo branches (a PR here opens moments after the push);
+# pull_request exists for forks, so the job guards skip same-repo PR events
+# to avoid running everything twice.
+on:
+  push:
+  pull_request:
 
 jobs:
   build-and-test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -17,8 +23,19 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
-      - name: npm install
-        run: npm install
+      - name: npm ci
+        run: npm ci
+      - name: Check every test suite has a workflow step
+        run: |
+          node -e '
+            const steps = ["test:unit", "test:integration", "test:cpu", "test:shader", "test:e2e"];
+            const scripts = Object.keys(require("./package.json").scripts).filter((s) => s.startsWith("test:"));
+            const missing = scripts.filter((s) => !steps.includes(s));
+            const stale = steps.filter((s) => !scripts.includes(s));
+            if (missing.length) console.error(`No workflow step runs: ${missing}. Add a step and list it here.`);
+            if (stale.length) console.error(`Listed in the workflow but not package.json: ${stale}`);
+            if (missing.length || stale.length) process.exit(1);
+          '
       - name: checks
         run: npm run ci-checks
       # Vitest 4's job summary has a fixed "Vitest Test Report" heading, so each
@@ -29,12 +46,15 @@ jobs:
           echo "# Unit tests" >> "$GITHUB_STEP_SUMMARY"
           npm run coverage:unit -- --silent=true
       - name: Coverage report
-        if: always() && hashFiles('coverage/coverage-summary.json') != ''
+        # The PR comment needs a write token, which fork pull_request events do not get.
+        if: always() && github.event_name != 'pull_request' && hashFiles('coverage/coverage-summary.json') != ''
         uses: davelosert/vitest-coverage-report-action@v2
         with:
           json-summary-path: coverage/coverage-summary.json
           json-final-path: coverage/coverage-final.json
-      # shields.io renders badge.json from the deployed report.
+      # shields.io renders badge.json from the deployed report. The label says "unit"
+      # because coverage instruments only the unit suite; the CPU-bound integration
+      # tests blow their timeouts under v8 instrumentation (#1002).
       - name: Publish coverage report and badge
         if: github.ref == 'refs/heads/main'
         env:
@@ -44,7 +64,7 @@ jobs:
         run: |
           PCT=$(node -p "require('./coverage/coverage-summary.json').total.lines.pct.toFixed(1)")
           COLOR=$(node -p "const p=$PCT; p>=90?'brightgreen':p>=75?'green':p>=60?'yellowgreen':p>=45?'yellow':'orange'")
-          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}' "$PCT" "$COLOR" > coverage/badge.json
+          printf '{"schemaVersion":1,"label":"unit coverage","message":"%s%%","color":"%s"}' "$PCT" "$COLOR" > coverage/badge.json
           aws s3 sync coverage s3://bbc.xania.org/coverage \
             --no-progress --delete \
             --exclude "coverage-final.json" --exclude "lcov.info" --exclude "lcov-report/*" --exclude ".tmp/*" \
@@ -72,6 +92,7 @@ jobs:
           if-no-files-found: ignore
 
   cpu-test:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -82,12 +103,13 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
-      - name: npm install
-        run: npm install
+      - name: npm ci
+        run: npm ci
       - name: CPU tests
         run: npm run test:cpu
 
   build-electron-packages:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -96,8 +118,8 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
-      - name: npm install
-        run: npm install
+      - name: npm ci
+        run: npm ci
       - name: Build web distribution
         run: npm run build
       - name: Build Electron packages in Docker
