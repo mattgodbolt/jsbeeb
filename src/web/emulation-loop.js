@@ -149,12 +149,7 @@ export class EmulationLoop extends EventTarget {
         const motorOn = processor.acia.motorOn;
         const speedy = this.fastAsPossible || (this.fastTape && motorOn);
 
-        // In speedy mode, we still run all the state machines accurately
-        // but we paint less often because painting is the most expensive
-        // part of jsbeeb at this time.
-        // We need need to paint per odd number of frames so that interlace
-        // modes, i.e. MODE 7, still look ok.
-        display.video.frameSkipCount = speedy ? 9 : 0;
+        display.setSpeedy(speedy);
 
         this.scheduleTick(speedy ? 0 : TickMs);
 

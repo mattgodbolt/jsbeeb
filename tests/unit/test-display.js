@@ -90,6 +90,29 @@ describe("Display", () => {
         expect(rafCallbacks).toHaveLength(1);
     });
 
+    describe("running fast", () => {
+        it("moves the skip into the video chip and back out again", () => {
+            const display = make();
+            display.setSpeedy(true);
+            expect(display.video.frameSkipCount).toBe(9);
+            display.setSpeedy(false);
+            expect(display.video.frameSkipCount).toBe(0);
+        });
+
+        it("keeps a deeper configured frameSkip, rounded up to alternate interlace fields", () => {
+            const display = make({ frameSkip: 100 });
+            display.setSpeedy(true);
+            expect(display.video.frameSkipCount).toBe(101);
+        });
+
+        it("presents every frame the chip paints rather than skipping twice", () => {
+            const display = make({ frameSkip: 3 });
+            display.setSpeedy(true);
+            display.onPaint(paintedFrom(), 0, 0, FbWidth, 8);
+            expect(rafCallbacks).toHaveLength(1);
+        });
+    });
+
     it("carries the interlace bases and line grid to the presenter", () => {
         const display = make();
         const from = { lineGrid: new Uint8Array([1, 2, 3]), lineBaseEven: 5, lineBaseOdd: 6 };
