@@ -61,7 +61,7 @@ describe("disc track layouts", function () {
         const testMachine = new TestMachine();
         await testMachine.initialise();
         const image = await load("discs/elite.hfe");
-        testMachine.processor.fdc.loadDisc(0, discFor(testMachine.processor.fdc, "elite.hfe", image));
+        testMachine.processor.fdc.loadDisc(0, discFor("elite.hfe", image));
         await testMachine.runUntilInput();
         const seen = [];
         testMachine.captureText((element) => seen.push(element.text));

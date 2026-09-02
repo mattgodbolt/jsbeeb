@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * The length of the shortest run of equal texels between `from` and `to`.
  *

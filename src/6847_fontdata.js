@@ -1,5 +1,3 @@
-"use strict";
-
 // MC6847 internal character ROM data (PAL square pixel variant, 8x12).
 // Derived from the MAME project's MC6847 VDG emulation:
 //   https://github.com/mamedev/mame/blob/master/src/devices/video/mc6847.cpp

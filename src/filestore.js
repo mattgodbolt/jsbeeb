@@ -1,8 +1,6 @@
 // Level-3 file server emulator ported from FSEM2
 // https://github.com/mmbeeb/FSEM
 
-"use strict";
-
 import { ReceiveBlock, EconetPacket } from "./econet.js";
 import * as utils from "./utils.js";
 

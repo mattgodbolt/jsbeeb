@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Circular buffer of emulator state snapshots for rewind functionality.
  * Snapshots are stored directly without deep-copying, since

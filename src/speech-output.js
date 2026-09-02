@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * RS-423 handler that routes transmitted bytes to the Web Speech API.
  *

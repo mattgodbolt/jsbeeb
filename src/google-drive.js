@@ -1,5 +1,3 @@
-"use strict";
-
 import { debounce, uint8ArrayToString } from "./utils.js";
 import { discFor } from "./fdc.js";
 
@@ -159,7 +157,7 @@ export class GoogleDriveLoader {
         } else {
             console.log("Making read-only disc");
         }
-        return discFor(fdc, name, data, flusher, layout);
+        return discFor(name, data, flusher, layout);
     }
 
     async load(fdc, fileId, layout) {

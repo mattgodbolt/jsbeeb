@@ -5,7 +5,6 @@ import { fake65C12 } from "../../src/fake6502.js";
 const cpu = fake65C12();
 
 describe("BCD tests", function () {
-    "use strict";
     it("handles 65c12sbc1", async function () {
         await cpu.initialise();
         cpu.p.reset();

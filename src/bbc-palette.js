@@ -1,5 +1,3 @@
-"use strict";
-
 // The 16 standard BBC Micro colours in ABGR format (0xffBBGGRR, little-endian canvas RGBA).
 // Colours 0-7 are the primary palette; 8-15 duplicate them as the default solid/non-flash set.
 // Imported by both video.js (NulaDefaultPalette) and teletext.js (BbcDefaultCollook) to avoid

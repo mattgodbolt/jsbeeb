@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Returns the command-line arguments the user actually passed to jsbeeb, with
  * the Electron binary path(s) and known runtime-injected flags stripped.

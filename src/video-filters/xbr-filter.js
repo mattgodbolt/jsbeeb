@@ -1,5 +1,3 @@
-"use strict";
-
 // The xBR-lv2 display mode. See shaders/xbr.frag.glsl for the algorithm, and
 // tests/shader, which runs it in a browser and asserts on what it draws.
 

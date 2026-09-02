@@ -192,7 +192,7 @@ const machine = new Machine({
 });
 const processor = machine.processor;
 
-const keys = new KeyboardSetup({
+const { keyboard } = new KeyboardSetup({
     actions: {
         enterDebugger: () => loop.stop(true),
         reload: () => window.location.reload(),
@@ -201,7 +201,7 @@ const keys = new KeyboardSetup({
         openPrinter: () => frontPanel.checkPrinterWindow(),
         pause: () => loop.stop(false),
         resume: () => loop.go(),
-        paste: (text) => keys.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
+        paste: (text) => keyboard.sendRawKeyboard(autoBoot.stringToMachineKeys(text), true),
         onAnyKeyDown: () => {
             audioHandler.tryResume();
             inputs.ensureMicrophoneRunning();
@@ -220,7 +220,7 @@ const loop = new EmulationLoop({
     audioHandler,
     dbgr,
     gamepad,
-    keyboard: keys,
+    keyboard,
     syncLights: () => frontPanel.syncLights(),
     rewindBuffer,
     onRewindCaptured: () => rewindUI.updateButtonState(),
@@ -230,7 +230,7 @@ const loop = new EmulationLoop({
     audioStatsNode,
 });
 
-const runControls = new RunControls({ loop, dbgr, keys });
+const runControls = new RunControls({ loop, dbgr, keyboard });
 
 const modals = new Modals({ loop });
 
@@ -247,7 +247,7 @@ const media = new MediaLoader({
 const autoBoot = new Autoboot({
     model,
     processor,
-    sendKeys: (keysToSend, check) => keys.sendRawKeyboard(keysToSend, check),
+    sendKeys: (keysToSend, check) => keyboard.sendRawKeyboard(keysToSend, check),
 });
 const autobootTicks = new AutobootTicks({ urlState });
 const sthPicker = new SthPicker({
@@ -312,8 +312,7 @@ const rewindUI = new RewindUI({
 });
 rewindUI.updateButtonState();
 
-if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
-else document.getElementById("disc-visualiser-open").classList.add("disabled");
+new DiscVisualiser({ fdc: processor.fdc });
 
 const layout = new Layout({
     screenCanvas,
@@ -323,7 +322,7 @@ const layout = new Layout({
 });
 
 // Everything a setting can reach now exists.
-settings.wire({ audioHandler, display, layout, quickSettings, machine, keys, inputs, modals });
+settings.wire({ audioHandler, display, layout, quickSettings, machine, keyboard, inputs, modals });
 
 // ------------------------------------------------------------------------
 // The page's own handlers.
@@ -334,7 +333,7 @@ for (const el of document.querySelectorAll(".initially-hidden")) el.classList.re
 document.getElementById("paste-form").addEventListener("submit", (event) => event.preventDefault());
 
 window.addEventListener("blur", function () {
-    keys.clearKeys();
+    keyboard.clearKeys();
     loop.setEmulationLead(audioHandler.setWindowFocused(false));
 });
 window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));

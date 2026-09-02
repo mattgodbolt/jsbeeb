@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Centronics printer attached to the user VIA: acknowledges each character and keeps the most
  * recent output so it can be shown whenever a printer window is opened.

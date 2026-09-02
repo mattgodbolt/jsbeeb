@@ -1,5 +1,3 @@
-"use strict";
-
 // Pure geometry and colour mapping, free of the DOM; disc-visualiser.js owns the canvases.
 
 import { IbmDiscFormat } from "./disc.js";

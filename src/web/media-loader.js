@@ -195,13 +195,7 @@ export class MediaLoader extends EventTarget {
 
     async loadHTMLFile(file) {
         const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
-        const loadedDisc = disc.discFor(
-            this.processor.fdc,
-            file.name,
-            imageData,
-            undefined,
-            this.drives.layoutForDrive(0),
-        );
+        const loadedDisc = disc.discFor(file.name, imageData, undefined, this.drives.layoutForDrive(0));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(imageData);
         this.drives.putDiscIn(0, loadedDisc);
@@ -233,7 +227,7 @@ export class MediaLoader extends EventTarget {
         discImage = split.image;
         const schema = split.schema;
         if (schema[0] === "!" || schema === "local") {
-            return disc.localDisc(this.processor.fdc, discImage, layout, (error) =>
+            return disc.localDisc(discImage, layout, (error) =>
                 toast(
                     `Browser storage would not take changes to ${discImage} (${errorText(error)}). Use Discs, Download to keep a copy.`,
                     { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },
@@ -251,17 +245,11 @@ export class MediaLoader extends EventTarget {
             case "sth": {
                 const { name, data, ignored } = await this.sources.sth(discImage);
                 reportIgnoredFiles(name, ignored);
-                return disc.discFor(this.processor.fdc, name, data, undefined, layout);
+                return disc.discFor(name, data, undefined, layout);
             }
 
             case "hfe":
-                return disc.discFor(
-                    this.processor.fdc,
-                    discImage,
-                    await this.sources.hfe(discImage),
-                    undefined,
-                    layout,
-                );
+                return disc.discFor(discImage, await this.sources.hfe(discImage), undefined, layout);
 
             case "gd": {
                 const splat = discImage.match(/([^/]+)\/?(.*)/);
@@ -273,12 +261,12 @@ export class MediaLoader extends EventTarget {
                 return this.sources.drive({ name, id: discImage }, layout);
             }
             case "b64data":
-                return disc.discFor(this.processor.fdc, "disk.ssd", atob(discImage), undefined, layout);
+                return disc.discFor("disk.ssd", atob(discImage), undefined, layout);
 
             case "data": {
                 const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
                 const { name, data } = await unzipAndReport(arr);
-                return disc.discFor(this.processor.fdc, name, data, undefined, layout);
+                return disc.discFor(name, data, undefined, layout);
             }
             case "http":
             case "https":
@@ -292,16 +280,10 @@ export class MediaLoader extends EventTarget {
                     discData = unzipped.data;
                     discImage = unzipped.name;
                 }
-                return disc.discFor(this.processor.fdc, discImage, discData, undefined, layout);
+                return disc.discFor(discImage, discData, undefined, layout);
             }
             default:
-                return disc.discFor(
-                    this.processor.fdc,
-                    discImage,
-                    await disc.load("discs/" + discImage),
-                    undefined,
-                    layout,
-                );
+                return disc.discFor(discImage, await disc.load("discs/" + discImage), undefined, layout);
         }
     }
 

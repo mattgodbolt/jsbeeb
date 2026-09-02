@@ -1,4 +1,3 @@
-"use strict";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell, nativeImage } from "electron";
 import Store from "electron-store";
 import * as fs from "fs";

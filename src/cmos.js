@@ -1,5 +1,3 @@
-"use strict";
-
 // CMOS layout: bytes 0-13 are RTC internal registers; bytes 14-63 are the 50
 // bytes of user storage.  Storage byte 11 (= CMOS address 25 = 0x19) holds
 // the BBC Master DFS configuration byte whose bits [1:0] are the WD1770 step

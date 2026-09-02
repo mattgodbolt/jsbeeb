@@ -1,5 +1,3 @@
-"use strict";
-
 const table = [19200, 9600, 4800, 2400, 1200, 300, 150, 75];
 
 export class Serial {

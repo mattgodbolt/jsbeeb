@@ -1,4 +1,3 @@
-"use strict";
 import { makeChars } from "./teletext_data.js";
 import { makeFast32 } from "./utils.js";
 import { BbcDefaultPalette as BbcDefaultCollook } from "./bbc-palette.js";

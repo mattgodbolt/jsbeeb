@@ -132,7 +132,7 @@ describe("DiscVisualiser", () => {
     describe("with a disc in the drive", () => {
         beforeEach(() => {
             vi.spyOn(console, "log").mockImplementation(() => {});
-            fdc.drives[0].disc = discFor(null, "elite.ssd", ssdImage());
+            fdc.drives[0].disc = discFor("elite.ssd", ssdImage());
             fdc.drives[0].spinning = true;
         });
 

@@ -66,6 +66,7 @@ describe("GoogleDrivePicker", () => {
             await vi.waitFor(() => expect(document.getElementById("google-drive-auth").style.display).toBe(""));
             document.getElementById("loading-dialog").dispatchEvent(new Event("hidden.bs.modal"));
             await expect(loading).resolves.toBeNull();
+            expect(document.getElementById("google-drive-auth").style.display).toBe("none");
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith();
             expect(loader.load).not.toHaveBeenCalled();
             expect(toasts()).toEqual([]);

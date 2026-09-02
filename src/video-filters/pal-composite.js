@@ -1,5 +1,3 @@
-"use strict";
-
 // PAL Composite Video Filter - Approach D: Baseband Chroma Blending
 //
 // Simulates PAL composite video artifacts by encoding the framebuffer to a

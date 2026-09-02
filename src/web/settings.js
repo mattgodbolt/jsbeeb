@@ -1,13 +1,9 @@
-import * as utils from "../utils.js";
 import { Config } from "./config.js";
 import { DefaultModel, findModel } from "../models.js";
 import { DefaultAudioOutput, isAudioOutput } from "../audio-output.js";
 import { SpeechOutput } from "../speech-output.js";
 import { guessModelFromHostname } from "../url-params.js";
 import { toast } from "./toast.js";
-
-// A slider fires for every pixel of a drag, and each URL update is a history entry.
-const UrlSettleMs = 300;
 
 /**
  * The user's settings: resolved from the URL, browser storage and the
@@ -79,8 +75,6 @@ export class Settings {
             [parsedQuery.speakerAmount, parseFloat(window.localStorage.speakerAmount)].find(Number.isFinite) ?? 1;
         this.config.setAudioOutput(this.audioOutput);
         this.config.setSpeakerAmount(this.speakerAmount);
-
-        this.updateUrlOnceSettled = utils.debounce(() => urlState.updateUrl(), UrlSettleMs);
     }
 
     get model() {
@@ -115,8 +109,7 @@ export class Settings {
         this.config.setSpeakerAmount(amount);
         this.targets.quickSettings?.showSpeakerAmount(amount);
         window.localStorage.speakerAmount = amount;
-        this.urlState.params.speakerAmount = amount;
-        this.updateUrlOnceSettled();
+        this.urlState.set({ speakerAmount: amount }, { settle: true });
     }
 
     applyDisplayMode(mode) {
@@ -132,13 +125,13 @@ export class Settings {
 
     onDialogClosed(changed) {
         const { urlState } = this;
-        const { machine, keys, inputs } = this.targets;
+        const { machine, keyboard, inputs } = this.targets;
         const parsedQuery = urlState.params;
         urlState.set(changed);
         if (changed.keyLayout) {
             window.localStorage.keyLayout = changed.keyLayout;
             machine.emulationConfig.keyLayout = changed.keyLayout;
-            keys.setKeyLayout(changed.keyLayout);
+            keyboard.setKeyLayout(changed.keyLayout);
         }
         if (changed.mouseJoystickEnabled !== undefined || Object.hasOwn(changed, "microphoneChannel")) {
             inputs.updateAdcSources(parsedQuery.mouseJoystickEnabled, parsedQuery.microphoneChannel);

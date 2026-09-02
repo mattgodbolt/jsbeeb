@@ -1,4 +1,3 @@
-"use strict";
 // Cassette motor relay click sound (issue #296).
 // Audio samples recorded from a real BBC Master cassette motor relay.
 import { SamplePlayer } from "./sample-player.js";

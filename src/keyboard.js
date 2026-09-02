@@ -1,4 +1,3 @@
-"use strict";
 import * as utils from "./utils.js";
 import { ATOM } from "./utils_atom.js";
 
