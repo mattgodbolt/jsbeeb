@@ -267,7 +267,7 @@ function is40TrackLayout(discType, data, name, layout) {
  * Create a disc object of the appropriate type based on the file name
  * @param {string} name - The file name with extension
  * @param {string|Uint8Array} stringData - The disc image data as string or Uint8Array
- * @param {function(Uint8Array): void} onChange - Optional callback when disc content changes
+ * @param {function(Uint8Array): void} [onChange] - called when disc content changes
  * @param {string} [layout] - one of DiscLayout; by default the image is asked what it is
  * @returns {Disc} The loaded disc object
  */
