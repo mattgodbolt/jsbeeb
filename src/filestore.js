@@ -304,22 +304,17 @@ export class Filestore {
         }
     }
 
-    reset() {
+    /** Resolves once the filestore code and its disc are loaded and in place. */
+    async reset() {
         console.log("Filestore: initialisation");
 
-        const filestoreRef = this;
-        utils.loadData("econet/L3FS.dat").then(function (data) {
-            filestoreRef.l3fs = data;
-            for (let i = 0; i < data.length; i++) {
-                filestoreRef.ram[0x400 + i] = data[i];
-            }
-            filestoreRef.PC = 0x400;
-            filestoreRef.SP = 0xff;
-            filestoreRef.A = 1;
-        });
-        utils.loadData("econet/scsi.dat").then(function (data) {
-            filestoreRef.scsi = data;
-        });
+        const [code, disc] = await Promise.all([utils.loadData("econet/L3FS.dat"), utils.loadData("econet/scsi.dat")]);
+        this.l3fs = code;
+        this.ram.set(code, 0x400);
+        this.PC = 0x400;
+        this.SP = 0xff;
+        this.A = 1;
+        this.scsi = disc;
     }
 
     polltime(cycles) {
