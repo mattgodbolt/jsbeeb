@@ -23,7 +23,12 @@ export async function expectPngToMatch(actualPng, expectedFile, outputStem, mism
         .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
-    const actual = await sharp(actualPng).ensureAlpha().raw().toBuffer();
+    const { data: actual, info: actualInfo } = await sharp(actualPng)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+    const shape = ({ width, height, channels }) => ({ width, height, channels });
+    expect(shape(actualInfo), `${mismatch} - expected ${expectedFile}, got ${actualFile}`).toEqual(shape(info));
     const diff = new Uint8Array(info.width * info.height * info.channels);
 
     const numDiffPixels = pixelmatch(expected, actual, diff, info.width, info.height, {
