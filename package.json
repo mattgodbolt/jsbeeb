@@ -91,9 +91,12 @@
     "start": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "ci-checks": "eslint .",
-    "lint": "eslint . --fix",
+    "ci-checks": "npm-run-all lint format:check check-workflow-suites",
+    "check-workflow-suites": "node tools/check-workflow-suites.js",
+    "lint": "eslint .",
+    "lint-fix": "eslint . --fix",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "pre-commit": "lint-staged",
     "test": "npm-run-all test:*",
     "test:unit": "vitest run --silent=true tests/unit",
@@ -101,6 +104,7 @@
     "test:cpu": "node tests/test-suite.js",
     "test:shader": "vitest run --silent=true tests/shader",
     "coverage:unit": "vitest run tests/unit --coverage",
+    "dom-unit-tests": "vitest run --silent=true --exclude tests/integration --exclude tests/shader $(grep -rl domFromIndexHtml tests/unit)",
     "coverage:all-tests": "vitest run --coverage",
     "benchmark": "node src/app-bench.js",
     "mirror-sth": "node tools/mirror-sth.js --out .sth-mirror",
@@ -125,6 +129,7 @@
       "eslint --cache --fix",
       "prettier --write"
     ],
+    "index.html": "npm run dom-unit-tests --",
     "*.{md,json,yml,yaml,css,html}": "prettier --write"
   },
   "allowScripts": {
