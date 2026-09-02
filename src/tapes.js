@@ -1,4 +1,5 @@
-import { DataStream } from "./binary.js";
+import { DataStream, stringToUint8Array } from "./binary.js";
+import { ungzip } from "./archive.js";
 import { hexword } from "./hex.js";
 
 function secsToClocks(secs, cpuSpeed) {
@@ -306,7 +307,12 @@ class TapefileTape {
 }
 
 export async function loadTapeFromData(name, data, model) {
-    const stream = await DataStream.create(name, data);
+    const raw = stringToUint8Array(data);
+    if (raw && raw.length > 4 && raw[0] === 0x1f && raw[1] === 0x8b) {
+        console.log("Ungzipping " + name);
+        data = await ungzip(raw);
+    }
+    const stream = new DataStream(name, data);
     if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
         console.log("Detected a 'tapefile' tape");
         return new TapefileTape(stream, model);

@@ -1,5 +1,3 @@
-import { ungzip } from "./archive.js";
-
 export function signExtend(val) {
     return val >= 128 ? val - 256 : val;
 }
@@ -47,15 +45,6 @@ export class DataStream {
             throw new Error("No data in " + name);
         }
         this.end = this.data.length;
-    }
-
-    static async create(name, data) {
-        const raw = stringToUint8Array(data);
-        if (raw && raw.length > 4 && raw[0] === 0x1f && raw[1] === 0x8b) {
-            console.log("Ungzipping " + name);
-            data = await ungzip(raw);
-        }
-        return new DataStream(name, data);
     }
 
     bytesLeft() {
