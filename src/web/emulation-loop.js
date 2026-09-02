@@ -96,7 +96,7 @@ export class EmulationLoop extends EventTarget {
         this.emulationLeadMs = 0;
         this.rewindCycleCounter = 0;
         this.wanted = false;
-        this.pauseDepth = 0;
+        this.holds = new Set();
         this.resumeOnVisible = null;
 
         this.virtualSpeedUpdater = new VirtualSpeedUpdater(cpuSpeed);
@@ -111,7 +111,11 @@ export class EmulationLoop extends EventTarget {
 
     go() {
         this.wanted = true;
-        if (this.pauseDepth === 0) this.start();
+        if (this.holds.size === 0) this.start();
+        else
+            console.warn(
+                `Emulator held by ${[...this.holds].map((hold) => hold.reason).join(", ")}; it runs when they let go`,
+            );
     }
 
     stop(debug) {
@@ -122,15 +126,16 @@ export class EmulationLoop extends EventTarget {
 
     /**
      * Holds the machine stopped until the returned function is called. Holds
-     * nest, and letting go twice counts once.
+     * nest, and letting go twice counts once. `reason` names the holder when a
+     * go() has to wait, so a hold that is never released can be found.
      */
-    pause() {
-        if (this.pauseDepth++ === 0 && this.running) this.halt();
-        let held = true;
+    pause(reason) {
+        if (this.holds.size === 0 && this.running) this.halt();
+        const hold = { reason };
+        this.holds.add(hold);
         return () => {
-            if (!held) return;
-            held = false;
-            if (--this.pauseDepth === 0 && this.wanted) this.start();
+            if (!this.holds.delete(hold)) return;
+            if (this.holds.size === 0 && this.wanted) this.start();
         };
     }
 
@@ -254,7 +259,7 @@ export class EmulationLoop extends EventTarget {
         if (document.visibilityState === "hidden") {
             const keepRunningWhenHidden =
                 processor.acia.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
-            if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.pause();
+            if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.pause("the hidden tab");
         } else if (this.resumeOnVisible) {
             this.resumeOnVisible();
             this.resumeOnVisible = null;

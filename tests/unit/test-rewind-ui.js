@@ -66,7 +66,7 @@ describe("RewindUI", () => {
             const snapshots = captured(3);
             make();
             document.getElementById("rewind-open").click();
-            expect(loop.pause).toHaveBeenCalledTimes(1);
+            expect(loop.pause).toHaveBeenCalledWith("the rewind panel");
             expect(panel().hidden).toBe(false);
             expect(thumbs().map((thumb) => thumb.querySelector(".rewind-thumb-label").textContent)).toEqual([
                 "-2s",
@@ -76,6 +76,18 @@ describe("RewindUI", () => {
             expect(selectedIndex()).toBe(2);
             expect(lastRestored()).toBe(snapshots[2]);
             expect(video.paint).toHaveBeenCalled();
+        });
+
+        it("lets go and stays closed if the machine cannot be snapshotted", () => {
+            captured(1);
+            processor.snapshotState.mockImplementation(() => {
+                throw new Error("no snapshot");
+            });
+            const ui = make();
+            expect(() => ui.open()).toThrow("no snapshot");
+            expect(panel().hidden).toBe(true);
+            expect(resume).toHaveBeenCalledTimes(1);
+            expect(processor.restoreState).not.toHaveBeenCalled();
         });
 
         it("opens once no matter how often it is asked", () => {

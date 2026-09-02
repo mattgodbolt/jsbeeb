@@ -182,7 +182,7 @@ describe("EmulationLoop", () => {
     describe("being held", () => {
         it("stops while held and runs again once let go", () => {
             const loop = started();
-            const resume = loop.pause();
+            const resume = loop.pause("the test");
             expect(loop.isRunning()).toBe(false);
             expect(deps.audioHandler.mute).toHaveBeenCalled();
             resume();
@@ -191,8 +191,8 @@ describe("EmulationLoop", () => {
 
         it("runs again only when the last hold has let go", () => {
             const loop = started();
-            const first = loop.pause();
-            const second = loop.pause();
+            const first = loop.pause("the test");
+            const second = loop.pause("the test");
             first();
             expect(loop.isRunning()).toBe(false);
             second();
@@ -201,8 +201,8 @@ describe("EmulationLoop", () => {
 
         it("counts letting go twice as once", () => {
             const loop = started();
-            const first = loop.pause();
-            const second = loop.pause();
+            const first = loop.pause("the test");
+            const second = loop.pause("the test");
             first();
             first();
             expect(loop.isRunning()).toBe(false);
@@ -212,24 +212,27 @@ describe("EmulationLoop", () => {
 
         it("stays stopped if the user stopped it while held", () => {
             const loop = started();
-            const resume = loop.pause();
+            const resume = loop.pause("the test");
             loop.stop(false);
             resume();
             expect(loop.isRunning()).toBe(false);
         });
 
-        it("waits for the hold to end before honouring a go", () => {
+        it("waits for the hold to end before honouring a go, and says who is holding", () => {
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
             const loop = make();
-            const resume = loop.pause();
+            const resume = loop.pause("the test");
+            loop.pause("another test");
             loop.go();
             expect(loop.isRunning()).toBe(false);
+            expect(warn).toHaveBeenCalledWith(expect.stringContaining("held by the test, another test"));
             resume();
-            expect(loop.isRunning()).toBe(true);
+            expect(loop.isRunning()).toBe(false);
         });
 
         it("leaves a stopped machine stopped when let go", () => {
             const loop = make();
-            loop.pause()();
+            loop.pause("the test")();
             expect(loop.isRunning()).toBe(false);
             expect(deps.audioHandler.unmute).not.toHaveBeenCalled();
         });
@@ -275,7 +278,7 @@ describe("EmulationLoop", () => {
 
         it("stays held for whoever else is holding it when the tab comes back", () => {
             const loop = started();
-            const resume = loop.pause();
+            const resume = loop.pause("the test");
             hide();
             show();
             expect(loop.isRunning()).toBe(false);

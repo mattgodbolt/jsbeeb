@@ -113,7 +113,7 @@ export class SnapshotUI {
     }
 
     async saveState() {
-        const resume = this.loop.pause();
+        const resume = this.loop.pause("saving state");
         try {
             const manifest = snapshotMedia(this.processor.fdc.drives, this.urlState.params, this.defaultBootDisc);
             const snapshot = createSnapshot(this.processor, this.model, manifest);
@@ -129,7 +129,7 @@ export class SnapshotUI {
     }
 
     async loadStateFromFile(file, preReadBuffer) {
-        const resume = this.loop.pause();
+        const resume = this.loop.pause("loading state");
         try {
             const arrayBuffer = preReadBuffer || (await file.arrayBuffer());
             const snapshot = await readSnapshot(arrayBuffer);

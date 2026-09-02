@@ -17,7 +17,7 @@ export class Modals {
 
         const holds = new WeakMap();
         document.addEventListener("show.bs.modal", (event) => {
-            if (!holds.has(event.target)) holds.set(event.target, loop.pause());
+            if (!holds.has(event.target)) holds.set(event.target, loop.pause(`the ${event.target.id} dialog`));
         });
         document.addEventListener("hidden.bs.modal", (event) => {
             holds.get(event.target)?.();

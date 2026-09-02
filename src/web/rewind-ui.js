@@ -53,12 +53,10 @@ export class RewindUI {
         this.snapshots = this.rewindBuffer.getAll();
         if (this.snapshots.length === 0) return;
 
-        this.resumeLoop = this.loop.pause();
-
+        this.resumeLoop = this.loop.pause("the rewind panel");
         this.isOpen = true;
-        this.savedState = this.processor.snapshotState();
-
         try {
+            this.savedState = this.processor.snapshotState();
             const thumbnails = renderThumbnails(
                 this.processor,
                 this.snapshots,
@@ -67,21 +65,20 @@ export class RewindUI {
                 this.savedState,
             );
             this._populateFilmstrip(thumbnails);
+            this.panel.hidden = false;
+            // Use capture phase so keys don't leak to the emulator's keyboard handler
+            document.addEventListener("keydown", this._onKeyDown, true);
+
+            // Select the newest snapshot ("now") and jump to it
+            this.selectedIndex = this.snapshots.length - 1;
+            this._restoreAndPaint(this.selectedIndex);
+            this._updateSelectionHighlight();
+            this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
         } catch (e) {
-            this.processor.restoreState(this.savedState);
+            if (this.savedState) this.processor.restoreState(this.savedState);
             this._closePanel();
             throw e;
         }
-
-        this.panel.hidden = false;
-        // Use capture phase so keys don't leak to the emulator's keyboard handler
-        document.addEventListener("keydown", this._onKeyDown, true);
-
-        // Select the newest snapshot ("now") and jump to it
-        this.selectedIndex = this.snapshots.length - 1;
-        this._restoreAndPaint(this.selectedIndex);
-        this._updateSelectionHighlight();
-        this.filmstrip.scrollLeft = this.filmstrip.scrollWidth;
     }
 
     /**

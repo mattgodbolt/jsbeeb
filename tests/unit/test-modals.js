@@ -37,7 +37,7 @@ describe("Modals", () => {
     describe("holding the emulator", () => {
         it("holds the emulator while a modal is up and lets go when it goes", () => {
             raise("info");
-            expect(loop.pause).toHaveBeenCalledTimes(1);
+            expect(loop.pause).toHaveBeenCalledWith("the info dialog");
             expect(resumes()[0]).not.toHaveBeenCalled();
             lower("info");
             expect(resumes()[0]).toHaveBeenCalledTimes(1);
