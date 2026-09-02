@@ -43,7 +43,7 @@ describe("the built-in disc list", () => {
         teardownDom();
     });
 
-    it("clicks Elite into drive 0, names it in the URL and catalogues it", async () => {
+    const setUp = async () => {
         const machine = new TestMachine();
         await machine.initialise();
         const urlState = fakeUrlState();
@@ -62,6 +62,11 @@ describe("the built-in disc list", () => {
             isSnapshotFile: () => false,
             loadSnapshot: () => {},
         });
+        return { machine, urlState, modals, drives, media };
+    };
+
+    it("clicks Elite into drive 0, names it in the URL and catalogues it", async () => {
+        const { machine, urlState, modals, media } = await setUp();
         const mediaEvents = [];
         media.addEventListener("media-changed", (e) => mediaEvents.push(e.detail));
 
@@ -85,5 +90,12 @@ describe("the built-in disc list", () => {
         const catalogue = seen.join("\n");
         expect(catalogue).toContain("Elite");
         expect(catalogue).toContain("LOAD");
+    });
+
+    it("rejects a disc that is not there and leaves the drive empty", async () => {
+        const { machine, drives, media } = await setUp();
+        await expect(media.loadDiscImage("nosuch.ssd", drives.layoutForDrive(0))).rejects.toThrow(/404/);
+        expect(machine.processor.fdc.drives[0].disc).toBeUndefined();
+        await machine.runUntilInput();
     });
 });
