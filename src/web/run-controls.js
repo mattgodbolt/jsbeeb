@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * The play and pause buttons on the top bar, kept in step with the loop's
  * running state. pause() and resume() are also the desktop app's menu actions.

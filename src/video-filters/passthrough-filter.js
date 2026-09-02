@@ -1,5 +1,3 @@
-"use strict";
-
 import VERT_SHADER from "./shaders/passthrough.vert.glsl?raw";
 import FRAG_SHADER from "./shaders/passthrough.frag.glsl?raw";
 import { compileProgram } from "./shader-program.js";

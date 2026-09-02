@@ -326,25 +326,22 @@ describe("URL Parameters", () => {
     });
 
     describe("parseMediaParams", () => {
-        it("should extract disc and tape images from query params", () => {
+        it("should extract disc images from query params", () => {
             const params = {
                 disc: "elite.ssd",
                 disc2: "games.ssd",
-                tape: "welcome.uef",
                 other: "value",
             };
 
             expect(parseMediaParams(params)).toEqual({
                 discImage: "elite.ssd",
                 secondDiscImage: "games.ssd",
-                tapeImage: "welcome.uef",
                 mmcImage: undefined,
             });
 
             expect(parseMediaParams({ disc1: "disc1.ssd" })).toEqual({
                 discImage: "disc1.ssd",
                 secondDiscImage: undefined,
-                tapeImage: undefined,
                 mmcImage: undefined,
             });
         });
@@ -353,7 +350,6 @@ describe("URL Parameters", () => {
             expect(parseMediaParams({ mmc: "sdcard.zip" })).toEqual({
                 discImage: undefined,
                 secondDiscImage: undefined,
-                tapeImage: undefined,
                 mmcImage: "sdcard.zip",
             });
         });

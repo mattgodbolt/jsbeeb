@@ -1,4 +1,3 @@
-"use strict";
 import { SamplePlayer } from "./sample-player.js";
 
 const Idle = 0;

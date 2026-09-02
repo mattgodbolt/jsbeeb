@@ -1,5 +1,3 @@
-"use strict";
-
 import { renderThumbnails, executeUntilFrame } from "../rewind-thumbnail.js";
 
 /**

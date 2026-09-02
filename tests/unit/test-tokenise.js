@@ -3,8 +3,6 @@ import * as Tokeniser from "../../src/basic-tokenise.js";
 const tokeniser = Tokeniser.create();
 
 describe("Tokeniser", function () {
-    "use strict";
-
     async function check(text, expected) {
         try {
             const t = await tokeniser;

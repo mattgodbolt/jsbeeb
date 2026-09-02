@@ -1,5 +1,3 @@
-"use strict";
-
 import { describe, it } from "vitest";
 import * as utils from "../../src/utils.js";
 import { fake6502, fake65C02, fake65C12 } from "../../src/fake6502.js";

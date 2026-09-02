@@ -23,8 +23,6 @@ import { ATOM, getKeyMapAtom } from "../../src/utils_atom.js";
 import { processInputParams } from "../../src/url-params.js";
 
 describe("Utils tests", function () {
-    "use strict";
-
     describe("parseAddr", function () {
         it("parses hex values with $ prefix", function () {
             expect(parseAddr("$1234")).toBe(0x1234);

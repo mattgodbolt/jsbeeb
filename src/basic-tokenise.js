@@ -1,4 +1,3 @@
-"use strict";
 import * as utils from "./utils.js";
 import * as models from "./models.js";
 import { fake6502 } from "./fake6502.js";

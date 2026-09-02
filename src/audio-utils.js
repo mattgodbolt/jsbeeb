@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Create an AudioContext with a fallback for older WebKit browsers.
  * @param {AudioContextOptions} [options] - passed to the AudioContext constructor

@@ -1,4 +1,3 @@
-"use strict";
 import * as utils from "./utils.js";
 import * as fontData from "./6847_fontdata.js";
 import { encodeLineGrid } from "./video-filters/pixel-grid.js";

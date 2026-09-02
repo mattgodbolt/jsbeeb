@@ -1,5 +1,3 @@
-"use strict";
-
 import { fake6502 } from "./fake6502.js";
 import * as models from "./models.js";
 import * as disc from "./fdc.js";

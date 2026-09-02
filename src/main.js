@@ -312,8 +312,7 @@ const rewindUI = new RewindUI({
 });
 rewindUI.updateButtonState();
 
-if (processor.fdc) new DiscVisualiser({ fdc: processor.fdc });
-else document.getElementById("disc-visualiser-open").classList.add("disabled");
+new DiscVisualiser({ fdc: processor.fdc });
 
 const layout = new Layout({
     screenCanvas,

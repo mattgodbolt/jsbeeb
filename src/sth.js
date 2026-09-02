@@ -1,5 +1,3 @@
-"use strict";
-
 import * as utils from "./utils.js";
 
 // Always https, whatever the page was loaded over: the mirror redirects plain

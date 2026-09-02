@@ -1,5 +1,3 @@
-"use strict";
-
 // Electron integration for jsbeeb desktop application.
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 

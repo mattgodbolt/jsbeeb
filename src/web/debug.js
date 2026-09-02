@@ -1,4 +1,3 @@
-"use strict";
 import { hexbyte, hexword, noop, parseAddr } from "../utils.js";
 import { toggle } from "../dom-utils.js";
 

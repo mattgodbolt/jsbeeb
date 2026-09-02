@@ -1,5 +1,3 @@
-"use strict";
-
 // Shared helpers for snapshot importers (bem-snapshot.js, uef-snapshot.js).
 // Contains volume table, default peripheral state, video state builder,
 // and the common snapshot envelope that wraps per-format parsed state.
