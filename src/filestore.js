@@ -304,7 +304,8 @@ export class Filestore {
         }
     }
 
-    reset() {
+    /** Resolves once the filestore code and its disc are loaded and in place. */
+    async reset() {
         console.log("Filestore: initialisation");
 
         const code = utils.loadData("econet/L3FS.dat").then((data) => {
@@ -317,7 +318,7 @@ export class Filestore {
         const disc = utils.loadData("econet/scsi.dat").then((data) => {
             this.scsi = data;
         });
-        return Promise.all([code, disc]);
+        await Promise.all([code, disc]);
     }
 
     polltime(cycles) {
