@@ -115,8 +115,8 @@ describe("Config", () => {
     let config;
 
     const dialog = () => document.getElementById("configuration");
-    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal"));
-    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal"));
+    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
+    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
     const modelDropdownText = () => document.querySelector("#bbc-model-dropdown .bbc-model").textContent;
     const restartPendingShown = () => !document.getElementById("restart-pending").classList.contains("d-none");
     const clickModel = (synonym) => document.querySelector(`.model-menu a[data-target="${synonym}"]`).click();

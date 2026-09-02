@@ -10,8 +10,8 @@ describe("Settings", () => {
     let targets;
 
     const dialog = () => document.getElementById("configuration");
-    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal"));
-    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal"));
+    const openDialog = () => dialog().dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
+    const closeDialog = () => dialog().dispatchEvent(new Event("hide.bs.modal", { bubbles: true }));
     const dragTubeSlider = (value) => {
         const slider = document.getElementById("tubeCpuMultiplier");
         slider.value = value;
