@@ -104,6 +104,43 @@ describe("Debugger", () => {
         });
     });
 
+    describe("execution tracking", () => {
+        const rowFor = (addr) => disRows().find((row) => row.dataset.addr === String(addr));
+        const dimmed = (addr) => rowFor(addr).classList.contains("unexecuted");
+
+        it("dims rows the CPU has not been seen to execute", () => {
+            dbgr.debug(cpu.pc);
+            expect(dimmed(0x2000)).toBe(true);
+            keyPress("n");
+            expect(dimmed(0x2000)).toBe(false);
+            expect(dimmed(0x2002)).toBe(true);
+        });
+
+        it("stops recording once hidden but remembers what it saw", () => {
+            cpu.writemem(0x2002, 0xea);
+            dbgr.debug(cpu.pc);
+            keyPress("n");
+            dbgr.hide();
+            while (cpu.pc === 0x2002) cpu.execute(1);
+            expect(cpu.pc).toBe(0x2003);
+            dbgr.debug(cpu.pc);
+            expect(dimmed(0x2000)).toBe(false);
+            expect(dimmed(0x2002)).toBe(true);
+        });
+
+        it("returns the CPU to the fast loop once hidden", () => {
+            dbgr.debug(cpu.pc);
+            const slow = vi.spyOn(cpu, "executeInternal");
+            const fast = vi.spyOn(cpu, "executeInternalFast");
+            cpu.execute(1);
+            expect(slow).toHaveBeenCalledTimes(1);
+            expect(fast).not.toHaveBeenCalled();
+            dbgr.hide();
+            cpu.execute(1);
+            expect(fast).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe("the memory window", () => {
         it("shows the bytes and text around the address the form asks for", () => {
             cpu.writemem(0x1234, 0x48);

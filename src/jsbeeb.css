@@ -406,6 +406,10 @@ div.modal-body > div:not(:first-child) {
   background-color: #227777;
 }
 
+.dis_elem.unexecuted {
+  opacity: 0.45;
+}
+
 .highlight {
   border: 1px solid #444;
 }

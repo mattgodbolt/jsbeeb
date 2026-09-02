@@ -1,6 +1,7 @@
 "use strict";
 import { hexbyte, hexword, noop, parseAddr } from "../utils.js";
 import { toggle } from "../dom-utils.js";
+import { ExecutionMap } from "../execution-map.js";
 
 const numToShow = 16;
 
@@ -102,6 +103,8 @@ export class Debugger {
         this.disassStack = [];
         this.uservia = this.sysvia = this.crtc = null;
         this.breakpoints = {};
+        this._executionMap = null;
+        this._executionHook = null;
 
         function setupGoto(form, func) {
             const addr = form.querySelector(".goto-addr");
@@ -143,6 +146,7 @@ export class Debugger {
 
     setCpu(cpu) {
         this.cpu = cpu;
+        this._executionMap = new ExecutionMap(cpu);
         this.sysvia = this.setupVia(document.getElementById("sysvia"), cpu.sysvia);
         this.uservia = this.setupVia(document.getElementById("uservia"), cpu.uservia);
         this.crtc = this.setupCrtc(document.getElementById("crtc_debug"), cpu.video);
@@ -332,6 +336,15 @@ export class Debugger {
             this.updatePrevMem();
         }
         this._enabled = e;
+        if (e && !this._executionHook && this.cpu) {
+            this._executionHook = this.cpu.debugInstruction.add((pc, opcode) => {
+                this._executionMap.record(pc, opcode);
+                return false;
+            });
+        } else if (!e && this._executionHook) {
+            this._executionHook.remove();
+            this._executionHook = null;
+        }
         for (const node of this.debugNodes) toggle(node, this._enabled);
     }
 
@@ -351,6 +364,7 @@ export class Debugger {
             elem.querySelector(".dis_addr").innerHTML = labelHtml(address);
             elem.classList.toggle("current", address === this.cpu.pc);
             elem.classList.toggle("highlight", address === this.disassPc);
+            elem.classList.toggle("unexecuted", !this._executionMap.isVerified(address));
             elem.querySelector(".instr_bytes").textContent = dump.hex.join(" ");
             elem.querySelector(".instr_asc").textContent = dump.asc.join("");
             const disNode = elem.querySelector(".disassembly");
@@ -382,7 +396,7 @@ export class Debugger {
     }
 
     prevInstruction(address) {
-        return this.cpu.disassembler.prevInstruction(address, this.cpu.pc);
+        return this.cpu.disassembler.prevInstruction(address, this.cpu.pc, this._executionMap);
     }
 
     updatePrevMem() {

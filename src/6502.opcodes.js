@@ -1105,17 +1105,25 @@ class Disassemble6502 {
      * opcodes are discarded. The highest-scoring run's last instruction wins;
      * any run beats none, since a wrong parse resynchronises within a few
      * instructions and so nearly always shares the true stream's last one.
+     * When an execution map is supplied, a verified executed instruction
+     * ending exactly at the target is returned before any guessing.
      * Good test cases:
      *   Repton 2 @ 2cbb
      *   MOS @ cfc8, and the unrolled STA abs,X screen clear @ cc63
      * also, just starting from the back of ROM and going up...
      */
-    prevInstruction(address, pc) {
+    prevInstruction(address, pc, executionMap = null) {
         const commonInstructions =
             /(RTS|B..|JMP|JSR|LD[AXY]|ST[AXY]|TA[XY]|T[XY]A|AD[DC]|SUB|SBC|CLC|SEC|CMP|EOR|ORA|AND|INC|DEC).*/;
         const uncommonInstructions = /.*,\s*([XY]|X\))$/;
 
         address &= 0xffff;
+        if (executionMap) {
+            for (let length = 1; length <= 3; ++length) {
+                const addr = (address - length) & 0xffff;
+                if (executionMap.isVerified(addr) && (this.disassemble(addr)[1] & 0xffff) === address) return addr;
+            }
+        }
         let bestAddr = address - 1;
         let bestScore = -1;
         for (let startingPoint = address - PrevInstructionWindow; startingPoint !== address; startingPoint++) {

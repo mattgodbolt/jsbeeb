@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Cpu6502 as cpu6502Opcodes, Cpu65c02 as cpu65c02Opcodes } from "../../src/6502.opcodes.js";
+import { ExecutionMap } from "../../src/execution-map.js";
 
 describe("Disassemble6502", () => {
     const mem = new Uint8Array(0x10000);
@@ -107,5 +108,31 @@ describe("Disassemble6502", () => {
         }
         mem[0x1fff] = 0xad;
         expect(disassembler.prevInstruction(0x2002, 0x2000)).toBe(0x2000);
+    });
+
+    describe("with an execution map", () => {
+        const makeMap = () => new ExecutionMap({ peekmem: (addr) => mem[addr & 0xffff], romsel: 0 });
+
+        it("returns the verified previous instruction ahead of the heuristic's guess", () => {
+            mem[0x1ffe] = 0xa9;
+            const map = makeMap();
+            map.record(0x1fff, mem[0x1fff]);
+            expect(disassembler.prevInstruction(0x2000, 0x0000)).toBe(0x1ffe);
+            expect(disassembler.prevInstruction(0x2000, 0x0000, map)).toBe(0x1fff);
+        });
+
+        it("ignores an entry whose byte has since been overwritten", () => {
+            const map = makeMap();
+            map.record(0x1fff, mem[0x1fff]);
+            mem[0x1ffe] = 0xa9;
+            mem[0x1fff] = 0x41;
+            expect(disassembler.prevInstruction(0x2000, 0x0000, map)).toBe(0x1ffe);
+        });
+
+        it("falls back to the heuristic when nothing before the target is verified", () => {
+            mem[0x1ffe] = 0xa9;
+            const map = makeMap();
+            expect(disassembler.prevInstruction(0x2000, 0x0000, map)).toBe(0x1ffe);
+        });
     });
 });
