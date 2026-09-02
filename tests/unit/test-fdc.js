@@ -31,13 +31,13 @@ describe("loading a disc image", () => {
     afterEach(() => vi.restoreAllMocks());
 
     it("lays a 40 track image out for a 40 track drive", () => {
-        expect(discFor(null, "test.ssd", catalogued(400)).is40Track).toBe(true);
-        expect(discFor(null, "test.ssd", catalogued(800)).is40Track).toBe(false);
+        expect(discFor("test.ssd", catalogued(400)).is40Track).toBe(true);
+        expect(discFor("test.ssd", catalogued(800)).is40Track).toBe(false);
     });
 
     it("does as it is told when a snapshot says how the disc was laid out", () => {
-        expect(discFor(null, "test.ssd", catalogued(400), null, DiscLayout.contiguous).is40Track).toBe(false);
-        expect(discFor(null, "test.ssd", catalogued(800), null, DiscLayout.expanded40).is40Track).toBe(true);
+        expect(discFor("test.ssd", catalogued(400), null, DiscLayout.contiguous).is40Track).toBe(false);
+        expect(discFor("test.ssd", catalogued(800), null, DiscLayout.expanded40).is40Track).toBe(true);
     });
 
     it("knows which formats hold a catalogue name", () => {
@@ -58,17 +58,17 @@ describe("knowing whether a disc keeps its changes", () => {
     afterEach(() => vi.restoreAllMocks());
 
     it("says no for a disc loaded without anywhere to write back to", () => {
-        expect(discFor(null, "test.ssd", catalogued(800), undefined, DiscLayout.contiguous).savesChanges).toBe(false);
+        expect(discFor("test.ssd", catalogued(800), undefined, DiscLayout.contiguous).savesChanges).toBe(false);
     });
 
     it("says yes once a writeback is wired up", () => {
-        expect(discFor(null, "test.ssd", catalogued(800), () => {}, DiscLayout.contiguous).savesChanges).toBe(true);
+        expect(discFor("test.ssd", catalogued(800), () => {}, DiscLayout.contiguous).savesChanges).toBe(true);
     });
 
     it("says no for the ADFS formats, which discard the writeback they are handed", () => {
         const adfsImage = new Uint8Array(80 * 16 * SectorSize);
         for (const name of ["test.adf", "test.adl"])
-            expect(discFor(null, name, adfsImage, () => {}, DiscLayout.contiguous).savesChanges).toBe(false);
+            expect(discFor(name, adfsImage, () => {}, DiscLayout.contiguous).savesChanges).toBe(false);
     });
 });
 
@@ -90,7 +90,7 @@ describe("a disc held in browser local storage", () => {
         const stored = {};
         stubStorage({ setItem: (key, value) => (stored[key] = value) });
 
-        const created = localDisc(null, "kept.ssd", DiscLayout.contiguous);
+        const created = localDisc("kept.ssd", DiscLayout.contiguous);
         writeTrack(created, 0);
 
         expect(created.savesChanges).toBe(true);
@@ -106,7 +106,7 @@ describe("a disc held in browser local storage", () => {
         });
         const refused = [];
 
-        const created = localDisc(null, "full.ssd", DiscLayout.contiguous, (error) => refused.push(error));
+        const created = localDisc("full.ssd", DiscLayout.contiguous, (error) => refused.push(error));
         for (const trackNum of [0, 1, 2]) writeTrack(created, trackNum);
 
         expect(refused).toEqual([refusal]);
@@ -117,7 +117,7 @@ describe("a disc held in browser local storage", () => {
         let refusals = 0;
 
         writeTrack(
-            localDisc(null, "fine.ssd", DiscLayout.contiguous, () => refusals++),
+            localDisc("fine.ssd", DiscLayout.contiguous, () => refusals++),
             0,
         );
 

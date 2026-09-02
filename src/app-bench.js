@@ -23,7 +23,7 @@ async function main() {
     const cpu = fake6502(models.findModel("B"));
     await cpu.initialise();
     const data = await disc.load("discs/" + discName + ".ssd");
-    cpu.fdc.loadDisc(0, disc.discFor(cpu.fdc, discName, data));
+    cpu.fdc.loadDisc(0, disc.discFor(discName, data));
     cpu.sysvia.keyDown(16);
     cpu.execute(10 * 1000 * 1000);
     cpu.sysvia.keyUp(16);

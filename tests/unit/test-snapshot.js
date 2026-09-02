@@ -504,7 +504,7 @@ describe("Snapshot coordinator", () => {
         it("should only store CRC32 (not image data) via discFor", () => {
             const ssdData = new Uint8Array(256 * 10);
             ssdData[0] = 0x42;
-            const loaded = discFor(null, "test.ssd", ssdData);
+            const loaded = discFor("test.ssd", ssdData);
 
             expect(loaded.originalImageCrc32).toBe(crc32(ssdData));
             expect(loaded.originalImageData).toBeNull();

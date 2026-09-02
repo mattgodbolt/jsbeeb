@@ -159,7 +159,7 @@ export class GoogleDriveLoader {
         } else {
             console.log("Making read-only disc");
         }
-        return discFor(fdc, name, data, flusher, layout);
+        return discFor(name, data, flusher, layout);
     }
 
     async load(fdc, fileId, layout) {

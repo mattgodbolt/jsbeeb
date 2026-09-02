@@ -84,7 +84,7 @@ describe("MediaLoader", () => {
         });
 
         it("fetches an hfe: reference from the archive", async () => {
-            sources.hfe.mockResolvedValue(toHfe(discFor(null, "x.ssd", ssdImage())));
+            sources.hfe.mockResolvedValue(toHfe(discFor("x.ssd", ssdImage())));
             const loaded = await make().loadDiscImage("hfe:3A1DAB83.hfe");
             expect(sources.hfe).toHaveBeenCalledWith("3A1DAB83.hfe");
             expect(loaded.name).toBe("3A1DAB83.hfe");
