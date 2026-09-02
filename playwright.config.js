@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { existsSync } from "node:fs";
+import { readdirSync } from "node:fs";
 
 import { workersFor } from "./tools/test-workers.js";
 
@@ -15,12 +15,18 @@ const BaseUrl = process.env.BASE_URL;
 // machine with one, Chrome is pointed at it instead, which takes a filter's
 // shader compile from tens of seconds to an instant.
 // E2E_GL=software or E2E_GL=hardware overrides the choice.
-const RenderNode = "/dev/dri/renderD128";
 const GlArgs = {
     software: ["--use-gl=angle", "--use-angle=swiftshader"],
     hardware: ["--use-gl=angle", "--use-angle=gl", "--ignore-gpu-blocklist"],
 };
-const Gl = process.env.E2E_GL ?? (process.env.CI || !existsSync(RenderNode) ? "software" : "hardware");
+const hasGpu = () => {
+    try {
+        return readdirSync("/dev/dri").some((node) => /^(card|renderD)\d+$/.test(node));
+    } catch {
+        return false;
+    }
+};
+const Gl = process.env.E2E_GL ?? (process.env.CI || !hasGpu() ? "software" : "hardware");
 if (!GlArgs[Gl]) throw new Error(`E2E_GL must be one of ${Object.keys(GlArgs).join(", ")}, not "${Gl}"`);
 
 export default defineConfig({
@@ -33,14 +39,12 @@ export default defineConfig({
     // per eight hardware threads keeps small machines serial and big ones parallel.
     workers: process.env.CI ? 2 : workersFor(8, 4),
     reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never" }]] : "list",
-    // A hang detector: the dearest test compiles three filters' shaders, which
-    // under software GL can run to minutes.
-    timeout: 180000,
+    timeout: 60000,
     expect: { timeout: 10000 },
     use: {
         // Without this a click on a selector that matches nothing waits out
         // the whole test timeout.
-        actionTimeout: 30000,
+        actionTimeout: 10000,
         baseURL: BaseUrl ?? PreviewUrl,
         viewport: { width: 1400, height: 900 },
         trace: "retain-on-failure",

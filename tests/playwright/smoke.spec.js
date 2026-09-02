@@ -28,7 +28,7 @@ const ConsoleSurface = [
 ];
 
 const OneRowWidth = 4000;
-const ShaderCompileBudgetMs = 60000;
+const ShaderCompileBudgetMs = 30000;
 // The bar expands at Bootstrap's lg breakpoint, 992px.
 const LaptopWidths = [993, 1024, 1280, 1400, 1440, 1512, 1536, 1600];
 
