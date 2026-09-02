@@ -1,15 +1,16 @@
 import { describe, it } from "vitest";
 import assert from "assert";
-import * as utils from "../../src/utils.js";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { TestMachine } from "../test-machine.js";
+import { RepoRoot } from "./helpers.js";
 
 describe("test various NOP timings", function () {
     it("should match the nops.bas code", async () => {
         const testMachine = new TestMachine("Master");
         await testMachine.initialise();
         await testMachine.runUntilInput();
-        const data = await utils.loadData("tests/integration/nops.bas");
-        await testMachine.loadBasic(utils.uint8ArrayToString(data));
+        await testMachine.loadBasic(readFileSync(path.join(RepoRoot, "tests/integration/nops.bas"), "latin1"));
 
         let numCaptures = 0;
         testMachine.captureText((elem) => {

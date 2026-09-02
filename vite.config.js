@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { firShaderPlugin } from "./tools/vite-plugin-fir-shader.js";
 import { workersFor } from "./tools/test-workers.js";
 
@@ -24,6 +24,7 @@ export default defineConfig({
                 test: {
                     name: "integration",
                     include: ["tests/integration/**/*.js"],
+                    exclude: [...configDefaults.exclude, "tests/integration/helpers.js"],
                     // A hang detector; the dearest test costs under ten seconds uncontended.
                     testTimeout: 120000,
                 },

@@ -1,9 +1,9 @@
 import { describe, it } from "vitest";
-import { TestMachine } from "../test-machine.js";
-import assert from "assert";
-import { Video } from "../../src/video.js";
+import path from "node:path";
 import sharp from "sharp";
-import pixelmatch from "pixelmatch";
+import { TestMachine } from "../test-machine.js";
+import { Video } from "../../src/video.js";
+import { RepoRoot, expectPngToMatch } from "./helpers.js";
 
 class CapturingVideo extends Video {
     constructor() {
@@ -29,7 +29,7 @@ class CapturingVideo extends Video {
         this._capturing = true;
         await testMachine.runUntilVblank();
         if (this._capturing) throw new Error("Should have captured by now");
-        return this._captureSharp;
+        return this._captureSharp.removeAlpha().png().toBuffer();
     }
 }
 
@@ -43,33 +43,12 @@ async function setupCeefaxTestMachine(video) {
     return testMachine;
 }
 
-const rootDir = "tests/integration/teletext";
-const outputDir = `tests/integration/output`;
+const RefDir = path.join(RepoRoot, "tests/integration/teletext");
 
 async function compare(video, testMachine, expectedName) {
-    const outputName = `${expectedName.replace("expected", "actual")}`;
-    const captureSharp = await video.capture(testMachine);
-    const outputFile = `${outputDir}/${outputName}`;
-    await captureSharp.removeAlpha().toFile(outputFile);
-    const expectedFile = `${rootDir}/${expectedName}`;
-    const diffFile = `${outputDir}/${outputName.replace(".png", ".diff.png")}`;
-
-    const { data: expectedData, info } = await sharp(expectedFile)
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-    const actualData = await sharp(outputFile).ensureAlpha().raw().toBuffer();
-    const diffData = new Uint8Array(info.width * info.height * info.channels);
-
-    const numDiffPixels = pixelmatch(expectedData, actualData, diffData, info.width, info.height, {
-        threshold: 0.1,
-    });
-    await sharp(diffData, { raw: info }).removeAlpha().toFile(diffFile);
-    assert.equal(
-        numDiffPixels,
-        0,
-        `Images do not match - expected ${expectedFile}, got ${outputFile}, diffs: ${diffFile}`,
-    );
+    const actualPng = await video.capture(testMachine);
+    const outputStem = expectedName.replace("expected", "actual").replace(".png", "");
+    await expectPngToMatch(actualPng, path.join(RefDir, expectedName), outputStem);
 }
 
 describe("Test Ceefax test page", () => {

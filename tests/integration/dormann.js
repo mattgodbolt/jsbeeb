@@ -1,14 +1,18 @@
 import { describe, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import * as utils from "../../src/utils.js";
 import { fake6502, fake65C02, fake65C12 } from "../../src/fake6502.js";
 import { TEST_65C02, TEST_65C12 } from "../../src/models.js";
+import { RepoRoot } from "./helpers.js";
 
 import assert from "assert";
 
 const log = false;
+const BinDir = path.join(RepoRoot, "tests/6502_65C02_functional_tests/bin_files");
 
 async function runTest(processor, test, name) {
-    const base = "tests/6502_65C02_functional_tests/bin_files/" + test;
+    const base = path.join(BinDir, test);
 
     function parseSuccess(listing) {
         let expectedPc = null;
@@ -27,8 +31,8 @@ async function runTest(processor, test, name) {
         return expectedPc;
     }
 
-    const expectedPc = parseSuccess((await utils.loadData(base + ".lst")).toString());
-    const data = await utils.loadData(base + ".bin");
+    const expectedPc = parseSuccess(readFileSync(base + ".lst", "utf8"));
+    const data = readFileSync(base + ".bin");
     for (let i = 0; i < data.length; ++i) processor.writemem(i, data[i]);
 
     processor.pc = 0x400;
