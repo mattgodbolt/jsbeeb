@@ -132,6 +132,17 @@ describe("Layout", () => {
             expect(canvas.style.top).toBe("64px");
         });
 
+        it("hides the page furniture and sees through the body when embedded", () => {
+            make();
+            expect(document.querySelector(".embed-hide").style.display).toBe("none");
+            expect(document.body.style.backgroundColor).toBe("transparent");
+        });
+
+        it("leaves the page furniture alone when not embedded", () => {
+            make({ embed: false });
+            expect(document.querySelector(".embed-hide").style.display).toBe("");
+        });
+
         it("reserves room for the page furniture when not embedded", () => {
             make({ embed: false });
             resize();
