@@ -75,7 +75,8 @@ export class Display {
      * configured frameSkip wins, so the two never multiply together.
      */
     setSpeedy(speedy) {
-        this.video.frameSkipCount = speedy ? Math.max(SpeedyFrameSkip, this.frameSkip) | 1 : 0;
+        const skip = Math.max(SpeedyFrameSkip, this.frameSkip);
+        this.video.frameSkipCount = speedy ? (skip % 2 ? skip : skip + 1) : 0;
     }
 
     onPaint(video, minx, miny, maxx, maxy) {
