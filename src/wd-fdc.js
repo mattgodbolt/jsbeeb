@@ -966,7 +966,7 @@ export class WdFdc {
                 return true;
             }
             // TODO(#1059) sync to c2 (5224).
-            // Note than an early, naive attempt had it triggered in in the middle of the sector data,
+            // Note that an early, naive attempt had it triggered in the middle of the sector data,
             // so we'll need to study how it actually works in detail.
             // Tag the byte after 3 sync bytes as a marker.
             if ((this._markDetector & 0xffffffffffff0000n) === 0x4489448944890000n) {
@@ -981,7 +981,7 @@ export class WdFdc {
                 );
                 if (!iffyPulses && clocks === 0xc7) {
                     // TODO(#1059) see http://info-coach.fr/atari/documents/_mydoc/WD1772-JLG.pdf
-                    // This suggests that a wider ranges of byte values will function as markers. It may also differ FM vs. MFM.
+                    // This suggests that a wider range of byte values will function as markers. It may also differ FM vs. MFM.
                     if (data === 0xf8 || data === 0xfb || data === 0xfe) {
                         // Resync to marker.
                         this._deliverData = data;
