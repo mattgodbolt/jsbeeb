@@ -37,8 +37,8 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
-      - name: npm install
-        run: npm install
+      - name: npm ci
+        run: npm ci
       - name: Build web distribution
         run: npm run build
       - name: Build Electron packages in Docker
@@ -66,8 +66,8 @@ jobs:
         with:
           node-version: 24.19.0
           cache: npm
-      - name: npm install
-        run: npm install
+      - name: npm ci
+        run: npm ci
       - name: Build web distribution
         run: npm run build
       - name: Build Windows Electron package
