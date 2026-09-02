@@ -6,6 +6,7 @@ import { domFromIndexHtml, teardownDom } from "./helpers.js";
 
 describe("PageActions", () => {
     let deps;
+    let page;
 
     beforeEach(() => {
         domFromIndexHtml("header-bar", "audio-warning", "info", "download-filestore-link");
@@ -22,12 +23,11 @@ describe("PageActions", () => {
     });
 
     afterEach(() => {
-        // Earlier tests' instances still listen on the shared window; keep theirs quiet.
-        deps.loop.isRunning.mockReturnValue(false);
+        page.dispose();
         return teardownDom();
     });
 
-    const make = () => new PageActions(deps);
+    const make = () => (page = new PageActions(deps));
     const click = (id) => {
         const event = new MouseEvent("click", { bubbles: true, cancelable: true });
         document.getElementById(id).dispatchEvent(event);

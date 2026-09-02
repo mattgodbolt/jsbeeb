@@ -2,7 +2,7 @@ import { downloadDriveData } from "../dom-utils.js";
 
 const UnloadWarning =
     "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +
-    "As a workarond, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
+    "As a workaround, create an 'Application Shortcut' from the Tools menu.  When jsbeeb runs as an application, it *can* prevent ctrl-W from closing the window.";
 
 /**
  * The page around the emulator: the reset menu items and the filestore
@@ -13,28 +13,42 @@ export class PageActions {
     constructor({ loop, processor, keyboard, audioHandler, rewindUI, modals, parsedQuery, version }) {
         this.processor = processor;
         this.rewindUI = rewindUI;
+        this.pageListeners = new AbortController();
+        const { signal } = this.pageListeners;
 
         for (const el of document.querySelectorAll(".initially-hidden")) el.classList.remove("initially-hidden");
         document.getElementById("paste-form").addEventListener("submit", (event) => event.preventDefault());
 
-        window.addEventListener("blur", () => {
-            keyboard.clearKeys();
-            loop.setEmulationLead(audioHandler.setWindowFocused(false));
-        });
-        window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)));
+        window.addEventListener(
+            "blur",
+            () => {
+                keyboard.clearKeys();
+                loop.setEmulationLead(audioHandler.setWindowFocused(false));
+            },
+            { signal },
+        );
+        window.addEventListener("focus", () => loop.setEmulationLead(audioHandler.setWindowFocused(true)), { signal });
 
         // To lower the chance of data loss, only the drop zone in the menu bar accepts drops.
-        document.addEventListener("dragover", (event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "none";
-        });
-        document.addEventListener("drop", (event) => event.preventDefault());
+        document.addEventListener(
+            "dragover",
+            (event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "none";
+            },
+            { signal },
+        );
+        document.addEventListener("drop", (event) => event.preventDefault(), { signal });
 
-        window.addEventListener("beforeunload", (event) => {
-            if (!loop.isRunning() || !processor.sysvia.hasAnyKeyDown()) return;
-            event.preventDefault();
-            event.returnValue = UnloadWarning;
-        });
+        window.addEventListener(
+            "beforeunload",
+            (event) => {
+                if (!loop.isRunning() || !processor.sysvia.hasAnyKeyDown()) return;
+                event.preventDefault();
+                event.returnValue = UnloadWarning;
+            },
+            { signal },
+        );
 
         document.getElementById("hard-reset").addEventListener("click", (event) => {
             event.preventDefault();
@@ -51,6 +65,11 @@ export class PageActions {
 
         const versionElement = document.getElementById("jsbeeb-version");
         if (versionElement) versionElement.textContent = `Version ${version}`;
+    }
+
+    /** Stops listening to the window and document; the elements go with the page. */
+    dispose() {
+        this.pageListeners.abort();
     }
 
     hardReset() {
