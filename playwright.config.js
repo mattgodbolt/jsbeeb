@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import os from "node:os";
 
 // The preview of dist/ the tests drive, on a port of its own so a dev server
 // can run alongside. BASE_URL points the suite at a server that is already
@@ -14,10 +15,11 @@ export default defineConfig({
     forbidOnly: !!process.env.CI,
     // Deliberately none, anywhere: a flake is a bug to root-cause.
     retries: 0,
-    // Each page runs the machine in real time, so the checks that watch it
-    // stop and start need CPU of their own: with one worker per core they
-    // starve each other and keys auto-repeat.
-    workers: process.env.CI ? 2 : 4,
+    // Each worker is a whole Chrome running the machine in real time, and
+    // starved emulators time out rather than slow down; a 15GB laptop showed
+    // four of them paging each other to death. One worker per eight hardware
+    // threads keeps small machines serial and big ones parallel.
+    workers: process.env.CI ? 2 : Math.max(1, Math.min(4, Math.floor(os.availableParallelism() / 8))),
     reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never" }]] : "list",
     timeout: 60000,
     expect: { timeout: 10000 },
