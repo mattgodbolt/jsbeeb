@@ -48,6 +48,20 @@ export const fakeUrlState = (search = "") =>
 export const toasts = () =>
     [...document.querySelectorAll(".toast")].map((el) => el.textContent.replace(/\s+/g, " ").trim());
 
+/** A fetch response carrying an archive manifest of `files`. */
+export const manifestResponse = (files) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ schemaVersion: 1, files }),
+});
+
+/** A fetch response carrying `body` as its bytes. */
+export const bytesResponse = (body = new Uint8Array()) => ({
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+});
+
 /**
  * A single-density image whose DFS catalogue claims `sectors` sectors and
  * holds a file starting at each of `starts`, the smallest thing discFor accepts.
