@@ -68,7 +68,7 @@ async function compare(video, testMachine, expectedName) {
     assert.equal(
         numDiffPixels,
         0,
-        `Images do not match - expected ${expectedFile}, got ${outputFile}, diffs: ${diffFile}}`,
+        `Images do not match - expected ${expectedFile}, got ${outputFile}, diffs: ${diffFile}`,
     );
 }
 
