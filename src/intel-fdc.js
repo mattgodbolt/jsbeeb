@@ -9,7 +9,7 @@ import { Disc, IbmDiscFormat } from "./disc.js";
 import { BaseDiscDrive, DiscDrive } from "./disc-drive.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
-import * as utils from "./utils.js";
+import { hexbyte, hexword } from "./hex.js";
 
 // TODOs remaining for intel-fdc and related functionality
 // - support loading other disc formats
@@ -400,7 +400,7 @@ export class IntelFdc {
             case Address.unknown_read_3:
                 return this._regs[Registers.internalCountLsb];
             default:
-                throw new Error(`"Unexpected read of addr ${utils.hexword(addr)}"`);
+                throw new Error(`"Unexpected read of addr ${hexword(addr)}"`);
         }
     }
 
@@ -443,7 +443,7 @@ export class IntelFdc {
                 break;
             case 3:
             default:
-                this._log(`Not supported: ${utils.hexword(addr)}=${utils.hexbyte(val)}`);
+                this._log(`Not supported: ${hexword(addr)}=${hexbyte(val)}`);
         }
     }
 
@@ -516,7 +516,7 @@ export class IntelFdc {
             const data = this._mmioData;
             const pulses = IbmDiscFormat.fmTo2usPulses(clocks, data);
             if (clocks !== 0xff && clocks !== IbmDiscFormat.markClockPattern)
-                this._log(`writing unusual clocks=${utils.hexbyte(clocks)} data=${utils.hexbyte(data)}`);
+                this._log(`writing unusual clocks=${hexbyte(clocks)} data=${hexbyte(data)}`);
             this._currentDrive.writePulses(pulses);
         }
 
@@ -1073,9 +1073,7 @@ export class IntelFdc {
     _commandWritten(command) {
         const status = this.internalStatus;
         if (status & StatusFlag.busy) {
-            this._log(
-                `command ${utils.hexbyte(command)} while busy with ${utils.hexbyte(this._regs[Registers.internalCommand])}`,
-            );
+            this._log(`command ${hexbyte(command)} while busy with ${hexbyte(this._regs[Registers.internalCommand])}`);
         }
 
         // Set command.
@@ -1125,7 +1123,7 @@ export class IntelFdc {
                 break;
             }
             case ParamAccept.specify: {
-                this._logCommand(`specify param ${utils.hexbyte(param)}`);
+                this._logCommand(`specify param ${hexbyte(param)}`);
                 this._writeRegister(this._regs[Registers.internalPointer], param);
                 ++this._regs[Registers.internalPointer];
                 if (--this._regs[Registers.internalParamCount] === 0) {
@@ -1155,7 +1153,7 @@ export class IntelFdc {
             case Registers.mmioData & 0x07:
                 return this._mmioData;
             default:
-                this._log(`direct read from MMIO register ${utils.hexbyte(reg)}`);
+                this._log(`direct read from MMIO register ${hexbyte(reg)}`);
                 break;
         }
         return 0;
@@ -1185,7 +1183,7 @@ export class IntelFdc {
                 this._mmioData = val;
                 break;
             default:
-                this._log(`direct write to MMIO register ${utils.hexbyte(reg)}`);
+                this._log(`direct write to MMIO register ${hexbyte(reg)}`);
                 break;
         }
     }
@@ -1430,13 +1428,13 @@ export class IntelFdc {
         commandReg &= ~(DriveOut.selectFlags | 0x03);
         this._regs[Registers.internalCommand] = commandReg;
         this._logCommand(
-            `command ${utils.hexbyte(origCommand & 0x3f)} ` +
-                `sel ${utils.hexbyte(selectBits)} ` +
-                `params ${utils.hexbyte(this._regs[Registers.internalParam_1])} ` +
-                `${utils.hexbyte(this._regs[Registers.internalParam_2])} ` +
-                `${utils.hexbyte(this._regs[Registers.internalParam_3])} ` +
-                `${utils.hexbyte(this._regs[Registers.internalParam_4])} ` +
-                `${utils.hexbyte(this._regs[Registers.internalParam_5])} ` +
+            `command ${hexbyte(origCommand & 0x3f)} ` +
+                `sel ${hexbyte(selectBits)} ` +
+                `params ${hexbyte(this._regs[Registers.internalParam_1])} ` +
+                `${hexbyte(this._regs[Registers.internalParam_2])} ` +
+                `${hexbyte(this._regs[Registers.internalParam_3])} ` +
+                `${hexbyte(this._regs[Registers.internalParam_4])} ` +
+                `${hexbyte(this._regs[Registers.internalParam_5])} ` +
                 `ptrk ${this._currentDrive ? this._currentDrive.track : -1} ` +
                 `hpos ${this._currentDrive ? this._currentDrive.headPosition : -1}`,
         );
@@ -1631,7 +1629,7 @@ export class IntelFdc {
 
     _lowerBusyAndLog() {
         this._statusLower(StatusFlag.busy);
-        this._logCommand(`status ${utils.hexbyte(this._status)} result ${utils.hexbyte(this._result)}`);
+        this._logCommand(`status ${hexbyte(this._status)} result ${hexbyte(this._result)}`);
     }
 
     _spinDown() {

@@ -4,6 +4,7 @@ import { DiscLayout } from "../disc.js";
 import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure, unzipAndReport } from "./reporting.js";
+import { stringToUint8Array } from "../binary.js";
 
 /** The images offered on the Discs dialog's built-in list. */
 export const BuiltInImages = [
@@ -98,7 +99,7 @@ export class MediaLoader extends EventTarget {
                 let tapeData = await readFileAsBinaryString(file);
                 let tapeName = file.name;
                 if (/\.zip/i.test(tapeName)) {
-                    const unzipped = await unzipAndReport(utils.stringToUint8Array(tapeData));
+                    const unzipped = await unzipAndReport(stringToUint8Array(tapeData));
                     tapeData = unzipped.data;
                     tapeName = unzipped.name;
                 }
@@ -194,7 +195,7 @@ export class MediaLoader extends EventTarget {
     }
 
     async loadHTMLFile(file) {
-        const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
+        const imageData = stringToUint8Array(await readFileAsBinaryString(file));
         const loadedDisc = disc.discFor(file.name, imageData, undefined, this.drives.layoutForDrive(0));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(imageData);
@@ -207,7 +208,7 @@ export class MediaLoader extends EventTarget {
         const { processor } = this;
         if (!processor.filestore) return;
         const binaryData = await readFileAsBinaryString(file);
-        processor.filestore.scsi = utils.stringToUint8Array(binaryData);
+        processor.filestore.scsi = stringToUint8Array(binaryData);
 
         processor.filestore.PC = 0x400;
         processor.filestore.SP = 0xff;

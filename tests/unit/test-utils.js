@@ -1,23 +1,11 @@
 import { describe, it, beforeAll, expect, vi, afterEach } from "vitest";
 
-import {
-    BBC,
-    debounce,
-    getKeyMap,
-    hexbyte,
-    hexword,
-    keyCodes,
-    parseAddr,
-    readInt16,
-    readInt32,
-    signExtend,
-    stringToUint8Array,
-    uint8ArrayToString,
-    userKeymap,
-} from "../../src/utils.js";
+import { BBC, debounce, getKeyMap, keyCodes, userKeymap } from "../../src/utils.js";
 import { ATOM, getKeyMapAtom } from "../../src/utils_atom.js";
 import { processInputParams } from "../../src/url-params.js";
 import { crc32, createZipBlob, replaceOrAddExtension, unzip } from "../../src/archive.js";
+import { readInt16, readInt32, signExtend, stringToUint8Array, uint8ArrayToString } from "../../src/binary.js";
+import { hexbyte, hexword, parseAddr } from "../../src/hex.js";
 
 describe("Utils tests", function () {
     describe("parseAddr", function () {
@@ -133,8 +121,8 @@ describe("Utils tests", function () {
         let DataStream;
 
         beforeAll(async function () {
-            const utils = await import("../../src/utils.js");
-            DataStream = utils.DataStream;
+            const binary = await import("../../src/binary.js");
+            DataStream = binary.DataStream;
         });
 
         it("creates from string data", function () {

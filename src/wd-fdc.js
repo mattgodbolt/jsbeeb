@@ -7,7 +7,7 @@ import { BaseDiscDrive, DiscDrive } from "./disc-drive.js";
 import { IbmDiscFormat } from "./disc.js";
 // eslint-disable-next-line no-unused-vars
 import { Scheduler } from "./scheduler.js";
-import * as utils from "./utils.js";
+import { hexbyte } from "./hex.js";
 
 /**
  * Commands.
@@ -337,7 +337,7 @@ export class WdFdc {
             case 1:
             case 2:
             case 3:
-                this._logCommand(`control register now ${utils.hexbyte(val)}`);
+                this._logCommand(`control register now ${hexbyte(val)}`);
                 if (this._statusRegister & Status.busy && !this._isReset(val)) {
                     throw new Error(`Control register updated while busy; without reset`);
                 }
@@ -372,8 +372,8 @@ export class WdFdc {
     _doCommand(val) {
         if (!this._currentDrive) throw new Error("Command while no selected drive");
         this._logCommand(
-            `command ${utils.hexbyte(val)} tr ${this._trackRegister} sr ${this._sectorRegister} dr ${this._dataRegister} ` +
-                `cr ${utils.hexbyte(this._controlRegister)} ` +
+            `command ${hexbyte(val)} tr ${this._trackRegister} sr ${this._sectorRegister} dr ${this._dataRegister} ` +
+                `cr ${hexbyte(this._controlRegister)} ` +
                 `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
         );
         const command = val & 0xf0;
@@ -387,7 +387,7 @@ export class WdFdc {
             // rule here. Whether a command will do anything when busy seems to depend on
             // the current command, the new command and also the current place in the
             // internal state machine!
-            this._log(`command ${utils.hexbyte(val)} while busy with ${utils.hexbyte(this._command)} - ignoring`);
+            this._log(`command ${hexbyte(val)} while busy with ${hexbyte(this._command)} - ignoring`);
             return;
         }
 
@@ -424,7 +424,7 @@ export class WdFdc {
                 this._commandType = 3;
                 break;
             default:
-                throw new Error(`unimplemented command ${utils.hexbyte(val)}`);
+                throw new Error(`unimplemented command ${hexbyte(val)}`);
         }
         if (this._commandType === 2 || (this._commandType === 3 && val & CommandBits.typeIIorIIISettle))
             this._isCommandSettle = true;
@@ -460,7 +460,7 @@ export class WdFdc {
             // unreliable on a drive that takes a while to come up to speed.
             if (val & CommandBits.disableSpinUp) {
                 this._indexPulseCount = 6;
-                this._log(`command ${utils.hexbyte(val)} spin up wait disabled, motor was off`);
+                this._log(`command ${hexbyte(val)} spin up wait disabled, motor was off`);
                 this._dispatchCommand();
             } else {
                 this._setState(State.spinUpWait);
@@ -476,7 +476,7 @@ export class WdFdc {
             this._log(
                 `State ${this._state} -> ${state} @ tr ${this._trackRegister} ` +
                     `sr ${this._sectorRegister} dr ${this._dataRegister} ` +
-                    `cr ${utils.hexbyte(this._controlRegister)} ` +
+                    `cr ${hexbyte(this._controlRegister)} ` +
                     `ptrk ${this._currentDrive.track} hpos ${this._currentDrive.headPosition}`,
             );
         }
@@ -599,7 +599,7 @@ export class WdFdc {
         if (this._currentDrive && this._currentDrive.spinning) {
             if (!isMotorOn) {
                 throw new Error(
-                    `Unexpected motor control bit off when setting the control register to ${utils.hexbyte(val)}`,
+                    `Unexpected motor control bit off when setting the control register to ${hexbyte(val)}`,
                 );
             }
             this._currentDrive.stopSpinning();
@@ -1084,7 +1084,7 @@ export class WdFdc {
             case 0xc2:
                 return IbmDiscFormat.mfmC2Sync;
             default:
-                throw new Error(`Bad marker byte ${utils.hexbyte(byte)}`);
+                throw new Error(`Bad marker byte ${hexbyte(byte)}`);
         }
     }
 
@@ -1119,7 +1119,7 @@ export class WdFdc {
         // EMU NOTE: leave DRQ alone, if it is raised, leave it raised.
         if (this._doRaiseIntRq) this._setIntRq(true);
 
-        this._logCommand(`result status ${utils.hexbyte(this._statusRegister)}`);
+        this._logCommand(`result status ${hexbyte(this._statusRegister)}`);
     }
 
     _checkVerify() {

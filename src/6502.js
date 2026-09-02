@@ -12,8 +12,8 @@ import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
 import { unzipRomImage } from "./archive.js";
-
-const signExtend = utils.signExtend;
+import { signExtend } from "./binary.js";
+import { hexbyte, hexword } from "./hex.js";
 
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
@@ -826,7 +826,7 @@ export class Cpu6502 extends Base6502 {
     readArea(addr, len) {
         let str = "";
         for (let i = 0; i < len; ++i) {
-            str += utils.hexbyte(this.readmem(addr + i));
+            str += hexbyte(this.readmem(addr + i));
         }
         return str;
     }
@@ -1564,11 +1564,11 @@ export class Cpu6502 extends Base6502 {
             function (pc, a, x, y) {
                 const dis = disassembler.disassemble(pc, true)[0];
                 console.log(
-                    utils.hexword(pc),
+                    hexword(pc),
                     (dis + "                       ").substring(0, 15),
-                    utils.hexbyte(a),
-                    utils.hexbyte(x),
-                    utils.hexbyte(y),
+                    hexbyte(a),
+                    hexbyte(x),
+                    hexbyte(y),
                 );
             };
         for (let i = maxToShow - 2; i >= 0; --i) {

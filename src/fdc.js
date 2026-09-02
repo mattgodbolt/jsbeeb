@@ -11,6 +11,7 @@ import {
 } from "./disc.js";
 import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
 import * as utils from "./utils.js";
+import { stringToUint8Array, uint8ArrayToString } from "./binary.js";
 
 export function load(name) {
     console.log("Loading disc from " + name);
@@ -272,7 +273,7 @@ function is40TrackLayout(discType, data, name, layout) {
  * @returns {Disc} The loaded disc object
  */
 export function discFor(name, stringData, onChange, layout = DiscLayout.auto) {
-    const data = typeof stringData !== "string" ? stringData : utils.stringToUint8Array(stringData);
+    const data = typeof stringData !== "string" ? stringData : stringToUint8Array(stringData);
     const discType = guessDiscTypeFromName(name);
     const config = new DiscConfig();
     config.expandTo80 = is40TrackLayout(discType, data, name, layout);
@@ -312,12 +313,12 @@ export function localDisc(name, layout = DiscLayout.auto, onSaveError = () => {}
         }
     } else {
         console.log("Loading browser-local disc " + name);
-        data = utils.stringToUint8Array(dataString);
+        data = stringToUint8Array(dataString);
     }
     let reportedSaveError = false;
     const onChange = (data) => {
         try {
-            const str = utils.uint8ArrayToString(data);
+            const str = uint8ArrayToString(data);
             window.localStorage.setItem(discName, str);
         } catch (e) {
             console.log(`Unable to save browser-local disc ${name}: ${e}`);

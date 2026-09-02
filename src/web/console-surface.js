@@ -1,4 +1,5 @@
 import * as utils from "../utils.js";
+import { hd } from "../hex.js";
 
 /**
  * The debugging surface the wiki documents, put on `target` (window in the
@@ -16,9 +17,9 @@ export function exposeConsoleSurface(target, { loop, processor, video, audioHand
     target.processor = processor;
     target.video = video;
     target.hd = (start, end) => {
-        console.log(utils.hd((x) => processor.readmem(x), start, end));
+        console.log(hd((x) => processor.readmem(x), start, end));
     };
     target.m7dump = () => {
-        console.log(utils.hd((x) => processor.readmem(x) & 0x7f, 0x7c00, 0x7fe8, { width: 40, gap: false }));
+        console.log(hd((x) => processor.readmem(x) & 0x7f, 0x7c00, 0x7fe8, { width: 40, gap: false }));
     };
 }

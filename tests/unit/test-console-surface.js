@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { exposeConsoleSurface } from "../../src/web/console-surface.js";
-import * as utils from "../../src/utils.js";
+import { hd } from "../../src/hex.js";
 
 // Mirrors the ConsoleSurface list in tests/playwright/smoke.spec.js.
 const ExpectedNames = [
@@ -67,14 +67,14 @@ describe("exposeConsoleSurface", () => {
         const { target } = make();
         const log = vi.spyOn(console, "log").mockImplementation(() => {});
         target.hd(0, 16);
-        expect(log).toHaveBeenCalledWith(utils.hd((x) => x & 0xff, 0, 16));
+        expect(log).toHaveBeenCalledWith(hd((x) => x & 0xff, 0, 16));
     });
 
     it("m7dump logs the mode 7 screen with the top bit stripped", () => {
         const { target } = make();
         const log = vi.spyOn(console, "log").mockImplementation(() => {});
         target.m7dump();
-        expect(log).toHaveBeenCalledWith(utils.hd((x) => x & 0x7f, 0x7c00, 0x7fe8, { width: 40, gap: false }));
+        expect(log).toHaveBeenCalledWith(hd((x) => x & 0x7f, 0x7c00, 0x7fe8, { width: 40, gap: false }));
     });
 
     it("the benchmark and profile calls are debounced onto the loop", () => {

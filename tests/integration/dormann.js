@@ -1,12 +1,12 @@
 import { describe, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import * as utils from "../../src/utils.js";
 import { fake6502, fake65C02, fake65C12 } from "../../src/fake6502.js";
 import { TEST_65C02, TEST_65C12 } from "../../src/models.js";
 import { RepoRoot } from "./helpers.js";
 
 import assert from "assert";
+import { hd, hexbyte, hexword } from "../../src/hex.js";
 
 const log = false;
 const BinDir = path.join(RepoRoot, "tests/6502_65C02_functional_tests/bin_files");
@@ -22,7 +22,7 @@ async function runTest(processor, test, name) {
             if (next) {
                 next = false;
                 expectedPc = parseInt(line.match(/^([0-9a-fA-F]+)/)[1], 16);
-                console.log("Found success address $" + utils.hexword(expectedPc));
+                console.log("Found success address $" + hexword(expectedPc));
             } else {
                 next = !!line.match(successRe);
             }
@@ -39,13 +39,13 @@ async function runTest(processor, test, name) {
     processor.debugInstruction.add(function (addr) {
         if (log) {
             console.log(
-                utils.hexword(addr) +
+                hexword(addr) +
                     " : A=" +
-                    utils.hexbyte(processor.a) +
+                    hexbyte(processor.a) +
                     " : X=" +
-                    utils.hexbyte(processor.x) +
+                    hexbyte(processor.x) +
                     " : Y=" +
-                    utils.hexbyte(processor.y) +
+                    hexbyte(processor.y) +
                     " : " +
                     processor.disassembler.disassemble(processor.pc)[0],
             );
@@ -56,25 +56,25 @@ async function runTest(processor, test, name) {
     });
     console.log("Running Dormann " + name + " tests...");
     processor.execute(2000000 * 60);
-    console.log(`Run complete at $${utils.hexword(processor.pc)}`);
+    console.log(`Run complete at $${hexword(processor.pc)}`);
     const result = processor.pc === expectedPc;
     if (!result) logFailure(processor);
     return result;
 }
 
 function logFailure(processor) {
-    console.log("Failed at " + utils.hexword(processor.pc));
+    console.log("Failed at " + hexword(processor.pc));
     console.log("Previous PCs:");
     for (let i = 1; i < 16; ++i) {
-        console.log("  " + utils.hexword(processor.getPrevPc(i)));
+        console.log("  " + hexword(processor.getPrevPc(i)));
     }
-    console.log("A: " + utils.hexbyte(processor.a));
-    console.log("X: " + utils.hexbyte(processor.x));
-    console.log("Y: " + utils.hexbyte(processor.y));
-    console.log("S: " + utils.hexbyte(processor.s));
-    console.log("P: " + utils.hexbyte(processor.p.asByte()) + " " + processor.p.debugString());
+    console.log("A: " + hexbyte(processor.a));
+    console.log("X: " + hexbyte(processor.x));
+    console.log("Y: " + hexbyte(processor.y));
+    console.log("S: " + hexbyte(processor.s));
+    console.log("P: " + hexbyte(processor.p.asByte()) + " " + processor.p.debugString());
     console.log(
-        utils.hd(
+        hd(
             function (i) {
                 return processor.readmem(i);
             },

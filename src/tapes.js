@@ -1,4 +1,5 @@
-import * as utils from "./utils.js";
+import { DataStream } from "./binary.js";
+import { hexword } from "./hex.js";
 
 function secsToClocks(secs, cpuSpeed) {
     return (cpuSpeed * secs) | 0;
@@ -239,7 +240,7 @@ class UefTape {
                 acia.tone(0);
                 return secsToClocks(gap, this.cpuSpeed);
             default:
-                console.log("Skipping unknown chunk " + utils.hexword(this.curChunk.id));
+                console.log("Skipping unknown chunk " + hexword(this.curChunk.id));
                 this.curChunk = this.readChunk();
                 break;
         }
@@ -305,7 +306,7 @@ class TapefileTape {
 }
 
 export async function loadTapeFromData(name, data, model) {
-    const stream = await utils.DataStream.create(name, data);
+    const stream = await DataStream.create(name, data);
     if (stream.readByte(0) === 0xff && stream.readByte(1) === 0x04) {
         console.log("Detected a 'tapefile' tape");
         return new TapefileTape(stream, model);

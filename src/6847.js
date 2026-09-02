@@ -1,6 +1,6 @@
-import * as utils from "./utils.js";
 import * as fontData from "./6847_fontdata.js";
 import { encodeLineGrid } from "./video-filters/pixel-grid.js";
+import { makeFast32 } from "./binary.js";
 
 const VDISPENABLE = 1 << 0,
     HDISPENABLE = 1 << 1,
@@ -126,7 +126,7 @@ export class Video6847 {
 
         // 8 colours (alpha on MSB)
         //
-        this.collook = utils.makeFast32(
+        this.collook = makeFast32(
             new Uint32Array([
                 0xff000000, // #00000000, // black
                 0xff03b91e, // #00ff00, // green

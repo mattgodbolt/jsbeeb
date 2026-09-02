@@ -1,5 +1,6 @@
-import { debounce, uint8ArrayToString } from "./utils.js";
+import { debounce } from "./utils.js";
 import { discFor } from "./fdc.js";
+import { uint8ArrayToString } from "./binary.js";
 
 const MIME_TYPE = "application/vnd.jsbeeb.disc-image";
 const CLIENT_ID = "356883185894-bhim19837nroivv18p0j25gecora60r5.apps.googleusercontent.com";

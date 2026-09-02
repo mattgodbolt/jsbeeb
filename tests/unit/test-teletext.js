@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { Teletext } from "../../src/teletext.js";
-import { makeFast32 } from "../../src/utils.js";
+import { makeFast32 } from "../../src/binary.js";
 
 const PixelsPerCell = 16;
 const PipelineDelay = 3;

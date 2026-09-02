@@ -1,4 +1,4 @@
-import * as utils from "./utils.js";
+import { Fifo } from "./binary.js";
 
 const PollHz = 8; // Made up
 
@@ -11,7 +11,7 @@ export class TouchScreen {
     constructor(scheduler, cyclesPerSecond) {
         this.scheduler = scheduler;
         this.pollCycles = cyclesPerSecond / PollHz;
-        this.outBuffer = new utils.Fifo(16);
+        this.outBuffer = new Fifo(16);
         this.pollTask = this.scheduler.newTask(() => this.poll());
         this.reset();
     }

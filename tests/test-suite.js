@@ -1,5 +1,6 @@
 import * as utils from "../src/utils.js";
 import { fake6502 } from "../src/fake6502.js";
+import { hexword } from "../src/hex.js";
 
 const processor = fake6502();
 const IRQ_ROUTINE_START = 0xff48;
@@ -39,7 +40,7 @@ function initializeMemory() {
 async function loadTest(filename) {
     const data = await utils.loadData(`tests/suite/bin/${filename}`);
     const addr = data[0] + (data[1] << 8);
-    console.log(`>> Loading test '${filename}' at ${utils.hexword(addr)}`);
+    console.log(`>> Loading test '${filename}' at ${hexword(addr)}`);
     for (let i = 2; i < data.length; ++i) processor.writemem(addr + i - 2, data[i]);
 }
 

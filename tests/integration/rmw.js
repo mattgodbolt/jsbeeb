@@ -1,7 +1,7 @@
-import * as utils from "../../src/utils.js";
 import { describe, it } from "vitest";
 import { TestMachine } from "../test-machine.js";
 import assert from "assert";
+import { hexbyte } from "../../src/hex.js";
 
 describe("test read-modify-write behaviour", function () {
     const doTest = async (model) => {
@@ -15,7 +15,7 @@ describe("test read-modify-write behaviour", function () {
         for (let i = 0x100; i < 0x110; i += 4) {
             if (i !== 0x100) result += " ";
             for (let j = 3; j >= 0; --j) {
-                result += utils.hexbyte(testMachine.readbyte(i + j));
+                result += hexbyte(testMachine.readbyte(i + j));
             }
         }
         return result;
