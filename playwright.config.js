@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test";
-import os from "node:os";
+
+import { workersFor } from "./tools/test-workers.js";
 
 // The preview of dist/ the tests drive, on a port of its own so a dev server
 // can run alongside. BASE_URL points the suite at a server that is already
@@ -15,13 +16,14 @@ export default defineConfig({
     forbidOnly: !!process.env.CI,
     // Deliberately none, anywhere: a flake is a bug to root-cause.
     retries: 0,
-    // Each worker is a whole Chrome running the machine in real time, and
-    // starved emulators time out rather than slow down; a 15GB laptop showed
-    // four of them paging each other to death. One worker per eight hardware
-    // threads keeps small machines serial and big ones parallel.
-    workers: process.env.CI ? 2 : Math.max(1, Math.min(4, Math.floor(os.availableParallelism() / 8))),
+    // Each worker is a whole Chrome running the machine in real time; a 15GB
+    // laptop showed four of them paging each other to death. One worker per
+    // eight hardware threads keeps small machines serial and big ones parallel.
+    workers: process.env.CI ? 2 : workersFor(8, 4),
     reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never" }]] : "list",
-    timeout: 60000,
+    // A hang detector. The dearest test compiles three filters' shaders under
+    // software GL, which a laptop that is paging has taken over a minute to do.
+    timeout: 180000,
     expect: { timeout: 10000 },
     use: {
         // Without this a click on a selector that matches nothing waits out

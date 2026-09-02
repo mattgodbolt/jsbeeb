@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { TestMachine } from "../test-machine.js";
 
-describe("Atom hardware", { timeout: 30000 }, () => {
+describe("Atom hardware", () => {
     let machine;
 
     async function bootAtom() {

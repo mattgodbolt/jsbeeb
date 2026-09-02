@@ -15,7 +15,7 @@ function screenText(machine) {
     return text;
 }
 
-describe("save state round trip", { timeout: 60000 }, () => {
+describe("save state round trip", () => {
     it("continues identically in a fresh machine restored through the gzipped file format", async () => {
         const original = new TestMachine();
         await original.initialise();

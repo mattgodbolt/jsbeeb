@@ -60,8 +60,10 @@ class Beeb {
         return before;
     }
 
-    async expectRunningPast(cycles) {
-        await expect.poll(() => this.cycles(), { message: "the emulator to run again" }).toBeGreaterThan(cycles);
+    async expectRunningPast(cycles, timeout = undefined) {
+        await expect
+            .poll(() => this.cycles(), { message: "the emulator to run again", timeout })
+            .toBeGreaterThan(cycles);
     }
 
     /** Held long enough for the OS to scan the matrix and see it down. */

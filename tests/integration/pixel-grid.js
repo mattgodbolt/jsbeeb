@@ -83,7 +83,7 @@ function gridDescribesPixels(frame, band, left, right) {
     return null;
 }
 
-describe("logical pixel grid over real screens", { timeout: 60000 }, () => {
+describe("logical pixel grid over real screens", () => {
     // Single-pixel-wide vertical stripes with a gap between them. If the grid
     // claimed pixels were wider than they are, a lit and an unlit pixel would
     // land inside one and gridDescribesPixels would say so. A grid that claimed

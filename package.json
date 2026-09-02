@@ -121,7 +121,7 @@
   },
   "lint-staged": {
     "*.js": [
-      "vitest related --run --exclude tests/integration --exclude tests/shader --no-file-parallelism",
+      "vitest related --run --project unit --no-file-parallelism",
       "eslint --cache --fix",
       "prettier --write"
     ],
