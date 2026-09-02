@@ -1,5 +1,3 @@
-"use strict";
-
 // Code ported from Beebem (C to .js) by Jason Robson
 const AUDIO_BUFFER_SIZE = 256;
 

@@ -1,5 +1,3 @@
-"use strict";
-
 export const LineGridRendered = 0x80;
 export const LineGridVerticalDouble = 0x08;
 export const LineGridWidthMask = 0x07;

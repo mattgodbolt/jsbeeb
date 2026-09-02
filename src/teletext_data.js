@@ -1,5 +1,3 @@
-"use strict";
-
 // Extremely heavily based on b-em.
 export function makeChars() {
     // prettier-ignore

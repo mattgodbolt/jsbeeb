@@ -13,8 +13,6 @@ export const UrlParamTypes = {
     embed: ParamTypes.BOOL,
     fasttape: ParamTypes.BOOL,
     noseek: ParamTypes.BOOL,
-    debug: ParamTypes.BOOL,
-    verbose: ParamTypes.BOOL,
     autoboot: ParamTypes.BOOL,
     autochain: ParamTypes.BOOL,
     autorun: ParamTypes.BOOL,
@@ -32,9 +30,9 @@ export const UrlParamTypes = {
     audioDebug: ParamTypes.BOOL,
 
     // Numeric parameters
-    speed: ParamTypes.INT,
     stationId: ParamTypes.INT,
     frameSkip: ParamTypes.INT,
+    videoCyclesBatch: ParamTypes.INT,
     audiofilterfreq: ParamTypes.FLOAT,
     audiofilterq: ParamTypes.FLOAT,
     speakerAmount: ParamTypes.FLOAT,
@@ -56,6 +54,12 @@ export const UrlParamTypes = {
     audioOutput: ParamTypes.STRING,
     drive0Tracks: ParamTypes.STRING,
     drive1Tracks: ParamTypes.STRING,
+    loadBasic: ParamTypes.STRING,
+    embedBasic: ParamTypes.STRING,
+    patch: ParamTypes.STRING,
+    sbLeft: ParamTypes.STRING,
+    sbRight: ParamTypes.STRING,
+    sbBottom: ParamTypes.STRING,
 };
 
 /**

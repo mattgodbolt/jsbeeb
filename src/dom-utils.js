@@ -1,16 +1,6 @@
-"use strict";
-
 import { replaceOrAddExtension } from "./utils.js";
 
 // Minimal DOM helpers to replace jQuery usage.
-
-export function show(el) {
-    el.style.display = "";
-}
-
-export function hide(el) {
-    el.style.display = "none";
-}
 
 export function toggle(el, visible) {
     el.style.display = visible ? "" : "none";

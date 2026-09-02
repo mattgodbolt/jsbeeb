@@ -1,4 +1,3 @@
-"use strict";
 // Minimal ZIP extractor. Supports methods 0 (stored) and 8 (deflate); other
 // methods (bzip2, lzma, etc.) will throw an error with the method number.
 
@@ -971,18 +970,6 @@ export function signExtend(val) {
 
 export function noop() {}
 
-export function bench() {
-    for (let j = 0; j < 10; ++j) {
-        let res = 0;
-        const start = Date.now();
-        for (let i = 0; i < 4096 * 1024; ++i) {
-            res += signExtend(i & 0xff);
-        }
-        const tt = Date.now() - start;
-        console.log(res, tt);
-    }
-}
-
 export function noteEvent(category, type, label) {
     if (
         !runningInNode &&
@@ -993,12 +980,6 @@ export function noteEvent(category, type, label) {
         gtag("event", category, { type, label });
     }
     console.log("event noted:", category, type, label);
-}
-
-let baseUrl = "";
-
-export function setBaseUrl(url) {
-    baseUrl = url;
 }
 
 export function uint8ArrayToString(array) {
@@ -1018,7 +999,7 @@ export function stringToUint8Array(str) {
 function loadDataHttp(url) {
     return new Promise(function (resolve, reject) {
         const request = new XMLHttpRequest();
-        request.open("GET", baseUrl + url, true);
+        request.open("GET", url, true);
         request.overrideMimeType("text/plain; charset=x-user-defined");
         request.onload = function () {
             if (request.status !== 200) {
@@ -1045,27 +1026,16 @@ export function setNodeBasePath(basePath) {
 }
 
 async function loadDataNode(url) {
-    if (typeof readbuffer !== "undefined") {
-        // d8 shell
-        /*global readbuffer*/
-        return new Uint8Array(readbuffer(url));
-    } else if (typeof read !== "undefined") {
-        // SpiderMonkey shell
-        /*global read*/
-        return read(url, "binary");
-    } else {
-        // Node
-        const fs = await import("fs");
-        const nodePath = await import("path");
-        if (_nodeBasePath) {
-            const publicPath = nodePath.join(_nodeBasePath, "public", url);
-            if (fs.existsSync(publicPath)) return fs.readFileSync(publicPath);
-            return fs.readFileSync(nodePath.join(_nodeBasePath, url));
-        }
-        if (url[0] === "/") url = "." + url;
-        if (fs.existsSync("public/" + url)) return fs.readFileSync("public/" + url);
-        return fs.readFileSync(url);
+    const fs = await import("fs");
+    const nodePath = await import("path");
+    if (_nodeBasePath) {
+        const publicPath = nodePath.join(_nodeBasePath, "public", url);
+        if (fs.existsSync(publicPath)) return fs.readFileSync(publicPath);
+        return fs.readFileSync(nodePath.join(_nodeBasePath, url));
     }
+    if (url[0] === "/") url = "." + url;
+    if (fs.existsSync("public/" + url)) return fs.readFileSync("public/" + url);
+    return fs.readFileSync(url);
 }
 
 export function loadData(url) {
@@ -1255,12 +1225,6 @@ export async function unzipDiscImage(data) {
 
 export async function unzipRomImage(data) {
     return unzipImage(data, knownRomExtensions);
-}
-
-export function resizeUint8Array(array, byteSize) {
-    const newArray = new Uint8Array(byteSize);
-    newArray.set(array.subarray(0, byteSize));
-    return newArray;
 }
 
 export class Fifo {

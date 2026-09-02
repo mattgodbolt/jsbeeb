@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * Convert a TypedArray to a base64 string for JSON serialization.
  * @param {ArrayBufferView} typedArray

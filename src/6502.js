@@ -1,4 +1,3 @@
-"use strict";
 import * as utils from "./utils.js";
 import * as via from "./via.js";
 import { Acia } from "./acia.js";

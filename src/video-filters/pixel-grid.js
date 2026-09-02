@@ -1,5 +1,3 @@
-"use strict";
-
 // Describing the logical pixel grid of jsbeeb's framebuffer, which is a
 // 1024-wide *raster* rather than a grid of BBC pixels: one logical pixel covers
 // up to eight texels across and two down. Filters need to know that, and only

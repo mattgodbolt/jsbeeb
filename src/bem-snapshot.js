@@ -1,4 +1,3 @@
-"use strict";
 import { inflate } from "./utils.js";
 
 // B-em snapshot format parser (versions 1 and 3).

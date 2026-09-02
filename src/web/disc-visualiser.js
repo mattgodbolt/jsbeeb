@@ -1,5 +1,3 @@
-"use strict";
-
 import { IbmDiscFormat } from "../disc.js";
 import {
     DensityPalette,

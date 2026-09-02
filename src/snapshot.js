@@ -1,5 +1,3 @@
-"use strict";
-
 import { typedArrayToBase64, base64ToTypedArray } from "./state-utils.js";
 import { findModel } from "./models.js";
 

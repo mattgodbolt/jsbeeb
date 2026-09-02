@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { Scheduler } from "../../src/scheduler.js";
 
 describe("Scheduler tests", function () {
-    "use strict";
     it("creates", function () {
         new Scheduler();
     });

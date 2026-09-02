@@ -1,5 +1,3 @@
-"use strict";
-
 import { NoiseAwareWdFdc } from "./wd-fdc.js";
 import { NoiseAwareIntelFdc } from "./intel-fdc.js";
 import * as opcodes from "./6502.opcodes.js";

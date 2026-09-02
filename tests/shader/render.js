@@ -1,5 +1,3 @@
-"use strict";
-
 // Renders patterns through the project's real GLSL in headless Chrome and hands
 // the pixels back, so a shader itself can be asserted on.
 //

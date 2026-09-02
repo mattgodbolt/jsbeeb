@@ -3,7 +3,6 @@ import { describe, it, expect } from "vitest";
 import { Fifo } from "../../src/utils.js";
 
 describe("FIFO tests", function () {
-    "use strict";
     it("creates ok", function () {
         new Fifo(16);
     });

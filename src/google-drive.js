@@ -1,5 +1,3 @@
-"use strict";
-
 import { debounce, uint8ArrayToString } from "./utils.js";
 import { discFor } from "./fdc.js";
 
