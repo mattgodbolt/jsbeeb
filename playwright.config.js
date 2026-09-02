@@ -12,8 +12,8 @@ const PreviewUrl = `http://${PreviewHost}:${PreviewPort}/`;
 const BaseUrl = process.env.BASE_URL;
 
 // CI's runners have no GPU, so the software renderer is what CI tests. On a
-// machine with one, Chrome is pointed at it instead: a filter's shaders then
-// compile in an instant rather than the minute a paging laptop has taken.
+// machine with one, Chrome is pointed at it instead, which takes a filter's
+// shader compile from tens of seconds to an instant.
 // E2E_GL=software or E2E_GL=hardware overrides the choice.
 const RenderNode = "/dev/dri/renderD128";
 const GlArgs = {
@@ -29,19 +29,17 @@ export default defineConfig({
     forbidOnly: !!process.env.CI,
     // Deliberately none, anywhere: a flake is a bug to root-cause.
     retries: 0,
-    // Each worker is a whole Chrome running the machine in real time; a 15GB
-    // laptop showed four of them paging each other to death. One worker per
-    // eight hardware threads keeps small machines serial and big ones parallel.
+    // Each worker is a whole Chrome running the machine in real time. One worker
+    // per eight hardware threads keeps small machines serial and big ones parallel.
     workers: process.env.CI ? 2 : workersFor(8, 4),
     reporter: process.env.CI ? [["list"], ["github"], ["html", { open: "never" }]] : "list",
-    // A hang detector. The dearest test compiles three filters' shaders under
-    // software GL, which a laptop that is paging has taken over a minute to do.
+    // A hang detector: the dearest test compiles three filters' shaders, which
+    // under software GL can run to minutes.
     timeout: 180000,
     expect: { timeout: 10000 },
     use: {
         // Without this a click on a selector that matches nothing waits out
-        // the whole test timeout; a laptop that is paging has held an honest
-        // click for ten seconds.
+        // the whole test timeout.
         actionTimeout: 30000,
         baseURL: BaseUrl ?? PreviewUrl,
         viewport: { width: 1400, height: 900 },

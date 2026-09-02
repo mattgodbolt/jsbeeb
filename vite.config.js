@@ -15,8 +15,7 @@ export default defineConfig({
         testTimeout: 15000,
         // Every worker runs CPU-bound JavaScript (an emulated machine, or jsdom),
         // so a hyperthread sibling would only share its core: one worker per two
-        // threads. That is also fewer copies of the process on a laptop that is
-        // already paging.
+        // threads.
         maxWorkers: workersFor(2),
         projects: [
             { extends: true, test: { name: "unit", include: ["tests/unit/**/test-*.js"] } },
