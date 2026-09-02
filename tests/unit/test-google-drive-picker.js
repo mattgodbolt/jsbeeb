@@ -37,7 +37,7 @@ describe("GoogleDrivePicker", () => {
             const ssd = { savesChanges: true };
             loader.load.mockResolvedValue(ssd);
             const got = await make().load({ id: "abc", name: "mine.ssd" }, "auto");
-            expect(loader.load).toHaveBeenCalledWith(deps.processor.fdc, "abc", "auto");
+            expect(loader.load).toHaveBeenCalledWith("abc", "auto");
             expect(deps.modals.popupLoading).toHaveBeenCalledWith("Loading 'mine.ssd' from Google Drive");
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith();
             expect(got).toBe(ssd);
@@ -160,7 +160,7 @@ describe("GoogleDrivePicker", () => {
             document.querySelector("#google-drive .disc-name").value = "fresh.ssd";
             submit();
             await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalled());
-            const [, name, data] = loader.create.mock.calls[0];
+            const [name, data] = loader.create.mock.calls[0];
             expect(name).toBe("fresh.ssd");
             expect(data.length).toBeGreaterThan(0);
             expect(deps.media.setDisc1Image).toHaveBeenCalledWith("gd:xyz/fresh.ssd");
