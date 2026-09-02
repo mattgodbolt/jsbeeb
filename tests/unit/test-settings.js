@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Settings } from "../../src/web/settings.js";
 import { DefaultModel, findModel } from "../../src/models.js";
-import { fakeUrlState, teardownDom } from "./helpers.js";
+import { fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
 /** Stands in for the Config dialog: remembers what it was told and hands back the callbacks. */
 function fakeConfig(onChange, onClose, onRestartRequired) {
@@ -83,7 +83,7 @@ describe("Settings", () => {
             urlState.params.model = "PDP-11";
             const settings = make();
             expect(settings.model.name).toBe(DefaultModel.name);
-            expect(document.querySelector(".toast").textContent).toContain('no model called "PDP-11"');
+            expect(toasts()).toEqual([expect.stringContaining('no model called "PDP-11"')]);
         });
 
         it("tells the dialog everything it resolved", () => {

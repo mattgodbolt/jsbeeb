@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Scheduler } from "../../src/scheduler.js";
 import { AudioHandler } from "../../src/web/audio-handler.js";
-import { domFromIndexHtml, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, teardownDom, toasts } from "./helpers.js";
 
 const SuspendedText = "Your browser has suspended audio";
 
@@ -239,8 +239,7 @@ describe("AudioHandler", () => {
 
             makeHandler({ hasMusic5000: true });
 
-            await vi.waitFor(() => expect(document.querySelector(".toast .message")).not.toBeNull());
-            expect(document.querySelector(".toast .message").textContent).toContain("Music 5000 will be silent");
+            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Music 5000 will be silent")]));
             expect(warningShown()).toBe(false);
         });
     });
