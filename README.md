@@ -96,8 +96,8 @@ Some things to know:
   was at fault.
 - On the Atom, use the Atom's own key names (`LOCK`, `UP_DOWN`, `LEFT_RIGHT` and so on) rather than the BBC's.
 
-The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/utils.js`](src/utils.js), and `ATOM` in
-[`src/utils_atom.js`](src/utils_atom.js).
+The definitive lists are `keyCodes` (host) and `BBC` (BBC micro) in [`src/keymap.js`](src/keymap.js), and `ATOM` in
+[`src/keymap-atom.js`](src/keymap-atom.js).
 
 ### Emulator Shortcuts
 
