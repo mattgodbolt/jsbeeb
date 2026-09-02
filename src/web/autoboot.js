@@ -2,6 +2,7 @@ import * as utils from "../utils.js";
 import * as utils_atom from "../utils_atom.js";
 import * as tokeniser from "../basic-tokenise.js";
 import { basicIdleAddr, installBasic } from "../basic-loader.js";
+import { noteEvent } from "./analytics.js";
 
 /** Booting and typing for the machine at startup: shift-break, *TAPE incantations and BASIC programs. */
 export class Autoboot {
@@ -21,7 +22,7 @@ export class Autoboot {
         const BBC = utils.BBC;
 
         console.log("Autobooting disc");
-        utils.noteEvent("init", "autoboot", image);
+        noteEvent("init", "autoboot", image);
 
         // Shift-break simulation, hold SHIFT for 1000ms.
         this.sendKeys([BBC.SHIFT, 1000], false);
@@ -29,7 +30,7 @@ export class Autoboot {
 
     type(keys) {
         console.log("Auto typing '" + keys + "'");
-        utils.noteEvent("init", "autochain");
+        noteEvent("init", "autochain");
 
         const bbcKeys = this.stringToMachineKeys(keys);
         this.sendKeys([1000].concat(bbcKeys), false);
@@ -37,7 +38,7 @@ export class Autoboot {
 
     chainTape() {
         console.log("Auto Chaining Tape");
-        utils.noteEvent("init", "autochain");
+        noteEvent("init", "autochain");
 
         const bbcKeys = this.stringToMachineKeys('*TAPE\nCH.""\n');
         this.sendKeys([1000].concat(bbcKeys), false);
@@ -45,7 +46,7 @@ export class Autoboot {
 
     runTape() {
         console.log("Auto Running Tape");
-        utils.noteEvent("init", "autorun");
+        noteEvent("init", "autorun");
 
         const bbcKeys = this.stringToMachineKeys("*TAPE\n*/\n");
         this.sendKeys([1000].concat(bbcKeys), false);
@@ -53,7 +54,7 @@ export class Autoboot {
 
     runBasic() {
         console.log("Auto Running basic");
-        utils.noteEvent("init", "autorunbasic");
+        noteEvent("init", "autorunbasic");
 
         const bbcKeys = this.stringToMachineKeys("RUN\n");
         this.sendKeys([1000].concat(bbcKeys), false);

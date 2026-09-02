@@ -1,4 +1,4 @@
-import * as utils from "../utils.js";
+import { noteEvent } from "./analytics.js";
 
 // A timer, not requestAnimationFrame: a display presentation stall withholds
 // animation frames, and with them the sound chip's samples (issue #885).
@@ -222,7 +222,7 @@ export class EmulationLoop extends EventTarget {
                     );
             } catch (e) {
                 this.running = false;
-                utils.noteEvent("exception", "thrown", e.stack);
+                noteEvent("exception", "thrown", e.stack);
                 this.dbgr.debug(processor.pc);
                 throw e;
             }

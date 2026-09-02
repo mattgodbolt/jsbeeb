@@ -4,7 +4,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { fake6502 } from "../../src/fake6502.js";
 import { findModel } from "../../src/models.js";
-import * as utils from "../../src/utils.js";
+import * as loader from "../../src/loader.js";
 import * as archive from "../../src/archive.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,14 +21,14 @@ describe("AtomCpu6502 loadRom", () => {
     });
 
     it("prefixes local ROM names with roms/", async () => {
-        const loadData = vi.spyOn(utils, "loadData").mockResolvedValue(new Uint8Array(AtomRomSize));
+        const loadData = vi.spyOn(loader, "loadData").mockResolvedValue(new Uint8Array(AtomRomSize));
         const cpu = makeAtom();
         await cpu.loadRom("extra.rom", cpu.romOffset);
         expect(loadData).toHaveBeenCalledWith("roms/extra.rom");
     });
 
     it("loads http URLs without a roms/ prefix", async () => {
-        const loadData = vi.spyOn(utils, "loadData").mockResolvedValue(new Uint8Array(AtomRomSize));
+        const loadData = vi.spyOn(loader, "loadData").mockResolvedValue(new Uint8Array(AtomRomSize));
         const cpu = makeAtom();
         await cpu.loadRom("https://example.com/extra.rom", cpu.romOffset);
         expect(loadData).toHaveBeenCalledWith("https://example.com/extra.rom");
@@ -36,7 +36,7 @@ describe("AtomCpu6502 loadRom", () => {
 
     it("unzips zipped ROM images", async () => {
         const zipped = new Uint8Array(readFileSync(join(__dirname, "zip", "test-atom-rom.zip")));
-        const loadData = vi.spyOn(utils, "loadData").mockResolvedValue(zipped);
+        const loadData = vi.spyOn(loader, "loadData").mockResolvedValue(zipped);
         const unzip = vi.spyOn(archive, "unzipRomImage");
         const cpu = makeAtom();
         await expect(cpu.loadRom("extra.zip", cpu.romOffset)).resolves.toBeUndefined();
@@ -45,7 +45,7 @@ describe("AtomCpu6502 loadRom", () => {
     });
 
     it("rejects ROMs of the wrong size", async () => {
-        vi.spyOn(utils, "loadData").mockResolvedValue(new Uint8Array(24));
+        vi.spyOn(loader, "loadData").mockResolvedValue(new Uint8Array(24));
         const cpu = makeAtom();
         await expect(cpu.loadRom("extra.rom", cpu.romOffset)).rejects.toThrow("Broken ROM file");
     });

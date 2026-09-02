@@ -10,12 +10,12 @@ import {
     toSsdOrDsd,
 } from "./disc.js";
 import { loadHfe, sniffHfeLayout, toHfe } from "./disc-hfe.js";
-import * as utils from "./utils.js";
 import { stringToUint8Array, uint8ArrayToString } from "./binary.js";
+import { loadData } from "./loader.js";
 
 export function load(name) {
     console.log("Loading disc from " + name);
-    return utils.loadData(name);
+    return loadData(name);
 }
 
 /**

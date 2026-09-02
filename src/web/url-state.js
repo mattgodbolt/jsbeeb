@@ -1,5 +1,5 @@
 import { buildUrlFromParams, ParamTypes, parseQueryString } from "../url-params.js";
-import { debounce } from "../utils.js";
+import { debounce } from "../debounce.js";
 
 // A slider fires for every pixel of a drag, and each URL update is a history entry.
 const UrlSettleMs = 300;

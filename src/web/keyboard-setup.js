@@ -1,6 +1,7 @@
 import * as utils from "../utils.js";
 import { Keyboard } from "../keyboard.js";
 import { showNotice } from "./reporting.js";
+import { noteEvent } from "./analytics.js";
 
 const PasteBoxId = "paste-text";
 const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
@@ -29,12 +30,12 @@ export class KeyboardSetup {
         keyboard.addEventListener("resume", () => actions.resume());
         keyboard.addEventListener("break", (e) => {
             // F12/Break: Reset processor
-            if (e.detail) utils.noteEvent("keyboard", "press", "break");
+            if (e.detail) noteEvent("keyboard", "press", "break");
         });
 
         const onDown = (note, action) => (down) => {
             if (down) {
-                if (note) utils.noteEvent("keyboard", "press", note);
+                if (note) noteEvent("keyboard", "press", note);
                 action();
             }
         };

@@ -1,5 +1,5 @@
-import * as utils from "../utils.js";
 import { hd } from "../hex.js";
+import { debounce } from "../debounce.js";
 
 /**
  * The debugging surface the wiki documents, put on `target` (window in the
@@ -7,10 +7,10 @@ import { hd } from "../hex.js";
  * from the JS console in firefox.
  */
 export function exposeConsoleSurface(target, { loop, processor, video, audioHandler }) {
-    target.benchmarkCpu = utils.debounce((numCycles) => loop.benchmarkCpu(numCycles), 1);
-    target.profileCpu = utils.debounce((arg) => loop.profileCpu(arg), 1);
-    target.benchmarkVideo = utils.debounce((numCycles) => loop.benchmarkVideo(numCycles), 1);
-    target.profileVideo = utils.debounce((arg) => loop.profileVideo(arg), 1);
+    target.benchmarkCpu = debounce((numCycles) => loop.benchmarkCpu(numCycles), 1);
+    target.profileCpu = debounce((arg) => loop.profileCpu(arg), 1);
+    target.benchmarkVideo = debounce((numCycles) => loop.benchmarkVideo(numCycles), 1);
+    target.profileVideo = debounce((arg) => loop.profileVideo(arg), 1);
     target.go = () => loop.go();
     target.stop = (debug) => loop.stop(debug);
     target.soundChip = audioHandler.soundChip;

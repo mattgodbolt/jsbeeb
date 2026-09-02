@@ -1,8 +1,8 @@
-import * as utils from "../utils.js";
 import * as bootstrap from "bootstrap";
 import { BbcDiscArchive, Provenance, describe as describeHfe, matches, provenancesIn } from "../bbcdiscs.js";
 import { errorText } from "./reporting.js";
 import { clearArchiveList, showArchiveMessage } from "./archive-list.js";
+import { noteEvent } from "./analytics.js";
 
 const HfeProvenanceLabels = {
     [Provenance.Captured]: ["Captured", "Direct from disc"],
@@ -57,7 +57,7 @@ export class HfePicker {
     }
 
     async pick(file) {
-        utils.noteEvent("hfe", "click", file.path);
+        noteEvent("hfe", "click", file.path);
         const image = "hfe:" + file.path;
         this.media.setDisc1Image(image);
         const needsAutoboot = this.urlState.params.autoboot !== undefined;

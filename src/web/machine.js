@@ -3,9 +3,9 @@ import { Cmos, localStoragePersistence } from "../cmos.js";
 import { Econet } from "../econet.js";
 import { LoadSD } from "../mmc.js";
 import { tubeModelFor } from "../models.js";
-import * as utils from "../utils.js";
 import { toast } from "./toast.js";
 import { errorText, reportLoadFailure, showNotice } from "./reporting.js";
+import { loadData } from "../loader.js";
 
 /**
  * The machine's fittings as the CPU wants them handed over. Pure, so the bank
@@ -195,7 +195,7 @@ export class Machine {
             await startImageLoad(`BASIC program ${loadBasic}`, () =>
                 autoBoot.insertBasic(
                     (async () => {
-                        const data = await utils.loadData(loadBasic);
+                        const data = await loadData(loadBasic);
                         return String.fromCharCode.apply(null, data);
                     })(),
                     basicNeedsRun,

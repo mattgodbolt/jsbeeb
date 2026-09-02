@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import * as utils from "../src/utils.js";
 import * as utils_atom from "../src/utils_atom.js";
 import * as Tokeniser from "../src/basic-tokenise.js";
+import { setNodeBasePath } from "../src/loader.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,7 +29,7 @@ export class TestMachine {
     }
 
     async initialise() {
-        utils.setNodeBasePath(RepoRoot);
+        setNodeBasePath(RepoRoot);
         await this.processor.initialise();
         if (this.model.isAtom) this._startAtomVSync();
     }

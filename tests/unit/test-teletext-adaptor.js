@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { TeletextAdaptor } from "../../src/teletext_adaptor.js";
-import * as utils from "../../src/utils.js";
+import * as loader from "../../src/loader.js";
 
 describe("TeletextAdaptor", () => {
     // Constants
@@ -230,7 +230,7 @@ describe("TeletextAdaptor", () => {
 
         beforeEach(() => {
             pending.clear();
-            vi.spyOn(utils, "loadData").mockImplementation(
+            vi.spyOn(loader, "loadData").mockImplementation(
                 (url) => new Promise((resolve, reject) => pending.set(url, { resolve, reject })),
             );
             adaptor = new TeletextAdaptor(mockCpu);
@@ -335,7 +335,7 @@ describe("TeletextAdaptor", () => {
         let restored;
 
         beforeEach(() => {
-            loadData = vi.spyOn(utils, "loadData").mockImplementation(() => new Promise(() => {}));
+            loadData = vi.spyOn(loader, "loadData").mockImplementation(() => new Promise(() => {}));
             source = new TeletextAdaptor(mockCpu);
             restoredCpu = { interrupt: 0, resetLine: true };
             restored = new TeletextAdaptor(restoredCpu);

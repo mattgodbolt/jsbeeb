@@ -1,14 +1,4 @@
-import { stringToUint8Array } from "./binary.js";
-
-export function debounce(fn, wait) {
-    let timeout;
-    return function (...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn.apply(this, args), wait);
-    };
-}
-
-export const runningInNode = typeof window === "undefined";
+import { runningInNode } from "./loader.js";
 
 export function isFirefox() {
     // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
@@ -752,65 +742,3 @@ export function getKeyMap(keyLayout) {
 }
 
 export function noop() {}
-
-export function noteEvent(category, type, label) {
-    if (
-        !runningInNode &&
-        (window.location.host.endsWith(".godbolt.org") || window.location.host.endsWith(".xania.org"))
-    ) {
-        // Only note events on the public site
-        /*global gtag*/
-        gtag("event", category, { type, label });
-    }
-    console.log("event noted:", category, type, label);
-}
-
-function loadDataHttp(url) {
-    return new Promise(function (resolve, reject) {
-        const request = new XMLHttpRequest();
-        request.open("GET", url, true);
-        request.overrideMimeType("text/plain; charset=x-user-defined");
-        request.onload = function () {
-            if (request.status !== 200) {
-                reject(new Error("Unable to load " + url + ", http code " + request.status));
-                return;
-            }
-            if (typeof request.response !== "string") {
-                resolve(request.response);
-            } else {
-                resolve(stringToUint8Array(request.response));
-            }
-        };
-        request.onerror = function () {
-            reject(new Error("A network error occurred loading " + url));
-        };
-        request.send(null);
-    });
-}
-
-let _nodeBasePath = null;
-
-export function setNodeBasePath(basePath) {
-    _nodeBasePath = basePath;
-}
-
-async function loadDataNode(url) {
-    const fs = await import("fs");
-    const nodePath = await import("path");
-    if (_nodeBasePath) {
-        const publicPath = nodePath.join(_nodeBasePath, "public", url);
-        if (fs.existsSync(publicPath)) return fs.readFileSync(publicPath);
-        return fs.readFileSync(nodePath.join(_nodeBasePath, url));
-    }
-    if (url[0] === "/") url = "." + url;
-    if (fs.existsSync("public/" + url)) return fs.readFileSync("public/" + url);
-    return fs.readFileSync(url);
-}
-
-export function loadData(url) {
-    if (runningInNode) {
-        return loadDataNode(url);
-    } else {
-        return loadDataHttp(url);
-    }
-}
