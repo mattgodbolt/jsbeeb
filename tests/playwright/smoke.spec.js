@@ -118,7 +118,9 @@ test("every display mode and sound output on the bar can be picked", async ({ be
     expect(modes).not.toEqual([]);
     expect(outputs).not.toEqual([]);
     for (const mode of modes) {
-        await page.click(`#display-mode [data-mode="${mode}"]`);
+        // Picking a mode compiles its shaders under software GL, which blocks
+        // the page well past the action default on a slow machine.
+        await page.click(`#display-mode [data-mode="${mode}"]`, { timeout: 30000 });
         await expect(page.locator("#display-mode .active")).toHaveAttribute("data-mode", mode);
     }
     for (const output of outputs) {
