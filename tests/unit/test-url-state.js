@@ -46,6 +46,22 @@ describe("UrlState", () => {
         );
     });
 
+    it("lets a settling burst of changes finish before pushing one URL", () => {
+        vi.useFakeTimers();
+        try {
+            const state = new UrlState(location("?model=B"), history);
+            state.set({ speakerAmount: 0.5 }, { settle: true });
+            state.set({ speakerAmount: 0.3 }, { settle: true });
+            expect(state.params.speakerAmount).toBe(0.3);
+            expect(history.pushState).not.toHaveBeenCalled();
+            vi.runAllTimers();
+            expect(history.pushState).toHaveBeenCalledTimes(1);
+            expect(history.pushState).toHaveBeenCalledWith(null, null, expect.stringContaining("speakerAmount=0.3"));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it("deletes a parameter set to undefined", () => {
         const state = new UrlState(location("?model=B&disc=elite.ssd"), history);
         state.set({ disc: undefined });

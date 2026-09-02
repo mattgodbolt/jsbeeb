@@ -28,7 +28,7 @@ class FakeLoop extends EventTarget {
 describe("RunControls", () => {
     let loop;
     let dbgr;
-    let keys;
+    let keyboard;
     let controls;
 
     const playButton = () => document.getElementById("debug-play");
@@ -39,8 +39,8 @@ describe("RunControls", () => {
         loop = new FakeLoop();
         dbgr = { hide: vi.fn() };
         // In the app, resumeEmulation restarts the loop through the keyboard's resume event.
-        keys = { setRunning: vi.fn(), resumeEmulation: vi.fn(() => loop.go()) };
-        controls = new RunControls({ loop, dbgr, keys });
+        keyboard = { setRunning: vi.fn(), resumeEmulation: vi.fn(() => loop.go()) };
+        controls = new RunControls({ loop, dbgr, keyboard });
     });
 
     afterEach(teardownDom);
@@ -56,7 +56,7 @@ describe("RunControls", () => {
     it("play hides the debugger and resumes through the keyboard", () => {
         playButton().click();
         expect(dbgr.hide).toHaveBeenCalled();
-        expect(keys.resumeEmulation).toHaveBeenCalled();
+        expect(keyboard.resumeEmulation).toHaveBeenCalled();
         expect(loop.isRunning()).toBe(true);
     });
 
@@ -71,9 +71,9 @@ describe("RunControls", () => {
 
     it("tells the keyboard the running state", () => {
         loop.go();
-        expect(keys.setRunning).toHaveBeenLastCalledWith(true);
+        expect(keyboard.setRunning).toHaveBeenLastCalledWith(true);
         loop.stop();
-        expect(keys.setRunning).toHaveBeenLastCalledWith(false);
+        expect(keyboard.setRunning).toHaveBeenLastCalledWith(false);
     });
 
     it("pause and resume work without the buttons, for the desktop app's menu", () => {

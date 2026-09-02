@@ -59,7 +59,7 @@ describe("KeyboardSetup", () => {
             },
         };
         setup = new KeyboardSetup({ actions, accessibilitySwitches, processor, dbgr: {}, keyLayout: "physical" });
-        setup.setRunning(true);
+        setup.keyboard.setRunning(true);
     });
 
     afterEach(teardownDom);

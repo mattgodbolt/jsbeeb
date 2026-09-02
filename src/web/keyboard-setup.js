@@ -5,7 +5,10 @@ import { showNotice } from "./reporting.js";
 const PasteBoxId = "paste-text";
 const TypingTargets = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])';
 
-/** The page's keyboard: the emulated one and the browser shortcuts around it. */
+/**
+ * Builds the emulated keyboard and wires the browser's shortcuts around it,
+ * exposing it as `keyboard` for whoever needs the machine's keys.
+ */
 export class KeyboardSetup {
     /**
      * @param {object} opts
@@ -71,29 +74,5 @@ export class KeyboardSetup {
             const text = evt.clipboardData?.getData("text/plain");
             if (text) actions.paste(text);
         });
-    }
-
-    sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
-        this.keyboard.sendRawKeyboard(keysToSend, checkCapsAndShiftLocks);
-    }
-
-    clearKeys() {
-        this.keyboard.clearKeys();
-    }
-
-    setKeyLayout(keyLayout) {
-        this.keyboard.setKeyLayout(keyLayout);
-    }
-
-    resumeEmulation() {
-        this.keyboard.resumeEmulation();
-    }
-
-    setRunning(running) {
-        this.keyboard.setRunning(running);
-    }
-
-    postFrameShouldPause() {
-        return this.keyboard.postFrameShouldPause();
     }
 }
