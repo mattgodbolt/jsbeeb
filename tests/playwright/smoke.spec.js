@@ -106,6 +106,27 @@ test("a modal pauses the emulator and closing it resumes", async ({ beeb, page }
     await beeb.expectRunningPast(during);
 });
 
+test("a setting changed in the dialog applies at once, reaches the URL and survives a reload", async ({
+    beeb,
+    page,
+}) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#audio-output .active")).not.toHaveAttribute("data-output", "board");
+    await beeb.armModalShown("configuration");
+    await page.click('a[data-bs-target="#configuration"]');
+    await beeb.expectModalShown();
+    await page.click("#audioOutputDropdown");
+    await page.click('#configuration .audio-output-option[data-output="board"]');
+    await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
+    expect(new URL(page.url()).searchParams.get("audioOutput")).toBe("board");
+    await page.click("#configuration .btn-close");
+    // Back to a bare URL: only browser storage can carry the setting across.
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
+});
+
 test("every display mode and sound output on the bar can be picked", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");
