@@ -1151,5 +1151,5 @@ ENDPROC`);
         // T2=98 (&62)
         expectArray(testMachine, [100, 0, 100, 0, 99, 0, 99, 0, 99, 0, 99, 0, 98, 0, 98, 0]);
     });
-    // TODO(#1069) write more pb6 pulse tests, e.g. interrupt behaviour and underflow, and run on a real bbc.
+    // TODO(#1069) write more PB6 pulse tests, e.g. interrupt behaviour and underflow, and run on a real BBC.
 });
