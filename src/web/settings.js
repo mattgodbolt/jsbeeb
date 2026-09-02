@@ -76,8 +76,10 @@ export class Settings extends EventTarget {
     /** Adopts `changes` (an undefined value clears a setting), persists them and tells the subscribers. */
     set(changes) {
         for (const [name, value] of Object.entries(changes)) {
-            this[name] = name === "model" ? findModel(value) : value;
-            if (StoredSettings.includes(name)) window.localStorage[name] = value;
+            this[name] = name === "model" ? (findModel(value) ?? this.model) : value;
+            if (!StoredSettings.includes(name)) continue;
+            if (value === undefined) window.localStorage.removeItem(name);
+            else window.localStorage[name] = value;
         }
         this.urlState.set(changes, { settle: "speakerAmount" in changes });
         for (const name of Object.keys(changes)) this.dispatchEvent(new Event(name));

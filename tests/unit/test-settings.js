@@ -107,6 +107,20 @@ describe("Settings", () => {
             expect(urlState.params.model).toBe("Master");
         });
 
+        it("keeps the model it has when given a name it does not know", () => {
+            const settings = make();
+            settings.set({ model: "PDP-11" });
+            expect(settings.model).toBe(DefaultModel);
+        });
+
+        it("forgets a stored setting that is cleared", () => {
+            window.localStorage.keyLayout = "natural";
+            const settings = make();
+            settings.set({ keyLayout: undefined });
+            expect(window.localStorage.keyLayout).toBeUndefined();
+            expect(settings.keyLayout).toBeUndefined();
+        });
+
         it("clears a setting given undefined", () => {
             urlState.params.microphoneChannel = 2;
             const settings = make();
