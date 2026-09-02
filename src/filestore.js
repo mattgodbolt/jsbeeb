@@ -307,19 +307,17 @@ export class Filestore {
     reset() {
         console.log("Filestore: initialisation");
 
-        const filestoreRef = this;
-        utils.loadData("econet/L3FS.dat").then(function (data) {
-            filestoreRef.l3fs = data;
-            for (let i = 0; i < data.length; i++) {
-                filestoreRef.ram[0x400 + i] = data[i];
-            }
-            filestoreRef.PC = 0x400;
-            filestoreRef.SP = 0xff;
-            filestoreRef.A = 1;
+        const code = utils.loadData("econet/L3FS.dat").then((data) => {
+            this.l3fs = data;
+            this.ram.set(data, 0x400);
+            this.PC = 0x400;
+            this.SP = 0xff;
+            this.A = 1;
         });
-        utils.loadData("econet/scsi.dat").then(function (data) {
-            filestoreRef.scsi = data;
+        const disc = utils.loadData("econet/scsi.dat").then((data) => {
+            this.scsi = data;
         });
+        return Promise.all([code, disc]);
     }
 
     polltime(cycles) {
