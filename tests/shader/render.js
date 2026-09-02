@@ -286,12 +286,15 @@ window.results = results;
 }
 
 const ChromiumCandidates = ["chromium", "chromium-browser"];
+const RenderTimeoutMs = 120000;
 
 /** Look a command up on PATH, as a shell would, without spawning one. */
 function onPath(command) {
+    // Windows needs the extension supplying; everywhere else the name is whole.
+    const suffixes = process.platform === "win32" ? [".exe", ".cmd", ""] : [""];
     return (process.env.PATH ?? "")
         .split(path.delimiter)
-        .map((dir) => path.join(dir, command))
+        .flatMap((dir) => suffixes.map((suffix) => path.join(dir, command + suffix)))
         .find(existsSync);
 }
 
@@ -327,7 +330,8 @@ export async function renderJobs(filter, jobs) {
     const browser = await launchBrowser();
     try {
         const page = await browser.newPage();
-        await page.setContent(buildHarness(filter, jobs));
+        // The harness renders synchronously during load, so give it the render budget.
+        await page.setContent(buildHarness(filter, jobs), { timeout: RenderTimeoutMs });
         const { failure, raw } = await page.evaluate(() => ({ failure: window.failure, raw: window.results }));
         if (failure) throw new Error(`WebGL harness failed: ${failure}`);
         if (!raw) throw new Error("WebGL harness did not finish; no results in the page");
