@@ -12,10 +12,9 @@ const AdcChannelCount = 4;
  * routed to whichever of them wants it.
  */
 export class AnalogueInputs {
-    constructor({ processor, screenCanvas, getGamepads, urlState, config, audioHandler }) {
+    constructor({ processor, screenCanvas, getGamepads, settings, audioHandler }) {
         this.processor = processor;
-        this.urlState = urlState;
-        this.config = config;
+        this.settings = settings;
 
         this.gamepadSource = new GamepadSource(getGamepads);
         // Create MicrophoneInput but don't enable by default
@@ -38,7 +37,7 @@ export class AnalogueInputs {
             if (processor.touchScreen) processor.touchScreen.onMouse(x, y, evt.buttons);
 
             // Handle mouse joystick if enabled
-            if (urlState.params.mouseJoystickEnabled && this.mouseJoystickSource.isEnabled()) {
+            if (settings.mouseJoystickEnabled && this.mouseJoystickSource.isEnabled()) {
                 // Use the API methods instead of direct manipulation
                 this.mouseJoystickSource.onMouseMove(x, y);
 
@@ -89,8 +88,7 @@ export class AnalogueInputs {
     }
 
     clearMicrophoneChannel() {
-        this.config.setMicrophoneChannel(undefined);
-        this.urlState.set({ microphoneChannel: undefined });
+        this.settings.set({ microphoneChannel: undefined });
     }
 
     async ensureMicrophoneRunning() {
@@ -109,7 +107,7 @@ export class AnalogueInputs {
 
     async setupMicrophone() {
         // The channel can have been turned off between the request and now.
-        if (this.urlState.params.microphoneChannel === undefined) return;
+        if (this.settings.microphoneChannel === undefined) return;
         const micPermissionStatus = document.getElementById("micPermissionStatus");
         micPermissionStatus.textContent = "Requesting microphone access...";
 
