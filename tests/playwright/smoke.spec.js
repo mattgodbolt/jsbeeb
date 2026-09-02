@@ -124,7 +124,9 @@ test("every display mode and sound output on the bar can be picked", async ({ be
         // action would otherwise pay for it.
         const before = await beeb.cycles();
         await page.click(`#display-mode [data-mode="${mode}"]`, { timeout: ShaderCompileBudgetMs });
-        await expect(page.locator("#display-mode .active")).toHaveAttribute("data-mode", mode);
+        await expect(page.locator("#display-mode .active")).toHaveAttribute("data-mode", mode, {
+            timeout: ShaderCompileBudgetMs,
+        });
         await beeb.expectRunningPast(before, ShaderCompileBudgetMs);
     }
     for (const output of outputs) {
