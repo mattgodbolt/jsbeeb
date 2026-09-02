@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { exposeConsoleSurface } from "../../src/web/console-surface.js";
 import * as utils from "../../src/utils.js";
 
-// Mirrors the ConsoleSurface list in tests/browser/smoke.js.
+// Mirrors the ConsoleSurface list in tests/playwright/smoke.spec.js.
 const ExpectedNames = [
     "processor",
     "video",

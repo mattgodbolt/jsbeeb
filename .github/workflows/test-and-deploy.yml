@@ -57,13 +57,19 @@ jobs:
         run: |
           echo "# Shader tests" >> "$GITHUB_STEP_SUMMARY"
           npm run test:shader
-      - name: Smoke test
-        # An explicit shell makes Actions add -o pipefail, so the step fails on
-        # the smoke test's exit code rather than tee's.
-        shell: bash
+      - name: End-to-end tests
         run: |
-          echo "# Smoke test" >> "$GITHUB_STEP_SUMMARY"
-          npm run test:smoke | tee >(sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY")
+          echo "# End-to-end tests" >> "$GITHUB_STEP_SUMMARY"
+          npm run test:e2e
+      - name: Keep the Playwright report and traces of any failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
 
   cpu-test:
     runs-on: ubuntu-24.04

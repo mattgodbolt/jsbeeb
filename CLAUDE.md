@@ -14,9 +14,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run test:unit` - Run unit tests
 - `npm run test:integration` - Run integration tests
 - `npm run test:cpu` - Run CPU compatibility tests
-- `npm run test:smoke` - Build, then boot the built page in headless Chrome and check the things unit tests cannot
-  see (construction order, Bootstrap, the console surface, the ids the checks reach). Part of `npm test`, and needs Chrome like the
-  shader tests; `node tests/browser/smoke.js --url http://localhost:5173/` runs it against a server that is already up
+- `npm run test:e2e` - Build, then drive the built page in the system Chrome with Playwright and check the things
+  unit tests cannot see (main.js constructing everything against the built bundle, Bootstrap layout at real widths, a
+  real keystroke, WebGL and WebAudio). Part of `npm test`, and needs Chrome like the shader tests;
+  `BASE_URL=http://localhost:5173/ npx playwright test --project chrome` runs it against a server that is already up
 - `npm run ci-checks` - Run linting checks for CI
 - `vitest run tests/unit/test-gzip.js` - Run a single test file
 

@@ -19,6 +19,8 @@ export default defineConfig({
             "tests/integration/**/*.js",
             "tests/shader/test-*.js",
         ],
+        // Playwright's runner owns these; vitest's default globs would take the spec files.
+        exclude: [...configDefaults.exclude, "tests/playwright/**"],
         testTimeout: 15000,
         slowTestThreshold: 1000,
         coverage: {
