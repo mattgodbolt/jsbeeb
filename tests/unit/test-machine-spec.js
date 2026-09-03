@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { machineSpec } from "../../src/machine-spec.js";
+import { isMachineSpec, machineSpec } from "../../src/machine-spec.js";
 
 describe("machineSpec", () => {
     it("fills in everything a machine needs by default", () => {
@@ -20,8 +20,15 @@ describe("machineSpec", () => {
         expect(spec.extraRoms).toEqual(["a.rom"]);
     });
 
-    it("refuses a field it does not know", () => {
+    it("refuses a field it does not know, including one every object inherits", () => {
         expect(() => machineSpec({ keylayout: "natural" })).toThrow("Unknown machine spec fields: keylayout");
+        expect(() => machineSpec({ toString: () => "" })).toThrow("Unknown machine spec fields: toString");
+    });
+
+    it("can tell its own specs from look-alikes", () => {
+        expect(isMachineSpec(machineSpec())).toBe(true);
+        expect(isMachineSpec(Object.freeze({ keyLayout: "physical" }))).toBe(false);
+        expect(isMachineSpec(undefined)).toBe(false);
     });
 
     it("cannot be changed afterwards", () => {

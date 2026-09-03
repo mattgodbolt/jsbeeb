@@ -20,8 +20,14 @@ describe("buildMachine", () => {
         expect(cpu.hasTube).toBe(false);
     });
 
-    it("refuses a config that did not come from machineSpec", () => {
+    it("refuses a config that did not come from machineSpec, frozen or missing", () => {
         expect(() => build(TEST_6502, { keyLayout: "physical" })).toThrow("must come from machineSpec()");
+        expect(() => build(TEST_6502, Object.freeze({ keyLayout: "physical" }))).toThrow(
+            "must come from machineSpec()",
+        );
+        expect(() => buildMachine({ model: TEST_6502, spec: undefined, io: nullIo() })).toThrow(
+            "must come from machineSpec()",
+        );
     });
 
     it("changes the key layout for the keyboard and for the next reset alike", () => {
