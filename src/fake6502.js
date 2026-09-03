@@ -3,37 +3,24 @@
 import { FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
 import { TEST_6502, TEST_65C02, TEST_65C12, tubeModelFor } from "./models.js";
-import { FakeDdNoise } from "./ddnoise.js";
-import { FakeRelayNoise } from "./relaynoise.js";
-import { Cpu6502, AtomCpu6502 } from "./6502.js";
-import { Cmos } from "./cmos.js";
-import { FakeMusic5000 } from "./music5000.js";
+import { buildMachine, nullIo } from "./build-machine.js";
+import { machineSpec } from "./machine-spec.js";
 
 const fakeVideo = new FakeVideo();
 const soundChip = new FakeSoundChip();
-const dbgr = {
-    setCpu: () => {},
-};
 
-export function fake6502(model, opts) {
-    opts = opts || {};
+export function fake6502(model, opts = {}) {
     model = model || TEST_6502;
-    const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
-    return new CpuClass(model, {
-        dbgr,
-        video: opts.video || fakeVideo,
-        soundChip: opts.soundChip || soundChip,
-        ddNoise: new FakeDdNoise(),
-        relayNoise: new FakeRelayNoise(),
-        music5000: new FakeMusic5000(),
-        cmos: new Cmos(),
-        cycleAccurate: opts.cycleAccurate,
-        config: {
+    return buildMachine({
+        model,
+        spec: machineSpec({
             tube: opts.tube ? tubeModelFor(model) : null,
             tubeCpuMultiplier: opts.tubeCpuMultiplier,
             cpuMultiplier: opts.cpuMultiplier,
             hasTeletextAdaptor: opts.hasTeletextAdaptor,
-        },
+        }),
+        io: nullIo({ video: opts.video ?? fakeVideo, soundChip: opts.soundChip ?? soundChip }),
+        cycleAccurate: opts.cycleAccurate,
     });
 }
 
