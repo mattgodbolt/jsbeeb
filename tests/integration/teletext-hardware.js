@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import path from "node:path";
 import { Pages, RefDir, renderPage } from "../hardware/teletext/render-page.js";
-import { expectPngToMatch } from "./helpers.js";
+import { expectPngToMatch } from "./png.js";
 
 // The T1 to T6 and T8 reference images were checked against a real BBC Master 128
 // running MOS 3.20 and agreed with it on every page, so they pin behaviour we have

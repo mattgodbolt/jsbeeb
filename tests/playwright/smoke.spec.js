@@ -128,6 +128,32 @@ test("a setting changed in the dialog applies at once, reaches the URL and survi
     await expect(page.locator("#audio-output .active")).toHaveAttribute("data-output", "board");
 });
 
+test("a setting that needs a restart asks first, and Later keeps it for next time", async ({ beeb, page }) => {
+    await beeb.open();
+    await beeb.expectScreenText(">");
+    await beeb.armModalShown("configuration");
+    await page.click('a[data-bs-target="#configuration"]');
+    await beeb.expectModalShown();
+    await page.click("#bbc-model-dropdown");
+    await page.click('#configuration .model-menu a[data-target="Master"]');
+    await expect(page.locator("#restart-pending")).toBeVisible();
+    // The prompt is raised from inside the settings dialog's own hide.
+    await beeb.armModalShown("are-you-sure");
+    await page.click("#configuration .btn-close");
+    await beeb.expectModalShown();
+    await expect(page.locator("#are-you-sure .context")).toContainText("Restart now?");
+    const held = await beeb.expectHeld();
+    await page.click("#are-you-sure .ays-no");
+    await expect(page.locator("#are-you-sure")).toBeHidden();
+    await expect(page.locator("#configuration")).toBeHidden();
+    await beeb.expectRunningPast(held);
+    expect(new URL(page.url()).searchParams.get("model")).toBe("Master");
+    await beeb.armModalShown("configuration");
+    await page.click('a[data-bs-target="#configuration"]');
+    await beeb.expectModalShown();
+    await expect(page.locator("#restart-pending")).toBeVisible();
+});
+
 test("every display mode and sound output on the bar can be picked", async ({ beeb, page }) => {
     await beeb.open();
     await beeb.expectScreenText(">");

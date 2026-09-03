@@ -155,4 +155,16 @@ describe("HfePicker", () => {
             expect(picker.archive.fetch).toHaveBeenCalledWith("Games/ELITE.hfe");
         });
     });
+
+    describe("the dialog", () => {
+        it("fills the catalogue as it opens and focuses the filter once shown", () => {
+            const picker = make();
+            const populate = vi.spyOn(picker.archive, "populate").mockResolvedValue();
+            const hfe = document.getElementById("hfe");
+            hfe.dispatchEvent(new Event("show.bs.modal", { bubbles: true }));
+            expect(populate).toHaveBeenCalledTimes(1);
+            hfe.dispatchEvent(new Event("shown.bs.modal", { bubbles: true }));
+            expect(document.activeElement).toBe(document.getElementById("hfe-filter"));
+        });
+    });
 });

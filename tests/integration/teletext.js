@@ -3,7 +3,8 @@ import path from "node:path";
 import sharp from "sharp";
 import { TestMachine } from "../test-machine.js";
 import { Video } from "../../src/video.js";
-import { RepoRoot, expectPngToMatch } from "./helpers.js";
+import { RepoRoot } from "./helpers.js";
+import { expectPngToMatch } from "./png.js";
 
 class CapturingVideo extends Video {
     constructor() {
