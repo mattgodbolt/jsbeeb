@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.23.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.23.0...v1.23.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* ship the Econet filestore's code and disc with the build ([#1055](https://github.com/mattgodbolt/jsbeeb/issues/1055)) ([1885230](https://github.com/mattgodbolt/jsbeeb/commit/188523088212d907f9367599bd414f61cb97a27b))
+* stop the fast-forward and frameSkip frame skips multiplying ([#1038](https://github.com/mattgodbolt/jsbeeb/issues/1038)) ([499731e](https://github.com/mattgodbolt/jsbeeb/commit/499731e676800a69263796c97b858817d9e845c4))
+
+
+### Performance Improvements
+
+* build the BASIC tokeniser's Master CPU once and share it ([#1040](https://github.com/mattgodbolt/jsbeeb/issues/1040)) ([946a6cf](https://github.com/mattgodbolt/jsbeeb/commit/946a6cf39307e05d26505d3a8873004b4b602a16))
+
 ## [1.23.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.4...v1.23.0) (2026-09-01)
 
 
