@@ -1,8 +1,8 @@
 import { expect, describe, test, beforeEach, vi } from "vitest";
 import { Keyboard } from "../../src/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
-import * as utils from "../../src/utils.js";
-import { ATOM, stringToATOMKeys } from "../../src/utils_atom.js";
+import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
+import { BBC, keyCodes } from "../../src/keymap.js";
 
 describe("Keyboard", () => {
     let keyboard;
@@ -68,63 +68,63 @@ describe("Keyboard", () => {
 
     test("keyCode should handle location properly", () => {
         // Test SHIFT key
-        const shiftEvent = { which: utils.keyCodes.SHIFT, location: 1 };
-        expect(keyboard.keyCode(shiftEvent)).toBe(utils.keyCodes.SHIFT_LEFT);
+        const shiftEvent = { which: keyCodes.SHIFT, location: 1 };
+        expect(keyboard.keyCode(shiftEvent)).toBe(keyCodes.SHIFT_LEFT);
 
-        const shiftEvent2 = { which: utils.keyCodes.SHIFT, location: 2 };
-        expect(keyboard.keyCode(shiftEvent2)).toBe(utils.keyCodes.SHIFT_RIGHT);
+        const shiftEvent2 = { which: keyCodes.SHIFT, location: 2 };
+        expect(keyboard.keyCode(shiftEvent2)).toBe(keyCodes.SHIFT_RIGHT);
 
         // Test CTRL key
-        const ctrlEvent = { which: utils.keyCodes.CTRL, location: 1 };
-        expect(keyboard.keyCode(ctrlEvent)).toBe(utils.keyCodes.CTRL_LEFT);
+        const ctrlEvent = { which: keyCodes.CTRL, location: 1 };
+        expect(keyboard.keyCode(ctrlEvent)).toBe(keyCodes.CTRL_LEFT);
 
-        const ctrlEvent2 = { which: utils.keyCodes.CTRL, location: 2 };
-        expect(keyboard.keyCode(ctrlEvent2)).toBe(utils.keyCodes.CTRL_RIGHT);
+        const ctrlEvent2 = { which: keyCodes.CTRL, location: 2 };
+        expect(keyboard.keyCode(ctrlEvent2)).toBe(keyCodes.CTRL_RIGHT);
 
         // Test ALT key
-        const altEvent = { which: utils.keyCodes.ALT, location: 1 };
-        expect(keyboard.keyCode(altEvent)).toBe(utils.keyCodes.ALT_LEFT);
+        const altEvent = { which: keyCodes.ALT, location: 1 };
+        expect(keyboard.keyCode(altEvent)).toBe(keyCodes.ALT_LEFT);
 
-        const altEvent2 = { which: utils.keyCodes.ALT, location: 2 };
-        expect(keyboard.keyCode(altEvent2)).toBe(utils.keyCodes.ALT_RIGHT);
+        const altEvent2 = { which: keyCodes.ALT, location: 2 };
+        expect(keyboard.keyCode(altEvent2)).toBe(keyCodes.ALT_RIGHT);
 
         // Test numpad
-        const enterEvent = { which: utils.keyCodes.ENTER, location: 3 };
-        expect(keyboard.keyCode(enterEvent)).toBe(utils.keyCodes.NUMPADENTER);
+        const enterEvent = { which: keyCodes.ENTER, location: 3 };
+        expect(keyboard.keyCode(enterEvent)).toBe(keyCodes.NUMPADENTER);
 
-        const deleteEvent = { which: utils.keyCodes.DELETE, location: 3 };
-        expect(keyboard.keyCode(deleteEvent)).toBe(utils.keyCodes.NUMPAD_DECIMAL_POINT);
+        const deleteEvent = { which: keyCodes.DELETE, location: 3 };
+        expect(keyboard.keyCode(deleteEvent)).toBe(keyCodes.NUMPAD_DECIMAL_POINT);
 
         // Test normal key
-        const normalEvent = { which: utils.keyCodes.A, location: 0 };
-        expect(keyboard.keyCode(normalEvent)).toBe(utils.keyCodes.A);
+        const normalEvent = { which: keyCodes.A, location: 0 };
+        expect(keyboard.keyCode(normalEvent)).toBe(keyCodes.A);
     });
 
     test("keyCode should remember last modifier key locations", () => {
         // First, set modifier locations to known values
-        keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 1 });
-        keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 1 });
-        keyboard.keyCode({ which: utils.keyCodes.ALT, location: 1 });
+        keyboard.keyCode({ which: keyCodes.SHIFT, location: 1 });
+        keyboard.keyCode({ which: keyCodes.CTRL, location: 1 });
+        keyboard.keyCode({ which: keyCodes.ALT, location: 1 });
 
         // When location = 0 (like in keyUp events), should return based on last location
-        expect(keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 0 })).toBe(utils.keyCodes.SHIFT_LEFT);
-        expect(keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 0 })).toBe(utils.keyCodes.CTRL_LEFT);
-        expect(keyboard.keyCode({ which: utils.keyCodes.ALT, location: 0 })).toBe(utils.keyCodes.ALT_LEFT);
+        expect(keyboard.keyCode({ which: keyCodes.SHIFT, location: 0 })).toBe(keyCodes.SHIFT_LEFT);
+        expect(keyboard.keyCode({ which: keyCodes.CTRL, location: 0 })).toBe(keyCodes.CTRL_LEFT);
+        expect(keyboard.keyCode({ which: keyCodes.ALT, location: 0 })).toBe(keyCodes.ALT_LEFT);
 
         // Change the locations to right side
-        keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 2 });
-        keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 2 });
-        keyboard.keyCode({ which: utils.keyCodes.ALT, location: 2 });
+        keyboard.keyCode({ which: keyCodes.SHIFT, location: 2 });
+        keyboard.keyCode({ which: keyCodes.CTRL, location: 2 });
+        keyboard.keyCode({ which: keyCodes.ALT, location: 2 });
 
         // Should now use the updated locations
-        expect(keyboard.keyCode({ which: utils.keyCodes.SHIFT, location: 0 })).toBe(utils.keyCodes.SHIFT_RIGHT);
-        expect(keyboard.keyCode({ which: utils.keyCodes.CTRL, location: 0 })).toBe(utils.keyCodes.CTRL_RIGHT);
-        expect(keyboard.keyCode({ which: utils.keyCodes.ALT, location: 0 })).toBe(utils.keyCodes.ALT_RIGHT);
+        expect(keyboard.keyCode({ which: keyCodes.SHIFT, location: 0 })).toBe(keyCodes.SHIFT_RIGHT);
+        expect(keyboard.keyCode({ which: keyCodes.CTRL, location: 0 })).toBe(keyCodes.CTRL_RIGHT);
+        expect(keyboard.keyCode({ which: keyCodes.ALT, location: 0 })).toBe(keyCodes.ALT_RIGHT);
     });
 
     test("keyDown should handle normal key press", () => {
         const event = {
-            which: utils.keyCodes.A,
+            which: keyCodes.A,
             location: 0,
             preventDefault: vi.fn(),
             ctrlKey: false,
@@ -135,13 +135,13 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(utils.keyCodes.A, false);
+        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
         expect(event.preventDefault).toHaveBeenCalled();
     });
 
     test("keyDown should not handle keys when not running", () => {
         const event = {
-            which: utils.keyCodes.A,
+            which: keyCodes.A,
             location: 0,
             preventDefault: vi.fn(),
             ctrlKey: false,
@@ -157,7 +157,7 @@ describe("Keyboard", () => {
 
     test("keyDown should not handle keys when input is enabled", () => {
         const event = {
-            which: utils.keyCodes.A,
+            which: keyCodes.A,
             location: 0,
             preventDefault: vi.fn(),
             ctrlKey: false,
@@ -177,7 +177,7 @@ describe("Keyboard", () => {
 
     test("keyDown should handle F12/BREAK and emit break event", async () => {
         const event = {
-            which: utils.keyCodes.F12,
+            which: keyCodes.F12,
             location: 0,
             preventDefault: vi.fn(),
             ctrlKey: false,
@@ -198,7 +198,7 @@ describe("Keyboard", () => {
 
     test("keyUp should call sysvia.keyUp", () => {
         const event = {
-            which: utils.keyCodes.A,
+            which: keyCodes.A,
             location: 0,
             preventDefault: vi.fn(),
             altKey: false,
@@ -207,13 +207,13 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
         keyboard.keyUp(event);
 
-        expect(mockSysvia.keyUp).toHaveBeenCalledWith(utils.keyCodes.A);
+        expect(mockSysvia.keyUp).toHaveBeenCalledWith(keyCodes.A);
         expect(event.preventDefault).toHaveBeenCalled();
     });
 
     test("keyUp should not proceed when input is enabled", () => {
         const event = {
-            which: utils.keyCodes.A,
+            which: keyCodes.A,
             location: 0,
             preventDefault: vi.fn(),
             altKey: false,
@@ -232,7 +232,7 @@ describe("Keyboard", () => {
 
     test("keyUp should handle F12/BREAK and emit break event", async () => {
         const event = {
-            which: utils.keyCodes.F12,
+            which: keyCodes.F12,
             location: 0,
             preventDefault: vi.fn(),
             altKey: false,
@@ -320,10 +320,10 @@ describe("Keyboard", () => {
 
     test("registerKeyHandler should add a handler for a key with Alt modifier", () => {
         const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(utils.keyCodes.Q, mockHandler, { alt: true, ctrl: false });
+        keyboard.registerKeyHandler(keyCodes.Q, mockHandler, { alt: true, ctrl: false });
 
         const event = {
-            which: utils.keyCodes.Q,
+            which: keyCodes.Q,
             location: 0,
             preventDefault: vi.fn(),
             ctrlKey: false,
@@ -334,18 +334,18 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
-        expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.Q);
+        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.Q);
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
     test("registered handler suppresses sysvia.keyDown for that key", () => {
         // When a handler claims a key, the BBC Micro should NOT also receive it.
         const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(utils.keyCodes.K1, mockHandler, { alt: true, ctrl: false });
+        keyboard.registerKeyHandler(keyCodes.K1, mockHandler, { alt: true, ctrl: false });
 
         keyboard.setRunning(true);
         keyboard.keyDown({
-            which: utils.keyCodes.K1,
+            which: keyCodes.K1,
             location: 0,
             preventDefault: vi.fn(),
             altKey: true,
@@ -353,14 +353,14 @@ describe("Keyboard", () => {
             shiftKey: false,
         });
 
-        expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.K1);
+        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.K1);
         expect(mockSysvia.keyDown).not.toHaveBeenCalled();
     });
 
     test("unhandled keys still reach sysvia.keyDown", () => {
         keyboard.setRunning(true);
         keyboard.keyDown({
-            which: utils.keyCodes.A,
+            which: keyCodes.A,
             location: 0,
             preventDefault: vi.fn(),
             altKey: false,
@@ -368,15 +368,15 @@ describe("Keyboard", () => {
             shiftKey: false,
         });
 
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(utils.keyCodes.A, false);
+        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.A, false);
     });
 
     test("registerKeyHandler should add a handler for a key with Ctrl modifier", () => {
         const mockHandler = vi.fn();
-        keyboard.registerKeyHandler(utils.keyCodes.E, mockHandler, { alt: false, ctrl: true });
+        keyboard.registerKeyHandler(keyCodes.E, mockHandler, { alt: false, ctrl: true });
 
         const event = {
-            which: utils.keyCodes.E,
+            which: keyCodes.E,
             location: 0,
             preventDefault: vi.fn(),
             ctrlKey: true,
@@ -387,22 +387,22 @@ describe("Keyboard", () => {
         keyboard.setRunning(true);
         keyboard.keyDown(event);
 
-        expect(mockHandler).toHaveBeenCalledWith(true, utils.keyCodes.E);
+        expect(mockHandler).toHaveBeenCalledWith(true, keyCodes.E);
     });
 
     test("sendRawKeyboard should disable keyboard and schedule paste task", () => {
-        keyboard.sendRawKeyboard([utils.BBC.A], false);
+        keyboard.sendRawKeyboard([BBC.A], false);
 
         expect(mockSysvia.disableKeyboard).toHaveBeenCalled();
         expect(keyboard.isPasting).toBe(true);
     });
 
     test("sendRawKeyboard should deliver keys via scheduler and re-enable keyboard", () => {
-        keyboard.sendRawKeyboard([utils.BBC.A], false);
+        keyboard.sendRawKeyboard([BBC.A], false);
 
         // First scheduler fire: presses the key
         mockProcessor.scheduler.polltime(1);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.A);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
         expect(keyboard.isPasting).toBe(true);
 
         // Second scheduler fire after delay: releases key, sees empty queue, re-enables keyboard
@@ -413,7 +413,7 @@ describe("Keyboard", () => {
     });
 
     test("cancelPaste should stop paste and re-enable keyboard", () => {
-        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
+        keyboard.sendRawKeyboard([BBC.A, BBC.B, BBC.C], false);
         mockProcessor.scheduler.polltime(1); // deliver first key
 
         keyboard.cancelPaste();
@@ -423,11 +423,11 @@ describe("Keyboard", () => {
     });
 
     test("Escape should cancel paste during keyDown", () => {
-        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.B], false);
+        keyboard.sendRawKeyboard([BBC.A, BBC.B], false);
         keyboard.setRunning(true);
 
         const escEvent = {
-            which: utils.keyCodes.ESCAPE,
+            which: keyCodes.ESCAPE,
             location: 0,
             preventDefault: vi.fn(),
             altKey: false,
@@ -441,7 +441,7 @@ describe("Keyboard", () => {
     });
 
     test("sendRawKeyboard should handle numeric delay entries", () => {
-        keyboard.sendRawKeyboard([1000, utils.BBC.A], false);
+        keyboard.sendRawKeyboard([1000, BBC.A], false);
         const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
 
         // First fire: numeric delay consumed, no key toggled yet
@@ -451,11 +451,11 @@ describe("Keyboard", () => {
 
         // After 1000ms delay: key A delivered
         mockProcessor.scheduler.polltime(1000 * clocksPerMs);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.A);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
     });
 
     test("sendRawKeyboard should debounce consecutive identical keys", () => {
-        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.A], false);
+        keyboard.sendRawKeyboard([BBC.A, BBC.A], false);
         const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
 
         // First fire: press A
@@ -474,18 +474,18 @@ describe("Keyboard", () => {
     });
 
     test("sendRawKeyboard while already pasting should cancel previous paste", () => {
-        keyboard.sendRawKeyboard([utils.BBC.A, utils.BBC.B, utils.BBC.C], false);
+        keyboard.sendRawKeyboard([BBC.A, BBC.B, BBC.C], false);
         mockProcessor.scheduler.polltime(1); // deliver first key
 
         // Start a new paste mid-stream
-        keyboard.sendRawKeyboard([utils.BBC.X], false);
+        keyboard.sendRawKeyboard([BBC.X], false);
 
         // Old paste should be cancelled, new one in progress
         expect(keyboard.isPasting).toBe(true);
 
         // Deliver new paste
         mockProcessor.scheduler.polltime(1);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(utils.BBC.X);
+        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.X);
     });
 
     test("postFrameShouldPause should handle single step", () => {
@@ -536,7 +536,7 @@ describe("Keyboard", () => {
         keyboard.handleMacCapsLock();
         keyboard.handleMacCapsLock();
 
-        expect(mockSysvia.keyDown).toHaveBeenCalledWith(utils.keyCodes.CAPSLOCK);
+        expect(mockSysvia.keyDown).toHaveBeenCalledWith(keyCodes.CAPSLOCK);
         expect(notices).toHaveLength(1);
         expect(notices[0].message).toContain("caps lock");
         expect(notices[0].quietKey).toBe("warnedAboutRubbishMacs");
@@ -601,11 +601,11 @@ describe("Keyboard Atom adapter", () => {
         // so the paste logic should not prepend/append any lock keys.
         mockAtomPPIA.capsLockLight = true;
         mockAtomPPIA.shiftLockLight = false;
-        const keys = [utils.BBC.A];
+        const keys = [BBC.A];
         keyboard.sendRawKeyboard(keys, true);
         expect(mockAtomPPIA.disableKeyboard).toHaveBeenCalled();
         // The keys array should not have been modified with lock toggles
-        expect(keys).toEqual([utils.BBC.A]);
+        expect(keys).toEqual([BBC.A]);
     });
 
     test("setKeyLayout should call PPIA setKeyLayout", () => {

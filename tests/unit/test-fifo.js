@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-
-import { Fifo } from "../../src/utils.js";
+import { Fifo } from "../../src/binary.js";
 
 describe("FIFO tests", function () {
     it("creates ok", function () {

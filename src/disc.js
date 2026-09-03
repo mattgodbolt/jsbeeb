@@ -1,7 +1,8 @@
 // Translated from beebjit by Chris Evans.
 // https://github.com/scarybeasts/beebjit
 
-import { hexbyte, crc32 } from "./utils.js";
+import { crc32 } from "./archive.js";
+import { hexbyte } from "./hex.js";
 class TrackBuilder {
     /**
      * @param {Track} track

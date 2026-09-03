@@ -1,8 +1,10 @@
 import { Teletext } from "./teletext.js";
-import * as utils from "./utils.js";
 import { BbcDefaultPalette as NulaDefaultPalette } from "./bbc-palette.js";
 import { Video6847 } from "./6847.js";
 import { encodeLineGrid, texelsPerPixel, LineGridRows } from "./video-filters/pixel-grid.js";
+import { makeFast32 } from "./binary.js";
+
+const noop = () => {};
 
 export const VDISPENABLE = 1 << 0;
 export const HDISPENABLE = 1 << 1;
@@ -337,8 +339,8 @@ function table4bppOffset(ulamode, byte) {
 export class Video {
     constructor(isMaster, fb32_param, paint_ext_param, { isAtom = false } = {}) {
         this.isMaster = isMaster;
-        this.fb32 = utils.makeFast32(fb32_param);
-        this.collook = utils.makeFast32(
+        this.fb32 = makeFast32(fb32_param);
+        this.collook = makeFast32(
             new Uint32Array([
                 0xff000000, 0xff0000ff, 0xff00ff00, 0xff00ffff, 0xffff0000, 0xffff00ff, 0xffffff00, 0xffffffff,
             ]),
@@ -387,7 +389,7 @@ export class Video {
         this.ulaMode = 0;
         this.teletextMode = false;
         this.displayEnableSkew = 0;
-        this.ulaPal = utils.makeFast32(new Uint32Array(16));
+        this.ulaPal = makeFast32(new Uint32Array(16));
         this.actualPal = new Uint8Array(16);
         this.teletext = new Teletext();
         this.cursorOn = false;
@@ -1227,14 +1229,14 @@ export class FakeVideo {
             read: function () {
                 return 0xff;
             },
-            write: utils.noop,
+            write: noop,
         };
         this.ula = {
             read: function () {
                 return 0xff;
             },
-            write: utils.noop,
-            reset: utils.noop,
+            write: noop,
+            reset: noop,
             disabled: false,
         };
         this.regs = new Uint8Array(32);

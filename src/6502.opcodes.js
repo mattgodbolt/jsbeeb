@@ -1,8 +1,5 @@
-import * as utils from "./utils.js";
-
-const hexword = utils.hexword;
-const hexbyte = utils.hexbyte;
-const signExtend = utils.signExtend;
+import { signExtend } from "./binary.js";
+import { hexbyte, hexword } from "./hex.js";
 
 function rotate(left, logical) {
     const lines = [];
@@ -1071,13 +1068,13 @@ class Disassemble6502 {
             case "()": {
                 const zp = this.cpu.peekmem(addr + 1);
                 const destAddr = this.cpu.peekmem(zp) | (this.cpu.peekmem(zp + 1) << 8);
-                return [`${split[0]} ($${hexbyte(zp)})${suffix} ; $${utils.hexword(destAddr)}${suffix2}`, addr + 2];
+                return [`${split[0]} ($${hexbyte(zp)})${suffix} ; $${hexword(destAddr)}${suffix2}`, addr + 2];
             }
             case "(abs)": {
                 const destAddr = this.cpu.peekmem(addr + 1) | (this.cpu.peekmem(addr + 2) << 8);
                 const indDest = this.cpu.peekmem(destAddr) | (this.cpu.peekmem(destAddr + 1) << 8);
                 return [
-                    `${split[0]} ($${formatJumpAddr(destAddr)})${suffix} ; $${utils.hexword(indDest)}${suffix2}`,
+                    `${split[0]} ($${formatJumpAddr(destAddr)})${suffix} ; $${hexword(indDest)}${suffix2}`,
                     addr + 3,
                     indDest,
                 ];
@@ -1389,12 +1386,10 @@ function makeCpuFunctions(cpu, opcodes, undocumented, is65c12, cycleAccurate = t
             indent +
             [
                 '"use strict";',
-                `// ${utils.hexbyte(opcodeNum)} - ${opcode}
+                `// ${hexbyte(opcodeNum)} - ${opcode}
 `,
             ].concat(
-                opcode
-                    ? getInstruction(opcode, !!needsReg)
-                    : [`this.invalidOpcode(cpu, 0x${utils.hexbyte(opcodeNum)});`],
+                opcode ? getInstruction(opcode, !!needsReg) : [`this.invalidOpcode(cpu, 0x${hexbyte(opcodeNum)});`],
             ).join(`
 ${indent}`)
         );
@@ -1407,7 +1402,7 @@ ${indent}`)
         const funcs = [];
         for (let opcodeNum = 0; opcodeNum < 256; ++opcodeNum) {
             const opcodeFunc = new Function("cpu", getIndentedSource("  ", opcodeNum, true));
-            let funcName = `exec_${utils.hexbyte(opcodeNum)}_`;
+            let funcName = `exec_${hexbyte(opcodeNum)}_`;
             if (opcodes[opcodeNum]) {
                 const instrName = opcodes[opcodeNum]
                     .replace("()", "ind")

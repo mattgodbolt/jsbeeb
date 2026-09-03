@@ -1,6 +1,6 @@
-import * as utils from "./utils.js";
 import * as models from "./models.js";
 import { fake6502 } from "./fake6502.js";
+import { hexword } from "./hex.js";
 
 async function makeTokeniser() {
     const cpu = fake6502(models.basicOnly);
@@ -67,9 +67,7 @@ async function makeTokeniser() {
             result += String.fromCharCode(cpu.readmem(i));
         }
         if (safety === 0) {
-            throw new Error(
-                "Unable to tokenize '" + line + "' - got as far as '" + result + "' pc=" + utils.hexword(cpu.pc),
-            );
+            throw new Error("Unable to tokenize '" + line + "' - got as far as '" + result + "' pc=" + hexword(cpu.pc));
         }
         return result;
     };

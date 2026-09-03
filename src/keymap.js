@@ -1,191 +1,9 @@
-// Minimal ZIP extractor. Supports methods 0 (stored) and 8 (deflate); other
-// methods (bzip2, lzma, etc.) will throw an error with the method number.
-
-import { inflate as pakoInflate, inflateRaw as pakoInflateRaw, ungzip as pakoUngzip } from "pako";
-
-const ZipLocalHeaderSig = 0x04034b50;
-const ZipCentralDirSig = 0x02014b50;
-const ZipEocdSig = 0x06054b50;
-const ZipMethodStored = 0;
-const ZipMethodDeflate = 8;
-
-function readU16(buf, off) {
-    return buf[off] | (buf[off + 1] << 8);
-}
-
-function readU32(buf, off) {
-    return (buf[off] | (buf[off + 1] << 8) | (buf[off + 2] << 16) | (buf[off + 3] << 24)) >>> 0;
-}
-
-function isValidEocd(buf, off) {
-    const commentLen = readU16(buf, off + 20);
-    if (off + 22 + commentLen !== buf.length) return false;
-    const cdOff = readU32(buf, off + 16);
-    const cdSize = readU32(buf, off + 12);
-    return cdOff <= off && cdSize <= off - cdOff;
-}
-
-// Find the End of Central Directory record by scanning backwards.
-// EOCD is in the last 65557 bytes (22-byte fixed record + up to 65535-byte comment).
-function findEocd(buf) {
-    const searchStart = Math.max(0, buf.length - 65557);
-    for (let i = buf.length - 22; i >= searchStart; i--) {
-        if (readU32(buf, i) === ZipEocdSig && isValidEocd(buf, i)) return i;
-    }
-    throw new Error("Not a ZIP file: EOCD not found");
-}
-
-function inflateWith(inflater, data, context) {
-    if (!(data instanceof Uint8Array)) data = new Uint8Array(data);
-    try {
-        return inflater(data);
-    } catch (cause) {
-        throw new Error(`${context}: ${cause.message || cause}`, { cause });
-    }
-}
-
-export function inflate(data) {
-    return inflateWith(pakoInflate, data, "Unable to inflate");
-}
-
-// Extract all files from a ZIP archive.  Returns {filename: Uint8Array}.
-export async function unzip(buf) {
-    if (!(buf instanceof Uint8Array)) buf = new Uint8Array(buf);
-    const eocdOff = findEocd(buf);
-    const cdOff = readU32(buf, eocdOff + 16);
-    const cdCount = readU16(buf, eocdOff + 10);
-    const decoder = new TextDecoder();
-
-    const files = Object.create(null);
-    let pos = cdOff;
-    for (let i = 0; i < cdCount; i++) {
-        if (pos + 46 > buf.length || readU32(buf, pos) !== ZipCentralDirSig)
-            throw new Error("Bad central directory entry");
-        const flags = readU16(buf, pos + 8);
-        if (flags & 0x0001) throw new Error("Encrypted ZIP entries are not supported");
-        const method = readU16(buf, pos + 10);
-        const expectedCrc = readU32(buf, pos + 16);
-        const compressedSize = readU32(buf, pos + 20);
-        const nameLen = readU16(buf, pos + 28);
-        const extraLen = readU16(buf, pos + 30);
-        const commentLen = readU16(buf, pos + 32);
-        const localHeaderOff = readU32(buf, pos + 42);
-        const name = decoder.decode(buf.subarray(pos + 46, pos + 46 + nameLen));
-        pos += 46 + nameLen + extraLen + commentLen;
-
-        // Read local file header to find actual data offset.
-        if (readU32(buf, localHeaderOff) !== ZipLocalHeaderSig) throw new Error(`Bad local file header for ${name}`);
-        const localNameLen = readU16(buf, localHeaderOff + 26);
-        const localExtraLen = readU16(buf, localHeaderOff + 28);
-        const dataOff = localHeaderOff + 30 + localNameLen + localExtraLen;
-        const dataEnd = dataOff + compressedSize;
-        if (dataEnd > buf.length) throw new Error(`Truncated ZIP entry data for ${name}`);
-        const raw = buf.subarray(dataOff, dataEnd);
-
-        if (method === ZipMethodStored) {
-            files[name] = raw.slice();
-        } else if (method === ZipMethodDeflate) {
-            files[name] = inflateWith(pakoInflateRaw, raw, `Unable to inflate ZIP entry ${name}`);
-        } else {
-            throw new Error(`Unsupported ZIP compression method ${method} for ${name}`);
-        }
-        if (crc32(files[name]) >>> 0 !== expectedCrc) throw new Error(`Corrupt ZIP entry ${name}: CRC32 mismatch`);
-    }
-    return files;
-}
-
-// Standard CRC-32/ISO-HDLC.
-const Crc32Table = new Uint32Array(256).map((_, index) => {
-    let crc = index;
-    for (let bit = 0; bit < 8; ++bit) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
-    return crc;
-});
-
-export function crc32(data) {
-    let crc = 0xffffffff;
-    for (let i = 0; i < data.length; ++i) crc = (crc >>> 8) ^ Crc32Table[(crc ^ data[i]) & 0xff];
-    return ~crc;
-}
-
-// Create a ZIP blob from an array of {name: string, data: Uint8Array} entries.
-// Uses stored method (no compression) with CRC-32 for maximum compatibility.
-export function createZipBlob(files) {
-    const encoder = new TextEncoder();
-    const localHeaders = [];
-    const centralHeaders = [];
-    let offset = 0;
-
-    for (const { name, data } of files) {
-        const nameBytes = encoder.encode(name);
-        const crc = crc32(data);
-        // Local file header (30 + nameLen + data)
-        const local = new Uint8Array(30 + nameBytes.length + data.length);
-        const lv = new DataView(local.buffer);
-        lv.setUint32(0, 0x04034b50, true); // signature
-        lv.setUint16(4, 20, true); // version needed
-        lv.setUint16(8, 0, true); // method: stored
-        lv.setUint32(14, crc, true); // CRC-32
-        lv.setUint32(18, data.length, true); // compressed size
-        lv.setUint32(22, data.length, true); // uncompressed size
-        lv.setUint16(26, nameBytes.length, true); // name length
-        local.set(nameBytes, 30);
-        local.set(data, 30 + nameBytes.length);
-        localHeaders.push(local);
-
-        // Central directory entry (46 + nameLen)
-        const central = new Uint8Array(46 + nameBytes.length);
-        const cv = new DataView(central.buffer);
-        cv.setUint32(0, 0x02014b50, true); // signature
-        cv.setUint16(4, 20, true); // version made by
-        cv.setUint16(6, 20, true); // version needed
-        cv.setUint16(10, 0, true); // method: stored
-        cv.setUint32(16, crc, true); // CRC-32
-        cv.setUint32(20, data.length, true); // compressed size
-        cv.setUint32(24, data.length, true); // uncompressed size
-        cv.setUint16(28, nameBytes.length, true); // name length
-        cv.setUint32(42, offset, true); // local header offset
-        central.set(nameBytes, 46);
-        centralHeaders.push(central);
-
-        offset += local.length;
-    }
-
-    const cdOffset = offset;
-    let cdSize = 0;
-    for (const c of centralHeaders) cdSize += c.length;
-
-    // End of central directory (22 bytes)
-    const eocd = new Uint8Array(22);
-    const ev = new DataView(eocd.buffer);
-    ev.setUint32(0, 0x06054b50, true); // signature
-    ev.setUint16(8, files.length, true); // entries on this disc
-    ev.setUint16(10, files.length, true); // total entries
-    ev.setUint32(12, cdSize, true); // central directory size
-    ev.setUint32(16, cdOffset, true); // central directory offset
-
-    return new Blob([...localHeaders, ...centralHeaders, eocd], { type: "application/zip" });
-}
-
-export function debounce(fn, wait) {
-    let timeout;
-    return function (...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => fn.apply(this, args), wait);
-    };
-}
-
-export const runningInNode = typeof window === "undefined";
+import { runningInNode } from "./loader.js";
 
 export function isFirefox() {
     // With thanks to http://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser
     // Opera 8.0+ (UA detection to detect Blink/v8-powered Opera)
     return typeof InstallTrigger !== "undefined"; // Firefox 1.0+
-}
-
-export function parseAddr(s) {
-    if (s[0] === "$" || s[0] === "&") return parseInt(s.substring(1), 16);
-    if (s.indexOf("0x") === 0) return parseInt(s.substring(2), 16);
-    return parseInt(s, 16);
 }
 
 export const userKeymap = [];
@@ -439,6 +257,13 @@ export function stringToBBCKeys(str) {
  */
 export const keyCodes = {
     UNDEFINED: 0,
+    SEMICOLON: 186,
+    HASH: 222,
+    APOSTROPHE: 192,
+    MUTE: 173,
+    MINUS: 189,
+    EQUALS: 187,
+    BACK_QUOTE: 223,
     BACKSPACE: 8,
     TAB: 9,
     CLEAR: 12,
@@ -552,7 +377,7 @@ export const keyCodes = {
     CTRL_RIGHT: 261, // hack, jsbeeb only
 };
 
-function detectKeyboardLayout() {
+export function detectKeyboardLayout() {
     if (runningInNode) {
         return "UK";
     }
@@ -566,41 +391,47 @@ function detectKeyboardLayout() {
     return "UK"; // Default guess of UK
 }
 
-const isUKlayout = detectKeyboardLayout() === "UK";
+/**
+ * Adjusts keyCodes for the browser this runs in. The table starts as Chrome on a
+ * UK keyboard, which is also what node sees, so only the differences are applied.
+ */
+export function adaptKeyCodesToBrowser() {
+    const isUKlayout = detectKeyboardLayout() === "UK";
+    if (isFirefox()) {
+        keyCodes.SEMICOLON = 59;
+        // #~ key (not on US keyboard)
+        keyCodes.HASH = 163;
+        keyCodes.APOSTROPHE = 222;
+        keyCodes.BACK_QUOTE = 192;
+        // Firefox doesn't return a keycode for this
+        keyCodes.MUTE = -1;
+        keyCodes.MINUS = 173;
+        keyCodes.EQUALS = 61;
+    } else {
+        // Chrome
+        // TODO(#1065) check other browsers
+        // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
+        keyCodes.SEMICOLON = 186;
+        // #~ key (not on US keyboard)
+        keyCodes.HASH = isUKlayout ? 222 : 223;
+        keyCodes.APOSTROPHE = isUKlayout ? 192 : 222;
+        keyCodes.MUTE = 173;
+        keyCodes.MINUS = 189;
+        keyCodes.EQUALS = 187;
+        keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
+    }
 
-if (isFirefox()) {
-    keyCodes.SEMICOLON = 59;
-    // #~ key (not on US keyboard)
-    keyCodes.HASH = 163;
-    keyCodes.APOSTROPHE = 222;
-    keyCodes.BACK_QUOTE = 192;
-    // Firefox doesn't return a keycode for this
-    keyCodes.MUTE = -1;
-    keyCodes.MINUS = 173;
-    keyCodes.EQUALS = 61;
-} else {
-    // Chrome
-    // TODO(#1065) check other browsers
-    // https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent.keyCode
-    keyCodes.SEMICOLON = 186;
-    // #~ key (not on US keyboard)
-    keyCodes.HASH = isUKlayout ? 222 : 223;
-    keyCodes.APOSTROPHE = isUKlayout ? 192 : 222;
-    keyCodes.MUTE = 173;
-    keyCodes.MINUS = 189;
-    keyCodes.EQUALS = 187;
-    keyCodes.BACK_QUOTE = isUKlayout ? 223 : 192;
-}
-
-// Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
-// Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
-if (!runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
-    keyCodes.BACK_QUOTE = 192;
-    keyCodes.APOSTROPHE = 222;
-    keyCodes.HASH = 223;
+    // Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
+    // Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
+    if (!runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
+        keyCodes.BACK_QUOTE = 192;
+        keyCodes.APOSTROPHE = 222;
+        keyCodes.HASH = 223;
+    }
 }
 
 export function getKeyMap(keyLayout) {
+    const isUKlayout = detectKeyboardLayout() === "UK";
     const keys2 = [];
 
     // shift pressed
@@ -921,362 +752,4 @@ export function getKeyMap(keyLayout) {
     }
 
     return keys2;
-}
-
-export function replaceOrAddExtension(name, newExt) {
-    const lastDot = name.lastIndexOf(".");
-    if (lastDot === -1) {
-        return name + newExt;
-    }
-    return name.substring(0, lastDot) + newExt;
-}
-
-export function hexbyte(value) {
-    return ((value >>> 4) & 0xf).toString(16) + (value & 0xf).toString(16);
-}
-
-export function hexword(value) {
-    return hexbyte(value >>> 8) + hexbyte(value & 0xff);
-}
-
-export function hd(reader, start, end, opts) {
-    opts = opts || {};
-    const width = opts.width || 16;
-    const gap = opts.gap === undefined ? 8 : opts.gap;
-    const res = [];
-    let str = "";
-    let j = 0;
-    for (let i = start; i < end; ++i) {
-        str += " ";
-        str += hexbyte(reader(i));
-        if (++j === gap) str += " ";
-        if (j === width) {
-            res.push(str);
-            str = "";
-            j = 0;
-        }
-    }
-    if (str) res.push(str);
-    let joined = "";
-    for (let i = 0; i < res.length; ++i) {
-        joined += hexword(start + i * width) + " :" + res[i] + "\n";
-    }
-    return joined;
-}
-
-export function signExtend(val) {
-    return val >= 128 ? val - 256 : val;
-}
-
-export function noop() {}
-
-export function noteEvent(category, type, label) {
-    if (
-        !runningInNode &&
-        (window.location.host.endsWith(".godbolt.org") || window.location.host.endsWith(".xania.org"))
-    ) {
-        // Only note events on the public site
-        /*global gtag*/
-        gtag("event", category, { type, label });
-    }
-    console.log("event noted:", category, type, label);
-}
-
-export function uint8ArrayToString(array) {
-    let str = "";
-    for (let i = 0; i < array.length; ++i) str += String.fromCharCode(array[i]);
-    return str;
-}
-
-export function stringToUint8Array(str) {
-    if (str instanceof Uint8Array) return str;
-    const len = str.length;
-    const array = new Uint8Array(len);
-    for (let i = 0; i < len; ++i) array[i] = str.charCodeAt(i) & 0xff;
-    return array;
-}
-
-function loadDataHttp(url) {
-    return new Promise(function (resolve, reject) {
-        const request = new XMLHttpRequest();
-        request.open("GET", url, true);
-        request.overrideMimeType("text/plain; charset=x-user-defined");
-        request.onload = function () {
-            if (request.status !== 200) {
-                reject(new Error("Unable to load " + url + ", http code " + request.status));
-                return;
-            }
-            if (typeof request.response !== "string") {
-                resolve(request.response);
-            } else {
-                resolve(stringToUint8Array(request.response));
-            }
-        };
-        request.onerror = function () {
-            reject(new Error("A network error occurred loading " + url));
-        };
-        request.send(null);
-    });
-}
-
-let _nodeBasePath = null;
-
-export function setNodeBasePath(basePath) {
-    _nodeBasePath = basePath;
-}
-
-async function loadDataNode(url) {
-    const fs = await import("fs");
-    const nodePath = await import("path");
-    if (_nodeBasePath) {
-        const publicPath = nodePath.join(_nodeBasePath, "public", url);
-        if (fs.existsSync(publicPath)) return fs.readFileSync(publicPath);
-        return fs.readFileSync(nodePath.join(_nodeBasePath, url));
-    }
-    if (url[0] === "/") url = "." + url;
-    if (fs.existsSync("public/" + url)) return fs.readFileSync("public/" + url);
-    return fs.readFileSync(url);
-}
-
-export function loadData(url) {
-    if (runningInNode) {
-        return loadDataNode(url);
-    } else {
-        return loadDataHttp(url);
-    }
-}
-
-export function readInt32(data, offset) {
-    return (data[offset + 3] << 24) | (data[offset + 2] << 16) | (data[offset + 1] << 8) | data[offset + 0];
-}
-
-export function readInt16(data, offset) {
-    return (data[offset + 1] << 8) | data[offset + 0];
-}
-
-const tempBuf = new ArrayBuffer(4);
-const tempBuf8 = new Uint8Array(tempBuf);
-const tempBufF32 = new Float32Array(tempBuf);
-
-export function readFloat32(data, offset) {
-    tempBuf8[0] = data[offset];
-    tempBuf8[1] = data[offset + 1];
-    tempBuf8[2] = data[offset + 2];
-    tempBuf8[3] = data[offset + 3];
-    return tempBufF32[0];
-}
-
-export async function ungzip(data) {
-    return inflateWith(pakoUngzip, data, "Unable to ungzip");
-}
-
-export class DataStream {
-    constructor(name, data) {
-        this.name = name;
-        this.pos = 0;
-        this.data = stringToUint8Array(data);
-        if (!this.data) {
-            throw new Error("No data in " + name);
-        }
-        this.end = this.data.length;
-    }
-
-    static async create(name, data) {
-        const raw = stringToUint8Array(data);
-        if (raw && raw.length > 4 && raw[0] === 0x1f && raw[1] === 0x8b) {
-            console.log("Ungzipping " + name);
-            data = await ungzip(raw);
-        }
-        return new DataStream(name, data);
-    }
-
-    bytesLeft() {
-        return this.end - this.pos;
-    }
-
-    eof() {
-        return this.bytesLeft() === 0;
-    }
-
-    advance(distance) {
-        if (this.bytesLeft() < distance) throw new RangeError("EOF in " + this.name);
-        this.pos += distance;
-        return this.pos - distance;
-    }
-
-    readFloat32(pos) {
-        if (pos === undefined) pos = this.advance(4);
-        return readFloat32(this.data, pos);
-    }
-
-    readInt32(pos) {
-        if (pos === undefined) pos = this.advance(4);
-        return readInt32(this.data, pos);
-    }
-
-    readInt16(pos) {
-        if (pos === undefined) pos = this.advance(2);
-        return readInt16(this.data, pos);
-    }
-
-    readByte(pos) {
-        if (pos === undefined) pos = this.advance(1);
-        return this.data[pos];
-    }
-
-    readNulString(pos, maxLength) {
-        if (!maxLength) maxLength = 1024;
-        let posToUse = pos === undefined ? this.pos : pos;
-        let result = "";
-        let c;
-        while ((c = this.readByte(posToUse++)) !== 0 && --maxLength) {
-            result += String.fromCharCode(c);
-        }
-        if (maxLength === 0) return "";
-        if (pos === undefined) this.pos = posToUse;
-        return result;
-    }
-
-    substream(posOrLength, length) {
-        let pos;
-        if (length === undefined) {
-            length = posOrLength;
-            pos = this.advance(length);
-        } else {
-            pos = posOrLength;
-            if (pos + length >= this.end) throw new RangeError("EOF in " + this.name);
-        }
-        return new DataStream(this.name + ".sub", this.data.subarray(pos, pos + length));
-    }
-
-    seek(to) {
-        if (to >= this.end) throw new RangeError("Seek out of range in " + this.name);
-        this.pos = to;
-    }
-}
-
-export function makeFast32(u32) {
-    // Firefox is ~5% faster with signed 32-bit arrays. Chrome is the same speed
-    // either way, so here we unconditionally wrap all u32 buffers as i32.
-    // Having a function do this makes it easy to test u32 vs i32, and means we
-    // keep the rest of the code using u32 (which makes more sense to me).
-    return new Int32Array(u32.buffer);
-}
-
-const knownDiscExtensions = {
-    uef: true,
-    ssd: true,
-    dsd: true,
-    adf: true,
-    adm: true,
-    adl: true,
-    hfe: true,
-};
-
-const knownRomExtensions = {
-    rom: true,
-};
-
-async function unzipImage(data, knownExtensions) {
-    console.log("Attempting to unzip");
-
-    let files;
-    try {
-        files = await unzip(data);
-    } catch (e) {
-        throw new Error("Error unzipping " + e.message, { cause: e });
-    }
-
-    let uncompressed = null;
-    let loadedFile;
-    const ignored = [];
-
-    for (const [filename, fileData] of Object.entries(files)) {
-        const match = filename.match(/.*\.([a-z]+)/i);
-        if (!match || !knownExtensions[match[1].toLowerCase()]) {
-            console.log("Skipping file", filename);
-            continue;
-        }
-        if (uncompressed) {
-            console.log("Ignoring", filename, "as already found a file");
-            ignored.push(filename);
-            continue;
-        }
-        loadedFile = filename;
-        uncompressed = fileData;
-    }
-
-    if (!uncompressed) {
-        throw new Error("Couldn't find any compatible files in the archive");
-    }
-
-    console.log("Unzipped '" + loadedFile + "'");
-    return { data: uncompressed, name: loadedFile, ignored };
-}
-
-/**
- * @param {Uint8Array|number[]} data a ZIP archive
- * @returns {Promise<{data: Uint8Array, name: string, ignored: string[]}>} the one file loaded, and the
- *     names of any other loadable files the archive held
- */
-export async function unzipDiscImage(data) {
-    return unzipImage(data, knownDiscExtensions);
-}
-
-export async function unzipRomImage(data) {
-    return unzipImage(data, knownRomExtensions);
-}
-
-export class Fifo {
-    constructor(capacity) {
-        this._buffer = new Uint8Array(capacity);
-        this._size = 0;
-        this._wPtr = 0;
-        this._rPtr = 0;
-    }
-
-    /** @returns {number} */
-    get size() {
-        return this._size;
-    }
-
-    /** @returns {boolean} */
-    get full() {
-        return this._size === this._buffer.length;
-    }
-
-    /** @returns {boolean} */
-    get empty() {
-        return this._size === 0;
-    }
-
-    clear() {
-        this._size = 0;
-        this._wPtr = 0;
-        this._rPtr = 0;
-    }
-
-    /** @type {Number} b */
-    put(b) {
-        if (this.full) return;
-        this._buffer[this._wPtr % this._buffer.length] = b;
-        this._wPtr++;
-        this._size++;
-    }
-
-    /** @returns {Number} */
-    get() {
-        if (this.empty) return;
-        const res = this._buffer[this._rPtr % this._buffer.length];
-        this._rPtr++;
-        this._size--;
-        return res;
-    }
-
-    /** @returns {number[]} pending bytes, oldest first */
-    toArray() {
-        const result = [];
-        for (let i = 0; i < this._size; ++i) result.push(this._buffer[(this._rPtr + i) % this._buffer.length]);
-        return result;
-    }
 }

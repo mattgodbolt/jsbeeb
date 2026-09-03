@@ -1,9 +1,11 @@
-import * as utils from "../utils.js";
 import * as disc from "../fdc.js";
 import { DiscLayout } from "../disc.js";
 import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
 import { errorText, reportIgnoredFiles, reportLoadFailure, unzipAndReport } from "./reporting.js";
+import { stringToUint8Array } from "../binary.js";
+import { noteEvent } from "./analytics.js";
+import { loadData } from "../loader.js";
 
 /** The images offered on the Discs dialog's built-in list. */
 export const BuiltInImages = [
@@ -67,7 +69,7 @@ export class MediaLoader extends EventTarget {
 
         document.getElementById("disc_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
-            utils.noteEvent("local", "click"); // NB no filename here
+            noteEvent("local", "click"); // NB no filename here
             const file = evt.target.files[0];
             try {
                 await this.loadHTMLFile(file);
@@ -79,7 +81,7 @@ export class MediaLoader extends EventTarget {
 
         document.getElementById("fs_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
-            utils.noteEvent("local", "click"); // NB no filename here
+            noteEvent("local", "click"); // NB no filename here
             const file = evt.target.files[0];
             try {
                 await this.loadSCSIFile(file);
@@ -92,13 +94,13 @@ export class MediaLoader extends EventTarget {
         document.getElementById("tape_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
             const file = evt.target.files[0];
-            utils.noteEvent("local", "clickTape"); // NB no filename here
+            noteEvent("local", "clickTape"); // NB no filename here
 
             try {
                 let tapeData = await readFileAsBinaryString(file);
                 let tapeName = file.name;
                 if (/\.zip/i.test(tapeName)) {
-                    const unzipped = await unzipAndReport(utils.stringToUint8Array(tapeData));
+                    const unzipped = await unzipAndReport(stringToUint8Array(tapeData));
                     tapeData = unzipped.data;
                     tapeName = unzipped.name;
                 }
@@ -119,7 +121,7 @@ export class MediaLoader extends EventTarget {
             event.dataTransfer.dropEffect = "copy";
         });
         pastetext.addEventListener("drop", async (event) => {
-            utils.noteEvent("local", "drop");
+            noteEvent("local", "drop");
             const file = event.dataTransfer.files[0];
             if (!file) return;
             try {
@@ -148,7 +150,7 @@ export class MediaLoader extends EventTarget {
             elem.querySelector(".name").textContent = image.name;
             elem.querySelector(".description").textContent = image.desc;
             elem.addEventListener("click", async () => {
-                utils.noteEvent("images", "click", image.file);
+                noteEvent("images", "click", image.file);
                 this.setDisc1Image(image.file);
                 modals.hide("discs");
                 try {
@@ -194,7 +196,7 @@ export class MediaLoader extends EventTarget {
     }
 
     async loadHTMLFile(file) {
-        const imageData = utils.stringToUint8Array(await readFileAsBinaryString(file));
+        const imageData = stringToUint8Array(await readFileAsBinaryString(file));
         const loadedDisc = disc.discFor(file.name, imageData, undefined, this.drives.layoutForDrive(0));
         // Local file: retain the image bytes for embedding in save-to-file snapshots.
         loadedDisc.setOriginalImage(imageData);
@@ -207,7 +209,7 @@ export class MediaLoader extends EventTarget {
         const { processor } = this;
         if (!processor.filestore) return;
         const binaryData = await readFileAsBinaryString(file);
-        processor.filestore.scsi = utils.stringToUint8Array(binaryData);
+        processor.filestore.scsi = stringToUint8Array(binaryData);
 
         processor.filestore.PC = 0x400;
         processor.filestore.SP = 0xff;
@@ -274,7 +276,7 @@ export class MediaLoader extends EventTarget {
                 const asUrl = `${schema}://${discImage}`;
                 // url may end in query params etc, which can upset the DSD/SSD etc detection on the extension.
                 discImage = new URL(asUrl).pathname;
-                let discData = await utils.loadData(asUrl);
+                let discData = await loadData(asUrl);
                 if (/\.zip/i.test(discImage)) {
                     const unzipped = await unzipAndReport(discData);
                     discData = unzipped.data;
@@ -313,7 +315,7 @@ export class MediaLoader extends EventTarget {
                 const asUrl = `${schema}://${tapeImage}`;
                 // url may end in query params etc, which can upset file handling
                 tapeImage = new URL(asUrl).pathname;
-                let tapeData = await utils.loadData(asUrl);
+                let tapeData = await loadData(asUrl);
                 if (/\.zip/i.test(tapeImage)) {
                     const unzipped = await unzipAndReport(tapeData);
                     tapeData = unzipped.data;
@@ -324,7 +326,7 @@ export class MediaLoader extends EventTarget {
 
             default: {
                 const tapePath = "tapes/" + tapeImage;
-                let tapeData = await utils.loadData(tapePath);
+                let tapeData = await loadData(tapePath);
                 let tapeName = tapeImage;
                 if (/\.zip/i.test(tapeName)) {
                     const unzipped = await unzipAndReport(tapeData);

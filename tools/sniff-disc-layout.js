@@ -23,7 +23,7 @@ import { brotliDecompressSync } from "node:zlib";
 
 import { Disc, DiscConfig, sniffDfsLayout, sniffSurfaceLayout } from "../src/disc.js";
 import { loadHfe, sniffHfeLayout } from "../src/disc-hfe.js";
-import { unzipDiscImage } from "../src/utils.js";
+import { unzipDiscImage } from "../src/archive.js";
 
 const SectorImages = new Set([".ssd", ".dsd"]);
 const FluxImages = new Set([".hfe"]);

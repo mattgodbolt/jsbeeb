@@ -8,10 +8,10 @@ import {
     OPAQUE_BLACK,
     PalPhasePeriodLines,
 } from "../../src/video.js";
-import * as utils from "../../src/utils.js";
 import { texelsPerPixel } from "../../src/video-filters/pixel-grid.js";
 import { decodeLineGrid } from "../line-grid.js";
 import { shortestRun } from "../pixel-runs.js";
+import * as binary from "../../src/binary.js";
 
 // Setup with focus on testing behavior rather than implementation details
 describe("Video", () => {
@@ -47,8 +47,8 @@ describe("Video", () => {
         // Mock paint_ext function
         mockPaintExt = vi.fn();
 
-        // Spy on utils.makeFast32
-        vi.spyOn(utils, "makeFast32").mockImplementation((arr) => arr);
+        // Spy on makeFast32
+        vi.spyOn(binary, "makeFast32").mockImplementation((arr) => arr);
 
         // Create a video instance (using Model B mode, not Master)
         video = new Video(false, mockFb32, mockPaintExt);

@@ -1,4 +1,4 @@
-import * as utils from "./utils.js";
+import { loadData } from "./loader.js";
 
 /**
  * Base class for audio components that load and play back sample buffers
@@ -26,7 +26,7 @@ export class SamplePlayer {
         const entries = Object.entries(pathMap);
         const decoded = await Promise.all(
             entries.map(async ([, path]) => {
-                const data = await utils.loadData(path);
+                const data = await loadData(path);
                 // Safari doesn't support the promise form of decodeAudioData.
                 return new Promise((resolve, reject) => {
                     this.context.decodeAudioData(

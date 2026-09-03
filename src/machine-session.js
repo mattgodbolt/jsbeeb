@@ -18,8 +18,8 @@ const _jsbeebRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 import * as fdc from "./fdc.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
-import { setNodeBasePath } from "./utils.js";
 import sharp from "sharp";
+import { setNodeBasePath } from "./loader.js";
 
 // BBC framebuffer is 1024×625 pixels
 const FB_WIDTH = 1024;

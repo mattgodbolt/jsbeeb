@@ -1,8 +1,8 @@
-import * as utils from "../utils.js";
 import * as bootstrap from "bootstrap";
 import { StairwayToHell } from "../sth.js";
 import { errorText } from "./reporting.js";
 import { clearArchiveList, filterArchiveList, showArchiveMessage } from "./archive-list.js";
+import { noteEvent } from "./analytics.js";
 
 /**
  * The Stairway to Hell archive picker: one modal browsing either the disc or
@@ -69,7 +69,7 @@ export class SthPicker {
     }
 
     async pickDisc(item) {
-        utils.noteEvent("sth", "click", item);
+        noteEvent("sth", "click", item);
         const image = "sth:" + item;
         this.media.setDisc1Image(image);
         const needsAutoboot = this.urlState.params.autoboot !== undefined;
@@ -93,7 +93,7 @@ export class SthPicker {
     }
 
     async pickTape(item) {
-        utils.noteEvent("sth", "clickTape", item);
+        noteEvent("sth", "clickTape", item);
         const image = "sth:" + item;
         this.media.setTapeImage(image);
 

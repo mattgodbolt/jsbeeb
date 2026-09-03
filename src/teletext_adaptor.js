@@ -1,4 +1,4 @@
-import * as utils from "./utils.js";
+import { loadData } from "./loader.js";
 
 // Code ported from Beebem (C to .js) by Jason Robson
 const TELETEXT_IRQ = 5;
@@ -72,7 +72,7 @@ export class TeletextAdaptor extends EventTarget {
         const request = ++this.streamRequest;
         let data;
         try {
-            data = await utils.loadData(`teletext/txt${channel}.dat`);
+            data = await loadData(`teletext/txt${channel}.dat`);
         } catch (error) {
             if (request !== this.streamRequest) return;
             console.error(`Teletext adaptor: failed to load channel ${channel}`, error);

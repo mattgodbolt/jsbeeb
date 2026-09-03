@@ -2,7 +2,7 @@
 // https://github.com/mmbeeb/FSEM
 
 import { ReceiveBlock, EconetPacket } from "./econet.js";
-import * as utils from "./utils.js";
+import { loadData } from "./loader.js";
 
 export class Filestore {
     constructor(cpu, econet) {
@@ -308,7 +308,7 @@ export class Filestore {
     async reset() {
         console.log("Filestore: initialisation");
 
-        const [code, disc] = await Promise.all([utils.loadData("econet/L3FS.dat"), utils.loadData("econet/scsi.dat")]);
+        const [code, disc] = await Promise.all([loadData("econet/L3FS.dat"), loadData("econet/scsi.dat")]);
         this.l3fs = code;
         this.ram.set(code, 0x400);
         this.PC = 0x400;

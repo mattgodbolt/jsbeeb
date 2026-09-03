@@ -1,4 +1,4 @@
-import * as utils from "./utils.js";
+import { hexbyte, hexword } from "./hex.js";
 
 //  this one should be declared more globally
 const HOST_CPU_FLAG_IRQ_TUBE_ULA = 8;
@@ -204,13 +204,13 @@ export class Tube {
         }
         this.updateInterrupts();
         if (this.debug) {
-            console.log("TUBE ULA: host read " + utils.hexword(address) + " = " + utils.hexbyte(result));
+            console.log("TUBE ULA: host read " + hexword(address) + " = " + hexbyte(result));
         }
         return result;
     }
     hostWrite(address, value) {
         if (this.debug) {
-            console.log("TUBE ULA: host write " + utils.hexword(address) + " = " + utils.hexbyte(value));
+            console.log("TUBE ULA: host write " + hexword(address) + " = " + hexbyte(value));
         }
         switch (address & 7) {
             case TUBE_ULA_R1_STATUS_ADDRESS: {
@@ -336,7 +336,7 @@ export class Tube {
         }
         this.updateInterrupts();
         if (this.debug) {
-            console.log("TUBE ULA: parasite read " + utils.hexword(address) + " = " + utils.hexbyte(result));
+            console.log("TUBE ULA: parasite read " + hexword(address) + " = " + hexbyte(result));
         }
         return result;
     }
@@ -381,7 +381,7 @@ export class Tube {
         //  Boot mode is terminated by the software when it selects any one of the Tube addresses.
         //  This deselects the ROM
         if (this.debug) {
-            console.log("TUBE ULA: parasite write " + utils.hexword(address) + " = " + utils.hexbyte(value));
+            console.log("TUBE ULA: parasite write " + hexword(address) + " = " + hexbyte(value));
         }
         switch (address & 7) {
             case TUBE_ULA_R1_DATA_ADDRESS:

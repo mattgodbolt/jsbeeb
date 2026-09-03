@@ -1,4 +1,3 @@
-import * as utils from "./utils.js";
 import * as via from "./via.js";
 import { Acia } from "./acia.js";
 import { Serial } from "./serial.js";
@@ -11,8 +10,10 @@ import { Filestore } from "./filestore.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
-
-const signExtend = utils.signExtend;
+import { unzipRomImage } from "./archive.js";
+import { signExtend } from "./binary.js";
+import { hexbyte, hexword } from "./hex.js";
+import { loadData } from "./loader.js";
 
 function _set(byte, mask, set) {
     return (byte & ~mask) | (set ? mask : 0);
@@ -539,7 +540,7 @@ class Tube6502 extends Base6502 {
     async loadOs() {
         console.log("Loading tube rom from roms/" + this.model.os);
         const tubeRom = this.rom;
-        const data = await utils.loadData("roms/" + this.model.os);
+        const data = await loadData("roms/" + this.model.os);
         const len = data.length;
         if (len !== 2048) throw new Error("Broken ROM file (length=" + len + ")");
         for (let i = 0; i < len; ++i) {
@@ -825,7 +826,7 @@ export class Cpu6502 extends Base6502 {
     readArea(addr, len) {
         let str = "";
         for (let i = 0; i < len; ++i) {
-            str += utils.hexbyte(this.readmem(addr + i));
+            str += hexbyte(this.readmem(addr + i));
         }
         return str;
     }
@@ -1164,9 +1165,9 @@ export class Cpu6502 extends Base6502 {
         if (name.indexOf("http") !== 0) name = "roms/" + name;
         console.log("Loading ROM from " + name);
         const ramRomOs = this.ramRomOs;
-        let data = await utils.loadData(name);
+        let data = await loadData(name);
         if (/\.zip/i.test(name)) {
-            data = (await utils.unzipRomImage(data)).data;
+            data = (await unzipRomImage(data)).data;
         }
         ramRomOs.set(data, offset);
     }
@@ -1176,7 +1177,7 @@ export class Cpu6502 extends Base6502 {
         os = "roms/" + os;
         console.log(`Loading OS from ${os}`);
         const ramRomOs = this.ramRomOs;
-        const data = await utils.loadData(os);
+        const data = await loadData(os);
         const len = data.length;
         if (len < 16384 || len & 16383) throw new Error(`Broken OS ROM file (length=${len})`);
         ramRomOs.set(data, this.osOffset);
@@ -1563,11 +1564,11 @@ export class Cpu6502 extends Base6502 {
             function (pc, a, x, y) {
                 const dis = disassembler.disassemble(pc, true)[0];
                 console.log(
-                    utils.hexword(pc),
+                    hexword(pc),
                     (dis + "                       ").substring(0, 15),
-                    utils.hexbyte(a),
-                    utils.hexbyte(x),
-                    utils.hexbyte(y),
+                    hexbyte(a),
+                    hexbyte(x),
+                    hexbyte(y),
                 );
             };
         for (let i = maxToShow - 2; i >= 0; --i) {
@@ -1784,7 +1785,7 @@ export class AtomCpu6502 extends Cpu6502 {
         const bankRoms = this.model.banks || [];
         os = "roms/" + os;
         console.log(`Loading Atom OS from ${os}`);
-        const data = await utils.loadData(os);
+        const data = await loadData(os);
         const len = data.length;
 
         if (len < AtomRomBlockSize || len % AtomRomBlockSize !== 0) {
@@ -1824,9 +1825,9 @@ export class AtomCpu6502 extends Cpu6502 {
     // Override loadRom to accept 4KB ROMs
     async loadRom(name, offset) {
         if (name.indexOf("http") !== 0) name = "roms/" + name;
-        let data = await utils.loadData(name);
+        let data = await loadData(name);
         if (/\.zip/i.test(name)) {
-            data = (await utils.unzipRomImage(data)).data;
+            data = (await unzipRomImage(data)).data;
         }
         const len = data.length;
         if (len !== 16384 && len !== 8192 && len !== 4096) {

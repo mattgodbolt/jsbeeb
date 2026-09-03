@@ -1,4 +1,4 @@
-import { getKeyMapAtom } from "./utils_atom.js";
+import { getKeyMapAtom } from "./keymap-atom.js";
 
 // 8255 Programmable Peripheral Interface Adapter for the Acorn Atom.
 // Reference: http://mdfs.net/Docs/Comp/Acorn/Atom/atap25.htm
