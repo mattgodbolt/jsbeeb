@@ -7,6 +7,7 @@ import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
+import { isMachineSpec } from "./machine-spec.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";
@@ -561,25 +562,6 @@ class FakeTube {
     reset() {}
 }
 
-class FakeUserPort {
-    write() {}
-
-    read() {
-        return 0xff;
-    }
-}
-
-function fixUpConfig(config) {
-    if (config === undefined) config = {};
-    if (!config.keyLayout) config.keyLayout = "physical";
-    if (!config.cpuMultiplier) config.cpuMultiplier = 1;
-    if (!config.userPort) config.userPort = new FakeUserPort();
-    if (config.printerPort === undefined) config.printerPort = null;
-    config.extraRoms = config.extraRoms || [];
-    config.debugFlags = config.debugFlags || {};
-    return config;
-}
-
 class DebugHook {
     constructor(cpu, functionName) {
         this.cpu = cpu;
@@ -645,7 +627,9 @@ export class Cpu6502 extends Base6502 {
         } = {},
     ) {
         super(model, { cycleAccurate });
-        this.config = fixUpConfig(config);
+        if (!isMachineSpec(config)) throw new Error("A machine's config must come from machineSpec()");
+        this.config = config;
+        this.keyLayout = config.keyLayout;
         this.debugFlags = this.config.debugFlags;
         this.cmos = cmos;
         this.debugger = dbgr;
@@ -702,7 +686,7 @@ export class Cpu6502 extends Base6502 {
             soundChip: this.soundChip,
             cmos: this.cmos,
             isMaster: this.model.isMaster,
-            initialLayout: this.config.keyLayout,
+            initialLayout: this.keyLayout,
             getGamepads: this.config.getGamepads,
         });
         this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
@@ -1410,7 +1394,7 @@ export class Cpu6502 extends Base6502 {
     }
 
     updateKeyLayout() {
-        this.sysvia.setKeyLayout(this.config.keyLayout);
+        this.sysvia.setKeyLayout(this.keyLayout);
     }
 
     polltimeAddr(cycles, addr, isWrite) {
@@ -1555,6 +1539,12 @@ export class Cpu6502 extends Base6502 {
         this.halted = true;
     }
 
+    /** Changes the host key layout for the keyboard, and for every reset after it. */
+    setKeyLayout(layout) {
+        this.keyLayout = layout;
+        this.sysvia.setKeyLayout(layout);
+    }
+
     dumpTrace(maxToShow, func) {
         if (!maxToShow) maxToShow = 256;
         if (maxToShow > 256) maxToShow = 256;
@@ -1613,11 +1603,16 @@ const NumBranquartBanks = 16;
 const AtomRomBlockSize = 0x1000; // 4KB
 
 export class AtomCpu6502 extends Cpu6502 {
+    setKeyLayout(layout) {
+        this.keyLayout = layout;
+        this.atomppia.setKeyLayout(layout);
+    }
+
     constructor(model, options) {
         super(model, options);
 
         // Atom peripherals
-        this.atomppia = new AtomPPIA(this, this.config.keyLayout, this.scheduler);
+        this.atomppia = new AtomPPIA(this, this.keyLayout, this.scheduler);
         this.atommc = new AtomMMC2(this);
 
         // Branquart bank selection
@@ -1838,7 +1833,7 @@ export class AtomCpu6502 extends Cpu6502 {
 
     // Atom key layout goes through PPIA, not SysVia
     updateKeyLayout() {
-        this.atomppia.setKeyLayout(this.config.keyLayout);
+        this.atomppia.setKeyLayout(this.keyLayout);
     }
 
     snapshotState(options) {

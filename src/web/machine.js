@@ -1,4 +1,5 @@
-import { AtomCpu6502, Cpu6502 } from "../6502.js";
+import { buildMachine } from "../build-machine.js";
+import { machineSpec } from "../machine-spec.js";
 import { Cmos, localStoragePersistence } from "../cmos.js";
 import { Econet } from "../econet.js";
 import { LoadSD } from "../mmc.js";
@@ -20,7 +21,7 @@ export function buildEmulationConfig({
     userPort,
     printer,
 }) {
-    return {
+    return machineSpec({
         keyLayout,
         cpuMultiplier,
         tubeCpuMultiplier: settings.tubeCpuMultiplier,
@@ -41,7 +42,7 @@ export function buildEmulationConfig({
             logFdcCommands: parsedQuery.logFdcCommands !== undefined,
             logFdcStateChanges: parsedQuery.logFdcStateChanges !== undefined,
         },
-    };
+    });
 }
 
 /** The emulated machine itself: the processor with everything bolted to it, and its start-up. */
@@ -60,7 +61,7 @@ export class Machine {
         video,
         audioHandler,
         dbgr,
-        makeCpu = (CpuClass, ...args) => new CpuClass(...args),
+        build = buildMachine,
     }) {
         this.model = model;
         this.audioHandler = audioHandler;
@@ -86,7 +87,7 @@ export class Machine {
             this.econet,
         );
 
-        this.emulationConfig = buildEmulationConfig({
+        this.spec = buildEmulationConfig({
             settings,
             parsedQuery,
             keyLayout,
@@ -96,17 +97,19 @@ export class Machine {
             printer,
         });
 
-        const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
-        this.processor = makeCpu(CpuClass, model, {
-            dbgr,
-            video,
-            soundChip: audioHandler.soundChip,
-            ddNoise: audioHandler.ddNoise,
-            relayNoise: audioHandler.relayNoise,
-            music5000: settings.hasMusic5000 ? audioHandler.music5000 : null,
-            cmos: this.cmos,
-            config: this.emulationConfig,
-            econet: this.econet,
+        this.processor = build({
+            model,
+            spec: this.spec,
+            io: {
+                dbgr,
+                video,
+                soundChip: audioHandler.soundChip,
+                ddNoise: audioHandler.ddNoise,
+                relayNoise: audioHandler.relayNoise,
+                music5000: settings.hasMusic5000 ? audioHandler.music5000 : null,
+                cmos: this.cmos,
+                econet: this.econet,
+            },
         });
 
         printer.attach(this.processor.uservia);

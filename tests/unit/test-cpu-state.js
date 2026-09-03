@@ -5,6 +5,7 @@ import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { FakeDdNoise } from "../../src/ddnoise.js";
 import { Cmos } from "../../src/cmos.js";
+import { machineSpec } from "../../src/machine-spec.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { findModel, TEST_6502 } from "../../src/models.js";
 
@@ -20,6 +21,7 @@ function makeCpu() {
         ddNoise: new FakeDdNoise(),
         music5000: new FakeMusic5000(),
         cmos: new Cmos(),
+        config: machineSpec(),
     });
     return cpu;
 }

@@ -6,6 +6,7 @@ import { FakeSoundChip } from "../../src/soundchip.js";
 import { FakeDdNoise } from "../../src/ddnoise.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { Cmos } from "../../src/cmos.js";
+import { machineSpec } from "../../src/machine-spec.js";
 
 function makeCpu() {
     return new Cpu6502(TEST_6502, {
@@ -15,7 +16,7 @@ function makeCpu() {
         ddNoise: new FakeDdNoise(),
         music5000: new FakeMusic5000(),
         cmos: new Cmos(),
-        config: { extraRoms: [] },
+        config: machineSpec(),
     });
 }
 
