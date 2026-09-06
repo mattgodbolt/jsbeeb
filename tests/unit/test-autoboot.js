@@ -84,8 +84,8 @@ describe("Autoboot", () => {
         });
 
         it("hooks the Master's idle loop on a Master", async () => {
-            processor.model = findModel("Master");
-            await make().insertBasic(Promise.resolve("10 END"), false);
+            const master = new Autoboot({ model: findModel("Master"), processor, sendKeys });
+            await master.insertBasic(Promise.resolve("10 END"), false);
             processor.debugInstruction.hook(0xe581);
             expect(processor.memory[0x1900]).toBe(0);
             processor.debugInstruction.hook(0xe7e6);

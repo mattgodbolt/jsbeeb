@@ -66,7 +66,7 @@ export class Autoboot {
         const tokenised = await t.tokenise(prog);
 
         const { processor } = this;
-        const idleAddr = processor.model.idleAddress;
+        const idleAddr = this.model.idleAddress;
         const hook = processor.debugInstruction.add((addr) => {
             if (addr !== idleAddr) return;
             installBasic(tokenised, {
