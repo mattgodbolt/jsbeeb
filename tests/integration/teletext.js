@@ -46,8 +46,27 @@ async function setupCeefaxTestMachine(video) {
 
 const RefDir = path.join(RepoRoot, "tests/integration/teletext");
 
-async function compare(video, testMachine, expectedName) {
-    const actualPng = await video.capture(testMachine);
+const FieldCycles = 40000;
+const FlashCycleFields = 64;
+// The flash and cursor phases both count fields since power-on, 64 and 32 to a cycle, so a
+// capture at a given field of the flash cycle is the same picture whatever ran before it.
+// Which field each reference was taken at was found by capturing every field and comparing.
+const FlashHiddenField = 56;
+const FlashShownField = 26;
+const CursorJustOnField = 15;
+const CursorOnField = 8;
+const FlashShownCursorOnField = 0;
+
+async function captureAtField(video, testMachine, field) {
+    for (let i = 0; i < 2 * FlashCycleFields; i++) {
+        const png = await video.capture(testMachine);
+        if (Math.floor(testMachine.elapsedCycles / FieldCycles) % FlashCycleFields === field) return png;
+    }
+    throw new Error(`Field ${field} did not come round`);
+}
+
+async function compare(video, testMachine, expectedName, field) {
+    const actualPng = await captureAtField(video, testMachine, field);
     const outputStem = expectedName.replace("expected", "actual").replace(".png", "");
     await expectPngToMatch(actualPng, path.join(RefDir, expectedName), outputStem);
 }
@@ -56,26 +75,24 @@ describe("Test Ceefax test page", () => {
     it("should match the Ceefax test page (no flash)", async () => {
         const video = new CapturingVideo();
         const testMachine = await setupCeefaxTestMachine(video);
-        await compare(video, testMachine, `expected_flash_0.png`);
+        await compare(video, testMachine, `expected_flash_0.png`, FlashHiddenField);
     });
     it("should match the Ceefax test page (flash)", async () => {
         const video = new CapturingVideo();
         const testMachine = await setupCeefaxTestMachine(video);
-        await testMachine.runFor(1500000);
-        await compare(video, testMachine, `expected_flash_1.png`);
+        await compare(video, testMachine, `expected_flash_1.png`, FlashShownField);
     });
     it("should match the Ceefax test page after reveal (no flash)", async () => {
         const video = new CapturingVideo();
         const testMachine = await setupCeefaxTestMachine(video);
         await testMachine.type(" ");
-        await compare(video, testMachine, `expected_reveal_flash_0.png`);
+        await compare(video, testMachine, `expected_reveal_flash_0.png`, FlashHiddenField);
     });
     it("should match the Ceefax test page after reveal (flash)", async () => {
         const video = new CapturingVideo();
         const testMachine = await setupCeefaxTestMachine(video);
         await testMachine.type(" ");
-        await testMachine.runFor(1500000);
-        await compare(video, testMachine, `expected_reveal_flash_1.png`);
+        await compare(video, testMachine, `expected_reveal_flash_1.png`, FlashShownField);
     });
 });
 
@@ -88,8 +105,7 @@ describe("Test other teletext test pages", () => {
         // https://github.com/mattgodbolt/jsbeeb/issues/316
         await testMachine.type("VDU &91,&61,&9E,&92,&93,&94,&81,&91,&91,10,13");
         await testMachine.runUntilInput();
-        await testMachine.runToCursorState(true);
-        await compare(video, testMachine, `expected_hoglet_held_char.png`);
+        await compare(video, testMachine, `expected_hoglet_held_char.png`, CursorJustOnField);
     });
     it("should apply Steady as Set At, not Set After (bug 611)", async () => {
         const video = new CapturingVideo();
@@ -107,9 +123,7 @@ describe("Test other teletext test pages", () => {
         // but pos 5 (Steady+held) and pos 6-7 should show red (Steady applies "Set At").
         await testMachine.type("CLS:VDU &91,&88,&BF,&BF,&9E,&89,&BF,&BF");
         await testMachine.runUntilInput();
-        await testMachine.runUntilFlashHidden();
-        await testMachine.runToCursorState(true);
-        await compare(video, testMachine, `expected_steady_set_at_flash_1.png`);
+        await compare(video, testMachine, `expected_steady_set_at_flash_1.png`, FlashShownCursorOnField);
     });
     it("should work with the alternative engineer test page bug 469", async () => {
         const video = new CapturingVideo();
@@ -122,7 +136,6 @@ describe("Test other teletext test pages", () => {
             "CLS:VDU &81,&80,&81,&A0,&80,&A0,&81,&9E,&A0,&9E,&A0,&97,&AC,&93,&93,&96,&96,&92,&92,&92,&95,&95,&91,&91,&94,&94,&94,&A0,&A0,&94,&80,&81,&80,&81,&80,&81,&80,&81,&B0,&B7",
         );
         await testMachine.runUntilInput();
-        await testMachine.runToCursorState(true);
-        await compare(video, testMachine, `expected_bug_469.png`);
+        await compare(video, testMachine, `expected_bug_469.png`, CursorOnField);
     });
 });

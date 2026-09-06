@@ -1,4 +1,5 @@
-import { BBC, keyCodes } from "../keymap.js";
+import { keyCodes } from "../keymap.js";
+import { Typist } from "../typist.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 
@@ -28,8 +29,7 @@ export class Keyboard extends EventTarget {
         this.dbgr = dbgr;
 
         this.keyInterface = processor.keyboardInterface;
-        // Compared by reference in _deliverPasteKey to avoid toggling shift off.
-        this._shiftKey = processor.model.keys.SHIFT;
+        this.typist = new Typist(processor);
 
         // State
         this.emuKeyHandlers = {};
@@ -43,13 +43,6 @@ export class Keyboard extends EventTarget {
         this.lastShiftLocation = 1;
         this.lastCtrlLocation = 1;
         this.lastAltLocation = 1;
-
-        // Paste state — uses a scheduler task instead of a debugInstruction
-        // hook so the CPU can remain on the fast execution path during paste.
-        this._pasteKeys = [];
-        this._pasteLastChar = undefined;
-        this._pasteClocksPerMs = 0;
-        this._pasteTask = this.processor.scheduler.newTask(() => this._deliverPasteKey());
     }
 
     /**
@@ -324,99 +317,17 @@ export class Keyboard extends EventTarget {
         );
     }
 
-    /**
-     * Send raw keyboard input to the emulated machine (for paste/autotype).
-     * @param {Array} keysToSend - Array of machine-specific key codes to send
-     * @param {boolean} checkCapsAndShiftLocks - Whether to check caps and shift locks
-     */
+    /** Sends raw keys, and millisecond delays, to the machine: paste and autoboot come through here. */
     sendRawKeyboard(keysToSend, checkCapsAndShiftLocks) {
-        if (this.isPasting) this.cancelPaste();
-
-        this.keyInterface.disableKeyboard();
-        // The paste task lives on the processor's scheduler, which is polled with peripheral
-        // cycles, so paste delays stay in real time whatever the CPU multiplier is.
-        this._pasteClocksPerMs = this.processor.peripheralCyclesPerSecond / 1000;
-
-        if (checkCapsAndShiftLocks) {
-            let toggleKey = null;
-            if (!this.keyInterface.capsLockLight) toggleKey = BBC.CAPSLOCK;
-            else if (this.keyInterface.shiftLockLight) toggleKey = BBC.SHIFTLOCK;
-            if (toggleKey) {
-                keysToSend.unshift(toggleKey);
-                keysToSend.push(toggleKey);
-            }
-        }
-
-        this._pasteKeys = keysToSend;
-        this._pasteLastChar = undefined;
-        this._pasteTask.schedule(0);
+        this.typist.type(keysToSend, checkCapsAndShiftLocks);
     }
 
-    /**
-     * Scheduler callback that delivers one key per invocation, rescheduling
-     * itself for the next key. Replaces the old debugInstruction hook so the
-     * CPU stays on the fast execution path during paste.
-     * @private
-     */
-    _deliverPasteKey() {
-        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey) {
-            this.keyInterface.keyToggleRaw(this._pasteLastChar);
-        }
-
-        if (this._pasteKeys.length === 0) {
-            this._pasteLastChar = undefined;
-            this.keyInterface.enableKeyboard();
-            return;
-        }
-
-        const releaseGapMs = this.processor.model.pasteReleaseGapMs;
-        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey && releaseGapMs) {
-            this._pasteLastChar = undefined;
-            this._pasteTask.schedule(releaseGapMs * this._pasteClocksPerMs);
-            return;
-        }
-
-        const ch = this._pasteKeys[0];
-        const debounce = this._pasteLastChar === ch;
-        this._pasteLastChar = ch;
-        if (debounce) {
-            this._pasteLastChar = undefined;
-            this._pasteTask.schedule(30 * this._pasteClocksPerMs);
-            return;
-        }
-
-        let delayMs = this.processor.model.pasteKeyDelayMs;
-        if (typeof this._pasteLastChar === "number") {
-            delayMs = this._pasteLastChar;
-            this._pasteLastChar = undefined;
-        } else {
-            this.keyInterface.keyToggleRaw(this._pasteLastChar);
-        }
-
-        this._pasteKeys.shift();
-        this._pasteTask.schedule(delayMs * this._pasteClocksPerMs);
-    }
-
-    /**
-     * Cancel any in-progress paste operation.
-     */
     cancelPaste() {
-        if (!this.isPasting) return;
-        this._pasteTask.cancel();
-        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey) {
-            this.keyInterface.keyToggleRaw(this._pasteLastChar);
-        }
-        this._pasteLastChar = undefined;
-        this._pasteKeys = [];
-        this.keyInterface.enableKeyboard();
+        this.typist.cancel();
     }
 
-    /**
-     * Whether a paste operation is currently in progress.
-     * @returns {boolean}
-     */
     get isPasting() {
-        return this._pasteKeys.length > 0 || this._pasteTask.scheduled();
+        return this.typist.isTyping;
     }
 
     /**

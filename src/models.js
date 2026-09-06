@@ -54,9 +54,9 @@ class Model {
         this.idleAddress = this.isAtom ? 0xfe94 : isMaster ? 0xe7e6 : 0xe581;
         // The Atom ROM polls its keyboard once per VSync, so pasted keys need longer apart.
         this.pasteKeyDelayMs = this.isAtom ? 80 : 50;
-        // The Atom polls its keyboard rather than taking an interrupt, so it
-        // must see each key up before the next key goes down.
-        this.pasteReleaseGapMs = this.isAtom ? 30 : 0;
+        // Two of those 60 Hz scans, 33 ms, with margin: the ROM wants a key seen up
+        // twice before it takes the next.
+        this.pasteReleaseGapMs = this.isAtom ? 40 : 0;
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;

@@ -203,10 +203,9 @@ export class MachineSession {
         await this._machine.runFor(cycles);
     }
 
-    /** Emulated cycles since power-on, undoing the per-second rebasing execute() applies */
+    /** Emulated cycles since power-on */
     get elapsedCycles() {
-        const cpu = this._machine.processor;
-        return cpu.cycleSeconds * cpu.model.cyclesPerSecond + cpu.currentCycles;
+        return this._machine.elapsedCycles;
     }
 
     /**

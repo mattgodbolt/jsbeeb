@@ -56,7 +56,7 @@ describe("Model", () => {
         expect(atom.keys).toBe(ATOM);
         expect(beeb.stringToKeys("A")).toEqual([BBC.A]);
         expect(atom.pasteKeyDelayMs).toBeGreaterThan(beeb.pasteKeyDelayMs);
-        expect([beeb.pasteReleaseGapMs, atom.pasteReleaseGapMs]).toEqual([0, 30]);
+        expect([beeb.pasteReleaseGapMs, atom.pasteReleaseGapMs]).toEqual([0, 40]);
     });
 
     it("carries no per-session settings", () => {
