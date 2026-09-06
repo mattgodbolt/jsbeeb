@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GlCanvas, Canvas, bestCanvas, useBestFilter } from "../../src/canvas.js";
+import { GlCanvas, Canvas, bestCanvas, useBestFilter } from "../../src/web/canvas.js";
 import PAL_FRAG_SHADER from "../../src/video-filters/shaders/pal-composite.frag.glsl?raw";
 import { PassthroughFilter } from "../../src/video-filters/passthrough-filter.js";
 import { PALCompositeFilter } from "../../src/video-filters/pal-composite.js";

@@ -1,4 +1,4 @@
-import { BBC, keyCodes } from "./keymap.js";
+import { BBC, keyCodes } from "../keymap.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
 

@@ -1,4 +1,4 @@
-import { toggle } from "../dom-utils.js";
+import { toggle } from "./dom-utils.js";
 import { hexbyte, hexword, parseAddr } from "../hex.js";
 
 const noop = () => {};

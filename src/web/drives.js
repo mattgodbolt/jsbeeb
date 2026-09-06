@@ -1,7 +1,7 @@
 import { toast } from "./toast.js";
 import { DiscLayout, toSsdOrDsd } from "../disc.js";
 import { toHfe } from "../disc-hfe.js";
-import { downloadDriveData } from "../dom-utils.js";
+import { downloadDriveData } from "./dom-utils.js";
 import { DriveTracks } from "../url-params.js";
 
 const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);

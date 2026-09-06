@@ -1,4 +1,4 @@
-import { downloadDriveData } from "../dom-utils.js";
+import { downloadDriveData } from "./dom-utils.js";
 
 const UnloadWarning =
     "It seems like you're still using the emulator. If you're in Chrome, it's impossible for jsbeeb to prevent some shortcuts (like ctrl-W) from performing their default behaviour (e.g. closing the window).\n" +

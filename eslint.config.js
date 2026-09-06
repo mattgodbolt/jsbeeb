@@ -32,4 +32,15 @@ export default [
             ],
         },
     },
+    // The core of the emulator runs headless as well as in the page, so it sees only what node and
+    // browsers share; the browser belongs to src/web, src/main.js and the vendored GL debugger.
+    {
+        files: ["src/**/*.js"],
+        ignores: ["src/web/**", "src/app/**", "src/main.js", "src/lib/**"],
+        languageOptions: { globals: { ...globals.node, ...globals["shared-node-browser"] } },
+    },
+    {
+        files: ["src/loader.js"],
+        languageOptions: { globals: { XMLHttpRequest: "readonly" } },
+    },
 ];

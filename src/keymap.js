@@ -423,7 +423,7 @@ export function adaptKeyCodesToBrowser() {
 
     // Swap APOSTROPHE and BACK_QUOTE keys around for Mac users.  They are the opposite to what jsbeeb expects.
     // Swap them to what jsbeeb expects, and tidy up the hash key to prevent duplicate key mappings.
-    if (!runningInNode && window.navigator.userAgent.indexOf("Mac") !== -1) {
+    if (!runningInNode && navigator.userAgent.indexOf("Mac") !== -1) {
         keyCodes.BACK_QUOTE = 192;
         keyCodes.APOSTROPHE = 222;
         keyCodes.HASH = 223;

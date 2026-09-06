@@ -1,4 +1,5 @@
 import * as disc from "../fdc.js";
+import { localDisc } from "./local-disc.js";
 import { DiscLayout } from "../disc.js";
 import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
@@ -220,7 +221,7 @@ export class MediaLoader extends EventTarget {
         if (!discImage) return null;
         const { schema, image } = splitImage(discImage);
         if (schema[0] === "!" || schema === "local") {
-            return disc.localDisc(image, layout, (error) =>
+            return localDisc(image, layout, (error) =>
                 toast(
                     `Browser storage would not take changes to ${image} (${errorText(error)}). Use Discs, Download to keep a copy.`,
                     { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },

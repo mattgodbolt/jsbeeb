@@ -1,4 +1,4 @@
-import { renderThumbnails, executeUntilFrame } from "../rewind-thumbnail.js";
+import { renderThumbnails, executeUntilFrame } from "./rewind-thumbnail.js";
 import { RewindBuffer } from "../rewind.js";
 import { RewindCaptureInterval } from "./emulation-loop.js";
 

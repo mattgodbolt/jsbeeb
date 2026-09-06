@@ -1,4 +1,4 @@
-import { Keyboard } from "../keyboard.js";
+import { Keyboard } from "./keyboard.js";
 import { showNotice } from "./reporting.js";
 import { noteEvent } from "./analytics.js";
 import { keyCodes } from "../keymap.js";

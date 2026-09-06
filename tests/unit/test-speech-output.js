@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { SpeechOutput, MAX_BUFFER } from "../../src/speech-output.js";
+import { SpeechOutput, MAX_BUFFER } from "../../src/web/speech-output.js";
 
 // Stub out speechSynthesis so tests run in Node without a browser.
 const mockSpeak = vi.fn();
