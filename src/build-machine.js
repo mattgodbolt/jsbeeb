@@ -55,6 +55,7 @@ export function isMachineSpec(config) {
 
 /** The processor for `model`, fitted as `spec` says, talking to the peripherals in `io`. */
 export function buildMachine({ model, spec, io, cycleAccurate = true }) {
+    if (!isMachineSpec(spec)) throw new Error("A machine's config must come from machineSpec()");
     const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
     return new CpuClass(model, { ...io, config: spec, cycleAccurate });
 }

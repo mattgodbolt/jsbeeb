@@ -1,29 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { Cpu6502 } from "../../src/6502.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
-import { FakeDdNoise } from "../../src/ddnoise.js";
-import { Cmos } from "../../src/cmos.js";
-import { machineSpec } from "../../src/build-machine.js";
-import { FakeMusic5000 } from "../../src/music5000.js";
+import { buildMachine, machineSpec, nullIo } from "../../src/build-machine.js";
 import { findModel, TEST_6502 } from "../../src/models.js";
 
 function makeCpu() {
     const fb32 = new Uint32Array(1024 * 768);
     const video = new Video(false, fb32, () => {});
     const soundChip = new SoundChip(() => {});
-    const dbgr = { setCpu: () => {} };
-    const cpu = new Cpu6502(TEST_6502, {
-        dbgr,
-        video,
-        soundChip,
-        ddNoise: new FakeDdNoise(),
-        music5000: new FakeMusic5000(),
-        cmos: new Cmos(),
-        config: machineSpec(),
-    });
-    return cpu;
+    return buildMachine({ model: TEST_6502, spec: machineSpec(), io: nullIo({ video, soundChip }) });
 }
 
 describe("Cpu6502 snapshotState / restoreState", () => {

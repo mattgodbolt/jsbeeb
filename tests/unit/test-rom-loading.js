@@ -1,23 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { Cpu6502 } from "../../src/6502.js";
 import { TEST_6502 } from "../../src/models.js";
-import { FakeVideo } from "../../src/video.js";
-import { FakeSoundChip } from "../../src/soundchip.js";
-import { FakeDdNoise } from "../../src/ddnoise.js";
-import { FakeMusic5000 } from "../../src/music5000.js";
-import { Cmos } from "../../src/cmos.js";
-import { machineSpec } from "../../src/build-machine.js";
+import { buildMachine, machineSpec, nullIo } from "../../src/build-machine.js";
 
 function makeCpu() {
-    return new Cpu6502(TEST_6502, {
-        dbgr: { setCpu: () => {} },
-        video: new FakeVideo(),
-        soundChip: new FakeSoundChip(),
-        ddNoise: new FakeDdNoise(),
-        music5000: new FakeMusic5000(),
-        cmos: new Cmos(),
-        config: machineSpec(),
-    });
+    return buildMachine({ model: TEST_6502, spec: machineSpec(), io: nullIo() });
 }
 
 // TEST_6502 has eight sideways RAM banks, leaving eight for extra ROMs.
