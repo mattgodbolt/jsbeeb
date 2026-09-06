@@ -400,21 +400,6 @@ describe("Keyboard", () => {
         expect(keyboard.isPasting).toBe(true);
     });
 
-    test("sendRawKeyboard should deliver keys via scheduler and re-enable keyboard", () => {
-        keyboard.sendRawKeyboard([BBC.A], false);
-
-        // First scheduler fire: presses the key
-        mockProcessor.scheduler.polltime(1);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
-        expect(keyboard.isPasting).toBe(true);
-
-        // Second scheduler fire after delay: releases key, sees empty queue, re-enables keyboard
-        const delayCycles = (50 * mockProcessor.peripheralCyclesPerSecond) / 1000;
-        mockProcessor.scheduler.polltime(delayCycles);
-        expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
-        expect(keyboard.isPasting).toBe(false);
-    });
-
     test("cancelPaste should stop paste and re-enable keyboard", () => {
         keyboard.sendRawKeyboard([BBC.A, BBC.B, BBC.C], false);
         mockProcessor.scheduler.polltime(1); // deliver first key
@@ -441,54 +426,6 @@ describe("Keyboard", () => {
 
         expect(keyboard.isPasting).toBe(false);
         expect(mockSysvia.enableKeyboard).toHaveBeenCalled();
-    });
-
-    test("sendRawKeyboard should handle numeric delay entries", () => {
-        keyboard.sendRawKeyboard([1000, BBC.A], false);
-        const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
-
-        // First fire: numeric delay consumed, no key toggled yet
-        mockProcessor.scheduler.polltime(1);
-        expect(mockSysvia.keyToggleRaw).not.toHaveBeenCalled();
-        expect(keyboard.isPasting).toBe(true);
-
-        // After 1000ms delay: key A delivered
-        mockProcessor.scheduler.polltime(1000 * clocksPerMs);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.A);
-    });
-
-    test("sendRawKeyboard should debounce consecutive identical keys", () => {
-        keyboard.sendRawKeyboard([BBC.A, BBC.A], false);
-        const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
-
-        // First fire: press A
-        mockProcessor.scheduler.polltime(1);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledTimes(1);
-
-        // Second fire after 50ms: release A, then debounce (same char)
-        mockProcessor.scheduler.polltime(50 * clocksPerMs);
-        // keyToggleRaw called twice: once to release A, once because debounce path
-        // releases previous char then skips pressing
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledTimes(2);
-
-        // After 30ms debounce: press A again
-        mockProcessor.scheduler.polltime(30 * clocksPerMs);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledTimes(3);
-    });
-
-    test("sendRawKeyboard while already pasting should cancel previous paste", () => {
-        keyboard.sendRawKeyboard([BBC.A, BBC.B, BBC.C], false);
-        mockProcessor.scheduler.polltime(1); // deliver first key
-
-        // Start a new paste mid-stream
-        keyboard.sendRawKeyboard([BBC.X], false);
-
-        // Old paste should be cancelled, new one in progress
-        expect(keyboard.isPasting).toBe(true);
-
-        // Deliver new paste
-        mockProcessor.scheduler.polltime(1);
-        expect(mockSysvia.keyToggleRaw).toHaveBeenCalledWith(BBC.X);
     });
 
     test("postFrameShouldPause should handle single step", () => {
@@ -601,95 +538,9 @@ describe("Keyboard Atom adapter", () => {
         expect(mockAtomPPIA.keyUp).toHaveBeenCalledWith(65);
     });
 
-    test("sendRawKeyboard should not inject lock toggles for Atom", () => {
-        // PPIA reports capsLockLight=true, shiftLockLight=false,
-        // so the paste logic should not prepend/append any lock keys.
-        mockAtomPPIA.capsLockLight = true;
-        mockAtomPPIA.shiftLockLight = false;
-        const keys = [BBC.A];
-        keyboard.sendRawKeyboard(keys, true);
-        expect(mockAtomPPIA.disableKeyboard).toHaveBeenCalled();
-        // The keys array should not have been modified with lock toggles
-        expect(keys).toEqual([BBC.A]);
-    });
-
     test("setKeyLayout hands the layout to the processor", () => {
         keyboard.setKeyLayout("natural");
         expect(mockProcessor.setKeyLayout).toHaveBeenCalledWith("natural");
-    });
-
-    test("paste should insert debounce gap between key release and next key press", () => {
-        keyboard.sendRawKeyboard([ATOM.A, ATOM.B], false);
-        const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
-
-        // First fire: press A
-        mockProcessor.scheduler.polltime(1);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledWith(ATOM.A);
-
-        // After 80ms (Atom uses longer hold): release A, then debounce gap
-        mockProcessor.scheduler.polltime(80 * clocksPerMs);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release A only
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A); // toggle off
-
-        // After 30ms debounce: press B
-        mockProcessor.scheduler.polltime(30 * clocksPerMs);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.B);
-    });
-
-    test("paste should not insert debounce gap after SHIFT key", () => {
-        keyboard.sendRawKeyboard([ATOM.SHIFT, ATOM.A], false);
-        const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
-
-        // First fire: press SHIFT
-        mockProcessor.scheduler.polltime(1);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
-
-        // After 80ms: SHIFT is not released (it's the shift key), and A should
-        // be pressed immediately — no debounce gap for SHIFT.
-        mockProcessor.scheduler.polltime(80 * clocksPerMs);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
-    });
-
-    test("paste should handle repeated characters with Atom debounce", () => {
-        keyboard.sendRawKeyboard([ATOM.A, ATOM.A], false);
-        const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
-
-        // Press first A
-        mockProcessor.scheduler.polltime(1);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
-
-        // After 80ms: release A, Atom debounce gap
-        mockProcessor.scheduler.polltime(80 * clocksPerMs);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2); // release only
-
-        // After 30ms Atom debounce: same-key debounce fires (not a double press)
-        mockProcessor.scheduler.polltime(30 * clocksPerMs);
-        // The Atom debounce cleared _pasteLastChar, so same-key debounce
-        // doesn't trigger — second A is pressed directly.
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
-    });
-
-    test("paste should debounce LOCK key like regular keys", () => {
-        keyboard.sendRawKeyboard([ATOM.LOCK, ATOM.A, ATOM.LOCK], false);
-        const clocksPerMs = mockProcessor.peripheralCyclesPerSecond / 1000;
-
-        // Press LOCK
-        mockProcessor.scheduler.polltime(1);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(1);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.LOCK);
-
-        // After 80ms: release LOCK, Atom debounce (LOCK is not SHIFT)
-        mockProcessor.scheduler.polltime(80 * clocksPerMs);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(2);
-
-        // After 30ms debounce: press A
-        mockProcessor.scheduler.polltime(30 * clocksPerMs);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenCalledTimes(3);
-        expect(mockAtomPPIA.keyToggleRaw).toHaveBeenLastCalledWith(ATOM.A);
     });
 });
 

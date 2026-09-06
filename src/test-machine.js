@@ -5,11 +5,10 @@ import { findModel } from "./models.js";
 import assert from "assert";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as utils_atom from "./keymap-atom.js";
 import * as Tokeniser from "./basic-tokenise.js";
 import { VduTextCapture } from "./vdu-capture.js";
 import { setNodeBasePath } from "./loader.js";
-import { keyCodes } from "./keymap.js";
+import { Typist } from "./typist.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -20,6 +19,7 @@ export class TestMachine {
         this.model = findModel(model);
         if (!this.model) throw new Error(`Unknown model "${model}"`);
         this.processor = fake6502(this.model, opts || {});
+        this.typist = new Typist(this.processor);
         this._capturedChars = [];
         this._captureHookInstalled = false;
     }
@@ -143,28 +143,10 @@ export class TestMachine {
         });
     }
 
-    /**
-     * Run until the cursor blink reaches the desired state.
-     * This ensures deterministic screenshots regardless of how many
-     * cycles were consumed by prior type() or runFor() calls.
-     * @param {boolean} on - true for cursor visible, false for hidden
-     */
-    async runToCursorState(on) {
-        const video = this.processor.video;
-        for (let i = 0; i < 100; i++) {
-            if (video.cursorOnThisFrame === on) return;
-            await this.runFor(40000);
-        }
-        throw new Error(`Cursor did not reach state ${on} in time (cursorOnThisFrame=${video.cursorOnThisFrame})`);
-    }
-
-    async runUntilFlashHidden() {
-        const teletext = this.processor.video.teletext;
-        for (let i = 0; i < 100; i++) {
-            if (teletext.hideFlashing) return;
-            await this.runFor(40000);
-        }
-        throw new Error("Flashing text did not reach its hidden phase in time");
+    /** Emulated cycles since power-on, undoing the per-second rebasing execute() applies. */
+    get elapsedCycles() {
+        const cpu = this.processor;
+        return cpu.cycleSeconds * this.model.cyclesPerSecond + cpu.currentCycles;
     }
 
     async runUntilVblank() {
@@ -260,215 +242,16 @@ export class TestMachine {
     }
 
     /**
-     * Convert an ASCII character to a {code, shift} pair for the BBC keyboard.
-     */
-    _charToKey(ch) {
-        switch (ch) {
-            case "\n":
-            case "\r":
-                return { code: 13, shift: false };
-            case '"':
-                return { code: keyCodes.K2, shift: true };
-            case "*":
-                return { code: keyCodes.APOSTROPHE, shift: true };
-            case "!":
-                return { code: keyCodes.K1, shift: true };
-            case ".":
-                return { code: keyCodes.PERIOD, shift: false };
-            case ";":
-                return { code: keyCodes.SEMICOLON, shift: false };
-            case ":":
-                return { code: keyCodes.APOSTROPHE, shift: false };
-            case ",":
-                return { code: keyCodes.COMMA, shift: false };
-            case "&":
-                return { code: keyCodes.K6, shift: true };
-            case " ":
-                return { code: keyCodes.SPACE, shift: false };
-            case "-":
-                return { code: keyCodes.MINUS, shift: false };
-            case "=":
-                return { code: keyCodes.MINUS, shift: true };
-            case "+":
-                return { code: keyCodes.SEMICOLON, shift: true };
-            case "^":
-                return { code: keyCodes.EQUALS, shift: false };
-            case "~":
-                return { code: keyCodes.EQUALS, shift: true };
-            case "[":
-                return { code: keyCodes.LEFT_SQUARE_BRACKET, shift: false };
-            case "]":
-                return { code: keyCodes.RIGHT_SQUARE_BRACKET, shift: false };
-            case "{":
-                return { code: keyCodes.LEFT_SQUARE_BRACKET, shift: true };
-            case "}":
-                return { code: keyCodes.HASH, shift: true };
-            case "\\":
-                return { code: keyCodes.BACKSLASH, shift: false };
-            case "/":
-                return { code: keyCodes.SLASH, shift: false };
-            case "?":
-                return { code: keyCodes.SLASH, shift: true };
-            case "<":
-                return { code: keyCodes.COMMA, shift: true };
-            case ">":
-                return { code: keyCodes.PERIOD, shift: true };
-            case "(":
-                return { code: keyCodes.K8, shift: true };
-            case ")":
-                return { code: keyCodes.K9, shift: true };
-            case "@":
-                return { code: keyCodes.BACK_QUOTE, shift: false };
-            case "#":
-                return { code: keyCodes.K3, shift: true };
-            case "$":
-                return { code: keyCodes.K4, shift: true };
-            case "%":
-                return { code: keyCodes.K5, shift: true };
-            default: {
-                const upper = ch.toUpperCase();
-                const isLetter = (ch >= "a" && ch <= "z") || (ch >= "A" && ch <= "Z");
-                if (isLetter) {
-                    const wantUpper = ch >= "A" && ch <= "Z";
-                    const capsOn = this.processor.sysvia.capsLockLight;
-                    // CAPS LOCK on: unshifted = upper, shifted = lower
-                    // CAPS LOCK off: unshifted = lower, shifted = upper
-                    const needShift = capsOn ? !wantUpper : wantUpper;
-                    return { code: upper.charCodeAt(0), shift: needShift };
-                }
-                return { code: ch.charCodeAt(0), shift: false };
-            }
-        }
-    }
-
-    /**
-     * Type text by installing a debugInstruction hook that presses/releases
-     * keys at timed intervals during CPU execution.  The hook persists across
-     * runFor calls, so breakpoints naturally coexist: if a breakpoint halts
-     * execution mid-typing, the remaining characters are typed when execution
-     * resumes.
+     * Types the text and a RETURN at the machine, running the CPU until the
+     * last key is up. The keys arrive from the scheduler, so a breakpoint that
+     * stops the CPU part way leaves the rest to be typed when it runs again.
      */
     async type(text) {
-        if (this.model.isAtom) {
-            return this._typeAtom(text);
-        }
-        const fullText = text + "\n"; // append RETURN
-        const keys = fullText.split("").map((ch) => this._charToKey(ch));
-        // Key hold is counted in CPU cycles, so scale it to keep the hold constant in
-        // real time: the OS scans the keyboard on a peripheral-rate interrupt.
-        const holdCycles = (40000 * this.processor.cpuMultiplier) | 0;
-        let index = 0;
-        let phase = "idle"; // "idle" → "down" → "idle"
-        let nextEventCycle = 0;
-        let done = false;
-
-        const currentCycle = () =>
-            this.processor.cycleSeconds * this.model.cyclesPerSecond + this.processor.currentCycles;
-
-        const hook = this.processor.debugInstruction.add(() => {
-            if (currentCycle() < nextEventCycle) return;
-
-            if (phase === "down") {
-                // Release current key
-                const key = keys[index];
-                this.processor.sysvia.keyUp(key.code);
-                if (key.shift) this.processor.sysvia.keyUp(16);
-                index++;
-                phase = "idle";
-                nextEventCycle = currentCycle() + holdCycles;
-                return;
-            }
-
-            // phase === "idle"
-            if (index >= keys.length) {
-                hook.remove();
-                done = true;
-                return;
-            }
-
-            // Press next key
-            const key = keys[index];
-            if (key.shift) this.processor.sysvia.keyDown(16);
-            this.processor.sysvia.keyDown(key.code);
-            phase = "down";
-            nextEventCycle = currentCycle() + holdCycles;
-        });
-
-        // Drive execution in chunks until all characters are typed or
-        // a breakpoint halts the CPU.
-        while (!done) {
-            const stopped = await this.runFor(holdCycles);
+        const lines = text.replace(/\r\n?/g, "\n");
+        this.typist.type(this.model.stringToKeys(lines + "\n"), true);
+        while (this.typist.isTyping) {
+            const stopped = await this.runFor(MaxCyclesPerIter);
             if (stopped) break;
-        }
-    }
-
-    /** Type text on the Atom using its key mapping and PPIA interface. */
-    async _typeAtom(text) {
-        // stringToATOMKeys returns a flat array of [col, row] pairs.
-        // SHIFT is held across multiple characters; LOCK is tapped to
-        // toggle the ROM's internal caps lock state.
-        const keySequence = utils_atom.stringToATOMKeys(text + "\n");
-        const ppia = this.processor.atomppia;
-        const holdCycles = (80000 * this.processor.cpuMultiplier) | 0; // Atom at 1 MHz needs longer hold than BBC at 2 MHz
-        const SHIFT = utils_atom.ATOM.SHIFT;
-
-        let index = 0;
-        let phase = "idle";
-        let nextEventCycle = 0;
-        let done = false;
-        let shiftHeld = false;
-
-        const currentCycle = () =>
-            this.processor.cycleSeconds * this.model.cyclesPerSecond + this.processor.currentCycles;
-
-        const isShift = (entry) => entry[0] === SHIFT[0] && entry[1] === SHIFT[1];
-
-        const hook = this.processor.debugInstruction.add(() => {
-            if (currentCycle() < nextEventCycle) return;
-
-            if (phase === "down") {
-                const entry = keySequence[index];
-                if (!isShift(entry)) {
-                    ppia.keyUpRaw(entry);
-                }
-                index++;
-                phase = "idle";
-                nextEventCycle = currentCycle() + holdCycles;
-                return;
-            }
-
-            if (index >= keySequence.length) {
-                if (shiftHeld) ppia.keyUpRaw(SHIFT);
-                hook.remove();
-                done = true;
-                return;
-            }
-
-            const entry = keySequence[index];
-            if (isShift(entry)) {
-                if (shiftHeld) {
-                    ppia.keyUpRaw(SHIFT);
-                    shiftHeld = false;
-                } else {
-                    ppia.keyDownRaw(SHIFT);
-                    shiftHeld = true;
-                }
-                index++;
-                nextEventCycle = currentCycle() + holdCycles;
-            } else {
-                ppia.keyDownRaw(entry);
-                phase = "down";
-                nextEventCycle = currentCycle() + holdCycles;
-            }
-        });
-
-        while (!done) {
-            const stopped = await this.runFor(holdCycles);
-            if (stopped) {
-                hook.remove();
-                if (shiftHeld) ppia.keyUpRaw(SHIFT);
-                break;
-            }
         }
     }
 
