@@ -83,12 +83,12 @@ describe("Machine", () => {
     it("builds the processor with everything bolted on and attaches the printer", () => {
         const machine = make();
         expect(machine.processor).toBe(fakeProcessor);
-        const [{ model, spec, io }] = deps.build.mock.calls[0];
+        const [model, fittings] = deps.build.mock.calls[0];
         expect(model).toBe(deps.model);
-        expect(io.cmos).toBe(machine.cmos);
-        expect(spec).toBe(machine.spec);
-        expect(Object.isFrozen(spec)).toBe(true);
-        expect(io.music5000).toBeNull();
+        expect(fittings.cmos).toBe(machine.cmos);
+        expect(fittings.config).toBe(machine.spec);
+        expect(Object.isFrozen(fittings.config)).toBe(true);
+        expect(fittings.music5000).toBeNull();
         expect(deps.printer.attach).toHaveBeenCalledWith(fakeProcessor.uservia);
     });
 

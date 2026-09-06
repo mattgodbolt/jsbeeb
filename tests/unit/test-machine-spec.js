@@ -1,36 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AtomCpu6502, Cpu6502 } from "../../src/6502.js";
-import { buildMachine, isMachineSpec, machineSpec, nullIo } from "../../src/build-machine.js";
-import { TEST_6502, findModel } from "../../src/models.js";
+import { machineSpec, nullIo } from "../../src/machine-spec.js";
+import { TEST_6502 } from "../../src/models.js";
 
-describe("buildMachine", () => {
-    const build = (model, spec = machineSpec()) => buildMachine({ model, spec, io: nullIo() });
+describe("a CPU fitted from a spec", () => {
+    const build = (spec = machineSpec()) => new TEST_6502.Cpu(TEST_6502, { ...nullIo(), config: spec });
 
-    it("builds the processor the model calls for", () => {
-        expect(build(TEST_6502)).toBeInstanceOf(Cpu6502);
-        expect(build(findModel("Atom"))).toBeInstanceOf(AtomCpu6502);
-    });
-
-    it("fits the machine as the spec says", () => {
-        const cpu = build(TEST_6502, machineSpec({ cpuMultiplier: 2, keyLayout: "natural" }));
+    it("is fitted as the spec says", () => {
+        const cpu = build(machineSpec({ cpuMultiplier: 2, keyLayout: "natural" }));
         expect(cpu.cpuMultiplier).toBe(2);
         expect(cpu.keyLayout).toBe("natural");
         expect(cpu.hasTube).toBe(false);
     });
 
-    it("refuses a config that did not come from machineSpec, frozen or missing", () => {
-        expect(() => build(TEST_6502, { keyLayout: "physical" })).toThrow("must come from machineSpec()");
-        expect(() => build(TEST_6502, Object.freeze({ keyLayout: "physical" }))).toThrow(
-            "must come from machineSpec()",
-        );
-        expect(() => buildMachine({ model: TEST_6502, spec: undefined, io: nullIo() })).toThrow(
-            "must come from machineSpec()",
-        );
-    });
-
     it("changes the key layout for the keyboard and for the next reset alike", () => {
-        const cpu = build(TEST_6502);
+        const cpu = build();
         const viaLayout = vi.spyOn(cpu.sysvia, "setKeyLayout");
         cpu.setKeyLayout("gaming");
         expect(cpu.keyLayout).toBe("gaming");
@@ -59,12 +43,6 @@ describe("machineSpec", () => {
     it("refuses a field it does not know, including one every object inherits", () => {
         expect(() => machineSpec({ keylayout: "natural" })).toThrow("Unknown machine spec fields: keylayout");
         expect(() => machineSpec({ toString: () => "" })).toThrow("Unknown machine spec fields: toString");
-    });
-
-    it("can tell its own specs from look-alikes", () => {
-        expect(isMachineSpec(machineSpec())).toBe(true);
-        expect(isMachineSpec(Object.freeze({ keyLayout: "physical" }))).toBe(false);
-        expect(isMachineSpec(undefined)).toBe(false);
     });
 
     it("cannot be changed afterwards", () => {

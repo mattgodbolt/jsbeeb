@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "../../src/snapshot.js";
 import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
-import { buildMachine, machineSpec, nullIo } from "../../src/build-machine.js";
+import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { TEST_6502, TubeModel } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
@@ -15,7 +15,7 @@ function makeCpu(config = {}) {
     const fb32 = new Uint32Array(1024 * 768);
     const video = new Video(false, fb32, () => {});
     const soundChip = new SoundChip(() => {});
-    return buildMachine({ model: TEST_6502, spec: machineSpec(config), io: nullIo({ video, soundChip }) });
+    return new TEST_6502.Cpu(TEST_6502, { ...nullIo({ video, soundChip }), config: machineSpec(config) });
 }
 
 describe("Snapshot coordinator", () => {

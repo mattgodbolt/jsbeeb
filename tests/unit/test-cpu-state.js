@@ -2,14 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { fake6502 } from "../../src/fake6502.js";
 import { Video, FakeVideo } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
-import { buildMachine, machineSpec, nullIo } from "../../src/build-machine.js";
+import { machineSpec, nullIo } from "../../src/machine-spec.js";
 import { findModel, TEST_6502 } from "../../src/models.js";
 
 function makeCpu() {
     const fb32 = new Uint32Array(1024 * 768);
     const video = new Video(false, fb32, () => {});
     const soundChip = new SoundChip(() => {});
-    return buildMachine({ model: TEST_6502, spec: machineSpec(), io: nullIo({ video, soundChip }) });
+    return new TEST_6502.Cpu(TEST_6502, { ...nullIo({ video, soundChip }), config: machineSpec() });
 }
 
 describe("Cpu6502 snapshotState / restoreState", () => {

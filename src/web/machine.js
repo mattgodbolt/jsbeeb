@@ -1,4 +1,4 @@
-import { buildMachine, machineSpec } from "../build-machine.js";
+import { machineSpec } from "../machine-spec.js";
 import { Cmos, localStoragePersistence } from "../cmos.js";
 import { Econet } from "../econet.js";
 import { LoadSD } from "../mmc.js";
@@ -60,7 +60,7 @@ export class Machine {
         video,
         audioHandler,
         dbgr,
-        build = buildMachine,
+        build = (cpuModel, options) => new cpuModel.Cpu(cpuModel, options),
     }) {
         this.model = model;
         this.audioHandler = audioHandler;
@@ -96,19 +96,16 @@ export class Machine {
             printer,
         });
 
-        this.processor = build({
-            model,
-            spec: this.spec,
-            io: {
-                dbgr,
-                video,
-                soundChip: audioHandler.soundChip,
-                ddNoise: audioHandler.ddNoise,
-                relayNoise: audioHandler.relayNoise,
-                music5000: settings.hasMusic5000 ? audioHandler.music5000 : null,
-                cmos: this.cmos,
-                econet: this.econet,
-            },
+        this.processor = build(model, {
+            dbgr,
+            video,
+            soundChip: audioHandler.soundChip,
+            ddNoise: audioHandler.ddNoise,
+            relayNoise: audioHandler.relayNoise,
+            music5000: settings.hasMusic5000 ? audioHandler.music5000 : null,
+            cmos: this.cmos,
+            econet: this.econet,
+            config: this.spec,
         });
 
         printer.attach(this.processor.uservia);
