@@ -10,6 +10,11 @@ describe("loadData in node", () => {
         expect(data.length).toBe(16384);
     });
 
+    it("reads a file: URL as the file it names", async () => {
+        const data = await loadData(new URL("../../public/roms/os.rom", import.meta.url).href);
+        expect(data.length).toBe(16384);
+    });
+
     it("fetches a URL", async () => {
         vi.stubGlobal(
             "fetch",

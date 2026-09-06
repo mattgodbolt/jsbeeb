@@ -52,11 +52,9 @@ export class MediaResolver {
                 return unzipDiscImage(stringToUint8Array(atob(image)));
             case "http":
             case "https":
-            case "file": {
-                const url = `${schema}://${image}`;
+            case "file":
                 // The URL may end in query parameters, which would upset the extension check.
-                return openIfZip(new URL(url).pathname, await this.load(url));
-            }
+                return openIfZip(new URL(ref).pathname, await this.load(ref));
             default:
                 return openIfZip(image, await this.load(`${folder}/${image}`));
         }
