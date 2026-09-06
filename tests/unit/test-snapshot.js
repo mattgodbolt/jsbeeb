@@ -1,11 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createSnapshot, restoreSnapshot, snapshotToJSON, snapshotFromJSON, isSameModel } from "../../src/snapshot.js";
-import { Cpu6502 } from "../../src/6502.js";
 import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
-import { FakeDdNoise } from "../../src/ddnoise.js";
-import { Cmos } from "../../src/cmos.js";
-import { FakeMusic5000 } from "../../src/music5000.js";
+import { buildMachine, machineSpec, nullIo } from "../../src/build-machine.js";
 import { TEST_6502, TubeModel } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
@@ -18,16 +15,7 @@ function makeCpu(config = {}) {
     const fb32 = new Uint32Array(1024 * 768);
     const video = new Video(false, fb32, () => {});
     const soundChip = new SoundChip(() => {});
-    const dbgr = { setCpu: () => {} };
-    return new Cpu6502(TEST_6502, {
-        dbgr,
-        video,
-        soundChip,
-        ddNoise: new FakeDdNoise(),
-        music5000: new FakeMusic5000(),
-        cmos: new Cmos(),
-        config,
-    });
+    return buildMachine({ model: TEST_6502, spec: machineSpec(config), io: nullIo({ video, soundChip }) });
 }
 
 describe("Snapshot coordinator", () => {

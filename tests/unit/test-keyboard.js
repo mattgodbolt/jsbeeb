@@ -41,6 +41,7 @@ describe("Keyboard", () => {
         mockProcessor = {
             model: { isAtom: false },
             sysvia: mockSysvia,
+            setKeyLayout: vi.fn(),
             scheduler: new Scheduler(),
             setReset: vi.fn(),
             peripheralCyclesPerSecond: 2000000,
@@ -254,9 +255,9 @@ describe("Keyboard", () => {
         expect(mockSysvia.clearKeys).toHaveBeenCalled();
     });
 
-    test("setKeyLayout should update config and call processor to update layout", () => {
+    test("setKeyLayout hands the layout to the processor", () => {
         keyboard.setKeyLayout("gaming");
-        expect(mockSysvia.setKeyLayout).toHaveBeenCalledWith("gaming");
+        expect(mockProcessor.setKeyLayout).toHaveBeenCalledWith("gaming");
     });
 
     test("keyPress should not proceed when input is enabled", () => {
@@ -562,6 +563,7 @@ describe("Keyboard Atom adapter", () => {
         mockProcessor = {
             model: { isAtom: true },
             atomppia: mockAtomPPIA,
+            setKeyLayout: vi.fn(),
             sysvia: { keyDown: vi.fn(), keyUp: vi.fn() },
             scheduler: new Scheduler(),
             setReset: vi.fn(),
@@ -608,9 +610,9 @@ describe("Keyboard Atom adapter", () => {
         expect(keys).toEqual([BBC.A]);
     });
 
-    test("setKeyLayout should call PPIA setKeyLayout", () => {
+    test("setKeyLayout hands the layout to the processor", () => {
         keyboard.setKeyLayout("natural");
-        expect(mockAtomPPIA.setKeyLayout).toHaveBeenCalledWith("natural");
+        expect(mockProcessor.setKeyLayout).toHaveBeenCalledWith("natural");
     });
 
     test("paste should insert debounce gap between key release and next key press", () => {

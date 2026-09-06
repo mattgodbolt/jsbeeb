@@ -141,7 +141,7 @@ export class Keyboard extends EventTarget {
      */
     setKeyLayout(layout) {
         this.keyLayout = layout;
-        this.keyInterface.setKeyLayout(layout);
+        this.processor.setKeyLayout(layout);
     }
 
     /**

@@ -271,7 +271,7 @@ const snapshots = new SnapshotUI({
 const inputs = new AnalogueInputs({
     processor,
     screenCanvas,
-    getGamepads: machine.emulationConfig.getGamepads,
+    getGamepads: machine.spec.getGamepads,
     settings,
     audioHandler,
 });
@@ -311,11 +311,7 @@ settings.on("displayMode", (mode) => {
     // The monitor picture may have changed shape.
     layout.resize();
 });
-settings.on("keyLayout", (chosen) => {
-    keyboard.setKeyLayout(chosen);
-    // A reset reads the layout from the machine's config again.
-    machine.emulationConfig.keyLayout = chosen;
-});
+settings.on("keyLayout", (chosen) => keyboard.setKeyLayout(chosen));
 settings.on("tubeCpuMultiplier", (multiplier) => {
     if (processor.hasTube) processor.tube.cpuMultiplier = multiplier;
 });
