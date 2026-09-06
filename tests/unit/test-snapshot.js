@@ -5,7 +5,7 @@ import { Video } from "../../src/video.js";
 import { SoundChip } from "../../src/soundchip.js";
 import { FakeDdNoise } from "../../src/ddnoise.js";
 import { Cmos } from "../../src/cmos.js";
-import { machineSpec } from "../../src/machine-spec.js";
+import { machineSpec } from "../../src/build-machine.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { TEST_6502, TubeModel } from "../../src/models.js";
 import { Disc, DiscConfig, loadSsd } from "../../src/disc.js";

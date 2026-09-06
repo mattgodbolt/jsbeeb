@@ -1,5 +1,4 @@
-import { buildMachine } from "../build-machine.js";
-import { machineSpec } from "../machine-spec.js";
+import { buildMachine, machineSpec } from "../build-machine.js";
 import { Cmos, localStoragePersistence } from "../cmos.js";
 import { Econet } from "../econet.js";
 import { LoadSD } from "../mmc.js";

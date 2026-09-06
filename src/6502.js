@@ -7,7 +7,7 @@ import { Scheduler } from "./scheduler.js";
 import { TouchScreen } from "./touchscreen.js";
 import { TeletextAdaptor } from "./teletext_adaptor.js";
 import { Filestore } from "./filestore.js";
-import { isMachineSpec } from "./machine-spec.js";
+import { isMachineSpec } from "./build-machine.js";
 import { FakeRelayNoise } from "./relaynoise.js";
 import { AtomPPIA } from "./ppia.js";
 import { AtomMMC2 } from "./mmc.js";

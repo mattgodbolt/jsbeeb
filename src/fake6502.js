@@ -3,8 +3,7 @@
 import { FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
 import { TEST_6502, TEST_65C02, TEST_65C12, tubeModelFor } from "./models.js";
-import { buildMachine, nullIo } from "./build-machine.js";
-import { machineSpec } from "./machine-spec.js";
+import { buildMachine, machineSpec, nullIo } from "./build-machine.js";
 
 const fakeVideo = new FakeVideo();
 const soundChip = new FakeSoundChip();

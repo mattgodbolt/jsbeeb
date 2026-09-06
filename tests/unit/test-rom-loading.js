@@ -6,7 +6,7 @@ import { FakeSoundChip } from "../../src/soundchip.js";
 import { FakeDdNoise } from "../../src/ddnoise.js";
 import { FakeMusic5000 } from "../../src/music5000.js";
 import { Cmos } from "../../src/cmos.js";
-import { machineSpec } from "../../src/machine-spec.js";
+import { machineSpec } from "../../src/build-machine.js";
 
 function makeCpu() {
     return new Cpu6502(TEST_6502, {
