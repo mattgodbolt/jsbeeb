@@ -18,6 +18,13 @@ describe("Atom keyboard", () => {
         return machine.drainText();
     }
 
+    it("reaches the prompt again after a command, so runUntilInput can wait for it", async () => {
+        await bootAtom();
+        await machine.type("PRINT 6*7");
+        await machine.runUntilInput(10);
+        expect(machine.drainText()).toContain("42");
+    });
+
     it("should type uppercase text", async () => {
         await bootAtom();
         const output = await typeAndCapture("PRINT 42");

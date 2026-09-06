@@ -51,7 +51,7 @@ describe("Model", () => {
         const atom = findModel("Atom");
         expect([beeb.Cpu, atom.Cpu]).toEqual([Cpu6502, AtomCpu6502]);
         expect([beeb.wrchvAddress, atom.wrchvAddress]).toEqual([0x020e, 0x0208]);
-        expect([beeb.idleAddress, master.idleAddress, atom.idleAddress]).toEqual([0xe581, 0xe7e6, 0xfe94]);
+        expect([beeb.idleAddress, master.idleAddress, atom.idleAddress]).toEqual([0xe581, 0xe7e6, 0xfe71]);
         expect(beeb.keys).toBe(BBC);
         expect(atom.keys).toBe(ATOM);
         expect(beeb.stringToKeys("A")).toEqual([BBC.A]);
