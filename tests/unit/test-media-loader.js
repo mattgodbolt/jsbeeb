@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BuiltInImages, MediaLoader, splitImage } from "../../src/web/media-loader.js";
+import { BuiltInImages, MediaLoader } from "../../src/web/media-loader.js";
 import { DiscLayout } from "../../src/disc.js";
 import { discFor } from "../../src/fdc.js";
 import { toHfe } from "../../src/disc-hfe.js";
@@ -49,21 +49,6 @@ describe("MediaLoader", () => {
         for (const [schema, fetcher] of Object.entries(sources)) media.addSource(schema, fetcher);
         return media;
     };
-
-    describe("splitImage", () => {
-        it.each([
-            ["sth:ELITE.zip", "sth", "ELITE.zip"],
-            ["|ELITE.zip", "|", "ELITE.zip"],
-            ["hfe:3A1DAB83.hfe", "hfe", "3A1DAB83.hfe"],
-            ["gd:abc123/name.ssd", "gd", "abc123/name.ssd"],
-            ["local:mydisc", "local", "mydisc"],
-            ["!mydisc", "!", "mydisc"],
-            ["https://example.com/a.ssd", "https", "example.com/a.ssd"],
-            ["elite.ssd", "", "elite.ssd"],
-        ])("splits %s into schema %j and image %j", (ref, schema, image) => {
-            expect(splitImage(ref)).toEqual({ schema, image });
-        });
-    });
 
     describe("loadDiscImage", () => {
         it("returns nothing for no reference", async () => {

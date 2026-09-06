@@ -237,3 +237,20 @@ describe("MachineSession snapshots", () => {
         BootTimeout,
     );
 });
+
+describe("MachineSession disc images", () => {
+    it(
+        "puts a built-in disc in drive 0 by its bare name and catalogues it",
+        async () => {
+            const session = new MachineSession("B-DFS1.2");
+            await session.initialise();
+            await session.boot(30);
+            expect(await session.loadDiscImage("elite.ssd")).toEqual({ name: "elite.ssd", ignored: [] });
+            await session.type("*CAT");
+            const { screenText } = await session.runUntilPrompt(30);
+            expect(screenText).toContain("Elite");
+            session.destroy();
+        },
+        BootTimeout,
+    );
+});

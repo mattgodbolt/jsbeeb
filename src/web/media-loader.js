@@ -2,10 +2,10 @@ import * as disc from "../fdc.js";
 import { DiscLayout } from "../disc.js";
 import { loadTapeFromData } from "../tapes.js";
 import { toast } from "./toast.js";
-import { errorText, reportIgnoredFiles, reportLoadFailure, unzipAndReport } from "./reporting.js";
+import { errorText, reportIgnoredFiles, reportLoadFailure } from "./reporting.js";
+import { MediaResolver, openIfZip, splitImage } from "../media-resolver.js";
 import { stringToUint8Array } from "../binary.js";
 import { noteEvent } from "./analytics.js";
-import { loadData } from "../loader.js";
 
 /** The images offered on the Discs dialog's built-in list. */
 export const BuiltInImages = [
@@ -25,13 +25,6 @@ export const BuiltInImages = [
         file: "5000mstr36008.ssd",
     },
 ];
-
-export function splitImage(image) {
-    const match = image.match(/(([^:]+):\/?\/?|[!^|])?(.*)/);
-    const schema = match[2] || match[1] || "";
-    image = match[3];
-    return { image: image, schema: schema };
-}
 
 function readFileAsBinaryString(file) {
     return new Promise((resolve, reject) => {
@@ -65,7 +58,8 @@ export class MediaLoader extends EventTarget {
         this.drives = drives;
         this.urlState = urlState;
         this.modals = modals;
-        this.sources = {};
+        this.resolver = new MediaResolver();
+        this.driveSource = null;
 
         document.getElementById("disc_load").addEventListener("change", async (evt) => {
             if (evt.target.files.length === 0) return;
@@ -97,14 +91,12 @@ export class MediaLoader extends EventTarget {
             noteEvent("local", "clickTape"); // NB no filename here
 
             try {
-                let tapeData = await readFileAsBinaryString(file);
-                let tapeName = file.name;
-                if (/\.zip/i.test(tapeName)) {
-                    const unzipped = await unzipAndReport(stringToUint8Array(tapeData));
-                    tapeData = unzipped.data;
-                    tapeName = unzipped.name;
-                }
-                this.setProcessorTape(await loadTapeFromData(tapeName, tapeData, model));
+                const { name, data, ignored } = await openIfZip(
+                    file.name,
+                    stringToUint8Array(await readFileAsBinaryString(file)),
+                );
+                reportIgnoredFiles(name, ignored);
+                this.setProcessorTape(await loadTapeFromData(name, data, model));
                 urlState.set({ tape: undefined });
                 modals.hide("tapes");
             } catch (error) {
@@ -168,7 +160,8 @@ export class MediaLoader extends EventTarget {
 
     /** Register the fetcher behind an image schema; each picker calls this as it is constructed. */
     addSource(schema, fetcher) {
-        this.sources[schema] = fetcher;
+        if (schema === "drive") this.driveSource = fetcher;
+        else this.resolver.addSource(schema, fetcher);
     }
 
     /** Route tape to the correct interface (ACIA for BBC, PPIA for Atom) */
@@ -225,16 +218,18 @@ export class MediaLoader extends EventTarget {
 
     async loadDiscImage(discImage, layout = DiscLayout.auto) {
         if (!discImage) return null;
-        const split = splitImage(discImage);
-        discImage = split.image;
-        const schema = split.schema;
+        const { schema, image } = splitImage(discImage);
         if (schema[0] === "!" || schema === "local") {
-            return disc.localDisc(discImage, layout, (error) =>
+            return disc.localDisc(image, layout, (error) =>
                 toast(
-                    `Browser storage would not take changes to ${discImage} (${errorText(error)}). Use Discs, Download to keep a copy.`,
+                    `Browser storage would not take changes to ${image} (${errorText(error)}). Use Discs, Download to keep a copy.`,
                     { title: "Disc", quietKey: "quietLocalDiscSaveFailed" },
                 ),
             );
+        }
+        if (schema === "gd") {
+            const [, id, name = "(unknown)"] = image.match(/([^/]+)\/?(.*)/) ?? [null, image];
+            return this.driveSource({ name, id }, layout);
         }
         // TODO(#822) come up with a decent UX for passing an 'onChange' parameter to each of these.
         // Consider:
@@ -242,99 +237,15 @@ export class MediaLoader extends EventTarget {
         //   to load the modified disc on load.
         // * popping up a message that notes the disc has changed, and offers a way to make a local image
         // * Dialog box (ugh) saying "is this ok?"
-        switch (schema) {
-            case "|":
-            case "sth": {
-                const { name, data, ignored } = await this.sources.sth(discImage);
-                reportIgnoredFiles(name, ignored);
-                return disc.discFor(name, data, undefined, layout);
-            }
-
-            case "hfe":
-                return disc.discFor(discImage, await this.sources.hfe(discImage), undefined, layout);
-
-            case "gd": {
-                const splat = discImage.match(/([^/]+)\/?(.*)/);
-                let name = "(unknown)";
-                if (splat) {
-                    discImage = splat[1];
-                    name = splat[2];
-                }
-                return this.sources.drive({ name, id: discImage }, layout);
-            }
-            case "b64data":
-                return disc.discFor("disk.ssd", atob(discImage), undefined, layout);
-
-            case "data": {
-                const arr = Array.prototype.map.call(atob(discImage), (x) => x.charCodeAt(0));
-                const { name, data } = await unzipAndReport(arr);
-                return disc.discFor(name, data, undefined, layout);
-            }
-            case "http":
-            case "https":
-            case "file": {
-                const asUrl = `${schema}://${discImage}`;
-                // url may end in query params etc, which can upset the DSD/SSD etc detection on the extension.
-                discImage = new URL(asUrl).pathname;
-                let discData = await loadData(asUrl);
-                if (/\.zip/i.test(discImage)) {
-                    const unzipped = await unzipAndReport(discData);
-                    discData = unzipped.data;
-                    discImage = unzipped.name;
-                }
-                return disc.discFor(discImage, discData, undefined, layout);
-            }
-            default:
-                return disc.discFor(discImage, await disc.load("discs/" + discImage), undefined, layout);
-        }
+        const { name, data, ignored } = await this.resolver.resolve("disc", discImage);
+        reportIgnoredFiles(name, ignored);
+        return disc.discFor(name, data, undefined, layout);
     }
 
     async loadTapeImage(tapeImage) {
         if (!tapeImage) return null;
-        const split = splitImage(tapeImage);
-        tapeImage = split.image;
-        const schema = split.schema;
-
-        switch (schema) {
-            case "|":
-            case "sth": {
-                const { name, data, ignored } = await this.sources.tapeSth(tapeImage);
-                reportIgnoredFiles(name, ignored);
-                return await loadTapeFromData(name, data, this.model);
-            }
-
-            case "data": {
-                const arr = Array.prototype.map.call(atob(tapeImage), (x) => x.charCodeAt(0));
-                const { name, data } = await unzipAndReport(arr);
-                return await loadTapeFromData(name, data, this.model);
-            }
-
-            case "http":
-            case "https":
-            case "file": {
-                const asUrl = `${schema}://${tapeImage}`;
-                // url may end in query params etc, which can upset file handling
-                tapeImage = new URL(asUrl).pathname;
-                let tapeData = await loadData(asUrl);
-                if (/\.zip/i.test(tapeImage)) {
-                    const unzipped = await unzipAndReport(tapeData);
-                    tapeData = unzipped.data;
-                    tapeImage = unzipped.name;
-                }
-                return await loadTapeFromData(tapeImage, tapeData, this.model);
-            }
-
-            default: {
-                const tapePath = "tapes/" + tapeImage;
-                let tapeData = await loadData(tapePath);
-                let tapeName = tapeImage;
-                if (/\.zip/i.test(tapeName)) {
-                    const unzipped = await unzipAndReport(tapeData);
-                    tapeData = unzipped.data;
-                    tapeName = unzipped.name;
-                }
-                return await loadTapeFromData(tapeName, tapeData, this.model);
-            }
-        }
+        const { name, data, ignored } = await this.resolver.resolve("tape", tapeImage);
+        reportIgnoredFiles(name, ignored);
+        return loadTapeFromData(name, data, this.model);
     }
 }

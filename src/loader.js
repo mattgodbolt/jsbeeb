@@ -32,6 +32,11 @@ export function setNodeBasePath(basePath) {
 }
 
 async function loadDataNode(url) {
+    if (/^https?:\/\//.test(url)) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Unable to load ${url}, http code ${response.status}`);
+        return new Uint8Array(await response.arrayBuffer());
+    }
     const fs = await import("fs");
     const nodePath = await import("path");
     if (_nodeBasePath) {

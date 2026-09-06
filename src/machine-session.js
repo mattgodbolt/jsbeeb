@@ -17,6 +17,9 @@ import { InstrumentedSoundChip, FakeSoundChip } from "./soundchip.js";
 // files relative to this package regardless of the calling process's cwd.
 const _jsbeebRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 import * as fdc from "./fdc.js";
+import { MediaResolver } from "./media-resolver.js";
+import { StairwayToHell } from "./sth.js";
+import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
 import sharp from "sharp";
@@ -354,6 +357,27 @@ export class MachineSession {
     loadDisc(imagePath) {
         const data = new Uint8Array(readFileSync(imagePath));
         this._machine.processor.fdc.loadDisc(0, fdc.discFor(imagePath, data));
+    }
+
+    /**
+     * Put a disc in a drive by any reference the web page's URL accepts: a bare
+     * name from the built-in discs, `sth:` or `hfe:` for the archives, or a URL.
+     * Returns the name of the image loaded and any others the archive held.
+     */
+    async loadDiscImage(ref, drive = 0) {
+        const { name, data, ignored } = await this.mediaResolver().resolve("disc", ref);
+        this._machine.processor.fdc.loadDisc(drive, fdc.discFor(name, data));
+        return { name, ignored };
+    }
+
+    mediaResolver() {
+        if (!this._mediaResolver) {
+            const quiet = () => {};
+            this._mediaResolver = new MediaResolver();
+            this._mediaResolver.addSource("sth", (file) => new StairwayToHell(quiet, quiet, quiet).fetch(file));
+            this._mediaResolver.addSource("hfe", (path) => new BbcDiscArchive(quiet, quiet, quiet).fetch(path));
+        }
+        return this._mediaResolver;
     }
 
     /**
