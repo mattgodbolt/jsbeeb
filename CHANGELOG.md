@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.24.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.23.0...v1.24.0) (2026-09-06)
+
+
+### Features
+
+* the package draws its lines: a headless root export, sharp optional, the browser kept in src/web ([#1080](https://github.com/mattgodbolt/jsbeeb/issues/1080)) ([51165a2](https://github.com/mattgodbolt/jsbeeb/commit/51165a26d6fa7008fa01fb3eb484acec73ff46f0))
+* the session loads discs by any reference the page's URL accepts, through one headless resolver ([#1078](https://github.com/mattgodbolt/jsbeeb/issues/1078)) ([aedb27d](https://github.com/mattgodbolt/jsbeeb/commit/aedb27d8b6bec20eba29c0fcb2306505e1cfa508))
+
+
+### Bug Fixes
+
+* fast tape and the hidden-tab hold see the Atom's cassette motor ([#1081](https://github.com/mattgodbolt/jsbeeb/issues/1081)) ([003d77b](https://github.com/mattgodbolt/jsbeeb/commit/003d77bb07f9d7c02e8a5de1cff84270769bb030))
+* one typing routine for the page and the headless machine, and the Atom stops dropping pasted keys ([#1082](https://github.com/mattgodbolt/jsbeeb/issues/1082)) ([aa14762](https://github.com/mattgodbolt/jsbeeb/commit/aa1476254b8770d08e486c1090a4f55387e23725))
+* ship the Econet filestore's code and disc with the build ([#1055](https://github.com/mattgodbolt/jsbeeb/issues/1055)) ([1885230](https://github.com/mattgodbolt/jsbeeb/commit/188523088212d907f9367599bd414f61cb97a27b))
+* stop the fast-forward and frameSkip frame skips multiplying ([#1038](https://github.com/mattgodbolt/jsbeeb/issues/1038)) ([499731e](https://github.com/mattgodbolt/jsbeeb/commit/499731e676800a69263796c97b858817d9e845c4))
+
+
+### Performance Improvements
+
+* build the BASIC tokeniser's Master CPU once and share it ([#1040](https://github.com/mattgodbolt/jsbeeb/issues/1040)) ([946a6cf](https://github.com/mattgodbolt/jsbeeb/commit/946a6cf39307e05d26505d3a8873004b4b602a16))
+
 ## [1.23.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.22.4...v1.23.0) (2026-09-01)
 
 
