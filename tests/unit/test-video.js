@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import {
+    FakeAtomVideo,
     Video,
     HDISPENABLE,
     VDISPENABLE,
@@ -1257,5 +1258,42 @@ describe("Video", () => {
 
             expect(snapshot.ulaPal[0]).toBe(0xdeadbeef);
         });
+    });
+});
+
+describe("FakeAtomVideo", () => {
+    const Field = 16667;
+    const FlybackStart = Field - (Field * 32) / 262;
+    const Step = 7;
+
+    const runAField = (video, ppia) => {
+        const edges = [];
+        let polled = 0;
+        ppia.setVBlankInt.mockImplementation((level) => edges.push({ level, at: polled }));
+        for (; polled < Field; polled += Step) video.polltime(Step);
+        return edges;
+    };
+
+    it("pulses the PPIA's field sync once a field, low for the flyback lines", () => {
+        const ppia = { setVBlankInt: vi.fn() };
+        const video = new FakeAtomVideo();
+        video.reset({ atomppia: ppia });
+        const [start, end] = runAField(video, ppia);
+        expect(start.level).toBe(1);
+        expect(start.at).toBeGreaterThanOrEqual(FlybackStart - Step);
+        expect(start.at).toBeLessThanOrEqual(FlybackStart);
+        expect(end.level).toBe(0);
+        expect(end.at).toBeGreaterThanOrEqual(Field - Step);
+        expect(end.at).toBeLessThanOrEqual(Field);
+    });
+
+    it("keeps the same period field after field", () => {
+        const ppia = { setVBlankInt: vi.fn() };
+        const video = new FakeAtomVideo();
+        video.reset({ atomppia: ppia });
+        runAField(video, ppia);
+        const [start, end] = runAField(video, ppia);
+        expect([start.level, end.level]).toEqual([1, 0]);
+        expect(ppia.setVBlankInt).toHaveBeenCalledTimes(4);
     });
 });

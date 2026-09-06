@@ -1254,3 +1254,29 @@ export class FakeVideo {
 
     restoreState() {}
 }
+
+// The 6847's field as the PPIA sees it: 262 lines at 60Hz, with field sync low
+// for the 32 lines of flyback (see 6847.js).
+const AtomFieldCycles = 16667;
+const AtomFlybackCycles = Math.round((AtomFieldCycles * 32) / 262);
+
+/** No picture, but the field sync the Atom ROM waits on before each keyboard scan. */
+export class FakeAtomVideo extends FakeVideo {
+    reset(cpu) {
+        this.ppia = cpu.atomppia;
+        this.cycles = 0;
+        this.inFlyback = false;
+    }
+
+    polltime(cycles) {
+        this.cycles += cycles;
+        if (!this.inFlyback && this.cycles >= AtomFieldCycles - AtomFlybackCycles) {
+            this.inFlyback = true;
+            this.ppia.setVBlankInt(1);
+        } else if (this.inFlyback && this.cycles >= AtomFieldCycles) {
+            this.inFlyback = false;
+            this.cycles -= AtomFieldCycles;
+            this.ppia.setVBlankInt(0);
+        }
+    }
+}
