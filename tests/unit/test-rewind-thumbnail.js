@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderThumbnails } from "../../src/rewind-thumbnail.js";
+import { renderThumbnails } from "../../src/web/rewind-thumbnail.js";
 
 // Minimal mock canvas for node/jsdom environment
 function createMockCanvas() {

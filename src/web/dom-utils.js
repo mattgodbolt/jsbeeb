@@ -1,4 +1,4 @@
-import { replaceOrAddExtension } from "./archive.js";
+import { replaceOrAddExtension } from "../archive.js";
 
 // Minimal DOM helpers to replace jQuery usage.
 

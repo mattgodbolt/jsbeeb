@@ -1,5 +1,5 @@
 import { GamepadSource } from "../gamepad-source.js";
-import { MicrophoneInput } from "../microphone-input.js";
+import { MicrophoneInput } from "./microphone-input.js";
 import { MouseJoystickSource } from "../mouse-joystick-source.js";
 import { calculateMouseCoordinates } from "../mouse-coordinates.js";
 import { toast } from "./toast.js";

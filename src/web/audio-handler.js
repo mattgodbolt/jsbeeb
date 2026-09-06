@@ -2,8 +2,8 @@ import { FakeSoundChip, SoundChip, AtomSoundChip } from "../soundchip.js";
 import { DdNoise, FakeDdNoise } from "../ddnoise.js";
 import { RelayNoise, FakeRelayNoise } from "../relaynoise.js";
 import { Music5000, FakeMusic5000 } from "../music5000.js";
-import { createAudioContext } from "../audio-utils.js";
-import { toggle, fadeIn, fadeOut } from "../dom-utils.js";
+import { createAudioContext } from "./audio-utils.js";
+import { toggle, fadeIn, fadeOut } from "./dom-utils.js";
 import { toast } from "./toast.js";
 
 import rendererUrl from "./audio-renderer.js?worker&url";

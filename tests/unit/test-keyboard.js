@@ -1,5 +1,5 @@
 import { expect, describe, test, beforeEach, vi } from "vitest";
-import { Keyboard } from "../../src/keyboard.js";
+import { Keyboard } from "../../src/web/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
 import { BBC, keyCodes } from "../../src/keymap.js";

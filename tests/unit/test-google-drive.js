@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GoogleDriveLoader } from "../../src/google-drive.js";
+import { GoogleDriveLoader } from "../../src/web/google-drive.js";
 import { teardownDom } from "./helpers.js";
 
 describe("GoogleDriveLoader", () => {

@@ -22,7 +22,6 @@ import { StairwayToHell } from "./sth.js";
 import { BbcDiscArchive } from "./bbcdiscs.js";
 import { Video } from "./video.js";
 import { findModel } from "./models.js";
-import sharp from "sharp";
 import { setNodeBasePath } from "./loader.js";
 
 // BBC framebuffer is 1024×625 pixels
@@ -445,6 +444,7 @@ export class MachineSession {
     async screenshot() {
         // Read from _completeFb8, the last fully-painted frame snapshotted in paint_ext.
         // _fb8/_fb32 is the live render buffer (cleared and partially refilled each frame).
+        const { default: sharp } = await import("sharp");
         return sharp(Buffer.from(this._completeFb8.buffer), {
             raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
         })
@@ -469,6 +469,7 @@ export class MachineSession {
         const w = FB_WIDTH - left - right;
         const h = FB_HEIGHT - top - bottom;
 
+        const { default: sharp } = await import("sharp");
         return sharp(Buffer.from(this._completeFb8.buffer), {
             raw: { width: FB_WIDTH, height: FB_HEIGHT, channels: 4 },
         })

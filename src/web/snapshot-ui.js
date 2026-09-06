@@ -1,6 +1,6 @@
 import * as disc from "../fdc.js";
 import { DiscLayout } from "../disc.js";
-import { downloadBlob } from "../dom-utils.js";
+import { downloadBlob } from "./dom-utils.js";
 import {
     createSnapshot,
     restoreSnapshot,

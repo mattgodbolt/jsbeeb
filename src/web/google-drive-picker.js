@@ -1,6 +1,6 @@
 import * as bootstrap from "bootstrap";
 import * as disc from "../fdc.js";
-import { GoogleDriveLoader } from "../google-drive.js";
+import { GoogleDriveLoader } from "./google-drive.js";
 import { toast } from "./toast.js";
 import { errorText } from "./reporting.js";
 import { replaceOrAddExtension } from "../archive.js";

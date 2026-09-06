@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { GamePad } from "../../src/gamepads.js";
+import { GamePad } from "../../src/web/gamepads.js";
 import { BBC } from "../../src/keymap.js";
 
 describe("GamePad", function () {

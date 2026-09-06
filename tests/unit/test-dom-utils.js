@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { downloadBlob, downloadDriveData } from "../../src/dom-utils.js";
+import { downloadBlob, downloadDriveData } from "../../src/web/dom-utils.js";
 import { teardownDom } from "./helpers.js";
 
 describe("dom-utils", () => {

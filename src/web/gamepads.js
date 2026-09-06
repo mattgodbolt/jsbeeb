@@ -1,4 +1,4 @@
-import { BBC, isFirefox } from "./keymap.js";
+import { BBC, isFirefox } from "../keymap.js";
 
 export class GamePad {
     constructor() {

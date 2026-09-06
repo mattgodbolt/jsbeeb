@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { createAudioContext } from "../../src/audio-utils.js";
+import { createAudioContext } from "../../src/web/audio-utils.js";
 
 describe("createAudioContext", () => {
     afterEach(() => {

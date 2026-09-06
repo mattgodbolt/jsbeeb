@@ -4,7 +4,7 @@ import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
 
 import { Debugger } from "./web/debug.js";
-import { GamePad } from "./gamepads.js";
+import { GamePad } from "./web/gamepads.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
 import { installIcons } from "./web/icons.js";
@@ -32,7 +32,7 @@ import { UrlState } from "./web/url-state.js";
 import { Modals } from "./web/modals.js";
 import { Settings } from "./web/settings.js";
 import { Config } from "./web/config.js";
-import { SpeechOutput } from "./speech-output.js";
+import { SpeechOutput } from "./web/speech-output.js";
 import { Printer } from "./printer.js";
 import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";

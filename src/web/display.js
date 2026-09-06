@@ -1,4 +1,4 @@
-import * as canvasLib from "../canvas.js";
+import * as canvasLib from "./canvas.js";
 import { FakeVideo, Video } from "../video.js";
 import { toast } from "./toast.js";
 

@@ -1,7 +1,7 @@
-import webglDebug from "./lib/webgl-debug.js";
-import { PALCompositeFilter } from "./video-filters/pal-composite.js";
-import { PassthroughFilter } from "./video-filters/passthrough-filter.js";
-import { XbrFilter } from "./video-filters/xbr-filter.js";
+import webglDebug from "../lib/webgl-debug.js";
+import { PALCompositeFilter } from "../video-filters/pal-composite.js";
+import { PassthroughFilter } from "../video-filters/passthrough-filter.js";
+import { XbrFilter } from "../video-filters/xbr-filter.js";
 
 const DISPLAY_MODE_FILTERS = {
     pal: PALCompositeFilter,

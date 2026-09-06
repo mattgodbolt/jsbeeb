@@ -15,7 +15,7 @@
   "type": "module",
   "main": "./src/app/app.js",
   "exports": {
-    ".": "./src/app/app.js",
+    ".": "./src/index.js",
     "./machine-session": "./src/machine-session.js",
     "./src/*": "./src/*"
   },
@@ -30,7 +30,6 @@
     "bootstrap-icons": "^1.13.1",
     "bootswatch": "^5.3.8",
     "pako": "^3.0.1",
-    "sharp": "^0.35.3",
     "smoothie": "^1.36.1"
   },
   "devDependencies": {
@@ -53,6 +52,7 @@
   },
   "optionalDependencies": {
     "electron": "^44.0.0",
+    "sharp": "^0.35.3",
     "electron-builder": "^26.15.3",
     "electron-store": "^11.0.2"
   },

@@ -1,4 +1,4 @@
-import { AnalogueSource } from "./analogue-source.js";
+import { AnalogueSource } from "../analogue-source.js";
 import { createAudioContext } from "./audio-utils.js";
 
 /**
