@@ -1,20 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as fs from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 
-import {
-    errorText,
-    reportIgnoredFiles,
-    reportLoadFailure,
-    showNotice,
-    unzipAndReport,
-} from "../../src/web/reporting.js";
+import { errorText, reportIgnoredFiles, reportLoadFailure, showNotice } from "../../src/web/reporting.js";
 import { teardownDom, toasts } from "./helpers.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const readZip = (name) => new Uint8Array(fs.readFileSync(join(__dirname, "zip", name)));
 
 describe("reporting", () => {
     beforeEach(() => {
@@ -60,21 +48,6 @@ describe("reporting", () => {
             expect(toasts()).toEqual([
                 expect.stringContaining("Loaded side1.ssd. The archive also holds side2.ssd, notes.txt"),
             ]);
-        });
-    });
-
-    describe("unzipAndReport", () => {
-        it("returns the unzipped image and reports the members it passed over", async () => {
-            const unzipped = await unzipAndReport(readZip("test-two-sides.zip"));
-            expect(unzipped.name).toBe("side1.ssd");
-            expect(unzipped.ignored).toEqual(["side2.ssd"]);
-            expect(toasts()).toEqual([expect.stringContaining("side2.ssd")]);
-        });
-
-        it("is quiet about an archive with nothing else loadable in it", async () => {
-            const unzipped = await unzipAndReport(readZip("test-mixed.zip"));
-            expect(unzipped.name).toBe("test.ssd");
-            expect(toasts()).toEqual([]);
         });
     });
 

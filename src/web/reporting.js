@@ -1,5 +1,4 @@
 import { toast } from "./toast.js";
-import { unzipDiscImage } from "../archive.js";
 
 export const errorText = (error) => error?.message ?? `${error}`;
 
@@ -13,12 +12,6 @@ export function reportIgnoredFiles(name, ignored) {
     toast(`Loaded ${name}. The archive also holds ${ignored.join(", ")}, and only one file is loaded from it.`, {
         title: "Archive",
     });
-}
-
-export async function unzipAndReport(data) {
-    const unzipped = await unzipDiscImage(data);
-    reportIgnoredFiles(unzipped.name, unzipped.ignored);
-    return unzipped;
 }
 
 /** Handles a component's "notice" event by toasting it. */

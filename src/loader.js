@@ -32,6 +32,16 @@ export function setNodeBasePath(basePath) {
 }
 
 async function loadDataNode(url) {
+    if (url.startsWith("file:")) {
+        const fs = await import("fs");
+        const { fileURLToPath } = await import("url");
+        return fs.readFileSync(fileURLToPath(url));
+    }
+    if (/^https?:\/\//.test(url)) {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Unable to load ${url}, http code ${response.status}`);
+        return new Uint8Array(await response.arrayBuffer());
+    }
     const fs = await import("fs");
     const nodePath = await import("path");
     if (_nodeBasePath) {
