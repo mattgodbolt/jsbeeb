@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.24.1](https://github.com/mattgodbolt/jsbeeb/compare/v1.24.0...v1.24.1) (2026-09-06)
+
+
+### Bug Fixes
+
+* the Atom's idle address is its keyboard scan, so waiting for the prompt works after boot ([#1087](https://github.com/mattgodbolt/jsbeeb/issues/1087)) ([f47c19b](https://github.com/mattgodbolt/jsbeeb/commit/f47c19b81734b1217a9339ba3d398d4af020bde6))
+* the headless Atom gets its field sync from its stand-in video, not from TestMachine ([#1086](https://github.com/mattgodbolt/jsbeeb/issues/1086)) ([9c5cd7e](https://github.com/mattgodbolt/jsbeeb/commit/9c5cd7e45ecd8b38320239b31d431a875f792d18))
+
 ## [1.24.0](https://github.com/mattgodbolt/jsbeeb/compare/v1.23.0...v1.24.0) (2026-09-06)
 
 
