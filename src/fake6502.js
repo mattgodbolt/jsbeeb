@@ -1,6 +1,6 @@
 // Fakes out various 6502s for testing purposes.
 
-import { FakeVideo } from "./video.js";
+import { FakeAtomVideo, FakeVideo } from "./video.js";
 import { FakeSoundChip } from "./soundchip.js";
 import { TEST_6502, TEST_65C02, TEST_65C12, tubeModelFor } from "./models.js";
 import { machineSpec, nullIo } from "./machine-spec.js";
@@ -11,7 +11,10 @@ const soundChip = new FakeSoundChip();
 export function fake6502(model, opts = {}) {
     model = model || TEST_6502;
     return new model.Cpu(model, {
-        ...nullIo({ video: opts.video ?? fakeVideo, soundChip: opts.soundChip ?? soundChip }),
+        ...nullIo({
+            video: opts.video ?? (model.isAtom ? new FakeAtomVideo() : fakeVideo),
+            soundChip: opts.soundChip ?? soundChip,
+        }),
         config: machineSpec({
             tube: opts.tube ? tubeModelFor(model) : null,
             tubeCpuMultiplier: opts.tubeCpuMultiplier,
