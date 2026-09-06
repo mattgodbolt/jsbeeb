@@ -277,3 +277,17 @@ describe("cycle counter rollover", () => {
         expect(absolute).toBeLessThan(2 * 1000 * 1000);
     });
 });
+
+describe("the chips a machine names", () => {
+    it("puts the keyboard and tape on the system VIA and ACIA of a BBC", () => {
+        const cpu = fake6502(findModel("B-DFS1.2"));
+        expect(cpu.keyboardInterface).toBe(cpu.sysvia);
+        expect(cpu.tapeInterface).toBe(cpu.acia);
+    });
+
+    it("puts both on the PPIA of an Atom", () => {
+        const cpu = fake6502(findModel("Atom"));
+        expect(cpu.keyboardInterface).toBe(cpu.atomppia);
+        expect(cpu.tapeInterface).toBe(cpu.atomppia);
+    });
+});

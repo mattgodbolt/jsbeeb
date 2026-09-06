@@ -24,8 +24,10 @@ describe("FrontPanel", () => {
 
     afterEach(teardownDom);
 
-    const make = (isAtom = false, printer = new Printer()) =>
-        new FrontPanel({ processor, model: { isAtom }, printer, loop });
+    const make = (isAtom = false, printer = new Printer()) => {
+        processor.tapeInterface = isAtom ? processor.atomppia : processor.acia;
+        return new FrontPanel({ processor, model: { isAtom }, printer, loop });
+    };
     const lit = (id) => document.getElementById(id).classList.contains("on");
 
     describe("the lights", () => {
@@ -89,11 +91,13 @@ describe("FrontPanel", () => {
             expect(processor.atomppia.rewindTape).not.toHaveBeenCalled();
         });
 
-        it("stops the Atom's tape before rewinding it", () => {
+        it("rewinds the Atom's tape and shows play as what comes next", () => {
             make(true);
+            processor.atomppia.motorOn = true;
+            processor.atomppia.rewindTape.mockImplementation(() => (processor.atomppia.motorOn = false));
             document.querySelector('#tape-menu a[data-id="rewind"]').click();
-            expect(processor.atomppia.stopTape).toHaveBeenCalled();
             expect(processor.atomppia.rewindTape).toHaveBeenCalled();
+            expect(document.getElementById("tape-play-stop").textContent).toBe("▶");
         });
 
         it("ignores menu links it does not handle", () => {

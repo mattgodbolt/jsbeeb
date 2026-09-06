@@ -177,7 +177,7 @@ export class EmulationLoop extends EventTarget {
         const now = performance.now();
 
         const { processor, display, audioHandler } = this;
-        const motorOn = processor.acia.motorOn;
+        const motorOn = processor.tapeInterface.motorOn;
         const speedy = this.fastAsPossible || (this.fastTape && motorOn);
 
         display.setSpeedy(speedy);
@@ -253,7 +253,7 @@ export class EmulationLoop extends EventTarget {
         const { processor } = this;
         if (document.visibilityState === "hidden") {
             const keepRunningWhenHidden =
-                processor.acia.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
+                processor.tapeInterface.motorOn || processor.fdc.motorOn[0] || processor.fdc.motorOn[1];
             if (!keepRunningWhenHidden && !this.resumeOnVisible) this.resumeOnVisible = this.pause("the hidden tab");
         } else if (this.resumeOnVisible) {
             this.resumeOnVisible();

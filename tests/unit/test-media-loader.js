@@ -26,8 +26,7 @@ describe("MediaLoader", () => {
         deps = {
             processor: {
                 fdc: null,
-                acia: { setTape: vi.fn() },
-                atomppia: { setTape: vi.fn() },
+                tapeInterface: { setTape: vi.fn() },
                 filestore: {},
                 econet: {},
             },
@@ -187,8 +186,8 @@ describe("MediaLoader", () => {
             deps.urlState.params.tape = "old.uef";
             make();
             await pickFile("tape_load", fileFor("mine.uef", uefImage()));
-            await vi.waitFor(() => expect(deps.processor.acia.setTape).toHaveBeenCalled());
-            expect(deps.processor.acia.setTape.mock.calls[0][0]).toBeTruthy();
+            await vi.waitFor(() => expect(deps.processor.tapeInterface.setTape).toHaveBeenCalled());
+            expect(deps.processor.tapeInterface.setTape.mock.calls[0][0]).toBeTruthy();
             expect(deps.urlState.params.tape).toBeUndefined();
             expect(deps.modals.hide).toHaveBeenCalledWith("tapes");
         });
@@ -197,7 +196,7 @@ describe("MediaLoader", () => {
             make();
             await pickFile("tape_load", fileFor("noise.uef", new Uint8Array(12)));
             await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Could not load noise.uef")]));
-            expect(deps.processor.acia.setTape).not.toHaveBeenCalled();
+            expect(deps.processor.tapeInterface.setTape).not.toHaveBeenCalled();
         });
     });
 
@@ -231,13 +230,10 @@ describe("MediaLoader", () => {
     });
 
     describe("setProcessorTape", () => {
-        it("routes the tape to the ACIA on a BBC and the PPIA on an Atom", () => {
+        it("hands the tape to the machine's tape interface", () => {
             const tape = {};
             make().setProcessorTape(tape);
-            expect(deps.processor.acia.setTape).toHaveBeenCalledWith(tape);
-            deps.model.isAtom = true;
-            make().setProcessorTape(tape);
-            expect(deps.processor.atomppia.setTape).toHaveBeenCalledWith(tape);
+            expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(tape);
         });
     });
 });

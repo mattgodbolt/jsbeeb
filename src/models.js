@@ -54,6 +54,9 @@ class Model {
         this.idleAddress = this.isAtom ? 0xfe94 : isMaster ? 0xe7e6 : 0xe581;
         // The Atom ROM polls its keyboard once per VSync, so pasted keys need longer apart.
         this.pasteKeyDelayMs = this.isAtom ? 80 : 50;
+        // The Atom polls its keyboard rather than taking an interrupt, so it
+        // must see each key up before the next key goes down.
+        this.pasteReleaseGapMs = this.isAtom ? 30 : 0;
         this.Fdc = fdc;
         this.swram = swram;
         this.isTest = false;
@@ -67,11 +70,6 @@ class Model {
      */
     get cyclesPerSecond() {
         return this.clockMhz * 1000 * 1000;
-    }
-
-    /** The chip the keyboard hangs off: the PPIA on an Atom, the system VIA on a BBC. */
-    keyboardOf(processor) {
-        return this.isAtom ? processor.atomppia : processor.sysvia;
     }
 
     get nmos() {

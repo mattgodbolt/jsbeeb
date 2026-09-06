@@ -27,7 +27,7 @@ export class Keyboard extends EventTarget {
         this.inputEnabledFunction = inputEnabledFunction;
         this.dbgr = dbgr;
 
-        this.keyInterface = processor.model.keyboardOf(processor);
+        this.keyInterface = processor.keyboardInterface;
         // Compared by reference in _deliverPasteKey to avoid toggling shift off.
         this._shiftKey = processor.model.keys.SHIFT;
 
@@ -369,12 +369,10 @@ export class Keyboard extends EventTarget {
             return;
         }
 
-        // Atom's PPIA keyboard is polled, not interrupt-driven like the BBC's
-        // SysVIA. Insert a debounce gap after every key release so the ROM
-        // sees the key-up before the next key-down arrives.
-        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey && this.processor.model.isAtom) {
+        const releaseGapMs = this.processor.model.pasteReleaseGapMs;
+        if (this._pasteLastChar && this._pasteLastChar !== this._shiftKey && releaseGapMs) {
             this._pasteLastChar = undefined;
-            this._pasteTask.schedule(30 * this._pasteClocksPerMs);
+            this._pasteTask.schedule(releaseGapMs * this._pasteClocksPerMs);
             return;
         }
 

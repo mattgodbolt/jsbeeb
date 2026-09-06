@@ -165,13 +165,8 @@ export class MediaLoader extends EventTarget {
         else this.resolver.addSource(schema, fetcher);
     }
 
-    /** Route tape to the correct interface (ACIA for BBC, PPIA for Atom) */
     setProcessorTape(tape) {
-        if (this.model.isAtom) {
-            this.processor.atomppia.setTape(tape);
-        } else {
-            this.processor.acia.setTape(tape);
-        }
+        this.processor.tapeInterface.setTape(tape);
     }
 
     setDisc1Image(name) {

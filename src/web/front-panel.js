@@ -40,13 +40,8 @@ export class FrontPanel {
 
                 if (type === "rewind") {
                     console.log("Rewinding tape to the start");
-                    if (model.isAtom) {
-                        processor.atomppia.stopTape();
-                        processor.atomppia.rewindTape();
-                        this.updateTapeButton();
-                    } else {
-                        processor.acia.rewindTape();
-                    }
+                    processor.tapeInterface.rewindTape();
+                    this.updateTapeButton();
                 }
             });
         }
@@ -100,14 +95,12 @@ export class FrontPanel {
 
     syncLights() {
         const { processor } = this;
-        if (this.model.isAtom) {
-            this.cassette.update(processor.atomppia.motorOn);
-        } else {
+        this.cassette.update(processor.tapeInterface.motorOn);
+        if (!this.model.isAtom) {
             this.caps.update(processor.sysvia.capsLockLight);
             this.shift.update(processor.sysvia.shiftLockLight);
             this.drive0.update(processor.fdc.motorOn[0]);
             this.drive1.update(processor.fdc.motorOn[1]);
-            this.cassette.update(processor.acia.motorOn);
             if (processor.econet) {
                 this.network.update(processor.econet.activityLight());
             }

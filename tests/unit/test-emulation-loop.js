@@ -19,7 +19,7 @@ describe("EmulationLoop", () => {
                 execute: vi.fn(() => true),
                 stop: vi.fn(),
                 pc: 0x1234,
-                acia: { motorOn: false },
+                tapeInterface: { motorOn: false },
                 fdc: { motorOn: [false, false] },
                 sysvia: {},
                 snapshotState: vi.fn(() => ({})),
@@ -110,7 +110,7 @@ describe("EmulationLoop", () => {
     it("speeds up for a tape motor only when told fast tape", () => {
         deps.fastTape = true;
         const loop = started();
-        deps.processor.acia.motorOn = true;
+        deps.processor.tapeInterface.motorOn = true;
         vi.advanceTimersByTime(10);
         expect(cyclesExecuted().at(-1)).toBe(ClocksPerSecond / 50);
         expect(loop.isRunning()).toBe(true);

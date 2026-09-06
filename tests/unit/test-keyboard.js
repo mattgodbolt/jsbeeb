@@ -42,6 +42,7 @@ describe("Keyboard", () => {
         mockProcessor = {
             model: findModel("B-DFS1.2"),
             sysvia: mockSysvia,
+            keyboardInterface: mockSysvia,
             setKeyLayout: vi.fn(),
             scheduler: new Scheduler(),
             setReset: vi.fn(),
@@ -564,6 +565,7 @@ describe("Keyboard Atom adapter", () => {
         mockProcessor = {
             model: findModel("Atom"),
             atomppia: mockAtomPPIA,
+            keyboardInterface: mockAtomPPIA,
             setKeyLayout: vi.fn(),
             sysvia: { keyDown: vi.fn(), keyUp: vi.fn() },
             scheduler: new Scheduler(),

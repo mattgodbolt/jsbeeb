@@ -690,6 +690,8 @@ export class Cpu6502 extends Base6502 {
         this.uservia = new via.UserVia(this, this.scheduler, this.model.isMaster, this.config.userPort);
         this.acia = new Acia(this, this.soundChip.toneGenerator, this.scheduler, this.relayNoise);
         this.serial = new Serial(this.acia);
+        this.keyboardInterface = this.sysvia;
+        this.tapeInterface = this.acia;
         this.adconverter = new Adc(this.sysvia, this.scheduler);
         this.touchScreen = new TouchScreen(this.scheduler, this.model.cyclesPerSecond);
         this.soundChip.setScheduler(this.scheduler);
@@ -1612,6 +1614,8 @@ export class AtomCpu6502 extends Cpu6502 {
         // Atom peripherals
         this.atomppia = new AtomPPIA(this, this.keyLayout, this.scheduler);
         this.atommc = new AtomMMC2(this);
+        this.keyboardInterface = this.atomppia;
+        this.tapeInterface = this.atomppia;
 
         // Branquart bank selection
         this.branquartLatch = 0;

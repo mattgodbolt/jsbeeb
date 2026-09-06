@@ -14,7 +14,7 @@ function init(args) {
     api.onLoadTape(async (message) => {
         const { path } = message;
         const tape = await loadTapeImage(path);
-        processor.acia.setTape(tape);
+        processor.tapeInterface.setTape(tape);
     });
 
     api.onShowModal((message) => {

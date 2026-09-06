@@ -55,9 +55,8 @@ describe("Model", () => {
         expect(beeb.keys).toBe(BBC);
         expect(atom.keys).toBe(ATOM);
         expect(beeb.stringToKeys("A")).toEqual([BBC.A]);
-        const processor = { sysvia: "via", atomppia: "ppia" };
-        expect([beeb.keyboardOf(processor), atom.keyboardOf(processor)]).toEqual(["via", "ppia"]);
         expect(atom.pasteKeyDelayMs).toBeGreaterThan(beeb.pasteKeyDelayMs);
+        expect([beeb.pasteReleaseGapMs, atom.pasteReleaseGapMs]).toEqual([0, 30]);
     });
 
     it("carries no per-session settings", () => {

@@ -26,7 +26,7 @@ export class TestMachine {
 
     /** The keyboard interface for this machine (SysVia for BBC, PPIA for Atom). */
     get _keyInterface() {
-        return this.model.keyboardOf(this.processor);
+        return this.processor.keyboardInterface;
     }
 
     async initialise() {
