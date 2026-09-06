@@ -1,7 +1,4 @@
 /** Where the OS sits waiting for a keypress, per machine: the place to interrupt with a program. */
-export function basicIdleAddr(model) {
-    return model.isMaster ? 0xe7e6 : 0xe581;
-}
 
 /**
  * Pokes a tokenised BASIC program into memory at PAGE, and sets TOP and

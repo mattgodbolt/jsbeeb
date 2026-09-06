@@ -5,6 +5,7 @@ import { AccessibilitySwitches } from "../../src/web/accessibility-switches.js";
 import { KeyboardSetup } from "../../src/web/keyboard-setup.js";
 import { domFromIndexHtml, teardownDom } from "./helpers.js";
 import { keyCodes } from "../../src/keymap.js";
+import { findModel } from "../../src/models.js";
 
 const keyEvent = (type, which, { alt = false, ctrl = false } = {}) => {
     const event = new KeyboardEvent(type, { altKey: alt, ctrlKey: ctrl, cancelable: true });
@@ -39,7 +40,7 @@ describe("KeyboardSetup", () => {
         };
         accessibilitySwitches = new AccessibilitySwitches();
         processor = {
-            model: { isAtom: false },
+            model: findModel("B-DFS1.2"),
             scheduler: {
                 newTask: () => ({
                     schedule: () => {},

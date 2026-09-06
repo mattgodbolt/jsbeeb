@@ -1,4 +1,3 @@
-import { AtomCpu6502, Cpu6502 } from "./6502.js";
 import { Cmos } from "./cmos.js";
 import { FakeDdNoise } from "./ddnoise.js";
 import { FakeMusic5000 } from "./music5000.js";
@@ -56,8 +55,7 @@ export function isMachineSpec(config) {
 /** The processor for `model`, fitted as `spec` says, talking to the peripherals in `io`. */
 export function buildMachine({ model, spec, io, cycleAccurate = true }) {
     if (!isMachineSpec(spec)) throw new Error("A machine's config must come from machineSpec()");
-    const CpuClass = model.isAtom ? AtomCpu6502 : Cpu6502;
-    return new CpuClass(model, { ...io, config: spec, cycleAccurate });
+    return new model.Cpu(model, { ...io, config: spec, cycleAccurate });
 }
 
 /** Peripherals that go nowhere, for a machine run headless. */

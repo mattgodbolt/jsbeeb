@@ -1,4 +1,3 @@
-import { ATOM } from "./keymap-atom.js";
 import { BBC, keyCodes } from "./keymap.js";
 
 const isMac = typeof window !== "undefined" && /^Mac/i.test(window.navigator?.platform || "");
@@ -28,13 +27,9 @@ export class Keyboard extends EventTarget {
         this.inputEnabledFunction = inputEnabledFunction;
         this.dbgr = dbgr;
 
-        // Key interface: routes key events to SysVia (BBC) or PPIA (Atom).
-        // Both provide keyDown, keyUp, keyToggleRaw, setKeyLayout,
-        // clearKeys, disableKeyboard, enableKeyboard.
-        this.keyInterface = processor.model.isAtom ? processor.atomppia : processor.sysvia;
-        // The SHIFT key constant used by stringToMachineKeys in the paste key array.
+        this.keyInterface = processor.model.keyboardOf(processor);
         // Compared by reference in _deliverPasteKey to avoid toggling shift off.
-        this._shiftKey = processor.model.isAtom ? ATOM.SHIFT : BBC.SHIFT;
+        this._shiftKey = processor.model.keys.SHIFT;
 
         // State
         this.emuKeyHandlers = {};
@@ -392,10 +387,7 @@ export class Keyboard extends EventTarget {
             return;
         }
 
-        // Atom ROM polls the keyboard once per VSync (~16ms at 60 Hz).
-        // 80ms gives the ROM ~5 scan cycles to detect, debounce, and
-        // process each keypress.
-        let delayMs = this.processor.model.isAtom ? 80 : 50;
+        let delayMs = this.processor.model.pasteKeyDelayMs;
         if (typeof this._pasteLastChar === "number") {
             delayMs = this._pasteLastChar;
             this._pasteLastChar = undefined;

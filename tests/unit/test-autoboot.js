@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Autoboot } from "../../src/web/autoboot.js";
 import * as keymap from "../../src/keymap.js";
 import { BBC } from "../../src/keymap.js";
+import { findModel } from "../../src/models.js";
 
 describe("Autoboot", () => {
     let sendKeys;
@@ -14,7 +15,7 @@ describe("Autoboot", () => {
         const memory = new Uint8Array(0x10000);
         memory[0x18] = 0x19;
         processor = {
-            model: { isMaster: false },
+            model: findModel("B-DFS1.2"),
             memory,
             readmem: (addr) => memory[addr],
             writemem: (addr, value) => (memory[addr] = value),
@@ -32,7 +33,8 @@ describe("Autoboot", () => {
         vi.restoreAllMocks();
     });
 
-    const make = (isAtom = false) => new Autoboot({ model: { isAtom }, processor, sendKeys });
+    const make = (isAtom = false) =>
+        new Autoboot({ model: findModel(isAtom ? "Atom" : "B-DFS1.2"), processor, sendKeys });
 
     it("boots a disc by holding SHIFT through a break", () => {
         make().boot("elite.ssd");
@@ -56,11 +58,10 @@ describe("Autoboot", () => {
     });
 
     it("chains and runs tapes with the right incantations", () => {
-        const spelled = vi.spyOn(keymap, "stringToBBCKeys");
         make().chainTape();
-        expect(spelled).toHaveBeenCalledWith('*TAPE\nCH.""\n');
+        expect(sendKeys.mock.calls.at(-1)[0]).toEqual([1000, ...keymap.stringToBBCKeys('*TAPE\nCH.""\n')]);
         make().runTape();
-        expect(spelled).toHaveBeenCalledWith("*TAPE\n*/\n");
+        expect(sendKeys.mock.calls.at(-1)[0]).toEqual([1000, ...keymap.stringToBBCKeys("*TAPE\n*/\n")]);
     });
 
     describe("insertBasic", () => {
@@ -83,7 +84,7 @@ describe("Autoboot", () => {
         });
 
         it("hooks the Master's idle loop on a Master", async () => {
-            processor.model.isMaster = true;
+            processor.model = findModel("Master");
             await make().insertBasic(Promise.resolve("10 END"), false);
             processor.debugInstruction.hook(0xe581);
             expect(processor.memory[0x1900]).toBe(0);

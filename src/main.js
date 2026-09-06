@@ -4,7 +4,6 @@ import "bootswatch/dist/darkly/bootstrap.min.css";
 import "./jsbeeb.css";
 
 import { Debugger } from "./web/debug.js";
-import * as atomKeymap from "./keymap-atom.js";
 import { GamePad } from "./gamepads.js";
 import { initialise as electron } from "./app/electron.js";
 import { AudioHandler } from "./web/audio-handler.js";
@@ -39,7 +38,7 @@ import { RewindUI } from "./web/rewind-ui.js";
 import { DiscVisualiser } from "./web/disc-visualiser.js";
 import { PageActions } from "./web/page-actions.js";
 import { parseMediaParams, processAutobootParams, processDriveTrackParams, processInputParams } from "./url-params.js";
-import { BBC, adaptKeyCodesToBrowser, keyCodes, userKeymap } from "./keymap.js";
+import { adaptKeyCodesToBrowser, keyCodes, userKeymap } from "./keymap.js";
 
 installIcons();
 adaptKeyCodesToBrowser();
@@ -106,13 +105,7 @@ speak(settings.speechOutput);
 settings.on("speechOutput", speak);
 
 // Must come after we know the model, to validate names against those of the hardware.
-const keyMappingWarnings = processInputParams(
-    parsedQuery,
-    model.isAtom ? atomKeymap.ATOM : BBC,
-    keyCodes,
-    userKeymap,
-    gamepad,
-);
+const keyMappingWarnings = processInputParams(parsedQuery, model.keys, keyCodes, userKeymap, gamepad);
 if (keyMappingWarnings.length) {
     toast(`${keyMappingWarnings.join(" ")} The key names are listed in the README.`, {
         title: "Mappings in the URL",
