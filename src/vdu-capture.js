@@ -26,6 +26,19 @@ export class VduTextCapture {
         this.params = [];
         this.nextN = 0;
         this.vduProc = null;
+        this.sequenceHandlers = {
+            17: (p) => {
+                if (p[0] & 0x80) this.attributes.background = p[0] & 0xf;
+                else this.attributes.foreground = p[0] & 0xf;
+            },
+            22: (p) => {
+                Object.assign(this.attributes, { mode: p[0], x: 0, y: 0, foreground: 7, background: 0 });
+            },
+            31: (p) => {
+                this.attributes.x = p[0];
+                this.attributes.y = p[1];
+            },
+        };
     }
 
     flush() {
@@ -73,27 +86,6 @@ export class VduTextCapture {
         }
         if (c >= 32 && c < 0x7f) this.currentText += String.fromCharCode(c);
         else this.flush();
-    }
-
-    get sequenceHandlers() {
-        const attributes = this.attributes;
-        return {
-            17: (p) => {
-                if (p[0] & 0x80) attributes.background = p[0] & 0xf;
-                else attributes.foreground = p[0] & 0xf;
-            },
-            22: (p) => {
-                attributes.mode = p[0];
-                attributes.x = 0;
-                attributes.y = 0;
-                attributes.foreground = 7;
-                attributes.background = 0;
-            },
-            31: (p) => {
-                attributes.x = p[0];
-                attributes.y = p[1];
-            },
-        };
     }
 
     /** The decoder's position in the byte stream, for a machine snapshot to carry. */
