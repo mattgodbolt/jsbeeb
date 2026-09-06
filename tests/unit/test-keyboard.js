@@ -3,6 +3,7 @@ import { Keyboard } from "../../src/keyboard.js";
 import { Scheduler } from "../../src/scheduler.js";
 import { ATOM, stringToATOMKeys } from "../../src/keymap-atom.js";
 import { BBC, keyCodes } from "../../src/keymap.js";
+import { findModel } from "../../src/models.js";
 
 describe("Keyboard", () => {
     let keyboard;
@@ -39,7 +40,7 @@ describe("Keyboard", () => {
         };
 
         mockProcessor = {
-            model: { isAtom: false },
+            model: findModel("B-DFS1.2"),
             sysvia: mockSysvia,
             setKeyLayout: vi.fn(),
             scheduler: new Scheduler(),
@@ -561,7 +562,7 @@ describe("Keyboard Atom adapter", () => {
         };
 
         mockProcessor = {
-            model: { isAtom: true },
+            model: findModel("Atom"),
             atomppia: mockAtomPPIA,
             setKeyLayout: vi.fn(),
             sysvia: { keyDown: vi.fn(), keyUp: vi.fn() },
@@ -581,7 +582,7 @@ describe("Keyboard Atom adapter", () => {
         keyboard.setRunning(true);
     });
 
-    test("should select atomppia as keyInterface when isAtom is true", () => {
+    test("takes the PPIA as its key interface on an Atom", () => {
         expect(keyboard.keyInterface).toBe(mockAtomPPIA);
     });
 

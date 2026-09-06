@@ -1,8 +1,7 @@
-import * as atomKeymap from "../keymap-atom.js";
 import * as tokeniser from "../basic-tokenise.js";
-import { basicIdleAddr, installBasic } from "../basic-loader.js";
+import { installBasic } from "../basic-loader.js";
 import { noteEvent } from "./analytics.js";
-import { BBC, stringToBBCKeys } from "../keymap.js";
+import { BBC } from "../keymap.js";
 
 /** Booting and typing for the machine at startup: shift-break, *TAPE incantations and BASIC programs. */
 export class Autoboot {
@@ -13,9 +12,8 @@ export class Autoboot {
         this.sendKeys = sendKeys;
     }
 
-    /** Convert text to machine-appropriate key sequences (BBC or Atom) */
     stringToMachineKeys(text) {
-        return this.model.isAtom ? atomKeymap.stringToATOMKeys(text) : stringToBBCKeys(text);
+        return this.model.stringToKeys(text);
     }
 
     boot(image) {
@@ -68,7 +66,7 @@ export class Autoboot {
         const tokenised = await t.tokenise(prog);
 
         const { processor } = this;
-        const idleAddr = basicIdleAddr(processor.model);
+        const idleAddr = this.model.idleAddress;
         const hook = processor.debugInstruction.add((addr) => {
             if (addr !== idleAddr) return;
             installBasic(tokenised, {

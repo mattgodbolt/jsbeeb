@@ -1,4 +1,4 @@
-import { basicIdleAddr, installBasic } from "./basic-loader.js";
+import { installBasic } from "./basic-loader.js";
 import * as fdc from "./fdc.js";
 import { fake6502 } from "./fake6502.js";
 import { findModel } from "./models.js";
@@ -26,7 +26,7 @@ export class TestMachine {
 
     /** The keyboard interface for this machine (SysVia for BBC, PPIA for Atom). */
     get _keyInterface() {
-        return this.model.isAtom ? this.processor.atomppia : this.processor.sysvia;
+        return this.model.keyboardOf(this.processor);
     }
 
     async initialise() {
@@ -71,7 +71,7 @@ export class TestMachine {
             this._vduListeners = [];
             const cpu = this.processor;
             const ram = cpu.ramRomOs;
-            const wrchvAddr = this.model.isAtom ? 0x0208 : 0x020e;
+            const wrchvAddr = this.model.wrchvAddress;
             cpu.debugInstruction.add((addr) => {
                 if (addr === (ram[wrchvAddr] | (ram[wrchvAddr + 1] << 8))) {
                     for (const listen of this._vduListeners) listen(cpu.a);
@@ -184,24 +184,7 @@ export class TestMachine {
     async runUntilInput(secs) {
         if (!secs) secs = 120;
         console.log("Running until keyboard input requested");
-        if (this.model.isAtom) {
-            // The Atom kernel's keyboard read loop at $FE94 is entered when
-            // BASIC (or the OS) waits for a keypress.  We detect entry to
-            // this routine as the idle point.
-            const atomIdleAddr = 0xfe94;
-            let hit = false;
-            const hook = this.processor.debugInstruction.add((addr) => {
-                if (addr === atomIdleAddr) {
-                    hit = true;
-                    return true;
-                }
-            });
-            await this.runFor(secs * this.model.cyclesPerSecond);
-            hook.remove();
-            assert(hit, "Atom did not reach keyboard input in time");
-            return this.runFor(10 * 1000);
-        }
-        const idleAddr = basicIdleAddr(this.processor.model);
+        const idleAddr = this.model.idleAddress;
         let hit = false;
         const hook = this.processor.debugInstruction.add((addr) => {
             if (addr === idleAddr) {

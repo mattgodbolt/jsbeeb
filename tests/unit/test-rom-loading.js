@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { TEST_6502 } from "../../src/models.js";
-import { buildMachine, machineSpec, nullIo } from "../../src/build-machine.js";
+import { machineSpec, nullIo } from "../../src/machine-spec.js";
 
 function makeCpu() {
-    return buildMachine({ model: TEST_6502, spec: machineSpec(), io: nullIo() });
+    return new TEST_6502.Cpu(TEST_6502, { ...nullIo(), config: machineSpec() });
 }
 
 // TEST_6502 has eight sideways RAM banks, leaving eight for extra ROMs.

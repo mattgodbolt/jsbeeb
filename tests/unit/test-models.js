@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import { allModels, basicOnly, DefaultModel, findModel, TEST_6502, TEST_65C02, TEST_65C12 } from "../../src/models.js";
 import { fake6502 } from "../../src/fake6502.js";
 import { guessModelFromHostname } from "../../src/url-params.js";
+import { AtomCpu6502, Cpu6502 } from "../../src/6502.js";
+import { BBC } from "../../src/keymap.js";
+import { ATOM } from "../../src/keymap-atom.js";
 
 describe("Model", () => {
     it("is frozen so per-session settings cannot be stored on it", () => {
@@ -40,6 +43,21 @@ describe("Model", () => {
             Tube65C02: "Tube65C02",
             Tube65C102: "Tube65C102",
         });
+    });
+
+    it("knows the shape of the machine it names", () => {
+        const beeb = findModel("B-DFS1.2");
+        const master = findModel("Master");
+        const atom = findModel("Atom");
+        expect([beeb.Cpu, atom.Cpu]).toEqual([Cpu6502, AtomCpu6502]);
+        expect([beeb.wrchvAddress, atom.wrchvAddress]).toEqual([0x020e, 0x0208]);
+        expect([beeb.idleAddress, master.idleAddress, atom.idleAddress]).toEqual([0xe581, 0xe7e6, 0xfe94]);
+        expect(beeb.keys).toBe(BBC);
+        expect(atom.keys).toBe(ATOM);
+        expect(beeb.stringToKeys("A")).toEqual([BBC.A]);
+        const processor = { sysvia: "via", atomppia: "ppia" };
+        expect([beeb.keyboardOf(processor), atom.keyboardOf(processor)]).toEqual(["via", "ppia"]);
+        expect(atom.pasteKeyDelayMs).toBeGreaterThan(beeb.pasteKeyDelayMs);
     });
 
     it("carries no per-session settings", () => {
