@@ -192,6 +192,22 @@ describe("AtomPPIA", () => {
             expect(ppia.tape).toBe(fakeTape);
         });
 
+        it("stops the motor when rewinding", () => {
+            const { ppia } = makePPIA();
+            const fakeTape = {
+                rewound: false,
+                rewind() {
+                    this.rewound = true;
+                },
+                poll: () => 100,
+            };
+            ppia.setTape(fakeTape);
+            ppia.playTape();
+            ppia.rewindTape();
+            expect(ppia.motorOn).toBe(false);
+            expect(fakeTape.rewound).toBe(true);
+        });
+
         it("should receive bits into port C", () => {
             const { ppia } = makePPIA();
             ppia.receiveBit(1);

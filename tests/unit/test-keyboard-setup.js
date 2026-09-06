@@ -59,6 +59,7 @@ describe("KeyboardSetup", () => {
                 keyboardEnabled: true,
             },
         };
+        processor.keyboardInterface = processor.sysvia;
         setup = new KeyboardSetup({ actions, accessibilitySwitches, processor, dbgr: {}, keyLayout: "physical" });
         setup.keyboard.setRunning(true);
     });

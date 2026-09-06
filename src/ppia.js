@@ -415,9 +415,8 @@ export class AtomPPIA extends PPIA {
     }
 
     rewindTape() {
-        if (this.tape) {
-            this.tape.rewind();
-        }
+        this.stopTape();
+        if (this.tape) this.tape.rewind();
     }
 
     playTape() {
