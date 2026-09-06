@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
 import { decodeLineGrid, findBands } from "../line-grid.js";
 

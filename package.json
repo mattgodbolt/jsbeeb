@@ -17,12 +17,10 @@
   "exports": {
     ".": "./src/app/app.js",
     "./machine-session": "./src/machine-session.js",
-    "./src/*": "./src/*",
-    "./tests/test-machine.js": "./tests/test-machine.js"
+    "./src/*": "./src/*"
   },
   "files": [
     "src/",
-    "tests/test-machine.js",
     "public/roms/"
   ],
   "dependencies": {

@@ -605,7 +605,7 @@ function parseArgs(argv) {
 }
 
 async function runReference(outFile, { model = "Master", rate = "48000", output = "board" }) {
-    const { TestMachine } = await import("../tests/test-machine.js");
+    const { TestMachine } = await import("../src/test-machine.js");
     const { SoundChip } = await import("../src/soundchip.js");
     const { PolyphaseResampler } = await import("../src/resampler.js");
     const { ResamplerCutoffOfOutputRate, ResamplerTaps, isAudioOutput, outputStages } =

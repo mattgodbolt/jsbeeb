@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 
 // Tom Seddon's 6502/65C02 timing tests.
 // Source: https://github.com/tom-seddon/beeb_6502_timing_tests
