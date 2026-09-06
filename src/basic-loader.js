@@ -1,5 +1,3 @@
-/** Where the OS sits waiting for a keypress, per machine: the place to interrupt with a program. */
-
 /**
  * Pokes a tokenised BASIC program into memory at PAGE, and sets TOP and
  * VARTOP after it, exactly as if it had just been typed.
