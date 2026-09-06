@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 
 describe("Atom keyboard", () => {
     let machine;

@@ -2,7 +2,7 @@ import { describe, it } from "vitest";
 import assert from "assert";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 import { RepoRoot } from "./helpers.js";
 
 describe("test various NOP timings", function () {

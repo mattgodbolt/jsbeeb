@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 
 const TeletextStatusRegister = 0xfc10;
 // INT, DOR and FSYN, all latched by the adaptor once a frame of broadcast data is ready.

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MediaLoader } from "../../src/web/media-loader.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 import { domFromIndexHtml, fakeUrlState, teardownDom } from "../unit/helpers.js";
 import { RepoRoot } from "./helpers.js";
 

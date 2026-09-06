@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 import { mode7Text } from "./helpers.js";
 
 describe("reset", () => {

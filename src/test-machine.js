@@ -1,14 +1,15 @@
-import { basicIdleAddr, installBasic } from "../src/basic-loader.js";
-import * as fdc from "../src/fdc.js";
-import { fake6502 } from "../src/fake6502.js";
-import { findModel } from "../src/models.js";
+import { basicIdleAddr, installBasic } from "./basic-loader.js";
+import * as fdc from "./fdc.js";
+import { fake6502 } from "./fake6502.js";
+import { findModel } from "./models.js";
 import assert from "assert";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as utils_atom from "../src/keymap-atom.js";
-import * as Tokeniser from "../src/basic-tokenise.js";
-import { setNodeBasePath } from "../src/loader.js";
-import { keyCodes } from "../src/keymap.js";
+import * as utils_atom from "./keymap-atom.js";
+import * as Tokeniser from "./basic-tokenise.js";
+import { VduTextCapture } from "./vdu-capture.js";
+import { setNodeBasePath } from "./loader.js";
+import { keyCodes } from "./keymap.js";
 
 const MaxCyclesPerIter = 100 * 1000;
 const RepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,22 +61,35 @@ export class TestMachine {
     }
 
     /**
-     * Install the character capture hook (once). All characters sent
-     * through WRCHV are accumulated and can be read with drainText().
-     * Safe to call multiple times — only installs one hook.
+     * Calls `listener` with each character the machine sends to the VDU, by
+     * watching the write-character vector (WRCHV, $020E on the BBC and $0208 on
+     * the Atom) as the OS or a program leaves it. Returns a function that stops
+     * listening.
      */
+    onVduChar(listener) {
+        if (!this._vduListeners) {
+            this._vduListeners = [];
+            const cpu = this.processor;
+            const ram = cpu.ramRomOs;
+            const wrchvAddr = this.model.isAtom ? 0x0208 : 0x020e;
+            cpu.debugInstruction.add((addr) => {
+                if (addr === (ram[wrchvAddr] | (ram[wrchvAddr + 1] << 8))) {
+                    for (const listen of this._vduListeners) listen(cpu.a);
+                }
+                return false;
+            });
+        }
+        this._vduListeners.push(listener);
+        return () => {
+            this._vduListeners = this._vduListeners.filter((other) => other !== listener);
+        };
+    }
+
+    /** Accumulates every character sent to the VDU for drainText(); safe to call more than once. */
     startCapture() {
         if (this._captureHookInstalled) return;
         this._captureHookInstalled = true;
-        // WRCHV is at 0x0208 on Atom, 0x020E on BBC.
-        const wrchvAddr = this.model.isAtom ? 0x0208 : 0x020e;
-        this.processor.debugInstruction.add((addr) => {
-            const wrchv = this.readword(wrchvAddr);
-            if (addr === wrchv) {
-                this._capturedChars.push(this.processor.a);
-            }
-            return false;
-        });
+        this.onVduChar((c) => this._capturedChars.push(c));
     }
 
     /**
@@ -515,100 +529,13 @@ export class TestMachine {
         return this.readbyte(addr) | (this.readbyte(addr + 1) << 8);
     }
 
+    /**
+     * Decodes the machine's VDU output into text elements for `onElement`
+     * until the returned capture's `stop()` is called; see VduTextCapture.
+     */
     captureText(onElement) {
-        const attributes = {
-            x: 0,
-            y: 0,
-            text: "",
-            foreground: 7,
-            background: 0,
-            mode: 7,
-        };
-        let currentText = "";
-        let params = [];
-        let nextN = 0;
-        let vduProc = null;
-
-        function flush() {
-            if (currentText.length) {
-                attributes.text = currentText;
-                onElement(attributes);
-                attributes.x += currentText.length; // Approximately...anyway
-            }
-            currentText = "";
-        }
-
-        function onChar(c) {
-            if (nextN) {
-                params.push(c);
-                if (--nextN === 0) {
-                    if (vduProc) vduProc(params);
-                    params = [];
-                    vduProc = null;
-                }
-                return;
-            }
-            switch (c) {
-                case 1: // Next char to printer
-                    nextN = 1;
-                    break;
-                case 10:
-                    attributes.y++;
-                    break;
-                case 12: // CLS
-                    attributes.x = 0;
-                    attributes.y = 0;
-                    break;
-                case 13:
-                    attributes.x = 0;
-                    break;
-                case 17: // Text colour
-                    nextN = 1;
-                    vduProc = function (params) {
-                        if (params[0] & 0x80) attributes.background = params[0] & 0xf;
-                        else attributes.foreground = params[0] & 0xf;
-                    };
-                    break;
-                case 18: // GCOL
-                    nextN = 2;
-                    break;
-                case 19: // logical colour
-                    nextN = 5;
-                    break;
-                case 22: // mode
-                    nextN = 1;
-                    vduProc = function (params) {
-                        attributes.mode = params[0];
-                        attributes.x = 0;
-                        attributes.y = 0;
-                    };
-                    break;
-                case 25: // plot
-                    nextN = 5;
-                    break;
-                case 28: // text window
-                    nextN = 4;
-                    break;
-                case 29: // origin
-                    nextN = 4;
-                    break;
-                case 31: // text location
-                    nextN = 2;
-                    vduProc = function (params) {
-                        attributes.x = params[0];
-                        attributes.y = params[1];
-                    };
-            }
-            if (c >= 32 && c < 0x7f) {
-                currentText += String.fromCharCode(c);
-            } else flush();
-            return false;
-        }
-
-        const wrchv = this.readword(0x20e);
-        this.processor.debugInstruction.add((addr) => {
-            if (addr === wrchv) onChar(this.processor.a);
-            return false;
-        });
+        const capture = new VduTextCapture(onElement, { isAtom: this.model.isAtom });
+        capture.stop = this.onVduChar((c) => capture.onChar(c));
+        return capture;
     }
 }

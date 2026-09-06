@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createSnapshot, restoreSnapshot, snapshotFromJSON, snapshotToJSON } from "../../src/snapshot.js";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 import { mode7Text } from "./helpers.js";
 
 describe("save state round trip", () => {

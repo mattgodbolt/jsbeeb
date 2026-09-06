@@ -1,5 +1,5 @@
 import { describe, it } from "vitest";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 import assert from "assert";
 
 describe("test timings", function () {

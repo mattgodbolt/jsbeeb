@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 
 // The ULA's M flag, which lets pending R3 data raise the parasite's NMI.
 const TubeStatusEnableParasiteNmiFromR3 = 0x08;

@@ -8,7 +8,8 @@
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
-import { TestMachine } from "../tests/test-machine.js";
+import { TestMachine } from "./test-machine.js";
+import { VduTextCapture } from "./vdu-capture.js";
 import { InstrumentedSoundChip, FakeSoundChip } from "./soundchip.js";
 
 // Resolve the jsbeeb package root from our own location (src/machine-session.js
@@ -86,7 +87,7 @@ export class MachineSession {
 
         // Accumulated VDU text output, drained by callers
         this._pendingOutput = [];
-        this._flushCapture = () => {};
+        this._capture = new VduTextCapture((element) => this._pendingOutput.push(element), { isAtom: this._isAtom });
 
         // Breakpoint management, with persistent hooks that survive across run calls
         this._breakpoints = new Map(); // id → { hook, type, address, hit }
@@ -100,7 +101,7 @@ export class MachineSession {
         if (this._opts.discImage) {
             this.loadDisc(this._opts.discImage);
         }
-        this._installCaptureHook();
+        this._machine.onVduChar((c) => this._capture.onChar(c));
     }
 
     /**
@@ -110,170 +111,6 @@ export class MachineSession {
     async boot(timeoutSecs = 30) {
         await this._machine.runUntilInput(timeoutSecs);
         return this.drainOutput();
-    }
-
-    /**
-     * Install the VDU character-output capture hook.
-     *
-     * WRCHV discovery: RAM at the OS write-character vector (0x20E on BBC,
-     * 0x208 on Atom) initialises to 0x0000 before the OS runs.  We read
-     * directly from cpu.ramRomOs (two array lookups, no readmem() dispatch
-     * overhead) on every instruction, waiting for the value to change from
-     * its initial 0xFFFF.  Once the OS installs a real handler we use that
-     * address for the lifetime of the session.  Programs that later install
-     * a custom VDU driver are handled seamlessly because we always re-read
-     * from the live memory.
-     *
-     * Text elements: { x, y, text, foreground, background, mode }
-     * Screenshots (via the real Video chip) are the right tool for anything
-     * visual; this capture is a lightweight aid for text-mode output only.
-     */
-    _installCaptureHook() {
-        const cpu = this._machine.processor;
-        const ram = cpu.ramRomOs; // direct Uint8Array, no dispatch overhead
-        // WRCHV vector: BBC at $020E, Atom at $0208.
-        const wrchvAddr = this._isAtom ? 0x208 : 0x20e;
-        const initialWrchv = ram[wrchvAddr] | (ram[wrchvAddr + 1] << 8); // 0xFFFF pre-boot
-
-        const attributes = { x: 0, y: 0, text: "", foreground: 7, background: 0, mode: 7 };
-        let currentText = "";
-        let params = [];
-        let nextN = 0;
-        let vduProc = null;
-
-        const onElement = (elem) => this._pendingOutput.push({ ...elem });
-
-        function flush() {
-            if (currentText.length) {
-                attributes.text = currentText;
-                onElement({ ...attributes });
-                attributes.x += currentText.length;
-            }
-            currentText = "";
-        }
-
-        // Expose flush so drainOutput can capture trailing text
-        // that hasn't been terminated by a control character.
-        this._flushCapture = flush;
-
-        // Expose the decoder's cursor so snapshot()/restore() can rewind it too:
-        // text captured after a restore would otherwise carry the coordinates
-        // and colours the abandoned run had reached.
-        this._snapshotCapture = () => ({
-            attributes: { ...attributes },
-            currentText,
-            params: [...params],
-            nextN,
-        });
-        this._restoreCapture = (state) => {
-            Object.assign(attributes, state.attributes);
-            currentText = state.currentText;
-            params = [...state.params];
-            nextN = state.nextN;
-            // vduProc is a closure and does not survive, so a snapshot taken
-            // mid-sequence resumes with nextN still swallowing the parameters:
-            // the sequence is dropped rather than printed as text.
-            vduProc = null;
-        };
-
-        const isAtom = this._isAtom;
-
-        function onChar(c) {
-            if (nextN) {
-                params.push(c);
-                if (--nextN === 0) {
-                    if (vduProc) vduProc(params);
-                    params = [];
-                    vduProc = null;
-                }
-                return;
-            }
-            switch (c) {
-                case 10: // LF
-                    flush();
-                    attributes.y++;
-                    break;
-                case 12: // CLS
-                    flush();
-                    attributes.x = 0;
-                    attributes.y = 0;
-                    break;
-                case 13: // CR
-                    flush();
-                    attributes.x = 0;
-                    break;
-                default:
-                    // BBC VDU control codes (multi-byte sequences).
-                    // The Atom doesn't use these; skip them to avoid
-                    // swallowing printable characters.
-                    if (!isAtom) {
-                        switch (c) {
-                            case 1: // next char to printer only
-                                nextN = 1;
-                                return;
-                            case 17: // COLOUR n
-                                nextN = 1;
-                                vduProc = (p) => {
-                                    if (p[0] & 0x80) attributes.background = p[0] & 0xf;
-                                    else attributes.foreground = p[0] & 0xf;
-                                };
-                                return;
-                            case 18: // GCOL
-                                nextN = 2;
-                                return;
-                            case 19: // define logical colour
-                                nextN = 5;
-                                return;
-                            case 22: // MODE n
-                                nextN = 1;
-                                vduProc = (p) => {
-                                    flush();
-                                    attributes.mode = p[0];
-                                    attributes.x = 0;
-                                    attributes.y = 0;
-                                    attributes.foreground = 7;
-                                    attributes.background = 0;
-                                };
-                                return;
-                            case 25: // PLOT
-                                nextN = 5;
-                                return;
-                            case 28: // define text window
-                                nextN = 4;
-                                return;
-                            case 29: // define graphics origin
-                                nextN = 4;
-                                return;
-                            case 31: // TAB(x,y)
-                                nextN = 2;
-                                vduProc = (p) => {
-                                    flush();
-                                    attributes.x = p[0];
-                                    attributes.y = p[1];
-                                };
-                                return;
-                        }
-                    }
-                    if (c >= 32 && c < 0x7f) {
-                        currentText += String.fromCharCode(c);
-                    } else {
-                        flush();
-                    }
-                    break;
-            }
-        }
-
-        cpu.debugInstruction.add((addr) => {
-            // Two direct array reads, no function-call dispatch overhead.
-            // Once the OS sets WRCHV (it changes from 0xFFFF), we start
-            // capturing.  Programs that install a custom VDU driver mid-run
-            // are handled transparently because we re-read on every call.
-            const wrchv = ram[wrchvAddr] | (ram[wrchvAddr + 1] << 8);
-            if (wrchv !== initialWrchv && addr === wrchv) {
-                onChar(cpu.a);
-            }
-            return false;
-        });
     }
 
     /**
@@ -313,7 +150,7 @@ export class MachineSession {
         return {
             machine: this._machine.snapshot({ includeRoms }),
             pendingOutput: this._pendingOutput.map((element) => ({ ...element })),
-            capture: this._snapshotCapture(),
+            capture: this._capture.snapshot(),
         };
     }
 
@@ -326,7 +163,7 @@ export class MachineSession {
     restore(state) {
         this._machine.restore(state.machine);
         this._pendingOutput = state.pendingOutput.map((element) => ({ ...element }));
-        this._restoreCapture(state.capture);
+        this._capture.restore(state.capture);
     }
 
     /** Tokenise BBC BASIC source and write it into PAGE */
@@ -531,7 +368,7 @@ export class MachineSession {
      * Also includes a flat `screenText` reconstruction.
      */
     drainOutput({ clear = true } = {}) {
-        this._flushCapture();
+        this._capture.flush();
         const elements = clear ? this._pendingOutput.splice(0) : [...this._pendingOutput];
         return {
             elements,

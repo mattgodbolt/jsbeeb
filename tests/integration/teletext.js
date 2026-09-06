@@ -1,7 +1,7 @@
 import { describe, it } from "vitest";
 import path from "node:path";
 import sharp from "sharp";
-import { TestMachine } from "../test-machine.js";
+import { TestMachine } from "../../src/test-machine.js";
 import { Video } from "../../src/video.js";
 import { RepoRoot } from "./helpers.js";
 import { expectPngToMatch } from "./png.js";
