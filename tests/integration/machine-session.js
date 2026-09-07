@@ -216,6 +216,71 @@ describe("MachineSession keyboard", () => {
     });
 });
 
+describe("MachineSession paged memory", () => {
+    let session;
+    const SidewaysRamBank = 4; // one of the Master's four
+    const OtherSidewaysRamBank = 5;
+
+    beforeAll(async () => {
+        session = new MachineSession("Master");
+        await session.initialise();
+        await session.boot(30);
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    it("reports what is paged in, agreeing with the OS's copy of ROMSEL", () => {
+        const [romselCopy] = session.readMemory(0xf4, 1);
+
+        expect(session.pagingState()).toEqual({ romsel: romselCopy, acccon: expect.any(Number) });
+    });
+
+    it("reads and writes a sideways bank other than the one paged in", () => {
+        const before = session.pagingState();
+
+        session.writeMemory(0x8000, [1, 2, 3], { bank: SidewaysRamBank });
+        session.writeMemory(0x8000, [9, 9, 9], { bank: OtherSidewaysRamBank });
+
+        expect(session.readMemory(0x8000, 3, { bank: SidewaysRamBank })).toEqual([1, 2, 3]);
+        expect(session.readMemory(0x8000, 3, { bank: OtherSidewaysRamBank })).toEqual([9, 9, 9]);
+        expect(session.readMemory(0x8000, 3)).toEqual(session.readMemory(0x8000, 3, { bank: before.romsel & 15 }));
+        expect(session.pagingState()).toEqual(before);
+    });
+
+    it("reads and writes shadow RAM apart from main RAM", () => {
+        const before = session.pagingState();
+
+        session.writeMemory(0x3000, [10, 20], { shadow: true });
+        session.writeMemory(0x3000, [30, 40], { shadow: false });
+
+        expect(session.readMemory(0x3000, 2, { shadow: true })).toEqual([10, 20]);
+        expect(session.readMemory(0x3000, 2, { shadow: false })).toEqual([30, 40]);
+        expect(session.pagingState()).toEqual(before);
+    });
+
+    it("refuses a bank that does not exist", () => {
+        expect(() => session.readMemory(0x8000, 1, { bank: 16 })).toThrow(/0 to 15/);
+    });
+});
+
+describe("MachineSession paged memory on a machine without shadow RAM", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    it("reports ROMSEL alone", () => {
+        expect(session.pagingState()).toEqual({ romsel: expect.any(Number) });
+    });
+
+    it("refuses to page shadow RAM", () => {
+        expect(() => session.readMemory(0x3000, 1, { shadow: true })).toThrow(/Master/);
+    });
+});
+
 describe("MachineSession frame stepping across a hard reset", () => {
     let session;
 
