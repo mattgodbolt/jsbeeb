@@ -86,8 +86,8 @@ describe("SthPicker", () => {
             await make().pickDisc("ELITE.zip");
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("sth:ELITE.zip", "auto");
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded);
-            expect(deps.media.setDisc1Image).toHaveBeenCalledWith("sth:ELITE.zip");
-            expect(deps.media.setDisc1Image.mock.invocationCallOrder[0]).toBeGreaterThan(
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "sth:ELITE.zip");
+            expect(deps.media.setDiscImage.mock.invocationCallOrder[0]).toBeGreaterThan(
                 deps.drives.putDiscIn.mock.invocationCallOrder[0],
             );
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith();
@@ -108,7 +108,7 @@ describe("SthPicker", () => {
             deps.media.loadDiscImage.mockRejectedValue(new Error("404"));
             await make().pickDisc("ELITE.zip");
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
-            expect(deps.media.setDisc1Image).not.toHaveBeenCalled();
+            expect(deps.media.setDiscImage).not.toHaveBeenCalled();
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
                 expect.stringContaining("Unable to load ELITE.zip from the STH archive: 404"),
             );

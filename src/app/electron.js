@@ -11,8 +11,7 @@ function init(args) {
         const { drive, path } = message;
         try {
             drives.putDiscIn(drive, await media.loadDiscImage(path, drives.layoutForDrive(drive)));
-            if (drive === 0) media.setDisc1Image(path);
-            else media.setDisc2Image(path);
+            media.setDiscImage(drive, path);
         } catch (error) {
             reportLoadFailure(`disc ${path}`, error);
         }

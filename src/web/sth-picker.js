@@ -80,7 +80,7 @@ export class SthPicker {
         try {
             const loaded = await this.media.loadDiscImage(image, this.drives.layoutForDrive(0));
             this.drives.putDiscIn(0, loaded);
-            this.media.setDisc1Image(image);
+            this.media.setDiscImage(0, image);
             this.modals.loadingFinished();
 
             if (needsAutoboot) {

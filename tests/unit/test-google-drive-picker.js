@@ -18,7 +18,7 @@ describe("GoogleDrivePicker", () => {
             create: vi.fn(),
         };
         deps = {
-            media: { addSource: vi.fn(), setDisc1Image: vi.fn() },
+            media: { addSource: vi.fn(), setDiscImage: vi.fn() },
             drives: { layoutForDrive: () => "auto", putDiscIn: vi.fn() },
             modals: { popupLoading: vi.fn(), loadingFinished: vi.fn() },
             processor: { fdc: { drives: [{ disc: null }, {}] } },
@@ -119,7 +119,7 @@ describe("GoogleDrivePicker", () => {
             );
             document.querySelector("#google-drive li:not(.template)").click();
             await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, ssd));
-            expect(deps.media.setDisc1Image).toHaveBeenCalledWith("gd:abc/mine.ssd");
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "gd:abc/mine.ssd");
         });
 
         it("reports a failed load once and leaves the drive alone", async () => {
@@ -136,7 +136,7 @@ describe("GoogleDrivePicker", () => {
                 expect(toasts()).toEqual([expect.stringContaining("Unable to load mine.ssd from Google Drive: boom")]),
             );
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
-            expect(deps.media.setDisc1Image).not.toHaveBeenCalled();
+            expect(deps.media.setDiscImage).not.toHaveBeenCalled();
         });
 
         it("says when the list cannot be fetched", async () => {
@@ -165,7 +165,7 @@ describe("GoogleDrivePicker", () => {
             expect(name).toBe("fresh.ssd");
             expect(data.length).toBeGreaterThan(0);
             expect(layout).toBe("auto");
-            expect(deps.media.setDisc1Image).toHaveBeenCalledWith("gd:xyz/fresh.ssd");
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "gd:xyz/fresh.ssd");
         });
 
         it("reports a drive 0 disc that cannot be saved in the named format", async () => {

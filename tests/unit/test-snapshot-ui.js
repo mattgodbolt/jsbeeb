@@ -97,7 +97,7 @@ describe("SnapshotUI", () => {
             processor: { fdc: { drives: [{ disc: null }, { disc: null }] }, hasTube: false, execute: vi.fn() },
             model: { name: "B-DFS1.2" },
             video: { paint: vi.fn() },
-            media: { loadDiscImage: vi.fn(), setDisc1Image: vi.fn(), setDisc2Image: vi.fn() },
+            media: { loadDiscImage: vi.fn(), setDiscImage: vi.fn() },
             drives: { putDiscIn: vi.fn() },
             urlState: { params: {}, urlWith: vi.fn() },
             modals: { showError: vi.fn() },
@@ -217,7 +217,7 @@ describe("SnapshotUI", () => {
             await make().reloadSnapshotMedia({ disc1: "sth:ELITE.zip", disc1Crc32: 0x1234 });
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("sth:ELITE.zip", DiscLayout.contiguous);
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded);
-            expect(deps.media.setDisc1Image).toHaveBeenCalledWith("sth:ELITE.zip");
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "sth:ELITE.zip");
             expect(toasts()).toEqual([]);
         });
 
@@ -280,7 +280,7 @@ describe("SnapshotUI", () => {
             expect(driveIndex).toBe(0);
             expect(loadedDisc.name).toBe("mine.ssd");
             expect(loadedDisc.originalImageData).toBeTruthy();
-            expect(deps.media.setDisc1Image).not.toHaveBeenCalled();
+            expect(deps.media.setDiscImage).not.toHaveBeenCalled();
         });
 
         it("rebuilds image data that was serialised as a plain object", async () => {
@@ -297,7 +297,7 @@ describe("SnapshotUI", () => {
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().reloadSnapshotMedia({ disc2: "b.ssd" });
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, loaded);
-            expect(deps.media.setDisc2Image).toHaveBeenCalledWith("b.ssd");
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "b.ssd");
         });
     });
 

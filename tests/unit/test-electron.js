@@ -24,8 +24,7 @@ describe("the Electron hooks", () => {
                 loadDiscImage: vi.fn(),
                 loadTapeImage: vi.fn(),
                 setProcessorTape: vi.fn(),
-                setDisc1Image: vi.fn(),
-                setDisc2Image: vi.fn(),
+                setDiscImage: vi.fn(),
                 setTapeImage: vi.fn(),
                 addEventListener: vi.fn(),
             },
@@ -59,14 +58,14 @@ describe("the Electron hooks", () => {
         await loadDisc({ drive: 1, path: "file:///discs/b.ssd" });
         expect(deps.media.loadDiscImage).toHaveBeenCalledWith("file:///discs/b.ssd", "layout1");
         expect(deps.drives.putDiscIn).toHaveBeenCalledWith(1, loaded);
-        expect(deps.media.setDisc2Image).toHaveBeenCalledWith("file:///discs/b.ssd");
-        expect(deps.media.setDisc1Image).not.toHaveBeenCalled();
+        expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "file:///discs/b.ssd");
+        expect(deps.media.setDiscImage).toHaveBeenCalledTimes(1);
     });
 
     it("names drive 0's disc as disc1", async () => {
         deps.media.loadDiscImage.mockResolvedValue({});
         await loadDisc({ drive: 0, path: "file:///discs/a.ssd" });
-        expect(deps.media.setDisc1Image).toHaveBeenCalledWith("file:///discs/a.ssd");
+        expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "file:///discs/a.ssd");
     });
 
     it("reports a disc that will not load and leaves the drive and the URL alone", async () => {
@@ -74,7 +73,7 @@ describe("the Electron hooks", () => {
         deps.media.loadDiscImage.mockRejectedValue(new Error("no such file"));
         await loadDisc({ drive: 0, path: "file:///discs/missing.ssd" });
         expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
-        expect(deps.media.setDisc1Image).not.toHaveBeenCalled();
+        expect(deps.media.setDiscImage).not.toHaveBeenCalled();
         expect(toasts()).toEqual([expect.stringContaining("Could not load disc file:///discs/missing.ssd")]);
     });
 

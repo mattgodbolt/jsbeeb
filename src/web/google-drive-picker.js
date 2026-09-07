@@ -144,7 +144,7 @@ export class GoogleDrivePicker {
                     const ssd = await this.load(item, this.drives.layoutForDrive(0));
                     if (ssd) {
                         this.drives.putDiscIn(0, ssd);
-                        this.media.setDisc1Image(`gd:${item.id}/${item.name}`);
+                        this.media.setDiscImage(0, `gd:${item.id}/${item.name}`);
                     }
                 } catch (error) {
                     toast(`Unable to load ${item.name} from Google Drive: ${errorText(error)}`, {
@@ -193,7 +193,7 @@ export class GoogleDrivePicker {
         try {
             const result = await this.googleDrive.create(name, data, this.drives.layoutForDrive(0));
             this.drives.putDiscIn(0, result.disc);
-            this.media.setDisc1Image("gd:" + result.fileId + "/" + name);
+            this.media.setDiscImage(0, "gd:" + result.fileId + "/" + name);
             this.modals.loadingFinished();
         } catch (error) {
             console.error(`Error creating Google Drive disc: ${error}`, error);

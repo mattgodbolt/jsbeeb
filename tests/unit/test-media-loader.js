@@ -110,7 +110,7 @@ describe("MediaLoader", () => {
 
         it("names drive 0's disc, displacing any bare disc parameter", () => {
             deps.urlState.params.disc = "old.ssd";
-            makeWatched().setDisc1Image("sth:ELITE.zip");
+            makeWatched().setDiscImage(0, "sth:ELITE.zip");
             expect(deps.urlState.params).toEqual({ disc1: "sth:ELITE.zip" });
             expect(deps.urlState.updateUrl).toHaveBeenCalledTimes(1);
             expect(mediaEvents).toEqual([{ disc1: "sth:ELITE.zip" }]);
@@ -118,7 +118,7 @@ describe("MediaLoader", () => {
 
         it("names drive 1's disc and the tape", () => {
             const media = makeWatched();
-            media.setDisc2Image("b.ssd");
+            media.setDiscImage(1, "b.ssd");
             media.setTapeImage("sth:Chuckie.zip");
             expect(deps.urlState.params).toEqual({ disc2: "b.ssd", tape: "sth:Chuckie.zip" });
             expect(mediaEvents).toEqual([{ disc2: "b.ssd" }, { tape: "sth:Chuckie.zip" }]);

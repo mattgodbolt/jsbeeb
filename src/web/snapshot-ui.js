@@ -235,10 +235,7 @@ export class SnapshotUI {
             // Only update the URL/query for URL-sourced discs. For embedded
             // (local-file) discs, setting parsedQuery would put a bogus source
             // in the URL and break subsequent saves/reloads.
-            if (savedMedia[discKey]) {
-                if (driveIndex === 0) this.media.setDisc1Image(savedMedia[discKey]);
-                else this.media.setDisc2Image(savedMedia[discKey]);
-            }
+            if (savedMedia[discKey]) this.media.setDiscImage(driveIndex, savedMedia[discKey]);
         }
     }
 }
