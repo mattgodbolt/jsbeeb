@@ -421,7 +421,7 @@ describe("MediaWindow", () => {
             document.getElementById("deck-window").click();
             expect(rowTitles()).toEqual(["Chuckie"]);
             document.querySelector('#media-chips .media-chip[title="Show discs"]').click();
-            expect(rowTitles()).toEqual(["Elite", "Chuckie", "saves.ssd"]);
+            expect(rowTitles()).toEqual(["Chuckie", "Elite", "saves.ssd"]);
         });
 
         it("narrows to what is typed and to a source, best match first", async () => {

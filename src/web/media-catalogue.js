@@ -148,3 +148,23 @@ export function scoreQuery(descriptor, query) {
 
 /** Whether a descriptor is what the typed query is looking for. */
 export const matchesQuery = (descriptor, query) => scoreQuery(descriptor, query) > 0;
+
+// Among equal matches: the examples that ship with jsbeeb, then the user's own discs, then the
+// archive with metadata before the one without.
+const SourceRank = { builtin: 0, browser: 1, gdrive: 1, session: 1, hfe: 2, sth: 3 };
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * The list's order for a query: the best matches first, then by title across every source so
+ * that the same title from two archives sits together, the richer source first.
+ */
+export function compareForQuery(query) {
+    return (a, b) =>
+        scoreQuery(b, query) - scoreQuery(a, query) ||
+        (b.source === "builtin") - (a.source === "builtin") ||
+        collator.compare(a.title, b.title) ||
+        (SourceRank[a.source] ?? 9) - (SourceRank[b.source] ?? 9) ||
+        collator.compare(a.publisher, b.publisher) ||
+        collator.compare(a.detail, b.detail);
+}

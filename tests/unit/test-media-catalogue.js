@@ -11,6 +11,7 @@ import {
     describeSessionFile,
     describeSthDisc,
     describeSthTape,
+    compareForQuery,
     matchesQuery,
     scoreQuery,
 } from "../../src/web/media-catalogue.js";
@@ -100,6 +101,39 @@ describe("the media catalogue", () => {
         window.localStorage.setItem("disc_apple.ssd", "");
         window.localStorage.setItem("quietDiscNotSaved", "1");
         expect(browserDiscNames()).toEqual(["apple.ssd", "zebra.ssd"]);
+    });
+
+    describe("ordering the list", () => {
+        const sth = (path) => describeSthDisc(path);
+        const hfe = (title, publisher = "Acornsoft") => describeHfeEntry({ path: `${title}.hfe`, title, publisher });
+        const builtIn = describeBuiltIn({ name: "Welcome", desc: "The disc supplied", file: "Welcome.ssd" });
+
+        it("puts the built-in discs first, then everything by title with the richer source first", () => {
+            const rows = [
+                sth("Superior/Exile.zip"),
+                hfe("Elite"),
+                sth("Acornsoft/Elite.zip"),
+                hfe("Arcadians"),
+                builtIn,
+            ];
+            const ordered = rows.sort(compareForQuery("")).map((d) => `${d.source}:${d.title}`);
+            expect(ordered).toEqual(["builtin:Welcome", "hfe:Arcadians", "hfe:Elite", "sth:Elite", "sth:Exile"]);
+        });
+
+        it("puts the best matches first when there is a query", () => {
+            const rows = [
+                sth("Cheats/CHT_Exile-Mapper.zip"),
+                builtIn,
+                sth("Superior/Exile.zip"),
+                hfe("Exile", "Superior"),
+            ];
+            const ordered = rows.filter((d) => matchesQuery(d, "exil")).sort(compareForQuery("exil"));
+            expect(ordered.map((d) => `${d.source}:${d.title}`)).toEqual([
+                "hfe:Exile",
+                "sth:Exile",
+                "sth:CHT_Exile-Mapper",
+            ]);
+        });
     });
 
     describe("matching a query", () => {

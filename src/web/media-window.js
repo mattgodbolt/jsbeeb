@@ -1,7 +1,7 @@
 import { dfsCatalogue } from "../disc.js";
 import { splitImage } from "../media-resolver.js";
 import { FloatingPanel } from "./floating-panel.js";
-import { Sources, scoreQuery } from "./media-catalogue.js";
+import { Sources, compareForQuery, matchesQuery } from "./media-catalogue.js";
 import { errorText, reportLoadFailure } from "./reporting.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
@@ -431,10 +431,8 @@ export class MediaWindow {
         const { list } = this;
         const shown = list.descriptors
             .filter((d) => list.kinds[d.kind] && (list.source === "all" || d.source === list.source))
-            .map((d) => ({ d, score: scoreQuery(d, list.query) }))
-            .filter(({ score }) => score > 0)
-            .sort((a, b) => b.score - a.score)
-            .map(({ d }) => d);
+            .filter((d) => matchesQuery(d, list.query))
+            .sort(compareForQuery(list.query));
         const rows = shown.slice(0, MaxRows).map((d) => this.buildRow(d));
         const notices = list.failures.map((failure) => {
             const li = document.createElement("li");
