@@ -126,7 +126,7 @@ export class MachineSession {
     _requireKeyboard() {
         if (this.typingPending) {
             throw new Error(
-                "Text from type() is still being typed (a breakpoint stopped the run part way): " +
+                "Text from type() is still being typed: await type(), or if a breakpoint stopped it " +
                     "run the machine on to finish it, or cancelTyping() first",
             );
         }
@@ -134,7 +134,7 @@ export class MachineSession {
 
     /**
      * Press a key (by browser keyCode).
-     * Use utils.keyCodes for named keys, or ASCII charCode for letters/digits.
+     * Use keyCodes from keymap.js for named keys, or ASCII charCode for letters/digits.
      */
     keyDown(keyCode, shiftDown = false) {
         this._requireKeyboard();
