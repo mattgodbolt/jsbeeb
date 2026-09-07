@@ -168,6 +168,15 @@ describe("Drives", () => {
     describe("the drive 0 downloads", () => {
         const download = (id) => document.getElementById(id).click();
 
+        it("find the disc in whichever drive is asked for", () => {
+            const drives = make();
+            const disc = fakeDisc();
+            drives.putDiscIn(1, disc);
+            expect(drives.discToDownload(1)).toBe(disc);
+            expect(drives.discToDownload(0)).toBeNull();
+            expect(toasts()).toEqual([expect.stringContaining("no disc in drive 0")]);
+        });
+
         it("say so instead of saving when drive 0 is empty", () => {
             make();
             download("download-drive-link");

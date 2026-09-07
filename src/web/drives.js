@@ -36,7 +36,7 @@ export class Drives extends EventTarget {
         }
 
         document.getElementById("download-drive-link").addEventListener("click", async () => {
-            const disc = this.discToDownload();
+            const disc = this.discToDownload(0);
             if (!disc) return;
             const save = (options) =>
                 downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
@@ -49,16 +49,16 @@ export class Drives extends EventTarget {
         });
 
         document.getElementById("download-drive-hfe-link").addEventListener("click", () => {
-            const disc = this.discToDownload();
+            const disc = this.discToDownload(0);
             if (!disc) return;
             downloadDriveData(toHfe(disc), disc.name, ".hfe");
         });
     }
 
-    /** @returns {import("../disc.js").Disc|null} the disc in drive 0, saying so when there is nothing to download */
-    discToDownload() {
-        const disc = this.fdc?.drives[0].disc;
-        if (!disc) toast("There is no disc in drive 0 to download.", { title: "Disc" });
+    /** @returns {import("../disc.js").Disc|null} the disc in the drive, saying so when there is nothing to download */
+    discToDownload(driveIndex) {
+        const disc = this.fdc?.drives[driveIndex].disc;
+        if (!disc) toast(`There is no disc in drive ${driveIndex} to download.`, { title: "Disc" });
         return disc ?? null;
     }
 
