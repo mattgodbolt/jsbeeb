@@ -11,11 +11,12 @@ import { DriveTracks } from "../url-params.js";
  * "tracks-changed" when a switch moves.
  */
 export class Drives extends EventTarget {
-    constructor({ fdc, driveTracks, confirm }) {
+    constructor({ fdc, driveTracks, confirm, urlState }) {
         super();
         this.fdc = fdc;
         this.driveTracks = driveTracks;
         this.confirm = confirm;
+        this.urlState = urlState;
         this.saidWritesAreNotKept = false;
 
         for (const driveIndex of [0, 1]) {
@@ -62,11 +63,18 @@ export class Drives extends EventTarget {
         return this.driveTracks[driveIndex] === DriveTracks.forty ? 2 : 1;
     }
 
-    /** Moves a drive's 40/80 switch: the disc in it now is read at that pitch. */
+    /**
+     * Throws a drive's 40/80 switch, as a switch on a real drive's front: the disc in it now is
+     * read at that pitch, and so is whatever is put in next, until the switch is thrown again.
+     */
     setTracksPerStep(driveIndex, tracksPerStep) {
         const drive = this.fdc?.drives[driveIndex];
-        if (!drive || drive.tracksPerStep === tracksPerStep) return;
+        if (!drive) return;
+        const setting = tracksPerStep === 2 ? DriveTracks.forty : DriveTracks.eighty;
+        if (drive.tracksPerStep === tracksPerStep && this.driveTracks[driveIndex] === setting) return;
         drive.tracksPerStep = tracksPerStep;
+        this.driveTracks[driveIndex] = setting;
+        this.urlState.set({ [`drive${driveIndex}Tracks`]: setting });
         this.dispatchEvent(new CustomEvent("tracks-changed", { detail: { driveIndex } }));
     }
 

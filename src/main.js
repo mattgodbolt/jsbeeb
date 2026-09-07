@@ -217,7 +217,7 @@ const runControls = new RunControls({ loop, dbgr, keyboard });
 
 const modals = new Modals({ loop });
 
-const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals) });
+const drives = new Drives({ fdc: processor.fdc, driveTracks, confirm: modals.confirm.bind(modals), urlState });
 const media = new MediaLoader({
     processor,
     model,

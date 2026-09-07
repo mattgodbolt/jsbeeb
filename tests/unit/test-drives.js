@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Drives } from "../../src/web/drives.js";
 import { DiscLayout } from "../../src/disc.js";
 import { DriveTracks } from "../../src/url-params.js";
-import { teardownDom, toasts } from "./helpers.js";
+import { fakeUrlState, teardownDom, toasts } from "./helpers.js";
 
 /** Enough of an FDC for the page's side of putting a disc in. */
 function fakeFdc() {
@@ -30,16 +30,19 @@ function fakeDisc({ name = "game.ssd", savesChanges = false, is40Track = false }
 describe("Drives", () => {
     let fdc;
     let confirm;
+    let urlState;
 
     beforeEach(() => {
         vi.useFakeTimers();
         fdc = fakeFdc();
         confirm = vi.fn().mockResolvedValue(false);
+        urlState = fakeUrlState();
     });
 
     afterEach(teardownDom);
 
-    const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) => new Drives({ fdc, driveTracks, confirm });
+    const make = (driveTracks = [DriveTracks.auto, DriveTracks.auto]) =>
+        new Drives({ fdc, driveTracks, confirm, urlState });
 
     describe("what the URL fixed each drive at", () => {
         it("loads an image contiguously for a drive fixed at 80 tracks, and lets the others be detected", () => {
@@ -182,28 +185,43 @@ describe("Drives", () => {
     });
 
     describe("the 40/80 switch", () => {
-        it("moves the drive's switch and says so", () => {
+        it("moves the drive's switch, pins the drive there in the URL, and says so", () => {
             const drives = make();
             const seen = [];
             drives.addEventListener("tracks-changed", (e) => seen.push(e.detail));
             drives.setTracksPerStep(1, 2);
             expect(fdc.drives[1].tracksPerStep).toBe(2);
+            expect(urlState.params).toEqual({ drive1Tracks: "40" });
+            expect(drives.tracksPerStepForDrive(1)).toBe(2);
             drives.setTracksPerStep(1, 1);
             expect(fdc.drives[1].tracksPerStep).toBe(1);
+            expect(urlState.params).toEqual({ drive1Tracks: "80" });
             expect(seen).toEqual([{ driveIndex: 1 }, { driveIndex: 1 }]);
         });
 
-        it("says nothing when the switch is already there", () => {
+        it("reads the next disc at the pitch the switch was thrown to", () => {
+            const drives = make();
+            drives.setTracksPerStep(0, 2);
+            drives.putDiscIn(0, fakeDisc({ is40Track: false }));
+            expect(fdc.loadDisc).toHaveBeenLastCalledWith(0, expect.anything(), 2);
+            expect(toasts()).toEqual([]);
+        });
+
+        it("pins a drive that was on auto even when the switch does not move", () => {
             const drives = make();
             const seen = vi.fn();
             drives.addEventListener("tracks-changed", seen);
             drives.setTracksPerStep(0, 1);
-            expect(seen).not.toHaveBeenCalled();
+            expect(urlState.params).toEqual({ drive0Tracks: "80" });
+            expect(seen).toHaveBeenCalledTimes(1);
+            drives.setTracksPerStep(0, 1);
+            expect(seen).toHaveBeenCalledTimes(1);
         });
 
         it("does nothing on a machine with no drives", () => {
             fdc = undefined;
             expect(() => make().setTracksPerStep(0, 2)).not.toThrow();
+            expect(urlState.params).toEqual({});
         });
     });
 });

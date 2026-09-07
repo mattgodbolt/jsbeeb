@@ -5,7 +5,7 @@ import { MediaWindow, sourceOf } from "../../src/web/media-window.js";
 import { Drives } from "../../src/web/drives.js";
 import { DriveTracks } from "../../src/url-params.js";
 import { discFor } from "../../src/fdc.js";
-import { domFromIndexHtml, ssdImage, teardownDom } from "./helpers.js";
+import { domFromIndexHtml, fakeUrlState, ssdImage, teardownDom } from "./helpers.js";
 
 /** An SSD whose catalogue carries a title and cycle number. */
 function titledImage(title, cycle) {
@@ -43,7 +43,12 @@ describe("MediaWindow", () => {
         fdc = fakeFdc();
         tapeInterface = { tape: undefined, motorOn: false, rewindTape: vi.fn(), playTape: vi.fn(), stopTape: vi.fn() };
         loop = new EventTarget();
-        const drives = new Drives({ fdc, driveTracks: [DriveTracks.auto, DriveTracks.auto], confirm: vi.fn() });
+        const drives = new Drives({
+            fdc,
+            driveTracks: [DriveTracks.auto, DriveTracks.auto],
+            confirm: vi.fn(),
+            urlState: fakeUrlState(),
+        });
         const media = new EventTarget();
         Object.assign(media, {
             params: {},
