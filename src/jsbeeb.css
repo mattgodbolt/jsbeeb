@@ -1982,7 +1982,7 @@ div.smoothie-chart-tooltip {
 
 .media-row-main {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 2fr) auto 26px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 2fr) 92px 26px;
   gap: 0 12px;
   align-items: center;
   width: 100%;
@@ -2041,6 +2041,9 @@ div.smoothie-chart-tooltip {
 
 .media-source {
   justify-self: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
   font-size: 11px;
   padding: 0 7px;
   border-radius: 3px;
