@@ -604,6 +604,39 @@ export function sniffDfsLayout(data, isDsd) {
     return { is40Track: true, reason };
 }
 
+// The title is split across the two catalogue sectors, and the cycle number follows its second half.
+const DfsTitleFirstHalf = 8;
+const DfsTitleSecondHalf = 4;
+const DfsCycleOffset = 4;
+const DfsEntryCountInSector1 = DfsEntryCountOffset - SsdFormat.sectorSize;
+
+const isPrintableAscii = (byte) => byte >= 0x20 && byte < 0x7f;
+
+/**
+ * What the DFS catalogue on one side of a loaded disc says it is called, and how many times it
+ * has been written to, which between them are what was on the sticker.
+ *
+ * @param {Disc} disc
+ * @param {boolean} [isSideUpper]
+ * @returns {{title: string, cycle: string}|null} null when the side holds no DFS catalogue
+ */
+export function dfsCatalogue(disc, isSideUpper = false) {
+    const sectors = new Map();
+    for (const sector of disc.getTrack(isSideUpper, 0).findSectors(() => {})) {
+        const usable =
+            !sector.hasHeaderCrcError && !sector.hasDataCrcError && sector.sectorData?.length === SsdFormat.sectorSize;
+        if (usable && !sectors.has(sector.sectorNumber)) sectors.set(sector.sectorNumber, sector.sectorData);
+    }
+    const sector0 = sectors.get(0);
+    const sector1 = sectors.get(1);
+    if (!sector0 || !sector1) return null;
+    const entryBytes = sector1[DfsEntryCountInSector1];
+    if (entryBytes % DfsEntrySize !== 0 || entryBytes > DfsMaxEntries * DfsEntrySize) return null;
+    const titleBytes = [...sector0.subarray(0, DfsTitleFirstHalf), ...sector1.subarray(0, DfsTitleSecondHalf)];
+    const title = String.fromCharCode(...titleBytes.filter(isPrintableAscii)).trimEnd();
+    return { title, cycle: hexbyte(sector1[DfsCycleOffset]) };
+}
+
 // One track could match by luck; a disc's worth of them could not.
 const MinDoubleSteppedTracks = 4;
 

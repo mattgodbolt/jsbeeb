@@ -71,7 +71,6 @@ export class SthPicker {
     async pickDisc(item) {
         noteEvent("sth", "click", item);
         const image = "sth:" + item;
-        this.media.setDisc1Image(image);
         const needsAutoboot = this.urlState.params.autoboot !== undefined;
         if (needsAutoboot) {
             this.processor.reset(true);
@@ -81,6 +80,7 @@ export class SthPicker {
         try {
             const loaded = await this.media.loadDiscImage(image, this.drives.layoutForDrive(0));
             this.drives.putDiscIn(0, loaded);
+            this.media.setDiscImage(0, image);
             this.modals.loadingFinished();
 
             if (needsAutoboot) {
@@ -95,12 +95,11 @@ export class SthPicker {
     async pickTape(item) {
         noteEvent("sth", "clickTape", item);
         const image = "sth:" + item;
-        this.media.setTapeImage(image);
-
         this.modals.popupLoading("Loading " + item);
         try {
             const tape = await this.media.loadTapeImage(image);
             this.media.setProcessorTape(tape);
+            this.media.setTapeImage(image);
             this.modals.loadingFinished();
         } catch (err) {
             console.error("Error loading tape image:", err);

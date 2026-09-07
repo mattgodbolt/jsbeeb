@@ -5,6 +5,7 @@ import {
     Disc,
     DiscConfig,
     IbmDiscFormat,
+    dfsCatalogue,
     loadSsd,
     loadAdf,
     sniffDfsLayout,
@@ -446,6 +447,63 @@ function eraseDataField(track, sectorNumber) {
     const start = Math.floor(sector.dataPosBitOffset / 32) - 1;
     for (let word = start; word < start + 256; ++word) track.pulses2Us[word] = IbmDiscFormat.fmTo2usPulses(0xff, 0xff);
 }
+
+describe("reading the sticker off a disc", () => {
+    const loaded = (data, isDsd = false) => loadSsd(new Disc(true, new DiscConfig(), "test.ssd"), data, isDsd);
+    const titled = (title, cycle, { sectors = 800, side = 0, isDsd = false } = {}) => {
+        const data = ssdImage(sectors, { length: 80 * TrackSize * (isDsd ? 2 : 1) });
+        const base = side * TrackSize;
+        data.set(new TextEncoder().encode(title.slice(0, 8)), base);
+        data.set(new TextEncoder().encode(title.slice(8, 12)), base + SectorSize);
+        data[base + SectorSize + 4] = cycle;
+        return data;
+    };
+
+    it("reads the title and cycle number Acornsoft put on Elite", () => {
+        const disc = loaded(fs.readFileSync("public/discs/elite.ssd"));
+        expect(dfsCatalogue(disc)).toEqual({ title: "Elite", cycle: "05" });
+    });
+
+    it("joins the title's two halves and reads the cycle as the BCD it is", () => {
+        expect(dfsCatalogue(loaded(titled("WELCOME-DISK", 0x12)))).toEqual({ title: "WELCOME-DISK", cycle: "12" });
+    });
+
+    it("drops the padding and anything unprintable", () => {
+        const data = titled("GAMES", 0x01);
+        data[5] = 0;
+        data[6] = 0xff;
+        expect(dfsCatalogue(loaded(data))).toEqual({ title: "GAMES", cycle: "01" });
+    });
+
+    it("reads each side of a double sided disc for itself", () => {
+        const data = titled("SIDE 0", 0x01, { isDsd: true });
+        const upper = titled("SIDE 2", 0x02, { isDsd: true, side: 1 });
+        data.set(upper.subarray(TrackSize, 2 * TrackSize), TrackSize);
+        const disc = loaded(data, true);
+        expect(dfsCatalogue(disc, false)).toEqual({ title: "SIDE 0", cycle: "01" });
+        expect(dfsCatalogue(disc, true)).toEqual({ title: "SIDE 2", cycle: "02" });
+    });
+
+    it("reads a freshly formatted disc as untitled and never written", () => {
+        expect(dfsCatalogue(unobservedDisc())).toEqual({ title: "", cycle: "00" });
+    });
+
+    it("finds no catalogue on a surface nobody has formatted", () => {
+        expect(dfsCatalogue(Disc.createBlank())).toBeNull();
+    });
+
+    it("finds no catalogue where the entry count is not a DFS one", () => {
+        const data = titled("NOT DFS", 0x01);
+        data[0x105] = 3;
+        expect(dfsCatalogue(loaded(data))).toBeNull();
+    });
+
+    it("finds no catalogue when a catalogue sector cannot be read", () => {
+        const disc = loaded(titled("LOST", 0x01));
+        eraseDataField(disc.getTrack(false, 0), 1);
+        expect(dfsCatalogue(disc)).toBeNull();
+    });
+});
 
 describe("flushWrites marks the surface used", () => {
     it("notices a write to the upper side of a disc loaded as single sided", () => {

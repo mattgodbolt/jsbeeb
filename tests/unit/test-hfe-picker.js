@@ -116,13 +116,16 @@ describe("HfePicker", () => {
             expect(click.defaultPrevented).toBe(true);
         });
 
-        it("names it in the URL, loads it and closes the loading dialog", async () => {
+        it("loads it, then names it in the URL and closes the loading dialog", async () => {
             const loaded = {};
             deps.media.loadDiscImage.mockResolvedValue(loaded);
             await make().pick(entry("Games/ELITE.hfe", "Elite"));
-            expect(deps.media.setDisc1Image).toHaveBeenCalledWith("hfe:Games/ELITE.hfe");
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("hfe:Games/ELITE.hfe", "auto");
             expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded);
+            expect(deps.media.setDiscImage).toHaveBeenCalledWith(0, "hfe:Games/ELITE.hfe");
+            expect(deps.media.setDiscImage.mock.invocationCallOrder[0]).toBeGreaterThan(
+                deps.drives.putDiscIn.mock.invocationCallOrder[0],
+            );
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith();
         });
 
@@ -139,6 +142,7 @@ describe("HfePicker", () => {
             deps.media.loadDiscImage.mockRejectedValue(new Error("404"));
             await make().pick(entry("A.hfe", "Elite"));
             expect(deps.drives.putDiscIn).not.toHaveBeenCalled();
+            expect(deps.media.setDiscImage).not.toHaveBeenCalled();
             expect(deps.modals.loadingFinished).toHaveBeenCalledWith(
                 expect.stringContaining("Unable to load Elite from the HFE archive: 404"),
             );

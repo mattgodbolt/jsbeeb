@@ -144,10 +144,10 @@ export class MediaLoader extends EventTarget {
             elem.querySelector(".description").textContent = image.desc;
             elem.addEventListener("click", async () => {
                 noteEvent("images", "click", image.file);
-                this.setDisc1Image(image.file);
                 modals.hide("discs");
                 try {
-                    drives.putDiscIn(0, await this.loadDiscImage(this.params.disc1, drives.layoutForDrive(0)));
+                    drives.putDiscIn(0, await this.loadDiscImage(image.file, drives.layoutForDrive(0)));
+                    this.setDiscImage(0, image.file);
                 } catch (error) {
                     reportLoadFailure(`${image.name} (${image.file})`, error);
                 }
@@ -165,18 +165,29 @@ export class MediaLoader extends EventTarget {
         else this.resolver.addSource(schema, fetcher);
     }
 
+    /** Puts a tape in the deck, or empties it; raises "tape-changed" with what the deck now holds. */
     setProcessorTape(tape) {
         this.processor.tapeInterface.setTape(tape);
+        this.dispatchEvent(new CustomEvent("tape-changed", { detail: { tape } }));
     }
 
-    setDisc1Image(name) {
-        this.urlState.set({ disc: undefined, disc1: name });
-        this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc1: name } }));
+    ejectDisc(driveIndex) {
+        this.drives.eject(driveIndex);
+        this.setDiscImage(driveIndex, undefined);
     }
 
-    setDisc2Image(name) {
-        this.urlState.set({ disc2: name });
-        this.dispatchEvent(new CustomEvent("media-changed", { detail: { disc2: name } }));
+    ejectTape() {
+        this.setProcessorTape(undefined);
+        this.setTapeImage(undefined);
+    }
+
+    /** Names the disc in a drive for the URL and the settings store, or unnames it. */
+    setDiscImage(driveIndex, name) {
+        // The URL has always called the drives disc1 and disc2, and a bare disc means disc1.
+        const changes = driveIndex === 0 ? { disc: undefined, disc1: name } : { disc2: name };
+        this.urlState.set(changes);
+        const detail = driveIndex === 0 ? { disc1: name } : { disc2: name };
+        this.dispatchEvent(new CustomEvent("media-changed", { detail }));
     }
 
     setTapeImage(name) {

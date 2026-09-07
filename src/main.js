@@ -389,11 +389,9 @@ exposeConsoleSurface(window, { loop, processor, video, audioHandler });
 
 // Hooks for electron.
 electron({
-    loadDiscImage: media.loadDiscImage.bind(media),
-    loadTapeImage: media.loadTapeImage.bind(media),
-    processor,
     settings,
     media,
+    drives,
     modals: {
         show: (modalId, sthType) => {
             if (modalId === "sth" && sthType) {

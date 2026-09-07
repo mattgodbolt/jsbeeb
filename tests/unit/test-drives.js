@@ -16,7 +16,7 @@ function fakeFdc() {
         drives,
         loadDisc: vi.fn((driveIndex, disc, fixed) => {
             drives[driveIndex].disc = disc;
-            drives[driveIndex].tracksPerStep = fixed ?? (disc.is40Track ? 2 : 1);
+            drives[driveIndex].tracksPerStep = fixed ?? (disc?.is40Track ? 2 : 1);
         }),
     };
 }
@@ -95,6 +95,47 @@ describe("Drives", () => {
         });
     });
 
+    describe("what the drives hold", () => {
+        const changes = (drives) => {
+            const seen = [];
+            drives.addEventListener("disc-changed", (e) => seen.push(e.detail));
+            return seen;
+        };
+
+        it("says which drive took which disc", () => {
+            const drives = make();
+            const seen = changes(drives);
+            const disc = fakeDisc();
+            drives.putDiscIn(1, disc);
+            expect(seen).toEqual([{ driveIndex: 1, disc }]);
+        });
+
+        it("ejects a disc, leaving the drive empty and saying so", () => {
+            const drives = make();
+            drives.putDiscIn(0, fakeDisc());
+            const seen = changes(drives);
+            drives.eject(0);
+            expect(fdc.drives[0].disc).toBeUndefined();
+            expect(seen).toEqual([{ driveIndex: 0, disc: undefined }]);
+        });
+
+        it("keeps a fixed switch where the user put it across an eject", () => {
+            const drives = make([DriveTracks.forty, DriveTracks.auto]);
+            drives.putDiscIn(0, fakeDisc({ is40Track: false }));
+            drives.eject(0);
+            expect(fdc.loadDisc).toHaveBeenLastCalledWith(0, undefined, 2);
+            expect(activeTracks(0)).toEqual(["40"]);
+        });
+
+        it("lets an unfixed switch rest at 80 track once the drive is empty", () => {
+            const drives = make();
+            drives.putDiscIn(1, fakeDisc({ is40Track: true }));
+            drives.eject(1);
+            expect(fdc.drives[1].tracksPerStep).toBe(1);
+            expect(activeTracks(1)).toEqual(["80"]);
+        });
+    });
+
     describe("unsaved writes", () => {
         it("warns on the first write to a disc whose changes go nowhere", () => {
             const disc = fakeDisc({ name: "elite.ssd" });
@@ -126,6 +167,15 @@ describe("Drives", () => {
 
     describe("the drive 0 downloads", () => {
         const download = (id) => document.getElementById(id).click();
+
+        it("find the disc in whichever drive is asked for", () => {
+            const drives = make();
+            const disc = fakeDisc();
+            drives.putDiscIn(1, disc);
+            expect(drives.discToDownload(1)).toBe(disc);
+            expect(drives.discToDownload(0)).toBeNull();
+            expect(toasts()).toEqual([expect.stringContaining("no disc in drive 0")]);
+        });
 
         it("say so instead of saving when drive 0 is empty", () => {
             make();

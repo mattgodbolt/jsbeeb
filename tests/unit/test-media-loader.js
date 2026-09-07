@@ -110,7 +110,7 @@ describe("MediaLoader", () => {
 
         it("names drive 0's disc, displacing any bare disc parameter", () => {
             deps.urlState.params.disc = "old.ssd";
-            makeWatched().setDisc1Image("sth:ELITE.zip");
+            makeWatched().setDiscImage(0, "sth:ELITE.zip");
             expect(deps.urlState.params).toEqual({ disc1: "sth:ELITE.zip" });
             expect(deps.urlState.updateUrl).toHaveBeenCalledTimes(1);
             expect(mediaEvents).toEqual([{ disc1: "sth:ELITE.zip" }]);
@@ -118,7 +118,7 @@ describe("MediaLoader", () => {
 
         it("names drive 1's disc and the tape", () => {
             const media = makeWatched();
-            media.setDisc2Image("b.ssd");
+            media.setDiscImage(1, "b.ssd");
             media.setTapeImage("sth:Chuckie.zip");
             expect(deps.urlState.params).toEqual({ disc2: "b.ssd", tape: "sth:Chuckie.zip" });
             expect(mediaEvents).toEqual([{ disc2: "b.ssd" }, { tape: "sth:Chuckie.zip" }]);
@@ -132,6 +132,26 @@ describe("MediaLoader", () => {
                 (el) => el.textContent,
             );
             expect(names).toEqual(BuiltInImages.map((image) => image.name));
+        });
+
+        it("puts the clicked image in drive 0, then names it in the URL", async () => {
+            const media = make();
+            const loaded = {};
+            vi.spyOn(media, "loadDiscImage").mockResolvedValue(loaded);
+            document.querySelector("#disc-list li:not(.template)").click();
+            await vi.waitFor(() => expect(deps.drives.putDiscIn).toHaveBeenCalledWith(0, loaded));
+            expect(media.loadDiscImage).toHaveBeenCalledWith("elite.ssd", DiscLayout.auto);
+            expect(deps.urlState.params).toEqual({ disc1: "elite.ssd" });
+            expect(deps.modals.hide).toHaveBeenCalledWith("discs");
+        });
+
+        it("leaves the URL alone when the image will not load", async () => {
+            const media = make();
+            vi.spyOn(console, "error").mockImplementation(() => {});
+            vi.spyOn(media, "loadDiscImage").mockRejectedValue(new Error("offline"));
+            document.querySelector("#disc-list li:not(.template)").click();
+            await vi.waitFor(() => expect(toasts()).toEqual([expect.stringContaining("Could not load Elite")]));
+            expect(deps.urlState.params).toEqual({});
         });
     });
 
@@ -230,10 +250,36 @@ describe("MediaLoader", () => {
     });
 
     describe("setProcessorTape", () => {
-        it("hands the tape to the machine's tape interface", () => {
+        it("hands the tape to the machine's tape interface and says the deck changed", () => {
             const tape = {};
-            make().setProcessorTape(tape);
+            const media = make();
+            const seen = [];
+            media.addEventListener("tape-changed", (e) => seen.push(e.detail));
+            media.setProcessorTape(tape);
             expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(tape);
+            expect(seen).toEqual([{ tape }]);
+        });
+    });
+
+    describe("ejecting", () => {
+        it("empties a drive and takes its disc out of the URL", () => {
+            deps.drives.eject = vi.fn();
+            deps.urlState.params.disc1 = "sth:ELITE.zip";
+            deps.urlState.params.disc2 = "b.ssd";
+            const media = make();
+            media.ejectDisc(0);
+            expect(deps.drives.eject).toHaveBeenCalledWith(0);
+            expect(deps.urlState.params).toEqual({ disc2: "b.ssd" });
+            media.ejectDisc(1);
+            expect(deps.drives.eject).toHaveBeenLastCalledWith(1);
+            expect(deps.urlState.params).toEqual({});
+        });
+
+        it("empties the deck and takes the tape out of the URL", () => {
+            deps.urlState.params.tape = "sth:Chuckie.zip";
+            make().ejectTape();
+            expect(deps.processor.tapeInterface.setTape).toHaveBeenCalledWith(undefined);
+            expect(deps.urlState.params).toEqual({});
         });
     });
 });

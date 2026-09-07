@@ -7,11 +7,13 @@ import { DriveTracks } from "../url-params.js";
 const tracksPerStepFor = (tracks) => (tracks === "40" ? 2 : 1);
 
 /**
- * The disc drives as the page sees them: putting a disc in, the 40/80 track
- * switches on the Discs menu, and downloading what is in drive 0.
+ * The disc drives as the page sees them: putting a disc in and taking it out,
+ * the 40/80 track switches on the Discs menu, and downloading what is in drive 0.
+ * Raises "disc-changed" with the drive index and what it now holds.
  */
-export class Drives {
+export class Drives extends EventTarget {
     constructor({ fdc, driveTracks, confirm }) {
+        super();
         this.fdc = fdc;
         this.driveTracks = driveTracks;
         this.saidWritesAreNotKept = false;
@@ -34,7 +36,7 @@ export class Drives {
         }
 
         document.getElementById("download-drive-link").addEventListener("click", async () => {
-            const disc = this.discToDownload();
+            const disc = this.discToDownload(0);
             if (!disc) return;
             const save = (options) =>
                 downloadDriveData(toSsdOrDsd(disc, options), disc.name, disc.isDoubleSided ? ".dsd" : ".ssd");
@@ -47,16 +49,16 @@ export class Drives {
         });
 
         document.getElementById("download-drive-hfe-link").addEventListener("click", () => {
-            const disc = this.discToDownload();
+            const disc = this.discToDownload(0);
             if (!disc) return;
             downloadDriveData(toHfe(disc), disc.name, ".hfe");
         });
     }
 
-    /** @returns {import("../disc.js").Disc|null} the disc in drive 0, saying so when there is nothing to download */
-    discToDownload() {
-        const disc = this.fdc?.drives[0].disc;
-        if (!disc) toast("There is no disc in drive 0 to download.", { title: "Disc" });
+    /** @returns {import("../disc.js").Disc|null} the disc in the drive, saying so when there is nothing to download */
+    discToDownload(driveIndex) {
+        const disc = this.fdc?.drives[driveIndex].disc;
+        if (!disc) toast(`There is no disc in drive ${driveIndex} to download.`, { title: "Disc" });
         return disc ?? null;
     }
 
@@ -80,6 +82,13 @@ export class Drives {
         this.noteUnsavedWrites(loadedDisc);
         // A switch the user fixed does not move, so anything it does is not news.
         if (fixed === undefined && drive.tracksPerStep !== was) this.noteDriveTracks(driveIndex, loadedDisc.name);
+        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: loadedDisc } }));
+    }
+
+    eject(driveIndex) {
+        this.fdc.loadDisc(driveIndex, undefined, this.tracksPerStepForDrive(driveIndex));
+        this.showDriveTracks(driveIndex);
+        this.dispatchEvent(new CustomEvent("disc-changed", { detail: { driveIndex, disc: undefined } }));
     }
 
     noteUnsavedWrites(loadedDisc) {

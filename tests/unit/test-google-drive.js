@@ -2,12 +2,38 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleDriveLoader } from "../../src/web/google-drive.js";
-import { teardownDom } from "./helpers.js";
+import { DiscLayout } from "../../src/disc.js";
+import { ssdImage, teardownDom } from "./helpers.js";
 
 describe("GoogleDriveLoader", () => {
     beforeEach(() => vi.spyOn(console, "log").mockImplementation(() => {}));
 
     afterEach(teardownDom);
+
+    describe("creating a disc", () => {
+        const fortyTrackSectors = 400;
+        const makeSignedIn = () => {
+            const loader = new GoogleDriveLoader();
+            loader.parentFolderId = "folder";
+            loader.gapi = {
+                client: {
+                    request: vi.fn().mockResolvedValue({
+                        result: { id: "xyz", name: "fresh.ssd", capabilities: { canEdit: true } },
+                    }),
+                },
+            };
+            return loader;
+        };
+
+        it("lays the new disc out as the drive it is for wants", async () => {
+            const loader = makeSignedIn();
+            const detected = await loader.create("fresh.ssd", ssdImage(fortyTrackSectors), DiscLayout.auto);
+            expect(detected.fileId).toBe("xyz");
+            expect(detected.disc.is40Track).toBe(true);
+            const contiguous = await loader.create("fresh.ssd", ssdImage(fortyTrackSectors), DiscLayout.contiguous);
+            expect(contiguous.disc.is40Track).toBe(false);
+        });
+    });
 
     it("gives up when the Google script cannot be fetched", async () => {
         const loader = new GoogleDriveLoader();
