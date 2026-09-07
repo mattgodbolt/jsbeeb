@@ -1,20 +1,31 @@
 // Electron integration for jsbeeb desktop application.
 // Handles IPC communication for loading disc/tape images and showing modals from Electron's main process.
 
+import { reportLoadFailure } from "../web/reporting.js";
+
 function init(args) {
-    const { loadDiscImage, loadTapeImage, loadStateFile, processor, modals, actions, settings, media } = args;
+    const { loadStateFile, modals, actions, settings, media, drives } = args;
     const api = window.electronAPI;
 
     api.onLoadDisc(async (message) => {
         const { drive, path } = message;
-        const image = await loadDiscImage(path);
-        processor.fdc.loadDisc(drive, image);
+        try {
+            drives.putDiscIn(drive, await media.loadDiscImage(path, drives.layoutForDrive(drive)));
+            if (drive === 0) media.setDisc1Image(path);
+            else media.setDisc2Image(path);
+        } catch (error) {
+            reportLoadFailure(`disc ${path}`, error);
+        }
     });
 
     api.onLoadTape(async (message) => {
         const { path } = message;
-        const tape = await loadTapeImage(path);
-        processor.tapeInterface.setTape(tape);
+        try {
+            media.setProcessorTape(await media.loadTapeImage(path));
+            media.setTapeImage(path);
+        } catch (error) {
+            reportLoadFailure(`tape ${path}`, error);
+        }
     });
 
     api.onShowModal((message) => {
