@@ -94,6 +94,51 @@ describe("MachineSession frame stepping", () => {
     });
 });
 
+describe("MachineSession running for cycles", () => {
+    let session;
+
+    beforeAll(async () => {
+        session = await bootedSession();
+    }, BootTimeout);
+
+    afterAll(() => session.destroy());
+
+    function breakOnNextInterrupt() {
+        const [lo, hi] = session.readMemory(0x204, 2); // IRQ1V, entered every interrupt
+        return session.addBreakpoint("execute", lo | (hi << 8));
+    }
+
+    it("reports the cycles it ran", async () => {
+        const before = session.elapsedCycles;
+
+        const result = await session.runFor(1000);
+
+        expect(result.completed).toBe(true);
+        expect(result.cyclesRun).toBe(session.elapsedCycles - before);
+        expectCyclesNear(result.cyclesRun, 1000);
+    });
+
+    it("stops short when a breakpoint fires and reports only the cycles run", async () => {
+        const id = breakOnNextInterrupt();
+        const before = session.elapsedCycles;
+
+        const result = await session.runFor(600000);
+        session.removeBreakpoint(id);
+
+        expect(result.completed).toBe(false);
+        expect(result.cyclesRun).toBe(session.elapsedCycles - before);
+        expect(result.cyclesRun).toBeLessThan(CyclesPerInterlacedFrame);
+    });
+
+    it("leaves no unspent cycles behind after a breakpoint stop", async () => {
+        const id = breakOnNextInterrupt();
+        await session.runFor(600000);
+        session.removeBreakpoint(id);
+
+        expectCyclesNear((await session.runFor(1000)).cyclesRun, 1000);
+    });
+});
+
 describe("MachineSession frame stepping across a hard reset", () => {
     let session;
 

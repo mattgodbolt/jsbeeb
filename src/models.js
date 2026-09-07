@@ -50,9 +50,10 @@ class Model {
         this.stringToKeys = this.isAtom ? stringToATOMKeys : stringToBBCKeys;
         // The OS write-character vector, watched to capture what the machine prints.
         this.wrchvAddress = this.isAtom ? 0x0208 : 0x020e;
-        // Where the machine sits waiting for a key: the Atom kernel's keyboard scan, which its
-        // line editor calls straight (the OSRDCH entry at $FE94 is only passed at boot), or BASIC's.
-        this.idleAddress = this.isAtom ? 0xfe71 : isMaster ? 0xe7e6 : 0xe581;
+        // Where the machine sits waiting for a key: BASIC's read loop, or on the Atom the kernel's
+        // wait-for-key scan at $FEA7. The scan before it at $FE9F only checks every key is up, and a
+        // 100 ms debounce delay follows, during which a key pressed is not seen.
+        this.idleAddress = this.isAtom ? 0xfea7 : isMaster ? 0xe7e6 : 0xe581;
         // The Atom ROM polls its keyboard once per VSync, so pasted keys need longer apart.
         this.pasteKeyDelayMs = this.isAtom ? 80 : 50;
         // Two of those 60 Hz scans, 33 ms, with margin: the ROM wants a key seen up

@@ -95,16 +95,24 @@ export class TestMachine {
             .join("");
     }
 
+    /**
+     * Run for `cycles` emulated cycles, or until something stops the CPU.
+     * Resolves true if it was stopped short.
+     */
     runFor(cycles) {
         let left = cycles;
         let stopped = false;
+        const cpu = this.processor;
         return new Promise((resolve) => {
             const runAnIter = () => {
                 const todo = Math.max(0, Math.min(left, MaxCyclesPerIter));
                 if (todo) {
-                    stopped = !this.processor.execute(todo);
+                    stopped = !cpu.execute(todo);
                     left -= todo;
                 }
+                // execute() adds each request to a running targetCycles, so budget
+                // left unspent by an early stop would silently lengthen the next run.
+                if (stopped) cpu.targetCycles = cpu.currentCycles;
                 // Not truthiness: a negative or NaN request clamps todo to zero,
                 // so left would never move and the loop never end.
                 if (left > 0 && !stopped) {
