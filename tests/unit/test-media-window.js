@@ -353,10 +353,17 @@ describe("MediaWindow", () => {
             expect(panel().classList.contains("list-collapsed")).toBe(false);
         });
 
-        it("lets the latch of an empty drive aim the list at it", () => {
+        it("lets the latch of an empty drive aim the list at it, unfolding the list", () => {
+            deps.drives.putDiscIn(0, discFor("a.ssd", ssdImage()));
             make();
-            expect(bay(0).querySelector(".bay-eject").disabled).toBe(false);
+            document.querySelector('#leds .slot-readout[data-slot="0"]').click();
+            expect(panel().classList.contains("list-collapsed")).toBe(true);
             bay(0).querySelector(".bay-eject").click();
+            expect(deps.media.ejectDisc).toHaveBeenCalledWith(0);
+            expect(panel().classList.contains("list-collapsed")).toBe(true);
+            deps.media.ejectDisc.mockClear();
+            bay(0).querySelector(".bay-eject").click();
+            expect(panel().classList.contains("list-collapsed")).toBe(false);
             expect(deps.media.ejectDisc).not.toHaveBeenCalled();
             expect(bay(0).classList.contains("target")).toBe(true);
             expect(document.activeElement).toBe(document.getElementById("media-search"));

@@ -122,9 +122,11 @@ export class MediaWindow {
      */
     openFor(target) {
         const holds = target === "tape" ? this.processor.tapeInterface.tape : this.processor.fdc?.drives[target]?.disc;
-        this.showList(!holds);
         this.floating.open();
-        this.aimAt(target);
+        this.unfold(target);
+        this.setTarget(target);
+        this.showList(!holds);
+        if (!holds) this.list.search.focus();
     }
 
     close() {
@@ -325,12 +327,17 @@ export class MediaWindow {
         return list;
     }
 
-    /** Points the list at a slot: what Enter on a row loads into. */
+    /** Points the list at a slot, unfolded and ready to type into: what Enter on a row loads into. */
     aimAt(target) {
+        this.unfold(target);
+        this.setTarget(target);
+        this.showList(true);
+        this.list.search.focus();
+    }
+
+    unfold(target) {
         if (target === "tape") this.showDeck(true);
         else if (target === FoldableDrive) this.showDrive(true);
-        this.setTarget(target);
-        if (this.list.shown) this.list.search.focus();
     }
 
     /** Aiming at a drive shows discs, aiming at the deck shows tapes; the chips can widen that. */
