@@ -859,7 +859,6 @@ div.smoothie-chart-tooltip {
 
 #media-panel button {
   font: inherit;
-  color: inherit;
   cursor: pointer;
 }
 
@@ -907,9 +906,10 @@ div.smoothie-chart-tooltip {
   z-index: 2;
 }
 
+/* The latch: a bar above the slot that drops across it to hold a disc in, and swings aside to let one out. */
 .lever {
   position: relative;
-  width: 66px;
+  width: 62px;
   height: 18px;
   border: 0;
   border-radius: 5px 9px 9px 5px;
@@ -919,10 +919,8 @@ div.smoothie-chart-tooltip {
     inset 0 1px 0 rgba(255, 255, 255, 0.8),
     inset 0 -1px 0 rgba(0, 0, 0, 0.35),
     0 3px 4px rgba(0, 0, 0, 0.45);
-  transform-origin: 50% 50%;
-  transition:
-    transform 0.25s ease,
-    width 0.25s ease;
+  transform-origin: 10px 9px;
+  transition: transform 0.25s ease;
 }
 
 .lever::after {
@@ -941,16 +939,24 @@ div.smoothie-chart-tooltip {
   filter: brightness(1.05);
 }
 
-/* An empty drive's latch stands open. */
-.lever:disabled {
-  width: 34px;
-  transform: rotate(-90deg);
-  margin: 8px 0;
+.bay[data-state="loaded"] .lever-wrap {
+  align-self: start;
+  margin: 2px 0 0 2px;
+}
+
+.bay[data-state="loaded"] .lever {
+  transform: rotate(90deg);
 }
 
 .lever-wrap .hwlabel {
   color: #d5cbb5;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+.bay[data-state="loaded"] .lever-wrap .hwlabel {
+  position: absolute;
+  left: 26px;
+  top: 4px;
 }
 
 .lever-wrap:has(.lever:disabled) .hwlabel {
@@ -974,8 +980,8 @@ div.smoothie-chart-tooltip {
   gap: 6px;
 }
 
-.bay[data-state="empty"] .mouth {
-  padding-left: 52px;
+.bay[data-state="loaded"] .mouth {
+  padding-left: 36px;
 }
 
 .slot {
@@ -1698,15 +1704,13 @@ div.smoothie-chart-tooltip {
     height: 15px;
   }
 
-  .lever:disabled {
-    width: 28px;
-    margin: 6px 0;
-  }
-
-  .mouth,
-  .bay[data-state="empty"] .mouth {
+  .mouth {
     padding-left: 50px;
     height: 42px;
+  }
+
+  .bay[data-state="loaded"] .mouth {
+    padding-left: 30px;
   }
 
   .bay-badge {
@@ -1873,7 +1877,7 @@ div.smoothie-chart-tooltip {
   flex-wrap: wrap;
 }
 
-.media-chip {
+#media-panel .media-chip {
   padding: 1px 10px;
   border-radius: 999px;
   border: 1px solid #495057;
@@ -1883,12 +1887,12 @@ div.smoothie-chart-tooltip {
   white-space: nowrap;
 }
 
-.media-chip:hover {
+#media-panel .media-chip:hover {
   color: #dee2e6;
   border-color: #adb5bd;
 }
 
-.media-chip[aria-pressed="true"] {
+#media-panel .media-chip[aria-pressed="true"] {
   background: #e9ecef;
   color: #212529;
   border-color: #e9ecef;

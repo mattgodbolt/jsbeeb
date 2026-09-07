@@ -1,7 +1,7 @@
 import { dfsCatalogue } from "../disc.js";
 import { splitImage } from "../media-resolver.js";
 import { FloatingPanel } from "./floating-panel.js";
-import { Sources, matchesQuery } from "./media-catalogue.js";
+import { Sources, scoreQuery } from "./media-catalogue.js";
 import { errorText, reportLoadFailure } from "./reporting.js";
 import { toast } from "./toast.js";
 import { noteEvent } from "./analytics.js";
@@ -84,11 +84,15 @@ export class MediaWindow {
                 const { slot } = opener.dataset;
                 if (slot !== undefined) this.aimAt(slot === "tape" ? "tape" : Number(slot));
             });
-        this.floating.addEventListener("open", () => this.refreshList());
+        this.floating.addEventListener("open", () => {
+            this.refreshList();
+            this.list.search.select();
+            this.list.search.focus();
+        });
         drives.addEventListener("disc-changed", (e) => this.renderDrive(e.detail.driveIndex));
         drives.addEventListener("tracks-changed", (e) => this.renderDrive(e.detail.driveIndex));
         media.addEventListener("tape-changed", (e) => {
-            if (e.detail.tape) this.showDeck(true, false);
+            if (e.detail.tape) this.unfoldDeckUnlessChosen();
             this.renderDeck();
         });
         // The URL is named after the bytes arrive, so the source line catches up here.
@@ -215,6 +219,7 @@ export class MediaWindow {
             this.renderDeck();
         });
         deck.toggle.addEventListener("click", () => this.showDeck(!this.deckShown, true));
+        document.getElementById("deck-hide").addEventListener("click", () => this.showDeck(false, true));
         document.getElementById("tape-counter-reset").addEventListener("click", () => {
             this.counterBase = this.tapeCount();
             this.showCounter();
@@ -229,6 +234,8 @@ export class MediaWindow {
             chips: document.getElementById("media-chips"),
             rows: document.getElementById("media-list"),
             open: document.getElementById("media-open"),
+            openText: document.getElementById("media-open-text"),
+            openLabel: document.getElementById("media-open-label"),
             connect: document.getElementById("media-connect-drive"),
             descriptors: [],
             failures: [],
@@ -241,13 +248,35 @@ export class MediaWindow {
             list.query = list.search.value.trim();
             this.renderList();
         });
+        // Enter takes the first match; the arrows walk the rows and come back to the box.
+        list.search.addEventListener("keydown", (e) => {
+            const first = list.rows.querySelector(".media-row-main");
+            if (e.key === "Enter" && first) {
+                e.preventDefault();
+                first.click();
+            } else if (e.key === "ArrowDown" && first) {
+                e.preventDefault();
+                first.focus();
+            }
+        });
+        list.rows.addEventListener("keydown", (e) => {
+            const row = e.target.closest(".media-row");
+            if (!row) return;
+            const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+            if (!step) return;
+            e.preventDefault();
+            const rows = [...list.rows.querySelectorAll(".media-row")];
+            const next = rows[rows.indexOf(row) + step];
+            if (next) next.querySelector(".media-row-main").focus();
+            else if (step < 0) list.search.focus();
+        });
         list.open.addEventListener("change", async (evt) => {
             const file = evt.target.files[0];
             if (!file) return;
             noteEvent("local", "clickWindow");
             try {
                 toast(await this.media.openFile(file, this.target === "tape" ? 0 : this.target), { title: "Opened" });
-                this.refreshList();
+                this.close();
             } catch (error) {
                 reportLoadFailure(file.name, error);
             }
@@ -265,10 +294,19 @@ export class MediaWindow {
         this.list.search.focus();
     }
 
+    /** Aiming at a drive shows discs, aiming at the deck shows tapes; the chips can widen that. */
     setTarget(target) {
         this.target = target;
+        const forTape = target === "tape";
+        this.list.kinds = { disc: !forTape, tape: forTape };
         for (const bay of this.bays) bay.section.classList.toggle("target", target === bay.driveIndex);
-        this.deck.window.classList.toggle("target", target === "tape");
+        this.deck.window.classList.toggle("target", forTape);
+        const into = forTape ? "the deck" : `drive ${target}`;
+        this.list.openText.textContent = `Open a file into ${into}…`;
+        this.list.openLabel.title = forTape
+            ? "Open a tape image from this computer; a disc image goes into drive 0"
+            : `Open a disc image from this computer into drive ${target}; a tape image goes into the deck`;
+        this.renderChips();
         this.renderList();
     }
 
@@ -327,12 +365,12 @@ export class MediaWindow {
 
     renderList() {
         const { list } = this;
-        const shown = list.descriptors.filter(
-            (d) =>
-                list.kinds[d.kind] &&
-                (list.source === "all" || d.source === list.source) &&
-                matchesQuery(d, list.query),
-        );
+        const shown = list.descriptors
+            .filter((d) => list.kinds[d.kind] && (list.source === "all" || d.source === list.source))
+            .map((d) => ({ d, score: scoreQuery(d, list.query) }))
+            .filter(({ score }) => score > 0)
+            .sort((a, b) => b.score - a.score)
+            .map(({ d }) => d);
         const rows = shown.slice(0, MaxRows).map((d) => this.buildRow(d));
         const notices = list.failures.map((failure) => {
             const li = document.createElement("li");
@@ -448,6 +486,8 @@ export class MediaWindow {
             this.drives.putDiscIn(driveIndex, loaded);
             this.media.setDiscImage(driveIndex, MediaWindow.urlRef(d));
             if (needsAutoboot) this.autoboot(d.title);
+            // Loaded is what the window was open for.
+            this.close();
         } catch (error) {
             bay.busy = null;
             bay.failed = { descriptor: d, error };
@@ -462,13 +502,14 @@ export class MediaWindow {
         const { deck } = this;
         deck.busy = d;
         deck.failed = null;
-        this.showDeck(true, false);
+        this.unfoldDeckUnlessChosen();
         this.renderDeck();
         try {
             const tape = await this.media.loadTapeImage(d.ref);
             deck.busy = null;
             this.media.setProcessorTape(tape);
             this.media.setTapeImage(MediaWindow.urlRef(d));
+            this.close();
         } catch (error) {
             deck.busy = null;
             deck.failed = { descriptor: d, error };
@@ -485,6 +526,11 @@ export class MediaWindow {
         this.deck.toggle.textContent = shown ? "Hide" : "Show";
         this.deck.toggle.setAttribute("aria-expanded", String(shown));
         if (remember) window.localStorage.setItem(DeckShownKey, shown ? "1" : "0");
+    }
+
+    /** A tape arriving is a reason to show the deck, unless the user has said what they want. */
+    unfoldDeckUnlessChosen() {
+        if (window.localStorage.getItem(DeckShownKey) === null) this.showDeck(true, false);
     }
 
     renderAll() {

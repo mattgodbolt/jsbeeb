@@ -12,6 +12,7 @@ import {
     describeSthDisc,
     describeSthTape,
     matchesQuery,
+    scoreQuery,
 } from "../../src/web/media-catalogue.js";
 import { Provenance } from "../../src/bbcdiscs.js";
 
@@ -110,6 +111,24 @@ describe("the media catalogue", () => {
             expect(matchesQuery(elite, "acorn elite")).toBe(true);
             expect(matchesQuery(elite, "d1s1")).toBe(true);
             expect(matchesQuery(elite, "elite superior")).toBe(false);
+        });
+
+        it("ranks the title itself over a title that merely contains the words", () => {
+            const exile = describeSthDisc("Superior/Exile.zip");
+            const cheat = describeSthDisc("Cheats/CHT_Exile-Mapper.zip");
+            const inside = describeSthDisc("Other/Texileworks.zip");
+            const byPublisher = describeSthDisc("Exile/Airwolf.zip");
+            const scores = ["exil", "exile"].map((q) =>
+                [exile, cheat, inside, byPublisher].map((d) => scoreQuery(d, q)),
+            );
+            for (const [whole, word, within, elsewhere] of scores) {
+                expect(whole).toBeGreaterThan(word);
+                expect(word).toBeGreaterThan(within);
+                expect(within).toBeGreaterThan(elsewhere);
+                expect(elsewhere).toBeGreaterThan(0);
+            }
+            expect(scoreQuery(exile, "exile")).toBeGreaterThan(scoreQuery(exile, "exil"));
+            expect(scoreQuery(exile, "")).toBe(1);
         });
     });
 });

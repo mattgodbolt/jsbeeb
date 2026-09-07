@@ -105,13 +105,46 @@ export function browserDiscNames(storage = window.localStorage) {
     return names.sort();
 }
 
-/** Whether a descriptor is what the typed query is looking for. */
-export function matchesQuery(descriptor, query) {
-    if (!query) return true;
-    const haystack = `${descriptor.title} ${descriptor.publisher} ${descriptor.detail}`.toLowerCase();
-    return query
+// How well one word of a query fits a descriptor: the title itself, a word of the title, somewhere
+// in the title, or only in the publisher or detail. Zero is no fit.
+const WholeTitle = 8;
+const TitleStart = 4;
+const TitleWordStart = 3;
+const InTitle = 2;
+const Elsewhere = 1;
+
+const wordsOf = (text) =>
+    text
         .toLowerCase()
-        .split(/\s+/)
-        .filter(Boolean)
-        .every((word) => haystack.includes(word));
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
+
+function scoreWord(descriptor, word) {
+    const title = descriptor.title.toLowerCase();
+    if (title === word) return WholeTitle;
+    if (title.startsWith(word)) return TitleStart;
+    if (wordsOf(title).some((titleWord) => titleWord.startsWith(word))) return TitleWordStart;
+    if (title.includes(word)) return InTitle;
+    if (`${descriptor.publisher} ${descriptor.detail}`.toLowerCase().includes(word)) return Elsewhere;
+    return 0;
 }
+
+/**
+ * How well a descriptor answers the typed query: zero when some word of the
+ * query is nowhere in it, otherwise higher the closer the title itself is to
+ * what was typed, so "Exile" outranks "CHT_Exile-Mapper" for "exil".
+ */
+export function scoreQuery(descriptor, query) {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return 1;
+    let score = 0;
+    for (const word of words) {
+        const wordScore = scoreWord(descriptor, word);
+        if (wordScore === 0) return 0;
+        score += wordScore;
+    }
+    return score;
+}
+
+/** Whether a descriptor is what the typed query is looking for. */
+export const matchesQuery = (descriptor, query) => scoreQuery(descriptor, query) > 0;

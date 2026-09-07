@@ -503,6 +503,8 @@
               <span class="status" id="deck-status"></span>
               <span class="status fail" id="deck-fail"></span>
               <button type="button" class="txt-btn primary" id="deck-retry" hidden>Retry</button>
+              <span class="spacer"></span>
+              <button type="button" class="txt-btn" id="deck-hide" title="Fold the recorder to one line">Hide</button>
             </div>
           </section>
         </div>
@@ -526,8 +528,8 @@
         <div class="media-chips" id="media-chips" role="group" aria-label="Show"></div>
         <ul class="media-list" id="media-list" aria-label="Discs and tapes"></ul>
         <div class="media-foot">
-          <label class="btn btn-sm btn-outline-light" title="Open a disc or tape image from this computer">
-            Open a file…
+          <label class="btn btn-sm btn-outline-light" id="media-open-label">
+            <span id="media-open-text">Open a file…</span>
             <input
               type="file"
               id="media-open"

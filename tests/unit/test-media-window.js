@@ -304,10 +304,20 @@ describe("MediaWindow", () => {
             expect(text(document.getElementById("deck-bar-name"))).toBe("empty");
             putTapeIn(tape());
             expect(panel().classList.contains("deck-collapsed")).toBe(false);
-            document.getElementById("deck-toggle").click();
+            document.getElementById("deck-hide").click();
             expect(panel().classList.contains("deck-collapsed")).toBe(true);
             expect(text(document.getElementById("deck-bar-name"))).toBe("chuckie.uef");
             expect(window.localStorage.getItem("mediaDeckShown")).toBe("0");
+            document.getElementById("deck-toggle").click();
+            expect(panel().classList.contains("deck-collapsed")).toBe(false);
+            expect(window.localStorage.getItem("mediaDeckShown")).toBe("1");
+        });
+
+        it("stays folded for a tape once the user has folded it", () => {
+            window.localStorage.setItem("mediaDeckShown", "0");
+            make();
+            putTapeIn(tape());
+            expect(panel().classList.contains("deck-collapsed")).toBe(true);
         });
 
         it("starts unfolded on an Atom, and where the user last left it", () => {
@@ -360,28 +370,63 @@ describe("MediaWindow", () => {
             box.dispatchEvent(new Event("input"));
         };
 
-        it("lists everything every source offers once opened, with a chip per source", async () => {
+        it("lists the discs every source offers once opened, with the search box focused and a chip per source", async () => {
             await openWith([elite, chuckie, saves]);
-            expect(rowTitles()).toEqual(["Elite", "Chuckie", "saves.ssd"]);
-            expect(text(document.getElementById("media-count"))).toBe("3 of 3");
+            expect(document.activeElement).toBe(document.getElementById("media-search"));
+            expect(rowTitles()).toEqual(["Elite", "saves.ssd"]);
+            expect(text(document.getElementById("media-count"))).toBe("2 of 3");
             const chips = [...document.querySelectorAll("#media-chips .media-chip")].map((c) => c.textContent);
             expect(chips).toEqual(["All", "STH archive 1", "HFE archive 1", "This browser 1", "Discs", "Tapes"]);
-            expect(text(rows()[2].querySelector(".detail"))).toContain("saves changes");
+            expect(text(rows()[1].querySelector(".detail"))).toContain("saves changes");
         });
 
-        it("narrows to what is typed, to a source, and to discs or tapes", async () => {
+        it("shows tapes when aimed at the deck, and either when the chips say so", async () => {
             await openWith([elite, chuckie, saves]);
-            search("elite");
-            expect(rowTitles()).toEqual(["Elite"]);
+            document.getElementById("deck-window").click();
+            expect(rowTitles()).toEqual(["Chuckie"]);
+            document.querySelector('#media-chips .media-chip[title="Show discs"]').click();
+            expect(rowTitles()).toEqual(["Elite", "Chuckie", "saves.ssd"]);
+        });
+
+        it("narrows to what is typed and to a source, best match first", async () => {
+            const cheat = {
+                ...elite,
+                ref: "sth:Cheats/CHT_Elite-Editor.zip",
+                title: "CHT_Elite-Editor",
+                source: "sth",
+            };
+            await openWith([cheat, elite, saves]);
+            search("elit");
+            expect(rowTitles()).toEqual(["Elite", "CHT_Elite-Editor"]);
             search("");
             document.querySelector('#media-chips .media-chip[title="The Stairway To Hell mirror"]').click();
-            expect(rowTitles()).toEqual(["Chuckie"]);
+            expect(rowTitles()).toEqual(["CHT_Elite-Editor"]);
             document.querySelector("#media-chips .media-chip").click();
-            document.querySelector('#media-chips .media-chip[title="Show tapes"]').click();
-            expect(rowTitles()).toEqual(["Elite", "saves.ssd"]);
             search("nothing here");
             expect(rowTitles()).toEqual([]);
             expect(text(document.querySelector("#media-list .notice"))).toBe('Nothing matches "nothing here"');
+        });
+
+        it("loads the first match on Enter in the search box, and walks the rows with the arrows", async () => {
+            deps.media.loadDiscImage.mockResolvedValue(discFor("A.ssd", ssdImage()));
+            await openWith([elite, saves]);
+            const box = document.getElementById("media-search");
+            box.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+            expect(document.activeElement).toBe(rows()[0].querySelector(".media-row-main"));
+            document.activeElement.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }),
+            );
+            expect(document.activeElement).toBe(rows()[1].querySelector(".media-row-main"));
+            document.activeElement.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+            );
+            document.activeElement.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+            );
+            expect(document.activeElement).toBe(box);
+            box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+            await vi.waitFor(() => expect(fdc.drives[0].disc).toBeTruthy());
+            expect(deps.media.loadDiscImage).toHaveBeenCalledWith("hfe:A.hfe", "auto");
         });
 
         it("says which sources could not be listed", async () => {
@@ -401,8 +446,10 @@ describe("MediaWindow", () => {
             expect(deps.media.loadDiscImage).toHaveBeenCalledWith("hfe:A.hfe", "auto");
             expect(deps.media.setDiscImage).toHaveBeenCalledWith(1, "hfe:A.hfe");
             expect(deps.processor.reset).not.toHaveBeenCalled();
+            expect(panel().hidden).toBe(true);
             await vi.waitFor(() => expect(text(rows()[0].querySelector(".detail"))).toContain("in drive 1"));
             bay(1).querySelector(".bay-slot").click();
+            expect(text(document.getElementById("media-open-text"))).toBe("Open a file into drive 1…");
             expect(rows()[0].querySelector(".media-keycap").textContent).toBe("1");
             expect(rows()[0].querySelector(".media-target").textContent).toBe("0");
         });
@@ -439,12 +486,14 @@ describe("MediaWindow", () => {
             const loadedTape = { name: "Chuckie.uef", position: 0 };
             deps.media.loadTapeImage.mockResolvedValue(loadedTape);
             await openWith([chuckie]);
+            document.getElementById("deck-window").click();
             expect(rows()[0].querySelector(".media-keycap").textContent).toBe("T");
             expect(rows()[0].querySelector(".media-target")).toBeNull();
             rows()[0].querySelector(".media-row-main").click();
             await vi.waitFor(() => expect(deps.media.setProcessorTape).toHaveBeenCalledWith(loadedTape));
             expect(deps.media.setTapeImage).toHaveBeenCalledWith("sth:AnF/Chuckie.zip");
             expect(panel().classList.contains("deck-collapsed")).toBe(false);
+            expect(panel().hidden).toBe(true);
         });
 
         it("leaves a file opened this session out of the URL", async () => {
@@ -462,9 +511,10 @@ describe("MediaWindow", () => {
             Object.defineProperty(input, "files", { value: [new File([new Uint8Array(4)], "mine.ssd")] });
             input.dispatchEvent(new Event("change"));
             await vi.waitFor(() => expect(deps.media.openFile).toHaveBeenCalledWith(expect.anything(), 1));
+            expect(panel().hidden).toBe(true);
             document.getElementById("media-connect-drive").click();
             await vi.waitFor(() => expect(deps.googleDrive.connect).toHaveBeenCalled());
-            expect(deps.media.listAll.mock.calls.length).toBeGreaterThanOrEqual(3);
+            expect(deps.media.listAll.mock.calls.length).toBeGreaterThanOrEqual(2);
         });
     });
 
