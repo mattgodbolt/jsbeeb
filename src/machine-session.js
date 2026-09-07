@@ -196,11 +196,15 @@ export class MachineSession {
     }
 
     /**
-     * Run for an exact number of emulated CPU cycles.
-     * Useful for timing-sensitive code.
+     * Run for an exact number of emulated CPU cycles, or until something stops
+     * the CPU first: a breakpoint, or the paint runFrames stops at. `completed`
+     * is false if it was stopped short.
+     * @returns {Promise<{cyclesRun: number, completed: boolean}>}
      */
     async runFor(cycles) {
-        await this._machine.runFor(cycles);
+        const startCycles = this.elapsedCycles;
+        const stopped = await this._machine.runFor(cycles);
+        return { cyclesRun: this.elapsedCycles - startCycles, completed: !stopped };
     }
 
     /** Emulated cycles since power-on */
@@ -226,25 +230,15 @@ export class MachineSession {
         const cpu = this._machine.processor;
         const backstop = maxCycles ?? count * BackstopSecondsPerFrame * cpu.model.cyclesPerSecond;
         const startFrame = this._frameCount;
-        const startCycles = this.elapsedCycles;
-        // execute() adds each request to a running targetCycles, so budget left
-        // unspent by an early stop would silently lengthen the caller's next run.
-        const unspentBefore = cpu.targetCycles - cpu.currentCycles;
 
         this._stopAtFrame = startFrame + count;
         try {
-            await this._machine.runFor(backstop);
+            const { cyclesRun } = await this.runFor(backstop);
+            const framesRun = this._frameCount - startFrame;
+            return { framesRun, cyclesRun, completed: framesRun >= count };
         } finally {
             this._stopAtFrame = Infinity;
-            cpu.targetCycles = cpu.currentCycles + unspentBefore;
         }
-
-        const framesRun = this._frameCount - startFrame;
-        return {
-            framesRun,
-            cyclesRun: this.elapsedCycles - startCycles,
-            completed: framesRun >= count,
-        };
     }
 
     /** Frames painted since the session was created; a hard reset does not zero it */
